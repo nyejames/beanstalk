@@ -1,16 +1,15 @@
 [Navbar]
 [header center: [title(1): ROADMAP FOR BEANSTALK]]
 [main:
-Beanstalk is a new language and is still in development. It doesn't even have a version number yet!
+Beanstalk is still in development. It doesn't even have a version number yet!
 
 Here is a list of current bugs, development goals and planned features.
 
-## Current immediate task list
+## Ongoing task list
 - Parsing tuples for reading the config file
 - Finish implementing all math operators and brackets
-- get variables and mostly folded expressions working fully
-- Tidy up Error reporting
-- Switching to arbitary precision instead of floats: https://daninet.github.io/gmp-wasm/
+- Get variables and mostly folded expressions working fully
+- Color theme system
 
 ## Current Bugs
 *Scenes*
@@ -29,10 +28,11 @@ Here is a list of current bugs, development goals and planned features.
 - Commit to final memory management strategy for the language
 - Compiler as a proper command line tool
 - Documentation generator - scenes can be docs scenes that document the code around it, everything else is placed into code blocks around these scenes
-- nestable comments
+- Nestable comments?
 
-## Future Design Plans and proposals
-- Function references to be compile time evaluated if no brackets? (must have no captures)
+## Future plans and ideas
+- Multiple return functions basically become like classes anyway?
+- Embedding on top of fast exciting general purpose languages
 - Better Dev server with web sockets handling hot reloading (rather than the current janky system)
 - Server files and server side BS code (Using a Wasm runtime on the server)
 
