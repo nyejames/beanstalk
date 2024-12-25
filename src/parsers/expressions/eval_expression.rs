@@ -1,5 +1,5 @@
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, Token};
+use crate::{bs_types::DataType, parsers::ast_nodes::{AstNode, Arg}, CompileError, Token};
 use colour::red_ln;
 
 // This function takes in an Expression node or Collection of expressions that has a Vec of Nodes to evaluate
@@ -10,7 +10,7 @@ pub fn evaluate_expression(
     expr: AstNode,
     type_declaration: &DataType,
     ast: &Vec<AstNode>,
-) -> AstNode {
+) -> Result<AstNode, CompileError> {
     let mut current_type = type_declaration.to_owned();
     let mut simplified_expression = Vec::new();
     let mut runtime_nodes: usize = 0;
@@ -27,54 +27,62 @@ pub fn evaluate_expression(
                             AstNode::Expression(nested_e.to_owned(), nested_line_number.to_owned()),
                             type_declaration,
                             ast,
-                        ));
+                        )?);
                     }
-                    AstNode::Literal(token) => match token {
+                    AstNode::Literal(token, line_number) => match token {
                         Token::FloatLiteral(value) => {
                             if current_type == DataType::CoerseToString {
-                                simplified_expression.push(AstNode::Literal(Token::StringLiteral(
-                                    value.to_string(),
-                                )));
+                                simplified_expression.push(
+                                    AstNode::Literal(Token::StringLiteral(value.to_string()), *line_number)
+                                );
+                                
                                 continue;
                             }
+                            
                             output_stack.push(node.to_owned());
                             if current_type == DataType::Inferred {
                                 current_type = DataType::Float;
                             }
                         }
+                        
                         Token::IntLiteral(value) => {
                             if current_type == DataType::CoerseToString {
-                                simplified_expression.push(AstNode::Literal(Token::StringLiteral(
-                                    value.to_string(),
-                                )));
+                                simplified_expression.push(
+                                    AstNode::Literal(Token::StringLiteral(value.to_string()), *line_number)
+                                );
+
                                 continue;
                             }
+                            
                             output_stack.push(node.to_owned());
                             if current_type == DataType::Inferred {
                                 current_type = DataType::Int;
                             }
                         }
+                        
                         Token::StringLiteral(_) => {
                             simplified_expression.push(node.to_owned());
                             if current_type == DataType::Inferred {
                                 current_type = DataType::String;
                             }
                         }
+                        
                         Token::BoolLiteral(_) => {
                             output_stack.push(node.to_owned());
                             if current_type == DataType::Inferred {
                                 current_type = DataType::Bool;
                             }
                         }
+                        
                         _ => {
-                            return AstNode::Error(
-                                "unsupported literal type found in expression".to_string(),
-                                line_number,
-                            );
+                            return Err( CompileError {
+                                msg: "unsupported literal type found in expression".to_string(),
+                                line_number: line_number.to_owned(),
+                            });
                         }
                     },
 
-                    AstNode::ConstReference(_, data_type) => {
+                    AstNode::ConstReference(_, data_type, line_number) => {
                         if current_type == DataType::Inferred {
                             current_type = data_type.to_owned();
                         }
@@ -87,21 +95,24 @@ pub fn evaluate_expression(
                                 simplified_expression.push(node.to_owned());
                             }
                             _ => {
-                                return AstNode::Error(
-                                    format!(
+                                return Err( CompileError {
+                                    msg: format!(
                                         "unsupported data type for constants in expressions: {:?}",
                                         current_type
                                     ),
-                                    line_number,
-                                );
+                                    line_number: *line_number,
+                                });
                             }
                         }
                     }
 
-                    AstNode::VarReference(_, data_type)
-                    | AstNode::FunctionCall(_, _, data_type)
-                    | AstNode::TupleAccess(_, _, data_type)
-                    | AstNode::CollectionAccess(_, _, data_type) => {
+                    AstNode::FunctionCall(..) => {
+                        // TODO
+                    }
+
+                    AstNode::VarReference(_, data_type, line_number)
+                    | AstNode::TupleAccess(_, _, data_type, line_number)
+                    | AstNode::CollectionAccess(_, _, data_type, line_number) => {
                         if current_type == DataType::Inferred {
                             current_type = data_type.to_owned();
                         }
@@ -114,27 +125,27 @@ pub fn evaluate_expression(
                                 simplified_expression.push(node.to_owned());
                             }
                             _ => {
-                                return AstNode::Error(
-                                    format!(
+                                return Err( CompileError {
+                                    msg: format!(
                                         "unsupported data type for variables in expressions: {:?}",
                                         current_type
                                     ),
-                                    line_number,
-                                );
+                                    line_number: *line_number,
+                                });
                             }
                         }
 
                         runtime_nodes += 1;
                     }
 
-                    AstNode::BinaryOperator(op, precedence) => {
+                    AstNode::BinaryOperator(op, precedence, _) => {
                         // If the current type is a string or scene, add operator is assumed.
                         if current_type == DataType::String || current_type == DataType::Scene {
                             if op != &Token::Add {
-                                return AstNode::Error(
-                                    "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
-                                    line_number
-                                );
+                                return Err( CompileError {
+                                    msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
+                                    line_number: line_number.to_owned(),
+                                });
                             }
                             simplified_expression.push(node.to_owned());
                             continue;
@@ -146,17 +157,17 @@ pub fn evaluate_expression(
 
                         if current_type == DataType::Bool {
                             if *op != Token::Or || *op != Token::And {
-                                return AstNode::Error(
-                                    "Can only use 'or' and 'and' operators with booleans"
+                                return Err( CompileError {
+                                    msg: "Can only use 'or' and 'and' operators with booleans"
                                         .to_string(),
-                                    line_number,
-                                );
+                                    line_number: line_number.to_owned(),
+                                });
                             }
                             operators_stack.push(node.to_owned());
                         }
 
                         if operators_stack.last().is_some_and(|x| match x {
-                            AstNode::BinaryOperator(_, p) => p >= &precedence,
+                            AstNode::BinaryOperator(_, p, _) => p >= &precedence,
                             _ => false,
                         }) {
                             output_stack.push(operators_stack.pop().unwrap());
@@ -165,59 +176,68 @@ pub fn evaluate_expression(
                         operators_stack.push(node.to_owned());
                     }
 
-                    AstNode::Scene(_, _, _, _) => {
+                    AstNode::Scene(..) => {
                         if current_type == DataType::Inferred {
                             current_type = DataType::Scene;
                         }
 
                         if current_type != DataType::Scene {
-                            return AstNode::Error(
-                                "Scene used in non-scene expression".to_string(),
-                                line_number,
-                            );
+                            return Err( CompileError {
+                                msg: "Scene used in non-scene expression".to_string(),
+                                line_number: line_number.to_owned(),
+                            });
                         }
                         output_stack.push(node.to_owned());
                     }
 
                     _ => {
-                        return AstNode::Error(
-                            "unsupported AST node found in expression".to_string(),
-                            line_number,
-                        );
+                        return Err( CompileError {
+                            msg: "unsupported AST node found in expression".to_string(),
+                            line_number: line_number.to_owned(),
+                        });
                     }
                 }
             }
         }
 
         AstNode::Tuple(e, line_number) => {
-            for node in e {
-                match node {
-                    AstNode::Expression(e, line_number) | AstNode::Tuple(e, line_number) => {
-                        simplified_expression.push(evaluate_expression(
-                            AstNode::Expression(e, line_number),
-                            type_declaration,
-                            ast,
-                        ));
-                    }
+            let mut simplified_references = Vec::new();
+            for arg in e {
+                match arg.value {
+                    AstNode::Expression(e, line_number) => {
+                        let simplified_ref = Arg {
+                            value: evaluate_expression(
+                                AstNode::Expression(e.to_owned(), line_number.to_owned()),
+                                type_declaration,
+                                ast,
+                            )?,
+                            data_type: arg.data_type,
+                            name: arg.name,
+                        };
+                        simplified_references.push(simplified_ref)
+                    },
                     _ => {
-                        simplified_expression.push(node);
+                        simplified_references.push(arg);
                     }
                 }
             }
 
-            return AstNode::Tuple(simplified_expression, line_number);
+            return Ok(AstNode::Tuple(
+                simplified_references,
+                line_number
+            ));
         }
         _ => {
-            return AstNode::Error(
-                format!("Compiler Bug: No Expression to Evaluate - eval expression passed wrong AST node: {:?}", expr),
-                0,
-            );
+            return Err( CompileError {
+                msg: format!("Compiler Bug: No Expression to Evaluate - eval expression passed wrong AST node: {:?}", expr),
+                line_number: 0,
+            });
         }
     }
 
     // If nothing to evaluate at compile time, just one value, return that value
     if simplified_expression.len() == 1 {
-        return simplified_expression[0].clone();
+        return Ok(simplified_expression[0].clone());
     }
 
     // LOGICAL EXPRESSIONS
@@ -232,18 +252,19 @@ pub fn evaluate_expression(
     // SCENE EXPRESSIONS
     // If constant scene expression, combine the scenes together and return the new scene
     if current_type == DataType::Scene && runtime_nodes == 0 {
-        return concat_scene(&mut simplified_expression);
+        return Ok(concat_scene(&mut simplified_expression));
     }
 
     // STRING EXPRESSIONS
     // If the expression is a constant string, combine and return a string
     if current_type == DataType::String && runtime_nodes == 0 {
-        return concat_strings(&mut simplified_expression);
+        return Ok(concat_strings(&mut simplified_expression));
     }
 
     // Scene Head Coerse to String
     if current_type == DataType::CoerseToString {
-        return AstNode::RuntimeExpression(simplified_expression, current_type);
+        // TODO - line number
+        return Ok(AstNode::RuntimeExpression(simplified_expression, current_type, 0));
     }
 
     // MATHS EXPRESSIONS
@@ -253,20 +274,21 @@ pub fn evaluate_expression(
     }
 
     // Evaluate all constants in the maths expression
-    return math_constant_fold(output_stack, current_type);
+    math_constant_fold(output_stack, current_type)
 }
 
 fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> AstNode {
-    let mut new_scene: AstNode = AstNode::Scene(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut new_scene: AstNode = AstNode::Scene(Vec::new(), Vec::new(), Vec::new(), Vec::new(), 0);
 
     for node in simplified_expression {
         match node {
-            AstNode::Scene(vec1, vec2, vec3, vec4) => match new_scene {
-                AstNode::Scene(ref mut v1, ref mut v2, ref mut v3, ref mut v4) => {
+            AstNode::Scene(vec1, vec2, vec3, vec4, line_number) => match new_scene {
+                AstNode::Scene(ref mut v1, ref mut v2, ref mut v3, ref mut v4, ref mut new_line_number) => {
                     v1.append(vec1);
                     v2.append(vec2);
                     v3.append(vec3);
                     v4.append(vec4);
+                    *new_line_number = line_number.to_owned();
                 }
                 _ => {
                     return AstNode::Error(
@@ -291,10 +313,15 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> AstNode {
 fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> AstNode {
     let mut new_string = String::new();
     let mut previous_node_is_plus = false;
+    let mut first_line_number = 0;
 
     for node in simplified_expression {
         match node {
-            AstNode::Literal(Token::StringLiteral(string)) => {
+            AstNode::Literal(Token::StringLiteral(string), line_number) => {
+                if new_string.is_empty() {
+                    first_line_number = line_number.to_owned();
+                }
+
                 if previous_node_is_plus || new_string.is_empty() {
                     new_string.push_str(string);
                     previous_node_is_plus = false;
@@ -305,7 +332,7 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> AstNode {
                     );
                 }
             }
-            AstNode::BinaryOperator(_, _) => {
+            AstNode::BinaryOperator(..) => {
                 // Should always be a plus operator, this is enforced in the eval_expression function
                 previous_node_is_plus = true;
             }
@@ -318,5 +345,5 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> AstNode {
         }
     }
 
-    AstNode::Literal(Token::StringLiteral(new_string))
+    AstNode::Literal(Token::StringLiteral(new_string), first_line_number)
 }

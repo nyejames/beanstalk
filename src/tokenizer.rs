@@ -249,9 +249,8 @@ pub fn get_next_token(
 
                 // Check for multiline
                 if let Some(&next_next_char) = chars.peek() {
-                    if next_next_char == '\n' {
-                        // Mutliline Comment
-                        *line_number += 1;
+                    if next_next_char == '-' {
+                        // Mutliline Comment (---)
                         chars.next();
 
                         // Multiline Comment
@@ -260,9 +259,9 @@ pub fn get_next_token(
                             if ch == '\n' {
                                 *line_number += 1;
                             }
-                            if token_value.ends_with("--") {
-                                return Token::MultilineComment(
-                                    token_value.trim_end_matches("\n--").to_string(),
+                            if token_value.ends_with("---") {
+                                return Token::Comment(
+                                    token_value.trim_end_matches("---").to_string(),
                                 );
                             }
                         }
@@ -520,11 +519,11 @@ fn keyword_or_variable(
                 "bg" => return Token::BG,
 
                 // Theme stuff
-                "clr" => return Token::ThemeColor,
+                "clr" => return Token::Color,
 
                 // Colour keywords
                 "rgb" => return Token::Rgb,
-                "hsl" => return Token::Hsl,
+                "hsl" => return Token::Hsv,
 
                 "red" => return Token::Red,
                 "green" => return Token::Green,

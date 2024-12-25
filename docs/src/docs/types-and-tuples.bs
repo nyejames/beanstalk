@@ -2,29 +2,24 @@
 [header center: [title(1): TYPES AND TUPLES]]
 [main:
 
-# Tuples and Types
-## Tuples
-Tuples are a way to group multiple values together. 
+# Immutable Collections
+Immutable collections are a way to group multiple values together. 
 They are created by using parentheses and separating the values with commas.
 
-The unique thing about tuples in Beanstalk is that they can have named values,
-and it creates a new type for that tuple, replacing the need for structs in many cases.
-
-Another unique property of tuples in Beanstalk is that a tuple of one item is the same as the item itself.
+You can give the elements names or indexes to access them. By default, they just have a numerical index.
 
 [code:
     -- Creating a new instance of the tuple
     -- You can pass the arguments the same as functions, either in order or named
-    -- Coords now becomes a new type with the properties x, y and z
-    enemy_vec Coords = (
-        x: 1,
-        y: 2,
-        z: 3,
+    enemy_vec = (
+        x = 1,
+        y = 2,
+        z = 3,
     )
 
     enemy_vec.x -- returns 1
 
-    single_item = (item: 1)
+    single_item = (item = 1)
     integer = 1
 
     single_item is integer -- returns true

@@ -38,7 +38,6 @@ pub enum Token {
 
     // Comments
     Comment(String),
-    MultilineComment(String),
     DocComment(String),
 
     // Variables / Functions
@@ -172,7 +171,7 @@ pub enum Token {
     Margin,
     Size,
     Rgb,
-    Hsl,
+    Hsv,
     BG,
     Table,
     Center,
@@ -183,7 +182,7 @@ pub enum Token {
     Hide,
 
     // Colours
-    ThemeColor,
+    Color,
     Red,
     Green,
     Blue,

@@ -1,23 +1,29 @@
 use colour::{blue_ln, cyan_ln, green_ln, grey_ln, red_ln};
 use colour::{blue_ln_bold, dark_grey_ln, dark_yellow_ln, green_ln_bold, yellow_ln_bold};
 
-use crate::bs_types::DataType;
 use crate::html_output::web_parser;
 use crate::parsers::ast_nodes::AstNode;
 use crate::settings::get_html_config;
-use crate::tokenizer;
+use crate::{tokenizer, CompileError};
 use crate::Token;
 use crate::{dev_server, parsers};
-use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-pub fn test_build() -> Result<(), Box<dyn Error>> {
+pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
     // Read content from a test file
     yellow_ln_bold!("\nREADING TEST FILE\n");
-    let path = PathBuf::from("test_output/src/#page.bs");
+
     let file_name = path.file_stem().unwrap().to_str().unwrap();
-    let content = fs::read_to_string(&path)?;
+    let content = match fs::read_to_string(&path.join("src/#page.bs")) {
+        Ok(content) => content,
+        Err(e) => {
+            return Err(CompileError {
+                msg: format!("Error reading file in test build: {:?}", e),
+                line_number: 0,
+            });
+        }
+    };
 
     // Tokenize File
     yellow_ln_bold!("TOKENIZING FILE\n");
@@ -54,26 +60,26 @@ pub fn test_build() -> Result<(), Box<dyn Error>> {
         tokens,
         &mut 0,
         &token_line_numbers,
-        Vec::new(),
-        &DataType::None,
+        &mut Vec::new(),
+        &Vec::new(),
         true,
-    );
+    )?;
 
     for node in &ast {
         match node {
-            AstNode::Scene(_, _, _, _) => {
+            AstNode::Scene(..) => {
                 print_scene(node, 0);
             }
-            AstNode::P(_) | AstNode::Span(_) => {
+            AstNode::P(..) | AstNode::Span(..) => {
                 green_ln!("{:?}", node);
             }
             AstNode::Error(err, line) => {
                 red_ln!("Error at line {}: {}", line, err);
             }
-            AstNode::Literal(_) => {
+            AstNode::Literal(..) => {
                 cyan_ln!("{:?}", node);
             }
-            AstNode::Comment(_) => {
+            AstNode::Comment(..) => {
                 grey_ln!("{:?}", node);
             }
             _ => {
@@ -83,23 +89,18 @@ pub fn test_build() -> Result<(), Box<dyn Error>> {
     }
 
     yellow_ln_bold!("\nCREATING HTML OUTPUT\n");
-    let parser_output = match web_parser::parse(
+    let parser_output = web_parser::parse(
         ast,
         &get_html_config(),
         false,
         "test",
         false,
         &String::new(),
-    ) {
-        Ok(output) => output,
-        Err(e) => {
-            red_ln!("Failed to Compile due to Error: \n\n{:?}", e);
-            return Err(e.into());
-        }
-    };
+    )?;
+
     for export in parser_output.exported_js {
         println!("JS EXPORTS:");
-        println!("{:?}", export.module_path);
+        println!("{:?}", export.path);
     }
     println!("CSS EXPORTS: {}", parser_output.exported_css);
 
@@ -132,8 +133,11 @@ pub fn test_build() -> Result<(), Box<dyn Error>> {
 
     */
 
-    dev_server::start_dev_server("test_output".to_string())?;
+    if path.is_dir() {
+        dev_server::start_dev_server(path)?;
+    }
 
+    green_ln_bold!("Test complete!");
     Ok(())
 }
 
@@ -145,7 +149,7 @@ fn print_scene(scene: &AstNode, scene_nesting_level: u32) {
     }
 
     match scene {
-        AstNode::Scene(nodes, tags, styles, actions) => {
+        AstNode::Scene(nodes, tags, styles, actions, ..) => {
             blue_ln_bold!("\n{}Scene Head: ", indentation);
             for tag in tags {
                 dark_yellow_ln!("{}  {:?}", indentation, tag);
@@ -161,25 +165,25 @@ fn print_scene(scene: &AstNode, scene_nesting_level: u32) {
 
             for scene_node in nodes {
                 match scene_node {
-                    AstNode::Scene(_, _, _, _) => {
+                    AstNode::Scene(..) => {
                         print_scene(scene_node, scene_nesting_level + 1);
                     },
-                    AstNode::Heading(_)
-                    | AstNode::BulletPoint(_)
-                    | AstNode::Em(_, _)
-                    | AstNode::Superscript(_) => {
+                    AstNode::Heading(..)
+                    | AstNode::BulletPoint(..)
+                    | AstNode::Em(..)
+                    | AstNode::Superscript(..) => {
                         green_ln_bold!("{}  {:?}", indentation, scene_node);
                     }
-                    AstNode::RuntimeExpression(_, _) => {
+                    AstNode::RuntimeExpression(..) => {
                         dark_yellow_ln!("{}  {:?}", indentation, scene_node);
                     }
                     AstNode::Error(err, line) => {
                         red_ln!("{}  Error at line {}: {}", indentation, line, err);
                     }
-                    AstNode::Literal(_) => {
+                    AstNode::Literal(..) => {
                         cyan_ln!("{}  {:?}", indentation, scene_node);
                     }
-                    AstNode::Space | AstNode::Comment(_) => {
+                    AstNode::Space(..) | AstNode::Comment(..) => {
                         dark_grey_ln!("{}  {:?}", indentation, scene_node);
                     }
                     _ => {

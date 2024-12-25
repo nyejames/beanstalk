@@ -1,26 +1,28 @@
 use super::{
-    ast_nodes::{AstNode, Reference},
+    ast_nodes::AstNode,
     create_scene_node::new_scene,
-    expressions::parse_expression::{create_expression, get_args},
+    expressions::parse_expression::create_expression,
     variables::create_new_var_or_ref,
 };
-use crate::{bs_types::DataType, Token};
+use crate::{bs_types::DataType, CompileError, Token};
 use colour::red_ln;
 use std::path::PathBuf;
+use crate::parsers::ast_nodes::Arg;
+use crate::parsers::tuples::new_tuple;
 
 pub fn new_ast(
     tokens: Vec<Token>,
     i: &mut usize,
     token_line_numbers: &Vec<u32>,
-    mut variable_declarations: Vec<Reference>,
-    return_type: &DataType,
+    variable_declarations: &mut Vec<Arg>,
+    return_args: &Vec<Arg>,
     module_scope: bool,
-    // AST         Imports
-) -> (Vec<AstNode>, Vec<AstNode>) {
+    // AST, Imports
+) -> Result<(Vec<AstNode>, Vec<AstNode>), CompileError> {
     let mut ast = Vec::new();
     let mut imports = Vec::new();
     let mut exported: bool = false;
-    let mut needs_to_return = return_type != &DataType::None;
+    let mut needs_to_return = !return_args.is_empty();
 
     while *i < tokens.len() {
         match &tokens[*i] {
@@ -40,7 +42,7 @@ pub fn new_ast(
                 match &tokens[*i] {
                     // Module path that will have all it's exports dumped into the module
                     Token::StringLiteral(value) => {
-                        imports.push(AstNode::Use(PathBuf::from(value.clone())));
+                        imports.push(AstNode::Use(PathBuf::from(value.clone()), token_line_numbers[*i]));
                     }
                     _ => {
                         ast.push(AstNode::Error(
@@ -59,43 +61,42 @@ pub fn new_ast(
                     ));
                 }
 
-                let starting_line_number = &token_line_numbers[*i];
                 ast.push(new_scene(
                     &tokens,
                     i,
                     &ast,
-                    starting_line_number,
-                    &variable_declarations,
-                ));
+                    token_line_numbers,
+                    variable_declarations,
+                )?);
             }
 
             Token::ModuleStart(_) => {
-                // In future, need to structure into code blocks
+                // In the future, need to structure into code blocks
             }
 
             // New Function or Variable declaration
             Token::Variable(name) => {
                 ast.push(create_new_var_or_ref(
                     name,
-                    &mut variable_declarations,
+                    variable_declarations,
                     &tokens,
                     i,
                     exported,
                     &ast,
                     token_line_numbers,
-                ));
+                )?.0);
             }
             Token::Export => {
                 exported = true;
             }
             Token::JS(value) => {
-                ast.push(AstNode::JS(value.clone()));
+                ast.push(AstNode::JS(value.clone(), token_line_numbers[*i]));
             }
             Token::Title => {
                 *i += 1;
                 match &tokens[*i] {
                     Token::StringLiteral(value) => {
-                        ast.push(AstNode::Title(value.clone()));
+                        ast.push(AstNode::Title(value.clone(), token_line_numbers[*i]));
                     }
                     _ => {
                         ast.push(AstNode::Error(
@@ -110,7 +111,7 @@ pub fn new_ast(
                 *i += 1;
                 match &tokens[*i] {
                     Token::StringLiteral(value) => {
-                        ast.push(AstNode::Date(value.clone()));
+                        ast.push(AstNode::Date(value.clone(), token_line_numbers[*i]));
                     }
                     _ => {
                         ast.push(AstNode::Error(
@@ -126,29 +127,19 @@ pub fn new_ast(
             }
 
             Token::Print => {
-                let required_args: Vec<Reference> = vec![Reference {
-                    name: "src".to_string(),
-                    data_type: DataType::String,
-                    default_value: None,
-                }];
-                let line_number = token_line_numbers[*i];
-
                 // Move past the print keyword
                 *i += 1;
-                let eval_arg = match get_args(
+                let arg = new_tuple(
+                    None,
                     &tokens,
-                    &mut *i,
+                    i,
+                    &Vec::new(),
                     &ast,
-                    &line_number,
-                    &variable_declarations,
-                    &required_args,
-                ) {
-                    Some(arg) => arg,
-                    None => {
-                        continue;
-                    }
-                };
-                ast.push(AstNode::Print(Box::new(eval_arg)));
+                    variable_declarations,
+                    &token_line_numbers,
+                )?;
+
+                ast.push(AstNode::Print(arg, token_line_numbers[*i]));
             }
 
             Token::DeadVarible(name) => {
@@ -181,20 +172,25 @@ pub fn new_ast(
 
                 needs_to_return = false;
                 *i += 1;
+                
+                let mut return_type = if return_args.len() > 1 {
+                    DataType::Tuple(return_args.to_owned())
+                } else {
+                    return_args[0].data_type.to_owned()
+                };
 
-                let starting_line_number = &token_line_numbers[*i];
                 let return_value = create_expression(
                     &tokens,
                     i,
                     false,
                     &ast,
-                    starting_line_number,
-                    &mut return_type.to_owned(),
+                    &mut return_type,
                     false,
-                    &variable_declarations,
-                );
+                    variable_declarations,
+                    token_line_numbers,
+                )?;
 
-                ast.push(AstNode::Return(Box::new(return_value)));
+                ast.push(AstNode::Return(Box::new(return_value), token_line_numbers[*i]));
 
                 *i -= 1;
             }
@@ -230,7 +226,7 @@ pub fn new_ast(
         ));
     }
 
-    (ast, imports)
+    Ok((ast, imports))
 }
 
 fn skip_dead_code(tokens: &Vec<Token>, i: &mut usize) {

@@ -109,16 +109,12 @@ The zero value is the value a variable will be assigned if it is not assigned a 
 ## Numerical Types
 There is an intention to support all of these number types in the future. **Currently only 64 bit floats are supported.**
 
-[table(3): 
+[table(3):
     [: Type] [: Description] [: Zero Value]
 
     [: float ] [: 64 bit floating point number on 64 bit systems, 32 bit on 32 bit systems ] [: 0.0]
 
     [: int ] [:  64 bit signed integer on 64 bit systems, 32 bit on 32 bit systems ] [: 0]
-
-    [: idx ] [: pointer sized unsigned integer ] [: 0]
-
-    [: unit] [: *NOT YET SUPPORTED* Special numeric unit syntax for appending numerical types. The underlaying primative will be the same, but automatic conversions will be applied to the result. ] [: error]
 ]
 
 ## String based Types
@@ -135,7 +131,7 @@ Eventually this will be entirely manipulated in Wasm, allowing for different str
 
     [: error] [: Contains a special type of debug string detailing the error] [: "ERROR"]
 
-    [: path] [: *NOT YET SUPPORTED* Path to a file, must be specified as the type of the string. Will handle OS specific paths. ] [: ""]
+    [: path] [: *NOT YET SUPPORTED* Path to a file or import, automatically formats the slashes to the correct format for the OS. Syntax pending but might start with an @ symbol. e.g @libs/stuff/cool.png] [: ""]
 ]
 
 ## Collection Types
@@ -185,29 +181,6 @@ The 'is' keyword is used to check equality. Not ==. The "and / or" keywords are 
     [: %%]         [: Remainder (floored)]  [: 3]
     [: +]          [: Sum]                  [: 2]
     [: `-`]        [: Subtraction]          [: 2]
-]
-
-# Numeric Units
-[red: In development]
-
-Values can be appended with special unit types. These can represent a real world unit and will inform how operations with other units will work. 
-
-The first unit in the operation will be used if no unit type is specified in the type parameter. 
-You don't need to have a space between a literal value and the unit type, but variables must have a space between the value and the unit type.
-
-If you are mixing unit types in an operation, the first unit type will be used for the result.
-
-[code:
-    -- Specifies the base type as a float
-    m unit : float
-    cm unit : m * 0.01
-    mm unit : cm * 0.1
-
-    width = 5m * 230cm
-    -- result is 5.23
-
-    height = (3m * 2m)cm
-    -- result is 500
 ]
 
 ]

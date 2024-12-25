@@ -1,7 +1,8 @@
 use crate::{
-    parsers::ast_nodes::{AstNode, Node, Reference},
+    parsers::ast_nodes::AstNode,
     Token,
 };
+use crate::parsers::ast_nodes::Arg;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
@@ -27,19 +28,25 @@ pub enum DataType {
 
     Style,
 
-    Function(Box<Vec<Reference>>, Box<DataType>), // Arguments, Return type
+    // Mixed types (fixed size), can be named so must be args, not just types
+    Tuple(Vec<Arg>),
 
-    Tuple(Box<Vec<DataType>>), // Mixed types (fixed size)
+    // Functions have named arguments
+    // Effectively identical to tuples
+    // We don't use a Datatypes here (to put two tuples there) as it just adds an extra unwrapping step
+    // And we want to be able to have optional names / default values for even single arguments
+    Function(Vec<Arg>, Vec<Arg>), // Arguments, Return type
 
-    Union(Box<Vec<DataType>>), // Union of types
+    Union(Vec<DataType>), // Union of types
 
-    None, // The None result of an option
+    Error,
+    None, // The None result of an option, or empty argument
 }
 
 pub fn return_datatype(node: &AstNode) -> DataType {
     match node {
-        AstNode::RuntimeExpression(_, datatype) => datatype.clone(),
-        AstNode::Literal(token) => match token {
+        AstNode::RuntimeExpression(_, datatype, _) => datatype.clone(),
+        AstNode::Literal(token, _) => match token {
             Token::FloatLiteral(_) => DataType::Float,
             Token::IntLiteral(_) => DataType::Int,
             Token::StringLiteral(_) => DataType::String,
@@ -52,16 +59,13 @@ pub fn return_datatype(node: &AstNode) -> DataType {
             }
             _ => DataType::Inferred,
         },
-        AstNode::VarReference(_, datatype) | AstNode::ConstReference(_, datatype) => {
+        AstNode::VarReference(_, datatype, _) | AstNode::ConstReference(_, datatype, _) => {
             datatype.clone()
         }
-        AstNode::Tuple(nodes, _) => {
-            let mut types: Vec<DataType> = Vec::new();
-            for node in nodes {
-                types.push(node.get_type());
-            }
-            DataType::Tuple(Box::new(types))
+        AstNode::Tuple(arguments, _) => {
+            DataType::Tuple(arguments.to_owned())
         }
+        AstNode::Empty(_) => DataType::None,
         _ => DataType::Inferred,
     }
 }

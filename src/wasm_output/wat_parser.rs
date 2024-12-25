@@ -1,58 +1,65 @@
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, Token};
-use colour::red_ln;
+use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token};
 
 pub fn new_wat_var(
     id: &String,
     expr: &AstNode,
     datatype: &DataType,
-    wat: &mut String,
-    wat_global_initilisation: &mut String,
-) {
+    wat_global_initialisation: &mut String,
+    line_number: u32,
+) -> Result<String, CompileError> {
     match datatype {
         DataType::Float => {
-            wat.push_str(&format!(
+            wat_global_initialisation.push_str(&format!(
+                "(global.set ${BS_VAR_PREFIX}{id} {})",
+                expression_to_wat(&expr)?
+            ));
+
+            Ok(format!(
                 "
                 \n(global ${BS_VAR_PREFIX}{id} (export \"{BS_VAR_PREFIX}{id}\") (mut f64) (f64.const 0))
                 \n(func (export \"get_{BS_VAR_PREFIX}{id}\") (result f64) (global.get ${BS_VAR_PREFIX}{id}))",
+            ))
+        }
+
+        DataType::Int => {
+            wat_global_initialisation.push_str(&format!(
+                "(global.set ${BS_VAR_PREFIX}{id} {})",
+                expression_to_wat(&expr)?
             ));
 
-            wat_global_initilisation.push_str(&format!(
-                "(global.set ${BS_VAR_PREFIX}{id} {})",
-                expression_to_wat(&expr)
-            ));
-        }
-        DataType::Int => {
-            wat.push_str(&format!(
+            Ok(format!(
                 "
                 \n(global ${BS_VAR_PREFIX}{id} (export \"{BS_VAR_PREFIX}{id}\") (mut i64) (i64.const 0))
                 \n(func (export \"get_{BS_VAR_PREFIX}{id}\") (result i64) (global.get ${BS_VAR_PREFIX}{id}))",
-            ));
-
-            wat_global_initilisation.push_str(&format!(
-                "(global.set ${BS_VAR_PREFIX}{id} {})",
-                expression_to_wat(&expr)
-            ));
+            ))
         }
+
         _ => {
-            red_ln!("Unsupported datatype found in WAT var creation");
+            Err(CompileError {
+                msg: "Unsupported datatype found in WAT var creation".to_string(),
+                line_number,
+            })
         }
     }
 }
 
-pub fn expression_to_wat(expr: &AstNode) -> String {
+pub fn expression_to_wat(expr: &AstNode) -> Result<String, CompileError> {
     let mut wat = String::new();
 
     match expr {
-        AstNode::RuntimeExpression(nodes, datatype) => match datatype {
+        AstNode::RuntimeExpression(nodes, datatype, line_number) => match datatype {
             &DataType::Float => {
                 return float_expr_to_wat(nodes);
             }
             _ => {
-                red_ln!("Unsupported datatype found in expression sent to WAT parser");
+                return Err(CompileError {
+                    msg: "Unsupported datatype found in expression sent to WAT parser".to_string(),
+                    line_number: line_number.to_owned(),
+                });
             }
         },
 
-        AstNode::Literal(token) => match token {
+        AstNode::Literal(token, line_number) => match token {
             Token::FloatLiteral(value) => {
                 wat.push_str(&format!("\n(f64.const {})", value.to_string()));
             }
@@ -60,52 +67,60 @@ pub fn expression_to_wat(expr: &AstNode) -> String {
                 wat.push_str(&format!("\n(i64.const {})", value.to_string()));
             }
             _ => {
-                red_ln!("unknown literal found in expression");
+                return Err(CompileError {
+                    msg: "Compiler error: Wrong literal type found in expression sent to WAT parser".to_string(),
+                    line_number: line_number.to_owned(),
+                });
             }
         },
 
         _ => {
-            red_ln!(
-                "Invalid AST node given to expression_to_wat (wat parser): {:?}",
-                expr
-            );
+            return Err(CompileError {
+                msg: "Compiler Bug: Invalid AST node given to expression_to_wat (wat parser): None".to_string(),
+                line_number: 0,
+            });
         }
     }
 
-    wat
+    Ok(wat)
 }
 
 pub fn _new_wat_function() {}
 
-fn float_expr_to_wat(nodes: &Vec<AstNode>) -> String {
+fn float_expr_to_wat(nodes: &Vec<AstNode>) -> Result<String, CompileError> {
     let mut wat: String = String::new();
 
     for node in nodes {
         match node {
-            AstNode::Literal(token) => {
+            AstNode::Literal(token, line_number) => {
                 match token {
                     Token::FloatLiteral(value) => {
                         wat.push_str(&format!(" f64.const {}", value));
                     }
                     _ => {
-                        red_ln!("Compiler error: Wrong literal type found in expression sent to WAT parser");
+                        return Err(CompileError {
+                            msg: "Compiler error: Wrong literal type found in expression sent to WAT parser".to_string(),
+                            line_number: line_number.to_owned(),
+                        });
                     }
                 }
             }
 
-            AstNode::VarReference(name, _) | AstNode::ConstReference(name, _) => {
+            AstNode::VarReference(name, ..) | AstNode::ConstReference(name, ..) => {
                 wat.push_str(&format!(" global.get ${BS_VAR_PREFIX}{name}"));
             }
 
-            AstNode::BinaryOperator(op, _) => {
+            AstNode::BinaryOperator(op, _, line_number) => {
                 let wat_op = match op {
                     Token::Add => " f64.add",
                     Token::Subtract => " f64.sub",
                     Token::Multiply => " f64.mul",
                     Token::Divide => " f64.div",
                     _ => {
-                        red_ln!("Unsupported operator found in operator stack when parsing an expression into WAT");
-                        return String::new();
+                        return Err(CompileError {
+                            msg: "Unsupported operator found in operator stack when parsing an expression into WAT".to_string(),
+                            line_number: line_number.to_owned(),
+                        });
                     }
                 };
 
@@ -113,12 +128,15 @@ fn float_expr_to_wat(nodes: &Vec<AstNode>) -> String {
             }
 
             _ => {
-                red_ln!("unknown AST node found in expression when parsing float expression into WAT: {:?}", node);
+                return Err(CompileError {
+                    msg: "Compiler Bug: unknown AST node found in expression when parsing float expression into WAT".to_string(),
+                    line_number: 0,
+                });
             }
         }
     }
 
-    wat
+    Ok(wat)
 }
 
 // if operators_stack.len() > 0 && output_stack.len() > 0 {

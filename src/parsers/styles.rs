@@ -1,11 +1,12 @@
 use crate::Token;
 
-use super::ast_nodes::AstNode;
+use super::ast_nodes::{Arg, AstNode};
 
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum Tag {
     None,
+    Id(Vec<Arg>),
 
     // Structure of the page
     Main,
@@ -31,7 +32,7 @@ pub enum Tag {
     Table(u32),
     Code(String), // Language
 
-    Nav(AstNode), // Will be an enum with different types of navs
+    Nav(f64), // different nav styles
     List,
 
     // Custom Beanstalk Tags

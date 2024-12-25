@@ -3,10 +3,10 @@
 [header center: [title(1): COLLECTIONS]]
 [main:
 
-All Collections are reference types in Beanstalk.
+All Collections are reference types in Beanstalk. They are dynamically sized and can only contain one data type.
 
-## Dynamic Collections (Arrays)
-When creating a variable collection rather than a constant collection, it becomes a dynamically sized collection.
+You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
+Collections are zero indexed.
 
 Dynamic collections can only contain one data type. 
 [code:
@@ -26,16 +26,16 @@ Dynamic collections can only contain one data type.
     array {Int}
 ]
 
-By using statements inside your collection rather than expressions, you can define keys for the items in the collection. 
+Set keys for items in your dynamic collection to turn it into a list.
 
 [code:
     dictionary = {
-        "key1" : 1,
+        "key1" = 1,
         "key2" = 2,
         "key3" = 3,
     }
 
-    dictionary{"key1"} -- returns 1
+    dictionary."key1" -- returns 1
 ]
 
 [Footer]

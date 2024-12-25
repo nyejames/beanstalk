@@ -1,7 +1,6 @@
-use crate::{build, settings};
+use crate::{build, settings, CompileError};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, grey_ln, print_bold, red_ln};
 use settings::get_default_config;
-use std::error::Error;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::{
@@ -11,20 +10,20 @@ use std::{
     time::Instant,
 };
 
-pub fn start_dev_server(mut path: String) -> Result<(), Box<dyn Error>> {
+pub fn start_dev_server(path: &PathBuf) -> Result<(), CompileError> {
     let url = "127.0.0.1:6969";
     let listener = TcpListener::bind(url).unwrap();
     print_bold!("Dev Server created on: ");
-    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
+    green_ln_bold!("https://{}", url.replace("127.0.0.1", "localhost"));
 
-    let current_dir = std::env::current_dir()?;
-    path = format!("{}/{}", current_dir.to_string_lossy().into_owned(), path);
-    build_project(&path, false);
+    let path = get_current_dir()?.join(path.to_owned());
+
+    build_project(&path, false)?;
 
     let mut modified = SystemTime::UNIX_EPOCH;
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, path.clone(), &mut modified);
+        handle_connection(stream, path.clone(), &mut modified)?;
     }
 
     Ok(())
@@ -32,13 +31,23 @@ pub fn start_dev_server(mut path: String) -> Result<(), Box<dyn Error>> {
 
 fn handle_connection(
     mut stream: TcpStream,
-    path: String,
-    last_modified: &mut std::time::SystemTime,
-) {
+    path: PathBuf,
+    last_modified: &mut SystemTime,
+) -> Result<(), CompileError> {
     let buf_reader = BufReader::new(&mut stream);
 
     // println!("{}", format!("{}/{}/dev/any file should be here", entry_path, path));
-    let mut contents = fs::read(format!("{}/dev/404.html", path)).unwrap();
+    let dir_404 = path.join("dev/404.html");
+    let mut contents = match fs::read(&dir_404) {
+        Ok(content) => content,
+        Err(e) => {
+            return Err(CompileError {
+                msg: format!("Error reading 404 file (is there a 404 file in the {:?} directory?): {:?}", dir_404, e),
+                line_number: 0,
+            });
+        }
+    };
+
     let mut status_line = "HTTP/1.1 404 NOT FOUND";
     let mut content_type = "text/html";
 
@@ -47,15 +56,17 @@ fn handle_connection(
         Ok(request) => {
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
-                match get_home_page_path(&path, false) {
-                    Ok(p) => {
-                        contents = fs::read(p).unwrap();
-                        status_line = "HTTP/1.1 200 OK";
-                    }
+                let p = get_home_page_path(&path, false)?;
+                contents = match fs::read(p) {
+                    Ok(content) => content,
                     Err(e) => {
-                        red_ln!("Error reading home page: {:?}", e);
+                        return Err(CompileError {
+                            msg: format!("Error reading home page: {:?}", e),
+                            line_number: 0,
+                        });
                     }
                 };
+                status_line = "HTTP/1.1 200 OK";
             } else if request.starts_with("HEAD /check") {
                 // the check request has the page url as a query parameter after the /check
                 let request_path = request.split("?page=").nth(1);
@@ -64,93 +75,87 @@ fn handle_connection(
                     Some(p) => {
                         let page_path = p.split_whitespace().collect::<Vec<&str>>()[0];
                         if page_path == "/" {
-                            get_home_page_path(&path, true)
+                            get_home_page_path(&path, true)?
                         } else {
-                            let src_path = PathBuf::from(format!(
-                                "{}/{}{}",
-                                path,
-                                get_default_config().src,
-                                page_path
-                            ))
-                            .with_extension("bs");
-                            Ok(src_path)
+                            PathBuf::from(&path)
+                                .join(get_default_config().src)
+                                .join(page_path)
+                                .with_extension("bs")
                         }
                     }
-                    None => get_home_page_path(&path, true),
+                    None => get_home_page_path(&path, true)?,
                 };
 
-                match &parsed_url {
-                    // Get the metadata of the file
-                    Ok(parsed_url) => {
-                        let global_file_path = PathBuf::from(format!(
-                            "{}/{}/{}",
-                            path,
-                            get_default_config().src,
-                            settings::GLOBAL_PAGE_KEYWORD
-                        ))
-                        .with_extension("bs");
-                        let global_file_modified = if fs::metadata(&global_file_path).is_ok() {
-                            has_been_modified(&global_file_path, last_modified)
-                        } else {
-                            false
-                        };
+                let global_file_path = PathBuf::from(&path)
+                    .join(get_default_config().src)
+                    .join(settings::GLOBAL_PAGE_KEYWORD)
+                    .with_extension("bs");
 
-                        if has_been_modified(parsed_url, last_modified) || global_file_modified {
-                            blue_ln!("Changes detected for {:?}", parsed_url);
-                            build_project(&path, false);
-                            status_line = "HTTP/1.1 205 Reset Content";
-                        } else {
-                            status_line = "HTTP/1.1 200 OK";
-                        }
-                    }
-                    // Throw an error if the url is invalid
-                    Err(e) => {
-                        red_ln!("Error parsing url: {:?}", e);
-                        status_line = "HTTP/1.1 404 NOT FOUND";
-                    }
+                // Get the metadata of the file to check if hot reloading is needed
+                // Check if globals have been modified
+                let global_file_modified = if metadata(&global_file_path).is_ok() {
+                    has_been_modified(&global_file_path, last_modified)
+                } else {
+                    false
+                };
+
+                // Check if the file has been modified
+                if has_been_modified(&parsed_url, last_modified) || global_file_modified {
+                    blue_ln!("Changes detected for {:?}", parsed_url);
+                    build_project(&path, false)?;
+                    status_line = "HTTP/1.1 205 Reset Content";
+                } else {
+                    status_line = "HTTP/1.1 200 OK";
                 }
+
             } else if request.starts_with("GET /") {
                 // Get requested path
                 let file_path = request.split_whitespace().collect::<Vec<&str>>()[1];
 
                 // Set the Content-Type based on the file extension
+
+                let path_to_file = path.join(format!("dev{file_path}"));
                 let file_requested = if file_path.ends_with(".js") {
                     content_type = "application/javascript";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else if file_path.ends_with(".wasm") {
                     content_type = "application/wasm";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else if file_path.ends_with(".css") {
                     content_type = "text/css";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else if file_path.ends_with(".png") {
                     content_type = "image/png";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else if file_path.ends_with(".jpg") {
                     content_type = "image/jpeg";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else if file_path.ends_with(".ico") {
                     content_type = "image/ico";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else if file_path.ends_with(".webmanifest") {
                     content_type = "application/manifest+json";
-                    fs::read(format!("{}/dev{}", path, file_path))
+                    fs::read(&path_to_file)
                 } else {
-                    let page_path = format!("{}/dev{}.html", path, file_path);
-
+                    let page_path = &path_to_file.with_extension("html");
                     fs::read_to_string(page_path).map(|c| c.into_bytes())
                 };
 
                 match file_requested {
                     Ok(c) => {
-                        // Make sure the path does not try to access any directories outside of /dev
+                        // Make sure the path does not try to access any directories outside /dev
                         if !file_path.contains("..") {
                             contents = c;
                             status_line = "HTTP/1.1 200 OK";
+                        } else {
+                            red_ln!("Error: File tried to access outside of /dev directory");
+                            contents = String::new().into_bytes();
+                            status_line = "HTTP/1.1 404 NOT FOUND";
                         }
                     }
+
                     Err(_) => {
-                        red_ln!("File not found: {}", file_path);
+                        red_ln!("File not found: {:?}", path_to_file);
                     }
                 }
             }
@@ -170,33 +175,35 @@ fn handle_connection(
     let response = &[string_response.as_bytes(), &contents].concat();
 
     match stream.write_all(response) {
-        Ok(_) => {}
-        Err(e) => {
-            red_ln!("Error sending response: {:?}", e);
-        }
-    };
-}
-
-fn build_project(build_path: &String, release: bool) {
-    dark_cyan_ln!("Building project...");
-    let start = Instant::now();
-    match build::build(build_path.to_string(), release) {
         Ok(_) => {
-            let duration = start.elapsed();
-            grey_ln!("------------------------------------");
-            print!("\nProject built in: ");
-            green_ln_bold!("{:?}", duration);
+            Ok(())
         }
         Err(e) => {
-            red_ln!("Error building project: {:?}", e);
-            return;
+            Err(CompileError {
+                msg: format!("Error sending response: {:?}", e),
+                line_number: 0,
+            })
         }
     }
 }
 
-fn has_been_modified(path: &PathBuf, modified: &mut std::time::SystemTime) -> bool {
+fn build_project(build_path: &PathBuf, release: bool) -> Result<(), CompileError> {
+    dark_cyan_ln!("Building project...");
+    let start = Instant::now();
+
+    build::build(build_path, release)?;
+
+    let duration = start.elapsed();
+    grey_ln!("------------------------------------");
+    print!("\nProject built in: ");
+    green_ln_bold!("{:?}", duration);
+
+    Ok(())
+}
+
+fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> bool {
     // Check if it's a file or directory
-    let path_metadata = match fs::metadata(path) {
+    let path_metadata = match metadata(path) {
         Ok(m) => m,
         Err(_) => {
             red_ln!(
@@ -266,7 +273,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut std::time::SystemTime) -> bo
     false
 }
 
-fn get_home_page_path(path: &String, src: bool) -> Result<PathBuf, Box<dyn Error>> {
+fn get_home_page_path(path: &PathBuf, src: bool) -> Result<PathBuf, CompileError> {
     let root_src_path = if src {
         PathBuf::from(&path).join(get_default_config().src)
     } else {
@@ -276,8 +283,10 @@ fn get_home_page_path(path: &String, src: bool) -> Result<PathBuf, Box<dyn Error
     let src_files = match fs::read_dir(root_src_path) {
         Ok(m) => m,
         Err(e) => {
-            red_ln!("Error reading root src directory metadata");
-            return Err(e.into());
+            return Err(CompileError {
+                msg: format!("Error reading root src directory metadata: {:?}", e),
+                line_number: 0,
+            });
         }
     };
 
@@ -314,8 +323,10 @@ fn get_home_page_path(path: &String, src: bool) -> Result<PathBuf, Box<dyn Error
                 }
             }
             Err(e) => {
-                red_ln!("Error reading src directory");
-                return Err(e.into());
+                return Err(CompileError {
+                    msg: format!("Error reading src directory: {:?}", e),
+                    line_number: 0,
+                });
             }
         };
     }
@@ -323,15 +334,22 @@ fn get_home_page_path(path: &String, src: bool) -> Result<PathBuf, Box<dyn Error
     match first_page {
         Some(index_page_path) => Ok(index_page_path),
         None => {
-            red_ln!(
-                "No page found in {} directory: {:?}",
-                if src { "src" } else { "dev" },
-                first_page
-            );
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "No page found in src directory",
-            )));
+            Err(CompileError {
+                msg: format!("No page found in {} directory: {:?}", if src { "src" } else { "dev" }, first_page),
+                line_number: 0,
+            })
+        }
+    }
+}
+
+fn get_current_dir() -> Result<PathBuf, CompileError> {
+    match std::env::current_dir() {
+        Ok(dir) => Ok(dir),
+        Err(e) => {
+            Err(CompileError {
+                msg: format!("Error getting current directory: {:?}", e),
+                line_number: 0,
+            })
         }
     }
 }

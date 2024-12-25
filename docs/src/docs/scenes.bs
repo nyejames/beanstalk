@@ -12,8 +12,6 @@ is used to define the styling and positioning of the scene.
 #### The body
 is used to define the content of the scene.
 
-
-
 These two sections are separated by a colon.
 
 Scenes are scoped using square brackets and have predefined keywords you use in the scene head that can change their behavior, content and styling. 

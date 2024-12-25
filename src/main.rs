@@ -1,10 +1,6 @@
 use std::path::PathBuf;
 use std::time::Instant;
-use std::{
-    fs,
-    io::{self, Write},
-    path::Path,
-};
+use std::{env, fs, io::{self, Write}, path::Path};
 
 mod bs_css;
 pub mod bs_types;
@@ -44,19 +40,38 @@ mod wasm_output {
     pub mod wasm_generator;
     pub mod wat_parser;
 }
-use colour::{dark_cyan, green_ln_bold, grey_ln, red_ln};
+use colour::{dark_cyan, green_ln_bold, grey_ln, red_bold, red_ln};
 pub use tokens::Token;
 enum Command {
     NewHTMLProject(PathBuf),
-    Build(String),
-    Release(String),
+    Dev(PathBuf),  // Runs local dev server
+    Release(PathBuf),
     Test,
-    Dev(String),  // Runs local dev server
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
 }
 
+pub struct CompileError {
+    pub msg: String,
+    pub line_number: u32,
+}
+
 fn main() {
-    let command = collect_user_input();
+    let compiler_args: Vec<String> = env::args().collect();
+
+    if compiler_args.len() < 2 {
+        print_help(false);
+        return;
+    }
+
+    let command = match get_command(&compiler_args[1..].to_vec()) {
+        Ok(command) => command,
+        Err(e) => {
+            red_ln!("{}", e);
+            print_help(true);
+            return;
+        }
+    };
+
     match command {
         Command::NewHTMLProject(path) => {
             let args = prompt_user_for_input("Project name: ".to_string());
@@ -76,82 +91,63 @@ fn main() {
             match create_new_project::create_project(path, &project_name) {
                 Ok(_) => {
                     println!("Creating new HTML project...");
-                    main();
                 }
                 Err(e) => {
                     red_ln!("Error creating project: {:?}", e);
                 }
             }
         }
-        Command::Build(path) => {
-            dark_cyan!("Building project...");
-            let start = Instant::now();
-            match build::build(path, true) {
-                Ok(_) => {
-                    let duration = start.elapsed();
-                    grey_ln!("------------------------------------");
-                    print!("\nProject built in: ");
-                    green_ln_bold!("{:?}", duration);
 
-                    main();
-                }
-                Err(e) => {
-                    red_ln!("Error building project: {:?}", e);
-                }
-            }
-        }
         Command::Release(path) => {
             dark_cyan!("Building project...");
             let start = Instant::now();
-            match build::build(path, true) {
+            match build::build(&path, true) {
                 Ok(_) => {
                     let duration = start.elapsed();
                     grey_ln!("------------------------------------");
                     print!("\nProject built in: ");
                     green_ln_bold!("{:?}", duration);
-
-                    main();
                 }
                 Err(e) => {
-                    red_ln!("Error building project: {:?}", e);
+                    red_ln!("Error building project: {:?}", e.msg);
                 }
             }
         }
+
         Command::Test => {
             println!("Testing...");
-            let result = test::test_build();
-            match result {
-                Ok(_) => {
-                    main();
-                }
+            let test_path = PathBuf::from("test_output");
+            match test::test_build(&test_path) {
+                Ok(_) => {}
                 Err(e) => {
-                    red_ln!("Error testing: {:?}", e);
+                    print_formatted_error(&e, &test_path.join("src/#page.bs"));
                 }
-            }
+            };
         }
+
         Command::Dev(path) => {
             println!("Starting dev server...");
-            match dev_server::start_dev_server(path) {
+            let mut path = PathBuf::from(path);
+
+            match dev_server::start_dev_server(&mut path) {
                 Ok(_) => {
                     println!("Dev server shutting down ... ");
                 }
                 Err(e) => {
-                    red_ln!("Error with dev server: {:?}", e);
+                    print_formatted_error(&e, &path);
                 }
             }
         }
+
         Command::Wat(path) => {
             println!("Compiling WAT to WebAssembly...");
             let _ = wasm_output::wasm_generator::compile_wat_file(&path);
-            main();
         }
     }
 }
-
-fn collect_user_input() -> Command {
-    let args = prompt_user_for_input("Enter compiler command: ".to_string());
-
+fn get_command(args: &Vec<String>) -> Result<Command, String> {
     match args.get(0).map(String::as_str) {
+
         Some("new") => {
             // Check type of project
             match args.get(1).map(String::as_str) {
@@ -160,116 +156,90 @@ fn collect_user_input() -> Command {
 
                     if dir.len() == 1 {
                         let dir = dir[0].to_string();
-                        if check_if_valid_directory_path(&dir) {
-                            return Command::NewHTMLProject(PathBuf::from(dir));
-                        }
+                        check_if_valid_directory_path(&dir)?;
+                        Ok(Command::NewHTMLProject(PathBuf::from(dir)))
                     } else {
                         // use current directory
-                        return Command::NewHTMLProject(PathBuf::from(""));
+                        Ok(Command::NewHTMLProject(PathBuf::from("")))
                     }
                 }
                 _ => {
-                    red_ln!("Invalid project type");
+                   Err("Invalid project type - currently only 'html' is supported (try 'cargo run new html')".to_string())
                 }
             }
         }
-        Some("build") => {
-            let entry_path = match std::env::current_dir() {
-                Ok(dir) => dir.to_str().unwrap().to_owned(),
-                Err(e) => {
-                    red_ln!("Error getting current directory: {:?}", e);
-                    "".to_owned()
-                }
-            };
 
-            match args.get(1).map(String::as_str) {
-                Some(string) => {
-                    return Command::Build(format!("{}/{}", entry_path, string));
-                }
-                _ => {
-                    // Return current working directory path
-                    return Command::Build(entry_path);
-                }
-            }
-        }
         Some("release") => {
-            let entry_path = match std::env::current_dir() {
-                Ok(dir) => dir.to_str().unwrap().to_owned(),
-                Err(e) => {
-                    red_ln!("Error getting current directory: {:?}", e);
-                    "".to_owned()
-                }
-            };
+            let entry_path = env::current_dir()
+                .map_err(|e| format!("Error getting current directory: {:?}", e))?;
 
             match args.get(1).map(String::as_str) {
                 Some(string) => {
-                    return Command::Release(format!("{}/{}", entry_path, string));
+                    Ok(Command::Release(entry_path.join(string)))
                 }
                 _ => {
                     // Return current working directory path
-                    return Command::Release(entry_path);
+                    Ok(Command::Release(entry_path))
                 }
             }
         }
+
         Some("test") => {
-            return Command::Test;
+            Ok(Command::Test)
         }
+
         Some("dev") => {
             match args.get(1) {
                 Some(path) => {
                     if path.is_empty() {
-                        return Command::Dev("test_output".to_string());
+                        Ok(Command::Dev(PathBuf::from("test_output")))
                     } else {
-                        return Command::Dev(path.to_string());
+                        Ok(Command::Dev(PathBuf::from(path)))
                     }
                 }
-                None => return Command::Dev("test_output".to_string()),
-            };
+                None => Ok(Command::Dev(PathBuf::from("test_output"))),
+            }
         }
+
         Some("wat") => {
             match args.get(1).map(String::as_str) {
                 Some(path) => {
                     if path.is_empty() {
-                        return Command::Wat(PathBuf::from("test_output/test.wat"));
+                        Ok(Command::Wat(PathBuf::from("test_output/test.wat")))
                     } else {
-                        return Command::Wat(PathBuf::from(path));
+                        Ok(Command::Wat(PathBuf::from(path)))
                     }
                 }
-                None => return Command::Wat(PathBuf::from("test_output/test.wat")),
-            };
+                None => Ok(Command::Wat(PathBuf::from("test_output/test.wat"))),
+            }
         }
 
         _ => {
-            return Command::Test;
+            Ok(Command::Test)
         }
     }
-
-    collect_user_input()
 }
 
-fn check_if_valid_directory_path(path: &str) -> bool {
+fn check_if_valid_directory_path(path: &str) -> Result<(), String> {
     let path = Path::new(path);
 
     // Check if the path exists
     if !path.exists() {
-        red_ln!("Path does not exist: {}", path.display());
-        return false;
+        return Err(format!("Path does not exist: {}", path.display()));
     }
 
     // Check if the path is a directory
     if !path.is_dir() {
-        red_ln!("Path is not a directory: {}", path.display());
-        return false;
+        return Err(format!("Path is not a directory: {}", path.display()));
     }
 
     // Check if the directory is writable
     let metadata = fs::metadata(path).expect("Unable to read metadata");
     if metadata.permissions().readonly() {
-        red_ln!("Directory is not writable: {}", path.display());
-        return false;
+        return Err(format!("Directory is not writable: {}", path.display()));
     }
 
-    true
+    Ok(())
 }
 
 fn prompt_user_for_input(msg: String) -> Vec<String> {
@@ -280,4 +250,55 @@ fn prompt_user_for_input(msg: String) -> Vec<String> {
     let args: Vec<String> = input.split_whitespace().map(String::from).collect();
 
     args
+}
+
+fn print_formatted_error(e: &CompileError, file_path: &PathBuf) {
+    // Read the file and get the line as a string
+    let file = match fs::read_to_string(file_path) {
+        Ok(file) => file,
+        Err(e) => {
+            red_ln!("Error reading file path when printing errors: {:?}", e);
+            return;
+        }
+    };
+
+    let line = match file.lines().nth(e.line_number as usize) {
+        Some(line) => line,
+        None => {
+            red_ln!("Error: Line number is out of range");
+            return;
+        }
+    };
+
+    red_ln!("------------------------------------");
+
+    if e.line_number == 0 {
+        red_bold!("Error during compilation: ");
+        red_ln!("{}", e.msg);
+    } else {
+        red_bold!("Error during compilation at line {}: ", e.line_number);
+        red_ln!("{}", e.msg);
+
+        grey_ln!("------------------------------------");
+
+        println!("{}", line);
+        red_ln!("{}", std::iter::repeat('^').take(line.len()).collect::<String>());
+    }
+
+    red_ln!("------------------------------------");
+}
+
+fn print_help(commands_only: bool) {
+    if !commands_only {
+        grey_ln!("------------------------------------");
+        green_ln_bold!("The Beanstalk compiler!");
+        println!("Usage: cargo run <command> <args>");
+    }
+    green_ln_bold!("Commands:");
+    println!("  new <project name>   - Creates a new HTML project");
+    println!("  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)");
+    println!("  build <path>         - Builds a file");
+    println!("  release <path>       - Builds a project in release mode");
+    println!("  test                 - Runs the test suite (currently just for testing the compiler)");
+    println!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }

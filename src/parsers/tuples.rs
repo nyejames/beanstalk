@@ -1,38 +1,40 @@
-use colour::red_ln;
-
 use super::{
-    ast_nodes::{AstNode, Reference},
-    expressions::parse_expression::create_expression,
+    ast_nodes::{AstNode, Arg},
+    variables::create_new_var_or_ref,
 };
-use crate::{bs_types::DataType, parsers::ast_nodes::Node, Token};
+use crate::{parsers::ast_nodes::Node, CompileError, Token};
+use crate::bs_types::DataType;
+use crate::parsers::expressions::parse_expression::create_expression;
 
-// Assumes to have started after the the open parenthesis
+// Assumes to have started after the open parenthesis
 // Datatype must always be a tuple containing the data types of the items in the tuple
 // Or inferred if the data type is not known
 // Also modifies the data type passed into it
-// TO DO: Add named tuples
+// If there is only one item in the tuple, it just returns that item
 pub fn new_tuple(
     initial_value: Option<AstNode>,
     tokens: &Vec<Token>,
     i: &mut usize,
-    data_type: &mut DataType,
+    required_args: &Vec<Arg>,
     ast: &Vec<AstNode>,
-    starting_line_number: &u32,
-    variable_declarations: &Vec<Reference>,
-) -> AstNode {
-    let mut item_data_types = match data_type {
-        DataType::Tuple(inner_types) => *inner_types.to_owned(),
-        _ => Vec::new(),
-    };
-    let mut items: Vec<AstNode> = match initial_value {
+    variable_declarations: &mut Vec<Arg>,
+    token_line_numbers: &Vec<u32>,
+) -> Result<Vec<Arg>, CompileError> {
+    let mut item_args = required_args.to_owned();
+    
+    let mut items: Vec<Arg> = match initial_value {
         Some(node) => {
-            item_data_types.push(node.get_type());
-            vec![node]
+            vec![Arg {
+                name: "0".to_string(),
+                data_type: node.get_type(),
+                value: node,
+            }]
         }
         None => Vec::new(),
     };
 
     let mut next_item: bool = true;
+    let mut item_name: String = "0".to_string();
 
     while let Some(token) = tokens.get(*i) {
         match token {
@@ -40,53 +42,121 @@ pub fn new_tuple(
                 *i += 1;
                 break;
             }
+
             Token::Comma => {
+                if next_item {
+                    return Err(CompileError {
+                        msg: "Expected a tuple item after the comma".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
+                }
                 next_item = true;
                 *i += 1;
             }
+
+            Token::Newline => {
+                *i += 1;
+            }
+
+            Token::Variable(value) => {
+                if !next_item {
+                    return Err(CompileError {
+                        msg: "Expected a comma between tuple declarations".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
+                }
+
+                let new_var = create_new_var_or_ref(
+                    value,
+                    variable_declarations,
+                    tokens,
+                    i,
+                    false,
+                    ast,
+                    token_line_numbers,
+                )?;
+
+                items.push(
+                    Arg {
+                        name: value.to_owned(),
+                        value: new_var.0,
+                        data_type: new_var.1,
+                    }
+                );
+
+                next_item = false;
+            }
+
             _ => {
                 if !next_item {
-                    red_ln!("Expected a comma between tuple items");
-                    return AstNode::Error(
-                        "Expected a comma between tuple items".to_string(),
-                        starting_line_number.to_owned(),
-                    );
+                    return Err(CompileError {
+                        msg: "Expected a comma between tuple items".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
                 }
-                next_item = false;
 
-                // Get the datatype of this tuple item
-                let mut item_data_type = match item_data_types.get(items.len()) {
-                    Some(datatype) => datatype.to_owned(),
-                    None => {
-                        DataType::Inferred
-                    }
+                next_item = false;
+                
+                let mut data_type = if required_args.len() == 0 {
+                    DataType::Inferred
+                } else if required_args.len() < items.len() {
+                    return Err(CompileError {
+                        msg: "Too many arguments provided to tuple".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
+                } else {
+                    required_args[items.len()].data_type.to_owned()
                 };
 
-                items.push(create_expression(
+                let arg_value = create_expression(
                     tokens,
                     i,
                     true,
-                    &ast,
-                    starting_line_number,
-                    &mut item_data_type,
-                    tokens[*i] == Token::OpenParenthesis,
+                    ast,
+                    &mut data_type,
+                    false,
                     variable_declarations,
-                ));
+                    token_line_numbers,
+                )?;
 
-                item_data_types.push(item_data_type);
+                // Get the arg of this tuple item
+                let item_arg = match item_args.get(items.len()) {
+                    Some(arg) => arg.to_owned(),
+                    None => {
+                        Arg {
+                            name: item_name,
+                            data_type,
+                            value: arg_value,
+                        }
+                    }
+                };
+
+                items.push(item_arg.to_owned());
+                item_args.push(item_arg);
+                item_name = items.len().to_string();
             }
         }
     }
 
-    if items.len() == 1 {
-        return items[0].to_owned();
+    Ok(items)
+}
+
+// AUTOMATIC TUPLE UNPACKING
+
+// If a tuple contains only one item, return that item
+// Tuples of no items represent null or empty - this will probably be the only way to represent that
+pub fn create_node_from_tuple(
+    tuple: Vec<Arg>,
+    line_number: u32,
+) -> Result<AstNode, CompileError> {
+
+    if tuple.len() == 1 {
+        return Ok(tuple[0].value.to_owned());
     }
 
-    if items.len() < 1 {
-        return AstNode::Empty;
+    if tuple.len() < 1 {
+        return Ok(AstNode::Empty(line_number));
     }
 
-    *data_type = DataType::Tuple(Box::new(item_data_types));
-
-    AstNode::Tuple(items, starting_line_number.to_owned())
+    Ok(AstNode::Tuple(tuple, line_number))
 }

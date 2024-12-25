@@ -10,7 +10,7 @@ Here is a list of current bugs, development goals and planned features.
 - Finish implementing all math operators and brackets
 - get variables and mostly folded expressions working fully
 - Tidy up Error reporting
-- Code blocks: wrap every token inside the pre in a span and give it a style based on the token type. get_next_token can be used for this.
+- Switching to arbitary precision instead of floats: https://daninet.github.io/gmp-wasm/
 
 ## Current Bugs
 *Scenes*
@@ -28,6 +28,8 @@ Here is a list of current bugs, development goals and planned features.
 - Scoping and variable shadowing
 - Commit to final memory management strategy for the language
 - Compiler as a proper command line tool
+- Documentation generator - scenes can be docs scenes that document the code around it, everything else is placed into code blocks around these scenes
+- nestable comments
 
 ## Future Design Plans and proposals
 - Function references to be compile time evaluated if no brackets? (must have no captures)

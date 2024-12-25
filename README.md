@@ -1,4 +1,4 @@
-<div align="center">
+<div text-align="center">
 
   <h1>Beanstalk 🌱</h1>
 
@@ -12,7 +12,7 @@
 
   ---
   <br>
-  <p>⚠️ This is currently a work in progress compiler. It's not reccomended you try and actually use it yet!</p>
+  <p>⚠️ This is currently a work in progress compiler. It's not recommended you try and actually use it yet!</p>
   <p>⚠️ The design and direction of the language is still subject to change overtime</p>
 
   <h1>
@@ -20,7 +20,7 @@
       Documentation
     </a>
   </h1>
-  <p>The docs were created entirely using Beanstalk. The output of the compiler is directly pushed to Github pages.</p>
+  <p>The docs were created entirely using Beanstalk. The output of the compiler is directly pushed to GitHub pages.</p>
   <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting plugin for Visual Studio / VSCode can be found here</a>
 
 </div>
@@ -49,11 +49,11 @@ Use keywords at the start of scenes to define, style and position all your eleme
 The compiler will only create any CSS or JS you've actually used.
 
 ### Compiled Output
-Beanstalk uses Web Assembly to unlock more datatypes than what JS can offer on it's own.
+Beanstalk uses Web Assembly to unlock more datatypes than what JS can offer on its own.
 
 Being compiled means folding constants, type checking and optimizing the output to be as small as possible is all done for you.
 
-The built in hot-reloading development server can be used to see changes in real time. 
+The built-in hot-reloading development server can be used to see changes in real time. 
 
 The compiler itself is written in Rust, and uses as few dependencies as possible to keep it fast and secure.
 
