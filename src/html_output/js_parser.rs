@@ -1,5 +1,7 @@
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token};
 use crate::parsers::ast_nodes::Value;
+use crate::{
+    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token,
+};
 
 // Create everything necessary in JS
 // Break out pieces in WASM calls
@@ -27,10 +29,13 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                             js.push_str(&value.to_string());
                         }
 
-                        Value::Reference(id, _) => {
+                        Value::Reference(id, _, argument_accessed) => {
                             // All just JS for now
                             js.push_str(&format!(" {BS_VAR_PREFIX}{id}"));
-                            /*                            
+                            if let Some(index) = argument_accessed {
+                                js.push_str(&format!("[{}]", index));
+                            }
+                            /*
                                 js.push_str(&format!("wsx.get_{BS_VAR_PREFIX}{id}()"));
                             */
                         }
@@ -40,7 +45,7 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                                 msg: format!("Compiler Bug (Not Implemented yet): Invalid argument type for function call (js_parser): {:?}", value),
                                 line_number,
                             });
-                        },
+                        }
                     },
 
                     AstNode::BinaryOperator(op, _, line_number) => match op {
@@ -56,13 +61,23 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         }
                     },
 
-                    AstNode::FunctionCall(name, args, ..) => {
-                        js.push_str(&format!(" {}({})", name, combine_vec_to_js(&args, line_number)?));
+                    AstNode::FunctionCall(name, args, _, argument_accessed, _) => {
+                        js.push_str(&format!(
+                            " {}({})",
+                            name,
+                            combine_vec_to_js(&args, line_number)?
+                        ));
+                        if let Some(index) = argument_accessed {
+                            js.push_str(&format!("[{}]", index));
+                        }
                     }
 
                     _ => {
                         return Err(CompileError {
-                            msg: "unknown AST node found in expression when parsing an expression into JS".to_string(),
+                            msg: format!(
+                                "unknown AST node found in expression when parsing an expression into JS: {:?}",
+                                node
+                            ),
                             line_number: line_number.to_owned(),
                         });
                     }
@@ -96,9 +111,12 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
         Value::String(value) => {
             js.push_str(&format!("\"{}\"", value));
         }
-        
-        Value::Reference(name, _) => {
+
+        Value::Reference(name, _, argument_accessed) => {
             js.push_str(&format!(" {BS_VAR_PREFIX}{name}"));
+            if let Some(index) = argument_accessed {
+                js.push_str(&format!("[{}]", index));
+            }
         }
 
         // If the expression is just a tuple,
@@ -113,7 +131,10 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
 
         _ => {
             return Err(CompileError {
-                msg: format!("Compiler Bug: Invalid AST node given to expression_to_js: {:?}", expr),
+                msg: format!(
+                    "Compiler Bug: Invalid AST node given to expression_to_js: {:?}",
+                    expr
+                ),
                 line_number: line_number.to_owned(),
             });
         }
@@ -133,7 +154,10 @@ pub fn create_reference_in_js(name: &String, data_type: &DataType) -> String {
     }
 }
 
-pub fn combine_vec_to_js(collection: &Vec<Value>, line_number: u32) -> Result<String, CompileError> {
+pub fn combine_vec_to_js(
+    collection: &Vec<Value>,
+    line_number: u32,
+) -> Result<String, CompileError> {
     let mut js = String::new();
 
     let mut i: usize = 0;
@@ -159,11 +183,9 @@ pub fn collection_to_js(collection: &Value, line_number: u32) -> Result<String, 
             }
             combine_vec_to_js(&nodes, line_number)
         }
-        _ => {
-            Err(CompileError {
-                msg: "Non-tuple AST node given to collection_to_js".to_string(),
-                line_number: 0,
-            })
-        }
+        _ => Err(CompileError {
+            msg: "Non-tuple AST node given to collection_to_js".to_string(),
+            line_number: 0,
+        }),
     }
 }

@@ -1,5 +1,5 @@
-use crate::{CompileError, Token};
 use crate::parsers::ast_nodes::Value;
+use crate::{CompileError, Token};
 
 // Returns the hsla value of the color in the color pallet
 // Colors in Beanstalk can have shades between -100 and 100

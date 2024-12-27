@@ -41,20 +41,20 @@ impl NumericalParsing for char {
         self.is_whitespace() && self != &'\n'
     }
     fn is_number_operation_char(&self) -> bool {
-        self.is_numeric() 
-        || self == &'.'
-        || self == &'_'
-        || self == &'-'
-        || self == &'+'
-        || self == &'*'
-        || self == &'/'
-        || self == &'%'
-        || self == &'^'
+        self.is_numeric()
+            || self == &'.'
+            || self == &'_'
+            || self == &'-'
+            || self == &'+'
+            || self == &'*'
+            || self == &'/'
+            || self == &'%'
+            || self == &'^'
     }
     fn is_bracket(&self) -> bool {
         match self {
             '(' | ')' | '{' | '}' | '[' | ']' => true,
-            _ => false
+            _ => false,
         }
     }
 }

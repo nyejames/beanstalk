@@ -1,9 +1,10 @@
-use std::path::PathBuf;
-
 use super::styles::{Action, Style, Tag};
 use crate::{
-    bs_types::{return_datatype, DataType}, Token
+    bs_types::{return_datatype, DataType},
+    Token,
 };
+use colour::red_ln;
+use std::path::PathBuf;
 
 #[derive(Debug, PartialEq, Clone)]
 // Args are abstractions on top of Datatypes
@@ -13,7 +14,7 @@ use crate::{
 pub struct Arg {
     pub name: String, // Optional Name of the argument (empty string if unnamed)
     pub data_type: DataType,
-    pub value: Value, // Optional Value of the argument - None if no value
+    pub value: Value, // Optional Value of the argument - 'None' if no value
 }
 
 // The possible values of any type
@@ -21,7 +22,8 @@ pub struct Arg {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     None,
-    Reference(String, DataType),
+    Reference(String, DataType, Option<usize>), // Name, DataType, Specific argument accessed
+
     Runtime(Vec<AstNode>, DataType),
 
     Int(i64),
@@ -53,10 +55,8 @@ pub enum AstNode {
 
     // Basics
     Function(String, Vec<Arg>, Vec<AstNode>, bool, Vec<Arg>, u32), // Function name, Args (named), Body, Public, return types (named), Line number
-    Expression(Vec<AstNode>, u32), // Expression that can contain mixed types, line number
     RuntimeExpression(Vec<AstNode>, DataType, u32), // Expression, Result type, Line number
 
-    Error(String, u32), // Message, line number
     Comment(String),
     VarDeclaration(String, Value, bool, DataType, bool, u32), // Variable name, Value, Public, Type, is_const, Line number
 
@@ -64,22 +64,19 @@ pub enum AstNode {
     // Print can accept multiple arguments and will coerce them to strings
     Print(Vec<Value>, u32), // Value, Line number
 
+    // Not even sure if this is needed
     JSStringReference(String, u32), // Variable name, Line number
-    FunctionCall(String, Vec<Value>, Vec<Arg>, u32), // Function name, arguments (can be a tuple of arguments), return args, Line number
 
-    // Need to remove for just being literals
-    CollectionAccess(String, usize, DataType, u32), // Name, Index, Type, Line number
-    TupleAccess(String, usize, DataType, u32),      // Name, Index, Type, Line number
+    // A bit too fiddly to just be values / literals
+    FunctionCall(String, Vec<Value>, Vec<Arg>, Option<usize>, u32), // Function name, arguments (has been sorted into correct order), return args, specific argument accessed, Line number
 
     // Other language code blocks
-    JS(String, u32), // Code, Line number
-    CSS(String, u32), // Code, Line number
+    JS(String, u32),   // Code, Line number
+    CSS(String, u32),  // Code, Line number
     WASM(String, u32), // Code, Line number
 
     // Literals
     Literal(Value, u32), // Token, Line number
-    Collection(Vec<AstNode>, DataType, u32), // Collection, Type, Line number
-    Tuple(Vec<Arg>, u32),           // Tuple, line number
 
     SceneTemplate,
     Empty(u32), // Line number
@@ -91,23 +88,24 @@ pub enum AstNode {
     UnaryOperator(Token, bool, u32), // Operator, is_postfix, Line number
 
     // SCENES ONLY
+    // Todo - separate from main AST
     Id(Vec<Arg>, u32), // ID, Line number
 
-    Span(String, u32), // ID, Line number
-    P(String, u32), // ID, Line number
-    Pre(String, u32), // Code, Line number
+    Span(String, u32),              // ID, Line number
+    P(String, u32),                 // ID, Line number
+    Pre(String, u32),               // Code, Line number
     CodeBlock(String, String, u32), // Code, Language, Line number
     Newline,
 
     Heading(u8),
     BulletPoint(u8),
-    Em(u8, String, u32), // Strength, Content, Line number
+    Em(u8, String, u32),      // Strength, Content, Line number
     Superscript(String, u32), // Content, Line number
-    Space(u32), // Add a space at front of element (line number)
+    Space(u32),               // Add a space at front of element (line number)
 
     // SCENE META DATA
     Title(String, u32), // Content, Line number
-    Date(String, u32), // Content, Line number
+    Date(String, u32),  // Content, Line number
 }
 
 pub trait NodeInfo {
@@ -128,31 +126,12 @@ impl NodeInfo for AstNode {
         match self {
             AstNode::Literal(value, _) => value.to_owned(),
 
-            // Turns tuple into a vec of values
-            AstNode::Tuple(args, _) => {
-                let values: Vec<Value> = args.iter().map(|arg| arg.value.to_owned()).collect();
-
-                // Automatically convert tuples of one item into that item
-                if values.len() == 1 {
-                    return values[0].to_owned()
-                }
-
-                // An empty tuple is None in this language
-                if values.len() < 1 {
-                    return Value::None
-                }
-
-                Value::Tuple(args.to_owned())
-            }
-
-            AstNode::Collection(nodes, data_type, _) => Value::Collection(nodes.iter().map(|arg| arg.get_value()).collect(), data_type.to_owned()),
-
             // Grab the value inside the variable declaration
-            AstNode::VarDeclaration(_, node, ..) => {
-                node.to_owned()
-            },
+            AstNode::VarDeclaration(_, node, ..) => node.to_owned(),
 
-            AstNode::RuntimeExpression(nodes, data_type, _) => Value::Runtime(nodes.to_owned(), data_type.to_owned()),
+            AstNode::RuntimeExpression(nodes, data_type, _) => {
+                Value::Runtime(nodes.to_owned(), data_type.to_owned())
+            }
 
             _ => Value::None,
         }
@@ -168,10 +147,25 @@ impl NodeInfo for Value {
             Value::Float(_) => DataType::Float,
             Value::String(_) => DataType::String,
             Value::Bool(_) => DataType::Bool,
-            Value::Scene(_, _, _, _) => DataType::Scene,
+            Value::Scene(..) => DataType::Scene,
             Value::Collection(_, data_type) => data_type.to_owned(),
             Value::Tuple(args) => DataType::Tuple(args.to_owned()),
-            Value::Reference(_, data_type) => data_type.to_owned(),
+            Value::Reference(_, data_type, argument_accessed) => {
+                if let Some(index) = argument_accessed {
+                    match &data_type {
+                        DataType::Tuple(inner_types) | DataType::Function(_, inner_types) => {
+                            inner_types[*index].data_type.to_owned()
+                        }
+                        DataType::Collection(inner_type) => *inner_type.to_owned(),
+                        _ => {
+                            red_ln!("Compiler Bug: Argument accessed on non-tuple/function/collection (this should never happen)");
+                            data_type.to_owned()
+                        }
+                    }
+                } else {
+                    data_type.to_owned()
+                }
+            }
         }
     }
 

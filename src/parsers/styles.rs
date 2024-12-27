@@ -30,7 +30,7 @@ pub enum Tag {
     Video(Value, u32), // src
     Audio(Value, u32), // src
     Table(Value, u32), // Columns
-    Code(String, u32),  // Language
+    Code(String, u32), // Language
 
     Nav(Value, u32), // different nav styles
     List,
@@ -58,7 +58,7 @@ pub enum Style {
     TextColor(Value, Token, u32), // Value, type (rgb, hsl)
     BackgroundColor(Value, u32),
     Alt(String, u32),
-    Center(bool, u32),   // true = also center vertically
+    Center(bool, u32), // true = also center vertically
     Order(Value, u32), // For positioning elements inside a grid/flex container/nav etc
     Hide(u32),
     Blank,

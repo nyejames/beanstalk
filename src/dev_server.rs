@@ -42,7 +42,10 @@ fn handle_connection(
         Ok(content) => content,
         Err(e) => {
             return Err(CompileError {
-                msg: format!("Error reading 404 file (is there a 404 file in the {:?} directory?): {:?}", dir_404, e),
+                msg: format!(
+                    "Error reading 404 file (is there a 404 file in the {:?} directory?): {:?}",
+                    dir_404, e
+                ),
                 line_number: 0,
             });
         }
@@ -107,7 +110,6 @@ fn handle_connection(
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }
-
             } else if request.starts_with("GET /") {
                 // Get requested path
                 let file_path = request.split_whitespace().collect::<Vec<&str>>()[1];
@@ -175,15 +177,11 @@ fn handle_connection(
     let response = &[string_response.as_bytes(), &contents].concat();
 
     match stream.write_all(response) {
-        Ok(_) => {
-            Ok(())
-        }
-        Err(e) => {
-            Err(CompileError {
-                msg: format!("Error sending response: {:?}", e),
-                line_number: 0,
-            })
-        }
+        Ok(_) => Ok(()),
+        Err(e) => Err(CompileError {
+            msg: format!("Error sending response: {:?}", e),
+            line_number: 0,
+        }),
     }
 }
 
@@ -333,23 +331,23 @@ fn get_home_page_path(path: &PathBuf, src: bool) -> Result<PathBuf, CompileError
 
     match first_page {
         Some(index_page_path) => Ok(index_page_path),
-        None => {
-            Err(CompileError {
-                msg: format!("No page found in {} directory: {:?}", if src { "src" } else { "dev" }, first_page),
-                line_number: 0,
-            })
-        }
+        None => Err(CompileError {
+            msg: format!(
+                "No page found in {} directory: {:?}",
+                if src { "src" } else { "dev" },
+                first_page
+            ),
+            line_number: 0,
+        }),
     }
 }
 
 fn get_current_dir() -> Result<PathBuf, CompileError> {
     match std::env::current_dir() {
         Ok(dir) => Ok(dir),
-        Err(e) => {
-            Err(CompileError {
-                msg: format!("Error getting current directory: {:?}", e),
-                line_number: 0,
-            })
-        }
+        Err(e) => Err(CompileError {
+            msg: format!("Error getting current directory: {:?}", e),
+            line_number: 0,
+        }),
     }
 }

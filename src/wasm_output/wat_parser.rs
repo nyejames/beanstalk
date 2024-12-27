@@ -1,5 +1,7 @@
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token};
 use crate::parsers::ast_nodes::Value;
+use crate::{
+    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token,
+};
 
 pub fn new_wat_var(
     id: &String,
@@ -35,12 +37,13 @@ pub fn new_wat_var(
             ))
         }
 
-        _ => {
-            Err(CompileError {
-                msg: format!("Unsupported datatype found in WAT var creation: {:?}", datatype),
-                line_number,
-            })
-        }
+        _ => Err(CompileError {
+            msg: format!(
+                "Unsupported datatype found in WAT var creation: {:?}",
+                datatype
+            ),
+            line_number,
+        }),
     }
 }
 
@@ -52,14 +55,17 @@ pub fn expression_to_wat(expr: &Value) -> Result<String, CompileError> {
             if data_type == &DataType::Float {
                 wat.push_str(&float_expr_to_wat(nodes)?);
             }
-        },
+        }
         Value::Float(value) => wat.push_str(&format!(" f64.const {}", value.to_string())),
         Value::Int(value) => wat.push_str(&format!(" i64.const {}", value.to_string())),
         Value::Bool(value) => wat.push_str(&format!(" i64.const {}", value.to_string())),
 
         _ => {
             return Err(CompileError {
-                msg: format!("Compiler Bug: Invalid AST node given to expression_to_wat (wat parser): {:?}", expr),
+                msg: format!(
+                    "Compiler Bug: Invalid AST node given to expression_to_wat (wat parser): {:?}",
+                    expr
+                ),
                 line_number: 0,
             });
         }
@@ -75,19 +81,17 @@ fn float_expr_to_wat(nodes: &Vec<AstNode>) -> Result<String, CompileError> {
 
     for node in nodes {
         match node {
-            AstNode::Literal(token, line_number) => {
-                match token {
-                    Value::Float(value) => {
-                        wat.push_str(&format!(" f64.const {}", value));
-                    }
-                    _ => {
-                        return Err(CompileError {
+            AstNode::Literal(token, line_number) => match token {
+                Value::Float(value) => {
+                    wat.push_str(&format!(" f64.const {}", value));
+                }
+                _ => {
+                    return Err(CompileError {
                             msg: format!("Compiler error: Wrong literal type found in expression sent to WAT parser: {:?}", token),
                             line_number: line_number.to_owned(),
                         });
-                    }
                 }
-            }
+            },
 
             AstNode::BinaryOperator(op, _, line_number) => {
                 let wat_op = match op {

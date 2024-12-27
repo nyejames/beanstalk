@@ -1,12 +1,13 @@
-use crate::{bs_types::DataType, CompileError, Token};
+use super::{
+    ast_nodes::{Arg, AstNode},
+    collections::new_collection,
+    expressions::parse_expression::{create_expression, get_accessed_arg},
+    functions::create_function,
+    tuples::new_tuple,
+};
 use crate::parsers::ast_nodes::{NodeInfo, Value};
 use crate::parsers::functions::create_func_call_args;
-use super::{
-    ast_nodes::{AstNode, Arg},
-    collections::new_collection,
-    expressions::parse_expression::create_expression,
-    functions::create_function, tuples::new_tuple,
-};
+use crate::{bs_types::DataType, CompileError, Token};
 
 pub fn create_new_var_or_ref(
     name: &String,
@@ -22,12 +23,9 @@ pub fn create_new_var_or_ref(
 
     // If this is a reference to a function or variable
     if let Some(arg) = variable_declarations.iter().find(|a| &a.name == name) {
-
         match arg.data_type {
-
             // Function Call
-            DataType::Function(ref argument_refs, ref return_type) => {
-
+            DataType::Function(ref argument_refs, ref return_args) => {
                 // Parse arguments passed into the function
                 let tuple = new_tuple(
                     Value::None,
@@ -43,27 +41,78 @@ pub fn create_new_var_or_ref(
 
                 // Create the args for the function call
                 // This makes sure the args are in the correct order
-                let args = create_func_call_args(
-                    &tuple,
-                    &argument_refs,
-                    &line_number,
+                let args = create_func_call_args(&tuple, &argument_refs, &line_number)?;
+                // look for which arguments are being accessed from the function call
+                // If nothing is being accessed, just pass the arguments in
+                let accessed_arg = get_accessed_arg(
+                    &arg.name,
+                    tokens,
+                    &mut *i,
+                    return_args.to_owned(),
+                    token_line_numbers,
                 )?;
 
-                return Ok(
-                    AstNode::FunctionCall(
-                        name.to_owned(),
-                        args,
-                        return_type.to_owned(),
-                        token_line_numbers[*i],
-                    ),
-                );
+                return Ok(AstNode::FunctionCall(
+                    name.to_owned(),
+                    args,
+                    return_args.to_owned(),
+                    accessed_arg,
+                    token_line_numbers[*i],
+                ));
+            }
+
+            DataType::Tuple(ref inner_types) => {
+                // Move past variable name
+                *i += 1;
+
+                let accessed_arg = get_accessed_arg(
+                    &arg.name,
+                    tokens,
+                    &mut *i,
+                    inner_types.to_owned(),
+                    token_line_numbers,
+                )?;
+
+                return Ok(AstNode::Literal(
+                    Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
+                    token_line_numbers[*i].to_owned(),
+                ));
+            }
+
+            DataType::Collection(_) => {
+                // Check if this is a collection access
+                if let Some(Token::Dot) = tokens.get(*i + 1) {
+                    // Move past the dot
+                    *i += 2;
+
+                    // Make sure an integer is next
+                    return if let Some(Token::IntLiteral(index)) = tokens.get(*i) {
+                        Ok(AstNode::Literal(
+                            Value::Reference(
+                                arg.name.to_owned(),
+                                arg.data_type.to_owned(),
+                                Some(*index as usize),
+                            ),
+                            token_line_numbers[*i].to_owned(),
+                        ))
+                    } else {
+                        Err(CompileError {
+                            msg: format!(
+                                "Expected an integer index to access collection '{}'",
+                                arg.name
+                            ),
+                            line_number: token_line_numbers[*i].to_owned(),
+                        })
+                    };
+                }
             }
             _ => {}
         }
 
-        return Ok(
-            AstNode::Literal(Value::Reference(arg.name.to_owned(), arg.data_type.to_owned()), token_line_numbers[*i]),
-        );
+        return Ok(AstNode::Literal(
+            Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), None),
+            token_line_numbers[*i],
+        ));
     }
 
     new_variable(
@@ -75,7 +124,7 @@ pub fn create_new_var_or_ref(
         token_line_numbers,
         &mut *variable_declarations,
         is_const,
-        inside_tuple
+        inside_tuple,
     )
 }
 
@@ -95,7 +144,7 @@ pub fn new_variable(
 
     // TODO - make sure that there is a type or a default value
     // Should be an error if neither is provided to initialise a variable?
-    
+
     match &tokens[*i] {
         // Type is inferred
         &Token::Assign => {}
@@ -138,14 +187,12 @@ pub fn new_variable(
                         value: Value::None,
                     });
 
-                    return Ok(
-                        create_zero_value_var(
-                            data_type.to_owned(),
-                            name.to_string(),
-                            is_exported,
-                            token_line_numbers[*i],
-                        )
-                    );
+                    return Ok(create_zero_value_var(
+                        data_type.to_owned(),
+                        name.to_string(),
+                        is_exported,
+                        token_line_numbers[*i],
+                    ));
                 }
                 _ => {
                     return Err(CompileError {
@@ -177,7 +224,6 @@ pub fn new_variable(
 
     let parsed_expr;
     match &tokens[*i] {
-
         // Check if this is a COLLECTION
         Token::OpenCurly => {
             // Dynamic Collection literal
@@ -256,12 +302,23 @@ fn create_var_node(
         );
     }
 
-    AstNode::VarDeclaration(var_name, var_value.to_owned(), is_exported, data_type, false, line_number)
+    AstNode::VarDeclaration(
+        var_name,
+        var_value.to_owned(),
+        is_exported,
+        data_type,
+        false,
+        line_number,
+    )
 }
 
-fn create_zero_value_var(data_type: DataType, name: String, is_exported: bool, line_number: u32) -> AstNode {
+fn create_zero_value_var(
+    data_type: DataType,
+    name: String,
+    is_exported: bool,
+    line_number: u32,
+) -> AstNode {
     match data_type {
-        
         DataType::Float => AstNode::VarDeclaration(
             name,
             Value::Float(0.0),
@@ -270,7 +327,7 @@ fn create_zero_value_var(data_type: DataType, name: String, is_exported: bool, l
             false,
             line_number,
         ),
-        
+
         DataType::Int => AstNode::VarDeclaration(
             name,
             Value::Int(0),
@@ -279,7 +336,7 @@ fn create_zero_value_var(data_type: DataType, name: String, is_exported: bool, l
             false,
             line_number,
         ),
-        
+
         DataType::String => AstNode::VarDeclaration(
             name,
             Value::String("".to_string()),
@@ -288,7 +345,7 @@ fn create_zero_value_var(data_type: DataType, name: String, is_exported: bool, l
             false,
             line_number,
         ),
-        
+
         DataType::Bool => AstNode::VarDeclaration(
             name,
             Value::Bool(false),
@@ -297,7 +354,7 @@ fn create_zero_value_var(data_type: DataType, name: String, is_exported: bool, l
             false,
             line_number,
         ),
-        
+
         _ => AstNode::VarDeclaration(
             name,
             Value::None,

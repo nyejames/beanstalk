@@ -1,10 +1,10 @@
 use super::{
-    ast_nodes::{AstNode, Arg},
+    ast_nodes::{Arg, AstNode},
     build_ast::new_ast,
     expressions::parse_expression::create_expression,
 };
-use crate::{bs_types::DataType, CompileError, Token};
 use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::{bs_types::DataType, CompileError, Token};
 
 pub fn create_function(
     name: String,
@@ -39,12 +39,15 @@ pub fn create_function(
             *i += 1;
             parse_return_type(tokens, i, token_line_numbers)?
         }
-        _ => Vec::new()
+        _ => Vec::new(),
     };
 
     // Should now be at the colon
     if &tokens[*i] != &Token::Colon {
-        return Err(CompileError {msg: "Expected ':' to open function scope".to_string(), line_number: token_line_numbers[*i]});
+        return Err(CompileError {
+            msg: "Expected ':' to open function scope".to_string(),
+            line_number: token_line_numbers[*i],
+        });
     }
 
     *i += 1;
@@ -67,9 +70,16 @@ pub fn create_function(
     .0;
 
     Ok((
-        AstNode::Function(name, arg_refs.clone(), function_body, is_exported, return_args.to_owned(), start_line_number),
+        AstNode::Function(
+            name,
+            arg_refs.clone(),
+            function_body,
+            is_exported,
+            return_args.to_owned(),
+            start_line_number,
+        ),
         arg_refs,
-        return_args
+        return_args,
     ))
 }
 
@@ -99,12 +109,10 @@ pub fn create_args(
             }
             Token::Variable(arg_name) => {
                 if !next_in_list {
-                    return Err(
-                        CompileError {
-                            msg: "Should have a comma to separate arguments".to_string(),
-                            line_number: token_line_numbers[*i].to_owned(),
-                        }
-                    );
+                    return Err(CompileError {
+                        msg: "Should have a comma to separate arguments".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
                 }
 
                 // Parse the argument
@@ -121,12 +129,10 @@ pub fn create_args(
                 // Make sure function arguments are not redeclared variables
                 for var in variable_declarations {
                     if var.name == *arg_name {
-                        return Err(
-                            CompileError {
-                                msg: "Function arguments must have unique names".to_string(),
-                                line_number: token_line_numbers[*i].to_owned(),
-                            }
-                        );
+                        return Err(CompileError {
+                            msg: "Function arguments must have unique names".to_string(),
+                            line_number: token_line_numbers[*i].to_owned(),
+                        });
                     }
                 }
 
@@ -199,7 +205,11 @@ pub fn create_args(
     Ok(args)
 }
 
-fn parse_return_type(tokens: &Vec<Token>, i: &mut usize, token_line_numbers: &Vec<u32>) -> Result<Vec<Arg>, CompileError> {
+fn parse_return_type(
+    tokens: &Vec<Token>,
+    i: &mut usize,
+    token_line_numbers: &Vec<u32>,
+) -> Result<Vec<Arg>, CompileError> {
     let mut return_type = Vec::<Arg>::new();
 
     // Check if there is a return type
@@ -236,12 +246,10 @@ fn parse_return_type(tokens: &Vec<Token>, i: &mut usize, token_line_numbers: &Ve
                 *i += 1;
             }
             _ => {
-                return Err(
-                    CompileError {
-                        msg: "Invalid syntax for return type".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
-                    }
-                );
+                return Err(CompileError {
+                    msg: "Invalid syntax for return type".to_string(),
+                    line_number: token_line_numbers[*i].to_owned(),
+                });
             }
         }
     }
@@ -265,7 +273,11 @@ fn parse_return_type(tokens: &Vec<Token>, i: &mut usize, token_line_numbers: &Ve
 
 // node = argument passed in
 // args = list of arguments needed (with possible default values)
-pub fn create_func_call_args(args_passed_in: &Vec<Arg>, args_required: &Vec<Arg>, _: &u32) -> Result<Vec<Value>, CompileError> {
+pub fn create_func_call_args(
+    args_passed_in: &Vec<Arg>,
+    args_required: &Vec<Arg>,
+    _: &u32,
+) -> Result<Vec<Value>, CompileError> {
     // Create a vec of the required args values (arg.value)
     let mut sorted_args: Vec<Value> = args_required
         .iter()

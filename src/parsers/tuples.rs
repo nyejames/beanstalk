@@ -1,11 +1,11 @@
 use super::{
-    ast_nodes::{AstNode, Arg},
+    ast_nodes::{Arg, AstNode},
     variables::create_new_var_or_ref,
 };
-use crate::{parsers::ast_nodes::NodeInfo, CompileError, Token};
 use crate::bs_types::DataType;
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::expressions::parse_expression::create_expression;
+use crate::{parsers::ast_nodes::NodeInfo, CompileError, Token};
 
 // Assumes to have started after the open parenthesis
 // Datatype must always be a tuple containing the data types of the items in the tuple
@@ -22,7 +22,7 @@ pub fn new_tuple(
     token_line_numbers: &Vec<u32>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut item_args = required_args.to_owned();
-    
+
     let mut items: Vec<Arg> = match initial_value {
         Value::None => Vec::new(),
         _ => {
@@ -100,7 +100,7 @@ pub fn new_tuple(
                 }
 
                 next_item = false;
-                
+
                 let mut data_type = if required_args.len() == 0 {
                     DataType::Inferred
                 } else if required_args.len() < items.len() {
@@ -126,13 +126,11 @@ pub fn new_tuple(
                 // Get the arg of this tuple item
                 let item_arg = match item_args.get(items.len()) {
                     Some(arg) => arg.to_owned(),
-                    None => {
-                        Arg {
-                            name: item_name,
-                            data_type: data_type.to_owned(),
-                            value: arg_value,
-                        }
-                    }
+                    None => Arg {
+                        name: item_name,
+                        data_type: data_type.to_owned(),
+                        value: arg_value,
+                    },
                 };
 
                 items.push(item_arg.to_owned());

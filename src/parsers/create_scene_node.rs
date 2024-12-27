@@ -1,12 +1,13 @@
-use colour::yellow_ln;
 use super::{
-    ast_nodes::{AstNode, Arg},
+    ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
     styles::{Action, Style, Tag},
     util::{count_newlines_at_end_of_string, count_newlines_at_start_of_string},
 };
-use crate::{bs_types::DataType, CompileError, Token};
 use crate::parsers::ast_nodes::Value;
+use crate::parsers::tuples::new_tuple;
+use crate::{bs_types::DataType, CompileError, Token};
+use colour::yellow_ln;
 
 // Recursive function to parse scenes
 pub fn new_scene(
@@ -62,16 +63,19 @@ pub fn new_scene(
             Token::A => {
                 // Inside brackets is set to true for these
                 // So it will enforce the parenthesis syntax in create_expression
-                scene_tags.push(Tag::A(create_expression(
-                    tokens,
-                    i,
-                    false,
-                    ast,
-                    &mut DataType::CoerceToString,
-                    true,
-                    variable_declarations,
-                    token_line_numbers,
-                )?, token_line_numbers[*i]));
+                scene_tags.push(Tag::A(
+                    create_expression(
+                        tokens,
+                        i,
+                        false,
+                        ast,
+                        &mut DataType::CoerceToString,
+                        true,
+                        variable_declarations,
+                        token_line_numbers,
+                    )?,
+                    token_line_numbers[*i],
+                ));
             }
 
             Token::Padding => {
@@ -113,7 +117,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -134,7 +139,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -156,7 +162,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -194,7 +201,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -236,7 +244,7 @@ pub fn new_scene(
                         token_line_numbers,
                     )?,
                     color_type,
-                    token_line_numbers[*i]
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -250,16 +258,20 @@ pub fn new_scene(
             | Token::Black => {
                 let color_type = token.to_owned();
 
-                scene_styles.push(Style::TextColor(create_expression(
-                    tokens,
-                    i,
-                    false,
-                    ast,
-                    &mut DataType::CoerceToString,
-                    true,
-                    variable_declarations,
-                    token_line_numbers,
-                )?, color_type, token_line_numbers[*i]));
+                scene_styles.push(Style::TextColor(
+                    create_expression(
+                        tokens,
+                        i,
+                        false,
+                        ast,
+                        &mut DataType::CoerceToString,
+                        true,
+                        variable_declarations,
+                        token_line_numbers,
+                    )?,
+                    color_type,
+                    token_line_numbers[*i],
+                ));
             }
 
             Token::Center => {
@@ -283,7 +295,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -312,7 +325,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -333,7 +347,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -354,7 +369,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -375,7 +391,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -387,21 +404,26 @@ pub fn new_scene(
             | Token::StringLiteral(_)
             | Token::RawStringLiteral(_) => {
                 *i -= 1;
-                scene.push(AstNode::Literal(create_expression(
-                    tokens,
-                    &mut *i,
-                    false,
-                    &ast,
-                    &mut DataType::CoerceToString,
-                    inside_brackets,
-                    variable_declarations,
-                    token_line_numbers
-                )?, token_line_numbers[*i]));
+                scene.push(AstNode::Literal(
+                    create_expression(
+                        tokens,
+                        &mut *i,
+                        false,
+                        &ast,
+                        &mut DataType::CoerceToString,
+                        inside_brackets,
+                        variable_declarations,
+                        token_line_numbers,
+                    )?,
+                    token_line_numbers[*i],
+                ));
             }
 
             Token::Comma => {
                 //TODO - decide if this should be enforced as a syntax error or allowed
-                yellow_ln!("Warning: Should there be a comma in the scene head? (ignored by compiler)");
+                yellow_ln!(
+                    "Warning: Should there be a comma in the scene head? (ignored by compiler)"
+                );
             }
 
             Token::Newline | Token::Empty => {}
@@ -448,7 +470,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -469,7 +492,8 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -503,7 +527,25 @@ pub fn new_scene(
                         true,
                         variable_declarations,
                         token_line_numbers,
-                    )?, token_line_numbers[*i]
+                    )?,
+                    token_line_numbers[*i],
+                ));
+            }
+
+            Token::OpenParenthesis => {
+                let tuple = new_tuple(
+                    Value::None,
+                    tokens,
+                    &mut *i,
+                    &Vec::new(),
+                    ast,
+                    variable_declarations,
+                    token_line_numbers,
+                )?;
+
+                scene.push(AstNode::Literal(
+                    Value::Tuple(tuple),
+                    token_line_numbers[*i],
                 ));
             }
 
@@ -560,7 +602,10 @@ pub fn new_scene(
                 scene.push(AstNode::Em(*size, content.clone(), token_line_numbers[*i]));
             }
             Token::Superscript(content) => {
-                scene.push(AstNode::Superscript(content.clone(), token_line_numbers[*i]));
+                scene.push(AstNode::Superscript(
+                    content.clone(),
+                    token_line_numbers[*i],
+                ));
             }
 
             Token::RawStringLiteral(content) => {
@@ -586,20 +631,20 @@ pub fn new_scene(
             Token::Empty | Token::Colon => {}
 
             Token::DeadVariable(name) => {
-                scene.push(AstNode::Error(
-                    format!("Dead Variable used in scene. '{}' was never defined", name),
-                    token_line_numbers[*i].to_owned(),
-                ));
+                return Err(CompileError {
+                    msg: format!("Dead Variable used in scene. '{}' was never defined", name),
+                    line_number: token_line_numbers[*i].to_owned(),
+                });
             }
 
             _ => {
-                scene.push(AstNode::Error(
-                    format!(
+                return Err(CompileError {
+                    msg: format!(
                         "Invalid Syntax Used Inside scene body when creating scene node: {:?}",
                         tokens[*i]
                     ),
-                    token_line_numbers[*i].to_owned(),
-                ));
+                    line_number: token_line_numbers[*i].to_owned(),
+                });
             }
         }
 

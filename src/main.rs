@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 use std::time::Instant;
-use std::{env, fs, io::{self, Write}, path::Path};
+use std::{
+    env, fs,
+    io::{self, Write},
+    path::Path,
+};
 
 mod bs_css;
 pub mod bs_types;
@@ -29,12 +33,12 @@ mod parsers {
     pub mod variables;
 }
 mod html_output {
+    pub mod code_block_highlighting;
     pub mod colors;
     pub mod dom_hooks;
     pub mod generate_html;
     pub mod js_parser;
     pub mod web_parser;
-    pub mod code_block_highlighting;
 }
 mod wasm_output {
     pub mod wasm_generator;
@@ -44,7 +48,7 @@ use colour::{dark_cyan, e_dark_red_ln_bold, e_dark_yellow_ln, green_ln_bold, gre
 pub use tokens::Token;
 enum Command {
     NewHTMLProject(PathBuf),
-    Dev(PathBuf),  // Runs local dev server
+    Dev(PathBuf), // Runs local dev server
     Release(PathBuf),
     Test,
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
@@ -152,7 +156,6 @@ fn main() {
 }
 fn get_command(args: &Vec<String>) -> Result<Command, String> {
     match args.get(0).map(String::as_str) {
-
         Some("new") => {
             // Check type of project
             match args.get(1).map(String::as_str) {
@@ -179,9 +182,7 @@ fn get_command(args: &Vec<String>) -> Result<Command, String> {
                 .map_err(|e| format!("Error getting current directory: {:?}", e))?;
 
             match args.get(1).map(String::as_str) {
-                Some(string) => {
-                    Ok(Command::Release(entry_path.join(string)))
-                }
+                Some(string) => Ok(Command::Release(entry_path.join(string))),
                 _ => {
                     // Return current working directory path
                     Ok(Command::Release(entry_path))
@@ -189,39 +190,31 @@ fn get_command(args: &Vec<String>) -> Result<Command, String> {
             }
         }
 
-        Some("test") => {
-            Ok(Command::Test)
-        }
+        Some("test") => Ok(Command::Test),
 
-        Some("dev") => {
-            match args.get(1) {
-                Some(path) => {
-                    if path.is_empty() {
-                        Ok(Command::Dev(PathBuf::from("test_output")))
-                    } else {
-                        Ok(Command::Dev(PathBuf::from(path)))
-                    }
+        Some("dev") => match args.get(1) {
+            Some(path) => {
+                if path.is_empty() {
+                    Ok(Command::Dev(PathBuf::from("test_output")))
+                } else {
+                    Ok(Command::Dev(PathBuf::from(path)))
                 }
-                None => Ok(Command::Dev(PathBuf::from("test_output"))),
             }
-        }
+            None => Ok(Command::Dev(PathBuf::from("test_output"))),
+        },
 
-        Some("wat") => {
-            match args.get(1).map(String::as_str) {
-                Some(path) => {
-                    if path.is_empty() {
-                        Ok(Command::Wat(PathBuf::from("test_output/test.wat")))
-                    } else {
-                        Ok(Command::Wat(PathBuf::from(path)))
-                    }
+        Some("wat") => match args.get(1).map(String::as_str) {
+            Some(path) => {
+                if path.is_empty() {
+                    Ok(Command::Wat(PathBuf::from("test_output/test.wat")))
+                } else {
+                    Ok(Command::Wat(PathBuf::from(path)))
                 }
-                None => Ok(Command::Wat(PathBuf::from("test_output/test.wat"))),
             }
-        }
+            None => Ok(Command::Wat(PathBuf::from("test_output/test.wat"))),
+        },
 
-        _ => {
-            Ok(Command::Test)
-        }
+        _ => Ok(Command::Test),
     }
 }
 
@@ -258,37 +251,38 @@ fn prompt_user_for_input(msg: String) -> Vec<String> {
 }
 
 fn print_formatted_error(e: &CompileError, file_path: &PathBuf) {
-    // Read the file and get the line as a string
-    let file = match fs::read_to_string(file_path) {
-        Ok(file) => file,
-        Err(e) => {
-            red_ln!("Error reading file path when printing errors: {:?}", e);
-            return;
-        }
-    };
-
-    let line = match file.lines().nth(e.line_number as usize) {
-        Some(line) => line,
-        None => {
-            red_ln!("Error: Line number is out of range");
-            return;
-        }
-    };
-
-    println!("(╯°□°)╯  🔥🔥🔥🔥🔥🔥🔥🔥 ");
-
+    println!("(╯°□°)╯  🔥🔥🔥🔥🔥🔥🔥🔥   ╰(°□°╰) ");
     if e.line_number == 0 {
         e_dark_yellow_ln!("Error during compilation");
         e_dark_red_ln_bold!("{}", e.msg);
     } else {
-        e_dark_yellow_ln!("Error during compilation at line {}", e.line_number);
+        // Read the file and get the actual line as a string from the code
+        let line = match fs::read_to_string(file_path) {
+            Ok(file) => file
+                .lines()
+                .nth(e.line_number as usize - 1)
+                .unwrap_or_else(|| {
+                    red_ln!("Error with printing error (lol): Line number is out of range of file");
+                    ""
+                })
+                .to_string(),
+            Err(e) => {
+                red_ln!("Error reading file path when printing errors: {:?}", e);
+                "".to_string()
+            }
+        };
+
+        e_dark_yellow_ln!("Error during compilation at line {}:", e.line_number);
         e_dark_red_ln_bold!("{}", e.msg);
 
-        println!("{}", line);
-        red_ln!("{}", std::iter::repeat('^').take(line.len()).collect::<String>());
+        println!("\n{}", line);
+        red_ln!(
+            "{}",
+            std::iter::repeat('^').take(line.len()).collect::<String>()
+        );
     }
 
-    println!("🔥🔥🔥🔥🔥🔥🔥🔥   ╰(°□°╰)");
+    // println!("🔥🔥🔥🔥🔥🔥🔥🔥   ╰(°□°╰)");
 }
 
 fn print_help(commands_only: bool) {
@@ -302,6 +296,8 @@ fn print_help(commands_only: bool) {
     println!("  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)");
     println!("  build <path>         - Builds a file");
     println!("  release <path>       - Builds a project in release mode");
-    println!("  test                 - Runs the test suite (currently just for testing the compiler)");
+    println!(
+        "  test                 - Runs the test suite (currently just for testing the compiler)"
+    );
     println!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }

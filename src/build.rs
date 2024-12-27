@@ -2,11 +2,11 @@ use crate::bs_types::DataType;
 use crate::html_output::dom_hooks::{generate_dom_update_js, DOMUpdate};
 use crate::html_output::generate_html::create_html_boilerplate;
 use crate::html_output::web_parser;
-use crate::parsers::ast_nodes::{AstNode, Arg, Value};
+use crate::parsers::ast_nodes::{Arg, AstNode, Value};
 use crate::settings::{get_default_config, get_html_config, Config};
-use crate::{tokenizer, CompileError};
 use crate::tokens::Token;
 use crate::{parsers, settings};
+use crate::{tokenizer, CompileError};
 
 use colour::{blue_ln, dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold, red_ln};
 use std::ffi::OsStr;
@@ -198,7 +198,10 @@ pub fn build(entry_path: &PathBuf, release_build: bool) -> Result<(), CompileErr
             Ok(dir) => dir,
             Err(e) => {
                 return Err(CompileError {
-                    msg: format!("Error reading output_dir directory: {:?}. {:?}", &output_dir, e),
+                    msg: format!(
+                        "Error reading output_dir directory: {:?}. {:?}",
+                        &output_dir, e
+                    ),
                     line_number: 0,
                 });
             }
@@ -208,7 +211,10 @@ pub fn build(entry_path: &PathBuf, release_build: bool) -> Result<(), CompileErr
             let file = match file {
                 Ok(f) => f,
                 Err(e) => {
-                    red_ln!("Error reading file when building project in release mode: {:?}", e);
+                    red_ln!(
+                        "Error reading file when building project in release mode: {:?}",
+                        e
+                    );
                     continue;
                 }
             };
@@ -364,7 +370,13 @@ fn compile(
         .iter()
         .filter(|e| e.global)
         .map(|e| Arg {
-            name: e.path.file_name().unwrap_or(OsStr::new("")).to_str().unwrap_or_else(|| "").to_owned(),
+            name: e
+                .path
+                .file_name()
+                .unwrap_or(OsStr::new(""))
+                .to_str()
+                .unwrap_or_else(|| "")
+                .to_owned(),
             data_type: e.data_type.to_owned(),
             value: Value::None,
         })
@@ -441,7 +453,7 @@ fn compile(
         generate_dom_update_js(DOMUpdate::InnerHTML),
         parser_output.js
     );
-    
+
     let module_output = create_html_boilerplate(&html_config, release_build)?
         .replace("page-template", &parser_output.html)
         .replace("@page-css", &parser_output.css)
@@ -459,10 +471,12 @@ fn compile(
     );
     let wasm = match parse_str(all_parsed_wasm) {
         Ok(wasm) => wasm,
-        Err(e) => return Err(CompileError {
-            msg: format!("Error parsing wat to wasm: {:?}", e),
-            line_number: 0,
-        }),
+        Err(e) => {
+            return Err(CompileError {
+                msg: format!("Error parsing wat to wasm: {:?}", e),
+                line_number: 0,
+            })
+        }
     };
 
     print!("WAT parsed to WASM in: ");
@@ -484,7 +498,10 @@ fn write_output_file(output: &OutputFile) -> Result<(), CompileError> {
                 output.file
             );
             return Err(CompileError {
-                msg: format!("Error getting parent directory of output file when writing: {:?}", output.file),
+                msg: format!(
+                    "Error getting parent directory of output file when writing: {:?}",
+                    output.file
+                ),
                 line_number: 0,
             });
         }

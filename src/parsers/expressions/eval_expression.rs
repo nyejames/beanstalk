@@ -1,113 +1,83 @@
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
 use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
 
 // This function will turn a series of ast nodes into a Value enum
 // A Value enum can also be a runtime expression which contains a series of nodes
 // It will fold constants (not working yet) down to a single Value if possible
 pub fn evaluate_expression(
-    expr: AstNode,
+    expr: Vec<AstNode>,
+    line_number: u32,
     type_declaration: &DataType,
-    ast: &Vec<AstNode>,
 ) -> Result<Value, CompileError> {
     let mut current_type = type_declaration.to_owned();
     let mut simplified_expression: Vec<AstNode> = Vec::new();
-    let line_number ;
 
     // SHUNTING YARD ALGORITHM
     let mut output_stack: Vec<AstNode> = Vec::new();
     let mut operators_stack: Vec<AstNode> = Vec::new();
-    match expr {
-        AstNode::Expression(e, line) => {
-            line_number = line.to_owned();
+    for ref node in expr {
+        match node {
+            AstNode::Literal(value, _) => {
+                if current_type == DataType::CoerceToString || current_type == DataType::String {
+                    simplified_expression.push(node.to_owned());
+                } else {
+                    output_stack.push(node.to_owned());
+                }
 
-            for ref node in e {
-                match node {
-                    AstNode::Expression(nested_e, nested_line_number) => {
-                        simplified_expression.push(AstNode::Literal(evaluate_expression(
-                            AstNode::Expression(nested_e.to_owned(), nested_line_number.to_owned()),
-                            type_declaration,
-                            ast,
-                        )?, nested_line_number.to_owned()));
-                    }
+                if current_type == DataType::Inferred {
+                    current_type = value.get_type();
+                }
+            }
 
-                    AstNode::Literal(value, _) => {
-                        if current_type == DataType::CoerceToString || current_type == DataType::String {
-                            simplified_expression.push(
-                                node.to_owned()
-                            );
-                        } else {
-                            output_stack.push(node.to_owned());
-                        }
+            AstNode::FunctionCall(..) => {
+                // TODO - check for access after function call
+                simplified_expression.push(node.to_owned());
+            }
 
-                        if current_type == DataType::Inferred {
-                            current_type = value.get_type();
-                        }
-                    },
-
-                    AstNode::FunctionCall(..) => {
-                        // TODO
-                    }
-
-                    AstNode::BinaryOperator(op, precedence, _) => {
-                        // If the current type is a string or scene, add operator is assumed.
-                        if current_type == DataType::String || current_type == DataType::Scene {
-                            if op != &Token::Add {
-                                return Err( CompileError {
-                                    msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
-                                    line_number: line,
-                                });
-                            }
-                            simplified_expression.push(node.to_owned());
-                            continue;
-                        }
-
-                        if current_type == DataType::CoerceToString {
-                            simplified_expression.push(node.to_owned());
-                        }
-
-                        if current_type == DataType::Bool {
-                            if *op != Token::Or || *op != Token::And {
-                                return Err( CompileError {
-                                    msg: "Can only use 'or' and 'and' operators with booleans"
-                                        .to_string(),
-                                    line_number: line_number.to_owned(),
-                                });
-                            }
-                            operators_stack.push(node.to_owned());
-                        }
-
-                        if operators_stack.last().is_some_and(|x| match x {
-                            AstNode::BinaryOperator(_, p, _) => p >= &precedence,
-                            _ => false,
-                        }) {
-                            output_stack.push(operators_stack.pop().unwrap());
-                        }
-
-                        operators_stack.push(node.to_owned());
-                    }
-
-                    _ => {
+            AstNode::BinaryOperator(op, precedence, line) => {
+                // If the current type is a string or scene, add operator is assumed.
+                if current_type == DataType::String || current_type == DataType::Scene {
+                    if op != &Token::Add {
                         return Err( CompileError {
-                            msg: "unsupported AST node found in expression".to_string(),
+                            msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
+                            line_number: line.to_owned(),
+                        });
+                    }
+                    simplified_expression.push(node.to_owned());
+                    continue;
+                }
+
+                if current_type == DataType::CoerceToString {
+                    simplified_expression.push(node.to_owned());
+                }
+
+                if current_type == DataType::Bool {
+                    if *op != Token::Or || *op != Token::And {
+                        return Err(CompileError {
+                            msg: "Can only use 'or' and 'and' operators with booleans".to_string(),
                             line_number: line_number.to_owned(),
                         });
                     }
+                    operators_stack.push(node.to_owned());
                 }
+
+                if operators_stack.last().is_some_and(|x| match x {
+                    AstNode::BinaryOperator(_, p, _) => p >= &precedence,
+                    _ => false,
+                }) {
+                    output_stack.push(operators_stack.pop().unwrap());
+                }
+
+                operators_stack.push(node.to_owned());
             }
-        }
 
-        // Don't evaluate tuples
-        // Each element inside should already be evaluated
-        AstNode::Tuple(e, _) => {
-            return Ok(Value::Tuple(e.to_owned()));
-        }
-
-        _ => {
-            return Err( CompileError {
-                msg: format!("Compiler Bug: No Expression to Evaluate - eval expression passed wrong AST node: {:?}", expr),
-                line_number: 0,
-            });
+            _ => {
+                return Err(CompileError {
+                    msg: format!("unsupported AST node found in expression: {:?}", node),
+                    line_number: line_number.to_owned(),
+                });
+            }
         }
     }
 
@@ -155,7 +125,10 @@ pub fn evaluate_expression(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_scene(simplified_expression: &mut Vec<AstNode>, line_number: u32) -> Result<Value, CompileError> {
+fn concat_scene(
+    simplified_expression: &mut Vec<AstNode>,
+    line_number: u32,
+) -> Result<Value, CompileError> {
     let mut nodes = Vec::new();
     let mut tags = Vec::new();
     let mut styles = Vec::new();
@@ -168,7 +141,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>, line_number: u32) -> R
                 tags.append(vec2);
                 styles.append(vec3);
                 actions.append(vec4);
-            },
+            }
             _ => {
                 return Err(CompileError {
                     msg: "Non-scene value found in scene expression (you can only concatenate scenes with other scenes)".to_string(),
@@ -183,7 +156,10 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>, line_number: u32) -> R
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_strings(simplified_expression: &mut Vec<AstNode>, line_number: u32) -> Result<Value, CompileError> {
+fn concat_strings(
+    simplified_expression: &mut Vec<AstNode>,
+    line_number: u32,
+) -> Result<Value, CompileError> {
     let mut new_string = String::new();
     let mut previous_node_is_plus = false;
 

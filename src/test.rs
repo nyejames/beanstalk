@@ -1,15 +1,15 @@
-use colour::{blue_ln, cyan_ln, green_ln, grey_ln, red_ln};
+use colour::{blue_ln, cyan_ln, green_ln, grey_ln};
 use colour::{blue_ln_bold, dark_grey_ln, dark_yellow_ln, green_ln_bold, yellow_ln_bold};
 
+use crate::bs_types::DataType;
 use crate::html_output::web_parser;
 use crate::parsers::ast_nodes::{AstNode, NodeInfo, Value};
 use crate::settings::get_html_config;
-use crate::{tokenizer, CompileError};
 use crate::Token;
 use crate::{dev_server, parsers};
+use crate::{tokenizer, CompileError};
 use std::fs;
 use std::path::PathBuf;
-use crate::bs_types::DataType;
 
 pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
     // Read content from a test file
@@ -70,9 +70,6 @@ pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
         match node {
             AstNode::P(..) | AstNode::Span(..) => {
                 green_ln!("{:?}", node);
-            }
-            AstNode::Error(err, line) => {
-                red_ln!("Error at line {}: {}", line, err);
             }
             AstNode::Literal(value, _) => {
                 if value.get_type() == DataType::Scene {
@@ -174,9 +171,6 @@ fn print_scene(scene: &Value, scene_nesting_level: u32) {
                     }
                     AstNode::RuntimeExpression(..) => {
                         dark_yellow_ln!("{}  {:?}", indentation, scene_node);
-                    }
-                    AstNode::Error(err, line) => {
-                        red_ln!("{}  Error at line {}: {}", indentation, line, err);
                     }
                     AstNode::Literal(value, _) => {
                         if value.get_type() == DataType::Scene {

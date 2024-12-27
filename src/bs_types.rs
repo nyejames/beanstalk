@@ -1,8 +1,6 @@
-use colour::red_ln;
-use crate::{
-    parsers::ast_nodes::AstNode,
-};
+use crate::parsers::ast_nodes::AstNode;
 use crate::parsers::ast_nodes::{Arg, Value};
+use colour::red_ln;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
@@ -61,20 +59,34 @@ pub fn return_datatype(node: &AstNode) -> DataType {
             Value::Scene(_, _, _, _) => DataType::Scene,
             Value::Collection(_, data_type) => data_type.to_owned(),
             Value::Tuple(args) => DataType::Tuple(args.to_owned()),
-            Value::Reference(_, data_type) => data_type.to_owned(),
+            Value::Reference(_, data_type, argument_accessed) => {
+                if let Some(index) = argument_accessed {
+                    match &data_type {
+                        DataType::Tuple(inner_types) | DataType::Function(_, inner_types) => {
+                            inner_types[*index].data_type.to_owned()
+                        }
+                        DataType::Collection(inner_type) => *inner_type.to_owned(),
+                        _ => {
+                            red_ln!("Compiler Bug: Argument accessed on non-tuple/function/collection (this should never happen)");
+                            data_type.to_owned()
+                        }
+                    }
+                } else {
+                    data_type.to_owned()
+                }
+            }
 
             Value::Runtime(_, data_type) => data_type.to_owned(),
             Value::None => DataType::None,
         },
-        AstNode::Tuple(arguments, _) => {
-            DataType::Tuple(arguments.to_owned())
-        }
+
         AstNode::Empty(_) => DataType::None,
-        AstNode::VarDeclaration(_, _, _, data_type, _, _) => {
-            data_type.to_owned()
-        },
+        AstNode::VarDeclaration(_, _, _, data_type, _, _) => data_type.to_owned(),
         _ => {
-            red_ln!("Probably compiler issue?: Datatype return not implemented for: {:?}", node);
+            red_ln!(
+                "Probably compiler issue?: Datatype return not implemented for: {:?}",
+                node
+            );
             DataType::Inferred
         }
     }

@@ -1,13 +1,15 @@
+use super::eval_expression::evaluate_expression;
+use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::parsers::variables::create_new_var_or_ref;
 use crate::{
-    bs_types::DataType, parsers::{
-        ast_nodes::{AstNode, Arg},
+    bs_types::DataType,
+    parsers::{
+        ast_nodes::{Arg, AstNode},
         create_scene_node::new_scene,
         tuples::new_tuple,
-    }, CompileError, Token
+    },
+    CompileError, Token,
 };
-use crate::parsers::ast_nodes::Value;
-use crate::parsers::functions::create_func_call_args;
-use super::eval_expression::evaluate_expression;
 
 // If the datatype is a collection
 // The expression must only contain references to collections
@@ -23,7 +25,7 @@ pub fn create_expression(
     token_line_numbers: &Vec<u32>,
 ) -> Result<Value, CompileError> {
     let mut expression = Vec::new();
-    let number_union = DataType::Union(vec![DataType::Int, DataType::Float]);
+    let mut number_union = DataType::Union(vec![DataType::Int, DataType::Float]);
 
     if inside_brackets {
         // Make sure there is an open parenthesis here (if not, return an error)
@@ -34,34 +36,35 @@ pub fn create_expression(
             *i += 1;
         } else {
             return Err(CompileError {
-                msg: "Missing open parenthesis (function call arguments must be inside parenthesis)".to_string(),
+                msg:
+                    "Missing open parenthesis (function call arguments must be inside parenthesis)"
+                        .to_string(),
                 line_number: token_line_numbers[*i].to_owned(),
             });
         }
 
         match data_type {
             DataType::Tuple(inner_types) => {
-
                 // HAS DEFINED INNER TYPES FOR THE TUPLE
                 let tuple = new_tuple(
                     Value::None,
                     tokens,
-                    i,
+                    &mut *i,
                     inner_types,
                     ast,
                     variable_declarations,
                     token_line_numbers,
                 )?;
 
-                return Ok(Value::Tuple(tuple));
-            },
+                return Ok(tuple_to_value(&tuple));
+            }
 
             DataType::Inferred => {
                 // DOES NOT HAVE DEFINED INNER TYPES FOR THE TUPLE
                 let tuple = new_tuple(
                     Value::None,
                     tokens,
-                    i,
+                    &mut *i,
                     &Vec::new(),
                     ast,
                     variable_declarations,
@@ -69,9 +72,9 @@ pub fn create_expression(
                 )?;
 
                 *data_type = DataType::Tuple(tuple.to_owned());
-                return Ok(Value::Tuple(tuple));
+                return Ok(tuple_to_value(&tuple));
             }
-            _ => {},
+            _ => {}
         }
     }
 
@@ -95,7 +98,7 @@ pub fn create_expression(
                     }
                     *i += 1;
                     // Mismatched brackets, return an error
-                    return Err( CompileError {
+                    return Err(CompileError {
                         msg: "Mismatched brackets in expression".to_string(),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
@@ -105,7 +108,7 @@ pub fn create_expression(
             Token::OpenParenthesis => {
                 return create_expression(
                     tokens,
-                    i,
+                    &mut *i,
                     false,
                     ast,
                     &mut data_type,
@@ -144,9 +147,9 @@ pub fn create_expression(
 
                 if inside_brackets {
                     let eval_first_expr = evaluate_expression(
-                        AstNode::Expression(expression, token_line_numbers[*i].to_owned()),
+                        expression,
+                        token_line_numbers[*i].to_owned(),
                         &mut data_type,
-                        ast,
                     )?;
 
                     let tuple = new_tuple(
@@ -162,7 +165,7 @@ pub fn create_expression(
                     return Ok(Value::Tuple(tuple));
                 }
 
-                return Err( CompileError {
+                return Err(CompileError {
                     msg: "Comma found outside of tuple".to_string(),
                     line_number: token_line_numbers[*i].to_owned(),
                 });
@@ -170,197 +173,42 @@ pub fn create_expression(
 
             // Check if name is a reference to another variable or function call
             Token::Variable(name) => {
-                match variable_declarations.iter().find(|a| a.name == *name) {
-                    
-                    Some(arg) => {
-                        // If this expression is inferring its type from the expression
-                        if *data_type == DataType::Inferred {
-                            *data_type = arg.data_type.to_owned();
-                        }
+                let new_ref = create_new_var_or_ref(
+                    name,
+                    variable_declarations,
+                    tokens,
+                    &mut *i,
+                    false,
+                    ast,
+                    token_line_numbers,
+                    false,
+                )?;
 
-                        // Check if this is a tuple/type/collection that is being accessed by a dot
-                        match &arg.data_type {
-                            DataType::Tuple(inner_types) => {
-                                // Check if this is a tuple access
-                                if let Some(Token::Dot) = tokens.get(*i + 1) {
-                                    // Move past the dot
-                                    *i += 2;
-
-                                    // Make sure an integer is next
-                                    if let Some(Token::IntLiteral(index)) = tokens.get(*i) {
-                                        // Check this is a valid index
-                                        // Usize will flip to max number if negative
-                                        // Maybe in future negative indexes with be supported (minus from the end)
-                                        let idx: usize = *index as usize;
-                                        if idx >= inner_types.len() {
-                                            return Err( CompileError {
-                                                msg: format!(
-                                                    "Index {} out of range for tuple '{}'",
-                                                    idx, arg.name
-                                                ),
-                                                line_number: token_line_numbers[*i].to_owned(),
-                                            });
-                                        }
-                                        // Check the accessed item in the tuple is the same type as the expression
-                                        // Or let it through if this expression is being coerced to a string
-
-                                        if !check_if_valid_type(&arg.data_type, &mut data_type) {
-                                            return Err( CompileError {
-                                                msg: format!(
-                                                    "Tuple '{}' is of type {:?}, but used in an expression of type {:?}",
-                                                    arg.name, arg.data_type, data_type
-                                                ),
-                                                line_number: token_line_numbers[*i].to_owned(),
-                                            });
-                                        }
-
-                                        expression.push(AstNode::TupleAccess(
-                                            arg.name.to_owned(),
-                                            *index as usize,
-                                            data_type.to_owned(),
-                                            token_line_numbers[*i].to_owned(),
-                                        ));
-
-                                        *i += 1;
-                                        continue;
-
-                                    // TODO - NAMED TUPLE ACCESS
-                                    } else {
-                                        return Err( CompileError {
-                                            msg: format!(
-                                                "Expected an integer index to access tuple '{}'",
-                                                arg.name
-                                            ),
-                                            line_number: token_line_numbers[*i].to_owned(),
-                                        });
-                                    }
-                                }
-                            }
-
-                            DataType::Collection(inner_types) => {
-                                // Check if this is a collection access
-                                if let Some(Token::Dot) = tokens.get(*i + 1) {
-                                    // Make sure the type of the collection is the same as the type of the expression
-                                    if !check_if_valid_type(&inner_types, &mut data_type) {
-                                        return Err( CompileError {
-                                            msg: format!(
-                                                "Collection '{}' is of type {:?}, but used in an expression of type {:?}",
-                                                arg.name, arg.data_type, data_type
-                                            ),
-                                           line_number: token_line_numbers[*i].to_owned(),
-                                        });
-                                    }
-
-                                    // Move past the dot
-                                    *i += 2;
-
-                                    // Make sure an integer is next
-                                    if let Some(Token::IntLiteral(index)) = tokens.get(*i) {
-                                        expression.push(AstNode::CollectionAccess(
-                                            arg.name.to_owned(),
-                                            *index as usize,
-                                            *inner_types.to_owned(),
-                                            token_line_numbers[*i].to_owned(),
-                                        ));
-                                        *i += 1;
-                                        continue;
-                                    } else {
-                                        return Err( CompileError {
-                                            msg: format!(
-                                                "Expected an integer index to access collection '{}'",
-                                                arg.name
-                                            ),
-                                            line_number: token_line_numbers[*i].to_owned(),
-                                        });
-                                    }
-                                }
-                            }
-
-                            // FUNCTION CALLS
-                            DataType::Function(arguments, return_type) => {
-                                
-                                // move past the variable name
-                                *i += 1;
-                                
-                                match tokens[*i] {
-                                    Token::OpenParenthesis => {
-                                        *i += 1;
-                                        if !check_if_valid_type(&DataType::Tuple(arguments.to_owned()), data_type) {
-                                            return Err( CompileError {
-                                                msg: format!(
-                                                    "Function '{}' returns type {:?}, but used in an expression of type {:?}",
-                                                    arg.name, return_type, data_type
-                                                ),
-                                                line_number: token_line_numbers[*i].to_owned(),
-                                            });
-                                        }
-
-                                        let args_passed_in = new_tuple(
-                                            Value::None,
-                                            tokens,
-                                            i,
-                                            arguments,
-                                            ast,
-                                            &mut variable_declarations.to_owned(),
-                                            token_line_numbers,
-                                        )?;
-
-                                        let line_number = token_line_numbers[*i];
-                                        let args = create_func_call_args(
-                                            &args_passed_in,
-                                            &arguments,
-                                            &line_number,
-                                        )?;
-                                        
-                                        expression.push(AstNode::FunctionCall(
-                                            arg.name.to_owned(),
-                                            args,
-                                            return_type.clone(),
-                                            token_line_numbers[*i].to_owned(),
-                                        ));
-
-                                        *i += 1;
-                                        continue;
-                                    }
-
-                                    // Just a reference to a function
-                                    _ => {
-                                        if !check_if_valid_type(&arg.data_type, &mut data_type) {
-                                            return Err( CompileError {
-                                                msg: format!(
-                                                    "Function {} literal used in expression of type {:?}",
-                                                    arg.name, data_type
-                                                ),
-                                                line_number: token_line_numbers[*i].to_owned(),
-                                            });
-                                        }
-                                    }
-                                };
-                            }
-                            _ => {}
-                        }
-
-                        // If the variables type is known and not the same as the type of the expression
-                        // Return a type error
-                        if !check_if_valid_type(&arg.data_type, &mut data_type) {
-                            return Err( CompileError {
+                match new_ref {
+                    // Make sure this is a reference and not a new variable
+                    AstNode::Literal(..) | AstNode::FunctionCall(..) => {
+                        // Check type is correct
+                        let reference_data_type = new_ref.get_type();
+                        if !check_if_valid_type(&reference_data_type, &mut data_type) {
+                            return Err(CompileError {
                                 msg: format!(
-                                    "Variable {} is of type {:?}, but used in an expression of type {:?}",
-                                    arg.name, arg.data_type, data_type
+                                    "Variable '{}' is of type {:?}, but used in an expression of type {:?}",
+                                    name, reference_data_type, data_type
                                 ),
                                 line_number: token_line_numbers[*i].to_owned(),
                             });
                         }
 
-                        expression.push(AstNode::Literal(Value::Reference(
-                            arg.name.to_owned(),
-                            arg.data_type.to_owned(),
-                        ), token_line_numbers[*i].to_owned()));
+                        expression.push(new_ref);
                     }
-                    
-                    None => {
-                        return Err( CompileError {
-                            msg: format!("Variable {} not found in scope", name),
+
+                    _ => {
+                        return Err(CompileError {
+                            msg: format!(
+                                "Variable '{}' is not a valid reference - it's a: {:?}",
+                                name,
+                                new_ref.get_type()
+                            ),
                             line_number: token_line_numbers[*i].to_owned(),
                         });
                     }
@@ -370,20 +218,23 @@ pub fn create_expression(
             // Check if is a literal
             Token::FloatLiteral(mut float) => {
                 if !check_if_valid_type(&DataType::Float, &mut data_type) {
-                    return Err( CompileError {
+                    return Err(CompileError {
                         msg: format!("Float literal used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                
+
                 if next_number_negative {
                     float = -float;
                     next_number_negative = false;
                 }
-                
-                expression.push(AstNode::Literal(Value::Float(float), token_line_numbers[*i]));
+
+                expression.push(AstNode::Literal(
+                    Value::Float(float),
+                    token_line_numbers[*i],
+                ));
             }
-            
+
             Token::IntLiteral(int) => {
                 if !check_if_valid_type(&DataType::Int, &mut data_type) {
                     return Err(CompileError {
@@ -391,15 +242,18 @@ pub fn create_expression(
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                
+
                 if next_number_negative {
-                    expression.push(AstNode::Literal(Value::Int(-(*int)), token_line_numbers[*i]));
+                    expression.push(AstNode::Literal(
+                        Value::Int(-(*int)),
+                        token_line_numbers[*i],
+                    ));
                     next_number_negative = false;
-                } else {
-                    expression.push(AstNode::Literal(Value::Int(*int), token_line_numbers[*i]));
                 }
+
+                expression.push(AstNode::Literal(Value::Int(*int), token_line_numbers[*i]));
             }
-            
+
             Token::StringLiteral(string) => {
                 if !check_if_valid_type(&DataType::String, &mut data_type) {
                     return Err(CompileError {
@@ -407,8 +261,11 @@ pub fn create_expression(
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                
-                expression.push(AstNode::Literal(Value::String(string.clone()), token_line_numbers[*i]));
+
+                expression.push(AstNode::Literal(
+                    Value::String(string.clone()),
+                    token_line_numbers[*i],
+                ));
             }
 
             // Scenes - Create a new scene node
@@ -431,74 +288,134 @@ pub fn create_expression(
 
             // BINARY OPERATORS
             Token::Add => {
-                expression.push(AstNode::BinaryOperator(token.to_owned(), 1, token_line_numbers[*i]));
+                expression.push(AstNode::BinaryOperator(
+                    token.to_owned(),
+                    1,
+                    token_line_numbers[*i],
+                ));
             }
-            
+
             Token::Subtract => {
-                if !check_if_valid_type(&number_union, &mut data_type) {
+                if !check_if_valid_type(&data_type, &mut number_union) {
                     return Err(CompileError {
-                        msg: format!("Subtraction can't be used in expression of type: {:?}", data_type),
+                        msg: format!(
+                            "Subtraction can't be used in expression of type: {:?}",
+                            data_type
+                        ),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                expression.push(AstNode::BinaryOperator(token.to_owned(), 1, token_line_numbers[*i]));
+                expression.push(AstNode::BinaryOperator(
+                    token.to_owned(),
+                    1,
+                    token_line_numbers[*i],
+                ));
             }
-            
+
             Token::Multiply => {
                 if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: format!("Multiplication can't be used in expression of type: {:?}", data_type),
+                        msg: format!(
+                            "Multiplication can't be used in expression of type: {:?}",
+                            data_type
+                        ),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                expression.push(AstNode::BinaryOperator(token.to_owned(), 2, token_line_numbers[*i]));
+                expression.push(AstNode::BinaryOperator(
+                    token.to_owned(),
+                    2,
+                    token_line_numbers[*i],
+                ));
             }
-            
+
             Token::Divide => {
                 if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: format!("Division can't be used in expression of type: {:?}", data_type),
+                        msg: format!(
+                            "Division can't be used in expression of type: {:?}",
+                            data_type
+                        ),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                expression.push(AstNode::BinaryOperator(token.to_owned(), 2, token_line_numbers[*i]));
+                expression.push(AstNode::BinaryOperator(
+                    token.to_owned(),
+                    2,
+                    token_line_numbers[*i],
+                ));
             }
-            
+
             Token::Modulus => {
                 if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: format!("Modulus can't be used in expression of type: {:?}", data_type),
+                        msg: format!(
+                            "Modulus can't be used in expression of type: {:?}",
+                            data_type
+                        ),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                expression.push(AstNode::BinaryOperator(token.to_owned(), 2, token_line_numbers[*i]));
+                expression.push(AstNode::BinaryOperator(
+                    token.to_owned(),
+                    2,
+                    token_line_numbers[*i],
+                ));
             }
 
             // LOGICAL OPERATORS
             Token::Equal => {
-                expression.push(AstNode::LogicalOperator(Token::Equal, 5, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::Equal,
+                    5,
+                    token_line_numbers[*i],
+                ));
             }
             Token::LessThan => {
-                expression.push(AstNode::LogicalOperator(Token::LessThan, 5, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::LessThan,
+                    5,
+                    token_line_numbers[*i],
+                ));
             }
             Token::LessThanOrEqual => {
-                expression.push(AstNode::LogicalOperator(Token::LessThanOrEqual, 5, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::LessThanOrEqual,
+                    5,
+                    token_line_numbers[*i],
+                ));
             }
             Token::GreaterThan => {
-                expression.push(AstNode::LogicalOperator(Token::GreaterThan, 5, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::GreaterThan,
+                    5,
+                    token_line_numbers[*i],
+                ));
             }
             Token::GreaterThanOrEqual => {
-                expression.push(AstNode::LogicalOperator(Token::GreaterThanOrEqual, 5, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::GreaterThanOrEqual,
+                    5,
+                    token_line_numbers[*i],
+                ));
             }
             Token::And => {
-                expression.push(AstNode::LogicalOperator(Token::And, 4, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::And,
+                    4,
+                    token_line_numbers[*i],
+                ));
             }
             Token::Or => {
-                expression.push(AstNode::LogicalOperator(Token::Or, 3, token_line_numbers[*i]));
+                expression.push(AstNode::LogicalOperator(
+                    Token::Or,
+                    3,
+                    token_line_numbers[*i],
+                ));
             }
 
             _ => {
-                return Err( CompileError {
+                return Err(CompileError {
                     msg: format!(
                         "Invalid Expression: {:?}, must be assigned with a valid datatype",
                         token
@@ -511,77 +428,32 @@ pub fn create_expression(
         *i += 1;
     }
 
-     evaluate_expression(
-        AstNode::Expression(expression, token_line_numbers[*i].to_owned()),
-        data_type,
-        ast,
-    )
+    evaluate_expression(expression, token_line_numbers[*i].to_owned(), data_type)
 }
 
-// RETURNING NONE MEANS NOT A FUNCTION CALL -> JUST A REFERENCE
-/*pub fn get_args(
-    tokens: &Vec<Token>,
-    i: &mut usize,
-    ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
-    variable_declarations: &mut Vec<Reference>,
-    argument_refs: &Vec<Reference>,
-) -> Option<AstNode> {
-    if *i >= tokens.len() {
-        return None;
-    }
-
-    // TO DO: Check the argument refs, if there are multiple, pass in a tuple of the correct types
-    let mut data_type = if argument_refs.len() > 1 {
-        // Create tuple of the argument types
-        DataType::Tuple(
-            argument_refs
-                .iter()
-                .map(|arg| arg.data_type.to_owned())
-                .collect(),
-        )
-    } else if argument_refs.len() == 1 {
-        argument_refs[0].data_type.to_owned()
-    } else {
-        DataType::None
-    };
-
-    // Check if the current token is an open bracket
-    // This can be passed an empty tuple
-    // So hopefully there will be a type error,
-    // if more than 0 arguments are passed in the case of a function call with 0 args
-    // Will probably be faster to check specifically for the empty tuple case before parsing in the future.
-    match &tokens[*i] {
-        // Check if open bracket
-        Token::OpenParenthesis => match create_expression(
-            tokens,
-            &mut *i,
-            false,
-            ast,
-            &mut data_type,
-            true,
-            variable_declarations,
-            token_line_numbers,
-        ) {
-            Ok(node) => Some(node),
-            Err(e) => return Err(CompileError {
-                msg: format!("Error parsing expression: {:?}", e),
-                line_number: token_line_numbers[*i].to_owned(),
-            }),
-        },
-        _ => None,
-    }
-}*/
-
 fn check_if_valid_type(data_type: &DataType, accepted_type: &mut DataType) -> bool {
+    // Has to make sure if either type is a union, that the other type is also a member of the union
+
+    match data_type {
+        DataType::Union(ref types) => {
+            for t in types {
+                if check_if_valid_type(t, accepted_type) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        _ => {}
+    }
+
     match accepted_type {
         DataType::Inferred => {
             *accepted_type = data_type.to_owned();
             true
         }
         DataType::CoerceToString => true,
-        DataType::Union(types) => {
-            for t in &**types {
+        DataType::Union(ref types) => {
+            for t in types {
                 if data_type == t {
                     return true;
                 }
@@ -595,5 +467,84 @@ fn check_if_valid_type(data_type: &DataType, accepted_type: &mut DataType) -> bo
                 false
             }
         }
+    }
+}
+
+fn tuple_to_value(args: &Vec<Arg>) -> Value {
+    // AUTOMATICALLY TURNS TUPLES OF ONE ITEM INTO THAT ITEM
+    // This is a weird/unique design choice of the language
+
+    // An empty tuple is None in this language
+    if args.len() < 1 {
+        return Value::None;
+    }
+
+    // Automatically convert tuples of one item into that item
+    if args.len() == 1 {
+        return args[0].value.to_owned();
+    }
+
+    Value::Tuple(args.to_owned())
+}
+
+pub fn get_accessed_arg(
+    collection_name: &String,
+    tokens: &Vec<Token>,
+    i: &mut usize,
+    possible_args: Vec<Arg>,
+    token_line_numbers: &Vec<u32>,
+) -> Result<Option<usize>, CompileError> {
+    // Check if this is an access
+    // Should be at the dot
+
+    if let Some(Token::Dot) = tokens.get(*i) {
+        // Move past the dot
+        *i += 1;
+
+        // Make sure an integer is next
+        match tokens.get(*i) {
+            Some(Token::IntLiteral(index)) => {
+                // Check this is a valid index
+                // Usize will flip to max number if negative
+                // Maybe in future negative indexes with be supported (minus from the end)
+                let idx: usize = *index as usize;
+                if idx >= possible_args.len() {
+                    return Err(CompileError {
+                        msg: format!(
+                            "Index {} out of range for any arguments in '{}'",
+                            idx, collection_name
+                        ),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
+                }
+
+                // Get the data type of this argument
+                Ok(Some(idx))
+            }
+
+            Some(Token::Variable(name)) => {
+                // Check if this is a named argument
+                for (idx, arg) in possible_args.iter().enumerate() {
+                    if arg.name == *name {
+                        return Ok(Some(idx));
+                    }
+                }
+
+                Err(CompileError {
+                    msg: format!("Name '{}' not found in tuple '{}'", name, collection_name),
+                    line_number: token_line_numbers[*i].to_owned(),
+                })
+            }
+
+            _ => Err(CompileError {
+                msg: format!(
+                    "Expected an index or name to access tuple '{}'",
+                    collection_name
+                ),
+                line_number: token_line_numbers[*i].to_owned(),
+            }),
+        }
+    } else {
+        Ok(None)
     }
 }

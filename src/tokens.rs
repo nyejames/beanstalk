@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use crate::bs_types::DataType;
+use std::path::PathBuf;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
@@ -15,9 +15,9 @@ pub enum Token {
     // For Compiler
     ModuleStart(String),
     Comptime,
-    Error(String, u32),  // Error message, line number
+    Error(String, u32),   // Error message, line number
     DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
-    EOF,                 // End of file
+    EOF,                  // End of file
 
     // Module Import/Export
     Import,
@@ -29,8 +29,8 @@ pub enum Token {
     Component,
     Title,
     Date,
-    JS(String),  // JS codeblock
-    CSS(String), // CSS codeblock
+    JS(String),   // JS codeblock
+    CSS(String),  // CSS codeblock
     WASM(String), // WAT codeblock (for testing WASM)
 
     // Standard Library (eventually)
@@ -58,7 +58,6 @@ pub enum Token {
     // Collections
     OpenCurly,  // {
     CloseCurly, // }
-
 
     // Structure of Syntax
     Newline,

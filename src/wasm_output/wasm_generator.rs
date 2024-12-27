@@ -1,7 +1,7 @@
+use crate::CompileError;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wat::parse_file;
-use crate::CompileError;
 
 pub fn compile_wat_file(path: &Path) -> Result<(), CompileError> {
     let wasm = parse_file(path);

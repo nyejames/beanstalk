@@ -1,6 +1,6 @@
 use super::{ast_nodes::AstNode, expressions::parse_expression::create_expression};
-use crate::{bs_types::DataType, CompileError, Token};
 use crate::parsers::ast_nodes::{Arg, NodeInfo, Value};
+use crate::{bs_types::DataType, CompileError, Token};
 
 // This is a dynamic array of one data type
 // TODO: string keys to make it a map
@@ -25,7 +25,6 @@ pub fn new_collection(
             }
 
             _ => {
-
                 let item = create_expression(
                     tokens,
                     i,
@@ -36,18 +35,22 @@ pub fn new_collection(
                     variable_declarations,
                     token_line_numbers,
                 )?;
-                
+
                 if item.get_type() != *collection_type {
                     return Err(CompileError {
-                        msg: format!("Type mismatch in collection. Expected type: {:?}, got type: {:?}", collection_type, item.get_type()),
+                        msg: format!(
+                            "Type mismatch in collection. Expected type: {:?}, got type: {:?}",
+                            collection_type,
+                            item.get_type()
+                        ),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                
+
                 if collection_type == &DataType::Inferred {
                     *collection_type = item.get_type();
                 }
-                
+
                 items.push(item);
             }
         }

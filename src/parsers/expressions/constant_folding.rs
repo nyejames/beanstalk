@@ -1,9 +1,13 @@
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
 use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
 
+// TODO - currently doesn't work lol
 // This will evaluate everything possible at compile time
 // returns either a literal or an evaluated runtime expression
-pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) -> Result<Value, CompileError> {
+pub fn math_constant_fold(
+    output_stack: Vec<AstNode>,
+    current_type: DataType,
+) -> Result<Value, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
@@ -13,11 +17,11 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
                 if first_line_number == 0 {
                     first_line_number = line_number.to_owned();
                 }
-                
+
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
                     return Err(CompileError {
-                        msg: "Not enough nodes on the stack for binary operator when parsing an expression".to_string(),
+                        msg: format!("Not enough nodes on the stack for binary operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}", output_stack, stack),
                         line_number: line_number.to_owned(),
                     });
                 }
@@ -66,8 +70,8 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
                     }
                 };
 
-                let new_float = AstNode::Literal(Value::Float(
-                    match op {
+                let new_number = AstNode::Literal(
+                    Value::Float(match op {
                         Token::Add => left_value + right_value,
                         Token::Subtract => left_value - right_value,
                         Token::Multiply => left_value * right_value,
@@ -75,14 +79,15 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
                         Token::Modulus => left_value % right_value,
                         _ => {
                             return Err(CompileError {
-                                msg: "Unsupported operator found in operator stack when parsing an expression into WAT".to_string(),
+                                msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
                                 line_number: line_number.to_owned(),
                             });
                         }
-                    }
-                ), line_number.to_owned());
+                    }),
+                    line_number.to_owned(),
+                );
 
-                stack.push(new_float);
+                stack.push(new_number);
             }
 
             // Some runtime thing
@@ -95,7 +100,7 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
     if stack.len() == 1 {
         return Ok(stack[0].get_value());
     }
-    
+
     if stack.len() == 0 {
         return Ok(Value::None);
     }
@@ -103,7 +108,10 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
     Ok(Value::Runtime(stack, current_type))
 }
 
-pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) -> Result<Value, CompileError> {
+pub fn logical_constant_fold(
+    output_stack: Vec<AstNode>,
+    current_type: DataType,
+) -> Result<Value, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
@@ -113,11 +121,11 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
                 if first_line_number == 0 {
                     first_line_number = line_number.to_owned();
                 }
-                
+
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
                     return Err(CompileError {
-                        msg: "Not enough nodes on the stack for logical operator when parsing an expression".to_string(),
+                        msg: format!("Not enough nodes on the stack for logical operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}", output_stack, stack),
                         line_number: line_number.to_owned(),
                     });
                 }
@@ -147,17 +155,20 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
                     }
                 };
 
-                let new_bool = AstNode::Literal(Value::Bool(match op {
-                    Token::Equal => left_value == right_value,
-                    Token::And => left_value && right_value,
-                    Token::Or => left_value || right_value,
-                    _ => {
-                        return Err(CompileError {
-                            msg: "Unsupported operator found in operator stack when parsing an expression into WAT".to_string(),
+                let new_bool = AstNode::Literal(
+                    Value::Bool(match op {
+                        Token::Equal => left_value == right_value,
+                        Token::And => left_value && right_value,
+                        Token::Or => left_value || right_value,
+                        _ => {
+                            return Err(CompileError {
+                            msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
                             line_number: line_number.to_owned(),
                         });
-                    }
-                }), line_number.to_owned());
+                        }
+                    }),
+                    line_number.to_owned(),
+                );
 
                 stack.push(new_bool);
             }
