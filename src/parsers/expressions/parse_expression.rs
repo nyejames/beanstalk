@@ -1,5 +1,3 @@
-use colour::red_ln;
-
 use crate::{
     bs_types::DataType, parsers::{
         ast_nodes::{AstNode, Arg},
@@ -7,9 +5,8 @@ use crate::{
         tuples::new_tuple,
     }, CompileError, Token
 };
-use crate::parsers::ast_nodes::Node;
+use crate::parsers::ast_nodes::Value;
 use crate::parsers::functions::create_func_call_args;
-use crate::parsers::tuples::create_node_from_tuple;
 use super::eval_expression::evaluate_expression;
 
 // If the datatype is a collection
@@ -20,20 +17,34 @@ pub fn create_expression(
     i: &mut usize,
     inside_tuple: bool,
     ast: &Vec<AstNode>,
-    data_type: &mut DataType,
+    mut data_type: &mut DataType,
     inside_brackets: bool,
     variable_declarations: &mut Vec<Arg>,
     token_line_numbers: &Vec<u32>,
-) -> Result<AstNode, CompileError> {
+) -> Result<Value, CompileError> {
     let mut expression = Vec::new();
     let number_union = DataType::Union(vec![DataType::Int, DataType::Float]);
 
     if inside_brackets {
-        *i += 1;
+        // Make sure there is an open parenthesis here (if not, return an error)
+        // Only needed if create expression is called from new_ast/new_scene
+        // Makes sure to enforce the parenthesis syntax
+        // (otherwise would end up with some function call style stuff not needing parenthesis - this would look inconsistent)
+        if let Some(Token::OpenParenthesis) = tokens.get(*i) {
+            *i += 1;
+        } else {
+            return Err(CompileError {
+                msg: "Missing open parenthesis (function call arguments must be inside parenthesis)".to_string(),
+                line_number: token_line_numbers[*i].to_owned(),
+            });
+        }
+
         match data_type {
             DataType::Tuple(inner_types) => {
+
+                // HAS DEFINED INNER TYPES FOR THE TUPLE
                 let tuple = new_tuple(
-                    None,
+                    Value::None,
                     tokens,
                     i,
                     inner_types,
@@ -42,11 +53,13 @@ pub fn create_expression(
                     token_line_numbers,
                 )?;
 
-                return create_node_from_tuple(tuple, token_line_numbers[*i])
+                return Ok(Value::Tuple(tuple));
             },
+
             DataType::Inferred => {
+                // DOES NOT HAVE DEFINED INNER TYPES FOR THE TUPLE
                 let tuple = new_tuple(
-                    None,
+                    Value::None,
                     tokens,
                     i,
                     &Vec::new(),
@@ -55,13 +68,14 @@ pub fn create_expression(
                     token_line_numbers,
                 )?;
 
-                return create_node_from_tuple(tuple, token_line_numbers[*i])
+                *data_type = DataType::Tuple(tuple.to_owned());
+                return Ok(Value::Tuple(tuple));
             }
             _ => {},
         }
     }
 
-    // Loop through the expression and create the AST nodes (increment i each time)
+    // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
     // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
     let mut next_number_negative = false;
@@ -72,7 +86,7 @@ pub fn create_expression(
                 if inside_brackets {
                     *i += 1;
                     if expression.is_empty() {
-                        return Ok(AstNode::Empty(token_line_numbers[*i].to_owned()));
+                        return Ok(Value::None);
                     }
                     break;
                 } else {
@@ -94,7 +108,7 @@ pub fn create_expression(
                     i,
                     false,
                     ast,
-                    data_type,
+                    &mut data_type,
                     true,
                     variable_declarations,
                     token_line_numbers,
@@ -131,12 +145,12 @@ pub fn create_expression(
                 if inside_brackets {
                     let eval_first_expr = evaluate_expression(
                         AstNode::Expression(expression, token_line_numbers[*i].to_owned()),
-                        data_type,
+                        &mut data_type,
                         ast,
                     )?;
 
                     let tuple = new_tuple(
-                        Some(eval_first_expr),
+                        eval_first_expr,
                         tokens,
                         i,
                         &Vec::new(),
@@ -145,7 +159,7 @@ pub fn create_expression(
                         token_line_numbers,
                     )?;
 
-                    return create_node_from_tuple(tuple, token_line_numbers[*i])
+                    return Ok(Value::Tuple(tuple));
                 }
 
                 return Err( CompileError {
@@ -157,6 +171,7 @@ pub fn create_expression(
             // Check if name is a reference to another variable or function call
             Token::Variable(name) => {
                 match variable_declarations.iter().find(|a| a.name == *name) {
+                    
                     Some(arg) => {
                         // If this expression is inferring its type from the expression
                         if *data_type == DataType::Inferred {
@@ -188,13 +203,8 @@ pub fn create_expression(
                                         }
                                         // Check the accessed item in the tuple is the same type as the expression
                                         // Or let it through if this expression is being coerced to a string
-                                        let tuple_item_type = create_node_from_tuple(
-                                            inner_types.to_owned(),
-                                            token_line_numbers[*i]
-                                                .to_owned())?
-                                            .get_type();
 
-                                        if !check_if_valid_type(&tuple_item_type, data_type) {
+                                        if !check_if_valid_type(&arg.data_type, &mut data_type) {
                                             return Err( CompileError {
                                                 msg: format!(
                                                     "Tuple '{}' is of type {:?}, but used in an expression of type {:?}",
@@ -203,15 +213,18 @@ pub fn create_expression(
                                                 line_number: token_line_numbers[*i].to_owned(),
                                             });
                                         }
+
                                         expression.push(AstNode::TupleAccess(
                                             arg.name.to_owned(),
                                             *index as usize,
-                                            tuple_item_type.to_owned(),
+                                            data_type.to_owned(),
                                             token_line_numbers[*i].to_owned(),
                                         ));
 
                                         *i += 1;
                                         continue;
+
+                                    // TODO - NAMED TUPLE ACCESS
                                     } else {
                                         return Err( CompileError {
                                             msg: format!(
@@ -228,7 +241,7 @@ pub fn create_expression(
                                 // Check if this is a collection access
                                 if let Some(Token::Dot) = tokens.get(*i + 1) {
                                     // Make sure the type of the collection is the same as the type of the expression
-                                    if !check_if_valid_type(&inner_types, data_type) {
+                                    if !check_if_valid_type(&inner_types, &mut data_type) {
                                         return Err( CompileError {
                                             msg: format!(
                                                 "Collection '{}' is of type {:?}, but used in an expression of type {:?}",
@@ -263,19 +276,16 @@ pub fn create_expression(
                                 }
                             }
 
+                            // FUNCTION CALLS
                             DataType::Function(arguments, return_type) => {
-                                // FUNCTION CALLS
+                                
                                 // move past the variable name
-                                let function_type = create_node_from_tuple(
-                                    arguments.to_owned(),
-                                    token_line_numbers[*i].to_owned())?
-                                    .get_type();
-
                                 *i += 1;
+                                
                                 match tokens[*i] {
                                     Token::OpenParenthesis => {
                                         *i += 1;
-                                        if !check_if_valid_type(&function_type, data_type) {
+                                        if !check_if_valid_type(&DataType::Tuple(arguments.to_owned()), data_type) {
                                             return Err( CompileError {
                                                 msg: format!(
                                                     "Function '{}' returns type {:?}, but used in an expression of type {:?}",
@@ -285,8 +295,8 @@ pub fn create_expression(
                                             });
                                         }
 
-                                        let tuple = new_tuple(
-                                            None,
+                                        let args_passed_in = new_tuple(
+                                            Value::None,
                                             tokens,
                                             i,
                                             arguments,
@@ -297,8 +307,8 @@ pub fn create_expression(
 
                                         let line_number = token_line_numbers[*i];
                                         let args = create_func_call_args(
-                                            &create_node_from_tuple(tuple.to_owned(), line_number)?,
-                                            &tuple,
+                                            &args_passed_in,
+                                            &arguments,
                                             &line_number,
                                         )?;
                                         
@@ -315,7 +325,7 @@ pub fn create_expression(
 
                                     // Just a reference to a function
                                     _ => {
-                                        if !check_if_valid_type(&arg.data_type, data_type) {
+                                        if !check_if_valid_type(&arg.data_type, &mut data_type) {
                                             return Err( CompileError {
                                                 msg: format!(
                                                     "Function {} literal used in expression of type {:?}",
@@ -332,7 +342,7 @@ pub fn create_expression(
 
                         // If the variables type is known and not the same as the type of the expression
                         // Return a type error
-                        if !check_if_valid_type(&arg.data_type, data_type) {
+                        if !check_if_valid_type(&arg.data_type, &mut data_type) {
                             return Err( CompileError {
                                 msg: format!(
                                     "Variable {} is of type {:?}, but used in an expression of type {:?}",
@@ -342,20 +352,12 @@ pub fn create_expression(
                             });
                         }
 
-                        if arg.name.to_uppercase() == arg.name {
-                            expression.push(AstNode::ConstReference(
-                                arg.name.to_owned(),
-                                arg.data_type.to_owned(),
-                                token_line_numbers[*i].to_owned(),
-                            ));
-                        } else {
-                            expression.push(AstNode::VarReference(
-                                arg.name.to_owned(),
-                                arg.data_type.to_owned(),
-                                token_line_numbers[*i].to_owned(),
-                            ));
-                        };
+                        expression.push(AstNode::Literal(Value::Reference(
+                            arg.name.to_owned(),
+                            arg.data_type.to_owned(),
+                        ), token_line_numbers[*i].to_owned()));
                     }
+                    
                     None => {
                         return Err( CompileError {
                             msg: format!("Variable {} not found in scope", name),
@@ -367,48 +369,54 @@ pub fn create_expression(
 
             // Check if is a literal
             Token::FloatLiteral(mut float) => {
-                if !check_if_valid_type(&DataType::Float, data_type) {
+                if !check_if_valid_type(&DataType::Float, &mut data_type) {
                     return Err( CompileError {
-                        msg: "Float literal used in non-float expression".to_string(),
+                        msg: format!("Float literal used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
+                
                 if next_number_negative {
                     float = -float;
                     next_number_negative = false;
                 }
-                expression.push(AstNode::Literal(Token::FloatLiteral(float), token_line_numbers[*i]));
+                
+                expression.push(AstNode::Literal(Value::Float(float), token_line_numbers[*i]));
             }
+            
             Token::IntLiteral(int) => {
-                if !check_if_valid_type(&DataType::Int, data_type) {
+                if !check_if_valid_type(&DataType::Int, &mut data_type) {
                     return Err(CompileError {
-                        msg: "Int literal used in non-integer expression".to_string(),
+                        msg: format!("Int literal used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
+                
                 if next_number_negative {
-                    expression.push(AstNode::Literal(Token::IntLiteral(-(*int)), token_line_numbers[*i]));
+                    expression.push(AstNode::Literal(Value::Int(-(*int)), token_line_numbers[*i]));
                     next_number_negative = false;
                 } else {
-                    expression.push(AstNode::Literal(Token::IntLiteral(*int), token_line_numbers[*i]));
+                    expression.push(AstNode::Literal(Value::Int(*int), token_line_numbers[*i]));
                 }
             }
+            
             Token::StringLiteral(string) => {
-                if !check_if_valid_type(&DataType::String, data_type) {
+                if !check_if_valid_type(&DataType::String, &mut data_type) {
                     return Err(CompileError {
-                        msg: "String literal used in non-string expression".to_string(),
+                        msg: format!("String literal used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
-                expression.push(AstNode::Literal(Token::StringLiteral(string.clone()), token_line_numbers[*i]));
+                
+                expression.push(AstNode::Literal(Value::String(string.clone()), token_line_numbers[*i]));
             }
 
             // Scenes - Create a new scene node
             // Maybe scenes can be added together like strings
             Token::SceneHead | Token::ParentScene => {
-                if !check_if_valid_type(&DataType::Scene, data_type) {
+                if !check_if_valid_type(&DataType::Scene, &mut data_type) {
                     return Err(CompileError {
-                        msg: "Scene used in non-scene expression".to_string(),
+                        msg: format!("Scene literal used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
@@ -425,37 +433,41 @@ pub fn create_expression(
             Token::Add => {
                 expression.push(AstNode::BinaryOperator(token.to_owned(), 1, token_line_numbers[*i]));
             }
+            
             Token::Subtract => {
-                if !check_if_valid_type(&number_union, data_type) {
+                if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: "Subtraction used in non-numerical expression".to_string(),
+                        msg: format!("Subtraction can't be used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
                 expression.push(AstNode::BinaryOperator(token.to_owned(), 1, token_line_numbers[*i]));
             }
+            
             Token::Multiply => {
-                if !check_if_valid_type(&number_union,  data_type) {
+                if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: "Multiplication used in non-numerical expression".to_string(),
+                        msg: format!("Multiplication can't be used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
                 expression.push(AstNode::BinaryOperator(token.to_owned(), 2, token_line_numbers[*i]));
             }
+            
             Token::Divide => {
-                if !check_if_valid_type(&number_union, data_type) {
+                if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: "Division used in non-numerical expression".to_string(),
+                        msg: format!("Division can't be used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
                 expression.push(AstNode::BinaryOperator(token.to_owned(), 2, token_line_numbers[*i]));
             }
+            
             Token::Modulus => {
-                if !check_if_valid_type(&number_union,  data_type) {
+                if !check_if_valid_type(&number_union, &mut data_type) {
                     return Err(CompileError {
-                        msg: "Modulus used in non-numerical expression".to_string(),
+                        msg: format!("Modulus can't be used in expression of type: {:?}", data_type),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
@@ -567,29 +579,19 @@ fn check_if_valid_type(data_type: &DataType, accepted_type: &mut DataType) -> bo
             *accepted_type = data_type.to_owned();
             true
         }
-        DataType::CoerseToString => true,
+        DataType::CoerceToString => true,
         DataType::Union(types) => {
             for t in &**types {
                 if data_type == t {
                     return true;
                 }
             }
-            red_ln!(
-                "Type Error: Expected type {:?}, but got type {:?}",
-                accepted_type,
-                data_type
-            );
             false
         }
         _ => {
             if data_type == accepted_type {
                 true
             } else {
-                red_ln!(
-                    "Type Error: Expected type {:?}, but got type {:?}",
-                    accepted_type,
-                    data_type
-                );
                 false
             }
         }

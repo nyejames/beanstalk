@@ -33,7 +33,7 @@ Functions must always have a return type specified, even if it is an error.
     fn(x Int) -> Int: return x + 1
 
     -- Shorthand for anonymous function that just returns a single inline expression
-    fn() -> "Hello, World!"
+    fn: return "Hello, World!"
 
     -- Calling a function
     multipleReturns(5)

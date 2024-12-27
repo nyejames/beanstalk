@@ -1,9 +1,9 @@
-use colour::red_ln;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wat::parse_file;
+use crate::CompileError;
 
-pub fn compile_wat_file(path: &Path) {
+pub fn compile_wat_file(path: &Path) -> Result<(), CompileError> {
     let wasm = parse_file(path);
     match wasm {
         Ok(wasm) => {
@@ -13,19 +13,23 @@ pub fn compile_wat_file(path: &Path) {
             };
             println!("Compiling: {:?} to WASM", file_stem);
 
-            let parent_folder = match path.parent() {
-                Some(p) => p,
-                None => Path::new(""),
-            };
+            let parent_folder = path.parent().unwrap_or_else(|| Path::new(""));
 
             let output_path = PathBuf::from(parent_folder).join(file_stem);
             match fs::write(output_path, wasm) {
                 Ok(_) => {
                     println!("WASM compiled successfully");
+                    Ok(())
                 }
-                Err(e) => red_ln!("Error writing WASM: {:?}", e),
+                Err(e) => Err(CompileError {
+                    msg: format!("Error writing WASM file: {:?}", e),
+                    line_number: 0,
+                }),
             }
         }
-        Err(e) => red_ln!("Error compiling WAT to WebAssembly: {:?}", e),
+        Err(e) => Err(CompileError {
+            msg: format!("Error parsing WAT file: {:?}", e),
+            line_number: 0,
+        }),
     }
 }

@@ -14,7 +14,7 @@ pub fn start_dev_server(path: &PathBuf) -> Result<(), CompileError> {
     let url = "127.0.0.1:6969";
     let listener = TcpListener::bind(url).unwrap();
     print_bold!("Dev Server created on: ");
-    green_ln_bold!("https://{}", url.replace("127.0.0.1", "localhost"));
+    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
 
     let path = get_current_dir()?.join(path.to_owned());
 

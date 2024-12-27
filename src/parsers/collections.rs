@@ -1,6 +1,6 @@
 use super::{ast_nodes::AstNode, expressions::parse_expression::create_expression};
 use crate::{bs_types::DataType, CompileError, Token};
-use crate::parsers::ast_nodes::{Arg, Node};
+use crate::parsers::ast_nodes::{Arg, NodeInfo, Value};
 
 // This is a dynamic array of one data type
 // TODO: string keys to make it a map
@@ -11,10 +11,10 @@ pub fn new_collection(
     token_line_numbers: &Vec<u32>,
     collection_type: &mut DataType,
     variable_declarations: &mut Vec<Arg>,
-) -> Result<AstNode, CompileError> {
-    let mut items: Vec<AstNode> = Vec::new();
+) -> Result<Value, CompileError> {
+    let mut items: Vec<Value> = Vec::new();
 
-    // Should always start with current token being an open scope
+    // Should always start with current token being an open curly brace
     // So skip to first value
     *i += 1;
 
@@ -55,9 +55,5 @@ pub fn new_collection(
         *i += 1;
     }
 
-    Ok(AstNode::Collection(
-        items,
-        DataType::Collection(Box::new(collection_type.to_owned())),
-        token_line_numbers[*i])
-    )
+    Ok(Value::Collection(items, collection_type.to_owned()))
 }

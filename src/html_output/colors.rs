@@ -1,38 +1,31 @@
-use colour::red_ln;
-
-use crate::{parsers::ast_nodes::AstNode, Token};
+use crate::{CompileError, Token};
+use crate::parsers::ast_nodes::Value;
 
 // Returns the hsla value of the color in the color pallet
 // Colors in Beanstalk can have shades between -100 and 100
 /* TODO
     The color system will be overhauled completely to work around pallets and themes
 */
-pub fn get_color(color: &Token, shade: &AstNode) -> String {
+pub fn get_color(color: &Token, shade: &Value) -> Result<String, CompileError> {
     let mut transparency = 1.0;
     let param = match shade {
-        AstNode::Literal(token, ..) => match token {
-            Token::IntLiteral(value) => *value as f64,
-            Token::FloatLiteral(value) => *value,
-            _ => 0.0,
-        },
-        AstNode::Tuple(references, _) => {
+        Value::Int(value) => *value as f64,
+        Value::Float(value) => *value,
+        Value::Tuple(references) => {
             if references.len() > 2 {
-                red_ln!("Error: Colors can only have a shade and a transparency value, more arguments provided");
+                return Err(CompileError {
+                    msg: "Error: Colors can only have a shade and a transparency value, more arguments provided".to_string(),
+                    line_number: 0,
+                });
             }
             transparency = match &references[1].value {
-                AstNode::Literal(token, ..) => match token {
-                    Token::IntLiteral(value) => *value as f64 / 100.0,
-                    Token::FloatLiteral(value) => *value,
-                    _ => 1.0,
-                },
+                Value::Int(value) => *value as f64 / 100.0,
+                Value::Float(value) => *value,
                 _ => 1.0,
             };
             match &references[0].value {
-                AstNode::Literal(token, ..) => match token {
-                    Token::IntLiteral(value) => *value as f64,
-                    Token::FloatLiteral(value) => *value,
-                    _ => 0.0,
-                },
+                Value::Int(value) => *value as f64,
+                Value::Float(value) => *value,
                 _ => 0.0,
             }
         }
@@ -49,7 +42,7 @@ pub fn get_color(color: &Token, shade: &AstNode) -> String {
     let saturation = 90.0 + sat_param;
     let lightness = 55.0 + lightness_param;
 
-    match color {
+    Ok(match color {
         Token::Red => format!("{},{}%,{}%,{}", 0, saturation, lightness, transparency),
         Token::Orange => format!("{},{}%,{}%,{}", 25, saturation, lightness, transparency),
         Token::Yellow => format!("{},{}%,{}%,{}", 60, saturation, lightness, transparency),
@@ -61,5 +54,5 @@ pub fn get_color(color: &Token, shade: &AstNode) -> String {
         Token::White => format!("{},{}%,{}%,{}", 0, 0, 100, transparency),
         Token::Black => format!("{},{}%,{}%,{}", 0, 0, 0, transparency),
         _ => format!("{},{}%,{}%,{}", 0, 0, lightness, transparency),
-    }
+    })
 }

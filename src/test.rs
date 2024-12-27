@@ -2,13 +2,14 @@ use colour::{blue_ln, cyan_ln, green_ln, grey_ln, red_ln};
 use colour::{blue_ln_bold, dark_grey_ln, dark_yellow_ln, green_ln_bold, yellow_ln_bold};
 
 use crate::html_output::web_parser;
-use crate::parsers::ast_nodes::AstNode;
+use crate::parsers::ast_nodes::{AstNode, NodeInfo, Value};
 use crate::settings::get_html_config;
 use crate::{tokenizer, CompileError};
 use crate::Token;
 use crate::{dev_server, parsers};
 use std::fs;
 use std::path::PathBuf;
+use crate::bs_types::DataType;
 
 pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
     // Read content from a test file
@@ -67,16 +68,16 @@ pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
 
     for node in &ast {
         match node {
-            AstNode::Scene(..) => {
-                print_scene(node, 0);
-            }
             AstNode::P(..) | AstNode::Span(..) => {
                 green_ln!("{:?}", node);
             }
             AstNode::Error(err, line) => {
                 red_ln!("Error at line {}: {}", line, err);
             }
-            AstNode::Literal(..) => {
+            AstNode::Literal(value, _) => {
+                if value.get_type() == DataType::Scene {
+                    print_scene(&value, 0);
+                }
                 cyan_ln!("{:?}", node);
             }
             AstNode::Comment(..) => {
@@ -141,7 +142,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
     Ok(())
 }
 
-fn print_scene(scene: &AstNode, scene_nesting_level: u32) {
+fn print_scene(scene: &Value, scene_nesting_level: u32) {
     // Indent the scene by how nested it is
     let mut indentation = String::new();
     for _ in 0..scene_nesting_level {
@@ -149,7 +150,7 @@ fn print_scene(scene: &AstNode, scene_nesting_level: u32) {
     }
 
     match scene {
-        AstNode::Scene(nodes, tags, styles, actions, ..) => {
+        Value::Scene(nodes, tags, styles, actions, ..) => {
             blue_ln_bold!("\n{}Scene Head: ", indentation);
             for tag in tags {
                 dark_yellow_ln!("{}  {:?}", indentation, tag);
@@ -165,9 +166,6 @@ fn print_scene(scene: &AstNode, scene_nesting_level: u32) {
 
             for scene_node in nodes {
                 match scene_node {
-                    AstNode::Scene(..) => {
-                        print_scene(scene_node, scene_nesting_level + 1);
-                    },
                     AstNode::Heading(..)
                     | AstNode::BulletPoint(..)
                     | AstNode::Em(..)
@@ -180,7 +178,10 @@ fn print_scene(scene: &AstNode, scene_nesting_level: u32) {
                     AstNode::Error(err, line) => {
                         red_ln!("{}  Error at line {}: {}", indentation, line, err);
                     }
-                    AstNode::Literal(..) => {
+                    AstNode::Literal(value, _) => {
+                        if value.get_type() == DataType::Scene {
+                            print_scene(&value, scene_nesting_level + 1);
+                        }
                         cyan_ln!("{}  {:?}", indentation, scene_node);
                     }
                     AstNode::Space(..) | AstNode::Comment(..) => {

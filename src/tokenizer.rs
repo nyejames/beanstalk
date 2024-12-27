@@ -189,7 +189,7 @@ pub fn get_next_token(
         let char_token = chars.next();
         if let Some(&char_after_next) = chars.peek() {
             if char_after_next == '\'' && char_token.is_some() {
-                return Token::RuneLiteral(char_token.unwrap());
+                return Token::CharLiteral(char_token.unwrap());
             }
         }
     }
@@ -595,6 +595,13 @@ fn keyword_or_variable(
                     *tokenize_mode = TokenizeMode::Normal;
                     return match string_block(chars, line_number) {
                         Ok(js_code) => Token::JS(js_code),
+                        Err(err) => err,
+                    };
+                }
+                "WASM" => {
+                    *tokenize_mode = TokenizeMode::Normal;
+                    return match string_block(chars, line_number) {
+                        Ok(js_code) => Token::WASM(js_code),
                         Err(err) => err,
                     };
                 }

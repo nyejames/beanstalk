@@ -9,7 +9,7 @@ Here is a list of current bugs, development goals and planned features.
 - Parsing tuples for reading the config file
 - Finish implementing all math operators and brackets
 - Get variables and mostly folded expressions working fully
-- Color theme system
+- Color theme system (color type built into language)
 
 ## Current Bugs
 *Scenes*
@@ -41,6 +41,20 @@ Beanstalk should be a very batteries included language, with a lot of standard l
 The standard library will be the only default import option in the project config file.
 
 print|import|rng|log|round|abs|sin|cos|tan|expo|gcd
+
+### Colour type ideas
+Would be a function that creates an RGB value at the end.
+
+Arguments:
+- Would be able to mix colors in (like painting) e.g red(100) green(20) magenta(40).
+This will be converted to a relative hue value. This can approach white or black without a value.
+- Saturation
+- Lightness
+- Hue (becomes priority colour input when used - but other colours can still be mixed in, which will modify the hue/saturation)
+- Integer (or float) passed in to select a theme colour as a base (primary colour = 1, secondary = 2 etc) Maybe 0 is always black or white depending on lightmode/darkmode
+
+The colour theme selections will have a lightmode / darkmode
+
 
 ### Concurrency (channels/threads) syntax
 Like go, but hopefully simpler and clearer control flow. 

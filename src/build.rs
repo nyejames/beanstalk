@@ -2,7 +2,7 @@ use crate::bs_types::DataType;
 use crate::html_output::dom_hooks::{generate_dom_update_js, DOMUpdate};
 use crate::html_output::generate_html::create_html_boilerplate;
 use crate::html_output::web_parser;
-use crate::parsers::ast_nodes::{AstNode, Arg};
+use crate::parsers::ast_nodes::{AstNode, Arg, Value};
 use crate::settings::{get_default_config, get_html_config, Config};
 use crate::{tokenizer, CompileError};
 use crate::tokens::Token;
@@ -366,7 +366,7 @@ fn compile(
         .map(|e| Arg {
             name: e.path.file_name().unwrap_or(OsStr::new("")).to_str().unwrap_or_else(|| "").to_owned(),
             data_type: e.data_type.to_owned(),
-            value: AstNode::Empty(0),
+            value: Value::None,
         })
         .collect();
 
@@ -441,7 +441,8 @@ fn compile(
         generate_dom_update_js(DOMUpdate::InnerHTML),
         parser_output.js
     );
-    let module_output = create_html_boilerplate(&html_config, release_build)
+    
+    let module_output = create_html_boilerplate(&html_config, release_build)?
         .replace("page-template", &parser_output.html)
         .replace("@page-css", &parser_output.css)
         .replace("page-title", &parser_output.page_title)

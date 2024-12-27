@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use crate::bs_types::DataType;
 
 #[derive(Debug, PartialEq)]
@@ -15,7 +16,7 @@ pub enum Token {
     ModuleStart(String),
     Comptime,
     Error(String, u32),  // Error message, line number
-    DeadVarible(String), // Name. Variable that is never used, to be removed in the AST
+    DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
     EOF,                 // End of file
 
     // Module Import/Export
@@ -30,6 +31,7 @@ pub enum Token {
     Date,
     JS(String),  // JS codeblock
     CSS(String), // CSS codeblock
+    WASM(String), // WAT codeblock (for testing WASM)
 
     // Standard Library (eventually)
     Settings,
@@ -46,10 +48,10 @@ pub enum Token {
 
     // Literals
     StringLiteral(String),
-    PathLiteral(String),
+    PathLiteral(PathBuf),
     FloatLiteral(f64),
     IntLiteral(i64),
-    RuneLiteral(char),
+    CharLiteral(char),
     RawStringLiteral(String),
     BoolLiteral(bool),
 
@@ -58,7 +60,7 @@ pub enum Token {
     CloseCurly, // }
 
 
-    // Stucture of Syntax
+    // Structure of Syntax
     Newline,
     Semicolon,
 
@@ -134,7 +136,7 @@ pub enum Token {
 
     // Scenes
     ParentScene,
-    EmptyScene(u32), // Used for templating values in scene heads in the body of scenes, value is numnber of spaces after the scene template
+    EmptyScene(u32), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
 
     SceneHead,
     SceneBody,

@@ -5,9 +5,9 @@ use super::{
     variables::create_new_var_or_ref,
 };
 use crate::{bs_types::DataType, CompileError, Token};
-use colour::red_ln;
 use std::path::PathBuf;
-use crate::parsers::ast_nodes::Arg;
+use crate::parsers::ast_nodes::{Arg, Value};
+use crate::parsers::functions::create_func_call_args;
 use crate::parsers::tuples::new_tuple;
 
 pub fn new_ast(
@@ -29,13 +29,13 @@ pub fn new_ast(
             Token::Comment(value) => {
                 ast.push(AstNode::Comment(value.clone()));
             }
+            
             Token::Import => {
                 if !module_scope {
-                    red_ln!("Error: Import found outside of module scope");
-                    ast.push(AstNode::Error(
-                        "Import found outside of module scope".to_string(),
-                        token_line_numbers[*i],
-                    ));
+                    return Err(CompileError {
+                        msg: "Error: Import found outside of module scope".to_string(),
+                        line_number: token_line_numbers[*i],
+                    });
                 }
 
                 *i += 1;
@@ -52,22 +52,25 @@ pub fn new_ast(
                     }
                 }
             }
+
+            // Scene literals
             Token::SceneHead | Token::ParentScene => {
                 if !module_scope {
-                    red_ln!("Error: Scene Head or Parent Scene found outside of module scope");
-                    ast.push(AstNode::Error(
-                        "Scene literal found outside of module scope".to_string(),
-                        token_line_numbers[*i],
-                    ));
+                    return Err(CompileError {
+                        msg: "Scene literals can only be used at the top level of a module".to_string(),
+                        line_number: token_line_numbers[*i],
+                    });
                 }
 
-                ast.push(new_scene(
+                let scene = new_scene(
                     &tokens,
                     i,
                     &ast,
                     token_line_numbers,
                     variable_declarations,
-                )?);
+                )?;
+
+                ast.push(AstNode::Literal(scene, token_line_numbers[*i]));
             }
 
             Token::ModuleStart(_) => {
@@ -84,8 +87,10 @@ pub fn new_ast(
                     exported,
                     &ast,
                     token_line_numbers,
-                )?.0);
+                    false,
+                )?);
             }
+
             Token::Export => {
                 exported = true;
             }
@@ -129,8 +134,8 @@ pub fn new_ast(
             Token::Print => {
                 // Move past the print keyword
                 *i += 1;
-                let arg = new_tuple(
-                    None,
+                let tuple = new_tuple(
+                    Value::None,
                     &tokens,
                     i,
                     &Vec::new(),
@@ -139,10 +144,11 @@ pub fn new_ast(
                     &token_line_numbers,
                 )?;
 
-                ast.push(AstNode::Print(arg, token_line_numbers[*i]));
+                let args = create_func_call_args(&tuple, &Vec::new(), &token_line_numbers[*i])?;
+                ast.push(AstNode::Print(args, token_line_numbers[*i]));
             }
 
-            Token::DeadVarible(name) => {
+            Token::DeadVariable(name) => {
                 // Remove entire declaration or scope of variable declaration
                 // So don't put any dead code into the AST
                 skip_dead_code(&tokens, i);
@@ -190,7 +196,7 @@ pub fn new_ast(
                     token_line_numbers,
                 )?;
 
-                ast.push(AstNode::Return(Box::new(return_value), token_line_numbers[*i]));
+                ast.push(AstNode::Return(return_value, token_line_numbers[*i]));
 
                 *i -= 1;
             }

@@ -1,10 +1,8 @@
-use colour::red_ln;
-
 use crate::settings::HTMLMeta;
 use std::fs;
+use crate::CompileError;
 
-pub fn create_html_boilerplate(meta_tags: &HTMLMeta, release_build: bool) -> String {
-    let mut boilerplate = String::new();
+pub fn create_html_boilerplate(meta_tags: &HTMLMeta, release_build: bool) -> Result<String, CompileError> {
 
     // Add basic HTML boilerplate to output
     let file = match release_build {
@@ -14,7 +12,7 @@ pub fn create_html_boilerplate(meta_tags: &HTMLMeta, release_build: bool) -> Str
 
     match file {
         Ok(html) => {
-            boilerplate = html
+            Ok(html
                 .replace("page-description", &meta_tags.page_description)
                 .replace("site-url", &meta_tags.site_url)
                 .replace("page-url", &meta_tags.page_url)
@@ -33,9 +31,15 @@ pub fn create_html_boilerplate(meta_tags: &HTMLMeta, release_build: bool) -> Str
                 .replace("site-favicons-folder-url", &meta_tags.favicons_folder_url)
                 .replace("theme-color-light", &meta_tags.theme_color_light)
                 .replace("theme-color-dark", &meta_tags.theme_color_dark)
+            )
         }
-        Err(err) => red_ln!("Error Reading HTML boilerplate file: {}", err),
-    };
 
-    boilerplate
+        Err(err) => {
+            Err(CompileError {
+                msg: format!("Error reading boilerplate HTML file: {:?}", err),
+                line_number: 0,
+            })
+        }
+    }
+
 }

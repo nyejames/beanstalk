@@ -40,7 +40,7 @@ mod wasm_output {
     pub mod wasm_generator;
     pub mod wat_parser;
 }
-use colour::{dark_cyan, green_ln_bold, grey_ln, red_bold, red_ln};
+use colour::{dark_cyan, e_dark_red_ln_bold, e_dark_yellow_ln, green_ln_bold, grey_ln, red_ln};
 pub use tokens::Token;
 enum Command {
     NewHTMLProject(PathBuf),
@@ -141,7 +141,12 @@ fn main() {
 
         Command::Wat(path) => {
             println!("Compiling WAT to WebAssembly...");
-            let _ = wasm_output::wasm_generator::compile_wat_file(&path);
+            match wasm_output::wasm_generator::compile_wat_file(&path) {
+                Ok(_) => {}
+                Err(e) => {
+                    print_formatted_error(&e, &path);
+                }
+            }
         }
     }
 }
@@ -270,22 +275,20 @@ fn print_formatted_error(e: &CompileError, file_path: &PathBuf) {
         }
     };
 
-    red_ln!("------------------------------------");
+    println!("(╯°□°)╯  🔥🔥🔥🔥🔥🔥🔥🔥 ");
 
     if e.line_number == 0 {
-        red_bold!("Error during compilation: ");
-        red_ln!("{}", e.msg);
+        e_dark_yellow_ln!("Error during compilation");
+        e_dark_red_ln_bold!("{}", e.msg);
     } else {
-        red_bold!("Error during compilation at line {}: ", e.line_number);
-        red_ln!("{}", e.msg);
-
-        grey_ln!("------------------------------------");
+        e_dark_yellow_ln!("Error during compilation at line {}", e.line_number);
+        e_dark_red_ln_bold!("{}", e.msg);
 
         println!("{}", line);
         red_ln!("{}", std::iter::repeat('^').take(line.len()).collect::<String>());
     }
 
-    red_ln!("------------------------------------");
+    println!("🔥🔥🔥🔥🔥🔥🔥🔥   ╰(°□°╰)");
 }
 
 fn print_help(commands_only: bool) {

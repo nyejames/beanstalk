@@ -1,8 +1,9 @@
 use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
+use crate::parsers::ast_nodes::{NodeInfo, Value};
 
 // This will evaluate everything possible at compile time
 // returns either a literal or an evaluated runtime expression
-pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) -> Result<AstNode, CompileError> {
+pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) -> Result<Value, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
@@ -28,9 +29,9 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
                 // And just push the operator onto the stack instead of evaluating
                 // TO DO: GENERICS FOR THIS TO SUPPORT INTS CORRECTLY
                 let left_value = match left {
-                    AstNode::Literal(ref token, _) => match token {
-                        Token::FloatLiteral(value) => *value,
-                        Token::IntLiteral(value) => *value as f64,
+                    AstNode::Literal(ref value, _) => match value {
+                        Value::Float(value) => *value,
+                        Value::Int(value) => *value as f64,
                         _ => {
                             stack.push(left);
                             stack.push(right);
@@ -47,9 +48,9 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
                 };
 
                 let right_value = match right {
-                    AstNode::Literal(ref token, _) => match token {
-                        Token::FloatLiteral(value) => *value,
-                        Token::IntLiteral(value) => *value as f64,
+                    AstNode::Literal(ref value, _) => match value {
+                        Value::Float(value) => *value,
+                        Value::Int(value) => *value as f64,
                         _ => {
                             stack.push(left);
                             stack.push(right);
@@ -65,7 +66,7 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
                     }
                 };
 
-                let new_float = AstNode::Literal(Token::FloatLiteral(
+                let new_float = AstNode::Literal(Value::Float(
                     match op {
                         Token::Add => left_value + right_value,
                         Token::Subtract => left_value - right_value,
@@ -92,23 +93,17 @@ pub fn math_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) ->
     }
 
     if stack.len() == 1 {
-        return match stack.pop() {
-            Some(node) => Ok(node),
-            None => Err(CompileError {
-                msg: "Compiler Bug: No node found in stack when parsing an expression in Constant_folding".to_string(),
-                line_number: 0,
-            }),
-        };
+        return Ok(stack[0].get_value());
     }
     
     if stack.len() == 0 {
-        return Ok(AstNode::Empty(first_line_number));
+        return Ok(Value::None);
     }
 
-    Ok(AstNode::RuntimeExpression(stack, current_type, first_line_number))
+    Ok(Value::Runtime(stack, current_type))
 }
 
-pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) -> Result<AstNode, CompileError> {
+pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType) -> Result<Value, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
@@ -133,7 +128,7 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
                 // if at least one is not then this must be a runtime expression
                 // And just push the operator onto the stack instead of evaluating
                 let left_value = match left {
-                    AstNode::Literal(Token::BoolLiteral(value), ..) => value,
+                    AstNode::Literal(Value::Bool(value), ..) => value,
                     _ => {
                         stack.push(left);
                         stack.push(right);
@@ -143,7 +138,7 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
                 };
 
                 let right_value = match right {
-                    AstNode::Literal(Token::BoolLiteral(value), ..) => value,
+                    AstNode::Literal(Value::Bool(value), ..) => value,
                     _ => {
                         stack.push(left);
                         stack.push(right);
@@ -152,7 +147,7 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
                     }
                 };
 
-                let new_bool = AstNode::Literal(Token::BoolLiteral(match op {
+                let new_bool = AstNode::Literal(Value::Bool(match op {
                     Token::Equal => left_value == right_value,
                     Token::And => left_value && right_value,
                     Token::Or => left_value || right_value,
@@ -176,7 +171,7 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
 
     if stack.len() == 1 {
         return match stack.pop() {
-            Some(node) => Ok(node),
+            Some(node) => Ok(node.get_value()),
             None => Err(CompileError {
                 msg: "Compiler Bug: No node found in stack when parsing an expression in Constant_folding".to_string(),
                 line_number: 0,
@@ -184,5 +179,5 @@ pub fn logical_constant_fold(output_stack: Vec<AstNode>, current_type: DataType)
         };
     }
 
-    Ok(AstNode::RuntimeExpression(stack, current_type, first_line_number))
+    Ok(Value::Runtime(stack, current_type))
 }
