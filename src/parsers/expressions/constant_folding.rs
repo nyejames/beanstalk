@@ -1,9 +1,13 @@
 use crate::parsers::ast_nodes::{NodeInfo, Value};
 use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
 
+#[allow(unused_imports)]
+use colour::{blue_ln, green_ln_bold, red_ln};
+
 // TODO - currently doesn't work lol
 // This will evaluate everything possible at compile time
 // returns either a literal or an evaluated runtime expression
+// Output stack must be in RPN order
 pub fn math_constant_fold(
     output_stack: Vec<AstNode>,
     current_type: DataType,
@@ -11,12 +15,17 @@ pub fn math_constant_fold(
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
+    // blue_ln!("starting stack: {:?}", output_stack);
     for node in &output_stack {
+        // red_ln!("output_stack: {:?}", stack);
+
         match node {
-            AstNode::BinaryOperator(op, _, line_number) => {
+            AstNode::BinaryOperator(op, line_number) => {
                 if first_line_number == 0 {
                     first_line_number = line_number.to_owned();
                 }
+
+                // green_ln_bold!("Binary operator found: {:?}", op);
 
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
@@ -25,24 +34,18 @@ pub fn math_constant_fold(
                         line_number: line_number.to_owned(),
                     });
                 }
-                let right = stack.pop().unwrap();
                 let left = stack.pop().unwrap();
+                let right = stack.pop().unwrap();
 
                 // Check if top 2 of stack are literals
                 // if at least one is not then this must be a runtime expression
                 // And just push the operator onto the stack instead of evaluating
                 // TO DO: GENERICS FOR THIS TO SUPPORT INTS CORRECTLY
-                let left_value = match left {
-                    AstNode::Literal(ref value, _) => match value {
-                        Value::Float(value) => *value,
-                        Value::Int(value) => *value as f64,
-                        _ => {
-                            stack.push(left);
-                            stack.push(right);
-                            stack.push(node.to_owned());
-                            continue;
-                        }
-                    },
+                let left_value = match left.get_value() {
+                    Value::Float(value) => value,
+                    Value::Int(value) => value as f64,
+
+                    // TODO - some runtime thing
                     _ => {
                         stack.push(left);
                         stack.push(right);
@@ -51,17 +54,11 @@ pub fn math_constant_fold(
                     }
                 };
 
-                let right_value = match right {
-                    AstNode::Literal(ref value, _) => match value {
-                        Value::Float(value) => *value,
-                        Value::Int(value) => *value as f64,
-                        _ => {
-                            stack.push(left);
-                            stack.push(right);
-                            stack.push(node.to_owned());
-                            continue;
-                        }
-                    },
+                let right_value = match right.get_value() {
+                    Value::Float(value) => value,
+                    Value::Int(value) => value as f64,
+
+                    // TODO - some runtime thing
                     _ => {
                         stack.push(left);
                         stack.push(right);
@@ -73,7 +70,7 @@ pub fn math_constant_fold(
                 let new_number = AstNode::Literal(
                     Value::Float(match op {
                         Token::Add => left_value + right_value,
-                        Token::Subtract => left_value - right_value,
+                        Token::Subtract => right_value - left_value,
                         Token::Multiply => left_value * right_value,
                         Token::Divide => left_value / right_value,
                         Token::Modulus => left_value % right_value,
@@ -90,12 +87,14 @@ pub fn math_constant_fold(
                 stack.push(new_number);
             }
 
-            // Some runtime thing
+            // Literal or anything else
             _ => {
                 stack.push(node.to_owned());
             }
         }
     }
+
+    // red_ln!("final stack: {:?}", stack);
 
     if stack.len() == 1 {
         return Ok(stack[0].get_value());
@@ -117,7 +116,7 @@ pub fn logical_constant_fold(
 
     for node in &output_stack {
         match node {
-            AstNode::LogicalOperator(op, _, line_number) => {
+            AstNode::LogicalOperator(op, line_number) => {
                 if first_line_number == 0 {
                     first_line_number = line_number.to_owned();
                 }

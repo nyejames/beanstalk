@@ -2,6 +2,16 @@
 [header center: [title(1): BASIC BEANSTALK SYNTAX]]
 [main:
 
+# Quick Synax Overview
+The specifics are not fully decided on, but some of the key points are:
+- No whitespace significance, using 'end' keyword to close scopes instead.
+- No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for scenes.
+- Colon is only used inside scene heads, equals is used for everything related to assignment. Including when declaring functions.
+- Equality and other logical operators only use keywords (you can't use == or ! in logical expressions for example)
+- A radically minimal struct syntax that uses parenthesis.
+- (possibly) ~ tilde symbol to indicate mutability (mutability must be explicit like in Rust)
+- double dashes for comments (--)
+
 # Style Guide
 The style guide is:
 - snake_case for variables, collections, styles and scenes
@@ -37,33 +47,45 @@ The @ symbol before a name is used to export variables and methods/functions out
 Types will be inferred if not specified. 
 Usually, you don't need to specify a type unless you are creating a new type or a collection.
 
-### Constant
+### Compile Time Constant
 [code: 
     IMMUTABLE_VARIABLE = 69
 ]
 
-### Variable with type annotation
+### Variable with type annotation (tilde means this is a mutable and can change)
 [code: 
-    float_var Float = 0.0
+    float_var ~Float = 0.0
+]
+
+### Mutable variables with inferred types
+[code: 
+    float_var ~= 0.0
+    int_var ~= 0
+    string_var ~= "boo!"
 ]
 
 ## Static Assignment
 [code:
     -- UTF-16 string with type annotation
-    my_brain String = "Dumb"
+    my_brain ~String = "Dumb"
 
-    -- 64 bit float with inferred type
+    -- 64 bit immutable float with inferred type
     number = 69.420
 
-    -- Copies the number
+    -- Becomes an immutable reference to the number
     another_number = number
 
-    -- Type error
-    number = "Not a number"
+    -- Becomes a mutable reference to the number
+    another_mutable_number ~= number
+
+    -- Type error (number is not mutable)
+    number = 1
+
+    -- Type error (another_mutable_number is a float type)
+    another_mutable_number ~= "Not a number"
 ]
 
 Variables must be given a value or a type when they are declared.
-There is no such thing as 'null' in Beanstalk, the closest equivalent is an Error type or an empty tuple.
 
 If an error occurs during assignment of a variable, it's type becomes an Error and must be handled. 
 Unhandled assignment errors at runtime will default the variable to it's zero value.
@@ -75,13 +97,13 @@ All copies of collections are explicit and must use the 'copy' keyword in place 
     a_collection {Int} = {1, 2, 3, 4, 5}
     
     -- Deep copy of a collection
-    a_copy = copy a_collection
+    a_copy copy = a_collection
 
     -- Reference to a_collection
     a_reference = a_collection
 
-    -- Shadow a_collection with a new value
-    a_collection {Float} = {23.0, 43.1}
+    -- Mutable Reference to a_collection (or ownership passed depending on context)
+    a_reference ~= a_collection
 
     -- a_reference is still a reference to the original collection
     a_reference add(5)
@@ -92,14 +114,12 @@ All copies of collections are explicit and must use the 'copy' keyword in place 
 ]
 
 If you are creating a non-collection variable and need it to be formatted over multiple lines, 
-you can surround it in parenthesis.
-
-This creates a tuple of one item, which is equivalent to the value inside the parenthesis.
+you can use the end keyword. The first newline must be after the '=' assignment operator.
 
 [code:
-    some_int = (
+    some_int =
         4 + 5 + 6 + 7 + 8 + 9 + 10
-    )
+    end
 ]
 
 # Data Types

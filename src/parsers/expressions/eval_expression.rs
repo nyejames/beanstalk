@@ -14,28 +14,49 @@ pub fn evaluate_expression(
     let mut simplified_expression: Vec<AstNode> = Vec::new();
 
     // SHUNTING YARD ALGORITHM
-    let mut output_stack: Vec<AstNode> = Vec::new();
+    let mut output_queue: Vec<AstNode> = Vec::new();
     let mut operators_stack: Vec<AstNode> = Vec::new();
-    for ref node in expr {
+
+    'outer: for ref node in expr {
         match node {
             AstNode::Literal(value, _) => {
+                // Ignore shunting yard for strings and coerced strings
                 if current_type == DataType::CoerceToString || current_type == DataType::String {
                     simplified_expression.push(node.to_owned());
-                } else {
-                    output_stack.push(node.to_owned());
+                    continue;
+                }
+
+                match value {
+                    /*
+                        if the token is:
+                            - a number:
+                                put it into the output queue
+                    */
+                    Value::Float(_) | Value::Int(_) | Value::Bool(_) => {
+                        output_queue.push(node.to_owned());
+                    }
+
+                    // Anything else must can't be folded at compile time
+                    _ => {
+                        simplified_expression.push(node.to_owned());
+                    }
                 }
 
                 if current_type == DataType::Inferred {
                     current_type = value.get_type();
                 }
             }
+            /*
+               - a function:
+               push it onto the operator stack
 
+            */
+            // Should already be type checked
             AstNode::FunctionCall(..) => {
-                // TODO - check for access after function call
-                simplified_expression.push(node.to_owned());
+                operators_stack.push(node.to_owned());
             }
 
-            AstNode::BinaryOperator(op, precedence, line) => {
+            AstNode::BinaryOperator(op, line) => {
                 // If the current type is a string or scene, add operator is assumed.
                 if current_type == DataType::String || current_type == DataType::Scene {
                     if op != &Token::Add {
@@ -50,28 +71,61 @@ pub fn evaluate_expression(
 
                 if current_type == DataType::CoerceToString {
                     simplified_expression.push(node.to_owned());
+                    continue;
                 }
 
                 if current_type == DataType::Bool {
-                    if *op != Token::Or || *op != Token::And {
+                    if *op != Token::Or
+                        || *op != Token::And
+                        || *op != Token::Equal
+                        || *op != Token::Not
+                        || *op != Token::LessThan
+                        || *op != Token::LessThanOrEqual
+                        || *op != Token::GreaterThan
+                        || *op != Token::GreaterThanOrEqual
+                    {
                         return Err(CompileError {
-                            msg: "Can only use 'or' and 'and' operators with booleans".to_string(),
+                            msg: "Can only use logical operators in booleans expressions"
+                                .to_string(),
                             line_number: line_number.to_owned(),
                         });
                     }
-                    operators_stack.push(node.to_owned());
+
+                    simplified_expression.push(node.to_owned());
+                    continue;
                 }
 
-                if operators_stack.last().is_some_and(|x| match x {
-                    AstNode::BinaryOperator(_, p, _) => p >= &precedence,
-                    _ => false,
-                }) {
-                    output_stack.push(operators_stack.pop().unwrap());
+                /*
+                    - an operator node:
+
+                    while (
+                        there is an operator o2 at the top of the operator stack which is not a left parenthesis,
+                        and (o2 has greater precedence than node or (node and o2 have the same precedence and node is left-associative))
+                    ):
+                        pop o2 off the operator stack into the output queue
+                        push node onto the operator stack
+                */
+
+                while let Some(o2) = operators_stack.pop() {
+                    if o2.get_precedence() > node.get_precedence() {
+                        output_queue.push(o2);
+                        continue;
+                    } else {
+                        operators_stack.push(node.to_owned());
+                        operators_stack.push(o2);
+                        continue 'outer;
+                    }
                 }
 
                 operators_stack.push(node.to_owned());
             }
 
+            /*
+                - a ",":
+                while the operator at the top of the operator stack is not a left parenthesis:
+                    pop the operator from the operator stack into the output queue
+
+            */
             _ => {
                 return Err(CompileError {
                     msg: format!("unsupported AST node found in expression: {:?}", node),
@@ -89,10 +143,10 @@ pub fn evaluate_expression(
     // LOGICAL EXPRESSIONS
     if current_type == DataType::Bool {
         for operator in operators_stack {
-            output_stack.push(operator);
+            output_queue.push(operator);
         }
 
-        return logical_constant_fold(output_stack, current_type);
+        return logical_constant_fold(output_queue, current_type);
     }
 
     // SCENE EXPRESSIONS
@@ -116,11 +170,11 @@ pub fn evaluate_expression(
     // MATHS EXPRESSIONS
     // Push everything into the stack, is now in RPN notation
     for operator in operators_stack {
-        output_stack.push(operator);
+        output_queue.push(operator);
     }
 
     // Evaluate all constants in the maths expression
-    math_constant_fold(output_stack, current_type)
+    math_constant_fold(output_queue, current_type)
 }
 
 // TODO - needs to check what can be concatenated at compile time
@@ -172,7 +226,8 @@ fn concat_strings(
                 } else {
                     // Syntax error, must have a + operator between strings when concatenating
                     return Err(CompileError {
-                        msg: "Syntax Error: Must have a + operator between strings when concatenating".to_string(),
+                        msg: "Must have a + operator between strings when concatenating"
+                            .to_string(),
                         line_number: line_number.to_owned(),
                     });
                 }
@@ -181,14 +236,14 @@ fn concat_strings(
             // TODO: - does there need to be runtime stuff here for strings?
             Value::Runtime(_, _) => {
                 return Err(CompileError {
-                    msg: "Compiler Bug: Runtime expressions not supported yet in string expression (concat strings - eval expression)".to_string(),
+                    msg: "Runtime expressions not supported yet in string expression (concat strings - eval expression)".to_string(),
                     line_number: line_number.to_owned(),
                 });
             }
 
             _ => {
                 return Err(CompileError {
-                    msg: "Compiler Bug: Non-string (or runtime string expression) used in string expression (concat strings - eval expression)".to_string(),
+                    msg: "Non-string (or runtime string expression) used in string expression (concat strings - eval expression)".to_string(),
                     line_number: line_number.to_owned(),
                 });
             }

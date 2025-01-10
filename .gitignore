@@ -1,6 +1,6 @@
 debug/
 target/
-docs/dev
+docs/dev/
 test_output/
 .vscode
 **/*.rs.bk

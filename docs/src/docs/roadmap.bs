@@ -6,10 +6,20 @@ Beanstalk is still in development. It doesn't even have a version number yet!
 Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
-- Parsing tuples for reading the config file
-- Finish implementing all math operators and brackets
-- Get variables and mostly folded expressions working fully
+- Finish testing named tuple stuff, make sure it works as expected 
+- then start try to make the standard library styles using that syntax
+- Move all of the html standard lib tokens to just exported variables included in builds
+- Need to create a Style type, which is not a primitive type. (see styles for the shape of that type). 
+This will be the first test for implementing a custom type system (figure out how that will work -> whether any tuple created also creates a type of itself)
+- Styles should just not be functions by default, they can be returned by functions only
+    > Styles will just be structs of the correct properties that can contain nested styles accessed with a dot
+    > so instead of nav(0) we will do nav.0 or something to that affect. button becomes button.click() (or it has to be button() and must have brackets)
+    > Any dynamic stuff just has to have brackets anyway (dot is compile time access, brackets are runtime access)
+- Parsing named tuples for reading the config file
+- Maybe just don't enforce brackets at all for function calls?
+- Finish implementing constant folding and all math operators and brackets
 - Color theme system (color type built into language)
+- dev / build prunes dev files that are no longer in the src files (bs files are cleared out of the dev folder each time)
 
 ## Current Bugs
 *Scenes*
@@ -31,7 +41,9 @@ Here is a list of current bugs, development goals and planned features.
 - Nestable comments?
 
 ## Future plans and ideas
-- Multiple return functions basically become like classes anyway?
+- Documentation scenes (can be put anywhere in a module or scene and a special docs compile mode will generate docs using these scenes)
+There can also be additional features or searchable things added to these scene heads that make the documentation of the project really easy
+it will output an entire documentation webpage by default
 - Embedding on top of fast exciting general purpose languages
 - Better Dev server with web sockets handling hot reloading (rather than the current janky system)
 - Server files and server side BS code (Using a Wasm runtime on the server)

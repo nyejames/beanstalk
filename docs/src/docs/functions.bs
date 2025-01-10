@@ -12,25 +12,25 @@ Functions must always have a return type specified, even if it is an error.
 
 [code:
     -- Returns an int
-    multipleReturns fn(x Int) -> Int: return 1 + x
+    multipleReturns = fn(x Int) -> Int = return 1 + x
 
     -- Returns a struct
-    returnStruct fn(x Int) -> SomeStruct:
+    returnStruct = fn(x Int) -> SomeStruct =
         return SomeStruct{1, 2}
     end
 
-    differentReturns fn(spicy bool = false) -> (Int, Int, Int):
+    differentReturns fn(spicy bool = false) -> (Int, Int, Int) =
         if spicy: return (69, 420, 1337)
         
         return (1, 2, 3)
     end
 
-    canError fn(x String) -> String?: 
+    canError fn(x String) -> String? =
         return fetch(x) ? error(msg)
     end
 
     -- Anonymous function
-    fn(x Int) -> Int: return x + 1
+    fn(x Int) -> Int = return x + 1
 
     -- Shorthand for anonymous function that just returns a single inline expression
     fn: return "Hello, World!"

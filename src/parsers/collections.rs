@@ -3,6 +3,7 @@ use crate::parsers::ast_nodes::{Arg, NodeInfo, Value};
 use crate::{bs_types::DataType, CompileError, Token};
 
 // This is a dynamic array of one data type
+// TODO - look through and update / test this code as a lot has changed
 // TODO: string keys to make it a map
 pub fn new_collection(
     tokens: &Vec<Token>,

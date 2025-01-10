@@ -40,6 +40,13 @@ pub fn tokenize(source_code: &str, module_name: &str) -> (Vec<Token>, Vec<u32>) 
 
     tokens.push(token);
     token_line_numbers.push(line_number);
+
+    assert_eq!(
+        tokens.len(),
+        token_line_numbers.len(),
+        "Compiler Bug: Tokens and line numbers not the same length"
+    );
+
     (tokens, token_line_numbers)
 }
 
@@ -85,16 +92,16 @@ pub fn get_next_token(
 
     if current_char == '[' {
         *scene_nesting_level += 1;
-        match tokenize_mode {
+        return match tokenize_mode {
             TokenizeMode::SceneHead => {
-                return Token::Error("Cannot have nested scenes inside of a scene head, must be inside the scene body. Use a colon to start the scene body.".to_string(), *line_number)
+                Token::Error("Cannot have nested scenes inside of a scene head, must be inside the scene body. Use a colon to start the scene body.".to_string(), *line_number)
             }
             TokenizeMode::Codeblock => {
-                return Token::Error("Cannot have nested scenes inside of a codeblock".to_string(), *line_number)
+                Token::Error("Cannot have nested scenes inside of a codeblock".to_string(), *line_number)
             }
             TokenizeMode::Normal => {
                 *tokenize_mode = TokenizeMode::SceneHead;
-                return Token::ParentScene
+                Token::ParentScene
             }
             _ => {
                 // [] is an empty scene
@@ -112,9 +119,9 @@ pub fn get_next_token(
                 }
 
                 *tokenize_mode = TokenizeMode::SceneHead;
-                return Token::SceneHead
+                Token::SceneHead
             }
-        }
+        };
     }
 
     if current_char == ']' {
@@ -521,9 +528,10 @@ fn keyword_or_variable(
                 // Theme stuff
                 "clr" => return Token::Color,
 
-                // Colour keywords
+                // Colour keywords (all have optional alpha)
                 "rgb" => return Token::Rgb,
-                "hsl" => return Token::Hsv,
+                "hsv" => return Token::Hsv,
+                "hsl" => return Token::Hsl,
 
                 "red" => return Token::Red,
                 "green" => return Token::Green,
@@ -548,7 +556,7 @@ fn keyword_or_variable(
                 "table" => return Token::Table,
 
                 // Interactive
-                "link" => return Token::A,
+                "link" => return Token::Link,
                 "button" => return Token::Button,
                 "input" => return Token::Input,
                 "click" => return Token::Click, // The action performed when clicked (any element)
@@ -627,10 +635,10 @@ fn keyword_or_variable(
     }
 
     // Failing all of that, this is an error
-    return Token::Error(
+    Token::Error(
         format!("Invalid variable name: {}", token_value),
         *line_number,
-    );
+    )
 }
 
 // Checking if the variable name is valid

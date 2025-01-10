@@ -159,8 +159,8 @@ pub enum Token {
     Ignore, // for commenting out an entire scene
 
     // named tags
-    A,   // href, content
-    Img, // src, alt
+    Link, // href, content
+    Img,  // src, alt
     Video,
     Audio,
     Raw,
@@ -173,6 +173,7 @@ pub enum Token {
     Size,
     Rgb,
     Hsv,
+    Hsl,
     BG,
     Table,
     Center,

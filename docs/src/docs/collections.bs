@@ -8,7 +8,6 @@ All Collections are reference types in Beanstalk. They are dynamically sized and
 You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
 Collections are zero indexed.
 
-Dynamic collections can only contain one data type. 
 [code:
     -- dynamically sized int array
     array = {3, 4, 5}

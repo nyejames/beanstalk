@@ -4,10 +4,11 @@ use super::{
     styles::{Action, Style, Tag},
     util::{count_newlines_at_end_of_string, count_newlines_at_start_of_string},
 };
+use crate::bs_types::{get_any_number_datatype, get_rgba_args};
 use crate::parsers::ast_nodes::Value;
-use crate::parsers::tuples::new_tuple;
+use crate::parsers::structs::new_struct;
 use crate::{bs_types::DataType, CompileError, Token};
-use colour::yellow_ln;
+use colour::{red_ln, yellow_ln};
 
 // Recursive function to parse scenes
 pub fn new_scene(
@@ -28,8 +29,11 @@ pub fn new_scene(
     // Look at all the possible properties that can be added to the scene head
     while *i < tokens.len() {
         let token = &tokens[*i];
+        let token_line_number = token_line_numbers[*i];
         let inside_brackets = token == &Token::OpenParenthesis;
         *i += 1;
+
+        // red_ln!("token being parsed for AST: {:?}", token);
 
         match token {
             Token::Colon => {
@@ -38,29 +42,32 @@ pub fn new_scene(
 
             Token::SceneClose(spaces) => {
                 for _ in 0..*spaces {
-                    scene.push(AstNode::Space(token_line_numbers[*i]));
+                    scene.push(AstNode::Space(token_line_number));
                 }
                 *i -= 1;
                 return Ok(Value::Scene(scene, scene_tags, scene_styles, scene_actions));
             }
 
+            // TODO - all of these 'styles' need to become structs rather than function calls
+            // If they have functions they use, those should be methods accessed on those structs
+            // Is this going to be done in an HTML styles standard lib? (they get parsed as variables etc)
             Token::Id => {
                 // ID can accept multiple arguments, first arg must be unique (regular ID)
                 // Remaining args are sort of like classes to group together elements
-                // Currently the ID can be a tuple of any type
+                // Currently the ID can be a struct of any type
                 scene_tags.push(Tag::Id(create_expression(
                     tokens,
                     i,
                     false,
                     ast,
-                    &mut DataType::Tuple(Vec::new()),
+                    &mut DataType::Collection(Box::new(DataType::String)),
                     true,
                     variable_declarations,
                     token_line_numbers,
                 )?));
             }
 
-            Token::A => {
+            Token::Link => {
                 // Inside brackets is set to true for these
                 // So it will enforce the parenthesis syntax in create_expression
                 scene_tags.push(Tag::A(
@@ -74,7 +81,7 @@ pub fn new_scene(
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
@@ -113,124 +120,66 @@ pub fn new_scene(
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut DataType::Structure(required_args),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Margin => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "margin".to_string(),
-                    data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                    value: Value::Float(2.0),
-                }];
-
                 scene_styles.push(Style::Margin(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             // For positioning inside a flex container / grid
             Token::Order => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "order".to_string(),
-                    data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                    value: Value::None,
-                }];
-
                 scene_styles.push(Style::Order(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::BG => {
-                let required_args: Vec<Arg> = vec![
-                    Arg {
-                        name: "red".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(0.0),
-                    },
-                    Arg {
-                        name: "green".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(0.0),
-                    },
-                    Arg {
-                        name: "blue".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(0.0),
-                    },
-                    Arg {
-                        name: "alpha".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(1.0),
-                    },
-                ];
-
                 scene_styles.push(Style::BackgroundColor(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut get_rgba_args(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             // Colours
-            Token::Rgb | Token::Hsv => {
-                let required_args: Vec<Arg> = vec![
-                    Arg {
-                        name: "red".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(0.0),
-                    },
-                    Arg {
-                        name: "green".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(0.0),
-                    },
-                    Arg {
-                        name: "blue".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(0.0),
-                    },
-                    Arg {
-                        name: "alpha".to_string(),
-                        data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                        value: Value::Float(1.0),
-                    },
-                ];
-
+            Token::Rgb => {
                 let color_type = token.to_owned();
                 scene_styles.push(Style::TextColor(
                     create_expression(
@@ -238,16 +187,18 @@ pub fn new_scene(
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut get_rgba_args(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
                     color_type,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
+            // TODO - HSL and HSV
+            // Token::Hsv | Token::Hsl => {}
             Token::Red
             | Token::Green
             | Token::Blue
@@ -270,33 +221,27 @@ pub fn new_scene(
                         token_line_numbers,
                     )?,
                     color_type,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Center => {
-                scene_styles.push(Style::Center(false, token_line_numbers[*i]));
+                scene_styles.push(Style::Center(false, token_line_number));
             }
 
             Token::Size => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "size".to_string(),
-                    data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                    value: Value::Float(1.0),
-                }];
-
                 scene_styles.push(Style::Size(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
@@ -305,94 +250,70 @@ pub fn new_scene(
             }
 
             Token::Hide => {
-                scene_styles.push(Style::Hide(token_line_numbers[*i]));
+                scene_styles.push(Style::Hide(token_line_number));
             }
 
             Token::Table => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "columns".to_string(),
-                    data_type: DataType::Int,
-                    value: Value::Int(1),
-                }];
-
                 scene_tags.push(Tag::Table(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut DataType::Int,
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Img => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "src".to_string(),
-                    data_type: DataType::String,
-                    value: Value::None,
-                }];
-
                 scene_tags.push(Tag::Img(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Video => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "src".to_string(),
-                    data_type: DataType::String,
-                    value: Value::None,
-                }];
-
                 scene_tags.push(Tag::Video(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Audio => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "src".to_string(),
-                    data_type: DataType::String,
-                    value: Value::None,
-                }];
-
                 scene_tags.push(Tag::Audio(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
@@ -404,6 +325,7 @@ pub fn new_scene(
             | Token::StringLiteral(_)
             | Token::RawStringLiteral(_) => {
                 *i -= 1;
+
                 scene.push(AstNode::Literal(
                     create_expression(
                         tokens,
@@ -415,26 +337,45 @@ pub fn new_scene(
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Comma => {
-                //TODO - decide if this should be enforced as a syntax error or allowed
+                // TODO - decide if this should be enforced as a syntax error or allowed
+                // Currently working around commas not ever being needed in scene heads
+                // So may enforce it with full error in the future (especially if it causes havoc in the emitter stage)
                 yellow_ln!(
                     "Warning: Should there be a comma in the scene head? (ignored by compiler)"
                 );
             }
 
+            // Newlines / empty things in the scene head are ignored
             Token::Newline | Token::Empty => {}
 
+            // Completely skips parsing this whole scene and returns empty.
+            // This is useful for comments / prototypes inside of other scenes
             Token::Ignore => {
                 // Should also clear any styles or tags in the scene
                 scene_styles.clear();
                 scene_tags.clear();
+
+                // Keep track of how many scene opens there are
+                // This is to make sure the scene close is at the correct place
+                let mut extra_scene_opens = 1;
                 while *i < tokens.len() {
                     match &tokens[*i] {
-                        Token::SceneClose(_) | Token::EOF => {
+                        Token::SceneClose(_) => {
+                            extra_scene_opens -= 1;
+                            if extra_scene_opens == 0 {
+                                *i += 1; // Skip the closing scene close
+                                break;
+                            }
+                        }
+                        Token::SceneOpen => {
+                            extra_scene_opens += 1;
+                        }
+                        Token::EOF => {
                             break;
                         }
                         _ => {}
@@ -445,55 +386,46 @@ pub fn new_scene(
                 return Ok(Value::None);
             }
 
+            // TODO - Honestly not sure if this is still needed?
             Token::CodeKeyword => {
                 scene_tags.clear();
             }
 
             Token::CodeBlock(content) => {
-                scene_tags.push(Tag::Code(content.to_string(), token_line_numbers[*i]));
+                scene_tags.push(Tag::Code(content.to_string(), token_line_number));
             }
 
             Token::Nav => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "style".to_string(),
-                    data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                    value: Value::Float(0.0),
-                }];
-
                 scene_tags.push(Tag::Nav(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        // Maybe accept more arguments in the future for more control over nav styles
+                        // For now this is just a number that selects a predetermined style
+                        &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::Title => {
-                let required_args: Vec<Arg> = vec![Arg {
-                    name: "size".to_string(),
-                    data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
-                    value: Value::Float(0.0),
-                }];
-
                 scene_tags.push(Tag::Title(
                     create_expression(
                         tokens,
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
@@ -523,17 +455,17 @@ pub fn new_scene(
                         i,
                         false,
                         ast,
-                        &mut DataType::Tuple(required_args.to_owned()),
+                        &mut DataType::Structure(required_args.to_owned()),
                         true,
                         variable_declarations,
                         token_line_numbers,
                     )?,
-                    token_line_numbers[*i],
+                    token_line_number,
                 ));
             }
 
             Token::OpenParenthesis => {
-                let tuple = new_tuple(
+                let structure = new_struct(
                     Value::None,
                     tokens,
                     &mut *i,
@@ -544,8 +476,8 @@ pub fn new_scene(
                 )?;
 
                 scene.push(AstNode::Literal(
-                    Value::Tuple(tuple),
-                    token_line_numbers[*i],
+                    Value::Structure(structure),
+                    token_line_number,
                 ));
             }
 
@@ -555,7 +487,7 @@ pub fn new_scene(
                         "Invalid Token Used Inside scene head when creating scene node. Token: {:?}",
                         token
                     ),
-                    line_number: token_line_numbers[*i].to_owned(),
+                    line_number: token_line_number.to_owned(),
                 });
             }
         }
@@ -563,6 +495,7 @@ pub fn new_scene(
 
     //look through everything that can be added to the scene body
     while *i < tokens.len() {
+        let token_line_number = token_line_numbers[*i];
         match &tokens[*i] {
             Token::EOF => {
                 break;
@@ -570,7 +503,7 @@ pub fn new_scene(
 
             Token::SceneClose(spaces) => {
                 for _ in 0..*spaces {
-                    scene.push(AstNode::Space(token_line_numbers[*i]));
+                    scene.push(AstNode::Space(token_line_number));
                 }
                 break;
             }
@@ -578,14 +511,14 @@ pub fn new_scene(
             Token::SceneHead => {
                 let nested_scene =
                     new_scene(tokens, i, ast, token_line_numbers, variable_declarations)?;
-                scene.push(AstNode::Literal(nested_scene, token_line_numbers[*i]));
+                scene.push(AstNode::Literal(nested_scene, token_line_number));
             }
 
             Token::P(content) => {
                 scene.push(if !check_if_inline(tokens, *i, &mut merge_next_p_line) {
-                    AstNode::P(content.clone(), token_line_numbers[*i])
+                    AstNode::P(content.clone(), token_line_number)
                 } else {
-                    AstNode::Span(content.clone(), token_line_numbers[*i])
+                    AstNode::Span(content.clone(), token_line_number)
                 });
             }
 
@@ -599,28 +532,25 @@ pub fn new_scene(
                 scene.push(AstNode::BulletPoint(*size));
             }
             Token::Em(size, content) => {
-                scene.push(AstNode::Em(*size, content.clone(), token_line_numbers[*i]));
+                scene.push(AstNode::Em(*size, content.clone(), token_line_number));
             }
             Token::Superscript(content) => {
-                scene.push(AstNode::Superscript(
-                    content.clone(),
-                    token_line_numbers[*i],
-                ));
+                scene.push(AstNode::Superscript(content.clone(), token_line_number));
             }
 
             Token::RawStringLiteral(content) => {
-                scene.push(AstNode::Span(content.to_string(), token_line_numbers[*i]));
+                scene.push(AstNode::Span(content.to_string(), token_line_number));
             }
 
             Token::Pre(content) => {
-                scene.push(AstNode::Pre(content.to_string(), token_line_numbers[*i]));
+                scene.push(AstNode::Pre(content.to_string(), token_line_number));
             }
 
             // For templating values in scene heads in the body of scenes
             Token::EmptyScene(spaces) => {
                 scene.push(AstNode::SceneTemplate);
                 for _ in 0..*spaces {
-                    scene.push(AstNode::Space(token_line_numbers[*i]));
+                    scene.push(AstNode::Space(token_line_number));
                 }
             }
 
@@ -633,7 +563,7 @@ pub fn new_scene(
             Token::DeadVariable(name) => {
                 return Err(CompileError {
                     msg: format!("Dead Variable used in scene. '{}' was never defined", name),
-                    line_number: token_line_numbers[*i].to_owned(),
+                    line_number: token_line_number,
                 });
             }
 
@@ -643,7 +573,7 @@ pub fn new_scene(
                         "Invalid Syntax Used Inside scene body when creating scene node: {:?}",
                         tokens[*i]
                     ),
-                    line_number: token_line_numbers[*i].to_owned(),
+                    line_number: token_line_number,
                 });
             }
         }
@@ -657,7 +587,7 @@ pub fn new_scene(
 fn check_if_inline(tokens: &Vec<Token>, i: usize, merge_next_p_line: &mut bool) -> bool {
     // If the element itself starts with Newlines, it should not be inlined
     let current_element = &tokens[i];
-    let p_newlines_to_seperate: usize = if *merge_next_p_line { 2 } else { 1 };
+    let p_newlines_to_separate: usize = if *merge_next_p_line { 2 } else { 1 };
     match current_element {
         Token::P(content) => {
             if count_newlines_at_start_of_string(content) > 0 {
@@ -699,7 +629,7 @@ fn check_if_inline(tokens: &Vec<Token>, i: usize, merge_next_p_line: &mut bool) 
         | Token::Span(content)
         | Token::Em(_, content)
         | Token::Superscript(content) => {
-            if count_newlines_at_end_of_string(content) >= p_newlines_to_seperate {
+            if count_newlines_at_end_of_string(content) >= p_newlines_to_separate {
                 *merge_next_p_line = true;
                 false
             } else {

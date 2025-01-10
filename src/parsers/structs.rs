@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use colour::grey_ln;
+
 use super::{
     ast_nodes::{Arg, AstNode},
     variables::create_new_var_or_ref,
@@ -8,11 +11,10 @@ use crate::parsers::expressions::parse_expression::create_expression;
 use crate::{parsers::ast_nodes::NodeInfo, CompileError, Token};
 
 // Assumes to have started after the open parenthesis
-// Datatype must always be a tuple containing the data types of the items in the tuple
+// Datatype must always be a struct containing the data types of the items in the struct
 // Or inferred if the data type is not known
 // Also modifies the data type passed into it
-// If there is only one item in the tuple, it just returns that item
-pub fn new_tuple(
+pub fn new_struct(
     initial_value: Value,
     tokens: &Vec<Token>,
     i: &mut usize,
@@ -22,6 +24,8 @@ pub fn new_tuple(
     token_line_numbers: &Vec<u32>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut item_args = required_args.to_owned();
+
+    //grey_ln!("parsing struct");
 
     let mut items: Vec<Arg> = match initial_value {
         Value::None => Vec::new(),
@@ -37,6 +41,7 @@ pub fn new_tuple(
     let mut next_item: bool = true;
     let mut item_name: String = "0".to_string();
 
+    // ASSUMES AN OPEN PARENTHESIS HAS JUST BEEN PASSED
     while let Some(token) = tokens.get(*i) {
         match token {
             Token::CloseParenthesis => {
@@ -47,7 +52,7 @@ pub fn new_tuple(
             Token::Comma => {
                 if next_item {
                     return Err(CompileError {
-                        msg: "Expected a tuple item after the comma".to_string(),
+                        msg: "Expected a struct item after the comma".to_string(),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
@@ -62,7 +67,7 @@ pub fn new_tuple(
             Token::Variable(name) => {
                 if !next_item {
                     return Err(CompileError {
-                        msg: "Expected a comma between tuple declarations".to_string(),
+                        msg: "Expected a comma between struct declarations".to_string(),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
@@ -94,7 +99,7 @@ pub fn new_tuple(
             _ => {
                 if !next_item {
                     return Err(CompileError {
-                        msg: "Expected a comma between tuple items".to_string(),
+                        msg: "Expected a comma between struct items".to_string(),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
@@ -105,7 +110,7 @@ pub fn new_tuple(
                     DataType::Inferred
                 } else if required_args.len() < items.len() {
                     return Err(CompileError {
-                        msg: "Too many arguments provided to tuple".to_string(),
+                        msg: "Too many arguments provided to struct".to_string(),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 } else {
@@ -123,7 +128,7 @@ pub fn new_tuple(
                     token_line_numbers,
                 )?;
 
-                // Get the arg of this tuple item
+                // Get the arg of this struct item
                 let item_arg = match item_args.get(items.len()) {
                     Some(arg) => arg.to_owned(),
                     None => Arg {
@@ -141,4 +146,21 @@ pub fn new_tuple(
     }
 
     Ok(items)
+}
+
+// AUTOMATICALLY TURNS STRUCTS OF ONE ITEM INTO THAT ITEM
+// This is a weird/unique design choice of the language
+// Every time an expression is parsed, it will turn a struct of one item into that item
+pub fn struct_to_value(args: &Vec<Arg>) -> Value {
+    // An empty struct is None in this language
+    if args.len() < 1 {
+        return Value::None;
+    }
+
+    // Automatically convert structs of one item into that item
+    if args.len() == 1 {
+        return args[0].value.to_owned();
+    }
+
+    Value::Structure(args.to_owned())
 }

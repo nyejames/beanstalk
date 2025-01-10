@@ -93,7 +93,7 @@ fn float_expr_to_wat(nodes: &Vec<AstNode>) -> Result<String, CompileError> {
                 }
             },
 
-            AstNode::BinaryOperator(op, _, line_number) => {
+            AstNode::BinaryOperator(op, line_number) => {
                 let wat_op = match op {
                     Token::Add => " f64.add",
                     Token::Subtract => " f64.sub",

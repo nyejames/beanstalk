@@ -3,9 +3,9 @@ use super::{
     expressions::parse_expression::create_expression, variables::create_new_var_or_ref,
 };
 use crate::parsers::ast_nodes::{Arg, Value};
-use crate::parsers::functions::create_func_call_args;
-use crate::parsers::tuples::new_tuple;
+use crate::parsers::structs::{new_struct, struct_to_value};
 use crate::{bs_types::DataType, CompileError, Token};
+use colour::red_ln;
 use std::path::PathBuf;
 
 pub fn new_ast(
@@ -23,6 +23,8 @@ pub fn new_ast(
     let mut needs_to_return = !return_args.is_empty();
 
     while *i < tokens.len() {
+        let token_line_number = token_line_numbers[*i];
+
         match &tokens[*i] {
             Token::Comment(value) => {
                 ast.push(AstNode::Comment(value.clone()));
@@ -31,8 +33,8 @@ pub fn new_ast(
             Token::Import => {
                 if !module_scope {
                     return Err(CompileError {
-                        msg: "Error: Import found outside of module scope".to_string(),
-                        line_number: token_line_numbers[*i],
+                        msg: "Import found outside of module scope".to_string(),
+                        line_number: token_line_number,
                     });
                 }
 
@@ -42,13 +44,13 @@ pub fn new_ast(
                     Token::StringLiteral(value) => {
                         imports.push(AstNode::Use(
                             PathBuf::from(value.clone()),
-                            token_line_numbers[*i],
+                            token_line_number,
                         ));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Import must have a valid path as a argument".to_string(),
-                            line_number: token_line_numbers[*i],
+                            line_number: token_line_number,
                         });
                     }
                 }
@@ -60,13 +62,13 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "Scene literals can only be used at the top level of a module"
                             .to_string(),
-                        line_number: token_line_numbers[*i],
+                        line_number: token_line_number,
                     });
                 }
 
                 let scene = new_scene(&tokens, i, &ast, token_line_numbers, variable_declarations)?;
 
-                ast.push(AstNode::Literal(scene, token_line_numbers[*i]));
+                ast.push(AstNode::Literal(scene, token_line_number));
             }
 
             Token::ModuleStart(_) => {
@@ -91,18 +93,18 @@ pub fn new_ast(
                 exported = true;
             }
             Token::JS(value) => {
-                ast.push(AstNode::JS(value.clone(), token_line_numbers[*i]));
+                ast.push(AstNode::JS(value.clone(), token_line_number));
             }
             Token::Title => {
                 *i += 1;
                 match &tokens[*i] {
                     Token::StringLiteral(value) => {
-                        ast.push(AstNode::Title(value.clone(), token_line_numbers[*i]));
+                        ast.push(AstNode::Title(value.clone(), token_line_number));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Title must have a valid string as a argument".to_string(),
-                            line_number: token_line_numbers[*i],
+                            line_number: token_line_number,
                         });
                     }
                 }
@@ -112,12 +114,12 @@ pub fn new_ast(
                 *i += 1;
                 match &tokens[*i] {
                     Token::StringLiteral(value) => {
-                        ast.push(AstNode::Date(value.clone(), token_line_numbers[*i]));
+                        ast.push(AstNode::Date(value.clone(), token_line_number));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Date must have a valid string as a argument".to_string(),
-                            line_number: token_line_numbers[*i],
+                            line_number: token_line_number,
                         });
                     }
                 }
@@ -127,21 +129,39 @@ pub fn new_ast(
                 // Do nothing for now
             }
 
+            // The actual print function doesn't exist in the compiler or standard library
+            // This is a small compile time speed improvement as print is used all the time
+            // Standard library function 'io' might have a bunch of special print functions inside it
+            // e.g io.red("red hello")
             Token::Print => {
                 // Move past the print keyword
                 *i += 1;
-                let tuple = new_tuple(
+
+                // Make sure there is an open parenthesis
+                if tokens.get(*i) != Some(&Token::OpenParenthesis) {
+                    return Err(CompileError {
+                        msg: "Expected an open parenthesis after the print keyword".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
+                }
+
+                *i += 1;
+
+                // Get the struct of args passed into the function call
+                let structure = new_struct(
                     Value::None,
                     &tokens,
-                    i,
+                    &mut *i,
                     &Vec::new(),
                     &ast,
-                    variable_declarations,
-                    &token_line_numbers,
+                    &mut variable_declarations.to_owned(),
+                    token_line_numbers,
                 )?;
 
-                let args = create_func_call_args(&tuple, &Vec::new(), &token_line_numbers[*i])?;
-                ast.push(AstNode::Print(args, token_line_numbers[*i]));
+                ast.push(AstNode::Print(
+                    struct_to_value(&structure),
+                    token_line_number,
+                ));
             }
 
             Token::DeadVariable(name) => {
@@ -161,7 +181,7 @@ pub fn new_ast(
                 if module_scope {
                     return Err(CompileError {
                         msg: "Return statement used outside of function".to_string(),
-                        line_number: token_line_numbers[*i],
+                        line_number: token_line_number,
                     });
                 }
 
@@ -169,7 +189,7 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "Return statement used in function that doesn't return a value"
                             .to_string(),
-                        line_number: token_line_numbers[*i],
+                        line_number: token_line_number,
                     });
                 }
 
@@ -177,7 +197,7 @@ pub fn new_ast(
                 *i += 1;
 
                 let mut return_type = if return_args.len() > 1 {
-                    DataType::Tuple(return_args.to_owned())
+                    DataType::Structure(return_args.to_owned())
                 } else {
                     return_args[0].data_type.to_owned()
                 };
@@ -193,19 +213,24 @@ pub fn new_ast(
                     token_line_numbers,
                 )?;
 
-                ast.push(AstNode::Return(return_value, token_line_numbers[*i]));
+                ast.push(AstNode::Return(return_value, token_line_number));
 
                 *i -= 1;
             }
 
-            // TOKEN END SHOULD NEVER BE AT TOP LEVEL
-            // This is to break out of blocks only
-            // There should be a way to handle this to throw a syntax error if 'end' is used at the top level
             Token::EOF => {
                 break;
             }
 
+            // TOKEN::End SHOULD NEVER BE IN MODULE SCOPE
             Token::End => {
+                if module_scope {
+                    return Err(CompileError {
+                        msg: "Return statement used outside of function".to_string(),
+                        line_number: token_line_number,
+                    });
+                }
+
                 *i += 1;
                 break;
             }
@@ -214,10 +239,10 @@ pub fn new_ast(
             _ => {
                 return Err(CompileError {
                     msg: format!(
-                        "Compiler Error: Token not recognised by AST parser when creating AST: {:?}",
+                        "Token not recognised by AST parser when creating AST: {:?}",
                         &tokens[*i]
                     ),
-                    line_number: token_line_numbers[*i - 1],
+                    line_number: token_line_number,
                 });
             }
         }

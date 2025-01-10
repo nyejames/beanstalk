@@ -4,24 +4,27 @@ use colour::{blue_ln_bold, dark_grey_ln, dark_yellow_ln, green_ln_bold, yellow_l
 use crate::bs_types::DataType;
 use crate::html_output::web_parser;
 use crate::parsers::ast_nodes::{AstNode, NodeInfo, Value};
-use crate::settings::get_html_config;
-use crate::Token;
+use crate::settings::{get_default_config, get_html_config};
+use crate::tokenizer;
 use crate::{dev_server, parsers};
-use crate::{tokenizer, CompileError};
+use crate::{Error, ErrorType, Token};
 use std::fs;
 use std::path::PathBuf;
 
-pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
+pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     // Read content from a test file
     yellow_ln_bold!("\nREADING TEST FILE\n");
 
     let file_name = path.file_stem().unwrap().to_str().unwrap();
-    let content = match fs::read_to_string(&path.join("src/#page.bs")) {
+    let compiler_test_path = path.join("src/#page.bs");
+    let content = match fs::read_to_string(&compiler_test_path) {
         Ok(content) => content,
         Err(e) => {
-            return Err(CompileError {
+            return Err(Error {
                 msg: format!("Error reading file in test build: {:?}", e),
                 line_number: 0,
+                file_path: PathBuf::from(""),
+                error_type: ErrorType::File,
             });
         }
     };
@@ -57,14 +60,24 @@ pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
 
     // Create AST
     yellow_ln_bold!("CREATING AST\n");
-    let (ast, _var_declarations) = parsers::build_ast::new_ast(
+    let (ast, _var_declarations) = match parsers::build_ast::new_ast(
         tokens,
         &mut 0,
         &token_line_numbers,
         &mut Vec::new(),
         &Vec::new(),
         true,
-    )?;
+    ) {
+        Ok(ast) => ast,
+        Err(e) => {
+            return Err(Error {
+                msg: e.msg,
+                line_number: e.line_number,
+                file_path: compiler_test_path,
+                error_type: ErrorType::Syntax,
+            });
+        }
+    };
 
     for node in &ast {
         match node {
@@ -87,14 +100,24 @@ pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
     }
 
     yellow_ln_bold!("\nCREATING HTML OUTPUT\n");
-    let parser_output = web_parser::parse(
+    let parser_output = match web_parser::parse(
         ast,
         &get_html_config(),
         false,
         "test",
         false,
         &String::new(),
-    )?;
+    ) {
+        Ok(parser_output) => parser_output,
+        Err(e) => {
+            return Err(Error {
+                msg: e.msg,
+                line_number: e.line_number,
+                file_path: compiler_test_path,
+                error_type: ErrorType::Syntax,
+            });
+        }
+    };
 
     for export in parser_output.exported_js {
         println!("JS EXPORTS:");
@@ -132,7 +155,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), CompileError> {
     */
 
     if path.is_dir() {
-        dev_server::start_dev_server(path)?;
+        dev_server::start_dev_server(path, &mut get_default_config())?;
     }
 
     green_ln_bold!("Test complete!");
@@ -168,9 +191,6 @@ fn print_scene(scene: &Value, scene_nesting_level: u32) {
                     | AstNode::Em(..)
                     | AstNode::Superscript(..) => {
                         green_ln_bold!("{}  {:?}", indentation, scene_node);
-                    }
-                    AstNode::RuntimeExpression(..) => {
-                        dark_yellow_ln!("{}  {:?}", indentation, scene_node);
                     }
                     AstNode::Literal(value, _) => {
                         if value.get_type() == DataType::Scene {

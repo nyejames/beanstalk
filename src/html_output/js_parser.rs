@@ -6,7 +6,7 @@ use crate::{
 // Create everything necessary in JS
 // Break out pieces in WASM calls
 pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, CompileError> {
-    let mut js = String::new(); //Open the template string
+    let mut js = String::new(); // Open the template string
 
     match expr {
         Value::Runtime(nodes, expression_type) => {
@@ -32,7 +32,7 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         Value::Reference(id, _, argument_accessed) => {
                             // All just JS for now
                             js.push_str(&format!(" {BS_VAR_PREFIX}{id}"));
-                            if let Some(index) = argument_accessed {
+                            for index in argument_accessed {
                                 js.push_str(&format!("[{}]", index));
                             }
                             /*
@@ -48,7 +48,7 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         }
                     },
 
-                    AstNode::BinaryOperator(op, _, line_number) => match op {
+                    AstNode::BinaryOperator(op, line_number) => match op {
                         Token::Add => js.push_str(" + "),
                         Token::Subtract => js.push_str(" - "),
                         Token::Multiply => js.push_str(" * "),
@@ -61,13 +61,13 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         }
                     },
 
-                    AstNode::FunctionCall(name, args, _, argument_accessed, _) => {
+                    AstNode::FunctionCall(name, args, _, arguments_accessed, _) => {
                         js.push_str(&format!(
                             " {}({})",
                             name,
                             combine_vec_to_js(&args, line_number)?
                         ));
-                        if let Some(index) = argument_accessed {
+                        for index in arguments_accessed {
                             js.push_str(&format!("[{}]", index));
                         }
                     }
@@ -112,16 +112,16 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
             js.push_str(&format!("\"{}\"", value));
         }
 
-        Value::Reference(name, _, argument_accessed) => {
+        Value::Reference(name, _, arguments_accessed) => {
             js.push_str(&format!(" {BS_VAR_PREFIX}{name}"));
-            if let Some(index) = argument_accessed {
+            for index in arguments_accessed {
                 js.push_str(&format!("[{}]", index));
             }
         }
 
         // If the expression is just a tuple,
         // then it should automatically destructure into multiple arguments like this
-        Value::Tuple(args) => {
+        Value::Structure(args) => {
             let mut values = Vec::new();
             for arg in args {
                 values.push(arg.value.to_owned());
@@ -143,13 +143,24 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
     Ok(js)
 }
 
-pub fn create_reference_in_js(name: &String, data_type: &DataType) -> String {
+pub fn create_reference_in_js(
+    name: &String,
+    data_type: &DataType,
+    accessed_args: &Vec<usize>,
+) -> String {
     match data_type {
-        DataType::String | DataType::Scene | DataType::Inferred | DataType::CoerceToString => {
-            format!("uInnerHTML(\"{name}\", {BS_VAR_PREFIX}{name});")
+        // DataType::Float | DataType::Int => {
+        //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
+        // }
+        DataType::Structure(_) | DataType::Collection(_) => {
+            let mut accesses = String::new();
+            for index in accessed_args {
+                accesses.push_str(&format!("[{}]", index));
+            }
+            format!("uInnerHTML(\"{name}\",{BS_VAR_PREFIX}{name}{accesses});")
         }
         _ => {
-            format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
+            format!("uInnerHTML(\"{name}\",{BS_VAR_PREFIX}{name});")
         }
     }
 }
@@ -176,7 +187,7 @@ pub fn combine_vec_to_js(
 
 pub fn collection_to_js(collection: &Value, line_number: u32) -> Result<String, CompileError> {
     match collection {
-        Value::Tuple(args) => {
+        Value::Structure(args) => {
             let mut nodes = Vec::new();
             for arg in args {
                 nodes.push(arg.value.to_owned());

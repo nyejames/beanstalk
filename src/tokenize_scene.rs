@@ -276,13 +276,13 @@ pub fn tokenize_markdown(
     // Return relevant token
     if !content.trim().is_empty() {
         match current_token {
-            Token::Empty => return Token::P(content),
-            Token::Em(size, _) => return Token::Em(size, content),
-            Token::Superscript(_) => return Token::Superscript(content),
-            _ => return current_token,
+            Token::Empty => Token::P(content),
+            Token::Em(size, _) => Token::Em(size, content),
+            Token::Superscript(_) => Token::Superscript(content),
+            _ => current_token,
         }
     } else {
-        return Token::Empty;
+        Token::Empty
     }
 }
 

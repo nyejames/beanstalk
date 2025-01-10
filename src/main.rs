@@ -27,8 +27,8 @@ mod parsers {
         pub mod eval_expression;
         pub mod parse_expression;
     }
+    pub mod structs;
     pub mod styles;
-    pub mod tuples;
     pub mod util;
     pub mod variables;
 }
@@ -44,8 +44,13 @@ mod wasm_output {
     pub mod wasm_generator;
     pub mod wat_parser;
 }
-use colour::{dark_cyan, e_dark_red_ln_bold, e_dark_yellow_ln, green_ln_bold, grey_ln, red_ln};
+use crate::settings::get_default_config;
+use colour::{
+    dark_cyan, dark_red, e_dark_magenta, e_dark_yellow, e_dark_yellow_ln, e_magenta_ln, e_red_ln,
+    e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
+};
 pub use tokens::Token;
+
 enum Command {
     NewHTMLProject(PathBuf),
     Dev(PathBuf), // Runs local dev server
@@ -57,6 +62,23 @@ enum Command {
 pub struct CompileError {
     pub msg: String,
     pub line_number: u32,
+}
+
+// Adds more information to the CompileError
+// So it knows the file path (possible specific part of the line soon)
+// And the type of error
+#[derive(PartialEq)]
+pub enum ErrorType {
+    Syntax,
+    File,
+    Compiler,
+    DevServer,
+}
+pub struct Error {
+    msg: String,
+    line_number: u32,
+    file_path: PathBuf,
+    error_type: ErrorType,
 }
 
 fn main() {
@@ -105,7 +127,9 @@ fn main() {
         Command::Release(path) => {
             dark_cyan!("Building project...");
             let start = Instant::now();
-            match build::build(&path, true) {
+
+            // TODO - parse config file instead of using default config
+            match build::build(&path, true, &mut get_default_config()) {
                 Ok(_) => {
                     let duration = start.elapsed();
                     grey_ln!("------------------------------------");
@@ -124,7 +148,7 @@ fn main() {
             match test::test_build(&test_path) {
                 Ok(_) => {}
                 Err(e) => {
-                    print_formatted_error(&e, &test_path.join("src/#page.bs"));
+                    print_formatted_error(e);
                 }
             };
         }
@@ -133,12 +157,15 @@ fn main() {
             println!("Starting dev server...");
             let mut path = PathBuf::from(path);
 
-            match dev_server::start_dev_server(&mut path) {
+            // TODO - replace with reading the config file
+            let mut project_config = get_default_config();
+
+            match dev_server::start_dev_server(&mut path, &mut project_config) {
                 Ok(_) => {
                     println!("Dev server shutting down ... ");
                 }
                 Err(e) => {
-                    print_formatted_error(&e, &path);
+                    print_formatted_error(e);
                 }
             }
         }
@@ -148,7 +175,12 @@ fn main() {
             match wasm_output::wasm_generator::compile_wat_file(&path) {
                 Ok(_) => {}
                 Err(e) => {
-                    print_formatted_error(&e, &path);
+                    print_formatted_error(Error {
+                        msg: e.msg,
+                        line_number: e.line_number,
+                        file_path: path,
+                        error_type: ErrorType::Compiler,
+                    });
                 }
             }
         }
@@ -250,39 +282,77 @@ fn prompt_user_for_input(msg: String) -> Vec<String> {
     args
 }
 
-fn print_formatted_error(e: &CompileError, file_path: &PathBuf) {
-    println!("(╯°□°)╯  🔥🔥🔥🔥🔥🔥🔥🔥   ╰(°□°╰) ");
-    if e.line_number == 0 {
-        e_dark_yellow_ln!("Error during compilation");
-        e_dark_red_ln_bold!("{}", e.msg);
-    } else {
-        // Read the file and get the actual line as a string from the code
-        let line = match fs::read_to_string(file_path) {
-            Ok(file) => file
-                .lines()
-                .nth(e.line_number as usize - 1)
-                .unwrap_or_else(|| {
-                    red_ln!("Error with printing error (lol): Line number is out of range of file");
-                    ""
-                })
-                .to_string(),
-            Err(e) => {
-                red_ln!("Error reading file path when printing errors: {:?}", e);
-                "".to_string()
-            }
-        };
+fn print_formatted_error(mut e: Error) {
+    // Walk back through the file path until it's the current directory
+    let relative_dir = match env::current_dir() {
+        Ok(dir) => e
+            .file_path
+            .strip_prefix(dir)
+            .unwrap_or(&e.file_path)
+            .to_string_lossy(),
+        Err(_) => e.file_path.to_string_lossy(),
+    };
 
-        e_dark_yellow_ln!("Error during compilation at line {}:", e.line_number);
-        e_dark_red_ln_bold!("{}", e.msg);
+    print!("\n(╯°□°)╯  🔥🔥🔥🔥 ");
+    dark_red!("{}", relative_dir);
+    println!(" 🔥🔥🔥🔥  ╰(°□°╰) ");
 
-        println!("\n{}", line);
-        red_ln!(
-            "{}",
-            std::iter::repeat('^').take(line.len()).collect::<String>()
-        );
+    // Read the file and get the actual line as a string from the code
+    let line = match fs::read_to_string(&e.file_path) {
+        Ok(file) => file
+            .lines()
+            .nth(e.line_number as usize)
+            .unwrap_or_else(|| {
+                red_ln!("Error with printing error (lol): Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
+                ""
+            })
+            .to_string(),
+        Err(_) => {
+            "".to_string()
+        }
+    };
+
+    e_dark_yellow!("Error: ");
+
+    if e.line_number == 0 && e.error_type == ErrorType::Syntax {
+        e.error_type = ErrorType::Compiler;
     }
 
-    // println!("🔥🔥🔥🔥🔥🔥🔥🔥   ╰(°□°╰)");
+    match e.error_type {
+        ErrorType::Syntax => {
+            e_yellow_ln!("Syntax Skill Issue");
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", e.line_number);
+
+            e_red_ln!("  {}", e.msg);
+
+            println!("\n{}", line);
+            red_ln!(
+                "{}",
+                std::iter::repeat('^').take(line.len()).collect::<String>()
+            );
+        }
+        ErrorType::File => {
+            e_yellow_ln!("Can't find/read file or directory");
+            e_red_ln!("  {}", e.msg);
+            return;
+        }
+        ErrorType::Compiler => {
+            e_yellow!("COMPILER BUG - ");
+            e_dark_yellow_ln!("compiler developer skill issue");
+
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", e.line_number);
+
+            e_red_ln!("  {}", e.msg);
+            return;
+        }
+        ErrorType::DevServer => {
+            e_yellow_ln!("Dev Server whoopsie");
+            e_red_ln!("  {}", e.msg);
+            return;
+        }
+    }
 }
 
 fn print_help(commands_only: bool) {

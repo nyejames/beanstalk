@@ -1,12 +1,10 @@
-use std::path::Path;
-
 use super::{
     code_block_highlighting::highlight_code_block,
     colors::get_color,
     js_parser::{collection_to_js, create_reference_in_js, expression_to_js},
 };
 use crate::html_output::js_parser::combine_vec_to_js;
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::{NodeInfo, Value};
 use crate::{
     bs_css::get_bs_css,
     bs_types::DataType,
@@ -20,6 +18,7 @@ use crate::{
     wasm_output::wat_parser::new_wat_var,
     CompileError, Token,
 };
+use std::path::Path;
 
 pub struct ParserOutput {
     pub html: String,
@@ -99,17 +98,18 @@ pub fn parse<'a>(
             ) => {
                 let assignment_keyword = if is_const { "const" } else { "let" };
                 match data_type {
-                    DataType::Float | DataType::Int => {
-                        wat.push_str(&new_wat_var(
-                            id,
-                            expr,
-                            data_type,
-                            &mut wat_global_initialisation,
-                            line_number,
-                        )?);
-                    }
+                    // DataType::Float | DataType::Int => {
+                    // wat.push_str(&new_wat_var(
+                    //     id,
+                    //     expr,
+                    //     data_type,
+                    //     &mut wat_global_initialisation,
+                    //     line_number,
+                    // )?);
+                    // }
 
-                    DataType::String => {
+                    // Temporary just JS
+                    DataType::String | DataType::Float | DataType::Int => {
                         let var_dec = format!(
                             "{} {BS_VAR_PREFIX}{id} = {};",
                             assignment_keyword,
@@ -169,77 +169,38 @@ pub fn parse<'a>(
                             }
                             _ => {
                                 return Err(CompileError {
-                                    msg: "Error: Scene declaration must be a scene".to_string(),
+                                    msg: "Scene declaration must be a scene".to_string(),
                                     line_number,
                                 });
                             }
                         };
                     }
 
-                    DataType::Tuple(args) => {
+                    DataType::Structure(_) => {
                         // Create struct to represent a tuple in JS
-                        let mut tuple_js = String::from("{");
-                        let mut index = 0;
+                        let mut tuple_js = String::from("[");
                         let tuple = match &*expr {
-                            Value::Tuple(values) => values,
+                            Value::Structure(args) => args,
                             _ => {
                                 return Err(CompileError {
-                                    msg: "Error: Tuple declaration must be a tuple".to_string(),
+                                    msg: "Tuple declaration must be a tuple".to_string(),
                                     line_number,
                                 });
                             }
                         };
 
-                        for arg in &**args {
-                            let current_tuple_item = match tuple.get(index) {
-                                Some(node) => node.value.to_owned(),
-                                None => {
-                                    return Err(CompileError {
-                                        msg: "Compiler Bug: Tuples can't be empty (should be replaced with 'empty' node)".to_string(),
-                                        line_number,
-                                    });
-                                }
-                            };
-
-                            let data_type = &arg.data_type;
-
-                            match data_type {
-                                DataType::Float | DataType::Int => {
-                                    wat.push_str(&new_wat_var(
-                                        &format!("{id}_{index}"),
-                                        &current_tuple_item,
-                                        data_type,
-                                        &mut wat_global_initialisation,
-                                        line_number,
-                                    )?);
-
-                                    tuple_js.push_str(&format!(
-                                        "{}: wsx.get_{BS_VAR_PREFIX}{id}_{index}(),",
-                                        index,
-                                    ));
-                                }
-                                DataType::String | DataType::CoerceToString => {
-                                    tuple_js.push_str(&format!(
-                                        "{}: {},",
-                                        index,
-                                        expression_to_js(&current_tuple_item, line_number)?
-                                    ));
-                                }
-                                _ => {
-                                    return Err(CompileError {
-                                        msg: format!(
-                                            "Unsupported datatype found in tuple declaration: {:?}",
-                                            data_type
-                                        ),
-                                        line_number: line_number.to_owned(),
-                                    });
-                                }
-                            }
-
-                            index += 1;
+                        // This currently is just another array
+                        // The names are replaced with indexes
+                        // Structs can't be accessed dynamically at runtime so this is fine
+                        // Can just enumerate this if index is needed later
+                        for arg in tuple {
+                            tuple_js.push_str(&format!(
+                                "{},",
+                                expression_to_js(&arg.value, line_number)?
+                            ));
                         }
 
-                        tuple_js.push_str("}");
+                        tuple_js.push_str("]");
                         js.push_str(&format!(
                             "{} {BS_VAR_PREFIX}{id} = {};",
                             assignment_keyword, tuple_js
@@ -270,7 +231,7 @@ pub fn parse<'a>(
                         // TODO - default args for other types
                         Value::Scene(_, _, _, _) => "",
                         Value::Collection(_, _) => "",
-                        Value::Tuple(_) => "",
+                        Value::Structure(_) => "",
 
                         Value::Runtime(..) => return Err(CompileError {
                             msg: format!("Runtime value used as default argument for function: {name}. Default values must be constants"),
@@ -278,11 +239,12 @@ pub fn parse<'a>(
                         }),
 
                         Value::Reference(name, _, argument_accessed) => {
-                            if let Some(index) = argument_accessed {
-                                &format!("={name}[{}]", index)
-                            } else {
-                                &format!("={name}")
+                            let mut accesses = String::new();
+                            for index in argument_accessed {
+                                accesses.push_str(&format!("[{}]", index));
                             }
+
+                            &format!("={name}{accesses}")
                         }
                     };
 
@@ -323,7 +285,7 @@ pub fn parse<'a>(
                     name,
                     combine_vec_to_js(&arguments, line_number)?
                 ));
-                if let Some(index) = argument_accessed {
+                for index in argument_accessed {
                     js.push_str(&format!("[{}]", index));
                 }
             }
@@ -335,12 +297,26 @@ pub fn parse<'a>(
                 ));
             }
 
-            AstNode::Print(ref expr, line_number) => {
-                let mut args = String::new();
-                for arg in expr {
-                    args.push_str(&format!("{}", expression_to_js(&arg, line_number)?));
-                }
-                js.push_str(&format!("console.log({});", args));
+            AstNode::Print(ref value, line_number) => {
+                // automatically unpack a tuple into one string
+                let mut final_string = String::new();
+
+                match value {
+                    Value::Structure(ref args) => {
+                        for arg in args {
+                            final_string.push_str(&format!(
+                                "{} ",
+                                expression_to_js(&arg.value, line_number)?
+                            ));
+                        }
+                    }
+                    _ => {
+                        final_string
+                            .push_str(&format!("{}", expression_to_js(&value, line_number)?));
+                    }
+                };
+
+                js.push_str(&format!("console.log({final_string});"));
             }
 
             // DIRECT INSERTION OF JS / CSS / HTML into page
@@ -448,7 +424,7 @@ pub fn parse_scene(
                     Value::Int(value) => {
                         scene_wrap.style.push_str(&format!("padding:{}rem;", value));
                     }
-                    Value::Tuple(args) => {
+                    Value::Structure(args) => {
                         let mut padding = String::new();
                         for arg in args {
                             match arg.value {
@@ -516,7 +492,7 @@ pub fn parse_scene(
                     }
                     _ => {
                         return Err(CompileError {
-                            msg: "Error: Invalid color type provided for text color".to_string(),
+                            msg: "Invalid color type provided for text color".to_string(),
                             line_number: line_number.to_owned(),
                         });
                     }
@@ -533,7 +509,7 @@ pub fn parse_scene(
                     Value::Int(value) => *value as f64,
                     _ => {
                         return Err(CompileError {
-                            msg: "Error: Size argument was not numeric".to_string(),
+                            msg: "Size argument was not numeric".to_string(),
                             line_number: line_number.to_owned(),
                         });
                     }
@@ -688,25 +664,7 @@ pub fn parse_scene(
 
             // Scripts
             Tag::Redirect(value, line_number) => {
-                let src = match value {
-                    Value::String(value) => value,
-                    Value::Runtime(_, data_type) => {
-                        if *data_type == DataType::String {
-                            &expression_to_js(value, *line_number)?
-                        } else {
-                            return Err(CompileError {
-                                msg: "Error: src attribute must be a string literal (Webparser - get src)".to_string(),
-                                line_number: line_number.to_owned(),
-                            });
-                        }
-                    }
-                    _ => {
-                        return Err(CompileError {
-                            msg: "Error: src attribute must be a string literal (Webparser - get src)".to_string(),
-                            line_number: line_number.to_owned(),
-                        });
-                    }
-                };
+                let src = get_src(value, config, line_number.to_owned())?;
                 js.push_str(&format!("window.location.href='{}';", src));
             }
             _ => {}
@@ -866,7 +824,7 @@ pub fn parse_scene(
                                     html.push_str("</p>");
                                     html.push_str(&format!("<p>{}", &content));
                                 } else {
-                                    html.push_str(&format!("<span>{}</span>", &content));
+                                    html.push_str(&format!("<span> {}</span>", &content));
                                 }
                             }
                             Tag::Table(..) | Tag::Nav(..) | Tag::List | Tag::Button(..) => {
@@ -892,11 +850,11 @@ pub fn parse_scene(
                             }
                             _ => {
                                 html.push_str(&format!("<p>{}", content));
-                                if count_newlines_at_end_of_string(&content) > 0 {
+                                if count_newlines_at_end_of_string(&content) > 1 {
                                     html.push_str("</p>");
                                     *parent_tag = Tag::None;
                                 } else {
-                                    closing_tags.push("</p>".to_string());
+                                    // closing_tags.push("</p>".to_string());
                                     *parent_tag = Tag::P;
                                 }
                             }
@@ -915,10 +873,7 @@ pub fn parse_scene(
                 match *parent_tag {
                     Tag::Table(..) | Tag::Nav(..) => {}
                     _ => {
-                        html.push_str(&collect_closing_tags(&mut closing_tags));
-                        // if columns == 0 {
-                        //     html.push_str("<br>");
-                        // }
+                        html.push_str("<br><br>");
                     }
                 };
             }
@@ -1005,13 +960,19 @@ pub fn parse_scene(
                 html.push_str(&format!("<span class=\"{name}\"></span>"));
                 if !module_references.contains(&node) {
                     module_references.push(node.to_owned());
+
+                    let mut accesses = String::new();
+                    for index in arguments_accessed {
+                        accesses.push_str(&format!("[{}]", index));
+                    }
                     js.push_str(&format!(
                         "uInnerHTML(\"{name}\",{}",
-                        format!("{}({})", name, combine_vec_to_js(&arguments, *line_number)?)
+                        format!(
+                            "{name}({}){accesses}",
+                            combine_vec_to_js(&arguments, *line_number)?
+                        )
                     ));
-                    if let Some(index) = arguments_accessed {
-                        js.push_str(&format!("[{}]", index));
-                    }
+
                     js.push_str(");");
                 }
             }
@@ -1077,42 +1038,44 @@ pub fn parse_scene(
 
                         if !module_references.contains(&node) {
                             module_references.push(node.to_owned());
-                            match argument_accessed {
-                                Some(index) => {
-                                    js.push_str(&format!(
-                                        "uInnerHTML(\"{name}\",{BS_VAR_PREFIX}{name}[{index}]);"
-                                    ));
-                                }
-                                None => {
-                                    match &data_type {
-                                        DataType::Tuple(items) => {
-                                            // Automatically unpack all items in the tuple into the scene
-                                            let mut elements = String::new();
-                                            let mut index = 0;
-                                            for _ in &**items {
-                                                elements.push_str(&format!(
-                                                    "{BS_VAR_PREFIX}{name}[{index}],"
-                                                ));
-                                                index += 1;
-                                            }
 
-                                            js.push_str(&format!(
-                                                "uInnerHTML(\"{name}\",[{elements}]);"
+                            match &data_type {
+                                DataType::Structure(items) => {
+                                    // Automatically unpack all items in the tuple into the scene
+                                    // If no items accessed
+                                    if argument_accessed.len() == 0 {
+                                        let mut elements = String::new();
+                                        let mut index = 0;
+                                        for _ in &**items {
+                                            elements.push_str(&format!(
+                                                "{BS_VAR_PREFIX}{name}[{index}],"
                                             ));
+                                            index += 1;
                                         }
-                                        _ => {
-                                            js.push_str(&create_reference_in_js(name, data_type));
-                                        }
+
+                                        js.push_str(&format!(
+                                            "uInnerHTML(\"{name}\",[{elements}]);"
+                                        ));
+                                    } else {
+                                        js.push_str(&create_reference_in_js(
+                                            name,
+                                            data_type,
+                                            argument_accessed,
+                                        ));
                                     }
                                 }
                                 _ => {
-                                    js.push_str(&create_reference_in_js(name, data_type));
+                                    js.push_str(&create_reference_in_js(
+                                        name,
+                                        data_type,
+                                        argument_accessed,
+                                    ));
                                 }
                             }
                         }
                     }
 
-                    Value::Tuple(items) => {
+                    Value::Structure(items) => {
                         for item in items {
                             let value = item.value.to_owned();
                             scenehead_literals.push(SceneHeadLiteral {
@@ -1124,10 +1087,10 @@ pub fn parse_scene(
                     }
 
                     Value::None => {
-                        return Err(CompileError {
-                            msg: "Error: None value used in scene head".to_string(),
-                            line_number: line_number.to_owned(),
-                        });
+                        // Ignore this
+                        // Currently 'ignored' or hidden scenes result in a None value being added to a scene,
+                        // So it's not an error
+                        // Hopefully the compiler will always catch unintended use of None in scenes
                     }
 
                     // TODO - add / test remaining types, some of them might need unpacking
@@ -1446,16 +1409,17 @@ fn get_src(value: &Value, config: &HTMLMeta, line_number: u32) -> Result<String,
                 expression_to_js(&value, line_number)?
             } else {
                 return Err(CompileError {
-                    msg: "Error: src attribute must be a string literal (Webparser - get src)"
-                        .to_string(),
+                    msg: format!("src attribute must be a string literal (Webparser - get src - runtime value). Got: {:?}", data_type),
                     line_number,
                 });
             }
         }
         _ => {
             return Err(CompileError {
-                msg: "Error: src attribute must be a string literal (web_parser - get src)"
-                    .to_string(),
+                msg: format!(
+                    "src attribute must be a string literal (web_parser - get src). Got: {:?}",
+                    value.get_type()
+                ),
                 line_number,
             })
         }

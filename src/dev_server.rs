@@ -1,6 +1,6 @@
-use crate::{build, settings, CompileError};
+use crate::settings::Config;
+use crate::{build, settings, CompileError, Error, ErrorType};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, grey_ln, print_bold, red_ln};
-use settings::get_default_config;
 use std::path::PathBuf;
 use std::time::SystemTime;
 use std::{
@@ -10,20 +10,33 @@ use std::{
     time::Instant,
 };
 
-pub fn start_dev_server(path: &PathBuf) -> Result<(), CompileError> {
+//noinspection HttpUrlsUsage
+pub fn start_dev_server(path: &PathBuf, project_config: &mut Config) -> Result<(), Error> {
     let url = "127.0.0.1:6969";
-    let listener = TcpListener::bind(url).unwrap();
-    print_bold!("Dev Server created on: ");
-    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
+    let listener = match TcpListener::bind(url) {
+        Ok(l) => l,
+        Err(e) => {
+            return Err(Error {
+                msg: format!("TCP error: {e}. Is there an instance of this local host server already running on {url}?"),
+                line_number: 0,
+                file_path: PathBuf::new(),
+                error_type: ErrorType::DevServer
+            })
+        }
+    };
 
     let path = get_current_dir()?.join(path.to_owned());
 
-    build_project(&path, false)?;
+    build_project(&path, false, project_config)?;
 
     let mut modified = SystemTime::UNIX_EPOCH;
+
+    print_bold!("Dev Server created on: ");
+    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
+
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, path.clone(), &mut modified)?;
+        handle_connection(stream, path.clone(), &mut modified, project_config)?;
     }
 
     Ok(())
@@ -33,7 +46,8 @@ fn handle_connection(
     mut stream: TcpStream,
     path: PathBuf,
     last_modified: &mut SystemTime,
-) -> Result<(), CompileError> {
+    project_config: &mut Config,
+) -> Result<(), Error> {
     let buf_reader = BufReader::new(&mut stream);
 
     // println!("{}", format!("{}/{}/dev/any file should be here", entry_path, path));
@@ -41,13 +55,12 @@ fn handle_connection(
     let mut contents = match fs::read(&dir_404) {
         Ok(content) => content,
         Err(e) => {
-            return Err(CompileError {
-                msg: format!(
-                    "Error reading 404 file (is there a 404 file in the {:?} directory?): {:?}",
-                    dir_404, e
-                ),
-                line_number: 0,
-            });
+            red_ln!(
+                "Error reading 404 file (is there a 404 file in the {:?} directory?): {:?}",
+                dir_404,
+                e
+            );
+            vec![]
         }
     };
 
@@ -59,17 +72,21 @@ fn handle_connection(
         Ok(request) => {
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
-                let p = get_home_page_path(&path, false)?;
-                contents = match fs::read(p) {
+                let p = get_home_page_path(&path, false, &project_config)?;
+                contents = match fs::read(&p) {
                     Ok(content) => content,
                     Err(e) => {
-                        return Err(CompileError {
+                        return Err(Error {
                             msg: format!("Error reading home page: {:?}", e),
                             line_number: 0,
+                            file_path: p,
+                            error_type: ErrorType::File,
                         });
                     }
                 };
                 status_line = "HTTP/1.1 200 OK";
+
+            // This is a request to check if the file has been modified
             } else if request.starts_with("HEAD /check") {
                 // the check request has the page url as a query parameter after the /check
                 let request_path = request.split("?page=").nth(1);
@@ -78,19 +95,19 @@ fn handle_connection(
                     Some(p) => {
                         let page_path = p.split_whitespace().collect::<Vec<&str>>()[0];
                         if page_path == "/" {
-                            get_home_page_path(&path, true)?
+                            get_home_page_path(&path, true, &project_config)?
                         } else {
                             PathBuf::from(&path)
-                                .join(get_default_config().src)
+                                .join(&project_config.src)
                                 .join(page_path)
                                 .with_extension("bs")
                         }
                     }
-                    None => get_home_page_path(&path, true)?,
+                    None => get_home_page_path(&path, true, &project_config)?,
                 };
 
                 let global_file_path = PathBuf::from(&path)
-                    .join(get_default_config().src)
+                    .join(&project_config.src)
                     .join(settings::GLOBAL_PAGE_KEYWORD)
                     .with_extension("bs");
 
@@ -105,7 +122,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified) || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build_project(&path, false)?;
+                    build_project(&path, false, project_config)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
@@ -150,7 +167,9 @@ fn handle_connection(
                             contents = c;
                             status_line = "HTTP/1.1 200 OK";
                         } else {
-                            red_ln!("Error: File tried to access outside of /dev directory");
+                            red_ln!(
+                                "Dev Server Error: File tried to access outside of /dev directory"
+                            );
                             contents = String::new().into_bytes();
                             status_line = "HTTP/1.1 404 NOT FOUND";
                         }
@@ -178,18 +197,25 @@ fn handle_connection(
 
     match stream.write_all(response) {
         Ok(_) => Ok(()),
-        Err(e) => Err(CompileError {
+        Err(e) => Err(Error {
             msg: format!("Error sending response: {:?}", e),
             line_number: 0,
+            file_path: PathBuf::from(""),
+            error_type: ErrorType::DevServer,
         }),
     }
 }
 
-fn build_project(build_path: &PathBuf, release: bool) -> Result<(), CompileError> {
+fn build_project(
+    build_path: &PathBuf,
+    release: bool,
+    project_config: &mut Config,
+) -> Result<(), Error> {
     dark_cyan_ln!("Building project...");
     let start = Instant::now();
 
-    build::build(build_path, release)?;
+    // TODO - send config file to dev server function and pass it in here
+    build::build(build_path, release, project_config)?;
 
     let duration = start.elapsed();
     grey_ln!("------------------------------------");
@@ -271,19 +297,25 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> bool {
     false
 }
 
-fn get_home_page_path(path: &PathBuf, src: bool) -> Result<PathBuf, CompileError> {
+fn get_home_page_path(
+    path: &PathBuf,
+    src: bool,
+    project_config: &Config,
+) -> Result<PathBuf, Error> {
     let root_src_path = if src {
-        PathBuf::from(&path).join(get_default_config().src)
+        PathBuf::from(&path).join(&project_config.src)
     } else {
-        PathBuf::from(&path).join(get_default_config().dev_folder)
+        PathBuf::from(&path).join(&project_config.dev_folder)
     };
 
-    let src_files = match fs::read_dir(root_src_path) {
+    let src_files = match fs::read_dir(&root_src_path) {
         Ok(m) => m,
         Err(e) => {
-            return Err(CompileError {
+            return Err(Error {
                 msg: format!("Error reading root src directory metadata: {:?}", e),
                 line_number: 0,
+                file_path: root_src_path,
+                error_type: ErrorType::File,
             });
         }
     };
@@ -321,9 +353,11 @@ fn get_home_page_path(path: &PathBuf, src: bool) -> Result<PathBuf, CompileError
                 }
             }
             Err(e) => {
-                return Err(CompileError {
+                return Err(Error {
                     msg: format!("Error reading src directory: {:?}", e),
                     line_number: 0,
+                    file_path: root_src_path,
+                    error_type: ErrorType::File,
                 });
             }
         };
@@ -331,23 +365,27 @@ fn get_home_page_path(path: &PathBuf, src: bool) -> Result<PathBuf, CompileError
 
     match first_page {
         Some(index_page_path) => Ok(index_page_path),
-        None => Err(CompileError {
+        None => Err(Error {
             msg: format!(
                 "No page found in {} directory: {:?}",
                 if src { "src" } else { "dev" },
                 first_page
             ),
             line_number: 0,
+            file_path: root_src_path,
+            error_type: ErrorType::File,
         }),
     }
 }
 
-fn get_current_dir() -> Result<PathBuf, CompileError> {
+fn get_current_dir() -> Result<PathBuf, Error> {
     match std::env::current_dir() {
         Ok(dir) => Ok(dir),
-        Err(e) => Err(CompileError {
+        Err(e) => Err(Error {
             msg: format!("Error getting current directory: {:?}", e),
             line_number: 0,
+            file_path: PathBuf::from(""),
+            error_type: ErrorType::DevServer,
         }),
     }
 }

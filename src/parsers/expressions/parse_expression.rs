@@ -1,12 +1,17 @@
+#[allow(unused_imports)]
+use colour::{grey_ln, red_ln};
+
 use super::eval_expression::evaluate_expression;
 use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::parsers::collections::new_collection;
+use crate::parsers::structs::struct_to_value;
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::{
     bs_types::DataType,
     parsers::{
         ast_nodes::{Arg, AstNode},
         create_scene_node::new_scene,
-        tuples::new_tuple,
+        structs::new_struct,
     },
     CompileError, Token,
 };
@@ -17,36 +22,30 @@ use crate::{
 pub fn create_expression(
     tokens: &Vec<Token>,
     i: &mut usize,
-    inside_tuple: bool,
+    inside_struct: bool,
     ast: &Vec<AstNode>,
     mut data_type: &mut DataType,
-    inside_brackets: bool,
+    inside_parenthesis: bool,
     variable_declarations: &mut Vec<Arg>,
     token_line_numbers: &Vec<u32>,
 ) -> Result<Value, CompileError> {
     let mut expression = Vec::new();
     let mut number_union = DataType::Union(vec![DataType::Int, DataType::Float]);
 
-    if inside_brackets {
-        // Make sure there is an open parenthesis here (if not, return an error)
-        // Only needed if create expression is called from new_ast/new_scene
-        // Makes sure to enforce the parenthesis syntax
-        // (otherwise would end up with some function call style stuff not needing parenthesis - this would look inconsistent)
-        if let Some(Token::OpenParenthesis) = tokens.get(*i) {
-            *i += 1;
-        } else {
-            return Err(CompileError {
-                msg:
-                    "Missing open parenthesis (function call arguments must be inside parenthesis)"
-                        .to_string(),
-                line_number: token_line_numbers[*i].to_owned(),
-            });
-        }
+    // grey_ln!("Parsing expression of type: {:?}", data_type);
+    // grey_ln!("token: {:?}", tokens[*i]);
 
+    // Inside brackets if set to true, means that there is expected to be a struct or collection
+    // Or this is currently inside a struct (in which case this first part of data type checking is skipped unless the type needs to be inferred)
+    // This first check is to see if a new struct is being created
+    // And whether brackets are expected
+    if inside_parenthesis {
         match data_type {
-            DataType::Tuple(inner_types) => {
-                // HAS DEFINED INNER TYPES FOR THE TUPLE
-                let tuple = new_tuple(
+            // TODO - do we need to handle unions here? or are they always collapsed into one type before being parsed?
+            DataType::Structure(inner_types) => {
+                // HAS DEFINED INNER TYPES FOR THE struct
+                // could this still result in None if the inner types are defined and not optional?
+                let structure = new_struct(
                     Value::None,
                     tokens,
                     &mut *i,
@@ -56,12 +55,16 @@ pub fn create_expression(
                     token_line_numbers,
                 )?;
 
-                return Ok(tuple_to_value(&tuple));
+                return Ok(struct_to_value(&structure));
             }
 
+            // If this is inside of parenthesis, and we don't know the type.
+            // It must be a struct
+            // This is enforced! If it's a single expression wrapped in parentheses,
+            // it will be flatted into that single value anyway by struct_to_value
             DataType::Inferred => {
-                // DOES NOT HAVE DEFINED INNER TYPES FOR THE TUPLE
-                let tuple = new_tuple(
+                // NO DEFINED TYPES FOR THE struct
+                let structure = new_struct(
                     Value::None,
                     tokens,
                     &mut *i,
@@ -71,9 +74,37 @@ pub fn create_expression(
                     token_line_numbers,
                 )?;
 
-                *data_type = DataType::Tuple(tuple.to_owned());
-                return Ok(tuple_to_value(&tuple));
+                *data_type = DataType::Structure(structure.to_owned());
+                return Ok(struct_to_value(&structure));
             }
+
+            // This is here because it's valid to do a function call without parenthesis
+            // If the function accepts a single collection as an argument
+            // Like: func_call{"a", "b", "c"} instead of func_call({"a", "b", "c"})
+            DataType::Collection(inner_type) => {
+                // Check to make sure this is a curly bracket if this is inside brackets
+                // Will work the same as a struct
+                // You can remove regular brackets for function calls if the function accepts a single collection
+                if let Some(Token::OpenCurly) = tokens.get(*i) {
+                    *i += 1;
+                } else {
+                    return Err(CompileError {
+                        msg: "Expected a curly bracket to start a collection".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    });
+                }
+
+                return new_collection(
+                    tokens,
+                    i,
+                    ast,
+                    token_line_numbers,
+                    inner_type,
+                    variable_declarations,
+                );
+            }
+
+            // There must be at least 1 unclosed bracket that this element is inside
             _ => {}
         }
     }
@@ -83,17 +114,19 @@ pub fn create_expression(
     // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
     let mut next_number_negative = false;
     while let Some(token) = tokens.get(*i) {
+        // red_ln!("current token in parse_expression: {:?}", token);
+
         match token {
             // Conditions that close the expression
             Token::CloseParenthesis => {
-                if inside_brackets {
+                if inside_parenthesis {
                     *i += 1;
                     if expression.is_empty() {
                         return Ok(Value::None);
                     }
                     break;
                 } else {
-                    if inside_tuple {
+                    if inside_struct {
                         break;
                     }
                     *i += 1;
@@ -106,6 +139,10 @@ pub fn create_expression(
             }
 
             Token::OpenParenthesis => {
+                // Move past the open parenthesis before calling this function again
+                // Removing this at one point for a test caused a wonderful infinite loop
+                *i += 1;
+
                 return create_expression(
                     tokens,
                     &mut *i,
@@ -119,7 +156,7 @@ pub fn create_expression(
             }
 
             Token::EOF | Token::SceneClose(_) | Token::Arrow | Token::Colon | Token::End => {
-                if inside_brackets {
+                if inside_parenthesis {
                     return Err( CompileError {
                         msg: "Not enough closing parenthesis for expression. Need more ')' at the end of the expression!".to_string(),
                         line_number: token_line_numbers[*i].to_owned(),
@@ -129,9 +166,9 @@ pub fn create_expression(
             }
 
             Token::Newline => {
-                // Fine if inside of brackets (not closed yet)
+                // Fine if inside of parenthesis (not closed yet)
                 // Otherwise break out of the expression
-                if inside_brackets {
+                if inside_parenthesis {
                     *i += 1;
                     continue;
                 } else {
@@ -140,19 +177,22 @@ pub fn create_expression(
             }
 
             Token::Comma => {
-                if inside_tuple {
+                // This is just one element inside a struct
+                if inside_struct {
                     break;
                 }
+
                 *i += 1;
 
-                if inside_brackets {
+                // First time inferring that this is actually a struct type
+                if inside_parenthesis {
                     let eval_first_expr = evaluate_expression(
                         expression,
                         token_line_numbers[*i].to_owned(),
                         &mut data_type,
                     )?;
 
-                    let tuple = new_tuple(
+                    let structure = new_struct(
                         eval_first_expr,
                         tokens,
                         i,
@@ -162,17 +202,24 @@ pub fn create_expression(
                         token_line_numbers,
                     )?;
 
-                    return Ok(Value::Tuple(tuple));
+                    return Ok(Value::Structure(structure));
                 }
 
+                // TODO - this is a bit of a mess
+                // Are we going to have special rules for return statements and return signatures?
+                // So we can just use this function for everything?
+                // Or does it make more sense to just use the parse_return_type function for cases without parenthesis?
+                // This function already breaks out if there is an End token or Colon token (if not inside parenthesis)
+
                 return Err(CompileError {
-                    msg: "Comma found outside of tuple".to_string(),
+                    msg: "Comma found outside of parenthesis: If this is error is for return arguments, this might change in the future".to_string(),
                     line_number: token_line_numbers[*i].to_owned(),
                 });
             }
 
             // Check if name is a reference to another variable or function call
             Token::Variable(name) => {
+                // This is never reached (I think) if we are inside a struct or collection
                 let new_ref = create_new_var_or_ref(
                     name,
                     variable_declarations,
@@ -184,11 +231,12 @@ pub fn create_expression(
                     false,
                 )?;
 
+                // red_ln!("new ref: {:?}", new_ref);
+
                 match new_ref {
-                    // Make sure this is a reference and not a new variable
-                    AstNode::Literal(..) | AstNode::FunctionCall(..) => {
+                    AstNode::Literal(ref value, line_number) => {
                         // Check type is correct
-                        let reference_data_type = new_ref.get_type();
+                        let reference_data_type = value.get_type();
                         if !check_if_valid_type(&reference_data_type, &mut data_type) {
                             return Err(CompileError {
                                 msg: format!(
@@ -199,6 +247,22 @@ pub fn create_expression(
                             });
                         }
 
+                        expression.push(new_ref);
+                    }
+
+                    // Must be evaluated at runtime
+                    AstNode::FunctionCall(..) => {
+                        // Check type is correct
+                        let reference_data_type = new_ref.get_type();
+                        if !check_if_valid_type(&reference_data_type, &mut data_type) {
+                            return Err(CompileError {
+                                msg: format!(
+                                    "Function call '{}' is of type {:?}, but used in an expression of type {:?}",
+                                    name, reference_data_type, data_type
+                                ),
+                                line_number: token_line_numbers[*i].to_owned(),
+                            });
+                        }
                         expression.push(new_ref);
                     }
 
@@ -290,7 +354,6 @@ pub fn create_expression(
             Token::Add => {
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
-                    1,
                     token_line_numbers[*i],
                 ));
             }
@@ -307,7 +370,6 @@ pub fn create_expression(
                 }
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
-                    1,
                     token_line_numbers[*i],
                 ));
             }
@@ -324,7 +386,6 @@ pub fn create_expression(
                 }
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
-                    2,
                     token_line_numbers[*i],
                 ));
             }
@@ -341,7 +402,6 @@ pub fn create_expression(
                 }
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
-                    2,
                     token_line_numbers[*i],
                 ));
             }
@@ -358,7 +418,6 @@ pub fn create_expression(
                 }
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
-                    2,
                     token_line_numbers[*i],
                 ));
             }
@@ -367,51 +426,38 @@ pub fn create_expression(
             Token::Equal => {
                 expression.push(AstNode::LogicalOperator(
                     Token::Equal,
-                    5,
                     token_line_numbers[*i],
                 ));
             }
             Token::LessThan => {
                 expression.push(AstNode::LogicalOperator(
                     Token::LessThan,
-                    5,
                     token_line_numbers[*i],
                 ));
             }
             Token::LessThanOrEqual => {
                 expression.push(AstNode::LogicalOperator(
                     Token::LessThanOrEqual,
-                    5,
                     token_line_numbers[*i],
                 ));
             }
             Token::GreaterThan => {
                 expression.push(AstNode::LogicalOperator(
                     Token::GreaterThan,
-                    5,
                     token_line_numbers[*i],
                 ));
             }
             Token::GreaterThanOrEqual => {
                 expression.push(AstNode::LogicalOperator(
                     Token::GreaterThanOrEqual,
-                    5,
                     token_line_numbers[*i],
                 ));
             }
             Token::And => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::And,
-                    4,
-                    token_line_numbers[*i],
-                ));
+                expression.push(AstNode::LogicalOperator(Token::And, token_line_numbers[*i]));
             }
             Token::Or => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::Or,
-                    3,
-                    token_line_numbers[*i],
-                ));
+                expression.push(AstNode::LogicalOperator(Token::Or, token_line_numbers[*i]));
             }
 
             _ => {
@@ -433,6 +479,7 @@ pub fn create_expression(
 
 fn check_if_valid_type(data_type: &DataType, accepted_type: &mut DataType) -> bool {
     // Has to make sure if either type is a union, that the other type is also a member of the union
+    // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
 
     match data_type {
         DataType::Union(ref types) => {
@@ -470,81 +517,116 @@ fn check_if_valid_type(data_type: &DataType, accepted_type: &mut DataType) -> bo
     }
 }
 
-fn tuple_to_value(args: &Vec<Arg>) -> Value {
-    // AUTOMATICALLY TURNS TUPLES OF ONE ITEM INTO THAT ITEM
-    // This is a weird/unique design choice of the language
-
-    // An empty tuple is None in this language
-    if args.len() < 1 {
-        return Value::None;
-    }
-
-    // Automatically convert tuples of one item into that item
-    if args.len() == 1 {
-        return args[0].value.to_owned();
-    }
-
-    Value::Tuple(args.to_owned())
-}
-
-pub fn get_accessed_arg(
+pub fn get_accessed_args(
     collection_name: &String,
     tokens: &Vec<Token>,
     i: &mut usize,
-    possible_args: Vec<Arg>,
+    data_type: &DataType,
     token_line_numbers: &Vec<u32>,
-) -> Result<Option<usize>, CompileError> {
-    // Check if this is an access
-    // Should be at the dot
-
-    if let Some(Token::Dot) = tokens.get(*i) {
+    accessed_args: &mut Vec<usize>,
+) -> Result<Vec<usize>, CompileError> {
+    // Check if there is an access
+    // Should be at the variable name in the token stream
+    if let Some(Token::Dot) = tokens.get(*i + 1) {
         // Move past the dot
-        *i += 1;
+        *i += 2;
 
-        // Make sure an integer is next
         match tokens.get(*i) {
+            // INTEGER INDEX ACCESS
             Some(Token::IntLiteral(index)) => {
                 // Check this is a valid index
                 // Usize will flip to max number if negative
                 // Maybe in future negative indexes with be supported (minus from the end)
-                let idx: usize = *index as usize;
-                if idx >= possible_args.len() {
+
+                // for now just error if it's negative
+                if *index < 0 {
                     return Err(CompileError {
                         msg: format!(
-                            "Index {} out of range for any arguments in '{}'",
-                            idx, collection_name
+                            "Can't use negative index: {} to access a collection or struct '{}'",
+                            *index, collection_name
                         ),
                         line_number: token_line_numbers[*i].to_owned(),
                     });
                 }
 
-                // Get the data type of this argument
-                Ok(Some(idx))
+                let idx: usize = *index as usize;
+                match data_type {
+                    DataType::Structure(ref inner_types) => {
+                        if idx >= inner_types.len() {
+                            return Err(CompileError {
+                                msg: format!(
+                                    "Index {} out of range for any arguments in '{}'",
+                                    idx, collection_name
+                                ),
+                                line_number: token_line_numbers[*i].to_owned(),
+                            });
+                        }
+
+                        accessed_args.push(idx);
+                    }
+
+                    DataType::Collection(ref inner_type) => {
+                        accessed_args.push(idx);
+                    }
+
+                    _ => {
+                        return Err(CompileError {
+                            msg: format!(
+                                "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
+                                collection_name,
+                                data_type
+                            ),
+                            line_number: token_line_numbers[*i].to_owned(),
+                        })
+                    }
+                }
             }
 
-            Some(Token::Variable(name)) => {
-                // Check if this is a named argument
-                for (idx, arg) in possible_args.iter().enumerate() {
-                    if arg.name == *name {
-                        return Ok(Some(idx));
+            // NAMED ARGUMENT ACCESS
+            Some(Token::Variable(name)) => match data_type {
+                DataType::Structure(ref inner_types) => {
+                    if let Some(idx) = inner_types.iter().position(|arg| arg.name == *name) {
+                        accessed_args.push(idx);
+                    } else {
+                        return Err(CompileError {
+                            msg: format!(
+                                "Name '{}' not found in struct '{}'",
+                                name, collection_name
+                            ),
+                            line_number: token_line_numbers[*i].to_owned(),
+                        });
                     }
                 }
 
-                Err(CompileError {
-                    msg: format!("Name '{}' not found in tuple '{}'", name, collection_name),
+                _ => {
+                    return Err(CompileError {
+                        msg: "Compiler only supports named access for structs".to_string(),
+                        line_number: token_line_numbers[*i].to_owned(),
+                    })
+                }
+            },
+
+            _ => {
+                return Err(CompileError {
+                    msg: format!(
+                        "Expected an index or name to access struct '{}'",
+                        collection_name
+                    ),
                     line_number: token_line_numbers[*i].to_owned(),
                 })
             }
-
-            _ => Err(CompileError {
-                msg: format!(
-                    "Expected an index or name to access tuple '{}'",
-                    collection_name
-                ),
-                line_number: token_line_numbers[*i].to_owned(),
-            }),
         }
-    } else {
-        Ok(None)
+
+        // Recursively call this function until there are no more accessed args
+        return get_accessed_args(
+            collection_name,
+            tokens,
+            i,
+            &data_type,
+            token_line_numbers,
+            accessed_args,
+        );
     }
+
+    Ok(Vec::new())
 }

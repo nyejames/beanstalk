@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 pub const COMP_PAGE_KEYWORD: &str = "#page";
 pub const GLOBAL_PAGE_KEYWORD: &str = "#global";
 pub const INDEX_PAGE_KEYWORD: &str = "index";
@@ -7,9 +9,9 @@ pub const BS_VAR_PREFIX: &str = "bs_";
 #[allow(dead_code)]
 pub struct Config {
     pub project: String,
-    pub src: String,
-    pub dev_folder: String,
-    pub release_folder: String,
+    pub src: PathBuf,
+    pub dev_folder: PathBuf,
+    pub release_folder: PathBuf,
     pub name: String,
     pub version: String,
     pub author: String,
@@ -19,9 +21,9 @@ pub struct Config {
 pub fn get_default_config() -> Config {
     Config {
         project: String::from("html"),
-        src: String::from("src"),
-        dev_folder: String::from("dev"),
-        release_folder: String::from("release"),
+        src: PathBuf::from("src"),
+        dev_folder: PathBuf::from("dev"),
+        release_folder: PathBuf::from("release"),
         name: String::from("html_project"),
         version: String::from("0.1.0"),
         author: String::new(),

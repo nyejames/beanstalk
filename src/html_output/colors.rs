@@ -11,7 +11,7 @@ pub fn get_color(color: &Token, shade: &Value) -> Result<String, CompileError> {
     let param = match shade {
         Value::Int(value) => *value as f64,
         Value::Float(value) => *value,
-        Value::Tuple(references) => {
+        Value::Structure(references) => {
             if references.len() > 2 {
                 return Err(CompileError {
                     msg: "Error: Colors can only have a shade and a transparency value, more arguments provided".to_string(),
