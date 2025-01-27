@@ -8,7 +8,8 @@ use super::{
 use crate::bs_types::DataType;
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::expressions::parse_expression::create_expression;
-use crate::{parsers::ast_nodes::NodeInfo, CompileError, Token};
+use crate::tokenizer::TokenPosition;
+use crate::{parsers::ast_nodes::NodeInfo, CompileError, ErrorType, Token};
 
 // Assumes to have started after the open parenthesis
 // Datatype must always be a struct containing the data types of the items in the struct
@@ -21,7 +22,7 @@ pub fn new_struct(
     required_args: &Vec<Arg>,
     ast: &Vec<AstNode>,
     variable_declarations: &mut Vec<Arg>,
-    token_line_numbers: &Vec<u32>,
+    token_positions: &Vec<TokenPosition>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut item_args = required_args.to_owned();
 
@@ -53,7 +54,12 @@ pub fn new_struct(
                 if next_item {
                     return Err(CompileError {
                         msg: "Expected a struct item after the comma".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_positions[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_positions[*i].line_number,
+                            char_column: token_positions[*i].char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
                 next_item = true;
@@ -68,7 +74,12 @@ pub fn new_struct(
                 if !next_item {
                     return Err(CompileError {
                         msg: "Expected a comma between struct declarations".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_positions[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_positions[*i].line_number,
+                            char_column: token_positions[*i].char_column + name.len() as u32,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
 
@@ -79,7 +90,7 @@ pub fn new_struct(
                     i,
                     false,
                     ast,
-                    token_line_numbers,
+                    token_positions,
                     true,
                 )?;
 
@@ -100,7 +111,12 @@ pub fn new_struct(
                 if !next_item {
                     return Err(CompileError {
                         msg: "Expected a comma between struct items".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_positions[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_positions[*i].line_number,
+                            char_column: token_positions[*i].char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
 
@@ -111,7 +127,12 @@ pub fn new_struct(
                 } else if required_args.len() < items.len() {
                     return Err(CompileError {
                         msg: "Too many arguments provided to struct".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_positions[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_positions[*i].line_number,
+                            char_column: token_positions[*i].char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 } else {
                     required_args[items.len()].data_type.to_owned()
@@ -125,7 +146,7 @@ pub fn new_struct(
                     &mut data_type,
                     false,
                     variable_declarations,
-                    token_line_numbers,
+                    token_positions,
                 )?;
 
                 // Get the arg of this struct item

@@ -1,23 +1,23 @@
 [Navbar]
-[header center: [title(1): BASIC BEANSTALK SYNTAX]]
+[header center: [title(1): BASIC BS SYNTAX]]
 [main:
 
 # Quick Synax Overview
 The specifics are not fully decided on, but some of the key points are:
-- No whitespace significance, using 'end' keyword to close scopes instead.
+- Using 'end' keyword to close scopes.
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for scenes.
 - Colon is only used inside scene heads, equals is used for everything related to assignment. Including when declaring functions.
 - Equality and other logical operators only use keywords (you can't use == or ! in logical expressions for example)
 - A radically minimal struct syntax that uses parenthesis.
-- (possibly) ~ tilde symbol to indicate mutability (mutability must be explicit like in Rust)
-- double dashes for comments (--)
+- ~ tilde symbol to indicate mutability (mutability must be explicit)
+- Double dashes for comments (--)
+- Naming variables is NOT case sensitive. So beans, Beans and BEANS are considered the same variable name.
 
 # Style Guide
 The style guide is:
 - snake_case for variables, collections, styles and scenes
-- Upper_Snake_Case for types and primatives
-- CamelCase for functions and methods
-- SCREAMING_SNAKE_CASE for constants (this is what determines a constant, not the keyword 'const')
+- Upper_Snake_Case for types and structs
+- CamelCase for functions
 
 4 spaces are recommended for indentation. 
 
@@ -44,25 +44,32 @@ Similar to Python, there is no special keyword for creating a new variable, but 
 The @ symbol before a name is used to export variables and methods/functions outside of a module or object.
 
 ## Assignment
-Types will be inferred if not specified. 
-Usually, you don't need to specify a type unless you are creating a new type or a collection.
 
-### Compile Time Constant
-[code: 
-    IMMUTABLE_VARIABLE = 69
+### Constant
+
+[code:
+    IMMUTABLE_VALUE = 69
 ]
 
-### Variable with type annotation (tilde means this is a mutable and can change)
-[code: 
+*Note*: You can always search for the declaration of a constant in a codebase as there will only be one instance of the constant name followed by an '='.
+This is because it can't be reassigned. Type annotations are not needed for constants.
+
+### Variable with optional type annotation (tilde means this is a mutable and can change)
+[code:
     float_var ~Float = 0.0
 ]
 
+Any variable declaration can be found by searching the variable name, followed by a tilde '~'.
+
 ### Mutable variables with inferred types
 [code: 
-    float_var ~= 0.0
     int_var ~= 0
+    float_var ~= 0.0
+    decimal_var ~= d
     string_var ~= "boo!"
 ]
+
+Type annotations are not needed for variables if they are being initialised with a value.
 
 ## Static Assignment
 [code:
@@ -99,10 +106,10 @@ All copies of collections are explicit and must use the 'copy' keyword in place 
     -- Deep copy of a collection
     a_copy copy = a_collection
 
-    -- Reference to a_collection
+    -- Immutable reference to a_collection
     a_reference = a_collection
 
-    -- Mutable Reference to a_collection (or ownership passed depending on context)
+    -- Ownership passed depending on context
     a_reference ~= a_collection
 
     -- a_reference is still a reference to the original collection
@@ -127,8 +134,6 @@ All data type keywords contain methods from the standard library for common mani
 The zero value is the value a variable will be assigned if it is not assigned a value when being initialized.
 
 ## Numerical Types
-There is an intention to support all of these number types in the future. **Currently only 64 bit floats are supported.**
-
 [table(3):
     [: Type] [: Description] [: Zero Value]
 
@@ -138,12 +143,6 @@ There is an intention to support all of these number types in the future. **Curr
 ]
 
 ## String based Types
-Beanstalk uses UTF-16 strings by default to keep all string manipulations inside JS. 
-The speed penalty of passing strings in and out of Wasm is currently not worth the extra complexity, 
-so all string expressions will compile to JS rather than Wasm.
-
-Eventually this will be entirely manipulated in Wasm, allowing for different string types and faster string operations. For now, JS is fast enough.
-
 [table(3): 
     [: Type] [: Description] [: Zero Value]
 

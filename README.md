@@ -1,9 +1,9 @@
 <div align="center">
 
-  <h1>Beanstalk 🌱</h1>
+  <h1>BS 🌱</h1>
 
   <p>
-    <strong>A lightweight language for bringing joy back to building UI, web pages and embedded tasks</strong>
+    <strong>A lightweight language and toolchain for bringing joy back to building UIs, web pages and typesetting</strong>
   </p>
 
   *The only BS in programming should be in the filename*
@@ -19,11 +19,11 @@
 
   <h1>
     <a href="https://nyejames.github.io/beanstalk">
-      Documentation
+      Plans and Documentation
     </a>
   </h1>
 
-  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully.</p>
+  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>
   <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>
 
 </div>
@@ -32,49 +32,30 @@
 <br>
 
 # Overview / Goals
-Beanstalk is a simple compiled programming language which outputs HTML, CSS and Wasm/JS all in one consistent syntax. Eventually, the goal is to also be a more general lightweight Wasm based UI building language that could be great for embedding in any application or game.
+BS is a simple compiled programming language which outputs HTML, CSS and Wasm/JS all in one consistent syntax.
+
+The whole language is built around it's unique markup syntax.
+
+Eventually, the goal is to also be a more general lightweight Wasm based UI building language that could be great for embedding in any application or game.
 
 At it's simplest it can be thought of as Markdown expanded into an entire language designed from the ground up.
 
-**Design Goals**
-- Easy to learn and minimal
-- Consistent or intuitive syntax (particular for designing UIs and contentful pages)
-- Simple but powerful static type system that helps avoid bugs without getting in the way of productivity
-- Very batteries included with powerful built-in standard library
-- Fast compile times (to remove the need for being interpreted)
-- Wasm output backend for fast web apps and for Wasm embedding on native projects
-- Be the best language for visual and written content related tasks that have some interactivity and dynamic behaviour
+The compiler's IR will be Web Assembly Text Format. 
 
-With fast compile times and built in hot-reloading, Beanstalk is designed to feel like a scripting language with all the power of being compiled.
-The language aims to replace the use cases of both JS / other Wasm compiler targets for the web or Lua in the embedded world.
+**Design Goals**
+- Minimal syntax with a focus around text content / typesetting and styling
+- Simple, static type system with some dynamic elements
+- Secure. Rust style memory management
+- Batteries included with powerful built-in standard library
+- Fast compile times to support hot reloading
+- Fast for prototyping and refactoring with default/optional values
+- Wasm based for fast web apps and for Wasm embedding in projects
+- The compiler should provide all the scaffolding and glue to embed Wasm
 
 The language wants to be great for building a website, making config files or as an embedded and UI language for apps and games.
 
-### The tradeoffs
-#### Raw performance 
-Trade highest possible runtime speeds for faster compile times, Development speed and security (avoid memory bugs).
-There may be a good option to vary compile optimisations, so more optimisation passes can be performed for certain builds, 
-but the main focus is to have a custom-built backend that uses only inexpensive code optimisations.
-
-This is not a language designed to be used for general purpose programming or low level domains.
-The aim is to be a very powerful tool for what it's designed to do, but be more performant and scalable than equivalent languages in those domains like Python or JS.
-
-The goal is to be faster and less dynamic than other high level interpreted languages, without falling into the design trap of being yet another C/C++ replacement
-or general purpose programming language that tries to do everything.
-
-The language is aiming to *avoid having a GC* (at least for the most part). 
-But there are some plans and ideas to experiment with <a href="https://nyejames.github.io/beanstalk/docs/memory-management"> hybrid memory management strategies </a>
-for performance gains / better memory security / predictable performance.
-
-There is also the posibility of using slower arbitary precision numerical types by default instead of floats. But this hasn't been decided yet.
-
-#### Unique syntax
-Designed to be as concise and intuitive as possible at the cost of familiarity when coming from other mainstream languages. 
-
-It is also very minimal with as few operators / keywords are in the language as possible. This means the language is less expressive than languages like rust or C++, but has far less to learn and (hopefully) avoids crazy symbol soup expressions. But also there may be more boilerplate code for some more complex algorithmic tasks.
-
 ## Scenes
-Beanstalk's core syntax idea is using scenes, which are declarative and built into an otherwise highly procedural language.
+BS's core syntax idea is using scenes, which are declarative and built into an otherwise highly procedural language.
 
 Scenes can be used to write content, styling and basic dynamic logic all in one place.
 
@@ -88,11 +69,12 @@ Write content in a simpler dialect of markdown. Images, videos and other media a
 You can finally center that div with only one keyword 🔥
 
 Use keywords at the start of scenes to define, style and position all your elements.
-The compiler will only create any HTML / CSS / Wasm / JS you've actually used.
 
 ### Compiled Output
-Beanstalk will eventually use as much Wasm as possible for a backend, but JS is currently the primary output for web.
+BS aims to just output Wasm and have it's own backend for doing this, but JS is currently the primary output for web while the language is being created.
 More JS will gradually get replaced, but only in cases where stricter runtime types or greater performance is needed.
+
+The compiler aims to output as little bytecode/glue code as possible. No 100kb Wasm files to just print "hello world".
 
 Being compiled means folding constants, type checking and optimizing the output to be as small as possible is all done for you.
 
@@ -100,6 +82,7 @@ The built-in hot-reloading development server can be used to see changes in real
 The compiler itself is written in Rust, and uses as few dependencies/libraries as possible to keep it fast and reliable.
 
 ### Technologies currently used in the compiler
+- [wat2wasm](https://github.com/WebAssembly/wabt) for compiling wat to wasm
 - [Pico CSS](https://picocss.com/) for the default CSS styling reset (will be replaced with a custom system in the near future)
 
 <br>

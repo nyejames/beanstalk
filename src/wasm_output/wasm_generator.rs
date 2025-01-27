@@ -1,4 +1,5 @@
-use crate::CompileError;
+use crate::tokenizer::TokenPosition;
+use crate::{CompileError, ErrorType};
 use std::fs;
 use std::path::{Path, PathBuf};
 use wat::parse_file;
@@ -23,13 +24,30 @@ pub fn compile_wat_file(path: &Path) -> Result<(), CompileError> {
                 }
                 Err(e) => Err(CompileError {
                     msg: format!("Error writing WASM file: {:?}", e),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    error_type: ErrorType::File,
                 }),
             }
         }
+
         Err(e) => Err(CompileError {
             msg: format!("Error parsing WAT file: {:?}", e),
-            line_number: 0,
+            start_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            end_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            error_type: ErrorType::File,
         }),
     }
 }

@@ -1,6 +1,8 @@
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::tokenizer::TokenPosition;
 use crate::{
-    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token,
+    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError,
+    ErrorType, Token,
 };
 
 pub fn new_wat_var(
@@ -8,7 +10,7 @@ pub fn new_wat_var(
     expr: &Value,
     datatype: &DataType,
     wat_global_initialisation: &mut String,
-    line_number: u32,
+    start_pos: TokenPosition,
 ) -> Result<String, CompileError> {
     match datatype {
         DataType::Float => {
@@ -42,7 +44,15 @@ pub fn new_wat_var(
                 "Unsupported datatype found in WAT var creation: {:?}",
                 datatype
             ),
-            line_number,
+            start_pos: TokenPosition {
+                line_number: start_pos.line_number,
+                char_column: start_pos.char_column,
+            },
+            end_pos: TokenPosition {
+                line_number: start_pos.line_number,
+                char_column: start_pos.char_column + expr.dimensions().char_column,
+            },
+            error_type: ErrorType::TypeError,
         }),
     }
 }
@@ -61,12 +71,21 @@ pub fn expression_to_wat(expr: &Value) -> Result<String, CompileError> {
         Value::Bool(value) => wat.push_str(&format!(" i64.const {}", value.to_string())),
 
         _ => {
+            let dimensions = expr.dimensions();
             return Err(CompileError {
                 msg: format!(
-                    "Compiler Bug: Invalid AST node given to expression_to_wat (wat parser): {:?}",
+                    "Invalid AST node given to expression_to_wat (wat parser): {:?}",
                     expr
                 ),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: dimensions.line_number,
+                    char_column: dimensions.char_column,
+                },
+                end_pos: TokenPosition {
+                    line_number: dimensions.line_number,
+                    char_column: dimensions.char_column + 1,
+                },
+                error_type: ErrorType::Compiler,
             });
         }
     }
@@ -81,19 +100,31 @@ fn float_expr_to_wat(nodes: &Vec<AstNode>) -> Result<String, CompileError> {
 
     for node in nodes {
         match node {
-            AstNode::Literal(token, line_number) => match token {
+            AstNode::Literal(token, _) => match token {
                 Value::Float(value) => {
                     wat.push_str(&format!(" f64.const {}", value));
                 }
                 _ => {
+                    let first_node_dimensions = nodes[0].dimensions();
                     return Err(CompileError {
-                            msg: format!("Compiler error: Wrong literal type found in expression sent to WAT parser: {:?}", token),
-                            line_number: line_number.to_owned(),
-                        });
+                        msg: format!(
+                            "Wrong literal type found in expression sent to WAT parser: {:?}",
+                            token
+                        ),
+                        start_pos: TokenPosition {
+                            line_number: first_node_dimensions.line_number,
+                            char_column: first_node_dimensions.char_column,
+                        },
+                        end_pos: TokenPosition {
+                            line_number: nodes[nodes.len() - 1].dimensions().line_number,
+                            char_column: nodes[nodes.len() - 1].dimensions().char_column,
+                        },
+                        error_type: ErrorType::Compiler,
+                    });
                 }
             },
 
-            AstNode::BinaryOperator(op, line_number) => {
+            AstNode::BinaryOperator(op, pos) => {
                 let wat_op = match op {
                     Token::Add => " f64.add",
                     Token::Subtract => " f64.sub",
@@ -102,7 +133,15 @@ fn float_expr_to_wat(nodes: &Vec<AstNode>) -> Result<String, CompileError> {
                     _ => {
                         return Err(CompileError {
                             msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
-                            line_number: line_number.to_owned(),
+                            start_pos: TokenPosition {
+                                line_number: pos.line_number,
+                                char_column: pos.char_column,
+                            },
+                            end_pos: TokenPosition {
+                                line_number: pos.line_number,
+                                char_column: pos.char_column + 1,
+                            },
+                            error_type: ErrorType::Syntax
                         });
                     }
                 };
@@ -111,9 +150,18 @@ fn float_expr_to_wat(nodes: &Vec<AstNode>) -> Result<String, CompileError> {
             }
 
             _ => {
+                let first_node_dimensions = nodes[0].dimensions();
                 return Err(CompileError {
-                    msg: format!("Compiler Bug: unknown AST node found in expression when parsing float expression into WAT: {:?}", node),
-                    line_number: 0,
+                    msg: format!("Unknown AST node found in expression when parsing float expression into WAT: {:?}", node),
+                    start_pos: TokenPosition {
+                        line_number: first_node_dimensions.line_number,
+                        char_column: first_node_dimensions.char_column,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: nodes[nodes.len() - 1].dimensions().line_number,
+                        char_column: nodes[nodes.len() - 1].dimensions().char_column,
+                    },
+                    error_type: ErrorType::Compiler,
                 });
             }
         }

@@ -1,12 +1,17 @@
 use crate::parsers::ast_nodes::Value;
-use crate::{CompileError, Token};
+use crate::tokenizer::TokenPosition;
+use crate::{CompileError, ErrorType, Token};
 
 // Returns the hsla value of the color in the color pallet
 // Colors in Beanstalk can have shades between -100 and 100
 /* TODO
     The color system will be overhauled completely to work around pallets and themes
 */
-pub fn get_color(color: &Token, shade: &Value) -> Result<String, CompileError> {
+pub fn get_color(
+    color: &Token,
+    shade: &Value,
+    token_position: &TokenPosition,
+) -> Result<String, CompileError> {
     let mut transparency = 1.0;
     let param = match shade {
         Value::Int(value) => *value as f64,
@@ -15,7 +20,12 @@ pub fn get_color(color: &Token, shade: &Value) -> Result<String, CompileError> {
             if references.len() > 2 {
                 return Err(CompileError {
                     msg: "Error: Colors can only have a shade and a transparency value, more arguments provided".to_string(),
-                    line_number: 0,
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Caution,
                 });
             }
             transparency = match &references[1].value {

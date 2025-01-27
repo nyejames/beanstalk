@@ -1,4 +1,5 @@
 use crate::settings::Config;
+use crate::tokenizer::TokenPosition;
 use crate::{build, settings, CompileError, Error, ErrorType};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, grey_ln, print_bold, red_ln};
 use std::path::PathBuf;
@@ -18,7 +19,14 @@ pub fn start_dev_server(path: &PathBuf, project_config: &mut Config) -> Result<(
         Err(e) => {
             return Err(Error {
                 msg: format!("TCP error: {e}. Is there an instance of this local host server already running on {url}?"),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: PathBuf::new(),
                 error_type: ErrorType::DevServer
             })
@@ -78,7 +86,14 @@ fn handle_connection(
                     Err(e) => {
                         return Err(Error {
                             msg: format!("Error reading home page: {:?}", e),
-                            line_number: 0,
+                            start_pos: TokenPosition {
+                                line_number: 0,
+                                char_column: 0,
+                            },
+                            end_pos: TokenPosition {
+                                line_number: 0,
+                                char_column: 0,
+                            },
                             file_path: p,
                             error_type: ErrorType::File,
                         });
@@ -199,7 +214,14 @@ fn handle_connection(
         Ok(_) => Ok(()),
         Err(e) => Err(Error {
             msg: format!("Error sending response: {:?}", e),
-            line_number: 0,
+            start_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            end_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
             file_path: PathBuf::from(""),
             error_type: ErrorType::DevServer,
         }),
@@ -313,7 +335,14 @@ fn get_home_page_path(
         Err(e) => {
             return Err(Error {
                 msg: format!("Error reading root src directory metadata: {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: root_src_path,
                 error_type: ErrorType::File,
             });
@@ -355,7 +384,14 @@ fn get_home_page_path(
             Err(e) => {
                 return Err(Error {
                     msg: format!("Error reading src directory: {:?}", e),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
                     file_path: root_src_path,
                     error_type: ErrorType::File,
                 });
@@ -371,7 +407,14 @@ fn get_home_page_path(
                 if src { "src" } else { "dev" },
                 first_page
             ),
-            line_number: 0,
+            start_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            end_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
             file_path: root_src_path,
             error_type: ErrorType::File,
         }),
@@ -383,7 +426,14 @@ fn get_current_dir() -> Result<PathBuf, Error> {
         Ok(dir) => Ok(dir),
         Err(e) => Err(Error {
             msg: format!("Error getting current directory: {:?}", e),
-            line_number: 0,
+            start_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            end_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
             file_path: PathBuf::from(""),
             error_type: ErrorType::DevServer,
         }),

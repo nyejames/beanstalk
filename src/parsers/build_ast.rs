@@ -4,14 +4,14 @@ use super::{
 };
 use crate::parsers::ast_nodes::{Arg, Value};
 use crate::parsers::structs::{new_struct, struct_to_value};
-use crate::{bs_types::DataType, CompileError, Token};
-use colour::red_ln;
+use crate::tokenizer::TokenPosition;
+use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use std::path::PathBuf;
 
 pub fn new_ast(
     tokens: Vec<Token>,
     i: &mut usize,
-    token_line_numbers: &Vec<u32>,
+    token_pos: &Vec<TokenPosition>,
     variable_declarations: &mut Vec<Arg>,
     return_args: &Vec<Arg>,
     module_scope: bool,
@@ -23,8 +23,6 @@ pub fn new_ast(
     let mut needs_to_return = !return_args.is_empty();
 
     while *i < tokens.len() {
-        let token_line_number = token_line_numbers[*i];
-
         match &tokens[*i] {
             Token::Comment(value) => {
                 ast.push(AstNode::Comment(value.clone()));
@@ -34,7 +32,12 @@ pub fn new_ast(
                 if !module_scope {
                     return Err(CompileError {
                         msg: "Import found outside of module scope".to_string(),
-                        line_number: token_line_number,
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + 6,
+                        },
+                        error_type: ErrorType::Rule,
                     });
                 }
 
@@ -44,13 +47,21 @@ pub fn new_ast(
                     Token::StringLiteral(value) => {
                         imports.push(AstNode::Use(
                             PathBuf::from(value.clone()),
-                            token_line_number,
+                            TokenPosition {
+                                line_number: token_pos[*i].line_number,
+                                char_column: token_pos[*i].char_column,
+                            },
                         ));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Import must have a valid path as a argument".to_string(),
-                            line_number: token_line_number,
+                            start_pos: token_pos[*i].to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: token_pos[*i].line_number,
+                                char_column: token_pos[*i].char_column + u32::MAX,
+                            },
+                            error_type: ErrorType::Rule,
                         });
                     }
                 }
@@ -62,13 +73,24 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "Scene literals can only be used at the top level of a module"
                             .to_string(),
-                        line_number: token_line_number,
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + u32::MAX,
+                        },
+                        error_type: ErrorType::Rule,
                     });
                 }
 
-                let scene = new_scene(&tokens, i, &ast, token_line_numbers, variable_declarations)?;
+                let scene = new_scene(&tokens, i, &ast, token_pos, variable_declarations)?;
 
-                ast.push(AstNode::Literal(scene, token_line_number));
+                ast.push(AstNode::Literal(
+                    scene,
+                    TokenPosition {
+                        line_number: token_pos[*i].line_number,
+                        char_column: token_pos[*i].char_column,
+                    },
+                ));
             }
 
             Token::ModuleStart(_) => {
@@ -84,7 +106,7 @@ pub fn new_ast(
                     i,
                     exported,
                     &ast,
-                    token_line_numbers,
+                    token_pos,
                     false,
                 )?);
             }
@@ -92,19 +114,38 @@ pub fn new_ast(
             Token::Export => {
                 exported = true;
             }
+
             Token::JS(value) => {
-                ast.push(AstNode::JS(value.clone(), token_line_number));
+                ast.push(AstNode::JS(
+                    value.clone(),
+                    TokenPosition {
+                        line_number: token_pos[*i].line_number,
+                        char_column: token_pos[*i].char_column,
+                    },
+                ));
             }
+
             Token::Title => {
                 *i += 1;
                 match &tokens[*i] {
                     Token::StringLiteral(value) => {
-                        ast.push(AstNode::Title(value.clone(), token_line_number));
+                        ast.push(AstNode::Title(
+                            value.clone(),
+                            TokenPosition {
+                                line_number: token_pos[*i].line_number,
+                                char_column: token_pos[*i].char_column,
+                            },
+                        ));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Title must have a valid string as a argument".to_string(),
-                            line_number: token_line_number,
+                            error_type: ErrorType::Rule,
+                            start_pos: token_pos[*i].to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: token_pos[*i].line_number,
+                                char_column: token_pos[*i].char_column + u32::MAX,
+                            },
                         });
                     }
                 }
@@ -114,12 +155,17 @@ pub fn new_ast(
                 *i += 1;
                 match &tokens[*i] {
                     Token::StringLiteral(value) => {
-                        ast.push(AstNode::Date(value.clone(), token_line_number));
+                        ast.push(AstNode::Date(value.clone(), token_pos[*i].to_owned()));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Date must have a valid string as a argument".to_string(),
-                            line_number: token_line_number,
+                            error_type: ErrorType::Rule,
+                            start_pos: token_pos[*i].to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: token_pos[*i].line_number,
+                                char_column: token_pos[*i].char_column + u32::MAX,
+                            },
                         });
                     }
                 }
@@ -141,7 +187,12 @@ pub fn new_ast(
                 if tokens.get(*i) != Some(&Token::OpenParenthesis) {
                     return Err(CompileError {
                         msg: "Expected an open parenthesis after the print keyword".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
 
@@ -155,12 +206,12 @@ pub fn new_ast(
                     &Vec::new(),
                     &ast,
                     &mut variable_declarations.to_owned(),
-                    token_line_numbers,
+                    token_pos,
                 )?;
 
                 ast.push(AstNode::Print(
                     struct_to_value(&structure),
-                    token_line_number,
+                    token_pos[*i].to_owned(),
                 ));
             }
 
@@ -168,20 +219,25 @@ pub fn new_ast(
                 // Remove entire declaration or scope of variable declaration
                 // So don't put any dead code into the AST
                 skip_dead_code(&tokens, i);
-                return Err(CompileError {
-                    msg: format!(
+                ast.push(AstNode::Warning(
+                    format!(
                         "Dead Variable Declaration. Variable is never used or declared: {}",
                         name
                     ),
-                    line_number: token_line_numbers[*i - 1],
-                });
+                    token_pos[*i].to_owned(),
+                ));
             }
 
             Token::Return => {
                 if module_scope {
                     return Err(CompileError {
                         msg: "Return statement used outside of function".to_string(),
-                        line_number: token_line_number,
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + 6,
+                        },
+                        error_type: ErrorType::Rule,
                     });
                 }
 
@@ -189,7 +245,12 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "Return statement used in function that doesn't return a value"
                             .to_string(),
-                        line_number: token_line_number,
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + 6,
+                        },
+                        error_type: ErrorType::Rule,
                     });
                 }
 
@@ -210,10 +271,10 @@ pub fn new_ast(
                     &mut return_type,
                     false,
                     variable_declarations,
-                    token_line_numbers,
+                    token_pos,
                 )?;
 
-                ast.push(AstNode::Return(return_value, token_line_number));
+                ast.push(AstNode::Return(return_value, token_pos[*i].to_owned()));
 
                 *i -= 1;
             }
@@ -226,8 +287,14 @@ pub fn new_ast(
             Token::End => {
                 if module_scope {
                     return Err(CompileError {
-                        msg: "Return statement used outside of function".to_string(),
-                        line_number: token_line_number,
+                        msg: "End statement used in module scope (too many end statements used?)"
+                            .to_string(),
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + 3,
+                        },
+                        error_type: ErrorType::Rule,
                     });
                 }
 
@@ -242,7 +309,12 @@ pub fn new_ast(
                         "Token not recognised by AST parser when creating AST: {:?}",
                         &tokens[*i]
                     ),
-                    line_number: token_line_number,
+                    start_pos: token_pos[*i].to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_pos[*i].line_number,
+                        char_column: token_pos[*i].char_column + 1,
+                    },
+                    error_type: ErrorType::Compiler,
                 });
             }
         }
@@ -253,7 +325,12 @@ pub fn new_ast(
     if needs_to_return {
         return Err(CompileError {
             msg: "Function does not return a value".to_string(),
-            line_number: token_line_numbers[*i - 1],
+            start_pos: token_pos[*i - 1].to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_pos[*i - 1].line_number,
+                char_column: token_pos[*i - 1].char_column + 1,
+            },
+            error_type: ErrorType::Rule,
         });
     }
 

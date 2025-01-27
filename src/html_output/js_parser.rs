@@ -1,11 +1,13 @@
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::tokenizer::TokenPosition;
 use crate::{
-    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError, Token,
+    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError,
+    ErrorType, Token,
 };
 
 // Create everything necessary in JS
 // Break out pieces in WASM calls
-pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, CompileError> {
+pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
 
     match expr {
@@ -43,12 +45,14 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         _ => {
                             return Err(CompileError {
                                 msg: format!("Compiler Bug (Not Implemented yet): Invalid argument type for function call (js_parser): {:?}", value),
-                                line_number,
+                                start_pos: start_pos.to_owned(),
+                                end_pos: expr.dimensions(),
+                                error_type: ErrorType::Compiler,
                             });
                         }
                     },
 
-                    AstNode::BinaryOperator(op, line_number) => match op {
+                    AstNode::BinaryOperator(op, token_position) => match op {
                         Token::Add => js.push_str(" + "),
                         Token::Subtract => js.push_str(" - "),
                         Token::Multiply => js.push_str(" * "),
@@ -56,7 +60,12 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         _ => {
                             return Err(CompileError {
                                 msg: "Unsupported operator found in operator stack when parsing an expression into JS".to_string(),
-                                line_number: line_number.to_owned(),
+                                start_pos: token_position.to_owned(),
+                                end_pos: TokenPosition {
+                                    line_number: token_position.line_number,
+                                    char_column: token_position.char_column + 1,
+                                },
+                                error_type: ErrorType::Compiler,
                             });
                         }
                     },
@@ -65,7 +74,7 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                         js.push_str(&format!(
                             " {}({})",
                             name,
-                            combine_vec_to_js(&args, line_number)?
+                            combine_vec_to_js(&args, start_pos)?
                         ));
                         for index in arguments_accessed {
                             js.push_str(&format!("[{}]", index));
@@ -78,7 +87,9 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                                 "unknown AST node found in expression when parsing an expression into JS: {:?}",
                                 node
                             ),
-                            line_number: line_number.to_owned(),
+                            start_pos: start_pos.to_owned(),
+                            end_pos: expr.dimensions(),
+                            error_type: ErrorType::Compiler,
                         });
                     }
                 }
@@ -93,7 +104,9 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                 _ => {
                     return Err(CompileError {
                         msg: format!("Compiler Bug: Haven't implemented this type yet in expression_to_js: {:?}", expression_type),
-                        line_number: line_number.to_owned(),
+                        start_pos: start_pos.to_owned(),
+                        end_pos: expr.dimensions(),
+                        error_type: ErrorType::Compiler,
                     });
                 }
             }
@@ -126,7 +139,7 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
             for arg in args {
                 values.push(arg.value.to_owned());
             }
-            js.push_str(&format!("[{}]", combine_vec_to_js(&values, line_number)?));
+            js.push_str(&format!("[{}]", combine_vec_to_js(&values, start_pos)?));
         }
 
         _ => {
@@ -135,7 +148,9 @@ pub fn expression_to_js(expr: &Value, line_number: u32) -> Result<String, Compil
                     "Compiler Bug: Invalid AST node given to expression_to_js: {:?}",
                     expr
                 ),
-                line_number: line_number.to_owned(),
+                start_pos: start_pos.to_owned(),
+                end_pos: expr.dimensions(),
+                error_type: ErrorType::Compiler,
             });
         }
     }
@@ -167,7 +182,7 @@ pub fn create_reference_in_js(
 
 pub fn combine_vec_to_js(
     collection: &Vec<Value>,
-    line_number: u32,
+    line_number: &TokenPosition,
 ) -> Result<String, CompileError> {
     let mut js = String::new();
 
@@ -185,18 +200,23 @@ pub fn combine_vec_to_js(
     Ok(js)
 }
 
-pub fn collection_to_js(collection: &Value, line_number: u32) -> Result<String, CompileError> {
+pub fn collection_to_js(
+    collection: &Value,
+    start_pos: &TokenPosition,
+) -> Result<String, CompileError> {
     match collection {
         Value::Structure(args) => {
             let mut nodes = Vec::new();
             for arg in args {
                 nodes.push(arg.value.to_owned());
             }
-            combine_vec_to_js(&nodes, line_number)
+            combine_vec_to_js(&nodes, start_pos)
         }
         _ => Err(CompileError {
             msg: "Non-tuple AST node given to collection_to_js".to_string(),
-            line_number: 0,
+            start_pos: start_pos.to_owned(),
+            end_pos: collection.dimensions(),
+            error_type: ErrorType::Compiler,
         }),
     }
 }

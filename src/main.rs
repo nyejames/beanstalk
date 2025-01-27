@@ -1,3 +1,4 @@
+use std::cmp::max;
 use std::path::PathBuf;
 use std::time::Instant;
 use std::{
@@ -45,9 +46,11 @@ mod wasm_output {
     pub mod wat_parser;
 }
 use crate::settings::get_default_config;
+use crate::tokenizer::TokenPosition;
 use colour::{
-    dark_cyan, dark_red, e_dark_magenta, e_dark_yellow, e_dark_yellow_ln, e_magenta_ln, e_red_ln,
-    e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
+    dark_cyan, dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta,
+    e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln,
+    red_ln,
 };
 pub use tokens::Token;
 
@@ -61,7 +64,17 @@ enum Command {
 
 pub struct CompileError {
     pub msg: String,
-    pub line_number: u32,
+
+    // If start pos is 0, there is no line to print
+    pub start_pos: TokenPosition,
+
+    // After the start pos
+    // This can be the entire rest of the line
+    // and will be set to U32::MAX in this case
+    // 0 if there is no line to print
+    pub end_pos: TokenPosition,
+
+    pub error_type: ErrorType,
 }
 
 // Adds more information to the CompileError
@@ -69,14 +82,19 @@ pub struct CompileError {
 // And the type of error
 #[derive(PartialEq)]
 pub enum ErrorType {
+    Suggestion,
+    Caution,
     Syntax,
+    TypeError,
+    Rule,
     File,
     Compiler,
     DevServer,
 }
 pub struct Error {
     msg: String,
-    line_number: u32,
+    start_pos: TokenPosition,
+    end_pos: TokenPosition,
     file_path: PathBuf,
     error_type: ErrorType,
 }
@@ -177,7 +195,8 @@ fn main() {
                 Err(e) => {
                     print_formatted_error(Error {
                         msg: e.msg,
-                        line_number: e.line_number,
+                        start_pos: e.start_pos,
+                        end_pos: e.end_pos,
                         file_path: path,
                         error_type: ErrorType::Compiler,
                     });
@@ -282,7 +301,7 @@ fn prompt_user_for_input(msg: String) -> Vec<String> {
     args
 }
 
-fn print_formatted_error(mut e: Error) {
+fn print_formatted_error(e: Error) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => e
@@ -293,17 +312,13 @@ fn print_formatted_error(mut e: Error) {
         Err(_) => e.file_path.to_string_lossy(),
     };
 
-    print!("\n(╯°□°)╯  🔥🔥🔥🔥 ");
-    dark_red!("{}", relative_dir);
-    println!(" 🔥🔥🔥🔥  ╰(°□°╰) ");
-
     // Read the file and get the actual line as a string from the code
     let line = match fs::read_to_string(&e.file_path) {
         Ok(file) => file
             .lines()
-            .nth(e.line_number as usize)
+            .nth(e.start_pos.line_number as usize)
             .unwrap_or_else(|| {
-                red_ln!("Error with printing error (lol): Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
+                red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
                 ""
             })
             .to_string(),
@@ -312,53 +327,109 @@ fn print_formatted_error(mut e: Error) {
         }
     };
 
-    e_dark_yellow!("Error: ");
-
-    if e.line_number == 0 && e.error_type == ErrorType::Syntax {
-        e.error_type = ErrorType::Compiler;
-    }
+    // e_dark_yellow!("Error: ");
 
     match e.error_type {
+        // This probably won't be used for the compiler
+        ErrorType::Suggestion => {
+            print!("\n( ͡° ͜ʖ ͡°) ");
+            dark_red_ln!("{}", relative_dir);
+            println!(" ( ._. ) ");
+            e_dark_blue_ln!("Suggestion");
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", e.start_pos.line_number);
+        }
+
+        ErrorType::Caution => {
+            print!("\n(ಠ_ಠ)☞  ⚠ ");
+            dark_red!("{}", relative_dir);
+            println!("⚠  ☜(■_■¬ ) ");
+
+            e_yellow_ln!("Caution");
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", e.start_pos.line_number);
+        }
+
         ErrorType::Syntax => {
-            e_yellow_ln!("Syntax Skill Issue");
+            print!("\n(╯°□°)╯  🔥🔥 ");
+            dark_red!("{}", relative_dir);
+            println!(" 🔥🔥  Σ(°△°;) ");
+
+            e_red_ln!("Syntax");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.line_number);
-
-            e_red_ln!("  {}", e.msg);
-
-            println!("\n{}", line);
-            red_ln!(
-                "{}",
-                std::iter::repeat('^').take(line.len()).collect::<String>()
-            );
+            e_magenta_ln!("{}\n", e.start_pos.line_number);
         }
+
+        ErrorType::TypeError => {
+            print!("\n( ͡° ͜ʖ ͡°) ");
+            dark_red_ln!("{}", relative_dir);
+            println!(" ( ._. ) ");
+
+            e_red_ln!("Type Error");
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", e.start_pos.line_number);
+        }
+
+        ErrorType::Rule => {
+            print!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ");
+            dark_red!("{}", relative_dir);
+            println!(" 🔥🔥🔥  ╰(°□°╰) ");
+
+            e_red_ln!("Rule");
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", e.start_pos.line_number);
+        }
+
         ErrorType::File => {
-            e_yellow_ln!("Can't find/read file or directory");
+            e_yellow_ln!("🏚 Can't find/read file or directory");
             e_red_ln!("  {}", e.msg);
             return;
         }
+
         ErrorType::Compiler => {
+            print!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
+            dark_red!("{}", relative_dir);
+            println!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
             e_yellow!("COMPILER BUG - ");
-            e_dark_yellow_ln!("compiler developer skill issue");
+            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
 
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.line_number);
-
-            e_red_ln!("  {}", e.msg);
-            return;
+            e_magenta_ln!("{}\n", e.start_pos.line_number);
         }
+
         ErrorType::DevServer => {
+            print!("\n(ﾉ☉_⚆)ﾉ  🔥 ");
+            dark_red!("{}", relative_dir);
+            println!(" 🔥 ╰(° O °)╯ ");
             e_yellow_ln!("Dev Server whoopsie");
             e_red_ln!("  {}", e.msg);
             return;
         }
     }
+
+    e_red_ln!("  {}", e.msg);
+
+    println!("\n{}", line);
+
+    // spaces before the relevant part of the line
+    print!(
+        "{}",
+        std::iter::repeat(' ')
+            .take(e.start_pos.char_column as usize)
+            .collect::<String>()
+    );
+    red_ln!(
+        "{}",
+        std::iter::repeat('^')
+            .take(max(e.end_pos.char_column as usize, line.len()))
+            .collect::<String>()
+    );
 }
 
 fn print_help(commands_only: bool) {
     if !commands_only {
         grey_ln!("------------------------------------");
-        green_ln_bold!("The Beanstalk compiler!");
+        green_ln_bold!("The BS compiler!");
         println!("Usage: cargo run <command> <args>");
     }
     green_ln_bold!("Commands:");

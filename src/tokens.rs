@@ -15,7 +15,6 @@ pub enum Token {
     // For Compiler
     ModuleStart(String),
     Comptime,
-    Error(String, u32),   // Error message, line number
     DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
     EOF,                  // End of file
 

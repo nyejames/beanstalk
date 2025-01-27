@@ -1,13 +1,13 @@
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
 use crate::parsers::ast_nodes::{NodeInfo, Value};
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
+use crate::tokenizer::TokenPosition;
+use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, ErrorType, Token};
 
 // This function will turn a series of ast nodes into a Value enum
 // A Value enum can also be a runtime expression which contains a series of nodes
 // It will fold constants (not working yet) down to a single Value if possible
 pub fn evaluate_expression(
     expr: Vec<AstNode>,
-    line_number: u32,
     type_declaration: &DataType,
 ) -> Result<Value, CompileError> {
     let mut current_type = type_declaration.to_owned();
@@ -56,16 +56,26 @@ pub fn evaluate_expression(
                 operators_stack.push(node.to_owned());
             }
 
-            AstNode::BinaryOperator(op, line) => {
+            AstNode::BinaryOperator(op, position) => {
                 // If the current type is a string or scene, add operator is assumed.
                 if current_type == DataType::String || current_type == DataType::Scene {
                     if op != &Token::Add {
                         return Err( CompileError {
                             msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
-                            line_number: line.to_owned(),
+                            start_pos: position.to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: position.line_number,
+                                char_column: position.char_column + 1,
+                            },
+                            error_type: ErrorType::Syntax,
                         });
                     }
-                    simplified_expression.push(node.to_owned());
+
+                    // We don't push the node into the simplified expression atm
+                    // As the only kind of string expression is contaminating them
+                    // So simplified string expressions are just a list of strings
+                    // Maybe other kinds of string expression will be valid in the future so more logic is needed here
+                    // simplified_expression.push(node.to_owned());
                     continue;
                 }
 
@@ -87,7 +97,12 @@ pub fn evaluate_expression(
                         return Err(CompileError {
                             msg: "Can only use logical operators in booleans expressions"
                                 .to_string(),
-                            line_number: line_number.to_owned(),
+                            start_pos: position.to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: position.line_number,
+                                char_column: position.char_column + 1,
+                            },
+                            error_type: ErrorType::Syntax,
                         });
                     }
 
@@ -129,7 +144,15 @@ pub fn evaluate_expression(
             _ => {
                 return Err(CompileError {
                     msg: format!("unsupported AST node found in expression: {:?}", node),
-                    line_number: line_number.to_owned(),
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    error_type: ErrorType::Compiler,
                 });
             }
         }
@@ -152,13 +175,13 @@ pub fn evaluate_expression(
     // SCENE EXPRESSIONS
     // If constant scene expression, combine the scenes together and return the new scene
     if current_type == DataType::Scene {
-        return concat_scene(&mut simplified_expression, line_number);
+        return concat_scene(&mut simplified_expression);
     }
 
     // STRING EXPRESSIONS
     // If the expression is a constant string, combine and return a string
     if current_type == DataType::String {
-        return concat_strings(&mut simplified_expression, line_number);
+        return concat_strings(&mut simplified_expression);
     }
 
     // Scene Head Coerce to String
@@ -179,10 +202,7 @@ pub fn evaluate_expression(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_scene(
-    simplified_expression: &mut Vec<AstNode>,
-    line_number: u32,
-) -> Result<Value, CompileError> {
+fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Value, CompileError> {
     let mut nodes = Vec::new();
     let mut tags = Vec::new();
     let mut styles = Vec::new();
@@ -196,10 +216,19 @@ fn concat_scene(
                 styles.append(vec3);
                 actions.append(vec4);
             }
+
             _ => {
                 return Err(CompileError {
                     msg: "Non-scene value found in scene expression (you can only concatenate scenes with other scenes)".to_string(),
-                    line_number,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    error_type: ErrorType::Compiler,
                 });
             }
         }
@@ -210,41 +239,49 @@ fn concat_scene(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_strings(
-    simplified_expression: &mut Vec<AstNode>,
-    line_number: u32,
-) -> Result<Value, CompileError> {
+fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Value, CompileError> {
     let mut new_string = String::new();
-    let mut previous_node_is_plus = false;
+
+    // String simplified expressions are just a list of strings atm
+    // So we can just concatenate them into a single string
+    // This will eventually need to be more complex to handle functions and other string manipulations
+    // The more complex things will be Runtime values
+    // However, there should also be compile-time folding for some of this stuff
 
     for node in simplified_expression {
         match node.get_value() {
             Value::String(ref string) => {
-                if previous_node_is_plus || new_string.is_empty() {
-                    new_string.push_str(string);
-                    previous_node_is_plus = false;
-                } else {
-                    // Syntax error, must have a + operator between strings when concatenating
-                    return Err(CompileError {
-                        msg: "Must have a + operator between strings when concatenating"
-                            .to_string(),
-                        line_number: line_number.to_owned(),
-                    });
-                }
+                new_string.push_str(string);
             }
 
-            // TODO: - does there need to be runtime stuff here for strings?
             Value::Runtime(_, _) => {
                 return Err(CompileError {
-                    msg: "Runtime expressions not supported yet in string expression (concat strings - eval expression)".to_string(),
-                    line_number: line_number.to_owned(),
+                    msg: "Runtime expressions not supported yet in string expression (concat strings - eval expression). Can only concatenate strings at compile time right now".to_string(),
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    error_type: ErrorType::Compiler,
                 });
             }
 
             _ => {
                 return Err(CompileError {
-                    msg: "Non-string (or runtime string expression) used in string expression (concat strings - eval expression)".to_string(),
-                    line_number: line_number.to_owned(),
+                    msg: "Non-string (or runtime string expression) used in string expression (concat strings - eval expression).
+                    Compiler should have already caught this, so 'Evaluate Expression' has not done it's job successfully".to_string(),
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    error_type: ErrorType::Compiler,
                 });
             }
         }

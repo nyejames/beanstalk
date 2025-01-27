@@ -21,7 +21,7 @@ prefixing the BS variable name with bs_
 If it's not a string, you need to get it with the wasx.get function.
 but add the name of the variable to the get part.
 
-This may change in the future as the WASM implementation is developed. 
+This will change in the future as the WASM implementation is developed. 
 
 [code:
     y = 10

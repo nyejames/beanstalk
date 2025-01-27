@@ -6,6 +6,7 @@ use crate::html_output::web_parser;
 use crate::parsers::ast_nodes::{AstNode, NodeInfo, Value};
 use crate::settings::{get_default_config, get_html_config};
 use crate::tokenizer;
+use crate::tokenizer::TokenPosition;
 use crate::{dev_server, parsers};
 use crate::{Error, ErrorType, Token};
 use std::fs;
@@ -22,7 +23,14 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
         Err(e) => {
             return Err(Error {
                 msg: format!("Error reading file in test build: {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: PathBuf::from(""),
                 error_type: ErrorType::File,
             });
@@ -31,7 +39,18 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
 
     // Tokenize File
     yellow_ln_bold!("TOKENIZING FILE\n");
-    let (tokens, token_line_numbers) = tokenizer::tokenize(&content, file_name);
+    let (tokens, token_positions) = match tokenizer::tokenize(&content, file_name) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            return Err(Error {
+                msg: e.msg,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
+                file_path: PathBuf::from(""),
+                error_type: ErrorType::File,
+            });
+        }
+    };
 
     for token in &tokens {
         match token {
@@ -63,7 +82,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     let (ast, _var_declarations) = match parsers::build_ast::new_ast(
         tokens,
         &mut 0,
-        &token_line_numbers,
+        &token_positions,
         &mut Vec::new(),
         &Vec::new(),
         true,
@@ -72,7 +91,8 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
         Err(e) => {
             return Err(Error {
                 msg: e.msg,
-                line_number: e.line_number,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
                 file_path: compiler_test_path,
                 error_type: ErrorType::Syntax,
             });
@@ -112,7 +132,8 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
         Err(e) => {
             return Err(Error {
                 msg: e.msg,
-                line_number: e.line_number,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
                 file_path: compiler_test_path,
                 error_type: ErrorType::Syntax,
             });

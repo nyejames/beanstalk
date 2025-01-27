@@ -8,29 +8,24 @@
 # Current ideas about memory management
 The intention is for Beanstalk to *not* have a garbage collector. 
 
-There will be need to be safety and avoidance of common bugs without a significant penaulty to how optimized the output can be.
+There will be need to be safety and avoidance of common bugs without a significant penalty to how optimized the output can be.
 
-The current plan is to have a system similar to Rust, but with an RC to trade off some performance for some more flexibility and higher developer velocity.
+The current plan is to have a system similar to Rust, but more forgiving whereever possible at the cost of performance.
 
-The much simpler type system and language design in general should hopefully curb some of the costs move semantics and being able to eliminate most reference counting 
-through move and immutable reference semantics means less complexity and more refactorable code for the developer to deal with than in Rust.
+This means the language aims to be strict and secure and faster / more predictable than a language with a GC, but will attempt to have some less friction then Rust.
 
 ## The current Idea
 - Start with a rust style single ownership system
-- Immutable and move semantics by default
-- All copies are explicit no matter what. Have to use the copy keyword before the type
-- The '~' symbol (or tilde) not only means a variable is mutable when declaring, but also is needed to be used when passing variables to functions if they are going to be a mutable reference or pass ownership
+- Simplify the syntax
+- All copies are ALWAYS explicit, even for stack allocated data
 - The compiler decides whether it's passing a mutable reference or passing over ownership based on whether the variable is later used in the same scope.
 (this might even be simplified to just always being dropped at the end of the scope anyway depending on whether there is a performance benefit to passing ownership over)
 - There can be more than one mutable reference passed to a function at a time as the language will need channels (like go) to do concurrency and multithreading. 
-- The RC kicks in to only keep track of ambiguous lifetimes cost of the RC overhead.
-- Currently don't know what to do about circular references, might have to be something that is statically analysed for at compile time.
 
 [code:
-
     testing_memory fn(number Int, mutable_number ~Int) =
     
-        Coords = (
+        coords = (
             x ~= 5,
             y ~= 3,
             swap fn() =
@@ -41,7 +36,7 @@ through move and immutable reference semantics means less complexity and more re
         )
 
         -- Coords 2 is a mutable reference to coords
-        Coords2 ~= Coords
+        coords2 ~= coords
 
         -- A mutable reference to the original Coords is given to change_var
         change_var(~Coords)

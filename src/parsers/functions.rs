@@ -5,7 +5,8 @@ use super::{
 };
 use crate::parsers::ast_nodes::{NodeInfo, Value};
 use crate::parsers::expressions::parse_expression::get_accessed_args;
-use crate::{bs_types::DataType, CompileError, Token};
+use crate::tokenizer::TokenPosition;
+use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 
 pub fn create_function(
     name: String,
@@ -13,7 +14,7 @@ pub fn create_function(
     i: &mut usize,
     is_exported: bool,
     ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
+    token_positions: &Vec<TokenPosition>,
     variable_declarations: &mut Vec<Arg>,
 ) -> Result<(AstNode, Vec<Arg>, Vec<Arg>), CompileError> {
     /*
@@ -27,10 +28,9 @@ pub fn create_function(
             -- Function body
         end
     */
-    let start_line_number = token_line_numbers[*i];
 
     // get args (tokens should currently be at the open parenthesis)
-    let arg_refs = create_args(tokens, i, ast, token_line_numbers, variable_declarations)?;
+    let arg_refs = create_args(tokens, i, ast, token_positions, variable_declarations)?;
 
     *i += 1;
 
@@ -38,7 +38,7 @@ pub fn create_function(
     let return_args: Vec<Arg> = match &tokens[*i] {
         Token::Arrow => {
             *i += 1;
-            parse_return_type(tokens, i, token_line_numbers)?
+            parse_return_type(tokens, i, token_positions)?
         }
         _ => Vec::new(),
     };
@@ -47,7 +47,12 @@ pub fn create_function(
     if &tokens[*i] != &Token::Colon {
         return Err(CompileError {
             msg: "Expected ':' to open function scope".to_string(),
-            line_number: token_line_numbers[*i],
+            start_pos: token_positions[*i].to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_positions[*i].line_number,
+                char_column: token_positions[*i].char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
         });
     }
 
@@ -63,7 +68,7 @@ pub fn create_function(
     let function_body = new_ast(
         tokens.to_vec(),
         i,
-        token_line_numbers,
+        token_positions,
         &mut arg_refs.clone(),
         &return_args,
         false,
@@ -77,7 +82,7 @@ pub fn create_function(
             function_body,
             is_exported,
             return_args.to_owned(),
-            start_line_number,
+            token_positions[*i].to_owned(),
         ),
         arg_refs,
         return_args,
@@ -88,7 +93,7 @@ pub fn create_args(
     tokens: &Vec<Token>,
     i: &mut usize,
     ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
+    token_positions: &Vec<TokenPosition>,
     variable_declarations: &Vec<Arg>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args = Vec::<Arg>::new();
@@ -112,7 +117,12 @@ pub fn create_args(
                 if !next_in_list {
                     return Err(CompileError {
                         msg: "Should have a comma to separate arguments".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_positions[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_positions[*i].line_number,
+                            char_column: token_positions[*i].char_column + arg_name.len() as u32,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
 
@@ -132,7 +142,13 @@ pub fn create_args(
                     if var.name == *arg_name {
                         return Err(CompileError {
                             msg: "Function arguments must have unique names".to_string(),
-                            line_number: token_line_numbers[*i].to_owned(),
+                            start_pos: token_positions[*i].to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: token_positions[*i].line_number,
+                                char_column: token_positions[*i].char_column
+                                    + arg_name.len() as u32,
+                            },
+                            error_type: ErrorType::Syntax,
                         });
                     }
                 }
@@ -145,7 +161,13 @@ pub fn create_args(
                     _ => {
                         return Err(CompileError {
                             msg: "Expected type keyword after argument name".to_string(),
-                            line_number: token_line_numbers[*i].to_owned(),
+                            start_pos: token_positions[*i].to_owned(),
+                            end_pos: TokenPosition {
+                                line_number: token_positions[*i].line_number,
+                                char_column: token_positions[*i].char_column
+                                    + arg_name.len() as u32,
+                            },
+                            error_type: ErrorType::Syntax,
                         });
                     }
                 };
@@ -168,7 +190,7 @@ pub fn create_args(
                         &mut data_type,
                         false,
                         &mut variable_declarations.to_owned(),
-                        token_line_numbers,
+                        token_positions,
                     )?;
                 }
 
@@ -188,7 +210,12 @@ pub fn create_args(
             _ => {
                 return Err(CompileError {
                     msg: "Invalid syntax for function arguments".to_string(),
-                    line_number: token_line_numbers[*i].to_owned(),
+                    start_pos: token_positions[*i].to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_positions[*i].line_number,
+                        char_column: token_positions[*i].char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
         }
@@ -199,7 +226,12 @@ pub fn create_args(
     if open_parenthesis != 0 {
         return Err(CompileError {
             msg: "Wrong number of parenthesis used when declaring function arguments".to_string(),
-            line_number: token_line_numbers[*i].to_owned(),
+            start_pos: token_positions[*i].to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_positions[*i].line_number,
+                char_column: token_positions[*i].char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
         });
     }
 
@@ -209,7 +241,7 @@ pub fn create_args(
 fn parse_return_type(
     tokens: &Vec<Token>,
     i: &mut usize,
-    token_line_numbers: &Vec<u32>,
+    token_positions: &Vec<TokenPosition>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut return_type = Vec::<Arg>::new();
 
@@ -238,7 +270,12 @@ fn parse_return_type(
                 } else {
                     return Err(CompileError {
                         msg: "Should have a comma to separate return types".to_string(),
-                        line_number: token_line_numbers[*i].to_owned(),
+                        start_pos: token_positions[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_positions[*i].line_number,
+                            char_column: token_positions[*i].char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
             }
@@ -249,7 +286,12 @@ fn parse_return_type(
             _ => {
                 return Err(CompileError {
                     msg: "Invalid syntax for return type".to_string(),
-                    line_number: token_line_numbers[*i].to_owned(),
+                    start_pos: token_positions[*i].to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_positions[*i].line_number,
+                        char_column: token_positions[*i].char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
         }
@@ -258,7 +300,12 @@ fn parse_return_type(
     if open_parenthesis != 0 {
         return Err(CompileError {
             msg: "Wrong number of parenthesis used when declaring return type".to_string(),
-            line_number: token_line_numbers[*i].to_owned(),
+            start_pos: token_positions[*i].to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_positions[*i].line_number,
+                char_column: token_positions[*i].char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
         });
     }
 
@@ -276,9 +323,9 @@ fn parse_return_type(
 pub fn create_structure_args(
     value_passed_in: &Value,
     args_required: &Vec<Arg>,
-    line_number: &u32,
+    token_position: &TokenPosition,
 ) -> Result<Vec<Value>, CompileError> {
-    // Create a vec of the required args values (arg.vaalue)
+    // Create a vec of the required args values (arg.value)
     let mut sorted_values: Vec<Value> = args_required
         .iter()
         .map(|arg| arg.value.to_owned())
@@ -295,7 +342,12 @@ pub fn create_structure_args(
                 // This should probably be throwing an error here as an empty struct should not be possible to pass as an arg
                 return Err( CompileError {
                     msg: "Compiler Problem: Empty struct passed into a struct arg: this should not be possible. This is equivalent to None.".to_string(),
-                    line_number: line_number.to_owned()
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
 
@@ -303,7 +355,12 @@ pub fn create_structure_args(
             if inner_args_length == 1 {
                 return Err( CompileError {
                     msg: "Compiler Problem: A spooky struct of one item has somehow got this far is the compile stage. This should just be the item itself".to_string(),
-                    line_number: line_number.to_owned()
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
 
@@ -318,7 +375,12 @@ pub fn create_structure_args(
                 if arg.value != Value::None {
                     return Err(CompileError {
                         msg: format!("Missed at least one required arguments for struct or function call: {} (type: {:?})", arg.name, arg.data_type),
-                        line_number: line_number.to_owned()
+                        start_pos: token_position.to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_position.line_number,
+                            char_column: token_position.char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
             }
@@ -333,7 +395,12 @@ pub fn create_structure_args(
             if sorted_values.is_empty() {
                 return Err(CompileError {
                     msg: format!("This struct or function call does not accept any arguments. Value passed in: {:?}", value_passed_in),
-                    line_number: line_number.to_owned()
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
 
@@ -351,7 +418,12 @@ pub fn create_structure_args(
                         if value_being_replaced_type != passed_value_type {
                             return Err(CompileError {
                                 msg: format!("Type error: argument of type {:?} was passed into an argument of type: {:?}", passed_value_type, value_being_replaced_type),
-                                line_number: line_number.to_owned()
+                                start_pos: token_position.to_owned(),
+                                end_pos: TokenPosition {
+                                    line_number: token_position.line_number,
+                                    char_column: token_position.char_column + 1,
+                                },
+                                error_type: ErrorType::Syntax,
                             });
                         }
 
@@ -378,7 +450,12 @@ pub fn create_structure_args(
                         "Required argument missing from struct/function call: {:?} (type: {:?})",
                         args_required[i].name, args_required[i].data_type
                     ),
-                    line_number: line_number.to_owned(),
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 })
             }
             _ => {}
@@ -394,7 +471,7 @@ pub fn parse_function_call(
     tokens: &Vec<Token>,
     i: &mut usize,
     ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
+    token_positions: &Vec<TokenPosition>,
     variable_declarations: &mut Vec<Arg>,
     argument_refs: &Vec<Arg>,
     return_args: &Vec<Arg>,
@@ -422,18 +499,23 @@ pub fn parse_function_call(
             &mut DataType::Structure(argument_refs.to_owned()),
             false,
             variable_declarations,
-            token_line_numbers,
+            token_positions,
         )?
     } else {
         return Err(CompileError {
             msg: "Expected a parenthesis after function name".to_string(),
-            line_number: token_line_numbers[*i].to_owned(),
+            start_pos: token_positions[*i].to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_positions[*i].line_number,
+                char_column: token_positions[*i].char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
         });
     };
 
     // Makes sure the call value is correct for the function call
     // If so, the function call args are sorted into their correct order (if some are named or optional)
-    let args = create_structure_args(&call_value, &argument_refs, &token_line_numbers[*i])?;
+    let args = create_structure_args(&call_value, &argument_refs, &token_positions[*i])?;
 
     // look for which arguments are being accessed from the function call
     let accessed_args = get_accessed_args(
@@ -441,7 +523,7 @@ pub fn parse_function_call(
         tokens,
         &mut *i,
         &DataType::Structure(return_args.to_owned()),
-        token_line_numbers,
+        token_positions,
         &mut Vec::new(),
     )?;
 
@@ -450,6 +532,6 @@ pub fn parse_function_call(
         args,
         return_args.to_owned(),
         accessed_args,
-        token_line_numbers[*i],
+        token_positions[*i].to_owned(),
     ))
 }

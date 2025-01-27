@@ -1,12 +1,12 @@
 [Navbar]
-[header center: [title(1): BEANSTALK CHOICES]]
+[header center: [title(1): CHOICES]]
 [main:
 
 # Choices (enums)
 Choices are a way to define a set of possible values. They are similar to enums in Rust.
 
 [code:
-    Thing =
+    Thing choice:
         A Int |
         B String |
         C (String, Thing) |

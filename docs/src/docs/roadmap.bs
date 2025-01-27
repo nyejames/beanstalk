@@ -7,7 +7,8 @@ Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
 - Finish testing named tuple stuff, make sure it works as expected 
-- then start try to make the standard library styles using that syntax
+- then start try to make the standard library styles using that syntax 
+    - Build out styles and what the shape of a style struct is
 - Move all of the html standard lib tokens to just exported variables included in builds
 - Need to create a Style type, which is not a primitive type. (see styles for the shape of that type). 
 This will be the first test for implementing a custom type system (figure out how that will work -> whether any tuple created also creates a type of itself)
@@ -41,6 +42,8 @@ This will be the first test for implementing a custom type system (figure out ho
 - Nestable comments?
 
 ## Future plans and ideas
+- Any type?
+- https://docs.orca-app.dev/ Orca for native UI?
 - Documentation scenes (can be put anywhere in a module or scene and a special docs compile mode will generate docs using these scenes)
 There can also be additional features or searchable things added to these scene heads that make the documentation of the project really easy
 it will output an entire documentation webpage by default
@@ -72,6 +75,8 @@ The colour theme selections will have a lightmode / darkmode
 Like go, but hopefully simpler and clearer control flow. 
 
 Uses >> and << to specify send / recieve channels. No "chan" keyword.
+
+keyword 'async' to mark async function calls.
 
 [code:
     -- Create a channel

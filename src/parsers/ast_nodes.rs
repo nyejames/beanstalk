@@ -1,5 +1,6 @@
 use super::styles::{Action, Style, Tag};
 use crate::bs_types::get_reference_data_type;
+use crate::tokenizer::TokenPosition;
 use crate::{
     bs_types::{return_datatype, DataType},
     Token,
@@ -44,75 +45,87 @@ pub enum Value {
 #[derive(Debug, Clone, PartialEq)]
 #[allow(dead_code)]
 pub enum AstNode {
+    // Warning Message
+    // This could be stuff like unused variables, possible race conditions, etc
+    Warning(String, TokenPosition), // Message, Line number, Start pos, End pos
+
     // Config settings
-    Settings(Vec<AstNode>, u32), // Settings, Line number
+    Settings(Vec<AstNode>, TokenPosition), // Settings, Line number
 
     // Named import path for the module
-    Import(String, u32), // Path, Line number
+    Import(String, TokenPosition), // Path, Line number
 
     // Path to a module that will automatically import all styles and scenes
     // into the scope of the current module. Doesn't automatically import variables or functions into the scope
-    Use(PathBuf, u32), // Path, Line number
+    Use(PathBuf, TokenPosition), // Path, Line number
 
     // Control Flow
-    Return(Value, u32), // Return value, Line number
+    Return(Value, TokenPosition), // Return value, Line number
 
     // Basics
-    Function(String, Vec<Arg>, Vec<AstNode>, bool, Vec<Arg>, u32), // Function name, Args (named), Body, Public, return types (named), Line number
-    FunctionCall(String, Vec<Value>, Vec<Arg>, Vec<usize>, u32), // Function name, arguments (has been sorted into correct order), return args, argument accessed, Line number
+    Function(
+        String,
+        Vec<Arg>,
+        Vec<AstNode>,
+        bool,
+        Vec<Arg>,
+        TokenPosition,
+    ), // Function name, Args (named), Body, Public, return types (named), Line number
+    FunctionCall(String, Vec<Value>, Vec<Arg>, Vec<usize>, TokenPosition), // Function name, arguments (has been sorted into correct order), return args, argument accessed, Line number
 
     Comment(String),
-    VarDeclaration(String, Value, bool, DataType, bool, u32), // Variable name, Value, Public, Type, is_const, Line number
+    VarDeclaration(String, Value, bool, DataType, bool, TokenPosition), // Variable name, Value, Public, Type, is_const, Line number
 
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
-    Print(Value, u32), // Value, Line number
+    Print(Value, TokenPosition), // Value, Line number
 
     // Not even sure if this is needed
-    JSStringReference(String, u32), // Variable name, Line number
+    JSStringReference(String, TokenPosition), // Variable name, Line number
 
     // Other language code blocks
-    JS(String, u32),   // Code, Line number
-    CSS(String, u32),  // Code, Line number
-    WASM(String, u32), // Code, Line number
+    JS(String, TokenPosition),   // Code, Line number
+    CSS(String, TokenPosition),  // Code, Line number
+    WASM(String, TokenPosition), // Code, Line number
 
     // Literals
-    Literal(Value, u32), // Token, Accessed args, Line number
+    Literal(Value, TokenPosition), // Token, Accessed args, Line number
 
     SceneTemplate,
-    Empty(u32), // Line number
+    Empty(TokenPosition), // Line number
 
     // Operators
     // Operator, Precedence
-    LogicalOperator(Token, u32),     // Operator, Line number
-    BinaryOperator(Token, u32),      // Operator, Line number
-    UnaryOperator(Token, bool, u32), // Operator, is_postfix, Line number
+    LogicalOperator(Token, TokenPosition), // Operator, Line number
+    BinaryOperator(Token, TokenPosition),  // Operator, Line number
+    UnaryOperator(Token, bool, TokenPosition), // Operator, is_postfix, Line number
 
     // SCENES ONLY
     // Todo - separate from main AST
-    Id(Vec<Arg>, u32), // ID, Line number
+    Id(Vec<Arg>, TokenPosition), // ID, Line number
 
-    Span(String, u32),              // ID, Line number
-    P(String, u32),                 // ID, Line number
-    Pre(String, u32),               // Code, Line number
-    CodeBlock(String, String, u32), // Code, Language, Line number
+    Span(String, TokenPosition),              // ID, Line number
+    P(String, TokenPosition),                 // ID, Line number
+    Pre(String, TokenPosition),               // Code, Line number
+    CodeBlock(String, String, TokenPosition), // Code, Language, Line number
     Newline,
 
     Heading(u8),
     BulletPoint(u8),
-    Em(u8, String, u32),      // Strength, Content, Line number
-    Superscript(String, u32), // Content, Line number
-    Space(u32),               // Add a space at front of element (line number)
+    Em(u8, String, TokenPosition), // Strength, Content, Line number
+    Superscript(String, TokenPosition), // Content, Line number
+    Space(u32),                    // Add a space at front of element (number of spaces)
 
     // SCENE META DATA
-    Title(String, u32), // Content, Line number
-    Date(String, u32),  // Content, Line number
+    Title(String, TokenPosition), // Content, Line number
+    Date(String, TokenPosition),  // Content, Line number
 }
 
 pub trait NodeInfo {
     fn get_type(&self) -> DataType;
     fn get_value(&self) -> Value;
     fn get_precedence(&self) -> u8;
+    fn dimensions(&self) -> TokenPosition;
 }
 
 impl NodeInfo for AstNode {
@@ -165,6 +178,22 @@ impl NodeInfo for AstNode {
             _ => 0,
         }
     }
+
+    fn dimensions(&self) -> TokenPosition {
+        match self {
+            AstNode::Literal(value, _) => value.dimensions(),
+
+            AstNode::VarDeclaration(name, _, _, _, _, token_position) => TokenPosition {
+                line_number: token_position.char_column + name.to_string().len() as u32,
+                char_column: token_position.line_number,
+            },
+
+            _ => TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+        }
+    }
 }
 
 impl NodeInfo for Value {
@@ -195,6 +224,86 @@ impl NodeInfo for Value {
         match self {
             Value::Runtime(..) => 1,
             _ => 0,
+        }
+    }
+
+    fn dimensions(&self) -> TokenPosition {
+        match self {
+            Value::None => TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+
+            Value::Int(val) => TokenPosition {
+                line_number: val.to_string().len() as u32,
+                char_column: 0,
+            },
+
+            Value::Float(val) => TokenPosition {
+                line_number: val.to_string().len() as u32,
+                char_column: 0,
+            },
+
+            Value::String(val) => TokenPosition {
+                line_number: val.len() as u32,
+                char_column: val.chars().filter(|c| *c == '\n').count() as u32,
+            },
+
+            Value::Bool(val) => {
+                if *val {
+                    TokenPosition {
+                        line_number: 4,
+                        char_column: 0,
+                    }
+                } else {
+                    TokenPosition {
+                        line_number: 5,
+                        char_column: 0,
+                    }
+                }
+            }
+
+            Value::Reference(name, ..) => TokenPosition {
+                line_number: name.len() as u32,
+                char_column: 0,
+            },
+
+            Value::Structure(args) => {
+                let mut combined_dimensions = TokenPosition {
+                    line_number: args[0].value.dimensions().line_number,
+                    char_column: args[0].value.dimensions().char_column,
+                };
+
+                for arg in args {
+                    combined_dimensions.char_column += arg.value.dimensions().char_column;
+                }
+
+                combined_dimensions
+            }
+
+            // Get the position of the first node, and the last node
+            // And get the positions
+            // This just gets the widest char line
+            // So error formatting will need to clip the line to each length
+            Value::Scene(nodes, ..) | Value::Runtime(nodes, ..) => {
+                let first_node = &nodes[0];
+                let last_node = &nodes[nodes.len() - 1];
+                TokenPosition {
+                    line_number: last_node.dimensions().line_number,
+                    char_column: last_node.dimensions().char_column
+                        - first_node.dimensions().char_column,
+                }
+            }
+
+            Value::Collection(nodes, ..) => {
+                let first_node = &nodes[0];
+                let last_node = &nodes[nodes.len() - 1];
+                TokenPosition {
+                    line_number: last_node.dimensions().line_number,
+                    char_column: last_node.dimensions().char_column
+                        - first_node.dimensions().char_column,
+                }
+            }
         }
     }
 }

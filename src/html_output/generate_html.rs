@@ -1,5 +1,6 @@
 use crate::settings::HTMLMeta;
-use crate::CompileError;
+use crate::tokenizer::TokenPosition;
+use crate::{CompileError, ErrorType};
 use std::fs;
 
 pub fn create_html_boilerplate(
@@ -35,7 +36,15 @@ pub fn create_html_boilerplate(
 
         Err(err) => Err(CompileError {
             msg: format!("Error reading boilerplate HTML file: {:?}", err),
-            line_number: 0,
+            start_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            end_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            error_type: ErrorType::File,
         }),
     }
 }

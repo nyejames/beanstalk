@@ -1,6 +1,7 @@
 use crate::parsers::ast_nodes::{NodeInfo, Value};
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, Token};
+use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, ErrorType, Token};
 
+use crate::tokenizer::TokenPosition;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln_bold, red_ln};
 
@@ -20,9 +21,12 @@ pub fn math_constant_fold(
         // red_ln!("output_stack: {:?}", stack);
 
         match node {
-            AstNode::BinaryOperator(op, line_number) => {
-                if first_line_number == 0 {
-                    first_line_number = line_number.to_owned();
+            AstNode::BinaryOperator(op, token_position) => {
+                let line_number = token_position.line_number;
+                let char_column = token_position.char_column;
+
+                if line_number != first_line_number {
+                    first_line_number = line_number;
                 }
 
                 // green_ln_bold!("Binary operator found: {:?}", op);
@@ -31,9 +35,15 @@ pub fn math_constant_fold(
                 if stack.len() < 2 {
                     return Err(CompileError {
                         msg: format!("Not enough nodes on the stack for binary operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}", output_stack, stack),
-                        line_number: line_number.to_owned(),
+                        start_pos: token_position.to_owned(),
+                        end_pos: TokenPosition {
+                            line_number,
+                            char_column,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
+
                 let left = stack.pop().unwrap();
                 let right = stack.pop().unwrap();
 
@@ -77,11 +87,19 @@ pub fn math_constant_fold(
                         _ => {
                             return Err(CompileError {
                                 msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
-                                line_number: line_number.to_owned(),
+                                start_pos: token_position.to_owned(),
+                                end_pos: TokenPosition {
+                                    line_number,
+                                    char_column,
+                                },
+                                error_type: ErrorType::Syntax,
                             });
                         }
                     }),
-                    line_number.to_owned(),
+                    TokenPosition {
+                        line_number,
+                        char_column,
+                    },
                 );
 
                 stack.push(new_number);
@@ -112,20 +130,31 @@ pub fn logical_constant_fold(
     current_type: DataType,
 ) -> Result<Value, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
+
     let mut first_line_number = 0;
+    let mut starting_char = 0;
 
     for node in &output_stack {
         match node {
-            AstNode::LogicalOperator(op, line_number) => {
+            AstNode::LogicalOperator(op, token_position) => {
+                let line_number = token_position.line_number;
+                let char_column = token_position.char_column;
+
                 if first_line_number == 0 {
-                    first_line_number = line_number.to_owned();
+                    first_line_number = line_number;
+                    starting_char = char_column;
                 }
 
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
                     return Err(CompileError {
                         msg: format!("Not enough nodes on the stack for logical operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}", output_stack, stack),
-                        line_number: line_number.to_owned(),
+                        start_pos: token_position.to_owned(),
+                        end_pos: TokenPosition {
+                            line_number,
+                            char_column,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
                 let right = stack.pop().unwrap();
@@ -162,11 +191,19 @@ pub fn logical_constant_fold(
                         _ => {
                             return Err(CompileError {
                             msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
-                            line_number: line_number.to_owned(),
+                            start_pos: token_position.to_owned(),
+                            end_pos: TokenPosition {
+                                line_number,
+                                char_column,
+                            },
+                            error_type: ErrorType::Syntax,
                         });
                         }
                     }),
-                    line_number.to_owned(),
+                    TokenPosition {
+                        line_number,
+                        char_column,
+                    },
                 );
 
                 stack.push(new_bool);
@@ -183,8 +220,17 @@ pub fn logical_constant_fold(
         return match stack.pop() {
             Some(node) => Ok(node.get_value()),
             None => Err(CompileError {
-                msg: "Compiler Bug: No node found in stack when parsing an expression in Constant_folding".to_string(),
-                line_number: 0,
+                msg: "No node found in stack when parsing an expression in Constant_folding"
+                    .to_string(),
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                error_type: ErrorType::Compiler,
             }),
         };
     }

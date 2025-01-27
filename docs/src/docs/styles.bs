@@ -2,16 +2,22 @@
 [header: [title: Styles]]
 [main: 
 
+## What are the keywords inside of sceneheads?
+Currently, styles are either a style object or a function that returns a style.
+
 You can create your own styles in Beanstalk using the HTML library type 'Style'.
 
 The html basic library that starts with any new beanstalk html project will contain many basic styles that you can use.
 
+# Making your own styles
+
 [code:
 
-    red = Style(
-        tag_type: "span",
-        css: "color: red;",
-        compatibility: All,
+    -- Default implimentation
+    @ Style = (
+        tag_type = "span",
+        css = "",
+        compatibility = All,
         nested_scene_behaviour: {
             force_wrap: false,
             disallow_children: false
@@ -25,7 +31,7 @@ The html basic library that starts with any new beanstalk html project will cont
     )
 ]
 
-Structure of a style:
+# Structure of a style:
 
 ## Tag type
 This is what HTML tag the style will use by default. 
@@ -49,7 +55,7 @@ An event must be defined before an action can be defined.
 Does this style work with other styles? Can be:
 - All
 - None (can't be used with any other styles)
-- Collection of compatible tags (will need specific logic to handle what happens and how the tags will be wrapped)
+- Struct of compatible tags (will need specific logic to handle what happens and how the tags will be wrapped)
 
 ## Nested Scene Behaviour
 Defines what happens to child scenes placed inside this style. 
@@ -65,8 +71,11 @@ The content of the scene may instead be used for properties such as becoming the
 - Alt
 
 ## Inlining Rules
-0: Will it never inline itself and always break out of the current p tag?
-1: Or will it be like headings and break after one newline?
-2: Will this style inline itself with p tags before it on after a newline?
+0: inlines itself with p tags before it on after a newline
+1: be like headings and break after one newline
+1: never inline itself and always break out of the current p tag?
+2: ignore it's parents styles / layout completely?
+3. break out of all ancestor styles? (apart from the root scene)
+4. Completely break out of all scene styles
 
 ]

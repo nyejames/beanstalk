@@ -6,8 +6,8 @@ use super::{
 use crate::parsers::ast_nodes::{NodeInfo, Value};
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::functions::parse_function_call;
-use crate::{bs_types::DataType, CompileError, Token};
-use colour::red_ln;
+use crate::tokenizer::TokenPosition;
+use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 
 pub fn create_new_var_or_ref(
     name: &String,
@@ -16,10 +16,13 @@ pub fn create_new_var_or_ref(
     i: &mut usize,
     is_exported: bool,
     ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
+    token_pos: &Vec<TokenPosition>,
     inside_structure: bool, // This allows parse_expression to know that new variable declarations are valid
 ) -> Result<AstNode, CompileError> {
     let is_const = &name.to_uppercase() == name;
+
+    let token_line_number = token_pos[*i].line_number;
+    let token_start_pos = token_pos[*i].char_column;
 
     // If this is a reference to a function or variable
     // This to_owned here is gross, probably a better way to avoid this
@@ -35,7 +38,7 @@ pub fn create_new_var_or_ref(
                 tokens,
                 i,
                 ast,
-                token_line_numbers,
+                token_pos,
                 variable_declarations,
                 argument_refs,
                 return_args,
@@ -47,13 +50,16 @@ pub fn create_new_var_or_ref(
                     tokens,
                     &mut *i,
                     &arg.data_type,
-                    token_line_numbers,
+                    token_pos,
                     &mut Vec::new(),
                 )?;
 
                 Ok(AstNode::Literal(
                     Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
-                    token_line_numbers[*i].to_owned(),
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_start_pos,
+                    },
                 ))
             }
 
@@ -67,13 +73,16 @@ pub fn create_new_var_or_ref(
                     tokens,
                     &mut *i,
                     &arg.data_type,
-                    token_line_numbers,
+                    token_pos,
                     &mut Vec::new(),
                 )?;
 
                 Ok(AstNode::Literal(
                     Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
-                    token_line_numbers[*i],
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_start_pos,
+                    },
                 ))
             }
         };
@@ -85,7 +94,7 @@ pub fn create_new_var_or_ref(
         i,
         is_exported,
         ast,
-        token_line_numbers,
+        token_pos,
         &mut *variable_declarations,
         is_const,
         inside_structure,
@@ -98,7 +107,7 @@ fn new_variable(
     i: &mut usize,
     is_exported: bool,
     ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
+    token_pos: &Vec<TokenPosition>,
     variable_declarations: &mut Vec<Arg>,
     is_const: bool,
     inside_structure: bool,
@@ -122,7 +131,7 @@ fn new_variable(
                 i,
                 is_exported,
                 ast,
-                token_line_numbers,
+                token_pos,
                 variable_declarations,
             )?;
 
@@ -160,7 +169,7 @@ fn new_variable(
                         data_type.to_owned(),
                         name.to_string(),
                         is_exported,
-                        token_line_numbers[*i],
+                        token_pos[*i].to_owned(),
                     ));
                 }
                 _ => {
@@ -169,7 +178,12 @@ fn new_variable(
                             "Variable of type: {:?} does not exist in this scope",
                             data_type
                         ),
-                        line_number: token_line_numbers[*i],
+                        start_pos: token_pos[*i].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: token_pos[*i].line_number,
+                            char_column: token_pos[*i].char_column + name.len() as u32,
+                        },
+                        error_type: ErrorType::Syntax,
                     });
                 }
             }
@@ -182,7 +196,12 @@ fn new_variable(
                     "'{}' - Invalid variable declaration: {:?}",
                     name, tokens[*i]
                 ),
-                line_number: token_line_numbers[*i],
+                start_pos: token_pos[*i].to_owned(),
+                end_pos: TokenPosition {
+                    line_number: token_pos[*i].line_number,
+                    char_column: token_pos[*i].char_column + name.len() as u32,
+                },
+                error_type: ErrorType::Syntax,
             });
         }
     };
@@ -199,7 +218,7 @@ fn new_variable(
         &mut data_type,
         false,
         variable_declarations,
-        token_line_numbers,
+        token_pos,
     )?;
 
     // Check if a type of collection / struct has been created
@@ -212,7 +231,7 @@ fn new_variable(
         var_value.to_owned(),
         is_exported,
         data_type.to_owned(),
-        token_line_numbers[*i],
+        token_pos[*i].to_owned(),
     );
 
     if !inside_structure {
@@ -232,7 +251,7 @@ fn create_var_node(
     var_value: Value,
     is_exported: bool,
     data_type: DataType,
-    line_number: u32,
+    token_position: TokenPosition,
 ) -> AstNode {
     if is_const {
         return AstNode::VarDeclaration(
@@ -241,7 +260,7 @@ fn create_var_node(
             is_exported,
             data_type,
             true,
-            line_number,
+            token_position,
         );
     }
 
@@ -251,7 +270,7 @@ fn create_var_node(
         is_exported,
         data_type,
         false,
-        line_number,
+        token_position,
     )
 }
 
@@ -259,7 +278,7 @@ fn create_zero_value_var(
     data_type: DataType,
     name: String,
     is_exported: bool,
-    line_number: u32,
+    token_position: TokenPosition,
 ) -> AstNode {
     match data_type {
         DataType::Float => AstNode::VarDeclaration(
@@ -268,7 +287,7 @@ fn create_zero_value_var(
             is_exported,
             data_type,
             false,
-            line_number,
+            token_position,
         ),
 
         DataType::Int => AstNode::VarDeclaration(
@@ -277,7 +296,7 @@ fn create_zero_value_var(
             is_exported,
             data_type,
             false,
-            line_number,
+            token_position,
         ),
 
         DataType::String => AstNode::VarDeclaration(
@@ -286,7 +305,7 @@ fn create_zero_value_var(
             is_exported,
             data_type,
             false,
-            line_number,
+            token_position,
         ),
 
         DataType::Bool => AstNode::VarDeclaration(
@@ -295,7 +314,7 @@ fn create_zero_value_var(
             is_exported,
             data_type,
             false,
-            line_number,
+            token_position,
         ),
 
         _ => AstNode::VarDeclaration(
@@ -304,7 +323,7 @@ fn create_zero_value_var(
             is_exported,
             data_type,
             false,
-            line_number,
+            token_position,
         ),
     }
 }

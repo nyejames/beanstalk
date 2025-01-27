@@ -5,9 +5,9 @@ use crate::html_output::web_parser;
 use crate::parsers::ast_nodes::{Arg, AstNode, Value};
 use crate::settings::{get_html_config, Config};
 use crate::tokenizer;
-use crate::tokens::Token;
 use crate::{parsers, settings, Error, ErrorType};
 
+use crate::tokenizer::TokenPosition;
 use colour::{blue_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold, red_ln};
 use std::ffi::OsStr;
 use std::fs;
@@ -47,7 +47,14 @@ pub fn build(
         Err(e) => {
             return Err(Error {
                 msg: format!("Error getting current directory: {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: entry_path.to_owned(),
                 error_type: ErrorType::File,
             });
@@ -75,7 +82,14 @@ pub fn build(
             Err(e) => {
                 return Err(Error {
                     msg: format!("Error reading file: {:?}", e),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
                     file_path: entry_dir.to_owned(),
                     error_type: ErrorType::File,
                 });
@@ -89,7 +103,14 @@ pub fn build(
             Err(_) => {
                 return Err(Error {
                     msg: "No config file found in directory".to_string(),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
                     file_path: config_path,
                     error_type: ErrorType::File,
                 });
@@ -192,7 +213,14 @@ pub fn build(
                         "Error reading output_dir directory: {:?}. {:?}",
                         &output_dir, e
                     ),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
                     file_path: output_dir,
                     error_type: ErrorType::File,
                 });
@@ -205,7 +233,14 @@ pub fn build(
                 Err(e) => {
                     return Err(Error {
                         msg: format!("Error reading file when deleting old files: {:?}", e),
-                        line_number: 0,
+                        start_pos: TokenPosition {
+                            line_number: 0,
+                            char_column: 0,
+                        },
+                        end_pos: TokenPosition {
+                            line_number: 0,
+                            char_column: 0,
+                        },
                         file_path: output_dir,
                         error_type: ErrorType::File,
                     });
@@ -227,7 +262,14 @@ pub fn build(
                         Err(e) => {
                             return Err(Error {
                                 msg: format!("Error deleting file: {:?}", e),
-                                line_number: 0,
+                                start_pos: TokenPosition {
+                                    line_number: 0,
+                                    char_column: 0,
+                                },
+                                end_pos: TokenPosition {
+                                    line_number: 0,
+                                    char_column: 0,
+                                },
                                 file_path: file_path.to_owned(),
                                 error_type: ErrorType::File,
                             });
@@ -257,7 +299,14 @@ pub fn add_bs_files_to_parse(
         Err(e) => {
             return Err(Error {
                 msg: format!("Error reading directory (add bs files to parse): {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: src_dir,
                 error_type: ErrorType::File,
             });
@@ -276,7 +325,14 @@ pub fn add_bs_files_to_parse(
                         Err(e) => {
                             return Err(Error {
                                 msg: format!("Error reading a file when reading all bs files in directory: {:?}", e),
-                                line_number: 0,
+                                start_pos: TokenPosition {
+                                    line_number: 0,
+                                    char_column: 0
+                                },
+                                end_pos: TokenPosition {
+                                    line_number: 0,
+                                    char_column: 0
+                                },
                                 file_path: src_dir,
                                 error_type: ErrorType::File,
                             });
@@ -299,7 +355,14 @@ pub fn add_bs_files_to_parse(
                         None => {
                             return Err(Error {
                                 msg: "Error getting file stem".to_string(),
-                                line_number: 0,
+                                start_pos: TokenPosition {
+                                    line_number: 0,
+                                    char_column: 0,
+                                },
+                                end_pos: TokenPosition {
+                                    line_number: 0,
+                                    char_column: 0,
+                                },
                                 file_path,
                                 error_type: ErrorType::File,
                             });
@@ -364,7 +427,14 @@ pub fn add_bs_files_to_parse(
             Err(e) => {
                 return Err(Error {
                     msg: format!("Error reading file while adding bs files to parse: {:?}", e),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
                     file_path: src_dir,
                     error_type: ErrorType::File,
                 });
@@ -394,7 +464,14 @@ fn compile(
     if file_name.is_empty() {
         return Err(Error {
             msg: "File name is empty".to_string(),
-            line_number: 0,
+            start_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+            end_pos: TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
             file_path: PathBuf::from(""),
             error_type: ErrorType::File,
         });
@@ -426,8 +503,18 @@ fn compile(
     let time = Instant::now();
 
     // TOKENIZER
-    let (tokens, token_line_numbers): (Vec<Token>, Vec<u32>) =
-        tokenizer::tokenize(&output.source_code, file_name);
+    let (tokens, token_pos) = match tokenizer::tokenize(&output.source_code, file_name) {
+        Ok(tokens) => tokens,
+        Err(e) => {
+            return Err(Error {
+                msg: e.msg,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
+                file_path: PathBuf::from(&output.source_path),
+                error_type: ErrorType::Syntax,
+            });
+        }
+    };
 
     print!("Tokenized in: ");
     green_ln!("{:?}", time.elapsed());
@@ -437,7 +524,7 @@ fn compile(
     let (ast, imports) = match parsers::build_ast::new_ast(
         tokens,
         &mut 0,
-        &token_line_numbers,
+        &token_pos,
         &mut globals,
         &Vec::new(),
         true,
@@ -446,7 +533,8 @@ fn compile(
         Err(e) => {
             return Err(Error {
                 msg: e.msg,
-                line_number: e.line_number,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
                 file_path: PathBuf::from(&output.source_path),
                 error_type: ErrorType::Syntax,
             });
@@ -466,8 +554,15 @@ fn compile(
             }
             _ => {
                 return Err(Error {
-                    msg: "Import must be a string literal".to_string(),
-                    line_number: 0,
+                    msg: "Import must be a string literal. Caught in build. This should not get this far".to_string(),
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0
+                    },
                     file_path: PathBuf::from(&output.source_path),
                     error_type: ErrorType::Syntax,
                 });
@@ -512,7 +607,8 @@ fn compile(
         Err(e) => {
             return Err(Error {
                 msg: e.msg,
-                line_number: e.line_number,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
                 file_path: PathBuf::from(&output.source_path),
                 error_type: ErrorType::Syntax,
             });
@@ -538,7 +634,8 @@ fn compile(
         Err(e) => {
             return Err(Error {
                 msg: e.msg,
-                line_number: e.line_number,
+                start_pos: e.start_pos,
+                end_pos: e.end_pos,
                 file_path: PathBuf::from(&output.source_path),
                 error_type: ErrorType::Compiler,
             });
@@ -559,7 +656,14 @@ fn compile(
         Err(e) => {
             return Err(Error {
                 msg: format!("Error parsing wat to wasm: {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: PathBuf::from(&output.source_path),
                 error_type: ErrorType::Compiler,
             })
@@ -586,7 +690,14 @@ fn write_output_file(output: &OutputFile) -> Result<(), Error> {
                     "Error getting parent directory of output file when writing: {:?}",
                     file_path
                 ),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path: output.output_path.to_owned(),
                 error_type: ErrorType::File,
             });
@@ -600,7 +711,14 @@ fn write_output_file(output: &OutputFile) -> Result<(), Error> {
             Err(e) => {
                 return Err(Error {
                     msg: format!("Error creating directory: {:?}", e),
-                    line_number: 0,
+                    start_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: 0,
+                        char_column: 0,
+                    },
                     file_path: output.output_path.to_owned(),
                     error_type: ErrorType::File,
                 });
@@ -613,7 +731,14 @@ fn write_output_file(output: &OutputFile) -> Result<(), Error> {
         Err(e) => {
             return Err(Error {
                 msg: format!("Error writing file: {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path,
                 error_type: ErrorType::File,
             });
@@ -626,7 +751,14 @@ fn write_output_file(output: &OutputFile) -> Result<(), Error> {
         Err(e) => {
             return Err(Error {
                 msg: format!("Error writing WASM module file: {:?}", e),
-                line_number: 0,
+                start_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
+                end_pos: TokenPosition {
+                    line_number: 0,
+                    char_column: 0,
+                },
                 file_path,
                 error_type: ErrorType::File,
             });

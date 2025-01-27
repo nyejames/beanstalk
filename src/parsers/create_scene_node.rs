@@ -7,7 +7,8 @@ use super::{
 use crate::bs_types::{get_any_number_datatype, get_rgba_args};
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::structs::new_struct;
-use crate::{bs_types::DataType, CompileError, Token};
+use crate::tokenizer::TokenPosition;
+use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use colour::{red_ln, yellow_ln};
 
 // Recursive function to parse scenes
@@ -15,7 +16,7 @@ pub fn new_scene(
     tokens: &Vec<Token>,
     i: &mut usize,
     ast: &Vec<AstNode>,
-    token_line_numbers: &Vec<u32>,
+    token_positions: &Vec<TokenPosition>,
     variable_declarations: &mut Vec<Arg>,
 ) -> Result<Value, CompileError> {
     let mut scene: Vec<AstNode> = Vec::new();
@@ -26,11 +27,12 @@ pub fn new_scene(
     let scene_actions: Vec<Action> = Vec::new();
     let mut merge_next_p_line: bool = true;
 
-    // Look at all the possible properties that can be added to the scene head
+    // SCENE HEAD PARSING
     while *i < tokens.len() {
         let token = &tokens[*i];
-        let token_line_number = token_line_numbers[*i];
+
         let inside_brackets = token == &Token::OpenParenthesis;
+
         *i += 1;
 
         // red_ln!("token being parsed for AST: {:?}", token);
@@ -41,9 +43,10 @@ pub fn new_scene(
             }
 
             Token::SceneClose(spaces) => {
-                for _ in 0..*spaces {
-                    scene.push(AstNode::Space(token_line_number));
+                if spaces > &0 {
+                    scene.push(AstNode::Space(*spaces));
                 }
+
                 *i -= 1;
                 return Ok(Value::Scene(scene, scene_tags, scene_styles, scene_actions));
             }
@@ -63,7 +66,7 @@ pub fn new_scene(
                     &mut DataType::Collection(Box::new(DataType::String)),
                     true,
                     variable_declarations,
-                    token_line_numbers,
+                    token_positions,
                 )?));
             }
 
@@ -79,9 +82,9 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -123,9 +126,9 @@ pub fn new_scene(
                         &mut DataType::Structure(required_args),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -139,9 +142,9 @@ pub fn new_scene(
                         &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -156,9 +159,9 @@ pub fn new_scene(
                         &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -172,9 +175,9 @@ pub fn new_scene(
                         &mut get_rgba_args(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -190,10 +193,10 @@ pub fn new_scene(
                         &mut get_rgba_args(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
                     color_type,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -218,15 +221,15 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
                     color_type,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
             Token::Center => {
-                scene_styles.push(Style::Center(false, token_line_number));
+                scene_styles.push(Style::Center(false, token_positions[*i].to_owned()));
             }
 
             Token::Size => {
@@ -239,9 +242,9 @@ pub fn new_scene(
                         &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -250,7 +253,7 @@ pub fn new_scene(
             }
 
             Token::Hide => {
-                scene_styles.push(Style::Hide(token_line_number));
+                scene_styles.push(Style::Hide(token_positions[*i].to_owned()));
             }
 
             Token::Table => {
@@ -263,9 +266,9 @@ pub fn new_scene(
                         &mut DataType::Int,
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -279,9 +282,9 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -295,9 +298,9 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -311,9 +314,9 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -335,9 +338,9 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         inside_brackets,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -392,7 +395,10 @@ pub fn new_scene(
             }
 
             Token::CodeBlock(content) => {
-                scene_tags.push(Tag::Code(content.to_string(), token_line_number));
+                scene_tags.push(Tag::Code(
+                    content.to_string(),
+                    token_positions[*i].to_owned(),
+                ));
             }
 
             Token::Nav => {
@@ -407,9 +413,9 @@ pub fn new_scene(
                         &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -423,9 +429,9 @@ pub fn new_scene(
                         &mut get_any_number_datatype(),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -458,9 +464,9 @@ pub fn new_scene(
                         &mut DataType::Structure(required_args.to_owned()),
                         true,
                         variable_declarations,
-                        token_line_numbers,
+                        token_positions,
                     )?,
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -472,12 +478,12 @@ pub fn new_scene(
                     &Vec::new(),
                     ast,
                     variable_declarations,
-                    token_line_numbers,
+                    token_positions,
                 )?;
 
                 scene.push(AstNode::Literal(
                     Value::Structure(structure),
-                    token_line_number,
+                    token_positions[*i].to_owned(),
                 ));
             }
 
@@ -487,7 +493,12 @@ pub fn new_scene(
                         "Invalid Token Used Inside scene head when creating scene node. Token: {:?}",
                         token
                     ),
-                    line_number: token_line_number.to_owned(),
+                    start_pos: token_positions[*i].to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_positions[*i].line_number,
+                        char_column: token_positions[*i].char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
         }
@@ -495,7 +506,9 @@ pub fn new_scene(
 
     //look through everything that can be added to the scene body
     while *i < tokens.len() {
-        let token_line_number = token_line_numbers[*i];
+        let token_line_number = token_positions[*i].line_number;
+        let token_char_column = token_positions[*i].char_column;
+
         match &tokens[*i] {
             Token::EOF => {
                 break;
@@ -510,15 +523,33 @@ pub fn new_scene(
 
             Token::SceneHead => {
                 let nested_scene =
-                    new_scene(tokens, i, ast, token_line_numbers, variable_declarations)?;
-                scene.push(AstNode::Literal(nested_scene, token_line_number));
+                    new_scene(tokens, i, ast, token_positions, variable_declarations)?;
+                scene.push(AstNode::Literal(
+                    nested_scene,
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column,
+                    },
+                ));
             }
 
             Token::P(content) => {
                 scene.push(if !check_if_inline(tokens, *i, &mut merge_next_p_line) {
-                    AstNode::P(content.clone(), token_line_number)
+                    AstNode::P(
+                        content.clone(),
+                        TokenPosition {
+                            line_number: token_line_number,
+                            char_column: token_char_column,
+                        },
+                    )
                 } else {
-                    AstNode::Span(content.clone(), token_line_number)
+                    AstNode::Span(
+                        content.clone(),
+                        TokenPosition {
+                            line_number: token_line_number,
+                            char_column: token_char_column,
+                        },
+                    )
                 });
             }
 
@@ -527,23 +558,51 @@ pub fn new_scene(
                 merge_next_p_line = false;
                 scene.push(AstNode::Heading(*size));
             }
+
             Token::BulletPointStart(size) => {
                 merge_next_p_line = false;
                 scene.push(AstNode::BulletPoint(*size));
             }
+
             Token::Em(size, content) => {
-                scene.push(AstNode::Em(*size, content.clone(), token_line_number));
+                scene.push(AstNode::Em(
+                    *size,
+                    content.clone(),
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column,
+                    },
+                ));
             }
+
             Token::Superscript(content) => {
-                scene.push(AstNode::Superscript(content.clone(), token_line_number));
+                scene.push(AstNode::Superscript(
+                    content.clone(),
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column,
+                    },
+                ));
             }
 
             Token::RawStringLiteral(content) => {
-                scene.push(AstNode::Span(content.to_string(), token_line_number));
+                scene.push(AstNode::Span(
+                    content.to_string(),
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column,
+                    },
+                ));
             }
 
             Token::Pre(content) => {
-                scene.push(AstNode::Pre(content.to_string(), token_line_number));
+                scene.push(AstNode::Pre(
+                    content.to_string(),
+                    TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column,
+                    },
+                ));
             }
 
             // For templating values in scene heads in the body of scenes
@@ -563,7 +622,12 @@ pub fn new_scene(
             Token::DeadVariable(name) => {
                 return Err(CompileError {
                     msg: format!("Dead Variable used in scene. '{}' was never defined", name),
-                    line_number: token_line_number,
+                    start_pos: token_positions[*i].to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column + name.len() as u32,
+                    },
+                    error_type: ErrorType::Caution,
                 });
             }
 
@@ -573,7 +637,12 @@ pub fn new_scene(
                         "Invalid Syntax Used Inside scene body when creating scene node: {:?}",
                         tokens[*i]
                     ),
-                    line_number: token_line_number,
+                    start_pos: token_positions[*i].to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_line_number,
+                        char_column: token_char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
                 });
             }
         }

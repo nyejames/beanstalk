@@ -1,9 +1,12 @@
-@Navbar = [
-    nav(1) bg(100, 220, 50, 0.03):
-    [white link("https://nyejames.github.io/beanstalk") pad(0): [img("https://nyejames.github.io/beanstalk/images/default.webp") size(0.1)]] 
+@ Navbar = [
+    nav bg(100, 220, 50, 0.03):
+
+    [white link("https://nyejames.github.io/beanstalk") pad(0): 
+        [img("https://nyejames.github.io/beanstalk/images/default.webp") size(0.1)]
+    ]
 ]
 
-@Footer = [
+@ Footer = [
     footer: [
         center pad(2, 0, 0, 0): 
         ### &#127793;

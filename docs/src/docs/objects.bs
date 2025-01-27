@@ -1,0 +1,49 @@
+[Navbar]
+[header center: [title(1): OBJECTS]]
+[main:
+
+Objects are a way to group multiple values together and specify names for them.
+They are created by using parentheses and separating the values with commas.
+
+[code:
+    -- Creating an object literal and assigning it to a variable
+    -- You can create the arguments with the same syntax as functions
+    -- All properties inside an Object are public
+    enemy = (
+        x ~= 1,
+        y ~= 2,
+        z ~= 3,
+
+        health ~= 100
+        alive Bool,
+    )
+
+    enemy_vec.x -- returns 1
+    enemy_vec.alive -- returns false,
+
+    -- Object literals containing a single item are automatically destructured into that item
+    single_item = (item = 1)
+    integer = 1
+    single_item is integer -- returns true
+
+    -- All objects also automatically define themselves as a type.
+    -- This type is automatically created with the same name, but with an uppercase first letter
+
+    new_enemy Enemy ~= (
+        x = 9,
+        y = 7,
+        z = 5,
+        
+        -- Health has a default value, so doesn't need to be specified
+        -- By default it's initilised as '100'
+
+        -- Alive does not have a default value, so an error will be thrown if you don't specify it
+        alive = true
+    )
+
+    print(new_enemy.alive) -- true
+
+]
+
+]
+[Footer]
