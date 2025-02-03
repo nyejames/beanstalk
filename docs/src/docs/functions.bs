@@ -2,21 +2,14 @@
 
 [header center: [title(1): FUNCTIONS]]
 [main:
-If the function can only return an error, you can use a '?' as the specified return type.
+If the function can only return an error, you can use a '!' as the specified return type.
 
 Arguments are passed in as immutable references (or immutable copies) by default, but mutable references can be passed by using the ~ operator to specify mutability.
 This can be specified further as being a copy by specifying the type as a copy.
 
 ## The arrow operator
 The arrow operator is used to define the signature of a function. 
-
-## Functions can encapculate data
-By exporting properties out of a function, you can use it to encapculate data.
-
-## methods
-There are no methods in a traditional sense, but similar to Rust, you can impliment traits for types by naming an argument of that type with 'self'.
-
-Self arguments cannot have a default value.
+If the function returns a value, it must be specified by the type signature.
 
 [code:
     -- Returns an int
@@ -33,33 +26,41 @@ Self arguments cannot have a default value.
         return (1, 2, 3)
     end
 
-    canError fn(x String) -> String?:
-        return fetch(x) ? error(msg)
+    canError fn(x String) -> String!:
+        return fetch(x) ! error(msg)
     end
-
-    -- Anonymous function
-    fn(x Int) -> Int: return x + 1
-
-    -- Shorthand for anonymous function that just returns a single inline expression
-    fn: return "Hello, World!"
 
     -- Calling a function
     multipleReturns(5)
 
     -- Calling a function with named arguments
     differentReturns(spicy = true)
+]
 
-    increment(self Int, )
+## Anonymous Functions
+Anonymous functions are a way to pass functions as values.
+
+Unlike named functions, they have optional type signatures.
+
+[code: 
+    -- Anonymous function
+    fn(x Int) -> Int: return x + 1
+
+    -- No type signature required
+    fn: return "Hello, World!"
+
+    -- Anonymous function that has side effects
+    fn(increase Int): timer += increase
 ]
 
 ## Concurrent Functions
-In a similar manor to Go. Beanstalk plans on having concurrent functions with message passing.
+In a similar style to Go. Beanstalk plans on having concurrent functions with message passing.
 
 Concurrent function calls are prefixed with the 'async' keyword.
 
 [code:
     -- Returns an int
-    async concurrentFunc fn
+    async concurrentFunc fn() -> Int: return 69
 ]
 
 [Footer]

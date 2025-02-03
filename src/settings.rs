@@ -16,20 +16,25 @@ pub struct Config {
     pub version: String,
     pub author: String,
     pub license: String,
+    pub html_meta: HTMLMeta,
 }
 
-pub fn get_default_config() -> Config {
-    Config {
-        project: String::from("html"),
-        src: PathBuf::from("src"),
-        dev_folder: PathBuf::from("dev"),
-        release_folder: PathBuf::from("release"),
-        name: String::from("html_project"),
-        version: String::from("0.1.0"),
-        author: String::new(),
-        license: String::from("MIT"),
+impl Default for Config {
+    fn default() -> Self {
+        Config {
+            project: String::from("html"),
+            src: PathBuf::from("src"),
+            dev_folder: PathBuf::from("dev"),
+            release_folder: PathBuf::from("release"),
+            name: String::from("html_project"),
+            version: String::from("0.1.0"),
+            author: String::new(),
+            license: String::from("MIT"),
+            html_meta: HTMLMeta::default(),
+        }
     }
 }
+
 #[allow(dead_code)]
 pub struct HTMLMeta {
     pub site_title: String,
@@ -53,26 +58,29 @@ pub struct HTMLMeta {
     pub release_build: bool,
 }
 
-pub fn get_html_config() -> HTMLMeta {
-    HTMLMeta {
-        site_title: String::from("Website Title"),
-        page_description: String::from("Website Description"),
-        site_url: String::from("localhost:6969"),
-        page_url: String::from(""),
-        page_og_title: String::from(""),
-        page_og_description: String::from(""),
-        page_image_url: String::from(""),
-        page_image_alt: String::from(""),
-        page_locale: String::from("en_US"),
-        page_type: String::from("website"),
-        page_twitter_large_image: String::from(""),
-        page_canonical_url: String::from(""),
-        page_root_url: String::from("./"),
-        image_folder_url: String::from("images"),
-        favicons_folder_url: String::from("images/favicons"),
-        theme_color_light: String::from("#fafafa"),
-        theme_color_dark: String::from("#101010"),
-        auto_site_title: true,
-        release_build: false,
+
+impl Default for HTMLMeta {
+    fn default() -> Self {
+        HTMLMeta {
+            site_title: String::from("Website Title"),
+            page_description: String::from("Website Description"),
+            site_url: String::from("localhost:6969"),
+            page_url: String::from(""),
+            page_og_title: String::from(""),
+            page_og_description: String::from(""),
+            page_image_url: String::from(""),
+            page_image_alt: String::from(""),
+            page_locale: String::from("en_US"),
+            page_type: String::from("website"),
+            page_twitter_large_image: String::from(""),
+            page_canonical_url: String::from(""),
+            page_root_url: String::from("./"),
+            image_folder_url: String::from("images"),
+            favicons_folder_url: String::from("images/favicons"),
+            theme_color_light: String::from("#fafafa"),
+            theme_color_dark: String::from("#101010"),
+            auto_site_title: true,
+            release_build: false,
+        }
     }
 }

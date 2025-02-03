@@ -1,4 +1,3 @@
-use std::cmp::max;
 use std::path::PathBuf;
 use std::time::Instant;
 use std::{
@@ -45,7 +44,6 @@ mod wasm_output {
     pub mod wasm_generator;
     pub mod wat_parser;
 }
-use crate::settings::get_default_config;
 use crate::tokenizer::TokenPosition;
 use colour::{
     dark_cyan, dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta,
@@ -75,6 +73,22 @@ pub struct CompileError {
     pub end_pos: TokenPosition,
 
     pub error_type: ErrorType,
+}
+
+trait ToError {
+    fn to_error(self, file_path: PathBuf) -> Error;
+}
+
+impl ToError for CompileError {
+    fn to_error(self, file_path: PathBuf) -> Error {
+        Error {
+            msg: self.msg,
+            start_pos: self.start_pos,
+            end_pos: self.end_pos,
+            file_path,
+            error_type: self.error_type,
+        }
+    }
 }
 
 // Adds more information to the CompileError
@@ -147,7 +161,7 @@ fn main() {
             let start = Instant::now();
 
             // TODO - parse config file instead of using default config
-            match build::build(&path, true, &mut get_default_config()) {
+            match build::build(&path, true) {
                 Ok(_) => {
                     let duration = start.elapsed();
                     grey_ln!("------------------------------------");
@@ -175,10 +189,7 @@ fn main() {
             println!("Starting dev server...");
             let mut path = PathBuf::from(path);
 
-            // TODO - replace with reading the config file
-            let mut project_config = get_default_config();
-
-            match dev_server::start_dev_server(&mut path, &mut project_config) {
+            match dev_server::start_dev_server(&mut path) {
                 Ok(_) => {
                     println!("Dev server shutting down ... ");
                 }
@@ -193,13 +204,7 @@ fn main() {
             match wasm_output::wasm_generator::compile_wat_file(&path) {
                 Ok(_) => {}
                 Err(e) => {
-                    print_formatted_error(Error {
-                        msg: e.msg,
-                        start_pos: e.start_pos,
-                        end_pos: e.end_pos,
-                        file_path: path,
-                        error_type: ErrorType::Compiler,
-                    });
+                    print_formatted_error(e.to_error(path));
                 }
             }
         }
@@ -421,7 +426,7 @@ fn print_formatted_error(e: Error) {
     red_ln!(
         "{}",
         std::iter::repeat('^')
-            .take(max(e.end_pos.char_column as usize, line.len()))
+            .take(e.end_pos.char_column as usize - e.start_pos.char_column as usize + 1)
             .collect::<String>()
     );
 }

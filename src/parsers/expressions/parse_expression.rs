@@ -3,7 +3,6 @@ use colour::{grey_ln, red_ln};
 
 use super::eval_expression::evaluate_expression;
 use crate::parsers::ast_nodes::{NodeInfo, Value};
-use crate::parsers::collections::new_collection;
 use crate::parsers::structs::struct_to_value;
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::tokenizer::TokenPosition;
@@ -16,6 +15,7 @@ use crate::{
     },
     CompileError, ErrorType, Token,
 };
+use crate::tokens::Length;
 
 // If the datatype is a collection
 // The expression must only contain references to collections
@@ -352,7 +352,7 @@ pub fn create_expression(
                         start_pos: token_positions[*i].to_owned(),
                         end_pos: TokenPosition {
                             line_number: token_positions[*i].line_number,
-                            char_column: token_positions[*i].char_column + string.len() as u32,
+                            char_column: token_positions[*i].char_column + token.length(),
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -376,12 +376,22 @@ pub fn create_expression(
                         start_pos: token_positions[*i].to_owned(),
                         end_pos: TokenPosition {
                             line_number: token_positions[*i].line_number,
-                            char_column: token_positions[*i].char_column + u32::MAX,
+                            char_column: token_positions[*i].char_column + token.length(),
                         },
                         error_type: ErrorType::TypeError,
                     });
                 }
                 return new_scene(tokens, i, &ast, token_positions, variable_declarations);
+            }
+            
+            Token::BoolLiteral(value) => {
+                expression.push(AstNode::Literal(
+                    Value::Bool(value.to_owned()),
+                    TokenPosition {
+                        line_number: token_positions[*i].line_number,
+                        char_column: token_positions[*i].char_column,
+                    },
+                ));
             }
 
             // OPERATORS
@@ -567,13 +577,13 @@ pub fn create_expression(
             _ => {
                 return Err(CompileError {
                     msg: format!(
-                        "Invalid Expression: {:?}, must be assigned with a valid datatype",
+                        "Invalid Value used in expression: '{:?}'. Expressions must be assigned with only valid datatypes",
                         token
                     ),
                     start_pos: token_positions[*i].to_owned(),
                     end_pos: TokenPosition {
                         line_number: token_positions[*i].line_number,
-                        char_column: token_positions[*i].char_column + 1,
+                        char_column: token_positions[*i].char_column + token.length(),
                     },
                     error_type: ErrorType::TypeError,
                 });
@@ -684,7 +694,7 @@ pub fn get_accessed_args(
                         accessed_args.push(idx);
                     }
 
-                    DataType::Collection(ref inner_type) => {
+                    DataType::Collection(_) => {
                         accessed_args.push(idx);
                     }
 

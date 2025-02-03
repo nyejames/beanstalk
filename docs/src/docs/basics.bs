@@ -65,7 +65,6 @@ Any variable declaration can be found by searching the variable name, followed b
 [code: 
     int_var ~= 0
     float_var ~= 0.0
-    decimal_var ~= d
     string_var ~= "boo!"
 ]
 
@@ -127,6 +126,20 @@ you can use the end keyword. The first newline must be after the '=' assignment 
     some_int =
         4 + 5 + 6 + 7 + 8 + 9 + 10
     end
+]
+
+# Imports
+The import keyword works like a function call, returning the imported value.
+
+[code:
+    -- Importing a struct without renaming it from a library
+    import("libs/math")
+    math.root(2, 8)
+
+    -- Renaming the import
+    encryption = import("libs/encrypt")
+
+
 ]
 
 # Data Types

@@ -9,7 +9,7 @@ use crate::parsers::ast_nodes::Value;
 use crate::parsers::structs::new_struct;
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
-use colour::{red_ln, yellow_ln};
+use colour::yellow_ln;
 
 // Recursive function to parse scenes
 pub fn new_scene(

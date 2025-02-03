@@ -6,11 +6,11 @@ Beanstalk is still in development. It doesn't even have a version number yet!
 Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
-- Finish testing named tuple stuff, make sure it works as expected 
-- then start try to make the standard library styles using that syntax 
+- All Styles in sceneheads are structs or functions that return Style structs
+- then start try to make the standard library styles using that syntax
     - Build out styles and what the shape of a style struct is
 - Move all of the html standard lib tokens to just exported variables included in builds
-- Need to create a Style type, which is not a primitive type. (see styles for the shape of that type). 
+- Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
 This will be the first test for implementing a custom type system (figure out how that will work -> whether any tuple created also creates a type of itself)
 - Styles should just not be functions by default, they can be returned by functions only
     > Styles will just be structs of the correct properties that can contain nested styles accessed with a dot

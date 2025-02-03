@@ -16,10 +16,11 @@ use crate::{
         util::{count_newlines_at_end_of_string, count_newlines_at_start_of_string},
     },
     settings::{HTMLMeta, BS_VAR_PREFIX},
-    wasm_output::wat_parser::new_wat_var,
     CompileError, ErrorType, Token,
 };
 use std::path::Path;
+use crate::settings::Config;
+use crate::wasm_output::wat_parser::new_wat_var;
 
 pub struct ParserOutput {
     pub html: String,
@@ -35,7 +36,7 @@ pub struct ParserOutput {
 // Parse ast into valid JS, HTML and CSS
 pub fn parse<'a>(
     ast: Vec<AstNode>,
-    config: &'a HTMLMeta,
+    config: &'a Config,
     release_build: bool,
     module_path: &'a str,
     is_global: bool,
@@ -77,7 +78,7 @@ pub fn parse<'a>(
                     &mut exp_id,
                     &mut Vec::new(),
                     &mut wat,
-                    config,
+                    &config.html_meta,
                 )?);
             }
 
@@ -99,18 +100,18 @@ pub fn parse<'a>(
             ) => {
                 let assignment_keyword = if is_const { "const" } else { "let" };
                 match data_type {
-                    // DataType::Float | DataType::Int => {
-                    // wat.push_str(&new_wat_var(
-                    //     id,
-                    //     expr,
-                    //     data_type,
-                    //     &mut wat_global_initialisation,
-                    //     line_number,
-                    // )?);
-                    // }
+                    DataType::Float | DataType::Int => {
+                        wat.push_str(&new_wat_var(
+                            id,
+                            expr,
+                            data_type,
+                            &mut wat_global_initialisation,
+                            start_pos,
+                        )?);
+                    }
 
                     // Temporary just JS
-                    DataType::String | DataType::Float | DataType::Int => {
+                    DataType::String => {
                         let var_dec = format!(
                             "{} {BS_VAR_PREFIX}{id} = {};",
                             assignment_keyword,
@@ -145,7 +146,7 @@ pub fn parse<'a>(
                                     &mut exp_id,
                                     &mut Vec::new(),
                                     &mut wat,
-                                    config,
+                                    &config.html_meta,
                                 )?;
                                 css.push_str(&created_css);
 
@@ -356,8 +357,8 @@ pub fn parse<'a>(
         }
     }
 
-    if config.auto_site_title {
-        page_title += &(" | ".to_owned() + &config.site_title.clone());
+    if config.html_meta.auto_site_title {
+        page_title += &(" | ".to_owned() + &config.html_meta.site_title.clone());
     }
 
     Ok(ParserOutput {

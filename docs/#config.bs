@@ -1,30 +1,30 @@
--- use @libraries/basic-html
+-- use "libraries/basic-html"
 
 project = "html"
 src = "src"
 output_folder = "dist"
 name = "html_project"
 version = "0.1.0"
-author = ""
+author = "Nye"
 license = "MIT"
 html_settings = (
-    site_title = "Website Title"
-    page_description = "Website Description"
-    site_url = "https://nyejames.github.io/beanstalk/"
-    page_url = ""
-    page_og_title = ""
-    page_og_description = ""
-    page_image_url = ""
-    page_image_alt = ""
-    page_locale = "en_US"
-    page_type = "website"
-    page_twitter_large_image = ""
-    page_canonical_url = ""
-    page_dist_url = ""
-    image_folder_url = "images"
-    favicons_folder_url = "images/favicons"
-    theme_color_light = "#fafafa"
-    theme_color_dark = "#101010"
-    auto_site_title = true
-    release_build = false
+    site_title = "Website Title",
+    page_description = "Website Description",
+    site_url = "https://nyejames.github.io/beanstalk/",
+    page_url = "",
+    page_og_title = "",
+    page_og_description = "",
+    page_image_url = "",
+    page_image_alt = "",
+    page_locale = "en_US",
+    page_type = "website",
+    page_twitter_large_image = "",
+    page_canonical_url = "",
+    page_dist_url = "",
+    image_folder_url = "images",
+    favicons_folder_url = "images/favicons",
+    theme_color_light = "#fafafa",
+    theme_color_dark = "#101010",
+    auto_site_title = true,
+    release_build = false,
 )

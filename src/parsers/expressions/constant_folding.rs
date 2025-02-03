@@ -132,7 +132,6 @@ pub fn logical_constant_fold(
     let mut stack: Vec<AstNode> = Vec::new();
 
     let mut first_line_number = 0;
-    let mut starting_char = 0;
 
     for node in &output_stack {
         match node {
@@ -142,7 +141,6 @@ pub fn logical_constant_fold(
 
                 if first_line_number == 0 {
                     first_line_number = line_number;
-                    starting_char = char_column;
                 }
 
                 // Make sure there are at least 2 nodes on the stack

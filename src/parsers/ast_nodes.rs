@@ -74,6 +74,8 @@ pub enum AstNode {
     FunctionCall(String, Vec<Value>, Vec<Arg>, Vec<usize>, TokenPosition), // Function name, arguments (has been sorted into correct order), return args, argument accessed, Line number
 
     Comment(String),
+    
+    // Variable names should be the full namespace (module path + variable name)
     VarDeclaration(String, Value, bool, DataType, bool, TokenPosition), // Variable name, Value, Public, Type, is_const, Line number
 
     // Built-in Functions (Would probably be standard lib in other languages)

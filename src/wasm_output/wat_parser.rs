@@ -10,7 +10,7 @@ pub fn new_wat_var(
     expr: &Value,
     datatype: &DataType,
     wat_global_initialisation: &mut String,
-    start_pos: TokenPosition,
+    start_pos: &TokenPosition,
 ) -> Result<String, CompileError> {
     match datatype {
         DataType::Float => {

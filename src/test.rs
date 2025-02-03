@@ -4,8 +4,8 @@ use colour::{blue_ln_bold, dark_grey_ln, dark_yellow_ln, green_ln_bold, yellow_l
 use crate::bs_types::DataType;
 use crate::html_output::web_parser;
 use crate::parsers::ast_nodes::{AstNode, NodeInfo, Value};
-use crate::settings::{get_default_config, get_html_config};
-use crate::tokenizer;
+use crate::settings::Config;
+use crate::{tokenizer, ToError};
 use crate::tokenizer::TokenPosition;
 use crate::{dev_server, parsers};
 use crate::{Error, ErrorType, Token};
@@ -42,13 +42,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     let (tokens, token_positions) = match tokenizer::tokenize(&content, file_name) {
         Ok(tokens) => tokens,
         Err(e) => {
-            return Err(Error {
-                msg: e.msg,
-                start_pos: e.start_pos,
-                end_pos: e.end_pos,
-                file_path: PathBuf::from(""),
-                error_type: ErrorType::File,
-            });
+            return Err(e.to_error(compiler_test_path));
         }
     };
 
@@ -89,13 +83,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     ) {
         Ok(ast) => ast,
         Err(e) => {
-            return Err(Error {
-                msg: e.msg,
-                start_pos: e.start_pos,
-                end_pos: e.end_pos,
-                file_path: compiler_test_path,
-                error_type: ErrorType::Syntax,
-            });
+            return Err(e.to_error(compiler_test_path));
         }
     };
 
@@ -122,7 +110,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     yellow_ln_bold!("\nCREATING HTML OUTPUT\n");
     let parser_output = match web_parser::parse(
         ast,
-        &get_html_config(),
+        &Config::default(),
         false,
         "test",
         false,
@@ -130,13 +118,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     ) {
         Ok(parser_output) => parser_output,
         Err(e) => {
-            return Err(Error {
-                msg: e.msg,
-                start_pos: e.start_pos,
-                end_pos: e.end_pos,
-                file_path: compiler_test_path,
-                error_type: ErrorType::Syntax,
-            });
+            return Err(e.to_error(compiler_test_path));
         }
     };
 
@@ -176,7 +158,7 @@ pub fn test_build(path: &PathBuf) -> Result<(), Error> {
     */
 
     if path.is_dir() {
-        dev_server::start_dev_server(path, &mut get_default_config())?;
+        dev_server::start_dev_server(path)?;
     }
 
     green_ln_bold!("Test complete!");

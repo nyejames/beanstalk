@@ -220,3 +220,35 @@ pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &Vec<us
         None => data_type.to_owned(),
     }
 }
+
+pub fn get_type_keyword_length(data_type: &DataType) -> u32 {
+    match data_type {
+        DataType::Inferred => 0,
+        DataType::CoerceToString => 0,
+        DataType::Bool => 4,
+        DataType::True => 4,
+        DataType::False => 5,
+        DataType::String => 6,
+        DataType::Float => 5,
+        DataType::Int => 3,
+        DataType::Decimal => 6,
+        DataType::Collection(inner_type) => get_type_keyword_length(inner_type),
+
+        DataType::Structure(_) => 1,
+        DataType::Union(inner_types) => {
+            let mut length = 0;
+            for arg in inner_types {
+                length += get_type_keyword_length(arg);
+            }
+            length
+        }
+        DataType::Function(..) => 2,
+        DataType::Type => 4,
+        DataType::Choice => 6,
+        DataType::Scene => 5,
+        DataType::Style => 5,
+        DataType::Error(_) => 1,
+        
+        DataType::None => 4,
+    }
+}

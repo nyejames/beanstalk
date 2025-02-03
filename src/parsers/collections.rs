@@ -6,7 +6,7 @@ use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 // This is a dynamic array of one data type
 // TODO - look through and update / test this code as a lot has changed
 // TODO: string keys to make it a map
-pub fn new_collection(
+pub fn _new_collection(
     tokens: &Vec<Token>,
     i: &mut usize,
     ast: &Vec<AstNode>,

@@ -20,7 +20,6 @@ This means the language aims to be strict and secure and faster / more predictab
 - All copies are ALWAYS explicit, even for stack allocated data
 - The compiler decides whether it's passing a mutable reference or passing over ownership based on whether the variable is later used in the same scope.
 (this might even be simplified to just always being dropped at the end of the scope anyway depending on whether there is a performance benefit to passing ownership over)
-- There can be more than one mutable reference passed to a function at a time as the language will need channels (like go) to do concurrency and multithreading. 
 
 [code:
     testing_memory fn(number Int, mutable_number ~Int) =

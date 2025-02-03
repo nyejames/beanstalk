@@ -1,6 +1,6 @@
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
-use crate::{build, settings, CompileError, Error, ErrorType};
+use crate::{build, settings, Error, ErrorType};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, grey_ln, print_bold, red_ln};
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -11,22 +11,15 @@ use std::{
     time::Instant,
 };
 
-//noinspection HttpUrlsUsage
-pub fn start_dev_server(path: &PathBuf, project_config: &mut Config) -> Result<(), Error> {
+pub fn start_dev_server(path: &PathBuf) -> Result<(), Error> {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
         Err(e) => {
             return Err(Error {
                 msg: format!("TCP error: {e}. Is there an instance of this local host server already running on {url}?"),
-                start_pos: TokenPosition {
-                    line_number: 0,
-                    char_column: 0,
-                },
-                end_pos: TokenPosition {
-                    line_number: 0,
-                    char_column: 0,
-                },
+                start_pos: TokenPosition::default(),
+                end_pos: TokenPosition::default(),
                 file_path: PathBuf::new(),
                 error_type: ErrorType::DevServer
             })
@@ -35,7 +28,7 @@ pub fn start_dev_server(path: &PathBuf, project_config: &mut Config) -> Result<(
 
     let path = get_current_dir()?.join(path.to_owned());
 
-    build_project(&path, false, project_config)?;
+    let mut project_config = build_project(&path, false)?;
 
     let mut modified = SystemTime::UNIX_EPOCH;
 
@@ -44,7 +37,7 @@ pub fn start_dev_server(path: &PathBuf, project_config: &mut Config) -> Result<(
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, path.clone(), &mut modified, project_config)?;
+        handle_connection(stream, path.clone(), &mut modified, &mut project_config)?;
     }
 
     Ok(())
@@ -78,6 +71,7 @@ fn handle_connection(
     let request_line = buf_reader.lines().next().unwrap();
     match request_line {
         Ok(request) => {
+            
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
                 let p = get_home_page_path(&path, false, &project_config)?;
@@ -86,14 +80,8 @@ fn handle_connection(
                     Err(e) => {
                         return Err(Error {
                             msg: format!("Error reading home page: {:?}", e),
-                            start_pos: TokenPosition {
-                                line_number: 0,
-                                char_column: 0,
-                            },
-                            end_pos: TokenPosition {
-                                line_number: 0,
-                                char_column: 0,
-                            },
+                            start_pos: TokenPosition::default(),
+                            end_pos: TokenPosition::default(),
                             file_path: p,
                             error_type: ErrorType::File,
                         });
@@ -137,7 +125,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified) || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build_project(&path, false, project_config)?;
+                    build_project(&path, false)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
@@ -214,14 +202,8 @@ fn handle_connection(
         Ok(_) => Ok(()),
         Err(e) => Err(Error {
             msg: format!("Error sending response: {:?}", e),
-            start_pos: TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
-            end_pos: TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
+            start_pos: TokenPosition::default(),
+            end_pos: TokenPosition::default(),
             file_path: PathBuf::from(""),
             error_type: ErrorType::DevServer,
         }),
@@ -231,20 +213,20 @@ fn handle_connection(
 fn build_project(
     build_path: &PathBuf,
     release: bool,
-    project_config: &mut Config,
-) -> Result<(), Error> {
+) -> Result<Config, Error> {
+    dark_cyan_ln!("Building project...");
     dark_cyan_ln!("Building project...");
     let start = Instant::now();
 
     // TODO - send config file to dev server function and pass it in here
-    build::build(build_path, release, project_config)?;
+    let config = build::build(build_path, release)?;
 
     let duration = start.elapsed();
     grey_ln!("------------------------------------");
     print!("\nProject built in: ");
     green_ln_bold!("{:?}", duration);
 
-    Ok(())
+    Ok(config)
 }
 
 fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> bool {
@@ -335,14 +317,8 @@ fn get_home_page_path(
         Err(e) => {
             return Err(Error {
                 msg: format!("Error reading root src directory metadata: {:?}", e),
-                start_pos: TokenPosition {
-                    line_number: 0,
-                    char_column: 0,
-                },
-                end_pos: TokenPosition {
-                    line_number: 0,
-                    char_column: 0,
-                },
+                start_pos: TokenPosition::default(),
+                end_pos: TokenPosition::default(),
                 file_path: root_src_path,
                 error_type: ErrorType::File,
             });
@@ -384,14 +360,8 @@ fn get_home_page_path(
             Err(e) => {
                 return Err(Error {
                     msg: format!("Error reading src directory: {:?}", e),
-                    start_pos: TokenPosition {
-                        line_number: 0,
-                        char_column: 0,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: 0,
-                        char_column: 0,
-                    },
+                    start_pos: TokenPosition::default(),
+                    end_pos: TokenPosition::default(),
                     file_path: root_src_path,
                     error_type: ErrorType::File,
                 });
@@ -407,14 +377,8 @@ fn get_home_page_path(
                 if src { "src" } else { "dev" },
                 first_page
             ),
-            start_pos: TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
-            end_pos: TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
+            start_pos: TokenPosition::default(),
+            end_pos: TokenPosition::default(),
             file_path: root_src_path,
             error_type: ErrorType::File,
         }),
@@ -426,14 +390,8 @@ fn get_current_dir() -> Result<PathBuf, Error> {
         Ok(dir) => Ok(dir),
         Err(e) => Err(Error {
             msg: format!("Error getting current directory: {:?}", e),
-            start_pos: TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
-            end_pos: TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
+            start_pos: TokenPosition::default(),
+            end_pos: TokenPosition::default(),
             file_path: PathBuf::from(""),
             error_type: ErrorType::DevServer,
         }),

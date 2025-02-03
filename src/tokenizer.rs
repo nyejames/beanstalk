@@ -6,7 +6,7 @@ use std::iter::Peekable;
 use std::str::Chars;
 
 // Line number, how many chars in the line
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Default)]
 pub struct TokenPosition {
     pub line_number: u32,
     pub char_column: u32,
@@ -508,7 +508,7 @@ pub fn get_next_token(
 
     // Exporting variables out of the module or scope (public declaration)
     if current_char == '@' {
-        return Ok(Token::Export);
+        return Ok(Token::Public);
     }
 
     // Numbers
@@ -597,9 +597,6 @@ fn keyword_or_variable(
     char_column: &mut u32,
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
-
-    let name_starting_column = *char_column;
-
     loop {
         let is_a_char = match chars.peek() {
             // If there is a char that is not None
@@ -660,77 +657,79 @@ fn keyword_or_variable(
 
         // only bother tokenizing / reserving these keywords if inside a scene head
         match tokenize_mode {
-            TokenizeMode::SceneHead => match token_value.as_str() {
-                // Style
-                "code" => {
-                    *tokenize_mode = TokenizeMode::Codeblock;
-                    return Ok(Token::CodeKeyword);
-                }
-                "id" => return Ok(Token::Id),
-                "blank" => return Ok(Token::Blank),
-                "bg" => return Ok(Token::BG),
 
-                // Theme stuff
-                "clr" => return Ok(Token::Color),
-
-                // Colour keywords (all have optional alpha)
-                "rgb" => return Ok(Token::Rgb),
-                "hsv" => return Ok(Token::Hsv),
-                "hsl" => return Ok(Token::Hsl),
-
-                "red" => return Ok(Token::Red),
-                "green" => return Ok(Token::Green),
-                "blue" => return Ok(Token::Blue),
-                "yellow" => return Ok(Token::Yellow),
-                "cyan" => return Ok(Token::Cyan),
-                "magenta" => return Ok(Token::Magenta),
-                "white" => return Ok(Token::White),
-                "black" => return Ok(Token::Black),
-                "orange" => return Ok(Token::Orange),
-                "pink" => return Ok(Token::Pink),
-                "purple" => return Ok(Token::Purple),
-                "grey" => return Ok(Token::Grey),
-
-                // Layout
-                "pad" => return Ok(Token::Padding),
-                "space" => return Ok(Token::Margin),
-                "center" => return Ok(Token::Center),
-                "size" => return Ok(Token::Size), // Changes text size or content (vid/img) size depending on context
-                "hide" => return Ok(Token::Hide),
-                "nav" => return Ok(Token::Nav),
-                "table" => return Ok(Token::Table),
-
-                // Interactive
-                "link" => return Ok(Token::Link),
-                "button" => return Ok(Token::Button),
-                "input" => return Ok(Token::Input),
-                "click" => return Ok(Token::Click), // The action performed when clicked (any element)
-                "form" => return Ok(Token::Form),
-                "option" => return Ok(Token::Option),
-                "dropdown" => return Ok(Token::Dropdown),
-
-                // Media
-                "img" => return Ok(Token::Img),
-                "alt" => return Ok(Token::Alt),
-                "video" => return Ok(Token::Video),
-                "audio" => return Ok(Token::Audio),
-
-                "order" => return Ok(Token::Order),
-                "title" => return Ok(Token::Title),
-
-                // Structure of the page
-                "main" => return Ok(Token::Main),
-                "header" => return Ok(Token::Header),
-                "footer" => return Ok(Token::Footer),
-                "section" => return Ok(Token::Section),
-
-                // Other
-                "ignore" => return Ok(Token::Ignore),
-                "canvas" => return Ok(Token::Canvas),
-                "redirect" => return Ok(Token::Redirect),
-
-                _ => {}
-            },
+            // NOW TIME TO MOVE THESE TO THE STANDARD HTML PROJECT LIBRARY
+            // TokenizeMode::SceneHead => match token_value.as_str() {
+            //     // Style
+            //     "code" => {
+            //         *tokenize_mode = TokenizeMode::Codeblock;
+            //         return Ok(Token::CodeKeyword);
+            //     }
+            //     "id" => return Ok(Token::Id),
+            //     "blank" => return Ok(Token::Blank),
+            //     "bg" => return Ok(Token::BG),
+            //
+            //     // Theme stuff
+            //     "clr" => return Ok(Token::Color),
+            //
+            //     // Colour keywords (all have optional alpha)
+            //     "rgb" => return Ok(Token::Rgb),
+            //     "hsv" => return Ok(Token::Hsv),
+            //     "hsl" => return Ok(Token::Hsl),
+            //
+            //     "red" => return Ok(Token::Red),
+            //     "green" => return Ok(Token::Green),
+            //     "blue" => return Ok(Token::Blue),
+            //     "yellow" => return Ok(Token::Yellow),
+            //     "cyan" => return Ok(Token::Cyan),
+            //     "magenta" => return Ok(Token::Magenta),
+            //     "white" => return Ok(Token::White),
+            //     "black" => return Ok(Token::Black),
+            //     "orange" => return Ok(Token::Orange),
+            //     "pink" => return Ok(Token::Pink),
+            //     "purple" => return Ok(Token::Purple),
+            //     "grey" => return Ok(Token::Grey),
+            //
+            //     // Layout
+            //     "pad" => return Ok(Token::Padding),
+            //     "space" => return Ok(Token::Margin),
+            //     "center" => return Ok(Token::Center),
+            //     "size" => return Ok(Token::Size), // Changes text size or content (vid/img) size depending on context
+            //     "hide" => return Ok(Token::Hide),
+            //     "nav" => return Ok(Token::Nav),
+            //     "table" => return Ok(Token::Table),
+            //
+            //     // Interactive
+            //     "link" => return Ok(Token::Link),
+            //     "button" => return Ok(Token::Button),
+            //     "input" => return Ok(Token::Input),
+            //     "click" => return Ok(Token::Click), // The action performed when clicked (any element)
+            //     "form" => return Ok(Token::Form),
+            //     "option" => return Ok(Token::Option),
+            //     "dropdown" => return Ok(Token::Dropdown),
+            //
+            //     // Media
+            //     "img" => return Ok(Token::Img),
+            //     "alt" => return Ok(Token::Alt),
+            //     "video" => return Ok(Token::Video),
+            //     "audio" => return Ok(Token::Audio),
+            //
+            //     "order" => return Ok(Token::Order),
+            //     "title" => return Ok(Token::Title),
+            //
+            //     // Structure of the page
+            //     "main" => return Ok(Token::Main),
+            //     "header" => return Ok(Token::Header),
+            //     "footer" => return Ok(Token::Footer),
+            //     "section" => return Ok(Token::Section),
+            //
+            //     // Other
+            //     "ignore" => return Ok(Token::Ignore),
+            //     "canvas" => return Ok(Token::Canvas),
+            //     "redirect" => return Ok(Token::Redirect),
+            //
+            //     _ => {}
+            // },
 
             TokenizeMode::CompilerDirective => match token_value.as_str() {
                 "settings" => {
@@ -764,6 +763,10 @@ fn keyword_or_variable(
         }
 
         // Finally, if this was None, then break at end or make new variable
+        // thing//thing
+        // VARIABLE NAMING
+        // Variable names should include the name of the block they are in
+        // e.g. var1 should be module/var1
         if is_a_char && is_valid_identifier(&token_value) {
             return Ok(Token::Variable(token_value.to_string()));
         } else {

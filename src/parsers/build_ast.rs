@@ -8,6 +8,7 @@ use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use std::path::PathBuf;
 
+// This is a new block that captures it's parents variable declarations
 pub fn new_ast(
     tokens: Vec<Token>,
     i: &mut usize,
@@ -111,7 +112,7 @@ pub fn new_ast(
                 )?);
             }
 
-            Token::Export => {
+            Token::Public => {
                 exported = true;
             }
 

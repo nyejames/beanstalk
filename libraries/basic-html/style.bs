@@ -1,0 +1,49 @@
+-- STANDARD HTML LIBRARY FOR SCENE STYLES
+
+-- When tagged unions (choices) are working,
+-- The integers will be replaced with choices
+@ Style Type = (
+    tag_type = "span",
+    css = "",
+    compatibility = 0,
+    nested_scene_behaviour = (
+        force_wrap: false,
+        disallow_children: false
+    ),
+    wrappers = (
+        before: "",
+        after: ""
+    ),
+    content_mode = 0,
+    inlining_rules = 0
+)
+
+-- Example of color implementation
+@ red Style = (
+    tag_type = "span",
+    css = "color: red;",
+    compatibility = 0,
+    nested_scene_behaviour = (
+        force_wrap: false,
+        disallow_children: false,
+    ),
+    wrappers = (
+        before: "",
+        after: "",
+    ),
+    content_mode = 0,
+    inlining_rules = 0
+)
+
+    -- Red,
+    -- Green,
+    -- Blue,
+    -- Yellow,
+    -- Cyan,
+    -- Magenta,
+    -- White,
+    -- Black,
+    -- Orange,
+    -- Pink,
+    -- Purple,
+    -- Grey,

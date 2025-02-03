@@ -3,14 +3,17 @@
 [header center: [title(1): COLLECTIONS]]
 [main:
 
-All Collections are reference types in Beanstalk. They are dynamically sized and can only contain one data type.
-
 You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
 Collections are zero indexed.
 
 [code:
-    -- dynamically sized int array
-    array = {3, 4, 5}
+   
+    -- Fixed size int array
+    -- Elements can be mutated, but this collection must have 4 elements
+    array = {1, 2, 3}
+
+   -- dynamically sized int array
+    array ~= {3, 4, 5}
 
     -- using pipe operator to print the array after pushing a new value
     array.push(9) => print() -- prints {3, 4, 5, 9}
@@ -28,7 +31,7 @@ Collections are zero indexed.
 Set keys for items in your dynamic collection to turn it into a list.
 
 [code:
-    dictionary = {
+    dictionary ~= {
         "key1" = 1,
         "key2" = 2,
         "key3" = 3,
