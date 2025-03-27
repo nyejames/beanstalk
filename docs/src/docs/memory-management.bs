@@ -6,74 +6,20 @@
 [red: Memory management scheme still in testing / design phase ]
 
 # Current ideas about memory management
-The intention is for Beanstalk to *not* have a garbage collector. 
+The language will start out just using Javascript's GC, but will eventually move to something more Rust-like.
+
+The intention is for Beanstalk to *not* have a garbage collector or at least provide a hybrid approach. 
 
 There will be need to be safety and avoidance of common bugs without a significant penalty to how optimized the output can be.
 
-The current plan is to have a system similar to Rust, but more forgiving whereever possible at the cost of performance.
+The current plan is to have a system similar to Rust, but more forgiving where possible at the cost of some performance.
 
-This means the language aims to be strict and secure and faster / more predictable than a language with a GC, but will attempt to have some less friction then Rust.
-
-## The current Idea
+## The current idea
 - Start with a rust style single ownership system
 - Simplify the syntax
 - All copies are ALWAYS explicit, even for stack allocated data
 - The compiler decides whether it's passing a mutable reference or passing over ownership based on whether the variable is later used in the same scope.
 (this might even be simplified to just always being dropped at the end of the scope anyway depending on whether there is a performance benefit to passing ownership over)
 
-[code:
-    testing_memory fn(number Int, mutable_number ~Int) =
-    
-        coords = (
-            x ~= 5,
-            y ~= 3,
-            swap fn() =
-                x = this.x
-                this.x = this.y
-                this.y = x
-            end
-        )
-
-        -- Coords 2 is a mutable reference to coords
-        coords2 ~= coords
-
-        -- A mutable reference to the original Coords is given to change_var
-        change_var(~Coords)
-
-        -- Compiler now has to determine how to handle the double mutable reference
-        -- It will do this by adding a reference counter that is now keeping track of when neither reference is needed
-        -- Using mutliple concurrent threads is an explicit task that will be similar to Go routines in Go.
-        change_2_vars(~Coords, ~Coords2)
-
-        -- Creates a new mutable copy
-        change_var(copy ~Coords2)
-
-        -- This copy is immutable because no mutability was specified
-        copying_a_var copy = Coords
-    end
-
-    -- References
-    testing_memory_3 fn() -> () =
-        var1 = {1, 2, 3}
-
-        -- Mutable Reference to var given to function
-        change_var(~var1)
-
-        -- Ownership given back to var1
-        -- Because var1 is later used in this scope
-
-        -- Giving var1 to var2 and var3
-        var2 = ~var1
-        var3 = ~var1
-
-        -- Creating a copy
-        var4 copy = ~var1 
-
-        -- Error, var2 was given to var3
-        var2 = {4, 5}
-
-        -- 
-        change_var(~var1)
-    end
 ]
 

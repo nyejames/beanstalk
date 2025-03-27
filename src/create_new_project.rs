@@ -1,7 +1,6 @@
+use crate::settings::Config;
 use fs_extra::dir::{copy, CopyOptions};
 use std::{env, fs, path::PathBuf};
-
-use crate::settings::{Config};
 
 pub fn create_project(
     user_project_path: PathBuf,
@@ -33,14 +32,14 @@ pub fn create_project(
         .join(dev_folder_name);
     // Copy the dist folder to the dev folder
     copy(
-        &full_path
+        full_path
             .join("html_project_template")
             .join(release_folder_name),
         new_dev_folder,
         &options.content_only(true),
     )?;
 
-    fs::rename(&full_path.join("html_project_template"), project_name)?;
+    fs::rename(full_path.join("html_project_template"), project_name)?;
 
     println!("Project created at: {:?}", &full_path);
 

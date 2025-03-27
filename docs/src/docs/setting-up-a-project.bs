@@ -1,6 +1,7 @@
 [Navbar]
-[header center: [title(1): PROJECT SETUP]]
-[main:
+
+[Header center: [title(1): PROJECT SETUP]]
+[Page:
 ## The Compiler
 You currently have to compile the Beanstalk compiler yourself. The compiler is written in Rust. This will change once the compiler and language development is more stable.
 
@@ -52,13 +53,13 @@ The simpliest way to get the compiler to output some HTML is to use the *build* 
 
 While in the root directory of your project, where the config.bs file is, run the command **build** to compile your whole project.
 
-[code:
+[Code:
     $ build ./path_to_project
 ]
 
 If you specify a specific bs file, build will only compile that specific file and will output it into the same directory.
 
-[code:
+[Code:
     $ build ./path_to_project/src/index.bs
 ]
 

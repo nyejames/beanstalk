@@ -1,3 +1,16 @@
+use crate::tokenizer::TokenPosition;
+
+pub fn string_dimensions(s: &str) -> TokenPosition {
+    let (width, height) = s.lines()
+        .map(|line| line.len())
+        .fold((0, 0), |(max_width, count), len| (max_width.max(len), count + 1));
+    
+    TokenPosition {
+        line_number: height.max(1),
+        char_column: width as u32,
+    }
+}
+
 pub fn count_newlines_at_end_of_string(s: &str) -> usize {
     let mut count = 0;
     for c in s.chars().rev() {
@@ -52,9 +65,6 @@ impl NumericalParsing for char {
             || self == &'^'
     }
     fn is_bracket(&self) -> bool {
-        match self {
-            '(' | ')' | '{' | '}' | '[' | ']' => true,
-            _ => false,
-        }
+        matches!(self, '(' | ')' | '{' | '}' | '[' | ']')
     }
 }

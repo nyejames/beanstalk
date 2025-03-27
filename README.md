@@ -23,6 +23,8 @@
     </a>
   </h1>
 
+  <p>The first proof of concept for the syntax has been figured out, and now the compiler is being refactored to accomodate these changes</p>
+
   <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>
   <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>
 
@@ -32,43 +34,26 @@
 <br>
 
 # Overview / Goals
-BS is a simple compiled programming language which outputs HTML, CSS and Wasm/JS all in one consistent syntax.
+BS is a lightweight, statically typed and compiled programming language.
 
-The whole language is built around it's unique markup syntax.
+The whole language is built around special template strings called 'Scenes'.
 
-Eventually, the goal is to also be a more general lightweight Wasm based UI building language that could be great for embedding in any application or game.
+The goal is to also be a more general lightweight Wasm based UI building language that could be great for embedding in any application or game.
+No LLVM backend.
 
-At it's simplest it can be thought of as Markdown expanded into an entire language designed from the ground up.
+HTML projects will use JS, CS and HTML to build websites and tie into the Wasm.
 
-The compiler's IR will be Web Assembly Text Format. 
+The compiler will also give you all the tools you need to quickly start working on projects.
 
 **Design Goals**
 - Minimal syntax with a focus around text content / typesetting and styling
-- Simple, static type system with some dynamic elements
-- Secure. Rust style memory management
+- Simple, static type system with some dynamic casting for strings
 - Batteries included with powerful built-in standard library
 - Fast compile times to support hot reloading
 - Fast for prototyping and refactoring with default/optional values
-- Wasm based for fast web apps and for Wasm embedding in projects
-- The compiler should provide all the scaffolding and glue to embed Wasm
+- Eventually Wasm based output
 
-The language wants to be great for building a website, making config files or as an embedded and UI language for apps and games.
-
-## Scenes
-BS's core syntax idea is using scenes, which are declarative and built into an otherwise highly procedural language.
-
-Scenes can be used to write content, styling and basic dynamic logic all in one place.
-
-Scenes provide a template for your styles and content, with the ability to create custom elements and styling.
-
-They can be nested and used as components in other scenes.
-
-**Markdown Built In**
-Write content in a simpler dialect of markdown. Images, videos and other media are easy to add and style with a sensible modern CSS starting point.
-
-You can finally center that div with only one keyword 🔥
-
-Use keywords at the start of scenes to define, style and position all your elements.
+The language aims to be great for building a website, making config files or as a lightweight embedded or UI language for apps and games.
 
 ### Compiled Output
 BS aims to just output Wasm and have it's own backend for doing this, but JS is currently the primary output for web while the language is being created.
@@ -77,12 +62,10 @@ More JS will gradually get replaced, but only in cases where stricter runtime ty
 The compiler aims to output as little bytecode/glue code as possible. No 100kb Wasm files to just print "hello world".
 
 Being compiled means folding constants, type checking and optimizing the output to be as small as possible is all done for you.
-
-The built-in hot-reloading development server can be used to see changes in real time. 
+ 
 The compiler itself is written in Rust, and uses as few dependencies/libraries as possible to keep it fast and reliable.
 
-### Technologies currently used in the compiler
-- [wat2wasm](https://github.com/WebAssembly/wabt) for compiling wat to wasm
-- [Pico CSS](https://picocss.com/) for the default CSS styling reset (will be replaced with a custom system in the near future)
+### Dependancies currently used in the compiler
+- [wat2wasm](https://github.com/WebAssembly/wabt) for compiling wat to Wasm
 
 <br>

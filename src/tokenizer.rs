@@ -1,9 +1,10 @@
 use super::tokens::{Token, TokenizeMode};
 use crate::bs_types::DataType;
-use crate::tokenize_scene::{tokenize_codeblock, tokenize_markdown};
+use crate::parsers::build_ast::TokenContext;
 use crate::{CompileError, ErrorType};
 use std::iter::Peekable;
 use std::str::Chars;
+use crate::parsers::codeblock::tokenize_codeblock;
 
 // Line number, how many chars in the line
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -12,21 +13,22 @@ pub struct TokenPosition {
     pub char_column: u32,
 }
 
-pub fn tokenize(
-    source_code: &str,
-    module_name: &str,
-) -> Result<(Vec<Token>, Vec<TokenPosition>), CompileError> {
-    let mut tokens: Vec<Token> = Vec::new();
+pub fn tokenize(source_code: &str, module_name: &str) -> Result<TokenContext, CompileError> {
+    
+    // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
+    let initial_capacity = source_code.len() / 5;
+    
+    let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut line_number: u32 = 0;
 
     // Is zero because get_next_token will increment it at the start
     // Only ModuleStart will have a char column of zero
-    let mut char_column: u32 = 0;
+    let mut char_column: u32 = 1;
 
-    let mut token_positions: Vec<TokenPosition> = Vec::new();
+    let mut token_positions: Vec<TokenPosition> = Vec::with_capacity(initial_capacity);
     let mut chars: Peekable<Chars<'_>> = source_code.chars().peekable();
     let mut tokenize_mode: TokenizeMode = TokenizeMode::Normal;
-    let mut scene_nesting_level: &mut i64 = &mut 0;
+    let scene_nesting_level: &mut i64 = &mut 0;
 
     // For variable optimisation
     let mut token: Token = Token::ModuleStart(module_name.to_string());
@@ -44,7 +46,7 @@ pub fn tokenize(
         token = get_next_token(
             &mut chars,
             &mut tokenize_mode,
-            &mut scene_nesting_level,
+            scene_nesting_level,
             &mut line_number,
             &mut char_column,
         )?;
@@ -64,13 +66,19 @@ pub fn tokenize(
         char_column,
     });
 
-    assert_eq!(
+    debug_assert_eq!(
         tokens.len(),
         token_positions.len(),
         "Compiler Bug: Tokens and line numbers not the same length"
     );
-
-    Ok((tokens, token_positions))
+    
+    // First creation of TokenContext
+    Ok(TokenContext {
+        length: tokens.len(),
+        tokens,
+        index: 0,
+        token_positions,
+    })
 }
 
 pub fn get_next_token(
@@ -93,7 +101,7 @@ pub fn get_next_token(
     // Check for raw strings (backticks)
     // Also used in scenes for raw outputs
     if current_char == '`' {
-        while let Some(ch) = chars.next() {
+        for ch in chars.by_ref() {
             *char_column += 1;
 
             if ch == '`' {
@@ -103,8 +111,8 @@ pub fn get_next_token(
         }
     }
 
-    if tokenize_mode == &TokenizeMode::Markdown && current_char != ']' && current_char != '[' {
-        return Ok(tokenize_markdown(chars, &mut current_char, line_number));
+    if tokenize_mode == &TokenizeMode::SceneBody && current_char != ']' && current_char != '[' {
+        return tokenize_scenebody(current_char, chars, line_number, char_column);
     }
 
     // Whitespace
@@ -142,24 +150,12 @@ pub fn get_next_token(
                 });
             }
 
-            TokenizeMode::Codeblock => {
-                return Err(CompileError {
-                    msg: "Can't have nested scenes inside of a codeblock".to_string(),
-                    start_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column + 1,
-                    },
-                    error_type: ErrorType::Syntax,
-                });
-            }
             TokenizeMode::Normal => {
                 *tokenize_mode = TokenizeMode::SceneHead;
                 Ok(Token::ParentScene)
             }
+
+            // Going into the scene head
             _ => {
                 // [] is an empty scene
                 if chars.peek() == Some(&']') {
@@ -169,8 +165,13 @@ pub fn get_next_token(
                     let mut spaces_after_scene = 0;
 
                     while let Some(ch) = chars.peek() {
-                        if !ch.is_whitespace() || ch == &'\n' {
+                        if !ch.is_whitespace() {
                             break;
+                        }
+
+                        if ch == &'\n' {
+                            *line_number += 1;
+                            *char_column = 1;
                         }
 
                         spaces_after_scene += 1;
@@ -190,45 +191,33 @@ pub fn get_next_token(
 
     if current_char == ']' {
         *scene_nesting_level -= 1;
+        
         if *scene_nesting_level == 0 {
             *tokenize_mode = TokenizeMode::Normal;
-            return Ok(Token::SceneClose(0));
+        } else {
+            *tokenize_mode = TokenizeMode::SceneBody;
         }
 
-        *tokenize_mode = TokenizeMode::Markdown;
-
-        // Track spaces after the scene close
-        let mut spaces_after_scene = 0;
-        while let Some(ch) = chars.peek() {
-            if !ch.is_whitespace() || ch == &'\n' {
-                break;
-            }
-            spaces_after_scene += 1;
-            chars.next();
-            *char_column += 1;
-        }
-        return Ok(Token::SceneClose(spaces_after_scene));
+        return Ok(Token::SceneClose);
     }
 
-    // Initialisation
-    // Check if going into markdown mode
+    // Check if going into scene body
     if current_char == ':' {
-        match &tokenize_mode {
-            &TokenizeMode::SceneHead => {
-                *tokenize_mode = TokenizeMode::Markdown;
-            }
-            &TokenizeMode::Codeblock => {
-                chars.next();
-                *char_column += 1;
-
-                if scene_nesting_level == &0 {
-                    *tokenize_mode = TokenizeMode::Normal;
-                } else {
-                    *tokenize_mode = TokenizeMode::Markdown;
-                }
-                return Ok(tokenize_codeblock(chars));
-            }
-            _ => {}
+        
+        if tokenize_mode  == &TokenizeMode::Codeblock {
+            chars.next();
+            *char_column += 1;
+            
+            let parsed_codeblock = tokenize_codeblock(chars, line_number, char_column);
+            let codeblock_dimensions = parsed_codeblock.dimensions();
+            *char_column += codeblock_dimensions.char_column;
+            *line_number += codeblock_dimensions.line_number;
+            
+            return Ok(parsed_codeblock);
+        }
+        
+        if tokenize_mode == &TokenizeMode::SceneHead {
+            *tokenize_mode = TokenizeMode::SceneBody;
         }
 
         return Ok(Token::Colon);
@@ -250,34 +239,35 @@ pub fn get_next_token(
 
     // Check for string literals
     if current_char == '"' {
-        while let Some(ch) = chars.next() {
-            *char_column += 1;
-
-            // Check for escape characters
-            if ch == '\\' {
-                if let Some(next_char) = chars.next() {
-                    *char_column += 1;
-
-                    token_value.push(next_char);
-                }
-            }
-            if ch == '"' {
-                return Ok(Token::StringLiteral(token_value));
-            }
-            token_value.push(ch);
-        }
+        return tokenize_string(chars, line_number, char_column);
     }
 
     // Check for character literals
     if current_char == '\'' {
-        let char_token = chars.next();
-        *char_column += 1;
-
-        if let Some(&char_after_next) = chars.peek() {
-            if char_after_next == '\'' && char_token.is_some() {
-                return Ok(Token::CharLiteral(char_token.unwrap()));
+        if let Some(c) = chars.next() {
+            if let Some(&char_after_next) = chars.peek() {
+                if char_after_next == '\'' {
+                    return Ok(Token::CharLiteral(c));
+                }
             }
-        }
+        };
+
+        // If not correct declaration of char
+        return Err(CompileError {
+            msg: format!(
+                "Unexpected character '{}' during char declaration",
+                current_char
+            ),
+            start_pos: TokenPosition {
+                line_number: *line_number,
+                char_column: *char_column,
+            },
+            end_pos: TokenPosition {
+                line_number: *line_number,
+                char_column: *char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        });
     }
 
     // Functions and grouping expressions
@@ -294,6 +284,10 @@ pub fn get_next_token(
         return Ok(Token::Assign);
     }
 
+    if current_char == '~' {
+        return Ok(Token::Mutable);
+    }
+
     if current_char == ',' {
         return Ok(Token::Comma);
     }
@@ -303,7 +297,7 @@ pub fn get_next_token(
     }
 
     if current_char == '$' {
-        return Ok(Token::Signal(token_value));
+        return Ok(Token::This(token_value));
     }
 
     // Collections
@@ -324,6 +318,10 @@ pub fn get_next_token(
         return Ok(Token::QuestionMark);
     }
 
+    if current_char == ';' {
+        return Ok(Token::Semicolon);
+    }
+
     // Comments / Subtraction / Negative / Scene Head / Arrow
     if current_char == '-' {
         if let Some(&next_char) = chars.peek() {
@@ -340,7 +338,7 @@ pub fn get_next_token(
                         *char_column += 1;
 
                         // Multiline Comment
-                        while let Some(ch) = chars.next() {
+                        for ch in chars.by_ref() {
                             *char_column += 1;
                             token_value.push(ch);
 
@@ -358,7 +356,7 @@ pub fn get_next_token(
                     }
 
                     // Inline Comment
-                    while let Some(ch) = chars.next() {
+                    for ch in chars.by_ref() {
                         *char_column += 1;
 
                         if ch == '\n' {
@@ -407,6 +405,7 @@ pub fn get_next_token(
         }
         return Ok(Token::Add);
     }
+
     if current_char == '*' {
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
@@ -418,6 +417,7 @@ pub fn get_next_token(
             return Ok(Token::Multiply);
         }
     }
+
     if current_char == '/' {
         if let Some(&next_char) = chars.peek() {
             if next_char == '/' {
@@ -443,6 +443,7 @@ pub fn get_next_token(
             return Ok(Token::Divide);
         }
     }
+
     if current_char == '%' {
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
@@ -468,6 +469,7 @@ pub fn get_next_token(
             return Ok(Token::Modulus);
         }
     }
+
     if current_char == '^' {
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
@@ -553,7 +555,7 @@ pub fn get_next_token(
         }
 
         if dot_count == 0 {
-            return Ok(Token::IntLiteral(token_value.parse::<i64>().unwrap()));
+            return Ok(Token::IntLiteral(token_value.parse::<i32>().unwrap()));
         }
         return Ok(Token::FloatLiteral(token_value.parse::<f64>().unwrap()));
     }
@@ -568,8 +570,6 @@ pub fn get_next_token(
             char_column,
         );
     }
-
-    if current_char == '_' {}
 
     Err(CompileError {
         msg: format!(
@@ -611,6 +611,12 @@ fn keyword_or_variable(
             }
             None => false,
         };
+        
+        // Codeblock tokenizing
+        if tokenize_mode == &TokenizeMode::SceneHead && token_value == "Code" {
+            *tokenize_mode= TokenizeMode::Codeblock;
+            return Ok(Token::CodeKeyword);
+        }
 
         // Always check if token value is a keyword in every other case
         // If there's whitespace or some termination
@@ -618,18 +624,20 @@ fn keyword_or_variable(
         // Otherwise break out and check it is a valid variable name
         match token_value.as_str() {
             // Control Flow
+            "zz" => return Ok(Token::End),
             "return" => return Ok(Token::Return),
-            "end" => return Ok(Token::End),
             "if" => return Ok(Token::If),
             "else" => return Ok(Token::Else),
             "for" => return Ok(Token::For),
             "import" => return Ok(Token::Import),
-            "use" => return Ok(Token::Use),
             "break" => return Ok(Token::Break),
             "defer" => return Ok(Token::Defer),
             "in" => return Ok(Token::In),
             "as" => return Ok(Token::As),
             "copy" => return Ok(Token::Copy),
+
+            "sync" => return Ok(Token::FunctionKeyword),
+            "async" => return Ok(Token::AsyncFunctionKeyword),
 
             // Logical
             "is" => return Ok(Token::Equal),
@@ -638,100 +646,35 @@ fn keyword_or_variable(
             "or" => return Ok(Token::Or),
 
             // Data Types
-            "fn" => return Ok(Token::FunctionKeyword),
             "true" | "True" => return Ok(Token::BoolLiteral(true)),
             "false" | "False" => return Ok(Token::BoolLiteral(false)),
             "Float" => return Ok(Token::TypeKeyword(DataType::Float)),
             "Int" => return Ok(Token::TypeKeyword(DataType::Int)),
             "String" => return Ok(Token::TypeKeyword(DataType::String)),
             "Bool" => return Ok(Token::TypeKeyword(DataType::Bool)),
-            "type" | "Type" => return Ok(Token::TypeKeyword(DataType::Type)),
+            "Type" => return Ok(Token::TypeKeyword(DataType::Type)),
+            "None" => return Ok(Token::TypeKeyword(DataType::None)),
+            "Function" => {
+                return Ok(Token::TypeKeyword(DataType::Function(
+                    Vec::new(),
+                    Vec::new(),
+                )))
+            }
 
-            // To be moved to standard library in future
+            "Scene" => return Ok(Token::TypeKeyword(DataType::Scene)),
+            "Style" => return Ok(Token::TypeKeyword(DataType::Style)),
+
+            // Built in standard library functions
             "print" => return Ok(Token::Print),
+            "log" => return Ok(Token::Log),
             "assert" => return Ok(Token::Assert),
-            "math" => return Ok(Token::Math),
+            "panic" => return Ok(Token::Panic),
 
             _ => {}
         }
-
-        // only bother tokenizing / reserving these keywords if inside a scene head
-        match tokenize_mode {
-
-            // NOW TIME TO MOVE THESE TO THE STANDARD HTML PROJECT LIBRARY
-            // TokenizeMode::SceneHead => match token_value.as_str() {
-            //     // Style
-            //     "code" => {
-            //         *tokenize_mode = TokenizeMode::Codeblock;
-            //         return Ok(Token::CodeKeyword);
-            //     }
-            //     "id" => return Ok(Token::Id),
-            //     "blank" => return Ok(Token::Blank),
-            //     "bg" => return Ok(Token::BG),
-            //
-            //     // Theme stuff
-            //     "clr" => return Ok(Token::Color),
-            //
-            //     // Colour keywords (all have optional alpha)
-            //     "rgb" => return Ok(Token::Rgb),
-            //     "hsv" => return Ok(Token::Hsv),
-            //     "hsl" => return Ok(Token::Hsl),
-            //
-            //     "red" => return Ok(Token::Red),
-            //     "green" => return Ok(Token::Green),
-            //     "blue" => return Ok(Token::Blue),
-            //     "yellow" => return Ok(Token::Yellow),
-            //     "cyan" => return Ok(Token::Cyan),
-            //     "magenta" => return Ok(Token::Magenta),
-            //     "white" => return Ok(Token::White),
-            //     "black" => return Ok(Token::Black),
-            //     "orange" => return Ok(Token::Orange),
-            //     "pink" => return Ok(Token::Pink),
-            //     "purple" => return Ok(Token::Purple),
-            //     "grey" => return Ok(Token::Grey),
-            //
-            //     // Layout
-            //     "pad" => return Ok(Token::Padding),
-            //     "space" => return Ok(Token::Margin),
-            //     "center" => return Ok(Token::Center),
-            //     "size" => return Ok(Token::Size), // Changes text size or content (vid/img) size depending on context
-            //     "hide" => return Ok(Token::Hide),
-            //     "nav" => return Ok(Token::Nav),
-            //     "table" => return Ok(Token::Table),
-            //
-            //     // Interactive
-            //     "link" => return Ok(Token::Link),
-            //     "button" => return Ok(Token::Button),
-            //     "input" => return Ok(Token::Input),
-            //     "click" => return Ok(Token::Click), // The action performed when clicked (any element)
-            //     "form" => return Ok(Token::Form),
-            //     "option" => return Ok(Token::Option),
-            //     "dropdown" => return Ok(Token::Dropdown),
-            //
-            //     // Media
-            //     "img" => return Ok(Token::Img),
-            //     "alt" => return Ok(Token::Alt),
-            //     "video" => return Ok(Token::Video),
-            //     "audio" => return Ok(Token::Audio),
-            //
-            //     "order" => return Ok(Token::Order),
-            //     "title" => return Ok(Token::Title),
-            //
-            //     // Structure of the page
-            //     "main" => return Ok(Token::Main),
-            //     "header" => return Ok(Token::Header),
-            //     "footer" => return Ok(Token::Footer),
-            //     "section" => return Ok(Token::Section),
-            //
-            //     // Other
-            //     "ignore" => return Ok(Token::Ignore),
-            //     "canvas" => return Ok(Token::Canvas),
-            //     "redirect" => return Ok(Token::Redirect),
-            //
-            //     _ => {}
-            // },
-
-            TokenizeMode::CompilerDirective => match token_value.as_str() {
+        
+        if tokenize_mode == &TokenizeMode::CompilerDirective {
+            match token_value.as_str() {
                 "settings" => {
                     *tokenize_mode = TokenizeMode::Normal;
                     return Ok(Token::Settings);
@@ -757,9 +700,7 @@ fn keyword_or_variable(
                     return Ok(Token::CSS(string_block(chars, line_number, char_column)?));
                 }
                 _ => {}
-            },
-
-            _ => {}
+            }
         }
 
         // Finally, if this was None, then break at end or make new variable
@@ -767,7 +708,7 @@ fn keyword_or_variable(
         // VARIABLE NAMING
         // Variable names should include the name of the block they are in
         // e.g. var1 should be module/var1
-        if is_a_char && is_valid_identifier(&token_value) {
+        if is_a_char && is_valid_identifier(token_value) {
             return Ok(Token::Variable(token_value.to_string()));
         } else {
             break;
@@ -794,13 +735,13 @@ fn is_valid_identifier(s: &str) -> bool {
     // Check if the string is a valid identifier (variable name)
     s.chars()
         .next()
-        .map_or(false, |c| c.is_alphabetic() || c == '_')
+        .is_some_and(|c| c.is_alphabetic() || c == '_')
         && s.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
-// A block that starts with : and ends with the 'end' keyword
+// A block that starts with : and ends with the 'fin' keyword
 // Everything inbetween is returned as a string
-// Throws an error if there is no starting colon or ending 'end' keyword
+// Throws an error if there is no starting colon or ending 'fin' keyword
 fn string_block(
     chars: &mut Peekable<Chars>,
     line_number: &u32,
@@ -881,4 +822,73 @@ fn string_block(
     }
 
     Ok(string_value)
+}
+fn tokenize_string(
+    chars: &mut Peekable<Chars>,
+    line_number: &mut u32,
+    char_column: &mut u32,
+) -> Result<Token, CompileError> {
+    let mut token_value = String::new();
+    
+    // Currently should be at the character that started the String
+    while let Some(ch) = chars.next() {
+        *char_column += 1;
+
+        if ch == '\n' {
+            *line_number += 1;
+            *char_column = 1;
+        }
+
+        // Check for escape characters
+        if ch == '\\' {
+            if let Some(next_char) = chars.next() {
+                *char_column += 1;
+
+                token_value.push(next_char);
+            }
+        } else if ch == '"' {
+            return Ok(Token::StringLiteral(token_value));
+        }
+
+        token_value.push(ch);
+    }
+
+    Ok(Token::StringLiteral(token_value))
+}
+
+fn tokenize_scenebody(
+    current_char: char,
+    chars: &mut Peekable<Chars>,
+    line_number: &mut u32,
+    char_column: &mut u32,
+) -> Result<Token, CompileError> {
+    let mut token_value = String::from(current_char);
+
+    // Currently should be at the character that started the String
+    while let Some(ch) = chars.peek() {
+        if ch == &'\n' {
+            *line_number += 1;
+            *char_column = 1;
+        }
+
+        // Check for escape characters
+        if ch == &'\\' {
+            chars.next();
+            *char_column += 1;
+
+            if let Some(next_char) = chars.next() {
+                *char_column += 1;
+                token_value.push(next_char);
+            }
+        } else if ch == &'[' || ch == &']' {
+            return Ok(Token::StringLiteral(token_value));
+        }
+
+        *char_column += 1;
+
+        // Should always be a valid char
+        token_value.push(chars.next().unwrap());
+    }
+
+    Ok(Token::StringLiteral(token_value))
 }

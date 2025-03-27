@@ -1,8 +1,9 @@
 [Navbar]
-[header center pad(2, 0, 0, 0):
+
+[Header center pad(2, 0, 0, 0):
     [title(1): THE BEANSTALK BOOK]
     # &#127793;
-][main:
+][Page:
 
 ## What is Beanstalk?
 This website was created using Beanstalk! 

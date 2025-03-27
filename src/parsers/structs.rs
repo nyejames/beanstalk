@@ -7,26 +7,23 @@ use super::{
 };
 use crate::bs_types::DataType;
 use crate::parsers::ast_nodes::Value;
+use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::parse_expression::create_expression;
 use crate::tokenizer::TokenPosition;
-use crate::{parsers::ast_nodes::NodeInfo, CompileError, ErrorType, Token};
+use crate::{CompileError, ErrorType, Token};
 
 // Assumes to have started after the open parenthesis
 // Datatype must always be a struct containing the data types of the items in the struct
 // Or inferred if the data type is not known
 // Also modifies the data type passed into it
 pub fn new_struct(
+    x: &mut TokenContext,
     initial_value: Value,
-    tokens: &Vec<Token>,
-    i: &mut usize,
-    required_args: &Vec<Arg>,
-    ast: &Vec<AstNode>,
+    required_args: &[Arg],
+    ast: &[AstNode],
     variable_declarations: &mut Vec<Arg>,
-    token_positions: &Vec<TokenPosition>,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut item_args = required_args.to_owned();
-
-    //grey_ln!("parsing struct");
 
     let mut items: Vec<Arg> = match initial_value {
         Value::None => Vec::new(),
@@ -43,10 +40,10 @@ pub fn new_struct(
     let mut item_name: String = "0".to_string();
 
     // ASSUMES AN OPEN PARENTHESIS HAS JUST BEEN PASSED
-    while let Some(token) = tokens.get(*i) {
-        match token {
+    while x.index < x.tokens.len() {
+        match x.current_token().to_owned() {
             Token::CloseParenthesis => {
-                *i += 1;
+                x.index += 1;
                 break;
             }
 
@@ -54,43 +51,41 @@ pub fn new_struct(
                 if next_item {
                     return Err(CompileError {
                         msg: "Expected a struct item after the comma".to_string(),
-                        start_pos: token_positions[*i].to_owned(),
+                        start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
-                            line_number: token_positions[*i].line_number,
-                            char_column: token_positions[*i].char_column + 1,
+                            line_number: x.token_positions[x.index].line_number,
+                            char_column: x.token_positions[x.index].char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
                 }
                 next_item = true;
-                *i += 1;
+                x.index += 1;
             }
 
             Token::Newline => {
-                *i += 1;
+                x.index += 1;
             }
 
             Token::Variable(name) => {
                 if !next_item {
                     return Err(CompileError {
                         msg: "Expected a comma between struct declarations".to_string(),
-                        start_pos: token_positions[*i].to_owned(),
+                        start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
-                            line_number: token_positions[*i].line_number,
-                            char_column: token_positions[*i].char_column + name.len() as u32,
+                            line_number: x.token_positions[x.index].line_number,
+                            char_column: x.token_positions[x.index].char_column + name.len() as u32,
                         },
                         error_type: ErrorType::Syntax,
                     });
                 }
 
                 let new_var = create_new_var_or_ref(
-                    name,
+                    x,
+                    name.to_owned(),
                     variable_declarations,
-                    tokens,
-                    i,
                     false,
                     ast,
-                    token_positions,
                     true,
                 )?;
 
@@ -111,10 +106,10 @@ pub fn new_struct(
                 if !next_item {
                     return Err(CompileError {
                         msg: "Expected a comma between struct items".to_string(),
-                        start_pos: token_positions[*i].to_owned(),
+                        start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
-                            line_number: token_positions[*i].line_number,
-                            char_column: token_positions[*i].char_column + 1,
+                            line_number: x.token_positions[x.index].line_number,
+                            char_column: x.token_positions[x.index].char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -122,15 +117,15 @@ pub fn new_struct(
 
                 next_item = false;
 
-                let mut data_type = if required_args.len() == 0 {
+                let mut data_type = if required_args.is_empty() {
                     DataType::Inferred
                 } else if required_args.len() < items.len() {
                     return Err(CompileError {
                         msg: "Too many arguments provided to struct".to_string(),
-                        start_pos: token_positions[*i].to_owned(),
+                        start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
-                            line_number: token_positions[*i].line_number,
-                            char_column: token_positions[*i].char_column + 1,
+                            line_number: x.token_positions[x.index].line_number,
+                            char_column: x.token_positions[x.index].char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -138,16 +133,8 @@ pub fn new_struct(
                     required_args[items.len()].data_type.to_owned()
                 };
 
-                let arg_value = create_expression(
-                    tokens,
-                    i,
-                    true,
-                    ast,
-                    &mut data_type,
-                    false,
-                    variable_declarations,
-                    token_positions,
-                )?;
+                let arg_value =
+                    create_expression(x, true, ast, &mut data_type, false, variable_declarations)?;
 
                 // Get the arg of this struct item
                 let item_arg = match item_args.get(items.len()) {
@@ -174,7 +161,7 @@ pub fn new_struct(
 // Every time an expression is parsed, it will turn a struct of one item into that item
 pub fn struct_to_value(args: &Vec<Arg>) -> Value {
     // An empty struct is None in this language
-    if args.len() < 1 {
+    if args.is_empty() {
         return Value::None;
     }
 

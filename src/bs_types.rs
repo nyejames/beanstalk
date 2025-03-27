@@ -1,18 +1,19 @@
-use crate::parsers::ast_nodes::AstNode;
 use crate::parsers::ast_nodes::{Arg, Value};
-use colour::red_ln;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
-    Inferred, // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
+    // Mutability is part of the type
+    // This helps with compile time constant folding
 
+    // Mutable Data Types will have an additional bool to indicate whether they are mutable
+    Inferred, // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
+    Bool,
+
+    // Immutable Data Types
     // In practice, these types should not be deliberately used much at all
     // The result / option types will be worked with directly instead
     Error(String),
     None, // The None result of an option, or empty argument
-
-    // Booleans
-    Bool,
     True,
     False,
 
@@ -60,7 +61,6 @@ pub enum DataType {
             DataType::None -- correct way to say None
     */
     Structure(Vec<Arg>),
-    Choice,
 
     // Special Beanstalk Types
     // Scene and style types may have more static structure to them in the future
@@ -75,7 +75,8 @@ pub enum DataType {
 
     // Type Types
     // Unions allow types such as option and result
-    Union(Vec<DataType>), // Union of types
+    Choice(Vec<DataType>), // Union of types
+
     // For generics
     Type,
 }
@@ -83,29 +84,30 @@ pub enum DataType {
 // Special Types that might change (basically same as rust with a bit more syntax sugar)
 pub fn create_option_datatype(datatype: DataType) -> DataType {
     match datatype {
-        DataType::Inferred => DataType::Union(vec![DataType::None, DataType::Inferred]),
-        DataType::CoerceToString => DataType::Union(vec![DataType::None, DataType::CoerceToString]),
-        DataType::Bool => DataType::Union(vec![DataType::None, DataType::Bool]),
-        DataType::True => DataType::Union(vec![DataType::None, DataType::True]),
-        DataType::False => DataType::Union(vec![DataType::None, DataType::False]),
-        DataType::String => DataType::Union(vec![DataType::None, DataType::String]),
-        DataType::Float => DataType::Union(vec![DataType::None, DataType::Float]),
-        DataType::Int => DataType::Union(vec![DataType::None, DataType::Int]),
-        DataType::Collection(inner_type) => {
-            DataType::Union(vec![DataType::None, DataType::Collection(inner_type)])
+        DataType::Inferred => DataType::Choice(vec![DataType::None, DataType::Inferred]),
+        DataType::CoerceToString => {
+            DataType::Choice(vec![DataType::None, DataType::CoerceToString])
         }
-        DataType::Decimal => DataType::Union(vec![DataType::None, DataType::Decimal]),
-        DataType::Choice => DataType::Union(vec![DataType::None, DataType::Choice]),
-        DataType::Type => DataType::Union(vec![DataType::None, DataType::Type]),
-        DataType::Style => DataType::Union(vec![DataType::None, DataType::Style]),
-        DataType::Union(inner_types) => {
-            DataType::Union(vec![DataType::None, DataType::Union(inner_types)])
+        DataType::Bool => DataType::Choice(vec![DataType::None, DataType::Bool]),
+        DataType::True => DataType::Choice(vec![DataType::None, DataType::True]),
+        DataType::False => DataType::Choice(vec![DataType::None, DataType::False]),
+        DataType::String => DataType::Choice(vec![DataType::None, DataType::String]),
+        DataType::Float => DataType::Choice(vec![DataType::None, DataType::Float]),
+        DataType::Int => DataType::Choice(vec![DataType::None, DataType::Int]),
+        DataType::Collection(inner_type) => {
+            DataType::Choice(vec![DataType::None, DataType::Collection(inner_type)])
+        }
+        DataType::Decimal => DataType::Choice(vec![DataType::None, DataType::Decimal]),
+        DataType::Type => DataType::Choice(vec![DataType::None, DataType::Type]),
+        DataType::Style => DataType::Choice(vec![DataType::None, DataType::Style]),
+        DataType::Choice(inner_types) => {
+            DataType::Choice(vec![DataType::None, DataType::Choice(inner_types)])
         }
         DataType::Function(args, return_type) => {
-            DataType::Union(vec![DataType::None, DataType::Function(args, return_type)])
+            DataType::Choice(vec![DataType::None, DataType::Function(args, return_type)])
         }
         DataType::Structure(args) => {
-            DataType::Union(vec![DataType::None, DataType::Structure(args)])
+            DataType::Choice(vec![DataType::None, DataType::Structure(args)])
         }
         _ => DataType::Error(format!(
             "You can't create an option of {:?} and None",
@@ -115,84 +117,47 @@ pub fn create_option_datatype(datatype: DataType) -> DataType {
 }
 
 pub fn get_any_number_datatype() -> DataType {
-    DataType::Union(vec![DataType::Float, DataType::Int, DataType::Decimal])
+    DataType::Choice(vec![DataType::Float, DataType::Int, DataType::Decimal])
 }
 
 pub fn get_rgba_args() -> DataType {
     DataType::Structure(vec![
         Arg {
             name: "red".to_string(),
-            data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
             value: Value::Float(0.0),
         },
         Arg {
             name: "green".to_string(),
-            data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
             value: Value::Float(0.0),
         },
         Arg {
             name: "blue".to_string(),
-            data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
             value: Value::Float(0.0),
         },
         Arg {
             name: "alpha".to_string(),
-            data_type: DataType::Union(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
             value: Value::Float(1.0),
         },
     ])
 }
 
-pub fn return_datatype(node: &AstNode) -> DataType {
-    match node {
-        AstNode::Literal(value, _) => match value {
-            Value::Float(_) => DataType::Float,
-            Value::Int(_) => DataType::Int,
-            Value::String(_) => DataType::String,
-            Value::Bool(value) => {
-                if *value {
-                    DataType::True
-                } else {
-                    DataType::False
-                }
-            }
-
-            Value::Scene(_, _, _, _) => DataType::Scene,
-            Value::Collection(_, data_type) => data_type.to_owned(),
-            Value::Structure(args) => DataType::Structure(args.to_owned()),
-            Value::Reference(_, data_type, argument_accessed) => {
-                get_reference_data_type(data_type, argument_accessed)
-            }
-
-            Value::Runtime(_, data_type) => data_type.to_owned(),
-            Value::None => DataType::None,
-        },
-
-        AstNode::Empty(_) => DataType::None,
-        AstNode::VarDeclaration(_, _, _, data_type, _, _) => data_type.to_owned(),
-        _ => {
-            red_ln!(
-                "Probably compiler issue?: Datatype return not implemented for: {:?}",
-                node
-            );
-            DataType::Inferred
-        }
-    }
-}
-
-pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &Vec<usize>) -> DataType {
-    match arguments_accessed.get(0) {
+pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &[usize]) -> DataType {
+    match arguments_accessed.first() {
         Some(index) => match &data_type {
             DataType::Structure(inner_types) | DataType::Function(_, inner_types) => {
                 // This should never happen (caught earlier in compiler)
-                assert!(index < &inner_types.len());
-                assert!(index >= &0);
+                debug_assert!(index < &inner_types.len());
+                debug_assert!(index >= &0);
 
                 // This part could be recursively check if there are more arguments to access
                 if arguments_accessed.len() > 1 {
                     get_reference_data_type(
                         &inner_types[*index].data_type,
-                        &arguments_accessed[1..].to_vec(),
+                        &arguments_accessed[1..],
                     )
                 } else {
                     inner_types[*index].data_type.to_owned()
@@ -205,7 +170,7 @@ pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &Vec<us
                 if arguments_accessed.len() > 1 {
                     // Could be trying to access a non-collection or struct,
                     // But this should be caught earlier in the compiler
-                    get_reference_data_type(&inner_type, &arguments_accessed[1..].to_vec())
+                    get_reference_data_type(&inner_type, &arguments_accessed[1..])
                 } else {
                     inner_type
                 }
@@ -235,7 +200,7 @@ pub fn get_type_keyword_length(data_type: &DataType) -> u32 {
         DataType::Collection(inner_type) => get_type_keyword_length(inner_type),
 
         DataType::Structure(_) => 1,
-        DataType::Union(inner_types) => {
+        DataType::Choice(inner_types) => {
             let mut length = 0;
             for arg in inner_types {
                 length += get_type_keyword_length(arg);
@@ -244,11 +209,10 @@ pub fn get_type_keyword_length(data_type: &DataType) -> u32 {
         }
         DataType::Function(..) => 2,
         DataType::Type => 4,
-        DataType::Choice => 6,
         DataType::Scene => 5,
         DataType::Style => 5,
         DataType::Error(_) => 1,
-        
+
         DataType::None => 4,
     }
 }

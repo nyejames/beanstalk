@@ -1,5 +1,5 @@
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
-use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::parsers::ast_nodes::Value;
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, ErrorType, Token};
 
@@ -204,17 +204,13 @@ pub fn evaluate_expression(
 // Everything else should be left for runtime
 fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Value, CompileError> {
     let mut nodes = Vec::new();
-    let mut tags = Vec::new();
     let mut styles = Vec::new();
-    let mut actions = Vec::new();
 
     for node in simplified_expression {
         match node.get_value() {
-            Value::Scene(ref mut vec1, ref mut vec2, ref mut vec3, ref mut vec4) => {
-                nodes.append(vec1);
-                tags.append(vec2);
+            Value::Scene(ref mut body, ref mut vec3, _) => {
+                nodes.append(body);
                 styles.append(vec3);
-                actions.append(vec4);
             }
 
             _ => {
@@ -234,7 +230,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Value, Compi
         }
     }
 
-    Ok(Value::Scene(nodes, tags, styles, actions))
+    Ok(Value::Scene(nodes, styles, String::new()))
 }
 
 // TODO - needs to check what can be concatenated at compile time

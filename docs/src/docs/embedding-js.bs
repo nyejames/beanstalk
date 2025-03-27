@@ -1,17 +1,18 @@
 [Navbar]
-[header center: [title(1): WRITING JS INSIDE BEANSTALK]]
-[main:
+
+[Header center: [title(1): WRITING JS INSIDE BEANSTALK]]
+[Page:
 Using the compiler directive '#' we can tell the compiler to parse a block of JS code that will be inserted into the page.
 
 You can't use the end keyword inside the JS block as it's used to end the block of JS code.
 
-[code:
+[Code:
     #JS:
         const x = 5;
         const y = 10;
         const z = x + y;
         console.log(z);
-    end
+    zz
 ]
 
 JS won't be able to use variables and functions written in Beanstalk directly.
@@ -23,14 +24,14 @@ but add the name of the variable to the get part.
 
 This will change in the future as the WASM implementation is developed. 
 
-[code:
+[Code:
     y = 10
     x = "5"
     #JS:
         const x = bs_x;
         const y = wasx.get_bs_y();
         console.log(x + y);
-    end
+    zz
 ]
 
 [Footer]

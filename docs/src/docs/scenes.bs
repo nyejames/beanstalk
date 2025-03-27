@@ -1,33 +1,41 @@
 [Navbar]
-[header center: [title(1): BEANSTALK SCENES]]
 
-[main:
-Beanstalk has its own templating language. These are called scenes.
+[Header center: [title(1): BEANSTALK SCENES]]
 
-Scenes have two sections, the head and the body. 
+[Page:
+
+Beanstalk has unique, superpowered templating strings called scenes.
+
+Scenes have two sections, the head and the body, separated with a colon. 
+
+Scenes are scoped using square brackets and can be passed styles to change their behavior, content and styling. 
+
+The main purpose of scenes in BS is to generate HTML or complex strings.
 
 #### The head
-is used to define the styling and positioning of the scene.
+Is used to:
+- Define properties of the scene
+- Convert literals and expressions to strings added into the scene
+- Wrap the scene itself in strings that conditionally depend on the scene's properties or parent scene's properties 
 
 #### The body
-is used to define the content of the scene.
+is used to define the content of the scene. This is a string.
 
-These two sections are separated by a colon.
-
-Scenes are scoped using square brackets and have predefined keywords you use in the scene head that can change their behavior, content and styling. 
-
-Inside the body of a scene, you can nest more scenes using square brackets. This allows you to create complex UIs and webpages, while writing mostly in a dialect of markdown.
+Inside the body of a scene, you can nest more scenes using square brackets. 
 
 ## Beanstalk Markdown
-Beanstalk uses it's own flavour of markdown. Instead of writing any raw HTML, you can use the Beanstalk scene syntax to write your text content inside of a scene body. Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
+Beanstalk uses it's own flavour of markdown that can be used inside scene bodies if the scene has the markdown option enabled. Instead of writing any raw HTML, you can use the Beanstalk scene syntax to write your text content inside of a scene body. 
+Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
-[code:
-    [main:
+[Code:
+    [Page:
 
     The open square bracket is used to start a new scene. 
     The colon begins the scene body. 
     This is defining the main scene, 
     which by default will add a main tag to the HTML and wrap the content in a centered container.
+
+    PAGE is a top-level style that unlocks all the basic HTML styles for nested scenes.
 
     # A Heading
     Some text that has a [link("example.com"): link] inside it.
@@ -42,14 +50,20 @@ Beanstalk uses it's own flavour of markdown. Instead of writing any raw HTML, yo
 
 ## Scene exmaple
 
-[code:
+[Code:
+    [Section:
+
     [head_of_element: content of element that renders as text (markdown / more templates) {string : "this is a code block inside of the scene body, that is scoped to the scene"} ]
 
-    [img("images/meme.jpg"), alt("meme")]
+    [img("images/meme.jpg"): meme (this is the alt description)]
 
     # A Cool Section
-    [section #scene_id:
-        [ reactive_variable ]
+    Using the export symbol @ you can give the scene an ID in the form of a variable name. 
+    The @ is needed to tell the compiler this is a declaration of the ID. 
+    ID's can be created for scenes at runtime but cannot be changed once a scene is created.
+
+    [section @scene_id:
+        [ variable ]
         [link("example.com/page"): here's a link!]
     ]
 
@@ -69,13 +83,17 @@ Beanstalk uses it's own flavour of markdown. Instead of writing any raw HTML, yo
     [rgb(230,20,150): this is a bunch of text with rgb color]
 
     [ imported_scene ]
+
+    ]
 ]
 
 ### Units and sizes
 By default, beanstalk uses rem for all units by default. This will continue to be the case until later in the project when more specific units will be supported. This will come with the language supporing more complex styling and layout.
 
+# HTML Standard library
+
 ## Scene Style Keywords
-More keywords will be added and more documentation about the aruments you can pass into the styles will be added as the compiler is developed and design desisions are slowly solidified.
+More styles and scene configs will be added overtime. Here are some of the ideas so far:
 
 ### Style
 [table(2):
@@ -155,7 +173,7 @@ Variables and expressions are typecast into strings when put into a scene. This 
 Booleans in a scenehead will conditonally hide or show itself based on the value of the boolean. 
 If the boolean is true, the scene and it's children will be shown, if false, it will be hidden.
 
-[code:
+[Code:
     logged_in = false
 
     -- Scene is hidden

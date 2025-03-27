@@ -1,22 +1,20 @@
 [Navbar]
-[header center: [title(1): ROADMAP FOR BEANSTALK]]
-[main:
+
+[Header center: [title(1): ROADMAP FOR BEANSTALK]]
+[Page:
 Beanstalk is still in development. It doesn't even have a version number yet!
 
 Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
-- All Styles in sceneheads are structs or functions that return Style structs
-- then start try to make the standard library styles using that syntax
-    - Build out styles and what the shape of a style struct is
+- How do styles that accept arguments work?
+    Options 1: needs to be a function that returns a style and whether it can be compile time evaluated needs to be decided later. 
+    Drawbacks of this are that evaluating these styles and evaluating them at Runtime will be much more complex
+
+- Build out HTML standard library for styles
 - Move all of the html standard lib tokens to just exported variables included in builds
 - Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
 This will be the first test for implementing a custom type system (figure out how that will work -> whether any tuple created also creates a type of itself)
-- Styles should just not be functions by default, they can be returned by functions only
-    > Styles will just be structs of the correct properties that can contain nested styles accessed with a dot
-    > so instead of nav(0) we will do nav.0 or something to that affect. button becomes button.click() (or it has to be button() and must have brackets)
-    > Any dynamic stuff just has to have brackets anyway (dot is compile time access, brackets are runtime access)
-- Parsing named tuples for reading the config file
 - Maybe just don't enforce brackets at all for function calls?
 - Finish implementing constant folding and all math operators and brackets
 - Color theme system (color type built into language)
@@ -24,7 +22,7 @@ This will be the first test for implementing a custom type system (figure out ho
 
 ## Current Bugs
 *Scenes*
-- Emphasis and strong tags are not being parsed correctly for bullet points. Markdown parser needs some work.
+- Emphasis and strong tags are not being parsed correctly for bullet points. Markdown parser needs some work
 - Not always merging spans into previous P tags correctly
 
 ## Core Features Being Implemented
@@ -33,13 +31,8 @@ This will be the first test for implementing a custom type system (figure out ho
 - If statements
 - Loops
 - Importing/exporting working fully
-- Scene reactivity and full component system
 - Importing HTML, CSS and JS libraries seemlessly into a BS project
 - Scoping and variable shadowing
-- Commit to final memory management strategy for the language
-- Compiler as a proper command line tool
-- Documentation generator - scenes can be docs scenes that document the code around it, everything else is placed into code blocks around these scenes
-- Nestable comments?
 
 ## Future plans and ideas
 - Any type?
@@ -51,11 +44,35 @@ it will output an entire documentation webpage by default
 - Better Dev server with web sockets handling hot reloading (rather than the current janky system)
 - Server files and server side BS code (Using a Wasm runtime on the server)
 
-### Reserved keywords for standard lib functions
-Beanstalk should be a very batteries included language, with a lot of standard library functions.
-The standard library will be the only default import option in the project config file.
+### Reserved keywords 
+Each capitalised letter could be reserved for Standard library objects and modules?
 
-print|import|rng|log|round|abs|sin|cos|tan|expo|gcd
+A = 
+B = 
+C = Channel
+D = Date (Date and time library)
+E = Errors
+F = 
+G =
+H = HTTP
+I = 
+J =
+K =
+L = Listeners (event listeners)
+M = Maths
+N = 
+O = Output (logging and special prints)
+P = Path
+Q = Quirie (For built in SQL stuff)
+R = Random Number Generators and probability stuff
+S = Scene (the config options for a scene)
+T = Type
+U = Unit
+V = Vectors
+W = Window
+X = Context (For memory management and getting info about the current scope)
+Y = 
+Z = 
 
 ### Colour type ideas
 Would be a function that creates an RGB value at the end.
@@ -78,7 +95,7 @@ Uses >> and << to specify send / recieve channels. No "chan" keyword.
 
 keyword 'async' to mark async function calls.
 
-[code:
+[Code:
     -- Create a channel
     channel <<int>>
 

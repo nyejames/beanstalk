@@ -6,14 +6,12 @@ use std::{
     path::Path,
 };
 
-mod bs_css;
 pub mod bs_types;
 mod build;
 mod create_new_project;
 pub mod dev_server;
 mod settings;
 mod test;
-mod tokenize_scene;
 mod tokenizer;
 mod tokens;
 mod parsers {
@@ -21,6 +19,7 @@ mod parsers {
     pub mod build_ast;
     pub mod collections;
     mod create_scene_node;
+    pub mod markdown;
     pub mod functions;
     mod expressions {
         pub mod constant_folding;
@@ -28,28 +27,30 @@ mod parsers {
         pub mod parse_expression;
     }
     pub mod structs;
-    pub mod styles;
+
+    pub mod scene;
     pub mod util;
     pub mod variables;
+    pub mod codeblock;
 }
 mod html_output {
     pub mod code_block_highlighting;
-    pub mod colors;
+    // pub mod colors;
     pub mod dom_hooks;
     pub mod generate_html;
+    pub mod html_styles;
     pub mod js_parser;
     pub mod web_parser;
 }
 mod wasm_output {
-    pub mod wasm_generator;
-    pub mod wat_parser;
+    pub mod wat_to_wasm;
 }
 use crate::tokenizer::TokenPosition;
 use colour::{
-    dark_cyan, dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta,
-    e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln,
-    red_ln,
+    dark_cyan, dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln,
+    e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
 };
+
 pub use tokens::Token;
 
 enum Command {
@@ -75,11 +76,7 @@ pub struct CompileError {
     pub error_type: ErrorType,
 }
 
-trait ToError {
-    fn to_error(self, file_path: PathBuf) -> Error;
-}
-
-impl ToError for CompileError {
+impl CompileError {
     fn to_error(self, file_path: PathBuf) -> Error {
         Error {
             msg: self.msg,
@@ -113,6 +110,15 @@ pub struct Error {
     error_type: ErrorType,
 }
 
+// Compiler Output_info_levels
+// Will need to be converted to cli args eventually
+// So cba to do enum yet because this might just change to strings or something
+const SHOW_TOKENS: i32 = 6;
+const SHOW_AST: i32 = 5;
+const SHOW_WAT: i32 = 4;
+const SHOW_TIMINGS: i32 = 3;
+const DONT_SHOW_TIMINGS: i32 = 2;
+
 fn main() {
     let compiler_args: Vec<String> = env::args().collect();
 
@@ -133,7 +139,7 @@ fn main() {
     match command {
         Command::NewHTMLProject(path) => {
             let args = prompt_user_for_input("Project name: ".to_string());
-            let name_args = args.get(0);
+            let name_args = args.first();
 
             let project_name = match name_args {
                 Some(name) => {
@@ -161,7 +167,7 @@ fn main() {
             let start = Instant::now();
 
             // TODO - parse config file instead of using default config
-            match build::build(&path, true) {
+            match build::build(&path, true, SHOW_TIMINGS) {
                 Ok(_) => {
                     let duration = start.elapsed();
                     grey_ln!("------------------------------------");
@@ -185,11 +191,10 @@ fn main() {
             };
         }
 
-        Command::Dev(path) => {
+        Command::Dev(ref path) => {
             println!("Starting dev server...");
-            let mut path = PathBuf::from(path);
 
-            match dev_server::start_dev_server(&mut path) {
+            match dev_server::start_dev_server(path, DONT_SHOW_TIMINGS) {
                 Ok(_) => {
                     println!("Dev server shutting down ... ");
                 }
@@ -201,7 +206,7 @@ fn main() {
 
         Command::Wat(path) => {
             println!("Compiling WAT to WebAssembly...");
-            match wasm_output::wasm_generator::compile_wat_file(&path) {
+            match wasm_output::wat_to_wasm::compile_wat_file(&path) {
                 Ok(_) => {}
                 Err(e) => {
                     print_formatted_error(e.to_error(path));
@@ -210,8 +215,8 @@ fn main() {
         }
     }
 }
-fn get_command(args: &Vec<String>) -> Result<Command, String> {
-    match args.get(0).map(String::as_str) {
+fn get_command(args: &[String]) -> Result<Command, String> {
+    match args.first().map(String::as_str) {
         Some("new") => {
             // Check type of project
             match args.get(1).map(String::as_str) {
@@ -328,6 +333,7 @@ fn print_formatted_error(e: Error) {
             })
             .to_string(),
         Err(_) => {
+            red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ File path is invalid: {}", e.file_path.display());
             "".to_string()
         }
     };
@@ -417,17 +423,10 @@ fn print_formatted_error(e: Error) {
     println!("\n{}", line);
 
     // spaces before the relevant part of the line
-    print!(
-        "{}",
-        std::iter::repeat(' ')
-            .take(e.start_pos.char_column as usize)
-            .collect::<String>()
-    );
+    print!("{}", " ".repeat((e.start_pos.char_column as usize / 2) - 1));
     red_ln!(
         "{}",
-        std::iter::repeat('^')
-            .take(e.end_pos.char_column as usize - e.start_pos.char_column as usize + 1)
-            .collect::<String>()
+        "^".repeat(e.end_pos.char_column as usize - e.start_pos.char_column as usize)
     );
 }
 

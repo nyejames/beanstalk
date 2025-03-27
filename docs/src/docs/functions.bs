@@ -1,34 +1,43 @@
 [Navbar]
 
-[header center: [title(1): FUNCTIONS]]
-[main:
+[Header center: [title(1): FUNCTIONS]]
+[Page:
+
 If the function can only return an error, you can use a '!' as the specified return type.
 
 Arguments are passed in as immutable references (or immutable copies) by default, but mutable references can be passed by using the ~ operator to specify mutability.
 This can be specified further as being a copy by specifying the type as a copy.
 
+The 'sync' keyword is used 
+
 ## The arrow operator
 The arrow operator is used to define the signature of a function. 
 If the function returns a value, it must be specified by the type signature.
 
-[code:
+[Code:
     -- Returns an int
-    multipleReturns fn(x Int) -> Int: return 1 + x
+    multipleReturns = sync(x Int) -> Int: return 1 + x
 
     -- Returns a struct
-    returnStruct fn(x Int) -> SomeStruct:
+    returnStruct = sync(x Int) -> SomeStruct:
         return SomeStruct{1, 2}
-    end
+    zz
 
-    differentReturns fn(spicy bool = false) -> (Int, Int, Int):
-        if spicy: return (69, 420, 1337)
+    IntResult Type = {
+        val1: Int,
+        val2: Int,
+        val3: Int
+    }
+
+    differentReturns = sync(spicy bool = false) -> IntResult:
+        if spicy: return {69, 420, 1337}
         
-        return (1, 2, 3)
-    end
+        return {1, 2, 3}
+    zz
 
-    canError fn(x String) -> String!:
-        return fetch(x) ! error(msg)
-    end
+    canError = sync(x String) -> String!:
+        return fetch(x)
+    zz
 
     -- Calling a function
     multipleReturns(5)
@@ -42,25 +51,25 @@ Anonymous functions are a way to pass functions as values.
 
 Unlike named functions, they have optional type signatures.
 
-[code: 
+[Code: 
     -- Anonymous function
-    fn(x Int) -> Int: return x + 1
+    sync(x Int) -> Int: return x + 1
 
     -- No type signature required
-    fn: return "Hello, World!"
+    sync: return "Hello, World!"
 
     -- Anonymous function that has side effects
-    fn(increase Int): timer += increase
+    sync(increase Int): timer += increase
 ]
 
 ## Concurrent Functions
 In a similar style to Go. Beanstalk plans on having concurrent functions with message passing.
 
-Concurrent function calls are prefixed with the 'async' keyword.
+Concurrent function calls use the 'async' keyword instead of 'sync'.
 
-[code:
+[Code:
     -- Returns an int
-    async concurrentFunc fn() -> Int: return 69
+    concurrentFunc = async() -> Int: return 69
 ]
 
 [Footer]

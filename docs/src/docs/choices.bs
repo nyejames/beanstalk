@@ -1,22 +1,17 @@
 [Navbar]
-[header center: [title(1): CHOICES]]
-[main:
+
+[Header center: [title(1): CHOICES]]
+[Page:
 
 # Choices (enums)
 Choices are a way to define a set of possible values. They are similar to enums in Rust.
 
-[code:
-    Thing choice:
+[Code:
+    Thing = (
         A Int |
         B String |
         C (String, Thing) |
-    end
-    
-    Thing:
-        A Int |
-        B String |
-        C (String, Thing) |
-    end
+    )
 ]
 
 [Footer]

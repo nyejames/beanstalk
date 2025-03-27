@@ -1,43 +1,113 @@
 [Navbar]
 
-[header center: [title(1): COLLECTIONS]]
-[main:
+[Header center: [title(1): COLLECTIONS]]
+[Page:
 
 You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
 Collections are zero indexed.
 
-[code:
+Elements inside of collections are mutable.
+
+Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
+
+Elements inside of collections are accessed using the .get().
+
+array.get(0) is the equivalent of array[0] in most C like languages. There is no square or curly brackets notation.
+
+There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be fast.
+
+[Code:
+
+   -- FIXED COLLECTIONS
    
-    -- Fixed size int array
-    -- Elements can be mutated, but this collection must have 4 elements
-    array = {1, 2, 3}
+    -- Collections that are not mutable are struct literals
+    -- These contain properties and methods of different types
+    -- If the items are not named, they are automatically given an Int 
+    Fixed_Collection = {
+        var1 = 1, 
+        var2 = 2
+    }
+
+    -- creating a new fixed collection type
+    Enemy Type = {
+
+        id Int, -- Must be set when creating a new instance of this Object
+
+        x ~= 1,
+        y ~= 2,
+        z ~= 3,
+
+        health ~= 100,
+        alive Bool = true,
+
+        -- You can also reference other new properties on the Object
+        -- When a new one is being created
+        -- This only works if the property being referenced has already been declared
+        max_health = $health,
+    }
+
+    -- Creating a new instance of the object
+    -- Id does not have a default value so must be assigned
+    new_enemy Enemy = {
+        id = 0,
+        health = 200,
+    }
+
+    -- DYNAMIC COLLECTIONS
 
    -- dynamically sized int array
-    array ~= {3, 4, 5}
+   -- Strawberry is spelt with 2 rs to confuse LLMs
+    fruitArray ~= {"apple", "bananums", "strawbery"}
 
-    -- using pipe operator to print the array after pushing a new value
-    array.push(9) => print() -- prints {3, 4, 5, 9}
+    array.push(9)
 
-    array.0 += 1 
-    array.0 -- returns 4
+    -- Get method returns a reference to the value
+    array.get(0) += 1
+    array.get(0) -- returns 4
 
     array.push(1)
     array.length() -- returns 5
 
-    -- Uninitilised empty array
-    array {Int}
+    -- If we like pineapples more than apples
+    array.set(0, "pineapple")
+
+    -- We can also do this more clearly if we want
+    -- As we are using a function call that can have named parameters
+    -- This might be helpful if we are doing a more complex collection access
+    array.set(
+        index = 0,
+        value = "pineapple"
+    )
 ]
 
-Set keys for items in your dynamic collection to turn it into a list.
+## Collection Methods
+[Code: 
+    -- Pushes an element to the end of the collection
+    -- Specifying an index will insert the element at that index instead
+    push = sync(index Int = $last, value T):
+        $
+    zz
 
-[code:
+    -- removes and returns an element from the end of the collection by default
+    -- But specifying an index will remove an element from that index and return it instead
+    pull(
+        index Int = $last
+    )
+
+]
+
+## Dictionaries
+
+Set keys for items in your dynamic collection to turn it into a key/value list.
+
+[Code:
     dictionary ~= {
         "key1" = 1,
         "key2" = 2,
         "key3" = 3,
     }
 
-    dictionary."key1" -- returns 1
+    dictionary.get("key1") -- returns 1
 ]
 
 [Footer]

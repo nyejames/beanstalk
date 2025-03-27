@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 
-pub fn start_dev_server(path: &PathBuf) -> Result<(), Error> {
+pub fn start_dev_server(path: &PathBuf, output_info_level: i32) -> Result<(), Error> {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
@@ -26,9 +26,10 @@ pub fn start_dev_server(path: &PathBuf) -> Result<(), Error> {
         }
     };
 
-    let path = get_current_dir()?.join(path.to_owned());
+    // Is checking to make sure the path is a directory
+    let path = get_current_dir()?.join(path);
 
-    let mut project_config = build_project(&path, false)?;
+    let mut project_config = build_project(&path, false, output_info_level)?;
 
     let mut modified = SystemTime::UNIX_EPOCH;
 
@@ -37,7 +38,13 @@ pub fn start_dev_server(path: &PathBuf) -> Result<(), Error> {
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, path.clone(), &mut modified, &mut project_config)?;
+        handle_connection(
+            stream,
+            path.clone(),
+            &mut modified,
+            &mut project_config,
+            output_info_level,
+        )?;
     }
 
     Ok(())
@@ -48,6 +55,7 @@ fn handle_connection(
     path: PathBuf,
     last_modified: &mut SystemTime,
     project_config: &mut Config,
+    output_info_level: i32,
 ) -> Result<(), Error> {
     let buf_reader = BufReader::new(&mut stream);
 
@@ -71,10 +79,9 @@ fn handle_connection(
     let request_line = buf_reader.lines().next().unwrap();
     match request_line {
         Ok(request) => {
-            
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
-                let p = get_home_page_path(&path, false, &project_config)?;
+                let p = get_home_page_path(&path, false, project_config)?;
                 contents = match fs::read(&p) {
                     Ok(content) => content,
                     Err(e) => {
@@ -98,7 +105,7 @@ fn handle_connection(
                     Some(p) => {
                         let page_path = p.split_whitespace().collect::<Vec<&str>>()[0];
                         if page_path == "/" {
-                            get_home_page_path(&path, true, &project_config)?
+                            get_home_page_path(&path, true, project_config)?
                         } else {
                             PathBuf::from(&path)
                                 .join(&project_config.src)
@@ -106,7 +113,7 @@ fn handle_connection(
                                 .with_extension("bs")
                         }
                     }
-                    None => get_home_page_path(&path, true, &project_config)?,
+                    None => get_home_page_path(&path, true, project_config)?,
                 };
 
                 let global_file_path = PathBuf::from(&path)
@@ -125,7 +132,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified) || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build_project(&path, false)?;
+                    build_project(&path, false, output_info_level)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
@@ -213,13 +220,14 @@ fn handle_connection(
 fn build_project(
     build_path: &PathBuf,
     release: bool,
+    output_info_level: i32,
 ) -> Result<Config, Error> {
     dark_cyan_ln!("Building project...");
     dark_cyan_ln!("Building project...");
     let start = Instant::now();
 
     // TODO - send config file to dev server function and pass it in here
-    let config = build::build(build_path, release)?;
+    let config = build::build(build_path, release, output_info_level)?;
 
     let duration = start.elapsed();
     grey_ln!("------------------------------------");
@@ -343,18 +351,16 @@ fn get_home_page_path(
                     } else {
                         continue;
                     }
+                } else if page
+                    .file_stem()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .starts_with(settings::INDEX_PAGE_KEYWORD)
+                {
+                    Some(page)
                 } else {
-                    if page
-                        .file_stem()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .starts_with(settings::INDEX_PAGE_KEYWORD)
-                    {
-                        Some(page)
-                    } else {
-                        continue;
-                    }
+                    continue;
                 }
             }
             Err(e) => {

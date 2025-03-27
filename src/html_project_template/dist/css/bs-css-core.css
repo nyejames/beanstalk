@@ -1,0 +1,227 @@
+@charset "UTF-8";
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bs-font-size: 100%;
+
+  /* Default Background Colours */
+  --bs-bg-lightmode: "#fff";
+  --bs-bg-darkmode: "#13171f";
+  --bs-text-lightmode: "#373c44";
+  --bs-text-darkmode: "#e0e3e7";
+
+  --bs-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bs-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bs-font-family-emoji);
+  --bs-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bs-font-family-emoji);
+  --bs-font-family: var(--bs-font-family-sans-serif);
+
+  --bs-line-height: 1.5;
+  --bs-font-weight: 400;
+  --bs-font-size: 100%;
+  --bs-text-underline-offset: 0.1rem;
+  --bs-border-radius: 0.25rem;
+  --bs-border-width: 0.0625rem;
+  --bs-outline-width: 0.125rem;
+  --bs-transition: 0.2s ease-in-out;
+
+  --bs-spacing: 1rem;
+  --bs-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: "#838c86";
+  --comment-light: "#759061";
+  --keyword-dark: "#ea943e";
+  --keyword-light: "#ad590e";
+  --string-dark: "#4fba11";
+  --string-light: "#007130";
+  --number-dark: "#96b5ed";
+  --number-light: "#073f85";
+  --operator-dark: "#9ec1ff";
+  --operator-light: "#2b476a";
+  --struct-dark: "#a17fbd";
+  --struct-light: "#ac2187";
+  --type-dark: "#54c5d3";
+  --type-light: "#0d8db3";
+  --parenthesis-dark: "#bcac52";
+  --parenthesis-light: "#ad7e0d";
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bs-font-weight);
+  font-size: var(--bs-font-size);
+  line-height: var(--bs-line-height);
+  font-family: var(--bs-font-family);
+  text-underline-offset: var(--bs-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+/* Container mostly provides default padding */
+.container {
+  width: 100%;
+  margin-right: auto;
+  margin-left: auto;
+  padding-right: var(--bs-spacing-small);
+  padding-left: var(--bs-spacing-small);
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bs-font-size: 106.25%;
+  }
+  .container {
+    max-width: 510px;
+    padding-right: var(--bs-spacing);
+    padding-left: var(--bs-spacing);
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bs-font-size: 112.5%;
+  }
+  .container {
+    max-width: 700px;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bs-font-size: 118.75%;
+  }
+  .container {
+    max-width: 950px;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bs-font-size: 125%;
+  }
+  .container {
+    max-width: 1200px;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bs-font-size: 131.25%;
+  }
+  .container {
+    max-width: 1450px;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Common Styles */
+
+.bs-center {
+  text-align: center;
+}
+
+/* Nav Style */
+.bs-nav-0 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+}
+.bs-nav-1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom-color: grey;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+  padding: 0rem 2rem 0rem 2rem;
+}
+
+/* Title Style */
+.bs-title-0 {
+  font-size: 3.5rem;
+  font-weight: bold;
+  letter-spacing: 0.4rem;
+  word-spacing: 0.5rem;
+  margin: 1.5rem 0 1.4rem 0;
+  line-height: 3.7rem;
+}
+.bs-title-1 {
+  font-size: 3rem;
+  font-weight: bold;
+  letter-spacing: 0.3rem;
+  word-spacing: 0.4rem;
+  margin: 1.3rem 0 1.2rem 0;
+  line-height: 3.5rem;
+}
+.bs-title-2 {
+  font-size: 2.5rem;
+  font-weight: bold;
+  letter-spacing: 0.3rem;
+  word-spacing: 0.35rem;
+  margin: 1.2rem 0 1rem 0;
+  line-height: 3.3rem;
+}
+
+/* Code Style */
+.codeblock {
+  color: light-dark(#222222, #ddd);
+}
+.bs-code-comment {
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword {
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string {
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number {
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator {
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct {
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type {
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis {
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}

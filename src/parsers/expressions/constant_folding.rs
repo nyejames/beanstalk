@@ -1,4 +1,4 @@
-use crate::parsers::ast_nodes::{NodeInfo, Value};
+use crate::parsers::ast_nodes::Value;
 use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, ErrorType, Token};
 
 use crate::tokenizer::TokenPosition;
@@ -118,7 +118,7 @@ pub fn math_constant_fold(
         return Ok(stack[0].get_value());
     }
 
-    if stack.len() == 0 {
+    if stack.is_empty() {
         return Ok(Value::None);
     }
 

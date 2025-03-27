@@ -1,0 +1,54 @@
+[Navbar]
+
+[Header center: [title(1): TYPES]]
+[Page:
+
+Objects are a way to group multiple values together and specify names for them.
+They are created by using parentheses and separating the values with commas.
+
+To define a new object type, you use explicitly use the 'Type' keyword when creating a new Object.
+
+To create a new instance of an object, you use your new Object type as the type.
+
+If you don't specify a type at all, you are creating a new object literal.
+
+[Code:
+    -- creating a new object type
+    Enemy Type = {
+
+        id Int, -- Must be set when creating a new instance of this Object
+
+        x ~= 1,
+        y ~= 2,
+        z ~= 3,
+
+        health ~= 100,
+        alive Bool = true,
+
+        -- You can also reference other new properties on the Object
+        -- When a new one is being created
+        -- This only works if the property being referenced has already been declared
+        max_health = $health,
+    }
+
+    -- Creating a new instance of the object
+    -- Id does not have a default value so must be assigned
+    new_enemy Enemy = {
+        id = 0,
+        health = 200,
+    }
+
+    new_enemy.x -- returns 1
+    new_enemy.alive -- returns false,
+    new_enemy.max_health -- returns 200
+
+    print{new_enemy.alive} -- true
+
+    -- New object literal that does not have a set type
+    obj_literal = {
+        name = "bob",
+        age = 69,
+    }
+]
+
+[Footer]

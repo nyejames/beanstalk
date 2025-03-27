@@ -1,25 +1,26 @@
 [Navbar]
-[header center: [title(1): CONTROL FLOW]]
 
-[main:
+[Header center: [title(1): CONTROL FLOW]]
+
+[Page:
 ## If Statements
 If statements can be used as expressions or statements.
 They can also be used for pattern matching, all with a similar syntax.
 
-[code:
+[Code:
     v = 1
     if v is not 1:
         print("nope")
     else
         print("yep")
-    end
+    zz
 
     -- If as an expression
     x = 0
     msg = if x is:
         0: "nope"
         else: "defintely nope"
-    end
+    zz
 
     print(msg) -- prints "defintely nope"
 ]
@@ -34,7 +35,7 @@ They can also be used for pattern matching, all with a similar syntax.
         < 0: print("negative")
         > 1: print("big number")
         else: print("only one")
-    end
+    zz
 
 ]
 
@@ -46,28 +47,28 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 [code:
     for thing in things:
         print(thing)
-    end
+    zz
 
     for c in collection_of_choices:
         if c is cool: 
             print(cool.value)
         else: 
             print(cool.value)
-        end
-    end
+        zz
+    zz
 
     for -20 to big_number:
         print("hello")
-    end
+    zz
 
     -- reverse loop
     for n in big_number to smaller_number:
         print(n)
-    end
+    zz
 
     for item in collection:
         print(item.index)
-    end
+    zz
 
     -- Using a loop in a scene
     names = {"Priya", "Sam", "Chad"}
@@ -77,11 +78,10 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         ]
     ]
 
-    --- scene looks like:
-    Name: Priya
-    Name: Sam
-    Name: Chad
-    ---
+    -- scene looks like:
+    -- Name: Priya
+    -- Name: Sam
+    -- Name: Chad
 ]
 
 [Footer]

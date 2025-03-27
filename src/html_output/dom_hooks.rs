@@ -21,7 +21,7 @@ pub fn generate_dom_update_js(update: DOMUpdate) -> &'static str {
 
     match update {
         DOMUpdate::InnerHTML => {
-            &"function uInnerHTML(id,update){
+            "function uInnerHTML(id,update){
                 const es = document.getElementsByClassName(id);
                 if (Array.isArray(update)){update = update.join(' ')}
                 for (let i = 0;i<es.length;i++) {
@@ -30,7 +30,7 @@ pub fn generate_dom_update_js(update: DOMUpdate) -> &'static str {
             }"
         }
         DOMUpdate::AppendChild => {
-            &"function uAppendChild(id,update){
+            "function uAppendChild(id,update){
                 const es = document.getElementsByClassName(id);
                 if (Array.isArray(update)){update = update.join(' ')}
                 for (let i = 0;i<es.length;i++) {
@@ -39,7 +39,7 @@ pub fn generate_dom_update_js(update: DOMUpdate) -> &'static str {
             }"
         }
         DOMUpdate::RemoveChild => {
-            &"function uRemoveChild(id,update){
+            "function uRemoveChild(id,update){
                 const es = document.getElementsByClassName(id);
                 if (Array.isArray(update)){update = update.join(' ')}
                 for (let i = 0;i<es.length;i++) {
@@ -48,7 +48,7 @@ pub fn generate_dom_update_js(update: DOMUpdate) -> &'static str {
             }"
         }
         DOMUpdate::ReplaceChild => {
-            &"function uReplaceChild(id,update){
+            "function uReplaceChild(id,update){
                 const es = document.getElementsByClassName(id);
                 if (Array.isArray(update)){update = update.join(' ')}
                 for (let i = 0;i<es.length;i++) {

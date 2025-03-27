@@ -58,7 +58,6 @@ pub struct HTMLMeta {
     pub release_build: bool,
 }
 
-
 impl Default for HTMLMeta {
     fn default() -> Self {
         HTMLMeta {
