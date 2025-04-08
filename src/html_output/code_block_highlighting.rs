@@ -2,7 +2,7 @@ use crate::parsers::util::NumericalParsing;
 
 // This function will take a code block and a language and return a highlighted version of the code block.
 // It parses the code block then adds spans with classes for each token.
-pub fn highlight_code_block(code_block: &str, language: &String) -> String {
+pub fn _highlight_code_block(code_block: &str, language: &String) -> String {
     let mut highlighted_code = String::new();
     let mut chars = code_block.chars().peekable();
     let mut char_scope: Option<char> = None;
@@ -85,7 +85,7 @@ pub fn highlight_code_block(code_block: &str, language: &String) -> String {
                         // If it didn't end up matching the comment,
                         // The characters need to be highlighted normally and added to the block
                         // keyword.push(*c);
-                        let not_comment_string = highlight_code_block(&keyword, language);
+                        let not_comment_string = _highlight_code_block(&keyword, language);
                         highlighted_code.push_str(&not_comment_string);
                         break 'outer;
                     }
@@ -143,7 +143,7 @@ pub fn highlight_code_block(code_block: &str, language: &String) -> String {
                 let mut whitespace = 0;
                 chars.next();
                 while let Some(c) = chars.peek() {
-                    if c.is_non_newline_whitespace() && whitespace <= indentations {
+                    if c._is_non_newline_whitespace() && whitespace <= indentations {
                         whitespace += 1;
                         chars.next();
                     } else {

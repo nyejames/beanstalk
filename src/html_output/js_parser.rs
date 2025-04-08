@@ -134,7 +134,7 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
 
         // If the expression is just a tuple,
         // then it should automatically destructure into multiple arguments like this
-        Value::Structure(args) => {
+        Value::StructLiteral(args) => {
             let mut structure = String::from("{{");
             for (index, arg) in args.iter().enumerate() {
                 let arg_name = if arg.name.is_empty() {
@@ -152,6 +152,10 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
             }
         }
 
+        Value::Collection(items, _) => {
+            js.push_str(&combine_vec_to_js(items, start_pos)?);
+        }
+
         Value::None => {
             js.push_str("null ");
         }
@@ -159,7 +163,7 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
         _ => {
             return Err(CompileError {
                 msg: format!(
-                    "Compiler Bug: Invalid AST node given to expression_to_js: {:?}",
+                    "Invalid AST node given to expression_to_js: {:?}",
                     expr
                 ),
                 start_pos: start_pos.to_owned(),
@@ -210,25 +214,4 @@ pub fn combine_vec_to_js(
     }
 
     Ok(js)
-}
-
-pub fn collection_to_js(
-    collection: &Value,
-    start_pos: &TokenPosition,
-) -> Result<String, CompileError> {
-    match collection {
-        Value::Structure(args) => {
-            let mut nodes = Vec::new();
-            for arg in args {
-                nodes.push(arg.value.to_owned());
-            }
-            combine_vec_to_js(&nodes, start_pos)
-        }
-        _ => Err(CompileError {
-            msg: "Non-tuple AST node given to collection_to_js".to_string(),
-            start_pos: start_pos.to_owned(),
-            end_pos: collection.dimensions(),
-            error_type: ErrorType::Compiler,
-        }),
-    }
 }

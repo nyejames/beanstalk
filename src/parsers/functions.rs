@@ -8,6 +8,7 @@ use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
+use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 
 pub fn create_function(
     x: &mut TokenContext,
@@ -78,6 +79,8 @@ pub fn create_function(
     ))
 }
 
+// Arg names and types are required
+// Can have default values
 pub fn create_args(
     x: &mut TokenContext,
     ast: &[AstNode],
@@ -193,7 +196,7 @@ pub fn create_args(
 
             _ => {
                 return Err(CompileError {
-                    msg: "Invalid syntax for function arguments".to_string(),
+                    msg: format!("Unexpected token used in function arguments: {:?}", token),
                     start_pos: x.token_positions[x.index].to_owned(),
                     end_pos: TokenPosition {
                         line_number: x.token_positions[x.index].line_number,
@@ -297,84 +300,80 @@ fn parse_return_type(x: &mut TokenContext) -> Result<Vec<Arg>, CompileError> {
 // Give back list of args for a function call in the correct order
 // Replace names with their correct index order
 // Makes sure they are the correct type
-// Return a CompileError if anything is incorrect
-
 // TODO: check if any of this actually works
-pub fn create_structure_args(
+pub fn create_func_call_args(
     value_passed_in: &Value,
     args_required: &[Arg],
     token_position: &TokenPosition,
 ) -> Result<Vec<Value>, CompileError> {
     // Create a vec of the required args values (arg.value)
-    let mut sorted_values: Vec<Value> = args_required
-        .iter()
-        .map(|arg| arg.value.to_owned())
-        .collect();
+    let mut indexes_filled: Vec<usize> = Vec::with_capacity(args_required.len());
+    let mut sorted_values: Vec<Value> = args_required.iter().map(|arg| arg.value.to_owned()).collect();
 
-    // If args required contains a struct of one datatype,
-    // Then any number of arguments of that datatype can be passed in
-    match value_passed_in {
-        // These are the only way values can be named
-        Value::Structure(inner_args) => {
-            let inner_args_length = inner_args.len();
-            if inner_args_length == 0 {
-                // This is equivalent to None
-                // This should probably be throwing an error here as an empty struct should not be possible to pass as an arg
-                return Err( CompileError {
-                    msg: "Compiler Problem: Empty struct passed into a struct arg: this should not be possible. This is equivalent to None.".to_string(),
-                    start_pos: token_position.to_owned(),
-                    end_pos: TokenPosition {
-                        line_number: token_position.line_number,
-                        char_column: token_position.char_column + 1,
-                    },
-                    error_type: ErrorType::Syntax,
-                });
-            }
-
-            // This should also not be possible, as a struct of a single item will automatically become a type of that item
-            if inner_args_length == 1 {
-                return Err( CompileError {
-                    msg: "Compiler Problem: A spooky struct of one item has somehow got this far is the compile stage. This should just be the item itself".to_string(),
-                    start_pos: token_position.to_owned(),
-                    end_pos: TokenPosition {
-                        line_number: token_position.line_number,
-                        char_column: token_position.char_column + 1,
-                    },
-                    error_type: ErrorType::Syntax,
-                });
-            }
-
-            // TODO: if the accepted argument is a struct of only one item, any number of values of that argument's type can be passed in
-            // TODO: Match all the args in the struct to the required args
+    let args_passed_in = match value_passed_in {
+        Value::StructLiteral(args) => {
+            args
         }
-
-        // This should only be in the case of function calls that don't need any arguments passed in
-        Value::None => {
-            for arg in args_required {
-                // Make sure there are no required arguments left
-                if arg.value != Value::None {
-                    return Err(CompileError {
-                        msg: format!("Missed at least one required arguments for struct or function call: {} (type: {:?})", arg.name, arg.data_type),
-                        start_pos: token_position.to_owned(),
-                        end_pos: TokenPosition {
-                            line_number: token_position.line_number,
-                            char_column: token_position.char_column + 1,
-                        },
-                        error_type: ErrorType::Syntax,
-                    });
-                }
-            }
-
-            return Ok(Vec::new());
-        }
-
-        // Should just be a literal value (one arg passed in)
-        // Probably won't allow names or anything here so can just type check it with the sorted args
-        // And return the value
         _ => {
-            if sorted_values.is_empty() {
+            &Vec::from([Arg {
+                name: "".to_string(),
+                data_type: value_passed_in.get_type(),
+                value: value_passed_in.to_owned(),
+            }])
+        }
+    };
+
+    if args_passed_in.is_empty() {
+        for arg in args_required {
+            // Make sure there are no required arguments left
+            if arg.value != Value::None {
                 return Err(CompileError {
-                    msg: format!("This struct or function call does not accept any arguments. Value passed in: {:?}", value_passed_in),
+                    msg: format!("Missed at least one required arguments for struct or function call: {} (type: {:?})", arg.name, arg.data_type),
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
+                });
+            }
+        }
+
+        // Since all sorted args have values, they can just be passed back
+        // As the default values
+        return Ok(sorted_values);
+    }
+
+    // Should just be a literal value (one arg passed in)
+    // Probably won't allow names or anything here so can just type check it with the sorted args
+    // And return the value
+    if sorted_values.is_empty() {
+        return Err(CompileError {
+            msg: format!("This function call does not accept any arguments. Value passed in: {:?}", args_passed_in),
+            start_pos: token_position.to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_position.line_number,
+                char_column: token_position.char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        });
+    }
+
+    // First we want to make sure we fill all the named arguments first
+    // Then we can fill in the unnamed arguments
+    // To do this we can just sort the args passed in
+    let args_in_sorted = sort_unnamed_args_last(args_passed_in);
+
+    'outer: for mut arg in args_in_sorted {
+
+        // If argument is unnamed, find the smallest index that hasn't been filled
+        if arg.name.is_empty() {
+            let min_available = find_first_missing(&indexes_filled);
+
+            // Make sure the type is correct
+            if args_required[min_available].data_type.is_valid_type(&mut arg.data_type) {
+                return Err(CompileError {
+                    msg: format!("Argument '{}' is of type {:?}, but used in an argument of type: {:?}", arg.name, arg.data_type, args_required[min_available].data_type),
                     start_pos: token_position.to_owned(),
                     end_pos: TokenPosition {
                         line_number: token_position.line_number,
@@ -384,37 +383,40 @@ pub fn create_structure_args(
                 });
             }
 
-            // Fill in the first required value (first none) in the required args
-            // Then make sure there are no more required args
-            let replacement_value = value_passed_in.to_owned();
-            for (i, value) in sorted_values.iter().enumerate() {
-                if value == &Value::None {
-                    // Make sure this is the correct type
-                    let value_being_replaced = &mut sorted_values[i];
-                    let value_being_replaced_type = value_being_replaced.get_type();
-                    let passed_value_type = value_passed_in.get_type();
-
-                    if value_being_replaced_type != passed_value_type {
-                        return Err(CompileError {
-                            msg: format!("Type error: argument of type {:?} was passed into an argument of type: {:?}", passed_value_type, value_being_replaced_type),
-                            start_pos: token_position.to_owned(),
-                            end_pos: TokenPosition {
-                                line_number: token_position.line_number,
-                                char_column: token_position.char_column + 1,
-                            },
-                            error_type: ErrorType::Syntax,
-                        });
-                    }
-
-                    *value_being_replaced = replacement_value;
-                    return Ok(sorted_values);
-                }
+            if sorted_values.len() <= min_available {
+                return Err(CompileError {
+                    msg: format!("Too many arguments passed into function call. Expected: {:?}, Passed in: {:?}", args_required, args_passed_in),
+                    start_pos: token_position.to_owned(),
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
+                });
             }
 
-            // If there are no None values, this automatically becomes the first one
-            sorted_values[0] = replacement_value;
-            return Ok(sorted_values);
+            sorted_values[min_available] = arg.value.to_owned();
+            indexes_filled.push(min_available);
+            continue;
         }
+
+        for (j, arg_required) in args_required.iter().enumerate() {
+            if arg_required.name == arg.name {
+                sorted_values[j] = arg.value.to_owned();
+                indexes_filled.push(j);
+                continue 'outer;
+            }
+        }
+
+        return Err(CompileError {
+            msg: format!("Argument '{}' not found in function call. Expected: {:?}, Passed in: {:?}", arg.name, args_required, arg),
+            start_pos: token_position.to_owned(),
+            end_pos: TokenPosition {
+                line_number: token_position.line_number,
+                char_column: token_position.char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        });
     }
 
     // Check if the sorted args contains any None values
@@ -460,17 +462,17 @@ pub fn parse_function_call(
 
     // Make sure there are parenthesis
     let call_value = if x.tokens.get(x.index) == Some(&Token::OpenParenthesis) {
-        x.index += 1;
 
         // Parse argument(s) passed into the function
         create_expression(
             x,
             false,
             ast,
-            &mut DataType::Structure(argument_refs.to_owned()),
+            &mut DataType::Inferred,
             false,
             variable_declarations,
         )?
+
     } else {
         return Err(CompileError {
             msg: "Expected a parenthesis after function name".to_string(),
@@ -485,7 +487,7 @@ pub fn parse_function_call(
 
     // Makes sure the call value is correct for the function call
     // If so, the function call args are sorted into their correct order (if some are named or optional)
-    let args = create_structure_args(&call_value, argument_refs, &x.token_positions[x.index])?;
+    let args = create_func_call_args(&call_value, argument_refs, &x.token_positions[x.index])?;
 
     // look for which arguments are being accessed from the function call
     let accessed_args = get_accessed_args(

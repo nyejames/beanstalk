@@ -3,30 +3,39 @@
 [Header center: [title(1): BASIC BS SYNTAX]]
 [Page:
 
-Each BS file is a module.
+Each Beanstalk file is a module.
+
+Each module is just a file that exports a Struct with the filename becoming the name of the struct.
 
 Projects are a collection of modules with a config file as an entry point.
-
-Anything inside a module is private by default, 
-variables and functions are only accessible to other modules in the project if they are explicitly exported using the @ symbol.
 
 # Quick Synax Overview
 The specifics are not fully decided on, but some of the key things are:
 - Using 'zz' keyword to close scopes (Colon opens scopes).
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for scenes.
-- Equality and other logical operators only use keywords (you can't use == or ! in logical expressions for example)
-- A radically minimal struct syntax that uses parenthesis.
+- Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit)
 - Double dashes for single line comments (--)
 
-# Style Guide
-The style guide is:
-- snake_case for variables, collections
-- Upper_Snake_Case for types
-- CamelCase for functions
-- Top level styles use PascalCase, but unlockable styles are regular snake_case
-
 4 spaces are recommended for indentation. 
+
+# Compiletime vs Runtime naming
+Anything that should exist only at compile time must start with a capital letter. 
+Anything else starts with a lower case letter. 
+This is to help the compiler know exactly what you intend to be constant or inlined.
+
+So types use Upper_Snake_Case. But instances of types use regular snake_case (if they are not constants).
+
+camelCase is used for naming functions, 
+but if you want to tell the compiler that the function should be inlined (evaluated at compiletime),
+you can name it with PascalCase and the compiler will replace the function with it's returned values.
+
+You will get an error if you use a name starting with a capitol letter that can't be a constant.
+
+Top level styles use PascalCase as they should always be constants.
+But their unlockable styles use lowercase as they usually exist at runtime.
+
+The compiler will still sometimes evaluate lower case variables as constants or inline regular functions.
 
 # Comments
 Comments use a double minus sign '--'.
@@ -44,11 +53,13 @@ Comments use a double minus sign '--'.
 ]
 
 # Variables
-Equals means assign. Fully capitalized names become constants or read-only variables depending on their context.
+Equals means assign.
 
 Similar to Python, there is no special keyword for creating a new variable, but you can specify a type annotation.
 
 The @ symbol before a name is used to export variables and methods/functions outside of a module or object.
+
+
 
 ## Assignment
 
@@ -76,10 +87,13 @@ Type annotations are not needed for variables if they are being initialised with
     -- 64 bit immutable float with inferred type
     number = 69.420
 
-    -- Becomes an immutable reference to the number
+    -- Becomes an immutable reference to the value
+    -- For primatives this is actually just an immutable copy,
+    -- But the behaviour is consistent for all datatypes, including heap allocated ones
     another_number = number
 
     -- Becomes a mutable reference to the number
+    -- or moves the value if it isn't used again later in the scope
     another_mutable_number ~= number
 
     -- Type error (number is not mutable)
@@ -91,16 +105,13 @@ Type annotations are not needed for variables if they are being initialised with
 
 Variables must be given a value or a type when they are declared.
 
-If an error occurs during assignment of a variable, it's type becomes an Error and must be handled. 
-Unhandled assignment errors at runtime will default the variable to it's zero value.
-
 All copies of collections are explicit and must use the 'copy' keyword in place of a type.
 
 [Code:
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
-    -- Deep copy of a collection
+    -- Deep mutable copy of a collection
     a_copy ~copy = a_collection
 
     -- Immutable reference to a_collection
@@ -131,7 +142,8 @@ The import keyword works like a function call, returning the imported value.
 
 [Code:
     -- Importing a struct without renaming it from a library
-    M.root(2, 8)
+    import("math")
+    math.root(2, 8)
 
     -- Renaming the import
     encryption = import("libs/encrypt")
@@ -183,12 +195,7 @@ String is the keyword for string types in Beanstalk. Double quotes are automatic
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 
-[Code: "string literal with \{curly braces} in it that are escaped"]
-
-[Code: 
-    `9 "is" {5 + 4}`
-    -- result is "9 "is" 9"
-]
+Scenes are used instead of format strings. See [link "./scenes": Scenes] for more information.
 
 # Logical Operators
 The 'is' keyword is used to check equality. Not ==. The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.

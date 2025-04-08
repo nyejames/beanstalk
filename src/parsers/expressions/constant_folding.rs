@@ -16,7 +16,9 @@ pub fn math_constant_fold(
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
-    // blue_ln!("starting stack: {:?}", output_stack);
+    for node in &output_stack {
+        blue_ln!("output_stack: {:?}", node);
+    }
     for node in &output_stack {
         // red_ln!("output_stack: {:?}", stack);
 
@@ -44,34 +46,34 @@ pub fn math_constant_fold(
                     });
                 }
 
-                let left = stack.pop().unwrap();
-                let right = stack.pop().unwrap();
+                let rhs = stack.pop().unwrap();
+                let lhs = stack.pop().unwrap();
 
                 // Check if top 2 of stack are literals
                 // if at least one is not then this must be a runtime expression
                 // And just push the operator onto the stack instead of evaluating
                 // TO DO: GENERICS FOR THIS TO SUPPORT INTS CORRECTLY
-                let left_value = match left.get_value() {
+                let lhs_value = match lhs.get_value() {
                     Value::Float(value) => value,
                     Value::Int(value) => value as f64,
 
                     // TODO - some runtime thing
                     _ => {
-                        stack.push(left);
-                        stack.push(right);
+                        stack.push(rhs);
+                        stack.push(lhs);
                         stack.push(node.to_owned());
                         continue;
                     }
                 };
 
-                let right_value = match right.get_value() {
+                let rhs_value = match rhs.get_value() {
                     Value::Float(value) => value,
                     Value::Int(value) => value as f64,
 
                     // TODO - some runtime thing
                     _ => {
-                        stack.push(left);
-                        stack.push(right);
+                        stack.push(rhs);
+                        stack.push(lhs);
                         stack.push(node.to_owned());
                         continue;
                     }
@@ -79,11 +81,11 @@ pub fn math_constant_fold(
 
                 let new_number = AstNode::Literal(
                     Value::Float(match op {
-                        Token::Add => left_value + right_value,
-                        Token::Subtract => right_value - left_value,
-                        Token::Multiply => left_value * right_value,
-                        Token::Divide => left_value / right_value,
-                        Token::Modulus => left_value % right_value,
+                        Token::Add => lhs_value + rhs_value,
+                        Token::Subtract => lhs_value - rhs_value,
+                        Token::Multiply => lhs_value * rhs_value,
+                        Token::Divide => lhs_value / rhs_value,
+                        Token::Modulus => lhs_value % rhs_value,
                         _ => {
                             return Err(CompileError {
                                 msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
@@ -112,7 +114,7 @@ pub fn math_constant_fold(
         }
     }
 
-    // red_ln!("final stack: {:?}", stack);
+    red_ln!("final stack: {:?}", stack);
 
     if stack.len() == 1 {
         return Ok(stack[0].get_value());

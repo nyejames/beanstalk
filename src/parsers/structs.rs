@@ -12,11 +12,13 @@ use crate::parsers::expressions::parse_expression::create_expression;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token};
 
-// Assumes to have started after the open parenthesis
+// Assumes to have started after the open curly
 // Datatype must always be a struct containing the data types of the items in the struct
 // Or inferred if the data type is not known
 // Also modifies the data type passed into it
-pub fn new_struct(
+
+// This can be created using curly brackets or parenthesis depending on context (function calls)
+pub fn new_fixed_collection(
     x: &mut TokenContext,
     initial_value: Value,
     required_args: &[Arg],
@@ -39,10 +41,10 @@ pub fn new_struct(
     let mut next_item: bool = true;
     let mut item_name: String = "0".to_string();
 
-    // ASSUMES AN OPEN PARENTHESIS HAS JUST BEEN PASSED
+    // ASSUMES AN OPEN CURLY HAS JUST BEEN PASSED
     while x.index < x.tokens.len() {
         match x.current_token().to_owned() {
-            Token::CloseParenthesis => {
+            Token::CloseCurly => {
                 x.index += 1;
                 break;
             }
@@ -50,7 +52,7 @@ pub fn new_struct(
             Token::Comma => {
                 if next_item {
                     return Err(CompileError {
-                        msg: "Expected a struct item after the comma".to_string(),
+                        msg: "Expected a collection item after the comma".to_string(),
                         start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
                             line_number: x.token_positions[x.index].line_number,
@@ -70,7 +72,7 @@ pub fn new_struct(
             Token::Variable(name) => {
                 if !next_item {
                     return Err(CompileError {
-                        msg: "Expected a comma between struct declarations".to_string(),
+                        msg: "Expected a comma between items in this collection".to_string(),
                         start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
                             line_number: x.token_positions[x.index].line_number,
@@ -156,19 +158,3 @@ pub fn new_struct(
     Ok(items)
 }
 
-// AUTOMATICALLY TURNS STRUCTS OF ONE ITEM INTO THAT ITEM
-// This is a weird/unique design choice of the language
-// Every time an expression is parsed, it will turn a struct of one item into that item
-pub fn struct_to_value(args: &Vec<Arg>) -> Value {
-    // An empty struct is None in this language
-    if args.is_empty() {
-        return Value::None;
-    }
-
-    // Automatically convert structs of one item into that item
-    if args.len() == 1 {
-        return args[0].value.to_owned();
-    }
-
-    Value::Structure(args.to_owned())
-}

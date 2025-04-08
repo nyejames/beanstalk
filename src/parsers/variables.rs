@@ -16,7 +16,7 @@ pub fn create_new_var_or_ref(
     variable_declarations: &mut Vec<Arg>,
     is_exported: bool,
     ast: &[AstNode],
-    inside_structure: bool, // This allows parse_expression to know that new variable declarations are valid
+    inside_collection: bool, // This allows parse_expression to know that new variable declarations are valid
 ) -> Result<AstNode, CompileError> {
     let token_line_number = x.token_positions[x.index].line_number;
     let token_start_pos = x.token_positions[x.index].char_column;
@@ -77,7 +77,7 @@ pub fn create_new_var_or_ref(
         is_exported,
         ast,
         &mut *variable_declarations,
-        inside_structure,
+        inside_collection,
     )
 }
 
@@ -87,34 +87,29 @@ fn new_variable(
     is_exported: bool,
     ast: &[AstNode],
     variable_declarations: &mut Vec<Arg>,
-    inside_structure: bool,
+    inside_collection: bool,
 ) -> Result<AstNode, CompileError> {
+    
     // Move past the name
     x.index += 1;
     let mut data_type = DataType::Inferred;
-    let mut is_const = true;
+    let mut is_mutable = true;
 
     if x.tokens[x.index] == Token::Mutable {
         x.index += 1;
-        is_const = false;
+        is_mutable = false;
     }
 
     match x.tokens[x.index] {
         Token::Assign => {
             x.index += 1;
-            // Check if this is a function declaration
+
             if x.tokens[x.index] == Token::FunctionKeyword {
                 x.index += 1;
                 let (function, arg_refs, return_type) =
                     create_function(x, name.to_owned(), is_exported, ast, variable_declarations)?;
 
-                variable_declarations.push(Arg {
-                    name: name.to_owned(),
-                    data_type: DataType::Function(arg_refs.clone(), return_type.to_owned()),
-                    value: Value::None,
-                });
-
-                if !inside_structure {
+                if !inside_collection {
                     variable_declarations.push(Arg {
                         name: name.to_owned(),
                         data_type: DataType::Function(arg_refs.clone(), return_type.to_owned()),
@@ -184,12 +179,14 @@ fn new_variable(
 
     let parsed_expr = create_expression(
         x,
-        inside_structure,
+        inside_collection,
         ast,
         &mut data_type,
         false,
         variable_declarations,
     )?;
+
+    // println!("parsed expr: {:?}", parsed_expr);
 
     // Check if a type of collection / struct has been created
     // Or whether it is a literal or expression
@@ -200,11 +197,11 @@ fn new_variable(
         var_value.to_owned(),
         is_exported,
         data_type.to_owned(),
-        is_const,
+        is_mutable,
         x.token_positions[x.index].to_owned(),
     );
 
-    if !inside_structure {
+    if !inside_collection {
         variable_declarations.push(Arg {
             name: name.to_string(),
             data_type,

@@ -4,9 +4,8 @@ use super::{
 };
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::build_ast::TokenContext;
-use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::scene::{Style, StyleFormat};
-use crate::parsers::structs::new_struct;
+use crate::parsers::structs::new_fixed_collection;
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use colour::yellow_ln;
@@ -105,7 +104,7 @@ pub fn new_scene(
 
                 // Otherwise check if it's a regular style or variable reference
                 // If this is a reference to a function or variable
-                let value = if let Some(arg) = declarations.iter().find(|a| a.name == name) {
+                let value = if declarations.iter().any(|a| a.name == name) {
 
                     // Here we need to evaluate the expression
                     // This is because functions can be folded into styles (or at least eventually can be)
@@ -134,16 +133,65 @@ pub fn new_scene(
 
                     // Check if this is a style or reference to a value
                     // Must follow all the rules with how a new style overrides the current style.
-                    Value::Style(style) => {
-                        // Insert this style's unlocked styles into the unlocked styles map
-                        if !style.unlocked_styles.is_empty() {
-                            for (name, style) in style.unlocked_styles.iter() {
-                                // Should this overwrite? Or skip if already unlocked?
-                                unlocked_styles.insert(name.to_owned(), style.to_owned());
+                    Value::StructLiteral(structure) => {
+                        let mut structure_args: Vec<Arg> = Vec::new();
+                        let mut style: Style = Style::default();
+                        
+                        for arg in structure {
+                            match arg.name.as_str() {
+                                // pub format: StyleFormat,
+                                // 
+                                // // Removes any parent wrappers lower than this precedence
+                                // // Before adding its own wrappers
+                                // pub parent_override: i32,
+                                // 
+                                // pub neighbour_rule: NeighbourRule,
+                                // 
+                                // // Passes a default style for any children to start with
+                                // // Wrappers can be overridden with parent overrides
+                                // // Or child wrappers that are higher precedence
+                                // pub child_default: Option<Box<PrecedenceStyle>>,
+                                // 
+                                // pub compatibility: SceneCompatibility,
+                                // 
+                                // // Styles that children of this scene can now use
+                                // pub unlocked_styles: HashMap<String, Style>,
+                                // 
+                                // // If this is true, no unlocked styles will be inherited from the parent
+                                // pub unlocks_override: bool,
+                                "format" => {
+                                    style.format = match arg.value {
+                                        Value::Int(int) => int,
+                                        _ => {
+                                            return Err(CompileError {
+                                                msg: "Expected an integer for the format field of a scene".to_string(),
+                                                start_pos: arg.value.dimensions(),
+                                                end_pos: TokenPosition {
+                                                    line_number: arg.value.dimensions().line_number,
+                                                    char_column: arg.value.dimensions().char_column + arg.name.len() as u32,
+                                                },
+                                                error_type: ErrorType::Syntax,
+                                            });
+                                        }
+                                    };
+                                }
+                                
+                                _ => {
+                                    structure_args.push(arg);
+                                }
                             }
+                        }
+                        
+                        // Insert this style's unlocked styles into the unlocked styles map
+                        for (name, style) in style.unlocked_styles.iter() {
+                            // Should this overwrite? Or skip if already unlocked?
+                            unlocked_styles.insert(name.to_owned(), style.to_owned());
                         }
 
                         scene_styles.push(style);
+                        
+                        // Anything that isn't a style field should be added to the scene body
+                        scene_body.push(Value::StructLiteral(structure_args));
                     }
 
                     _ => scene_body.push(value),
@@ -158,7 +206,7 @@ pub fn new_scene(
             | Token::RawStringLiteral(_) => {
                 x.index -= 1;
 
-                scene_body.push(AstNode::Literal(
+                scene_body.push(
                     create_expression(
                         x,
                         false,
@@ -166,9 +214,8 @@ pub fn new_scene(
                         &mut DataType::CoerceToString,
                         inside_brackets,
                         declarations,
-                    )?,
-                    x.token_positions[x.index].to_owned(),
-                ));
+                    )?
+                );
             }
 
             Token::Comma => {
@@ -185,19 +232,18 @@ pub fn new_scene(
 
             Token::CodeKeyword => {
                 scene_styles.push(Style {
-                    format: StyleFormat::Codeblock,
+                    format: StyleFormat::Codeblock as i32,
                     parent_override: 10,
                     ..Style::default()
                 });
             }
 
             Token::OpenParenthesis => {
-                let structure = new_struct(x, Value::None, &Vec::new(), ast, declarations)?;
+                let structure = new_fixed_collection(x, Value::None, &Vec::new(), ast, declarations)?;
 
-                scene_body.push(AstNode::Literal(
-                    Value::Structure(structure),
-                    x.token_positions[x.index].to_owned(),
-                ));
+                scene_body.push(
+                    Value::StructLiteral(structure)
+                );
             }
 
             Token::Ignore => {
@@ -264,35 +310,27 @@ pub fn new_scene(
             Token::SceneHead => {
                 let nested_scene = new_scene(x, ast, declarations, unlocked_styles)?;
 
-                scene_body.push(AstNode::Literal(
-                    nested_scene,
-                    TokenPosition {
-                        line_number: token_line_number,
-                        char_column: token_char_column,
-                    },
-                ));
+                scene_body.push(
+                    nested_scene
+                );
             }
 
             Token::RawStringLiteral(content) | Token::StringLiteral(content) => {
-                scene_body.push(AstNode::Literal(
-                    Value::String(content.to_string()),
-                    TokenPosition {
-                        line_number: token_line_number,
-                        char_column: token_char_column,
-                    },
-                ));
+                scene_body.push(
+                    Value::String(content.to_string())
+                );
             }
 
             // For templating values in scene heads in the body of scenes
-            Token::EmptyScene(spaces) => {
-                scene_body.push(AstNode::SceneTemplate);
-                for _ in 0..*spaces {
-                    scene_body.push(AstNode::Spaces(token_line_number));
-                }
-            }
+            // Token::EmptyScene(spaces) => {
+            //     scene_body.push(AstNode::SceneTemplate);
+            //     for _ in 0..*spaces {
+            //         scene_body.push(AstNode::Spaces(token_line_number));
+            //     }
+            // }
 
             Token::Newline => {
-                scene_body.push(AstNode::Newline);
+                scene_body.push(Value::String("\n".to_string()));
             }
 
             Token::Empty | Token::Colon => {}

@@ -1,6 +1,6 @@
 use super::js_parser::expression_to_js;
 use crate::html_output::js_parser::combine_vec_to_js;
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::{Arg, Value};
 use crate::parsers::scene::{parse_scene, PrecedenceStyle, SceneIngredients, StyleFormat};
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
@@ -46,7 +46,7 @@ pub fn parse<'a>(
 
     // Keeps track of whether a reference has already been used
     // This is to prevent duplicate JS code for updating the same element
-    let mut module_references: Vec<AstNode> = Vec::new();
+    let mut module_references: Vec<Arg> = Vec::new();
 
     let mut class_id: usize = 0;
 
@@ -61,7 +61,7 @@ pub fn parse<'a>(
                         scene_styles: &scene_styles,
                         inherited_style: PrecedenceStyle::new(),
                         scene_id,
-                        format_context: &StyleFormat::None,
+                        format_context: StyleFormat::None as i32,
                     },
                     &mut js,
                     &mut css,
@@ -118,7 +118,7 @@ pub fn parse<'a>(
                                         scene_styles,
                                         inherited_style: PrecedenceStyle::new(),
                                         scene_id: id.to_owned(),
-                                        format_context: &StyleFormat::None,
+                                        format_context: StyleFormat::None as i32,
                                     },
                                     &mut js,
                                     &mut created_css,
@@ -190,7 +190,11 @@ pub fn parse<'a>(
                     }
                 };
 
-                module_references.push(node);
+                module_references.push(Arg {
+                    name: id.to_owned(),
+                    data_type: data_type.to_owned(),
+                    value: expr.to_owned(),
+                });
             }
 
             AstNode::Function(name, args, body, is_exported, return_type, ref start_pos) => {
@@ -245,7 +249,7 @@ pub fn parse<'a>(
                 let mut final_string = String::new();
 
                 match value {
-                    Value::Structure(args) => {
+                    Value::StructLiteral(args) => {
                         for arg in args {
                             final_string.push_str(&format!(
                                 "{} ",
@@ -307,109 +311,109 @@ pub fn parse<'a>(
     })
 }
 
-fn collect_closing_tags(closing_tags: &mut Vec<String>) -> String {
-    let mut tags = String::new();
-
-    closing_tags.reverse();
-    while let Some(tag) = closing_tags.pop() {
-        tags.push_str(&tag);
-    }
-
-    tags
-}
-
-fn get_src(
-    value: &Value,
-    config: &HTMLMeta,
-    start_pos: &TokenPosition,
-) -> Result<String, CompileError> {
-    let src: String = match value {
-        Value::String(value) => value.clone(),
-        Value::Runtime(_, data_type) => {
-            if *data_type == DataType::String || *data_type == DataType::CoerceToString {
-                expression_to_js(value, start_pos)?
-            } else {
-                return Err(CompileError {
-                    msg: format!("src attribute must be a string literal (Webparser - get src - runtime value). Got: {:?}", data_type),
-                    start_pos: start_pos.to_owned(),
-                    end_pos: value.dimensions(),
-                    error_type: ErrorType::TypeError
-                });
-            }
-        }
-        _ => {
-            return Err(CompileError {
-                msg: format!(
-                    "src attribute must be a string literal (web_parser - get src). Got: {:?}",
-                    value.get_type()
-                ),
-                start_pos: start_pos.to_owned(),
-                end_pos: value.dimensions(),
-                error_type: ErrorType::TypeError,
-            })
-        }
-    };
-
-    if src.starts_with("http") || src.starts_with('/') {
-        Ok(src)
-    } else {
-        Ok(format!(
-            "{}{}/{}",
-            config.page_root_url, config.image_folder_url, src
-        ))
-    }
-}
+// fn collect_closing_tags(closing_tags: &mut Vec<String>) -> String {
+//     let mut tags = String::new();
+// 
+//     closing_tags.reverse();
+//     while let Some(tag) = closing_tags.pop() {
+//         tags.push_str(&tag);
+//     }
+// 
+//     tags
+// }
+// 
+// fn get_src(
+//     value: &Value,
+//     config: &HTMLMeta,
+//     start_pos: &TokenPosition,
+// ) -> Result<String, CompileError> {
+//     let src: String = match value {
+//         Value::String(value) => value.clone(),
+//         Value::Runtime(_, data_type) => {
+//             if *data_type == DataType::String || *data_type == DataType::CoerceToString {
+//                 expression_to_js(value, start_pos)?
+//             } else {
+//                 return Err(CompileError {
+//                     msg: format!("src attribute must be a string literal (Webparser - get src - runtime value). Got: {:?}", data_type),
+//                     start_pos: start_pos.to_owned(),
+//                     end_pos: value.dimensions(),
+//                     error_type: ErrorType::TypeError
+//                 });
+//             }
+//         }
+//         _ => {
+//             return Err(CompileError {
+//                 msg: format!(
+//                     "src attribute must be a string literal (web_parser - get src). Got: {:?}",
+//                     value.get_type()
+//                 ),
+//                 start_pos: start_pos.to_owned(),
+//                 end_pos: value.dimensions(),
+//                 error_type: ErrorType::TypeError,
+//             })
+//         }
+//     };
+// 
+//     if src.starts_with("http") || src.starts_with('/') {
+//         Ok(src)
+//     } else {
+//         Ok(format!(
+//             "{}{}/{}",
+//             config.page_root_url, config.image_folder_url, src
+//         ))
+//     }
+// }
 
 // Returns the index it inserted the html at
-fn insert_into_table(
-    inserted_html: &str,
-    ele_count: &mut u32,
-    columns: u32,
-    html: &mut String,
-) -> usize {
-    *ele_count += 1;
-
-    let heading = *ele_count <= columns || columns < 2;
-    let ele_mod = *ele_count % columns;
-
-    if ele_mod == 1 {
-        // if this is the first element for this row
-        html.push_str("<tr>");
-    }
-
-    if heading {
-        html.push_str("<th scope='col'>");
-    } else {
-        html.push_str("<td>");
-    }
-
-    // Should check if we need to close some tags before the end of this scene
-    html.push_str(inserted_html);
-    let idx = html.len();
-
-    if heading {
-        html.push_str("</th>");
-    } else {
-        html.push_str("</td>");
-    }
-
-    // If this is the last element for this row
-    if ele_mod == 0 {
-        html.push_str("</tr>");
-
-        if *ele_count == columns {
-            html.push_str("</thead><tbody>");
-        }
-    }
-
-    idx
-}
-
-// Also make sure to escape reserved HTML characters and remove any empty lines
-fn sanitise_content(content: &str) -> String {
-    content
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .trim_start()
-        .to_string()
-}
+// fn insert_into_table(
+//     inserted_html: &str,
+//     ele_count: &mut u32,
+//     columns: u32,
+//     html: &mut String,
+// ) -> usize {
+//     *ele_count += 1;
+// 
+//     let heading = *ele_count <= columns || columns < 2;
+//     let ele_mod = *ele_count % columns;
+// 
+//     if ele_mod == 1 {
+//         // if this is the first element for this row
+//         html.push_str("<tr>");
+//     }
+// 
+//     if heading {
+//         html.push_str("<th scope='col'>");
+//     } else {
+//         html.push_str("<td>");
+//     }
+// 
+//     // Should check if we need to close some tags before the end of this scene
+//     html.push_str(inserted_html);
+//     let idx = html.len();
+// 
+//     if heading {
+//         html.push_str("</th>");
+//     } else {
+//         html.push_str("</td>");
+//     }
+// 
+//     // If this is the last element for this row
+//     if ele_mod == 0 {
+//         html.push_str("</tr>");
+// 
+//         if *ele_count == columns {
+//             html.push_str("</thead><tbody>");
+//         }
+//     }
+// 
+//     idx
+// }
+// 
+// // Also make sure to escape reserved HTML characters and remove any empty lines
+// fn sanitise_content(content: &str) -> String {
+//     content
+//         .replace('<', "&lt;")
+//         .replace('>', "&gt;")
+//         .trim_start()
+//         .to_string()
+// }

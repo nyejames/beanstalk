@@ -20,28 +20,28 @@ By default HTML scene styles will contain an array of mostly empty strings so ad
 
     -- This is currently just implimented in Rust as a struct
     -- But this is a BS representation of that data type
-    @ Style Type = {
-        format String = "",
+    @ Style:
+        @ format String = "",
 
-        wrapper = (
-            before [String],
-            after [String]
-        ),
+        -- @ wrapper = (
+        --     before [String],
+        --     after [String]
+        -- ),
 
         -- Will remove any wrappers lower than this precedence 
         -- Before adding it's own wrappers
-        parent_override = -1,
+        @ parent_override = -1,
 
-        inlining_rule Int,
+        @ inlining_rule Int,
 
-        child_default Style?,
+        @ child_default Style?,
 
-        compatibility Int,
+        @ compatibility Int,
 
-        disable_children Bool,
-    }
+        @ disable_children Bool,
+    zz
 
-    @ page Style = {
+    @ Page Style = {
         
     }
 ]
@@ -88,5 +88,23 @@ to be more useful to the programmer than just completely overriding eachother or
 
 ## Disable children
 This prevents the scene from having nested scenes. An error will be thrown if a nested scene is used.
+
+
+## Something like this for styles??? Using slots in a struct instead?
+
+Page: 
+    [:<main ]
+
+    [@0]
+
+    [:>]
+
+    [@1]
+
+    [:</main>]
+
+zz
+
+
 
 ]

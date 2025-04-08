@@ -34,7 +34,7 @@
 <br>
 
 # Overview / Goals
-BS is a lightweight, statically typed and compiled programming language.
+Beanstalk is a lightweight, statically typed and compiled programming language.
 
 The whole language is built around special template strings called 'Scenes'.
 
@@ -56,7 +56,7 @@ The compiler will also give you all the tools you need to quickly start working 
 The language aims to be great for building a website, making config files or as a lightweight embedded or UI language for apps and games.
 
 ### Compiled Output
-BS aims to just output Wasm and have it's own backend for doing this, but JS is currently the primary output for web while the language is being created.
+Beanstalk aims to just output Wasm and have it's own backend for doing this, but JS is currently the primary output for web while the language is being created.
 More JS will gradually get replaced, but only in cases where stricter runtime types or greater performance is needed.
 
 The compiler aims to output as little bytecode/glue code as possible. No 100kb Wasm files to just print "hello world".

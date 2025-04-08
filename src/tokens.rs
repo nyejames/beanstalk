@@ -1,4 +1,4 @@
-use crate::bs_types::{get_type_keyword_length, DataType};
+use crate::bs_types::DataType;
 use std::path::PathBuf;
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
@@ -229,7 +229,7 @@ impl Token {
 
             Token::TypeKeyword(data_type) => TokenPosition {
                 line_number: 0,
-                char_column: get_type_keyword_length(data_type)
+                char_column: data_type.length()
             },
 
             Token::StringLiteral(string) => string_dimensions(string),

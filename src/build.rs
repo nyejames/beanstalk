@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::parsers::build_ast::new_ast;
 use crate::tokenizer::TokenPosition;
-use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_grey_ln, dark_yellow_ln, green_ln, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
+use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_ln, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
@@ -769,7 +769,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "html_settings" => {
                     return match value {
-                        Value::Structure(args) => {
+                        Value::StructLiteral(args) => {
                             for arg in args {
                                 match arg.name.as_str() {
                                     "site_title" => {
@@ -1090,27 +1090,7 @@ fn print_ast_output(ast: &Vec<AstNode>) {
             blue_ln_bold!("{}Scene Body:", indentation);
 
             for scene_node in nodes {
-                match scene_node {
-                    AstNode::Literal(value, _) => {
-                        match value.get_type() {
-                            DataType::Scene => {
-                                print_scene(value, scene_nesting_level + 1);
-                            }
-                            DataType::Style => {
-                                green_ln!("{}  {:?}", indentation, value);
-                            }
-                            _ => {
-                                cyan_ln!("\n{}  {:?}", indentation, value);
-                            }
-                        }
-                    }
-                    AstNode::Comment(comment) => {
-                        dark_grey_ln!("{}  {}", indentation, comment);
-                    }
-                    _ => {
-                        println!("{}  {:?}", indentation, scene_node.get_value());
-                    }
-                }
+                println!("{}  {:?}", indentation, scene_node);
             }
         }
         println!("\n");

@@ -5,10 +5,10 @@ use super::{
 };
 use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Arg, Value};
-use crate::parsers::structs::{new_struct, struct_to_value};
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use std::path::PathBuf;
+use crate::parsers::functions::create_func_call_args;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -24,8 +24,11 @@ impl TokenContext {
         &self.tokens[self.index]
     }
     pub fn current_position(&self) -> TokenPosition {
-        // Do we actually ever need to do a bounds check here?
-        debug_assert!(self.index < self.length);
+        debug_assert!(self.index <= self.length);
+
+        if self.index == self.length {
+            return self.token_positions[self.index - 1].to_owned();
+        }
 
         self.token_positions[self.index].to_owned()
     }
@@ -60,10 +63,10 @@ pub fn new_ast(
                 if !module_scope {
                     return Err(CompileError {
                         msg: "Import found outside of module scope".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 6,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 6,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -77,18 +80,18 @@ pub fn new_ast(
                         imports.push(AstNode::Use(
                             PathBuf::from(value.clone()),
                             TokenPosition {
-                                line_number: x.token_positions[x.index].line_number,
-                                char_column: x.token_positions[x.index].char_column,
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column,
                             },
                         ));
                     }
                     _ => {
                         return Err(CompileError {
                             msg: "Import must have a valid path as a argument".to_string(),
-                            start_pos: x.token_positions[x.index].to_owned(),
+                            start_pos: x.current_position(),
                             end_pos: TokenPosition {
-                                line_number: x.token_positions[x.index].line_number,
-                                char_column: x.token_positions[x.index].char_column + u32::MAX,
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + u32::MAX,
                             },
                             error_type: ErrorType::Rule,
                         });
@@ -102,10 +105,10 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "Scene literals can only be used at the top level of a module"
                             .to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + u32::MAX,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + u32::MAX,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -118,7 +121,7 @@ pub fn new_ast(
 
                 ast.push(AstNode::Literal(
                     scene,
-                    x.token_positions[x.index].to_owned(),
+                    x.current_position(),
                 ));
             }
 
@@ -146,10 +149,10 @@ pub fn new_ast(
                 if !module_scope {
                     return Err(CompileError {
                         msg: "JS block can only be used inside of a module scope (not inside of a function)".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + value.len() as u32,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + value.len() as u32,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -157,7 +160,7 @@ pub fn new_ast(
 
                 ast.push(AstNode::JS(
                     value.clone(),
-                    x.token_positions[x.index].to_owned(),
+                    x.current_position(),
                 ));
             }
 
@@ -177,23 +180,38 @@ pub fn new_ast(
                 if x.tokens.get(x.index) != Some(&Token::OpenParenthesis) {
                     return Err(CompileError {
                         msg: "Expected an open parenthesis after the print keyword".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
                 }
-
-                x.index += 1;
+                
+                let arguments = create_expression(
+                    x,
+                    false,
+                    &ast,
+                    &mut DataType::Inferred,
+                    false,
+                    &mut declarations,
+                )?;
+                
+                let arguments_parsed = create_func_call_args(
+                    &arguments,
+                    &[Arg {
+                        name: "".to_string(),
+                        data_type: DataType::CoerceToString,
+                        value: Value::None,
+                    }],
+                    &x.current_position(),
+                )?;
 
                 // Get the struct of args passed into the function call
-                let structure = new_struct(x, Value::None, &Vec::new(), &ast, &mut declarations)?;
-
                 ast.push(AstNode::Print(
-                    struct_to_value(&structure),
-                    x.token_positions[x.index].to_owned(),
+                    Value::Collection(arguments_parsed, DataType::CoerceToString),
+                    x.current_position(),
                 ));
             }
 
@@ -206,7 +224,7 @@ pub fn new_ast(
                         "Dead Variable Declaration. Variable is never used or declared: {}",
                         name
                     ),
-                    x.token_positions[x.index].to_owned(),
+                    x.current_position(),
                 ));
             }
 
@@ -214,10 +232,10 @@ pub fn new_ast(
                 if module_scope {
                     return Err(CompileError {
                         msg: "Return statement used outside of function".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 6,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 6,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -227,10 +245,10 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "Return statement used in function that doesn't return a value"
                             .to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 6,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 6,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -250,7 +268,7 @@ pub fn new_ast(
 
                 ast.push(AstNode::Return(
                     return_value,
-                    x.token_positions[x.index].to_owned(),
+                    x.current_position(),
                 ));
 
                 x.index -= 1;
@@ -266,10 +284,10 @@ pub fn new_ast(
                     return Err(CompileError {
                         msg: "End statement used in module scope (too many end statements used?)"
                             .to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 3,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 3,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -286,10 +304,10 @@ pub fn new_ast(
                         "Token not recognised by AST parser when creating AST: {:?}",
                         &x.current_token()
                     ),
-                    start_pos: x.token_positions[x.index].to_owned(),
+                    start_pos: x.current_position(),
                     end_pos: TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column + 1,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column + 1,
                     },
                     error_type: ErrorType::Compiler,
                 });

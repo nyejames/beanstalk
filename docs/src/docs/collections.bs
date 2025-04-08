@@ -1,6 +1,6 @@
 [Navbar]
 
-[Header center: [title(1): COLLECTIONS]]
+[Header center: [title(1): COLLECTIONS AND STRUCTS]]
 [Page:
 
 You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
@@ -20,35 +20,36 @@ There may not actually be a function call under the hood when using collection m
 
    -- FIXED COLLECTIONS
    
-    -- Collections that are not mutable are struct literals
-    -- These contain properties and methods of different types
-    -- If the items are not named, they are automatically given an Int 
+    -- Collections that are not mutable are tuple literals
+    -- If the items are not named, they are automatically given an Int index
     Fixed_Collection = {
         var1 = 1, 
         var2 = 2
     }
 
-    -- creating a new fixed collection type
-    Enemy Type = {
+    -- Creating a new struct that defines the shape of a fixed collection literal
+    -- Each module is a new struct that defines a fixed collection by default
+    -- Structs can have scene literals in them that can be accessed
+    Enemy:
 
-        id Int, -- Must be set when creating a new instance of this Object
+        @ id Int, -- Must be set when creating a new instance of this Object
 
-        x ~= 1,
-        y ~= 2,
-        z ~= 3,
+        @ x ~= 1,
+        @ y ~= 2,
+        @ z ~= 3,
 
-        health ~= 100,
-        alive Bool = true,
+        @ health ~= 100,
+        @ alive Bool = true,
 
         -- You can also reference other new properties on the Object
         -- When a new one is being created
         -- This only works if the property being referenced has already been declared
-        max_health = $health,
-    }
+        @ max_health = health,
+    zz
 
     -- Creating a new instance of the object
     -- Id does not have a default value so must be assigned
-    new_enemy Enemy = {
+    new_enemy Enemy ~= {
         id = 0,
         health = 200,
     }
@@ -84,7 +85,7 @@ There may not actually be a function call under the hood when using collection m
 [Code: 
     -- Pushes an element to the end of the collection
     -- Specifying an index will insert the element at that index instead
-    push = sync(index Int = $last, value T):
+    push = fn(index Int = $last, value T):
         $
     zz
 

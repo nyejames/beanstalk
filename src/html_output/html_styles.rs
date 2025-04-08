@@ -23,6 +23,10 @@ const TEMPLATE_BEFORE_WRAPPER: [&str; 11] = [
 ];
 
 // CORE TOP LEVEL STYLES
+
+// TODO: rewrite this in beanstalk itself
+// Styles will just be regular structs that export certain style fields
+// Scenes inside those structs will have slots instead of this wrapper thing
 pub fn get_html_styles() -> [(String, Style); 4] {
     // THE CORE STYLES
 
@@ -38,11 +42,11 @@ pub fn get_html_styles() -> [(String, Style); 4] {
                 ..WrapperString::default()
             }]),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         unlocked_styles: HashMap::from(get_basic_unlockable_styles()),
         child_default: Some(Box::new(PrecedenceStyle {
             style: Style {
-                format: StyleFormat::Markdown,
+                format: StyleFormat::Markdown as i32,
                 ..Style::default()
             },
             precedence: -1,
@@ -62,11 +66,11 @@ pub fn get_html_styles() -> [(String, Style); 4] {
                 ..WrapperString::default()
             }]),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         unlocked_styles: HashMap::from(get_basic_unlockable_styles().to_owned()),
         child_default: Some(Box::new(PrecedenceStyle {
             style: Style {
-                format: StyleFormat::Markdown,
+                format: StyleFormat::Markdown as i32,
                 ..Style::default()
             },
             precedence: -1,
@@ -86,11 +90,11 @@ pub fn get_html_styles() -> [(String, Style); 4] {
                 ..WrapperString::default()
             }]),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         unlocked_styles: HashMap::from(get_basic_unlockable_styles().to_owned()),
         child_default: Some(Box::new(PrecedenceStyle {
             style: Style {
-                format: StyleFormat::Markdown,
+                format: StyleFormat::Markdown as i32,
                 ..Style::default()
             },
             precedence: -1,
@@ -110,11 +114,11 @@ pub fn get_html_styles() -> [(String, Style); 4] {
                 ..WrapperString::default()
             }]),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         unlocked_styles: HashMap::from(get_basic_unlockable_styles().to_owned()),
         child_default: Some(Box::new(PrecedenceStyle {
             style: Style {
-                format: StyleFormat::Markdown,
+                format: StyleFormat::Markdown as i32,
                 ..Style::default()
             },
             precedence: -1,
@@ -164,7 +168,7 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
             before,
             after: Vec::new(),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         ..Style::default()
     });
     
@@ -193,7 +197,7 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
             before,
             after: Vec::new(),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         ..Style::default()
     });
 
@@ -206,7 +210,7 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
             before,
             after: Vec::new(),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         ..Style::default()
     });
 
@@ -222,7 +226,7 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
                 ..WrapperString::default()
             }]),
         },
-        format: StyleFormat::Markdown,
+        format: StyleFormat::Markdown as i32,
         ..Style::default()
     });
     // Yellow,

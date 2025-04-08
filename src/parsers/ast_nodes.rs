@@ -74,11 +74,13 @@ pub enum Value {
         TokenPosition,
     ), // Function name, Args (named), Body, Public, return types (named), Line number
 
-    Scene(Vec<AstNode>, Vec<Style>, String), // Content Nodes, Styles, ID
-    Style(Style),
+    Scene(Vec<Value>, Vec<Style>, String), // Content Nodes, Styles, ID
 
-    Structure(Vec<Arg>),
     Collection(Vec<Value>, DataType),
+
+    // Could behave just like a tuple if type isn't specified
+    // And the arguments are not named
+    StructLiteral(Vec<Arg>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,7 +154,6 @@ impl Value {
             Value::Float(float) => float.to_string(),
             Value::Bool(bool) => bool.to_string(),
             Value::Scene(..) => String::new(),
-            Value::Style(..) => String::new(),
             Value::Collection(items, ..) => {
                 let mut all_items = String::new();
                 for item in items {
@@ -160,7 +161,7 @@ impl Value {
                 }
                 all_items
             }
-            Value::Structure(args) => {
+            Value::StructLiteral(args) => {
                 let mut all_items = String::new();
                 for arg in args {
                     all_items.push_str(&arg.value.as_string());
@@ -191,9 +192,14 @@ impl AstNode {
                 }
 
                 Value::Scene(..) => DataType::Scene,
-                Value::Style(..) => DataType::Style,
                 Value::Collection(_, data_type) => data_type.to_owned(),
-                Value::Structure(args) => DataType::Structure(args.to_owned()),
+                Value::StructLiteral(args) => {
+                    let mut data_type = DataType::Inferred;
+                    for arg in args {
+                        data_type = arg.data_type.to_owned();
+                    }
+                    data_type
+                }
                 Value::Reference(_, data_type, argument_accessed) => {
                     get_reference_data_type(data_type, argument_accessed)
                 }
@@ -237,7 +243,7 @@ impl AstNode {
         }
     }
 
-    pub fn get_precedence(&self) -> u8 {
+    pub fn get_precedence(&self) -> u32 {
         match self {
             AstNode::BinaryOperator(op, _) => match op {
                 Token::Add => 2,
@@ -292,9 +298,8 @@ impl Value {
             Value::String(_) => DataType::String,
             Value::Bool(_) => DataType::Bool,
             Value::Scene(..) => DataType::Scene,
-            Value::Style(..) => DataType::Style,
             Value::Collection(_, data_type) => data_type.to_owned(),
-            Value::Structure(args) => DataType::Structure(args.to_owned()),
+            Value::StructLiteral(args) => DataType::Structure(args.to_owned()),
             Value::Function(_, args, _, _, return_args, ..) => {
                 DataType::Function(args.to_owned(), return_args.to_owned())
             }
@@ -343,19 +348,6 @@ impl Value {
                 char_column: name.len() as u32,
             },
 
-            Value::Structure(args) => {
-                let mut combined_dimensions = TokenPosition {
-                    line_number: args[0].value.dimensions().line_number,
-                    char_column: args[0].value.dimensions().char_column,
-                };
-
-                for arg in args {
-                    combined_dimensions.char_column += arg.value.dimensions().char_column;
-                }
-
-                combined_dimensions
-            }
-
             Value::Function(_, _, nodes, ..) => {
                 let mut combined_dimensions = TokenPosition::default();
                 
@@ -377,7 +369,16 @@ impl Value {
             // And get the positions
             // This just gets the widest char line
             // So error formatting will need to clip the line to each length
-            Value::Scene(nodes, ..) | Value::Runtime(nodes, ..) => {
+            Value::Scene(nodes, ..) => {
+                let first_node = &nodes[0];
+                let last_node = &nodes[nodes.len() - 1];
+                TokenPosition {
+                    line_number: last_node.dimensions().line_number,
+                    char_column: last_node.dimensions().char_column
+                        - first_node.dimensions().char_column,
+                }
+            }
+            Value::Runtime(nodes, ..) => {
                 let first_node = &nodes[0];
                 let last_node = &nodes[nodes.len() - 1];
                 TokenPosition {
@@ -387,12 +388,6 @@ impl Value {
                 }
             }
 
-            // TODO: style syntax
-            Value::Style(_) => TokenPosition {
-                line_number: 0,
-                char_column: 0,
-            },
-
             Value::Collection(nodes, ..) => {
                 let first_node = &nodes[0];
                 let last_node = &nodes[nodes.len() - 1];
@@ -401,6 +396,19 @@ impl Value {
                     char_column: last_node.dimensions().char_column
                         - first_node.dimensions().char_column,
                 }
+            }
+
+            Value::StructLiteral(args) => {
+                let mut combined_dimensions = TokenPosition {
+                    line_number: args[0].value.dimensions().line_number,
+                    char_column: args[0].value.dimensions().char_column,
+                };
+
+                for arg in args {
+                    combined_dimensions.char_column += arg.value.dimensions().char_column;
+                }
+
+                combined_dimensions
             }
         }
     }

@@ -17,13 +17,13 @@ pub fn evaluate_expression(
     let mut output_queue: Vec<AstNode> = Vec::new();
     let mut operators_stack: Vec<AstNode> = Vec::new();
 
-    'outer: for ref node in expr {
+    'outer: for node in expr {
         match node {
-            AstNode::Literal(value, _) => {
+            AstNode::Literal(ref value, _) => {
                 // Ignore shunting yard for strings and coerced strings
                 if current_type == DataType::CoerceToString || current_type == DataType::String {
                     simplified_expression.push(node.to_owned());
-                    continue;
+                    continue 'outer;
                 }
 
                 match value {
@@ -53,10 +53,11 @@ pub fn evaluate_expression(
             */
             // Should already be type checked
             AstNode::FunctionCall(..) => {
+                // TODO: Check here if function call can be folded
                 operators_stack.push(node.to_owned());
             }
 
-            AstNode::BinaryOperator(op, position) => {
+            AstNode::BinaryOperator(ref op, ref position) => {
                 // If the current type is a string or scene, add operator is assumed.
                 if current_type == DataType::String || current_type == DataType::Scene {
                     if op != &Token::Add {
@@ -76,12 +77,12 @@ pub fn evaluate_expression(
                     // So simplified string expressions are just a list of strings
                     // Maybe other kinds of string expression will be valid in the future so more logic is needed here
                     // simplified_expression.push(node.to_owned());
-                    continue;
+                    continue 'outer;
                 }
 
                 if current_type == DataType::CoerceToString {
                     simplified_expression.push(node.to_owned());
-                    continue;
+                    continue 'outer;
                 }
 
                 if current_type == DataType::Bool {
@@ -107,7 +108,7 @@ pub fn evaluate_expression(
                     }
 
                     simplified_expression.push(node.to_owned());
-                    continue;
+                    continue 'outer;
                 }
 
                 /*
@@ -121,18 +122,33 @@ pub fn evaluate_expression(
                         push node onto the operator stack
                 */
 
-                while let Some(o2) = operators_stack.pop() {
-                    if o2.get_precedence() > node.get_precedence() {
-                        output_queue.push(o2);
-                        continue;
+                while let Some(top_op_node) = operators_stack.last() {
+                    // Stop if top is not an operator (e.g., left parenthesis)
+                    match top_op_node {
+                        AstNode::BinaryOperator(..) | AstNode::LogicalOperator(..) => {},
+                        _ => {
+                            break;
+                        }
+                    }
+
+                    let o2_precedence = top_op_node.get_precedence();
+                    let node_precedence = node.get_precedence();
+
+                    // Pop 'top_op_node' if:
+                    // 1. It has higher precedence OR
+                    // 2. It has equal precedence and 'node' is left-associative
+                    // (Assumes standard left-associativity for operators like +, -, *, /)
+                    // You might need a AstNode::is_left_associative() check for more complex cases (like '^')
+                    if o2_precedence >= node_precedence {
+                        output_queue.push(operators_stack.pop().unwrap()); // Pop from stack to output
                     } else {
-                        operators_stack.push(node.to_owned());
-                        operators_stack.push(o2);
-                        continue 'outer;
+                        // Current 'node' has higher precedence, stop popping
+                        break;
                     }
                 }
 
                 operators_stack.push(node.to_owned());
+
             }
 
             /*
@@ -192,7 +208,7 @@ pub fn evaluate_expression(
 
     // MATHS EXPRESSIONS
     // Push everything into the stack, is now in RPN notation
-    for operator in operators_stack {
+    while let Some(operator) = operators_stack.pop() {
         output_queue.push(operator);
     }
 

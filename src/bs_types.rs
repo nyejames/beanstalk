@@ -81,38 +81,105 @@ pub enum DataType {
     Type,
 }
 
-// Special Types that might change (basically same as rust with a bit more syntax sugar)
-pub fn create_option_datatype(datatype: DataType) -> DataType {
-    match datatype {
-        DataType::Inferred => DataType::Choice(vec![DataType::None, DataType::Inferred]),
-        DataType::CoerceToString => {
-            DataType::Choice(vec![DataType::None, DataType::CoerceToString])
+
+impl DataType {
+    pub fn is_valid_type(&self, accepted_type: &mut DataType) -> bool {
+        // Has to make sure if either type is a union, that the other type is also a member of the union
+        // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
+
+        if let DataType::Choice(types) = self {
+            for t in types {
+                if t.is_valid_type(accepted_type) {
+                    return true;
+                }
+            }
+            return false;
         }
-        DataType::Bool => DataType::Choice(vec![DataType::None, DataType::Bool]),
-        DataType::True => DataType::Choice(vec![DataType::None, DataType::True]),
-        DataType::False => DataType::Choice(vec![DataType::None, DataType::False]),
-        DataType::String => DataType::Choice(vec![DataType::None, DataType::String]),
-        DataType::Float => DataType::Choice(vec![DataType::None, DataType::Float]),
-        DataType::Int => DataType::Choice(vec![DataType::None, DataType::Int]),
-        DataType::Collection(inner_type) => {
-            DataType::Choice(vec![DataType::None, DataType::Collection(inner_type)])
+
+        match accepted_type {
+            DataType::Inferred => {
+                *accepted_type = self.to_owned();
+                true
+            }
+            DataType::CoerceToString => true,
+            DataType::Choice(types) => {
+                for t in types {
+                    if self == t {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => {
+                self == accepted_type
+            },
         }
-        DataType::Decimal => DataType::Choice(vec![DataType::None, DataType::Decimal]),
-        DataType::Type => DataType::Choice(vec![DataType::None, DataType::Type]),
-        DataType::Style => DataType::Choice(vec![DataType::None, DataType::Style]),
-        DataType::Choice(inner_types) => {
-            DataType::Choice(vec![DataType::None, DataType::Choice(inner_types)])
+    }
+
+    pub fn length(&self) -> u32 {
+        match self {
+            DataType::Inferred => 0,
+            DataType::CoerceToString => 0,
+            DataType::Bool => 4,
+            DataType::True => 4,
+            DataType::False => 5,
+            DataType::String => 6,
+            DataType::Float => 5,
+            DataType::Int => 3,
+            DataType::Decimal => 6,
+            DataType::Collection(inner_type) => inner_type.length(),
+
+            DataType::Structure(_) => 1,
+            DataType::Choice(inner_types) => {
+                let mut length = 0;
+                for arg in inner_types {
+                    length += arg.length();
+                }
+                length
+            }
+            DataType::Function(..) => 2,
+            DataType::Type => 4,
+            DataType::Scene => 5,
+            DataType::Style => 5,
+            DataType::Error(_) => 1,
+
+            DataType::None => 4,
         }
-        DataType::Function(args, return_type) => {
-            DataType::Choice(vec![DataType::None, DataType::Function(args, return_type)])
+    }
+
+    // Special Types that might change (basically same as rust with a bit more syntax sugar)
+    pub fn create_option_datatype(self) -> DataType {
+        match self {
+            DataType::Inferred => DataType::Choice(vec![DataType::None, DataType::Inferred]),
+            DataType::CoerceToString => {
+                DataType::Choice(vec![DataType::None, DataType::CoerceToString])
+            }
+            DataType::Bool => DataType::Choice(vec![DataType::None, DataType::Bool]),
+            DataType::True => DataType::Choice(vec![DataType::None, DataType::True]),
+            DataType::False => DataType::Choice(vec![DataType::None, DataType::False]),
+            DataType::String => DataType::Choice(vec![DataType::None, DataType::String]),
+            DataType::Float => DataType::Choice(vec![DataType::None, DataType::Float]),
+            DataType::Int => DataType::Choice(vec![DataType::None, DataType::Int]),
+            DataType::Collection(inner_type) => {
+                DataType::Choice(vec![DataType::None, DataType::Collection(inner_type)])
+            }
+            DataType::Decimal => DataType::Choice(vec![DataType::None, DataType::Decimal]),
+            DataType::Type => DataType::Choice(vec![DataType::None, DataType::Type]),
+            DataType::Style => DataType::Choice(vec![DataType::None, DataType::Style]),
+            DataType::Choice(inner_types) => {
+                DataType::Choice(vec![DataType::None, DataType::Choice(inner_types)])
+            }
+            DataType::Function(args, return_type) => {
+                DataType::Choice(vec![DataType::None, DataType::Function(args, return_type)])
+            }
+            DataType::Structure(args) => {
+                DataType::Choice(vec![DataType::None, DataType::Structure(args)])
+            }
+            _ => DataType::Error(format!(
+                "You can't create an option of {:?} and None",
+                self
+            )),
         }
-        DataType::Structure(args) => {
-            DataType::Choice(vec![DataType::None, DataType::Structure(args)])
-        }
-        _ => DataType::Error(format!(
-            "You can't create an option of {:?} and None",
-            datatype
-        )),
     }
 }
 
@@ -186,33 +253,4 @@ pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &[usize
     }
 }
 
-pub fn get_type_keyword_length(data_type: &DataType) -> u32 {
-    match data_type {
-        DataType::Inferred => 0,
-        DataType::CoerceToString => 0,
-        DataType::Bool => 4,
-        DataType::True => 4,
-        DataType::False => 5,
-        DataType::String => 6,
-        DataType::Float => 5,
-        DataType::Int => 3,
-        DataType::Decimal => 6,
-        DataType::Collection(inner_type) => get_type_keyword_length(inner_type),
 
-        DataType::Structure(_) => 1,
-        DataType::Choice(inner_types) => {
-            let mut length = 0;
-            for arg in inner_types {
-                length += get_type_keyword_length(arg);
-            }
-            length
-        }
-        DataType::Function(..) => 2,
-        DataType::Type => 4,
-        DataType::Scene => 5,
-        DataType::Style => 5,
-        DataType::Error(_) => 1,
-
-        DataType::None => 4,
-    }
-}

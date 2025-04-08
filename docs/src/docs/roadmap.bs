@@ -7,23 +7,17 @@ Beanstalk is still in development. It doesn't even have a version number yet!
 Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
-- How do styles that accept arguments work?
-    Options 1: needs to be a function that returns a style and whether it can be compile time evaluated needs to be decided later. 
-    Drawbacks of this are that evaluating these styles and evaluating them at Runtime will be much more complex
-
-- Build out HTML standard library for styles
-- Move all of the html standard lib tokens to just exported variables included in builds
-- Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
-This will be the first test for implementing a custom type system (figure out how that will work -> whether any tuple created also creates a type of itself)
-- Maybe just don't enforce brackets at all for function calls?
+- Compile time is now forced by capitol letter start naming. Make sure this works and write compile time functions that return scenes using this.
 - Finish implementing constant folding and all math operators and brackets
-- Color theme system (color type built into language)
-- dev / build prunes dev files that are no longer in the src files (bs files are cleared out of the dev folder each time)
+- Folding (inlining) compile time functions (functions named with capitol letter start)
+- Styles should just be structs in the language itself that Scenes can use fields from to define their behaviour.
+and insert any scenes inside those styles correctly into the body, while making use of slots to insert anything in the scenebody into any slots in the scenes from the scene head.
+In the case of multiple scenes being imported in the scenehead, each successive scene should slot the last one into itself. Need to think about how all the wrapping works here though.
+- Scene slots for templating and wrapping other scenes (to build out standard library)
+- Build out HTML standard library for styles
+- Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
 
 ## Current Bugs
-*Scenes*
-- Emphasis and strong tags are not being parsed correctly for bullet points. Markdown parser needs some work
-- Not always merging spans into previous P tags correctly
 
 ## Core Features Being Implemented
 - Finish implementing Style system for scenes (separate from core language into library of keywords)
@@ -36,7 +30,7 @@ This will be the first test for implementing a custom type system (figure out ho
 
 ## Future plans and ideas
 - Any type?
-- https://docs.orca-app.dev/ Orca for native UI?
+- https://docs.orca-app.dev/ Orca for native UI? Or just Servo as optional depenancy? https://servo.org/
 - Documentation scenes (can be put anywhere in a module or scene and a special docs compile mode will generate docs using these scenes)
 There can also be additional features or searchable things added to these scene heads that make the documentation of the project really easy
 it will output an entire documentation webpage by default

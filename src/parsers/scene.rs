@@ -1,10 +1,9 @@
 use crate::bs_types::DataType;
-use crate::html_output::js_parser::{combine_vec_to_js, create_reference_in_js};
-use crate::parsers::ast_nodes::{AstNode, Value};
+use crate::html_output::js_parser::{create_reference_in_js};
+use crate::parsers::ast_nodes::{Arg, Value};
 use crate::settings::HTMLMeta;
 use crate::settings::BS_VAR_PREFIX;
-use crate::tokenizer::TokenPosition;
-use crate::{CompileError, ErrorType};
+use crate::{CompileError};
 use std::collections::HashMap;
 use crate::parsers::markdown::to_markdown;
 
@@ -16,7 +15,7 @@ pub struct Style {
 
     // A callback functions for how the string content of the scene should be parsed
     // If at all
-    pub format: StyleFormat,
+    pub format: i32,
 
     // Removes any parent wrappers lower than this precedence
     // Before adding its own wrappers
@@ -41,7 +40,7 @@ pub struct Style {
 impl Style {
     pub fn default() -> Style {
         Style {
-            format: StyleFormat::None,
+            format: StyleFormat::None as i32,
             parent_override: -1,
             neighbour_rule: NeighbourRule::None,
             child_default: None,
@@ -61,11 +60,11 @@ impl Style {
 // THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum StyleFormat {
-    None,
-    Markdown,
-    Metadata,
-    Codeblock,
-    Comment,
+    None = 0,
+    Markdown = 1,
+    Metadata = 2,
+    Codeblock = 3,
+    Comment = 4,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -143,7 +142,7 @@ pub struct SceneIngredients<'a> {
     pub scene_styles: &'a Vec<Style>,
     pub inherited_style: PrecedenceStyle,
     pub scene_id: String,
-    pub format_context: &'a StyleFormat,
+    pub format_context: i32,
 }
 
 // Returns a regular string containing the parsed scene
@@ -151,12 +150,12 @@ pub fn parse_scene(
     scene_ingredients: SceneIngredients,
     js: &mut String,
     css: &mut String,
-    module_references: &mut Vec<AstNode>,
+    declarations: &mut Vec<Arg>,
     class_id: &mut usize,
     exp_id: &mut usize,
     config: &HTMLMeta,
 ) -> Result<String, CompileError> {
-    
+
     let SceneIngredients {
         scene_body,
         scene_styles,
@@ -210,7 +209,7 @@ pub fn parse_scene(
     }
 
     for style in scene_styles {
-        
+
         merge_wrapper(&mut final_style.wrapper.before, &style.wrapper.before);
         merge_wrapper(&mut final_style.wrapper.after, &style.wrapper.after);
 
@@ -288,6 +287,11 @@ pub fn parse_scene(
                 content.push_str(&int.to_string());
             }
 
+            // Just add the string representation of the bool
+            Value::Bool(value) => {
+                content.push_str(&value.to_string());
+            }
+
             Value::Scene(new_scene_nodes, new_scene_styles, _) => {
                 let child_default_style = match &final_style.child_default {
                     Some(child_default) => *child_default.to_owned(),
@@ -300,11 +304,11 @@ pub fn parse_scene(
                         scene_styles: new_scene_styles,
                         inherited_style: child_default_style,
                         scene_id: scene_id.to_owned(),
-                        format_context: &final_style.format,
+                        format_context: final_style.format,
                     },
                     js,
                     css,
-                    module_references,
+                    declarations,
                     class_id,
                     exp_id,
                     config,
@@ -320,8 +324,7 @@ pub fn parse_scene(
                 // TODO: should only do this in markdown mode
                 content.push_str(&format!("<span class=\"{name}\"></span>"));
 
-                if !module_references.contains(name) {
-                    module_references.push(value.to_owned());
+                if !declarations.iter().any(|a| &a.name == name) {
 
                     match &data_type {
                         DataType::Structure(items) => {
@@ -347,8 +350,8 @@ pub fn parse_scene(
                                 ));
                             }
                         }
-                        
-                        
+
+
                         _ => {
                             js.push_str(&create_reference_in_js(
                                 name,
@@ -360,7 +363,6 @@ pub fn parse_scene(
                 }
             }
 
-
             Value::None => {
                 // Ignore this
                 // Currently 'ignored' or hidden scenes result in a None value being added to a scene,
@@ -369,7 +371,15 @@ pub fn parse_scene(
             }
 
             // TODO - add / test remaining types, some of them might need unpacking
-            
+            Value::Runtime(_, _) => {}
+            Value::Function(_, _, _, _, _, _) => {}
+
+            // At this point, if this structure was a style, those fields and inner scene would have been parsed in scene_node.rs
+            // So we can just unpack any other public fields into the scene as strings
+            Value::StructLiteral(_) => {}
+
+            // Collections will be unpacked into a scene
+            Value::Collection(_, _) => {}
         }
     }
 
@@ -377,19 +387,19 @@ pub fn parse_scene(
     // parse the content into markdown
     // If the parent is parsing the markdown already,
     // skip this as it should be done at the highest level possible
-    if final_style.format == StyleFormat::Markdown && format_context == &StyleFormat::None {
+    if final_style.format == StyleFormat::Markdown as i32 && format_context == StyleFormat::None as i32 {
         let default_tag = "p";
 
         final_string.push_str(&to_markdown(&content, default_tag));
 
     // TODO - add parsers for each format
-    } else if final_style.format == StyleFormat::Codeblock && format_context == &StyleFormat::Markdown {
+    } else if final_style.format == StyleFormat::Codeblock as i32 && format_context == StyleFormat::Markdown as i32 {
         // Add a special object replace character to signal to parent that this tag should not be parsed into markdown
         final_string.push_str(&format!("\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}", content));
     } else {
         final_string.push_str(&content);
     }
-    
+
     // After wrappers
     final_string.push_str(
         &final_style

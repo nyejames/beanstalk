@@ -348,7 +348,7 @@ fn print_formatted_error(e: Error) {
             println!(" ( ._. ) ");
             e_dark_blue_ln!("Suggestion");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number);
+            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
         ErrorType::Caution => {
@@ -358,7 +358,7 @@ fn print_formatted_error(e: Error) {
 
             e_yellow_ln!("Caution");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number);
+            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
         ErrorType::Syntax => {
@@ -368,7 +368,7 @@ fn print_formatted_error(e: Error) {
 
             e_red_ln!("Syntax");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number);
+            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
         ErrorType::TypeError => {
@@ -378,7 +378,7 @@ fn print_formatted_error(e: Error) {
 
             e_red_ln!("Type Error");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number);
+            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
         ErrorType::Rule => {
@@ -388,7 +388,7 @@ fn print_formatted_error(e: Error) {
 
             e_red_ln!("Rule");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number);
+            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
         ErrorType::File => {
@@ -405,7 +405,7 @@ fn print_formatted_error(e: Error) {
             e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
 
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number);
+            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
         ErrorType::DevServer => {

@@ -6,7 +6,6 @@ use super::eval_expression::evaluate_expression;
 use crate::bs_types::get_any_number_datatype;
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::build_ast::TokenContext;
-use crate::parsers::structs::struct_to_value;
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::tokenizer::TokenPosition;
 use crate::{
@@ -14,7 +13,7 @@ use crate::{
     parsers::{
         ast_nodes::{Arg, AstNode},
         create_scene_node::new_scene,
-        structs::new_struct,
+        structs::new_fixed_collection,
     },
     CompileError, ErrorType, Token,
 };
@@ -25,107 +24,143 @@ use crate::html_output::html_styles::get_html_styles;
 // Or collection literals
 pub fn create_expression(
     x: &mut TokenContext,
-    inside_struct: bool,
+    inside_collection: bool,
     ast: &[AstNode],
     data_type: &mut DataType,
     inside_parenthesis: bool,
     captured_declarations: &mut Vec<Arg>,
 ) -> Result<Value, CompileError> {
-    let mut expression = Vec::new();
+    let mut expression: Vec<AstNode> = Vec::new();
     let mut number_union = get_any_number_datatype();
-
-    // If inside parenthesis is set to true, means that there is expected to be a struct or collection (or style)
-    // Or this is currently inside a struct (in which case this first part of data type checking is skipped unless the type needs to be inferred)
-    // This first check is to see if a new struct is being created
-    // And whether parenthesis are to be expected
-    if inside_parenthesis {
-        match data_type {
-            // TODO - do we need to handle unions here? or are they always collapsed into one type before being parsed?
-            DataType::Structure(inner_types) => {
-                // HAS DEFINED INNER TYPES FOR THE struct
-                // could this still result in None if the inner types are defined and not optional?
-                let structure =
-                    new_struct(x, Value::None, inner_types, ast, captured_declarations)?;
-
-                return Ok(struct_to_value(&structure));
-            }
-
-            // If this is inside of parenthesis, and we don't know the type.
-            // It must be a struct
-            // This is enforced! If it's a single expression wrapped in parentheses,
-            // it will be flatted into that single value anyway by struct_to_value
-            DataType::Inferred => {
-                // NO DEFINED TYPES FOR THE struct
-                let structure = new_struct(
-                    x,
-                    Value::None,
-                    // Difference is this is inferred
-                    &Vec::new(),
-                    ast,
-                    captured_declarations,
-                )?;
-
-                // And then the type is set here
-                *data_type = DataType::Structure(structure.to_owned());
-                return Ok(struct_to_value(&structure));
-            }
-
-            // There must be at least 1 unclosed bracket that this element is inside
-            _ => {}
-        }
-    }
 
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
     // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
     let mut next_number_negative = false;
     while x.index < x.length {
+
         let token = x.current_token().to_owned();
         match token {
             // Conditions that close the expression
             Token::CloseParenthesis => {
                 if inside_parenthesis {
-                    x.index += 1;
                     if expression.is_empty() {
                         return Ok(Value::None);
                     }
                     break;
                 } else {
-                    if inside_struct {
-                        break;
-                    }
-
                     x.index += 1;
 
                     // Mismatched brackets, return an error
                     return Err(CompileError {
                         msg: "Mismatched brackets in expression".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
                 }
             }
 
-            Token::OpenParenthesis => {
-                // Move past the open parenthesis before calling this function again
-                // Removing this at one point for a test caused a wonderful infinite loop
+            Token::CloseCurly => {
+                if inside_collection {
+                    break;
+                }
+
                 x.index += 1;
 
-                return create_expression(x, false, ast, data_type, true, captured_declarations);
+                // Mismatched brackets, return an error
+                return Err(CompileError {
+                    msg: "Mismatched brackets in expression".to_string(),
+                    start_pos: x.current_position(),
+                    end_pos: TokenPosition {
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column + 1,
+                    },
+                    error_type: ErrorType::Syntax,
+                });
+            }
+
+            Token::OpenParenthesis => {
+                // Move past the open parenthesis before calling this function again
+                // Removed this at one point for a test caused a wonderful infinite loop
+                x.index += 1;
+    
+                let value = create_expression(x, false, ast, data_type, true, captured_declarations)?;
+                expression.push(AstNode::Literal(value, x.current_position()));
+            }
+
+            Token::OpenCurly => {
+                x.index += 1;
+
+                return match data_type {
+                    // TODO - do we need to handle unions here? or are they always collapsed into one type before being parsed?
+                    DataType::Structure(inner_types) => {
+                        // HAS DEFINED INNER TYPES FOR THE struct
+                        // could this still result in None if the inner types are defined and not optional?
+                        let structure =
+                            new_fixed_collection(x, Value::None, inner_types, ast, captured_declarations)?;
+
+                        Ok(Value::StructLiteral(structure))
+                    }
+
+                    // If this is inside of parenthesis, and we don't know the type.
+                    // It must be a struct
+                    // This is enforced! If it's a single expression wrapped in parentheses,
+                    // it will be flatted into that single value anyway by struct_to_value
+                    DataType::Inferred => {
+                        // NO DEFINED TYPES FOR THE struct
+                        let structure = new_fixed_collection(
+                            x,
+                            Value::None,
+                            // Difference is this is inferred
+                            &Vec::new(),
+                            ast,
+                            captured_declarations,
+                        )?;
+
+                        // And then the type is set here
+                        *data_type = DataType::Structure(structure.to_owned());
+                        Ok(Value::StructLiteral(structure))
+                    }
+
+                    // Need to error here as a collection literal is being made with wrong explicit type
+                    _ => {
+                        Err(CompileError {
+                            msg: format!("Expected a struct literal, but found a collection literal with type: {:?}", data_type),
+                            start_pos: x.current_position(),
+                            end_pos: TokenPosition {
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
+                            },
+                            error_type: ErrorType::TypeError,
+                        })
+                    }
+                }
             }
 
             Token::EOF | Token::SceneClose | Token::Arrow | Token::Colon | Token::End => {
                 if inside_parenthesis {
                     return Err( CompileError {
-                        msg: "Not enough closing parenthesis for expression. Need more ')' at the end of the expression!".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        msg: "Not enough closing parenthesis for expression. Need more ')' at the end of the expression".to_string(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
+                    });
+                }
+                
+                if inside_collection {
+                    return Err( CompileError {
+                        msg: "Not enough closing curly brackets to close the collection. Need more '}' at the end of the collection".to_string(),
+                        start_pos: x.current_position(),
+                        end_pos: TokenPosition {
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -146,21 +181,11 @@ pub fn create_expression(
 
             Token::Comma => {
                 // This is just one element inside a struct
-                if inside_struct {
+                if inside_collection {
                     break;
                 }
 
                 x.index += 1;
-
-                // First time inferring that this is actually a struct type
-                if inside_parenthesis {
-                    let eval_first_expr = evaluate_expression(expression, data_type)?;
-
-                    let structure =
-                        new_struct(x, eval_first_expr, &Vec::new(), ast, captured_declarations)?;
-
-                    return Ok(Value::Structure(structure));
-                }
 
                 // TODO - this is a bit of a mess
                 // Are we going to have special rules for return statements and return signatures?
@@ -169,11 +194,11 @@ pub fn create_expression(
                 // This function already breaks out if there is an End token or Colon token (if not inside parenthesis)
 
                 return Err(CompileError {
-                    msg: "Comma found outside of parenthesis: If this is error is for return arguments, this might change in the future".to_string(),
-                    start_pos: x.token_positions[x.index].to_owned(),
+                    msg: "Comma found outside of curly brackets (collection): If this is error is for return arguments, this might change in the future".to_string(),
+                    start_pos: x.current_position(),
                     end_pos: TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column + 1,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column + 1,
                     },
                     error_type: ErrorType::Syntax,
                 });
@@ -197,16 +222,16 @@ pub fn create_expression(
                     AstNode::Literal(ref value, ..) => {
                         // Check type is correct
                         let reference_data_type = value.get_type();
-                        if !check_if_valid_type(&reference_data_type, data_type) {
+                        if !reference_data_type.is_valid_type(data_type) {
                             return Err(CompileError {
                                 msg: format!(
                                     "Variable '{}' is of type {:?}, but used in an expression of type {:?}",
                                     name, reference_data_type, data_type
                                 ),
-                                start_pos: x.token_positions[x.index].to_owned(),
+                                start_pos: x.current_position(),
                                 end_pos: TokenPosition {
-                                    line_number: x.token_positions[x.index].line_number,
-                                    char_column: x.token_positions[x.index].char_column + 1,
+                                    line_number: x.current_position().line_number,
+                                    char_column: x.current_position().char_column + 1,
                                 },
                                 error_type: ErrorType::TypeError,
                             });
@@ -219,16 +244,16 @@ pub fn create_expression(
                     AstNode::FunctionCall(..) => {
                         // Check type is correct
                         let reference_data_type = new_ref.get_type();
-                        if !check_if_valid_type(&reference_data_type, data_type) {
+                        if !reference_data_type.is_valid_type(data_type) {
                             return Err(CompileError {
                                 msg: format!(
                                     "Function call '{}' is of type {:?}, but used in an expression of type {:?}",
                                     name, reference_data_type, data_type
                                 ),
-                                start_pos: x.token_positions[x.index].to_owned(),
+                                start_pos: x.current_position(),
                                 end_pos: TokenPosition {
-                                    line_number: x.token_positions[x.index].line_number,
-                                    char_column: x.token_positions[x.index].char_column + name.len() as u32,
+                                    line_number: x.current_position().line_number,
+                                    char_column: x.current_position().char_column + name.len() as u32,
                                 },
                                 error_type: ErrorType::TypeError,
                             });
@@ -243,10 +268,10 @@ pub fn create_expression(
                                 name,
                                 new_ref.get_type()
                             ),
-                            start_pos: x.token_positions[x.index].to_owned(),
+                            start_pos: x.current_position(),
                             end_pos: TokenPosition {
-                                line_number: x.token_positions[x.index].line_number,
-                                char_column: x.token_positions[x.index].char_column
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column
                                     + name.len() as u32,
                             },
                             error_type: ErrorType::Syntax,
@@ -257,13 +282,13 @@ pub fn create_expression(
 
             // Check if is a literal
             Token::FloatLiteral(mut float) => {
-                if !check_if_valid_type(&DataType::Float, data_type) {
+                if !DataType::Float.is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Float literal used in expression of type: {:?}", data_type),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column
                                 + float.to_string().len() as u32,
                         },
                         error_type: ErrorType::TypeError,
@@ -278,20 +303,20 @@ pub fn create_expression(
                 expression.push(AstNode::Literal(
                     Value::Float(float),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
 
             Token::IntLiteral(int) => {
-                if !check_if_valid_type(&DataType::Int, data_type) {
+                if !DataType::Int.is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Int literal used in expression of type: {:?}", data_type),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column
                                 + int.to_string().len() as u32,
                         },
                         error_type: ErrorType::TypeError,
@@ -308,20 +333,20 @@ pub fn create_expression(
                 expression.push(AstNode::Literal(
                     Value::Int(int_value),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
 
             Token::StringLiteral(ref string) => {
-                if !check_if_valid_type(&DataType::String, data_type) {
+                if !DataType::String.is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("String literal used in expression of type: {:?}", data_type),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + token.dimensions().char_column,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + token.dimensions().char_column,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -330,8 +355,8 @@ pub fn create_expression(
                 expression.push(AstNode::Literal(
                     Value::String(string.to_owned()),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -340,13 +365,13 @@ pub fn create_expression(
             // Maybe scenes can be added together like strings
             Token::SceneHead | Token::ParentScene => {
 
-                if !check_if_valid_type(&DataType::Scene, data_type) {
+                if !DataType::Scene.is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Scene literal used in expression of type: {:?}", data_type),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + token.dimensions().char_column,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + token.dimensions().char_column,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -362,8 +387,8 @@ pub fn create_expression(
                 expression.push(AstNode::Literal(
                     Value::Bool(value.to_owned()),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -379,23 +404,23 @@ pub fn create_expression(
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
 
             Token::Subtract => {
-                if !check_if_valid_type(data_type, &mut number_union) {
+                if !data_type.is_valid_type(&mut number_union) {
                     return Err(CompileError {
                         msg: format!(
                             "Subtraction can't be used in expression of type: {:?}",
                             data_type
                         ),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -404,23 +429,23 @@ pub fn create_expression(
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
 
             Token::Multiply => {
-                if !check_if_valid_type(&number_union, data_type) {
+                if !data_type.is_valid_type(&mut number_union) {
                     return Err(CompileError {
                         msg: format!(
                             "Multiplication can't be used in expression of type: {:?}",
                             data_type
                         ),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -428,23 +453,23 @@ pub fn create_expression(
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
 
             Token::Divide => {
-                if !check_if_valid_type(&number_union, data_type) {
+                if !number_union.is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!(
                             "Division can't be used in expression of type: {:?}",
                             data_type
                         ),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -452,23 +477,23 @@ pub fn create_expression(
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
 
             Token::Modulus => {
-                if !check_if_valid_type(&number_union, data_type) {
+                if !number_union.is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!(
                             "Modulus can't be used in expression of type: {:?}",
                             data_type
                         ),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -476,8 +501,8 @@ pub fn create_expression(
                 expression.push(AstNode::BinaryOperator(
                     token.to_owned(),
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -487,8 +512,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::Equal,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -497,8 +522,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::LessThan,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -506,8 +531,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::LessThanOrEqual,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -515,8 +540,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::GreaterThan,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -524,8 +549,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::GreaterThanOrEqual,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -533,8 +558,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::And,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -542,8 +567,8 @@ pub fn create_expression(
                 expression.push(AstNode::LogicalOperator(
                     Token::Or,
                     TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column,
                     },
                 ));
             }
@@ -554,10 +579,10 @@ pub fn create_expression(
                         "Invalid Value used in expression: '{:?}'. Expressions must be assigned with only valid datatypes",
                         token
                     ),
-                    start_pos: x.token_positions[x.index].to_owned(),
+                    start_pos: x.current_position(),
                     end_pos: TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column + token.dimensions().char_column,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column + token.dimensions().char_column,
                     },
                     error_type: ErrorType::TypeError,
                 });
@@ -568,37 +593,6 @@ pub fn create_expression(
     }
 
     evaluate_expression(expression, data_type)
-}
-
-fn check_if_valid_type(data_type: &DataType, accepted_type: &mut DataType) -> bool {
-    // Has to make sure if either type is a union, that the other type is also a member of the union
-    // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
-
-    if let DataType::Choice(types) = data_type {
-        for t in types {
-            if check_if_valid_type(t, accepted_type) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    match accepted_type {
-        DataType::Inferred => {
-            *accepted_type = data_type.to_owned();
-            true
-        }
-        DataType::CoerceToString => true,
-        DataType::Choice(types) => {
-            for t in types {
-                if data_type == t {
-                    return true;
-                }
-            }
-            false
-        }
-        _ => data_type == accepted_type,
-    }
 }
 
 pub fn get_accessed_args(
@@ -627,10 +621,10 @@ pub fn get_accessed_args(
                             "Can't use negative index: {} to access a collection or struct '{}'",
                             x.index, collection_name
                         ),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -645,10 +639,10 @@ pub fn get_accessed_args(
                                     "Index {} out of range for any arguments in '{}'",
                                     idx, collection_name
                                 ),
-                                start_pos: x.token_positions[x.index].to_owned(),
+                                start_pos: x.current_position(),
                                 end_pos: TokenPosition {
-                                    line_number: x.token_positions[x.index].line_number,
-                                    char_column: x.token_positions[x.index].char_column + 1,
+                                    line_number: x.current_position().line_number,
+                                    char_column: x.current_position().char_column + 1,
                                 },
                                 error_type: ErrorType::Rule
                             });
@@ -668,10 +662,10 @@ pub fn get_accessed_args(
                                 collection_name,
                                 data_type
                             ),
-                            start_pos: x.token_positions[x.index].to_owned(),
+                            start_pos: x.current_position(),
                             end_pos: TokenPosition {
-                                line_number: x.token_positions[x.index].line_number,
-                                char_column: x.token_positions[x.index].char_column + 1,
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
                             },
                             error_type: ErrorType::Rule
                         })
@@ -690,10 +684,10 @@ pub fn get_accessed_args(
                                 "Name '{}' not found in struct '{}'",
                                 name, collection_name
                             ),
-                            start_pos: x.token_positions[x.index].to_owned(),
+                            start_pos: x.current_position(),
                             end_pos: TokenPosition {
-                                line_number: x.token_positions[x.index].line_number,
-                                char_column: x.token_positions[x.index].char_column + 1,
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
                             },
                             error_type: ErrorType::Rule,
                         });
@@ -703,10 +697,10 @@ pub fn get_accessed_args(
                 _ => {
                     return Err(CompileError {
                         msg: "Compiler only supports named access for structs".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
+                        start_pos: x.current_position(),
                         end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::Rule,
                     })
@@ -719,10 +713,10 @@ pub fn get_accessed_args(
                         "Expected an index or name to access struct '{}'",
                         collection_name
                     ),
-                    start_pos: x.token_positions[x.index].to_owned(),
+                    start_pos: x.current_position(),
                     end_pos: TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column + 1,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column + 1,
                     },
                     error_type: ErrorType::Rule,
                 })
