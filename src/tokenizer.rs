@@ -509,7 +509,20 @@ pub fn get_next_token(
     }
 
     // Exporting variables out of the module or scope (public declaration)
+    // When used in a scene head, it's an ID for that scene
     if current_char == '@' {
+        if tokenize_mode == &TokenizeMode::SceneHead {
+            while let Some(&next_char) = chars.peek() {
+                if next_char.is_alphanumeric() || next_char == '_' {
+                    token_value.push(chars.next().unwrap());
+                    *char_column += 1;
+                    continue;
+                }
+                break;
+            }
+            return Ok(Token::Id(token_value));
+        }
+
         return Ok(Token::Public);
     }
 
@@ -636,7 +649,7 @@ fn keyword_or_variable(
             "as" => return Ok(Token::As),
             "copy" => return Ok(Token::Copy),
 
-            "sync" => return Ok(Token::FunctionKeyword),
+            "fn" => return Ok(Token::FunctionKeyword),
             "async" => return Ok(Token::AsyncFunctionKeyword),
 
             // Logical
@@ -648,27 +661,28 @@ fn keyword_or_variable(
             // Data Types
             "true" | "True" => return Ok(Token::BoolLiteral(true)),
             "false" | "False" => return Ok(Token::BoolLiteral(false)),
-            "Float" => return Ok(Token::TypeKeyword(DataType::Float)),
-            "Int" => return Ok(Token::TypeKeyword(DataType::Int)),
-            "String" => return Ok(Token::TypeKeyword(DataType::String)),
-            "Bool" => return Ok(Token::TypeKeyword(DataType::Bool)),
+            "Float" => return Ok(Token::TypeKeyword(DataType::Float(false))),
+            "Int" => return Ok(Token::TypeKeyword(DataType::Int(false))),
+            "String" => return Ok(Token::TypeKeyword(DataType::String(false))),
+            "Bool" => return Ok(Token::TypeKeyword(DataType::Bool(false))),
             "Type" => return Ok(Token::TypeKeyword(DataType::Type)),
             "None" => return Ok(Token::TypeKeyword(DataType::None)),
             "Function" => {
                 return Ok(Token::TypeKeyword(DataType::Function(
                     Vec::new(),
-                    Vec::new(),
+                    Box::new(DataType::None),
                 )))
             }
 
             "Scene" => return Ok(Token::TypeKeyword(DataType::Scene)),
-            "Style" => return Ok(Token::TypeKeyword(DataType::Style)),
 
             // Built in standard library functions
             "print" => return Ok(Token::Print),
             "log" => return Ok(Token::Log),
             "assert" => return Ok(Token::Assert),
             "panic" => return Ok(Token::Panic),
+
+            "io" => return Ok(Token::IO),
 
             _ => {}
         }

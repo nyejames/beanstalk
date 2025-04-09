@@ -17,6 +17,7 @@ pub enum Token {
     // For Compiler
     ModuleStart(String),
     Print,
+    IO,
     Log,
     Panic,
     DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
@@ -148,15 +149,8 @@ pub enum Token {
     // HTTP
     Dollar,
 
-    //HTML element stuff
-    //markdown inferred elements
-    // Id,
-    // Span(String),
-    // Paragraph(String),
-    // Em(u8, String), // Forms the start and the end of an Em tag
-    // Superscript(String),
-    // HeadingStart(u8), // Max heading size should be 10 or something
-    // BulletPointStart(u8),
+    Id(String), // ID for scenes
+
     Empty,
     // Pre(String), // Content inside raw elements. Might change to not be a format tag in the future
     Ignore, // for commenting out an entire scene

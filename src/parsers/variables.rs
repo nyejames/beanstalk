@@ -1,3 +1,4 @@
+use colour::blue_ln;
 use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
@@ -18,8 +19,8 @@ pub fn create_new_var_or_ref(
     ast: &[AstNode],
     inside_collection: bool, // This allows parse_expression to know that new variable declarations are valid
 ) -> Result<AstNode, CompileError> {
-    let token_line_number = x.token_positions[x.index].line_number;
-    let token_start_pos = x.token_positions[x.index].char_column;
+    let token_line_number = x.current_position().line_number;
+    let token_start_pos = x.current_position().char_column;
 
     // If this is a reference to a function or variable
     // This to_owned here is gross, probably a better way to avoid this
@@ -29,28 +30,21 @@ pub fn create_new_var_or_ref(
         .find(|a| a.name == name)
     {
         return match arg.data_type {
+
             // Function Call
-            DataType::Function(ref argument_refs, ref return_args) => parse_function_call(
-                x,
-                name,
-                ast,
-                variable_declarations,
-                argument_refs,
-                return_args,
-            ),
-
-            DataType::Structure(..) | DataType::Collection(..) => {
-                let accessed_arg =
-                    get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
-
-                Ok(AstNode::Literal(
-                    Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
-                    TokenPosition {
-                        line_number: token_line_number,
-                        char_column: token_start_pos,
-                    },
-                ))
-            }
+            DataType::Function(ref argument_refs, ref return_type) => {
+                x.index += 1;
+                // blue_ln!("arg value purity: {:?}, for {}",  arg.value.is_pure(), name);
+                parse_function_call(
+                    x,
+                    name,
+                    ast,
+                    variable_declarations,
+                    argument_refs,
+                    return_type,
+                    arg.value.is_pure(),
+                )
+            },
 
             _ => {
                 // Check to make sure there is no access attempt on any other types
@@ -59,6 +53,18 @@ pub fn create_new_var_or_ref(
                 // incase the language changes in the future and properties/methods are added to other types
                 let accessed_arg =
                     get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
+
+                // If the value isn't wrapped in a runtime value,
+                // Replace the reference with a literal value
+                if arg.value.is_pure() {
+                    return Ok(AstNode::Literal(
+                        arg.value.to_owned(),
+                        TokenPosition {
+                            line_number: token_line_number,
+                            char_column: token_start_pos,
+                        },
+                    ))
+                }
 
                 Ok(AstNode::Literal(
                     Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
@@ -112,8 +118,8 @@ fn new_variable(
                 if !inside_collection {
                     variable_declarations.push(Arg {
                         name: name.to_owned(),
-                        data_type: DataType::Function(arg_refs.clone(), return_type.to_owned()),
-                        value: Value::None,
+                        data_type: DataType::Function(arg_refs.clone(), Box::new(return_type)),
+                        value: function.get_value(),
                     });
                 }
 
@@ -176,7 +182,6 @@ fn new_variable(
     };
 
     // Current token should be whatever is after assignment operator
-
     let parsed_expr = create_expression(
         x,
         inside_collection,
@@ -197,7 +202,6 @@ fn new_variable(
         var_value.to_owned(),
         is_exported,
         data_type.to_owned(),
-        is_mutable,
         x.token_positions[x.index].to_owned(),
     );
 
@@ -219,39 +223,35 @@ fn create_zero_value_var(
     token_position: TokenPosition,
 ) -> AstNode {
     match data_type {
-        DataType::Float => AstNode::VarDeclaration(
+        DataType::Float(_) => AstNode::VarDeclaration(
             name,
             Value::Float(0.0),
             is_exported,
             data_type,
-            false,
             token_position,
         ),
 
-        DataType::Int => AstNode::VarDeclaration(
+        DataType::Int(_) => AstNode::VarDeclaration(
             name,
             Value::Int(0),
             is_exported,
             data_type,
-            false,
             token_position,
         ),
 
-        DataType::String => AstNode::VarDeclaration(
+        DataType::String(_) => AstNode::VarDeclaration(
             name,
             Value::String("".to_string()),
             is_exported,
             data_type,
-            false,
             token_position,
         ),
 
-        DataType::Bool => AstNode::VarDeclaration(
+        DataType::Bool(_) => AstNode::VarDeclaration(
             name,
             Value::Bool(false),
             is_exported,
             data_type,
-            false,
             token_position,
         ),
 
@@ -260,7 +260,6 @@ fn create_zero_value_var(
             Value::None,
             is_exported,
             data_type,
-            false,
             token_position,
         ),
     }

@@ -38,6 +38,14 @@ pub fn sort_unnamed_args_last(args: &[Arg]) -> Vec<Arg> {
     args_in_sorted
 }
 
+pub fn first_letter_is_capitalised(s: &str) -> bool {
+    let mut c = s.chars();
+    match c.next() {
+        None => false,
+        Some(f) => f.is_uppercase(),
+    }
+}
+
 pub fn count_newlines_at_end_of_string(s: &str) -> usize {
     let mut count = 0;
     for c in s.chars().rev() {

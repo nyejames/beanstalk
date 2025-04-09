@@ -1,3 +1,4 @@
+use colour::{blue_ln, red_ln};
 use super::{
     ast_nodes::{Arg, AstNode},
     build_ast::new_ast,
@@ -8,6 +9,7 @@ use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
+use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 
 pub fn create_function(
@@ -19,36 +21,34 @@ pub fn create_function(
     // Functions don't capture the scope of the module
     // This is just for parsing the arguments
     declarations: &[Arg],
-) -> Result<(AstNode, Vec<Arg>, Vec<Arg>), CompileError> {
+) -> Result<(AstNode, Vec<Arg>, DataType), CompileError> {
     /*
-        funcName = sync(arg ~Type, arg2 Type = default_value) -> returnType:
+        funcName = fn(arg ~Type, arg2 Type = default_value) -> Type:
             -- Function body
             return value
-        ;
+        zz
 
         No return value
 
-        func sync():
+        func fn():
             -- Function body
-        ;
+        zz
     */
 
+    let mut pure = true;
+
     // get args (tokens should currently be at the open parenthesis)
-    let arg_refs = create_args(x, ast, declarations)?;
+    let arg_refs = create_args(x, ast, declarations, &mut pure)?;
 
     x.index += 1;
 
     // Return type is optional (can not return anything)
-    let return_args: Vec<Arg> = match x.tokens[x.index] {
-        Token::Arrow => {
-            x.index += 1;
-            parse_return_type(x)?
-        }
-        _ => Vec::new(),
-    };
+    let mut return_type: DataType = parse_return_type(x)?;
+
+    x.index += 1;
 
     // Should now be at the colon
-    if x.tokens[x.index] != Token::Colon {
+    if x.current_token() != &Token::Colon {
         return Err(CompileError {
             msg: "Expected ':' to open function scope".to_string(),
             start_pos: x.token_positions[x.index].to_owned(),
@@ -62,20 +62,20 @@ pub fn create_function(
 
     x.index += 1;
 
-    // The function ends with the end token
-    let function_body = new_ast(x, &arg_refs, &return_args, false)?.0;
-
+    let function_body = new_ast(x, &arg_refs, &mut return_type, false, &mut pure)?.0;
+    
     Ok((
         AstNode::Function(
             name,
             arg_refs.clone(),
             function_body,
             is_exported,
-            return_args.to_owned(),
+            return_type.to_owned(),
             x.current_position(),
+            pure.to_owned(),
         ),
         arg_refs,
-        return_args,
+        return_type,
     ))
 }
 
@@ -85,6 +85,7 @@ pub fn create_args(
     x: &mut TokenContext,
     ast: &[AstNode],
     variable_declarations: &[Arg],
+    pure: &mut bool
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args = Vec::<Arg>::new();
 
@@ -164,6 +165,10 @@ pub fn create_args(
                     }
                 };
 
+                if data_type.is_mutable() {
+                    *pure = false;
+                }
+
                 // Check if there is a default value
                 let mut default_value: Value = Value::None;
                 if matches!(x.tokens[x.index + 1], Token::Assign) {
@@ -225,75 +230,103 @@ pub fn create_args(
     Ok(args)
 }
 
-fn parse_return_type(x: &mut TokenContext) -> Result<Vec<Arg>, CompileError> {
-    let mut return_type = Vec::<Arg>::new();
+fn parse_return_type(x: &mut TokenContext) -> Result<DataType, CompileError> {
+    match x.current_token() {
+        Token::Arrow => {
+            x.index += 1;
+        }
+        _ => return Ok(DataType::None),
+    };
 
-    // Check if there is a return type
-    let mut open_parenthesis = 0;
-    let mut next_in_list: bool = true;
-    while x.tokens[x.index] != Token::Colon {
-        match &x.tokens[x.index] {
-            Token::OpenParenthesis => {
-                open_parenthesis += 1;
-                x.index += 1;
-            }
-            Token::CloseParenthesis => {
-                open_parenthesis -= 1;
-                x.index += 1;
-            }
-            Token::TypeKeyword(type_keyword) => {
-                if next_in_list {
-                    return_type.push(Arg {
-                        name: "".to_string(),
-                        data_type: type_keyword.to_owned(),
-                        value: Value::None,
-                    });
-                    next_in_list = false;
-                    x.index += 1;
-                } else {
-                    return Err(CompileError {
-                        msg: "Should have a comma to separate return types".to_string(),
-                        start_pos: x.token_positions[x.index].to_owned(),
-                        end_pos: TokenPosition {
-                            line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + 1,
-                        },
-                        error_type: ErrorType::Syntax,
-                    });
-                }
-            }
-            Token::Comma => {
-                next_in_list = true;
-                x.index += 1;
-            }
-            _ => {
-                return Err(CompileError {
-                    msg: "Invalid syntax for return type".to_string(),
-                    start_pos: x.token_positions[x.index].to_owned(),
+    match x.current_token() {
+        Token::TypeKeyword(data_type) => {
+            Ok(data_type.to_owned())
+        }
+        _ => {
+            Err(
+                CompileError {
+                    msg: "Expected a type keyword after the arrow operator".to_string(),
+                    start_pos: x.current_position(),
                     end_pos: TokenPosition {
-                        line_number: x.token_positions[x.index].line_number,
-                        char_column: x.token_positions[x.index].char_column + 1,
+                        line_number: x.current_position().line_number,
+                        char_column: x.current_position().char_column + 1,
                     },
                     error_type: ErrorType::Syntax,
-                });
-            }
+                }
+            )
         }
     }
-
-    if open_parenthesis != 0 {
-        return Err(CompileError {
-            msg: "Wrong number of parenthesis used when declaring return type".to_string(),
-            start_pos: x.token_positions[x.index].to_owned(),
-            end_pos: TokenPosition {
-                line_number: x.token_positions[x.index].line_number,
-                char_column: x.token_positions[x.index].char_column + 1,
-            },
-            error_type: ErrorType::Syntax,
-        });
-    }
-
-    Ok(return_type)
 }
+
+// fn parse_return_type(x: &mut TokenContext) -> Result<Vec<Arg>, CompileError> {
+//     let mut return_type = Vec::<Arg>::new();
+//
+//     // Check if there is a return type
+//     let mut open_parenthesis = 0;
+//     let mut next_in_list: bool = true;
+//     while x.tokens[x.index] != Token::Colon {
+//         match &x.tokens[x.index] {
+//             Token::OpenParenthesis => {
+//                 open_parenthesis += 1;
+//                 x.index += 1;
+//             }
+//             Token::CloseParenthesis => {
+//                 open_parenthesis -= 1;
+//                 x.index += 1;
+//             }
+//             Token::TypeKeyword(type_keyword) => {
+//                 if next_in_list {
+//                     return_type.push(Arg {
+//                         name: "".to_string(),
+//                         data_type: type_keyword.to_owned(),
+//                         value: Value::None,
+//                     });
+//                     next_in_list = false;
+//                     x.index += 1;
+//                 } else {
+//                     return Err(CompileError {
+//                         msg: "Should have a comma to separate return types".to_string(),
+//                         start_pos: x.token_positions[x.index].to_owned(),
+//                         end_pos: TokenPosition {
+//                             line_number: x.token_positions[x.index].line_number,
+//                             char_column: x.token_positions[x.index].char_column + 1,
+//                         },
+//                         error_type: ErrorType::Syntax,
+//                     });
+//                 }
+//             }
+//             Token::Comma => {
+//                 next_in_list = true;
+//                 x.index += 1;
+//             }
+//             _ => {
+//                 return Err(CompileError {
+//                     msg: "Invalid syntax for return type".to_string(),
+//                     start_pos: x.token_positions[x.index].to_owned(),
+//                     end_pos: TokenPosition {
+//                         line_number: x.token_positions[x.index].line_number,
+//                         char_column: x.token_positions[x.index].char_column + 1,
+//                     },
+//                     error_type: ErrorType::Syntax,
+//                 });
+//             }
+//         }
+//     }
+//
+//     if open_parenthesis != 0 {
+//         return Err(CompileError {
+//             msg: "Wrong number of parenthesis used when declaring return type".to_string(),
+//             start_pos: x.token_positions[x.index].to_owned(),
+//             end_pos: TokenPosition {
+//                 line_number: x.token_positions[x.index].line_number,
+//                 char_column: x.token_positions[x.index].char_column + 1,
+//             },
+//             error_type: ErrorType::Syntax,
+//         });
+//     }
+//
+//     Ok(return_type)
+// }
 
 // For Function Calls or new instances of a predefined struct type (basically like a struct)
 // Unpacks references into their values and returns them
@@ -323,7 +356,7 @@ pub fn create_func_call_args(
         }
     };
 
-    if args_passed_in.is_empty() {
+    if args_passed_in.is_empty() || args_passed_in[0].value == Value::None {
         for arg in args_required {
             // Make sure there are no required arguments left
             if arg.value != Value::None {
@@ -349,7 +382,7 @@ pub fn create_func_call_args(
     // And return the value
     if sorted_values.is_empty() {
         return Err(CompileError {
-            msg: format!("This function call does not accept any arguments. Value passed in: {:?}", args_passed_in),
+            msg: format!("Function call does not accept any arguments. Value passed in: {:?}", args_passed_in),
             start_pos: token_position.to_owned(),
             end_pos: TokenPosition {
                 line_number: token_position.line_number,
@@ -448,7 +481,8 @@ pub fn parse_function_call(
     ast: &[AstNode],
     variable_declarations: &mut Vec<Arg>,
     argument_refs: &[Arg],
-    return_args: &[Arg],
+    return_type: &DataType,
+    is_pure: bool,
 ) -> Result<AstNode, CompileError> {
     // Assumes starting at the first token after the name of the function call
 
@@ -462,6 +496,7 @@ pub fn parse_function_call(
 
     // Make sure there are parenthesis
     let call_value = if x.tokens.get(x.index) == Some(&Token::OpenParenthesis) {
+        x.index += 1;
 
         // Parse argument(s) passed into the function
         create_expression(
@@ -469,17 +504,17 @@ pub fn parse_function_call(
             false,
             ast,
             &mut DataType::Inferred,
-            false,
+            true,
             variable_declarations,
         )?
 
     } else {
         return Err(CompileError {
             msg: "Expected a parenthesis after function name".to_string(),
-            start_pos: x.token_positions[x.index].to_owned(),
+            start_pos: x.current_position(),
             end_pos: TokenPosition {
-                line_number: x.token_positions[x.index].line_number,
-                char_column: x.token_positions[x.index].char_column + 1,
+                line_number: x.current_position().line_number,
+                char_column: x.current_position().char_column + 1,
             },
             error_type: ErrorType::Syntax,
         });
@@ -487,21 +522,32 @@ pub fn parse_function_call(
 
     // Makes sure the call value is correct for the function call
     // If so, the function call args are sorted into their correct order (if some are named or optional)
-    let args = create_func_call_args(&call_value, argument_refs, &x.token_positions[x.index])?;
+    let args = create_func_call_args(&call_value, argument_refs, &x.current_position())?;
 
     // look for which arguments are being accessed from the function call
     let accessed_args = get_accessed_args(
         x,
         &name,
-        &DataType::Structure(return_args.to_owned()),
+        &DataType::Structure(Vec::from([Arg {
+            name: "".to_string(),
+            data_type: return_type.to_owned(),
+            value: Value::None,
+        }])),
         &mut Vec::new(),
     )?;
+
+    // Inline this function call if it's pure and the function call is pure
+    if is_pure && call_value.is_pure() {
+        let original_function = variable_declarations.iter().find(|a| a.name == *name).unwrap();
+        return inline_function_call(&args, &accessed_args, &original_function.value);
+    }
 
     Ok(AstNode::FunctionCall(
         name.to_owned(),
         args,
-        return_args.to_owned(),
+        return_type.to_owned(),
         accessed_args,
-        x.token_positions[x.index].to_owned(),
+        x.current_position(),
+        is_pure,
     ))
 }

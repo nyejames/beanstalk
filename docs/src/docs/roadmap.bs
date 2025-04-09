@@ -8,13 +8,13 @@ Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
 - Compile time is now forced by capitol letter start naming. Make sure this works and write compile time functions that return scenes using this.
-- Finish implementing constant folding and all math operators and brackets
 - Folding (inlining) compile time functions (functions named with capitol letter start)
 - Styles should just be structs in the language itself that Scenes can use fields from to define their behaviour.
 and insert any scenes inside those styles correctly into the body, while making use of slots to insert anything in the scenebody into any slots in the scenes from the scene head.
 In the case of multiple scenes being imported in the scenehead, each successive scene should slot the last one into itself. Need to think about how all the wrapping works here though.
 - Scene slots for templating and wrapping other scenes (to build out standard library)
 - Build out HTML standard library for styles
+- Linking!!! get imports working
 - Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
 
 ## Current Bugs

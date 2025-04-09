@@ -10,7 +10,7 @@ use std::collections::HashMap;
 
 use crate::parsers::build_ast::new_ast;
 use crate::tokenizer::TokenPosition;
-use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_ln, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
+use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
@@ -149,7 +149,7 @@ pub fn build(
                 }
             };
 
-            let (config_ast, _) = match new_ast(&mut token_context, &[], &Vec::new(), true) {
+            let (config_ast, _) = match new_ast(&mut token_context, &[], &mut DataType::None, true, &mut true) {
                 Ok(ast) => ast,
                 Err(e) => return Err(e.to_error(entry_dir.join("#config.bs"))),
             };
@@ -457,7 +457,7 @@ fn compile(
     let time = Instant::now();
 
     // PARSER
-    let (ast, imports) = match new_ast(&mut token_context, &[], &[], true) {
+    let (ast, imports) = match new_ast(&mut token_context, &[], &mut DataType::None, true, &mut true) {
         Ok(ast) => ast,
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&output.source_path)));
@@ -465,6 +465,7 @@ fn compile(
     };
 
     if output_info_level > 4 {
+        yellow_ln_bold!("CREATING AST\n");
         print_ast_output(&ast);
     }
 
@@ -1049,17 +1050,12 @@ fn print_token_output(tokens: &Vec<Token>) {
 }
 
 fn print_ast_output(ast: &Vec<AstNode>) {
-    yellow_ln_bold!("CREATING AST\n");
-
     for node in ast {
         match node {
             AstNode::Literal(value, _) => {
                 match value.get_type() {
                     DataType::Scene => {
                         print_scene(value, 0);
-                    }
-                    DataType::Style => {
-                        green_ln!("{:?}", value);
                     }
                     _ => {
                         cyan_ln!("{:?}", value);
@@ -1069,10 +1065,25 @@ fn print_ast_output(ast: &Vec<AstNode>) {
             AstNode::Comment(..) => {
                 grey_ln!("{:?}", node);
             }
+            AstNode::Function(name, args, body, ..) => {
+                blue_ln!("Function: {:?}", name);
+                for (i, arg) in args.iter().enumerate() {
+                    green_ln_bold!("    {}: {} = {:?}", i, arg.name, arg.value);
+                }
+                print_ast_output(body);
+            }
+            AstNode::FunctionCall(name, args, ..) => {
+                blue_ln!("Function Call: {:?}", name);
+                green_bold!("Arguments: ");
+                for (i, arg) in args.iter().enumerate() {
+                    green_ln_bold!("    {}: {:?}", i, arg);
+                }
+            }
             _ => {
                 println!("{:?}", node);
             }
         }
+        println!("\n");
     }
 
     fn print_scene(scene: &Value, scene_nesting_level: u32) {

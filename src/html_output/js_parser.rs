@@ -70,7 +70,7 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
                         }
                     },
 
-                    AstNode::FunctionCall(name, args, _, arguments_accessed, _) => {
+                    AstNode::FunctionCall(name, args, _, arguments_accessed, ..) => {
                         js.push_str(&format!(
                             " {}({})",
                             name,
@@ -96,8 +96,8 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
             }
 
             match expression_type {
-                DataType::String | DataType::Float | DataType::Int => {}
-                DataType::CoerceToString => {
+                DataType::String(_) | DataType::Float(_) | DataType::Int(_) => {}
+                DataType::CoerceToString(_) => {
                     js.insert_str(0, "String(");
                     js.push(')');
                 }

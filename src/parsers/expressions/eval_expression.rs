@@ -20,23 +20,23 @@ pub fn evaluate_expression(
     'outer: for node in expr {
         match node {
             AstNode::Literal(ref value, _) => {
+
                 // Ignore shunting yard for strings and coerced strings
-                if current_type == DataType::CoerceToString || current_type == DataType::String {
-                    simplified_expression.push(node.to_owned());
-                    continue 'outer;
+                match current_type {
+                    DataType::CoerceToString(_) | DataType::String(_) => {
+                        simplified_expression.push(node.to_owned());
+                        continue 'outer;
+                    },
+                    _ => {},
                 }
 
                 match value {
-                    /*
-                        if the token is:
-                            - a number:
-                                put it into the output queue
-                    */
+
                     Value::Float(_) | Value::Int(_) | Value::Bool(_) => {
                         output_queue.push(node.to_owned());
                     }
 
-                    // Anything else must can't be folded at compile time
+                    // Anything else can't be folded at compile time
                     _ => {
                         simplified_expression.push(node.to_owned());
                     }
@@ -46,47 +46,43 @@ pub fn evaluate_expression(
                     current_type = value.get_type();
                 }
             }
-            /*
-               - a function:
-               push it onto the operator stack
 
-            */
-            // Should already be type checked
             AstNode::FunctionCall(..) => {
-                // TODO: Check here if function call can be folded
-                operators_stack.push(node.to_owned());
+                simplified_expression.push(node.to_owned());
             }
 
             AstNode::BinaryOperator(ref op, ref position) => {
                 // If the current type is a string or scene, add operator is assumed.
-                if current_type == DataType::String || current_type == DataType::Scene {
-                    if op != &Token::Add {
-                        return Err( CompileError {
-                            msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
-                            start_pos: position.to_owned(),
-                            end_pos: TokenPosition {
-                                line_number: position.line_number,
-                                char_column: position.char_column + 1,
-                            },
-                            error_type: ErrorType::Syntax,
-                        });
+                match current_type {
+
+                    DataType::String(_) | DataType::Scene => {
+                        if op != &Token::Add {
+                            return Err( CompileError {
+                                msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
+                                start_pos: position.to_owned(),
+                                end_pos: TokenPosition {
+                                    line_number: position.line_number,
+                                    char_column: position.char_column + 1,
+                                },
+                                error_type: ErrorType::Syntax,
+                            });
+                        }
+
+                        // We don't push the node into the simplified expression atm
+                        // As the only kind of string expression is contaminating them
+                        // So simplified string expressions are just a list of strings
+                        // Maybe other kinds of string expression will be valid in the future so more logic is needed here
+                        // simplified_expression.push(node.to_owned());
+                        continue 'outer;
                     }
 
-                    // We don't push the node into the simplified expression atm
-                    // As the only kind of string expression is contaminating them
-                    // So simplified string expressions are just a list of strings
-                    // Maybe other kinds of string expression will be valid in the future so more logic is needed here
-                    // simplified_expression.push(node.to_owned());
-                    continue 'outer;
-                }
+                    DataType::CoerceToString(_) => {
+                        simplified_expression.push(node.to_owned());
+                        continue 'outer;
+                    }
 
-                if current_type == DataType::CoerceToString {
-                    simplified_expression.push(node.to_owned());
-                    continue 'outer;
-                }
-
-                if current_type == DataType::Bool {
-                    if *op != Token::Or
+                    DataType::Bool(_) => {
+                        if *op != Token::Or
                         || *op != Token::And
                         || *op != Token::Equal
                         || *op != Token::Not
@@ -94,33 +90,24 @@ pub fn evaluate_expression(
                         || *op != Token::LessThanOrEqual
                         || *op != Token::GreaterThan
                         || *op != Token::GreaterThanOrEqual
-                    {
+                        {
                         return Err(CompileError {
-                            msg: "Can only use logical operators in booleans expressions"
-                                .to_string(),
-                            start_pos: position.to_owned(),
-                            end_pos: TokenPosition {
-                                line_number: position.line_number,
-                                char_column: position.char_column + 1,
-                            },
-                            error_type: ErrorType::Syntax,
+                        msg: "Can only use logical operators in booleans expressions"
+                        .to_string(),
+                        start_pos: position.to_owned(),
+                        end_pos: TokenPosition {
+                        line_number: position.line_number,
+                        char_column: position.char_column + 1,
+                        },
+                        error_type: ErrorType::Syntax,
                         });
+                        }
+
+                        simplified_expression.push(node.to_owned());
+                        continue 'outer;
                     }
-
-                    simplified_expression.push(node.to_owned());
-                    continue 'outer;
+                    _ => {}
                 }
-
-                /*
-                    - an operator node:
-
-                    while (
-                        there is an operator o2 at the top of the operator stack which is not a left parenthesis,
-                        and (o2 has greater precedence than node or (node and o2 have the same precedence and node is left-associative))
-                    ):
-                        pop o2 off the operator stack into the output queue
-                        push node onto the operator stack
-                */
 
                 while let Some(top_op_node) = operators_stack.last() {
                     // Stop if top is not an operator (e.g., left parenthesis)
@@ -134,11 +121,6 @@ pub fn evaluate_expression(
                     let o2_precedence = top_op_node.get_precedence();
                     let node_precedence = node.get_precedence();
 
-                    // Pop 'top_op_node' if:
-                    // 1. It has higher precedence OR
-                    // 2. It has equal precedence and 'node' is left-associative
-                    // (Assumes standard left-associativity for operators like +, -, *, /)
-                    // You might need a AstNode::is_left_associative() check for more complex cases (like '^')
                     if o2_precedence >= node_precedence {
                         output_queue.push(operators_stack.pop().unwrap()); // Pop from stack to output
                     } else {
@@ -151,12 +133,6 @@ pub fn evaluate_expression(
 
             }
 
-            /*
-                - a ",":
-                while the operator at the top of the operator stack is not a left parenthesis:
-                    pop the operator from the operator stack into the output queue
-
-            */
             _ => {
                 return Err(CompileError {
                     msg: format!("unsupported AST node found in expression: {:?}", node),
@@ -179,41 +155,39 @@ pub fn evaluate_expression(
         return Ok(simplified_expression[0].get_value());
     }
 
-    // LOGICAL EXPRESSIONS
-    if current_type == DataType::Bool {
-        for operator in operators_stack {
-            output_queue.push(operator);
+    match current_type {
+        DataType::Bool(_) => {
+            for operator in operators_stack {
+                output_queue.push(operator);
+            }
+
+            logical_constant_fold(output_queue, current_type)
         }
 
-        return logical_constant_fold(output_queue, current_type);
-    }
+        DataType::Scene => {
+            concat_scene(&mut simplified_expression)
+        }
 
-    // SCENE EXPRESSIONS
-    // If constant scene expression, combine the scenes together and return the new scene
-    if current_type == DataType::Scene {
-        return concat_scene(&mut simplified_expression);
-    }
+        DataType::String(_) => {
+            concat_strings(&mut simplified_expression)
+        }
 
-    // STRING EXPRESSIONS
-    // If the expression is a constant string, combine and return a string
-    if current_type == DataType::String {
-        return concat_strings(&mut simplified_expression);
-    }
+        DataType::CoerceToString(_) => {
+            // TODO - line number
+            Ok(Value::Runtime(simplified_expression, current_type))
+        }
 
-    // Scene Head Coerce to String
-    if current_type == DataType::CoerceToString {
-        // TODO - line number
-        return Ok(Value::Runtime(simplified_expression, current_type));
-    }
+        _ => {
+            // MATHS EXPRESSIONS
+            // Push everything into the stack, is now in RPN notation
+            while let Some(operator) = operators_stack.pop() {
+                output_queue.push(operator);
+            }
 
-    // MATHS EXPRESSIONS
-    // Push everything into the stack, is now in RPN notation
-    while let Some(operator) = operators_stack.pop() {
-        output_queue.push(operator);
+            // Evaluate all constants in the maths expression
+            math_constant_fold(output_queue, current_type)
+        }
     }
-
-    // Evaluate all constants in the maths expression
-    math_constant_fold(output_queue, current_type)
 }
 
 // TODO - needs to check what can be concatenated at compile time

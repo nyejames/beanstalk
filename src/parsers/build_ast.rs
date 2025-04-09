@@ -8,7 +8,8 @@ use crate::parsers::ast_nodes::{Arg, Value};
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use std::path::PathBuf;
-use crate::parsers::functions::create_func_call_args;
+use colour::red_ln;
+use crate::parsers::functions::parse_function_call;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -38,8 +39,9 @@ impl TokenContext {
 pub fn new_ast(
     x: &mut TokenContext,
     captured_declarations: &[Arg],
-    return_args: &[Arg],
-    module_scope: bool,
+    return_type: &mut DataType,
+    module: bool,
+    pure: &mut bool, // No side effects or IO
     // AST, Imports
 ) -> Result<(Vec<AstNode>, Vec<AstNode>), CompileError> {
     
@@ -48,7 +50,7 @@ pub fn new_ast(
 
     let mut imports = Vec::new();
     let mut exported: bool = false;
-    let mut needs_to_return = !return_args.is_empty();
+    let mut needs_to_return = return_type != &DataType::None;
     let mut declarations = captured_declarations.to_vec();
 
     while x.index < x.length {
@@ -60,7 +62,7 @@ pub fn new_ast(
             }
 
             Token::Import => {
-                if !module_scope {
+                if !module {
                     return Err(CompileError {
                         msg: "Import found outside of module scope".to_string(),
                         start_pos: x.current_position(),
@@ -101,7 +103,7 @@ pub fn new_ast(
 
             // Scene literals
             Token::SceneHead | Token::ParentScene => {
-                if !module_scope {
+                if !module {
                     return Err(CompileError {
                         msg: "Scene literals can only be used at the top level of a module"
                             .to_string(),
@@ -131,14 +133,21 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             Token::Variable(name) => {
-                ast.push(create_new_var_or_ref(
+                let new_var = create_new_var_or_ref(
                     x,
-                    name,
+                    name.to_owned(),
                     &mut declarations,
                     exported,
                     &ast,
                     false,
-                )?);
+                )?;
+
+                if !new_var.get_value().is_pure() {
+                    // red_ln!("flipping pure for {}", name);
+                    *pure = false;
+                }
+
+                ast.push(new_var);
             }
 
             Token::Public => {
@@ -146,7 +155,7 @@ pub fn new_ast(
             }
 
             Token::JS(value) => {
-                if !module_scope {
+                if !module {
                     return Err(CompileError {
                         msg: "JS block can only be used inside of a module scope (not inside of a function)".to_string(),
                         start_pos: x.current_position(),
@@ -157,6 +166,8 @@ pub fn new_ast(
                         error_type: ErrorType::Rule,
                     });
                 }
+
+                *pure = false;
 
                 ast.push(AstNode::JS(
                     value.clone(),
@@ -173,46 +184,27 @@ pub fn new_ast(
             // Standard library function 'io' might have a bunch of special print functions inside it
             // e.g io.red("red hello")
             Token::Print => {
+                // This module is no longer pure
+                *pure = false;
+
                 // Move past the print keyword
                 x.index += 1;
 
-                // Make sure there is an open parenthesis
-                if x.tokens.get(x.index) != Some(&Token::OpenParenthesis) {
-                    return Err(CompileError {
-                        msg: "Expected an open parenthesis after the print keyword".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::Syntax,
-                    });
-                }
-                
-                let arguments = create_expression(
+                ast.push(parse_function_call(
                     x,
-                    false,
+                    String::from("console.log"),
                     &ast,
-                    &mut DataType::Inferred,
-                    false,
                     &mut declarations,
-                )?;
-                
-                let arguments_parsed = create_func_call_args(
-                    &arguments,
                     &[Arg {
                         name: "".to_string(),
-                        data_type: DataType::CoerceToString,
+                        data_type: DataType::CoerceToString(false),
                         value: Value::None,
                     }],
-                    &x.current_position(),
-                )?;
 
-                // Get the struct of args passed into the function call
-                ast.push(AstNode::Print(
-                    Value::Collection(arguments_parsed, DataType::CoerceToString),
-                    x.current_position(),
-                ));
+                    // Console.log does not return anything
+                    &DataType::None,
+                    false,
+                )?);
             }
 
             Token::DeadVariable(name) => {
@@ -229,7 +221,7 @@ pub fn new_ast(
             }
 
             Token::Return => {
-                if module_scope {
+                if module {
                     return Err(CompileError {
                         msg: "Return statement used outside of function".to_string(),
                         start_pos: x.current_position(),
@@ -257,14 +249,12 @@ pub fn new_ast(
                 needs_to_return = false;
                 x.index += 1;
 
-                let mut return_type = if return_args.len() > 1 {
-                    DataType::Structure(return_args.to_owned())
-                } else {
-                    return_args[0].data_type.to_owned()
-                };
-
                 let return_value =
-                    create_expression(x, false, &ast, &mut return_type, false, &mut declarations)?;
+                    create_expression(x, false, &ast, return_type, false, &mut declarations)?;
+
+                // if !return_value.is_pure() {
+                //     *pure = false;
+                // }
 
                 ast.push(AstNode::Return(
                     return_value,
@@ -280,7 +270,7 @@ pub fn new_ast(
 
             // TOKEN::End SHOULD NEVER BE IN MODULE SCOPE
             Token::End => {
-                if module_scope {
+                if module {
                     return Err(CompileError {
                         msg: "End statement used in module scope (too many end statements used?)"
                             .to_string(),

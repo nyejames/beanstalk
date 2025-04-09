@@ -371,8 +371,8 @@ pub fn parse_scene(
             }
 
             // TODO - add / test remaining types, some of them might need unpacking
-            Value::Runtime(_, _) => {}
-            Value::Function(_, _, _, _, _, _) => {}
+            Value::Runtime(..) => {}
+            Value::Function(..) => {}
 
             // At this point, if this structure was a style, those fields and inner scene would have been parsed in scene_node.rs
             // So we can just unpack any other public fields into the scene as strings

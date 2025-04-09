@@ -104,15 +104,14 @@ pub fn new_scene(
 
                 // Otherwise check if it's a regular style or variable reference
                 // If this is a reference to a function or variable
-                let value = if declarations.iter().any(|a| a.name == name) {
-
+                let value = if let Some(arg) = declarations.iter().find(|a| a.name == name) {
                     // Here we need to evaluate the expression
                     // This is because functions can be folded into styles (or at least eventually can be)
                     create_expression(
                         x,
                         false,
                         ast,
-                        &mut DataType::CoerceToString,
+                        &mut DataType::CoerceToString(arg.data_type.is_mutable()),
                         false,
                         declarations,
                     )?
@@ -211,7 +210,7 @@ pub fn new_scene(
                         x,
                         false,
                         ast,
-                        &mut DataType::CoerceToString,
+                        &mut DataType::CoerceToString(false),
                         inside_brackets,
                         declarations,
                     )?

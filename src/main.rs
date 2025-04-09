@@ -25,6 +25,7 @@ mod parsers {
         pub mod constant_folding;
         pub mod eval_expression;
         pub mod parse_expression;
+        pub mod function_call_inline;
     }
     pub mod structs;
 
@@ -423,7 +424,7 @@ fn print_formatted_error(e: Error) {
     println!("\n{}", line);
 
     // spaces before the relevant part of the line
-    print!("{}", " ".repeat((e.start_pos.char_column as usize / 2) - 1));
+    print!("{}", " ".repeat(e.start_pos.char_column as usize / 2));
     red_ln!(
         "{}",
         "^".repeat(e.end_pos.char_column as usize - e.start_pos.char_column as usize)

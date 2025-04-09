@@ -21,16 +21,16 @@ pub struct Arg {
 impl Arg {
     pub fn to_wasm_type(&self) -> Vec<ValType> {
         match &self.data_type {
-            DataType::Float => vec![ValType::F64],
-            DataType::Int | DataType::Bool | DataType::None | DataType::True | DataType::False => {
+            DataType::Float(_) => vec![ValType::F64],
+            DataType::Int(_) | DataType::Bool(_) | DataType::None | DataType::True | DataType::False => {
                 vec![ValType::I32]
             }
 
             // TODO
-            DataType::Decimal => vec![ValType::F64],
+            DataType::Decimal(_) => vec![ValType::F64],
 
-            DataType::String => vec![ValType::I32, ValType::I32],
-            DataType::CoerceToString => vec![ValType::I32, ValType::I32],
+            DataType::String(_) => vec![ValType::I32, ValType::I32],
+            DataType::CoerceToString(_) => vec![ValType::I32, ValType::I32],
 
             DataType::Type => vec![ValType::I32],
 
@@ -70,9 +70,10 @@ pub enum Value {
         Vec<Arg>,
         Vec<AstNode>,
         bool,
-        Vec<Arg>,
+        DataType,
         TokenPosition,
-    ), // Function name, Args (named), Body, Public, return types (named), Line number
+        bool
+    ),
 
     Scene(Vec<Value>, Vec<Style>, String), // Content Nodes, Styles, ID
 
@@ -104,19 +105,27 @@ pub enum AstNode {
 
     // Basics
     Function(
-        String,
-        Vec<Arg>,
-        Vec<AstNode>,
-        bool,
-        Vec<Arg>,
+        String, // Name
+        Vec<Arg>, // Args (named)
+        Vec<AstNode>, // Body
+        bool, // Public
+        DataType, // return type
         TokenPosition,
-    ), // Function name, Args (named), Body, Public, return types (named), Line number
-    FunctionCall(String, Vec<Value>, Vec<Arg>, Vec<usize>, TokenPosition), // Function name, arguments (has been sorted into correct order), return args, argument accessed, Line number
+        bool // Pure
+    ),
+    FunctionCall(
+        String,
+        Vec<Value>, // Arguments passed in
+        DataType, // return type
+        Vec<usize>, // Accessed args
+        TokenPosition,
+        bool // Function is pure
+    ),
 
     Comment(String),
 
     // Variable names should be the full namespace (module path + variable name)
-    VarDeclaration(String, Value, bool, DataType, bool, TokenPosition), // Variable name, Value, Public, Type, is_const, Line number
+    VarDeclaration(String, Value, bool, DataType, TokenPosition), // Variable name, Value, Public, Type, Line number
 
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
@@ -146,43 +155,13 @@ pub enum AstNode {
     Spaces(u32),
 }
 
-impl Value {
-    pub fn as_string(&self) -> String {
-        match self {
-            Value::String(string) => string.to_owned(),
-            Value::Int(int) => int.to_string(),
-            Value::Float(float) => float.to_string(),
-            Value::Bool(bool) => bool.to_string(),
-            Value::Scene(..) => String::new(),
-            Value::Collection(items, ..) => {
-                let mut all_items = String::new();
-                for item in items {
-                    all_items.push_str(&item.as_string());
-                }
-                all_items
-            }
-            Value::StructLiteral(args) => {
-                let mut all_items = String::new();
-                for arg in args {
-                    all_items.push_str(&arg.value.as_string());
-                }
-                all_items
-            }
-            Value::Function(..) => String::new(),
-            Value::Reference(..) => String::new(),
-            Value::Runtime(..) => String::new(),
-            Value::None => String::new(),
-        }
-    }
-}
-
 impl AstNode {
     pub fn get_type(&self) -> DataType {
         match self {
             AstNode::Literal(value, _) => match value {
-                Value::Float(_) => DataType::Float,
-                Value::Int(_) => DataType::Int,
-                Value::String(_) => DataType::String,
+                Value::Float(_) => DataType::Float(false),
+                Value::Int(_) => DataType::Int(false),
+                Value::String(_) => DataType::String(false),
                 Value::Bool(value) => {
                     if *value {
                         DataType::True
@@ -203,8 +182,8 @@ impl AstNode {
                 Value::Reference(_, data_type, argument_accessed) => {
                     get_reference_data_type(data_type, argument_accessed)
                 }
-                Value::Function(_, args, _, _, return_args, ..) => {
-                    DataType::Function(args.to_owned(), return_args.to_owned())
+                Value::Function(_, args, _, _, return_type, ..) => {
+                    DataType::Function(args.to_owned(), Box::new(return_type.to_owned()))
                 }
 
                 Value::Runtime(_, data_type) => data_type.to_owned(),
@@ -213,6 +192,14 @@ impl AstNode {
 
             AstNode::Empty(_) => DataType::None,
             AstNode::VarDeclaration(_, _, _, data_type, ..) => data_type.to_owned(),
+
+            AstNode::FunctionCall(_, _, return_type, ..) => {
+                DataType::Structure(Vec::from([Arg {
+                    name: "".to_string(),
+                    data_type: return_type.to_owned(),
+                    value: Value::None,
+                }]))
+            }
 
             _ => {
                 red_ln!(
@@ -231,14 +218,11 @@ impl AstNode {
     // Returns 'Runtime' if it can't be evaluated at compile time
     pub(crate) fn get_value(&self) -> Value {
         match self {
-            AstNode::Literal(value, ..) => value.to_owned(),
-
-            // Grab the value inside the variable declaration
-            AstNode::VarDeclaration(_, node, ..) => node.to_owned(),
-
-            // Note: Function calls can't be evaluated for their value at compile time (yet)
-            // When the compiler gets more complex, some function calls may be possible to evaluate
-            // Maybe even compile time only functions that do the work of macros
+            AstNode::Literal(value, ..) |
+            AstNode::VarDeclaration(_, value, ..) => value.to_owned(),
+            AstNode::Function(name, args, body, is_exported, return_type, _, is_pure) => {
+                Value::Function(name.to_owned(), args.to_owned(), body.to_owned(), *is_exported, return_type.to_owned(), TokenPosition::default(), is_pure.to_owned())
+            },
             _ => Value::None,
         }
     }
@@ -275,7 +259,7 @@ impl AstNode {
         match self {
             AstNode::Literal(value, _) => value.dimensions(),
 
-            AstNode::VarDeclaration(name, _, _, _, _, token_position) => TokenPosition {
+            AstNode::VarDeclaration(name, _, _, _, token_position) => TokenPosition {
                 line_number: token_position.char_column + name.to_string().len() as u32,
                 char_column: token_position.line_number,
             },
@@ -293,20 +277,78 @@ impl Value {
         match self {
             Value::None => DataType::None,
             Value::Runtime(_, data_type) => data_type.to_owned(),
-            Value::Int(_) => DataType::Int,
-            Value::Float(_) => DataType::Float,
-            Value::String(_) => DataType::String,
-            Value::Bool(_) => DataType::Bool,
+            Value::Int(_) => DataType::Int(false),
+            Value::Float(_) => DataType::Float(false),
+            Value::String(_) => DataType::String(false),
+            Value::Bool(_) => DataType::Bool(false),
             Value::Scene(..) => DataType::Scene,
             Value::Collection(_, data_type) => data_type.to_owned(),
             Value::StructLiteral(args) => DataType::Structure(args.to_owned()),
-            Value::Function(_, args, _, _, return_args, ..) => {
-                DataType::Function(args.to_owned(), return_args.to_owned())
+            Value::Function(_, args, _, _, return_type, ..) => {
+                DataType::Function(args.to_owned(), Box::new(return_type.to_owned()))
             }
             // Need to check accessed args
             Value::Reference(_, data_type, argument_accessed) => {
                 get_reference_data_type(data_type, argument_accessed)
             }
+        }
+    }
+
+    pub fn as_string(&self) -> String {
+        match self {
+            Value::String(string) => string.to_owned(),
+            Value::Int(int) => int.to_string(),
+            Value::Float(float) => float.to_string(),
+            Value::Bool(bool) => bool.to_string(),
+            Value::Scene(..) => String::new(),
+            Value::Collection(items, ..) => {
+                let mut all_items = String::new();
+                for item in items {
+                    all_items.push_str(&item.as_string());
+                }
+                all_items
+            }
+            Value::StructLiteral(args) => {
+                let mut all_items = String::new();
+                for arg in args {
+                    all_items.push_str(&arg.value.as_string());
+                }
+                all_items
+            }
+            Value::Function(..) => String::new(),
+            Value::Reference(..) => String::new(),
+            Value::Runtime(..) => String::new(),
+            Value::None => String::new(),
+        }
+    }
+
+    pub fn is_pure(&self) -> bool {
+        match self {
+            Value::Runtime(..) | Value::Reference(..) => false,
+            Value::Function(_, _, _, _, _, _, is_pure) => {
+                // red_ln!("is_pure: {:?}", is_pure);
+                *is_pure
+            },
+            Value::Collection(values, _) => {
+                for value in values {
+                    if !value.is_pure() {
+                        return false;
+                    }
+                }
+                true
+            }
+            Value::StructLiteral(args) => {
+                for arg in args {
+                    if !arg.value.is_pure() {
+                        return false;
+                    }
+                }
+                true
+            }
+
+            // Not sure about how to handle this yet
+            Value::Scene(..) => false,
+            _ => true,
         }
     }
 

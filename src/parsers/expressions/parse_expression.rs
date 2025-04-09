@@ -18,6 +18,7 @@ use crate::{
     CompileError, ErrorType, Token,
 };
 use crate::html_output::html_styles::get_html_styles;
+use crate::parsers::expressions::function_call_inline::inline_function_call;
 
 // If the datatype is a collection
 // The expression must only contain references to collections
@@ -31,7 +32,7 @@ pub fn create_expression(
     captured_declarations: &mut Vec<Arg>,
 ) -> Result<Value, CompileError> {
     let mut expression: Vec<AstNode> = Vec::new();
-    let mut number_union = get_any_number_datatype();
+    let mut number_union = get_any_number_datatype(false);
 
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
@@ -53,7 +54,7 @@ pub fn create_expression(
 
                     // Mismatched brackets, return an error
                     return Err(CompileError {
-                        msg: "Mismatched brackets in expression".to_string(),
+                        msg: "Mismatched parenthesis in expression".to_string(),
                         start_pos: x.current_position(),
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
@@ -73,7 +74,7 @@ pub fn create_expression(
 
                 // Mismatched brackets, return an error
                 return Err(CompileError {
-                    msg: "Mismatched brackets in expression".to_string(),
+                    msg: "Mismatched curly brackets in expression".to_string(),
                     start_pos: x.current_position(),
                     end_pos: TokenPosition {
                         line_number: x.current_position().line_number,
@@ -239,9 +240,8 @@ pub fn create_expression(
 
                         expression.push(new_ref);
                     }
-
-                    // Must be evaluated at runtime
-                    AstNode::FunctionCall(..) => {
+                    
+                    AstNode::FunctionCall(ref name, ..) => {
                         // Check type is correct
                         let reference_data_type = new_ref.get_type();
                         if !reference_data_type.is_valid_type(data_type) {
@@ -258,6 +258,7 @@ pub fn create_expression(
                                 error_type: ErrorType::TypeError,
                             });
                         }
+                        
                         expression.push(new_ref);
                     }
 
@@ -282,7 +283,7 @@ pub fn create_expression(
 
             // Check if is a literal
             Token::FloatLiteral(mut float) => {
-                if !DataType::Float.is_valid_type(data_type) {
+                if !DataType::Float(false).is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Float literal used in expression of type: {:?}", data_type),
                         start_pos: x.current_position(),
@@ -310,7 +311,7 @@ pub fn create_expression(
             }
 
             Token::IntLiteral(int) => {
-                if !DataType::Int.is_valid_type(data_type) {
+                if !DataType::Int(false).is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Int literal used in expression of type: {:?}", data_type),
                         start_pos: x.current_position(),
@@ -340,7 +341,7 @@ pub fn create_expression(
             }
 
             Token::StringLiteral(ref string) => {
-                if !DataType::String.is_valid_type(data_type) {
+                if !DataType::String(false).is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("String literal used in expression of type: {:?}", data_type),
                         start_pos: x.current_position(),

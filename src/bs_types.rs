@@ -7,7 +7,7 @@ pub enum DataType {
 
     // Mutable Data Types will have an additional bool to indicate whether they are mutable
     Inferred, // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
-    Bool,
+    Bool(bool),
 
     // Immutable Data Types
     // In practice, these types should not be deliberately used much at all
@@ -18,16 +18,16 @@ pub enum DataType {
     False,
 
     // Strings
-    String, // UTF-8 (will probably just be utf 16 because js for now)
+    String(bool), // UTF-8 (will probably just be utf 16 because js for now)
     // Any type can be used in the expression and will be coerced to a string (for scenes only)
     // Mathematical operations will still work and take priority, but strings can be used in these expressions
     // And all types will finally be coerced to strings after everything is evaluated
-    CoerceToString,
+    CoerceToString(bool),
 
     // Numbers
-    Float,
-    Int,
-    Decimal,
+    Float(bool),
+    Int(bool),
+    Decimal(bool),
 
     // Collections
     // Collection of a single type, dynamically sized
@@ -63,15 +63,14 @@ pub enum DataType {
     Structure(Vec<Arg>),
 
     // Special Beanstalk Types
-    // Scene and style types may have more static structure to them in the future
+    // Scene types may have more static structure to them in the future
     Scene,
-    Style,
 
     // Functions have named arguments
     // These arguments are effectively identical to tuples
     // We don't use a Datatypes here (to put two tuples there) as it just adds an extra unwrapping step
     // And we want to be able to have optional names / default values for even single arguments
-    Function(Vec<Arg>, Vec<Arg>), // Arguments, Return type
+    Function(Vec<Arg>, Box<DataType>), // Arguments, Return type
 
     // Type Types
     // Unions allow types such as option and result
@@ -101,7 +100,7 @@ impl DataType {
                 *accepted_type = self.to_owned();
                 true
             }
-            DataType::CoerceToString => true,
+            DataType::CoerceToString(_) => true,
             DataType::Choice(types) => {
                 for t in types {
                     if self == t {
@@ -119,14 +118,14 @@ impl DataType {
     pub fn length(&self) -> u32 {
         match self {
             DataType::Inferred => 0,
-            DataType::CoerceToString => 0,
-            DataType::Bool => 4,
+            DataType::CoerceToString(_) => 0,
+            DataType::Bool(_) => 4,
             DataType::True => 4,
             DataType::False => 5,
-            DataType::String => 6,
-            DataType::Float => 5,
-            DataType::Int => 3,
-            DataType::Decimal => 6,
+            DataType::String(_) => 6,
+            DataType::Float(_) => 5,
+            DataType::Int(_) => 3,
+            DataType::Decimal(_) => 6,
             DataType::Collection(inner_type) => inner_type.length(),
 
             DataType::Structure(_) => 1,
@@ -140,7 +139,6 @@ impl DataType {
             DataType::Function(..) => 2,
             DataType::Type => 4,
             DataType::Scene => 5,
-            DataType::Style => 5,
             DataType::Error(_) => 1,
 
             DataType::None => 4,
@@ -151,21 +149,20 @@ impl DataType {
     pub fn create_option_datatype(self) -> DataType {
         match self {
             DataType::Inferred => DataType::Choice(vec![DataType::None, DataType::Inferred]),
-            DataType::CoerceToString => {
-                DataType::Choice(vec![DataType::None, DataType::CoerceToString])
+            DataType::CoerceToString(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::CoerceToString(mutable)])
             }
-            DataType::Bool => DataType::Choice(vec![DataType::None, DataType::Bool]),
+            DataType::Bool(mutable) => DataType::Choice(vec![DataType::None, DataType::Bool(mutable)]),
             DataType::True => DataType::Choice(vec![DataType::None, DataType::True]),
             DataType::False => DataType::Choice(vec![DataType::None, DataType::False]),
-            DataType::String => DataType::Choice(vec![DataType::None, DataType::String]),
-            DataType::Float => DataType::Choice(vec![DataType::None, DataType::Float]),
-            DataType::Int => DataType::Choice(vec![DataType::None, DataType::Int]),
+            DataType::String(mutable) => DataType::Choice(vec![DataType::None, DataType::String(mutable)]),
+            DataType::Float(mutable) => DataType::Choice(vec![DataType::None, DataType::Float(mutable)]),
+            DataType::Int(mutable) => DataType::Choice(vec![DataType::None, DataType::Int(mutable)]),
             DataType::Collection(inner_type) => {
                 DataType::Choice(vec![DataType::None, DataType::Collection(inner_type)])
             }
-            DataType::Decimal => DataType::Choice(vec![DataType::None, DataType::Decimal]),
+            DataType::Decimal(mutable) => DataType::Choice(vec![DataType::None, DataType::Decimal(mutable)]),
             DataType::Type => DataType::Choice(vec![DataType::None, DataType::Type]),
-            DataType::Style => DataType::Choice(vec![DataType::None, DataType::Style]),
             DataType::Choice(inner_types) => {
                 DataType::Choice(vec![DataType::None, DataType::Choice(inner_types)])
             }
@@ -181,32 +178,56 @@ impl DataType {
             )),
         }
     }
+    
+    pub fn is_mutable(&self) -> bool {
+        match self {
+            DataType::Inferred => false,
+            DataType::CoerceToString(mutable) => *mutable,
+            DataType::Bool(mutable) => *mutable,
+            DataType::True => false,
+            DataType::False => false,
+            DataType::String(mutable) => *mutable,
+            DataType::Float(mutable) => *mutable,
+            DataType::Int(mutable) => *mutable,
+            DataType::Decimal(mutable) => *mutable,
+            DataType::Collection(inner_type) => inner_type.is_mutable(),
+            DataType::Structure(args) => {
+                for arg in args {
+                    if arg.data_type.is_mutable() {
+                        return true;
+                    }
+                }
+                false
+            }
+            _ => false,
+        }
+    }
 }
 
-pub fn get_any_number_datatype() -> DataType {
-    DataType::Choice(vec![DataType::Float, DataType::Int, DataType::Decimal])
+pub fn get_any_number_datatype(mutable: bool) -> DataType {
+    DataType::Choice(vec![DataType::Float(mutable), DataType::Int(mutable), DataType::Decimal(mutable)])
 }
 
 pub fn get_rgba_args() -> DataType {
     DataType::Structure(vec![
         Arg {
             name: "red".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
             value: Value::Float(0.0),
         },
         Arg {
             name: "green".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
             value: Value::Float(0.0),
         },
         Arg {
             name: "blue".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
             value: Value::Float(0.0),
         },
         Arg {
             name: "alpha".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float, DataType::Int]),
+            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
             value: Value::Float(1.0),
         },
     ])
@@ -215,7 +236,7 @@ pub fn get_rgba_args() -> DataType {
 pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &[usize]) -> DataType {
     match arguments_accessed.first() {
         Some(index) => match &data_type {
-            DataType::Structure(inner_types) | DataType::Function(_, inner_types) => {
+            DataType::Structure(inner_types) => {
                 // This should never happen (caught earlier in compiler)
                 debug_assert!(index < &inner_types.len());
                 debug_assert!(index >= &0);
@@ -231,7 +252,7 @@ pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &[usize
                 }
             }
 
-            DataType::Collection(inner_type) => {
+            DataType::Collection(inner_type) | DataType::Function(_, inner_type) => {
                 // This part could be recursive as get_type() can call this function again
                 let inner_type = *inner_type.to_owned();
                 if arguments_accessed.len() > 1 {

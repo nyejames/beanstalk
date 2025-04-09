@@ -16,9 +16,9 @@ pub fn math_constant_fold(
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
-    for node in &output_stack {
-        blue_ln!("output_stack: {:?}", node);
-    }
+    // for node in &output_stack {
+    //     blue_ln!("output_stack: {:?}", node);
+    // }
     for node in &output_stack {
         // red_ln!("output_stack: {:?}", stack);
 
@@ -114,7 +114,7 @@ pub fn math_constant_fold(
         }
     }
 
-    red_ln!("final stack: {:?}", stack);
+    // red_ln!("final stack: {:?}", stack);
 
     if stack.len() == 1 {
         return Ok(stack[0].get_value());

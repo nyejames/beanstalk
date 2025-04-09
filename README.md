@@ -1,6 +1,6 @@
 <div align="center">
 
-  <h1>BS 🌱</h1>
+  <h1>Beanstalk 🌱</h1>
 
   <p>
     <strong>A lightweight language and toolchain for bringing joy back to building UIs, web pages and typesetting</strong>

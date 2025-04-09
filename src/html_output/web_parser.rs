@@ -8,7 +8,7 @@ use crate::{
     bs_types::DataType,
     build::CompiledExport,
     parsers::ast_nodes::AstNode,
-    settings::{HTMLMeta, BS_VAR_PREFIX},
+    settings::BS_VAR_PREFIX,
     CompileError, ErrorType,
 };
 use std::collections::HashMap;
@@ -80,13 +80,13 @@ pub fn parse<'a>(
                 ref expr,
                 is_exported,
                 ref data_type,
-                is_const,
                 ref start_pos,
             ) => {
-                let assignment_keyword = if is_const { "const" } else { "let" };
 
                 match data_type {
-                    DataType::Float | DataType::Int | DataType::String => {
+                    DataType::Float(mutable) | DataType::Int(mutable) | DataType::String(mutable) => {
+                        let assignment_keyword = if *mutable { "const" } else { "let" };
+
                         let var_dec = format!(
                             "{} {BS_VAR_PREFIX}{id}={};",
                             assignment_keyword,
@@ -129,8 +129,8 @@ pub fn parse<'a>(
                                 )?;
 
                                 let var_dec = format!(
-                                    "{} {BS_VAR_PREFIX}{id} = `{}`;",
-                                    assignment_keyword, scene_to_js_string
+                                    "const {BS_VAR_PREFIX}{id} = `{}`;",
+                                    scene_to_js_string
                                 );
 
                                 css.push_str(&created_css);
@@ -163,8 +163,7 @@ pub fn parse<'a>(
 
                     DataType::Structure(_) => {
                         let var_dec = format!(
-                            "{} {BS_VAR_PREFIX}{id}={};",
-                            assignment_keyword,
+                            "const {BS_VAR_PREFIX}{id}={};",
                             expression_to_js(expr, start_pos)?
                         );
 
@@ -183,8 +182,7 @@ pub fn parse<'a>(
                     }
                     _ => {
                         js.push_str(&format!(
-                            "{} {BS_VAR_PREFIX}{id}={};",
-                            assignment_keyword,
+                            "const {BS_VAR_PREFIX}{id}={};",
                             expression_to_js(expr, start_pos)?
                         ));
                     }
@@ -197,7 +195,7 @@ pub fn parse<'a>(
                 });
             }
 
-            AstNode::Function(name, args, body, is_exported, return_type, ref start_pos) => {
+            AstNode::Function(name, args, body, is_exported, return_type, ref start_pos, _) => {
                 let mut func = format!("function {}(", name);
 
                 for arg in &args {
@@ -222,14 +220,14 @@ pub fn parse<'a>(
                         CompiledExport {
                             js: func,
                             css: String::new(),
-                            data_type: DataType::Function(args.to_owned(), return_type.to_owned()),
+                            data_type: DataType::Function(args.to_owned(), Box::new(return_type)),
                             wasm: Module::new(),
                         },
                     );
                 }
             }
 
-            AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos) => {
+            AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos, _) => {
                 js.push_str(&format!(
                     " {}({})",
                     name,
@@ -242,27 +240,6 @@ pub fn parse<'a>(
 
             AstNode::Return(ref expr, start_pos) => {
                 js.push_str(&format!("return {};", expression_to_js(expr, &start_pos)?));
-            }
-
-            AstNode::Print(ref value, start_pos) => {
-                // automatically unpack a tuple into one string
-                let mut final_string = String::new();
-
-                match value {
-                    Value::StructLiteral(args) => {
-                        for arg in args {
-                            final_string.push_str(&format!(
-                                "{} ",
-                                expression_to_js(&arg.value, &start_pos)?
-                            ));
-                        }
-                    }
-                    _ => {
-                        final_string.push_str(&expression_to_js(value, &start_pos)?.to_string());
-                    }
-                };
-
-                js.push_str(&format!("console.log({final_string});"));
             }
 
             // DIRECT INSERTION OF JS / CSS / HTML into page
