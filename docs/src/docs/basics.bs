@@ -5,7 +5,7 @@
 
 Each Beanstalk file is a module.
 
-Each module is just a file that exports a Struct with the filename becoming the name of the struct.
+Each module is just a file that exports functions and fields marked as public.
 
 Projects are a collection of modules with a config file as an entry point.
 
@@ -15,27 +15,21 @@ The specifics are not fully decided on, but some of the key things are:
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for scenes.
 - Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit)
+- @ symbol is used to mean 'public' or 'export'
 - Double dashes for single line comments (--)
 
 4 spaces are recommended for indentation. 
 
 # Compiletime vs Runtime naming
 Anything that should exist only at compile time must start with a capital letter. 
-Anything else starts with a lower case letter. 
+Everything else starts with a lower case letter. 
 This is to help the compiler know exactly what you intend to be constant or inlined.
 
 So types use Upper_Snake_Case. But instances of types use regular snake_case (if they are not constants).
 
 camelCase is used for naming functions, 
 but if you want to tell the compiler that the function should be inlined (evaluated at compiletime),
-you can name it with PascalCase and the compiler will replace the function with it's returned values.
-
-You will get an error if you use a name starting with a capitol letter that can't be a constant.
-
-Top level styles use PascalCase as they should always be constants.
-But their unlockable styles use lowercase as they usually exist at runtime.
-
-The compiler will still sometimes evaluate lower case variables as constants or inline regular functions.
+you can name it with PascalCase and the compiler will throw an error if the function can't be evaluated at compile time.
 
 # Comments
 Comments use a double minus sign '--'.
@@ -57,9 +51,7 @@ Equals means assign.
 
 Similar to Python, there is no special keyword for creating a new variable, but you can specify a type annotation.
 
-The @ symbol before a name is used to export variables and methods/functions outside of a module or object.
-
-
+The @ symbol before a name is used to export variables and functions outside of a module or object.
 
 ## Assignment
 
@@ -68,13 +60,17 @@ The @ symbol before a name is used to export variables and methods/functions out
     float_var ~Float = 0.0
 ]
 
-Any variable declaration can be found by searching the variable name, followed by a tilde '~'.
+Any mutable variable declaration can be found by searching the variable name, followed by a tilde '~'.
+If the variable is immutable then you it should only have one instance of its name followed by an equals sign, so it can be searched that way.
 
 ### Mutable variables with inferred types
 [Code: 
     int_var ~= 0
     float_var ~= 0.0
     string_var ~= "boo!"
+    bool_var ~= true
+    collection_var ~= {}
+    scene_var ~= []
 ]
 
 Type annotations are not needed for variables if they are being initialised with a value.
