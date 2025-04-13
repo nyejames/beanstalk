@@ -7,3 +7,4 @@ test_output/
 *.pdb
 /.VSCodeCounter
 DEV_NOTES.md
+.idea
