@@ -7,15 +7,15 @@ Beanstalk is still in development. It doesn't even have a version number yet!
 Here is a list of current bugs, development goals and planned features.
 
 ## Ongoing task list
-- Compile time is now forced by capitol letter start naming. Make sure this works and write compile time functions that return scenes using this.
-- Folding (inlining) compile time functions (functions named with capitol letter start)
-- Styles should just be structs in the language itself that Scenes can use fields from to define their behaviour.
-and insert any scenes inside those styles correctly into the body, while making use of slots to insert anything in the scenebody into any slots in the scenes from the scene head.
-In the case of multiple scenes being imported in the scenehead, each successive scene should slot the last one into itself. Need to think about how all the wrapping works here though.
-- Scene slots for templating and wrapping other scenes (to build out standard library)
-- Build out HTML standard library for styles
-- Linking!!! get imports working
+- Folding (inlining) compile time functions (need to do step through eval in inline_function_call)
+- Scenes will parse structs and look for style properties and insert sucessive scenes passed into it into a 'slot' scene if it has one.
+If multiple scenes with slots are added to a scene, they need to be parsed correctly so each successsive scene is passed into the slot of the previous scene.
+If that slot has any styles, the styles need to be applied each time a new scene is added into that slot. 
+Otherwise all the scenes are just passed directly into the slot one by one.
+- Linking!!! get imports working so html library can work properly
+- Build out HTML standard library for styles once they can be folded at compile time
 - Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
+- Compile time forced by capitol letter start naming. If pure is found not to be true for one of these functions or variables, it throws an error.
 
 ## Current Bugs
 

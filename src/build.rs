@@ -7,54 +7,33 @@ use crate::settings::Config;
 use crate::{settings, Error, ErrorType};
 use crate::{tokenizer, Token};
 use std::collections::HashMap;
-
-use crate::parsers::build_ast::new_ast;
+use crate::parsers::build_ast::{new_ast, TokenContext};
 use crate::tokenizer::TokenPosition;
 use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
-use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
 use wasm_encoder::Module;
 use wasmparser::validate;
 
-pub struct OutputFile {
+pub struct OutputModule {
     source_code: String,
     output_path: PathBuf,
     source_path: PathBuf,
     html: String,
+    js: String,
     wasm: Module,
-    imports: Vec<PathBuf>,
-    global: bool,
 }
 
-impl OutputFile {
+impl OutputModule {
     pub fn new(source_code: String, output_path: PathBuf, source_path: PathBuf) -> Self {
-        OutputFile {
+        OutputModule {
             source_code,
             output_path,
             source_path,
             html: String::new(),
-            wasm: Module::new(),
-            imports: Vec::new(),
-            global: false,
-        }
-    }
-}
-pub struct CompiledExport {
-    pub js: String,
-    pub wasm: Module,
-    pub css: String,
-    pub data_type: DataType,
-}
-
-impl CompiledExport {
-    pub fn new() -> Self {
-        CompiledExport {
             js: String::new(),
             wasm: Module::new(),
-            css: String::new(),
-            data_type: DataType::Inferred,
         }
     }
 }
@@ -66,7 +45,7 @@ pub fn build(
 ) -> Result<Config, Error> {
     // Hashmap for fast lookup of variable declarations
     // The key is the path to the export
-    let mut project_exports: HashMap<PathBuf, CompiledExport> = HashMap::new();
+    let mut public_exports: HashMap<String, DataType> = HashMap::new();
 
     // Create a new PathBuf from the entry_path
     let entry_dir = match std::env::current_dir() {
@@ -86,7 +65,7 @@ pub fn build(
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
 
-    let mut source_code_to_parse: Vec<OutputFile> = Vec::new();
+    let mut source_code_to_parse: Vec<OutputModule> = Vec::new();
     let mut project_config = Config::default();
 
     // check to see if there is a config.bs file in this directory
@@ -133,7 +112,7 @@ pub fn build(
 
     match config {
         CompileType::SingleFile(file_path, code) => {
-            source_code_to_parse.push(OutputFile::new(
+            source_code_to_parse.push(OutputModule::new(
                 code, 
                 file_path.with_extension("html"), 
                 file_path
@@ -141,17 +120,28 @@ pub fn build(
         }
 
         CompileType::MultiFile(entry_dir, config_source_code) => {
+
+            let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
+
             // Parse the config file
-            let mut token_context = match tokenizer::tokenize(&config_source_code, "config") {
+            let (mut token_context, exports) = match tokenizer::tokenize(&config_source_code, &config_path) {
                 Ok(tokens) => tokens,
                 Err(e) => {
-                    return Err(e.to_error(entry_dir.join("#config.bs")));
+                    return Err(e.to_error(config_path));
                 }
             };
 
-            let (config_ast, _) = match new_ast(&mut token_context, &[], &mut DataType::None, true, &mut true) {
+            public_exports.extend(exports);
+
+            let config_ast = match new_ast(
+                &mut token_context,
+                &[],
+                &mut DataType::None,
+                &config_path,
+                &mut true)
+            {
                 Ok(ast) => ast,
-                Err(e) => return Err(e.to_error(entry_dir.join("#config.bs"))),
+                Err(e) => return Err(e.to_error(config_path)),
             };
 
             // get all exported variables from the config file
@@ -169,56 +159,52 @@ pub fn build(
         }
     }
 
-    // Compile all output files
-    // And collect all exported functions and variables from the module
-    // After compiling, collect all imported modules and add them to the list of exported modules
+    // First tokenize all files
     for file in &mut source_code_to_parse {
-        let (compiled_html, compiled_wasm, import_requests) = compile(
+        dark_yellow_ln!("{:?}", file.output_path.file_name());
+        
+        // For letting the user know how long compile times are taking
+        let time = Instant::now();
+
+        // TOKENIZER
+        let (mut token_context, exports) = match tokenizer::tokenize(&file.source_code, &file.output_path) {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                return Err(e.to_error(PathBuf::from(&file.source_path)));
+            }
+        };
+
+        // Exports are type checked (will be enforced to have an explicit type declaration)
+        // Imports currently are just for anything public in a module, there is no specifying imports atm
+        public_exports.extend(exports);
+
+        if output_info_level > 5 {
+            print_token_output(&token_context.tokens);
+        }
+
+        if output_info_level > 2 {
+            print!("Tokenized in: ");
+            green_ln!("{:?}", time.elapsed());
+        }
+
+        let compile_result = compile(
+            &mut token_context,
             file,
             release_build,
             output_info_level,
             &mut project_config,
-            &mut project_exports,
         )?;
 
-        file.html = compiled_html;
-        file.wasm = compiled_wasm;
-        file.imports.extend(import_requests);
-    }
+        let mut js_imports: String = format!("<script type=\"module\" src=\"./{}\"></script>", &file.output_path.with_extension("js").file_name().unwrap().to_string_lossy());
 
-    // Add imports to the compiled code of the files
-    for file in &mut source_code_to_parse {
-        let mut js_imports: String = String::new();
-
-        // Add the imports to the files source code importing them after compiling all of them
-        for import in &file.imports {
-            let requested_module = match project_exports.get(import) {
-                Some(export) => export,
-                None => {
-                    return Err(Error {
-                        msg: format!(
-                            "Could not find module to add import to. May not be exported. {:?}",
-                            import
-                        ),
-                        start_pos: TokenPosition {
-                            line_number: 0,
-                            char_column: 0,
-                        },
-                        end_pos: TokenPosition {
-                            line_number: 0,
-                            char_column: 0,
-                        },
-                        file_path: import.to_owned(),
-                        error_type: ErrorType::File,
-                    })
-                }
-            };
-
-            js_imports += &requested_module.js;
+        for import in &compile_result.import_requests {
+            js_imports += format!("<script type=\"module\" src=\"{}.js\"></script>", import).as_str();
         }
 
-        file.html = file.html.replace("//imports", &js_imports);
-
+        file.html = compile_result.html.replace("<!--//js-modules-->", &js_imports);
+        file.wasm = compile_result.wasm;
+        file.js = compile_result.js;
+        
         // Write the file to the output directory
         write_output_file(file)?;
     }
@@ -261,15 +247,20 @@ pub fn build(
             };
 
             let file_path = file.path();
-            if (file_path.extension() == Some("html".as_ref())
+
+            if (
+                // These checks are mostly here for safety to avoid accidentally deleting files
+                (  file_path.extension() == Some("html".as_ref())
                 || file_path.extension() == Some("wasm".as_ref()))
-                && !source_code_to_parse
-                    .iter()
-                    .any(|f| f.output_path.file_stem() == file_path.file_stem())
+                || file_path.extension() == Some("js".as_ref())  )
+
+                // If the file is not in the source code to parse, it's not needed
+                && !source_code_to_parse.iter().any(|f| f.output_path.with_extension("") == file_path.with_extension(""))
+            
             {
                 match fs::remove_file(&file_path) {
                     Ok(_) => {
-                        blue_ln!("Deleted unused file: {:?}", file_path);
+                        blue_ln!("Deleted unused file: {:?}", file_path.file_name());
                     }
                     Err(e) => {
                         return Err(Error {
@@ -290,7 +281,7 @@ pub fn build(
 
 // Look for every subdirectory inside of dir and add all .bs files to the source_code_to_parse
 pub fn add_bs_files_to_parse(
-    source_code_to_parse: &mut Vec<OutputFile>,
+    source_code_to_parse: &mut Vec<OutputModule>,
     output_dir: PathBuf,
     src_dir: PathBuf,
 ) -> Result<(), Error> {
@@ -338,7 +329,7 @@ pub fn add_bs_files_to_parse(
                                 global = true;
                                 settings::GLOBAL_PAGE_KEYWORD.to_string()
                             } else if stem_str.contains(settings::COMP_PAGE_KEYWORD) {
-                                settings::INDEX_PAGE_KEYWORD.to_string()
+                                settings::INDEX_PAGE_NAME.to_string()
                             } else {
                                 stem_str.to_string()
                             }
@@ -354,7 +345,7 @@ pub fn add_bs_files_to_parse(
                         }
                     };
 
-                    let final_file = OutputFile::new(
+                    let final_output_file = OutputModule::new(
                         code, 
                         PathBuf::from(&output_dir)
                             .join(file_name)
@@ -363,14 +354,14 @@ pub fn add_bs_files_to_parse(
                     );
 
                     if global {
-                        source_code_to_parse.insert(0, final_file);
+                        source_code_to_parse.insert(0, final_output_file);
                     } else {
-                        source_code_to_parse.push(final_file);
+                        source_code_to_parse.push(final_output_file);
                     }
 
                 // If directory, recursively call add_bs_files_to_parse
                 } else if file_path.is_dir() {
-                    // Add the new direcory folder to the output directory
+                    // Add the new directory folder to the output directory
                     let new_output_dir = output_dir.join(file_path.file_stem().unwrap());
 
                     // Recursively call add_bs_files_to_parse on the new directory
@@ -381,7 +372,8 @@ pub fn add_bs_files_to_parse(
                     // TEMPORARY: JUST PUT THEM DIRECTLY INTO THE OUTPUT DIRECTORY
                     if ext == "js" || ext == "html" || ext == "css" {
                         let file_name = file_path.file_name().unwrap().to_str().unwrap();
-                        source_code_to_parse.push(OutputFile::new(
+                        
+                        source_code_to_parse.push(OutputModule::new(
                             String::new(), 
                             output_dir.join(file_name), 
                             file_path
@@ -405,59 +397,31 @@ pub fn add_bs_files_to_parse(
     Ok(())
 }
 
+struct CompileResult {
+    html: String,
+    js: String,
+    wasm: Module,
+    import_requests: Vec<String>,
+}
+
 fn compile(
-    output: &OutputFile,
+    token_context: &mut TokenContext,
+    output: &OutputModule,
     release_build: bool,
     output_info_level: i32,
     project_config: &mut Config,
-    mut exports: &mut HashMap<PathBuf, CompiledExport>,
-    // html, wasm, import requests
-) -> Result<(String, Module, Vec<PathBuf>), Error> {
+) -> Result<CompileResult, Error> {
     print_bold!("\nCompiling: ");
 
-    let file_stem = output.output_path.to_owned();
-    let file_name = file_stem
-        .file_stem()
-        .unwrap_or(OsStr::new(""))
-        .to_str()
-        .unwrap_or("");
-
-    if file_name.is_empty() {
-        return Err(Error {
-            msg: "File name is empty".to_string(),
-            start_pos: TokenPosition::default(),
-            end_pos: TokenPosition::default(),
-            file_path: PathBuf::from(""),
-            error_type: ErrorType::File,
-        });
-    }
-
-    dark_yellow_ln!("{:?}", file_name);
-
-    // For letting the user know how long compile times are taking
     let time = Instant::now();
 
-    // TOKENIZER
-    let mut token_context = match tokenizer::tokenize(&output.source_code, file_name) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            return Err(e.to_error(PathBuf::from(&output.source_path)));
-        }
-    };
-
-    if output_info_level > 5 {
-        print_token_output(&token_context.tokens);
-    }
-
-    if output_info_level > 2 {
-        print!("Tokenized in: ");
-        green_ln!("{:?}", time.elapsed());
-    }
-
-    let time = Instant::now();
-
-    // PARSER
-    let (ast, imports) = match new_ast(&mut token_context, &[], &mut DataType::None, true, &mut true) {
+    // AST PARSER
+    let ast = match new_ast(
+        token_context,
+        &[], 
+        &mut DataType::None,
+        &output.source_path,
+        &mut true) {
         Ok(ast) => ast,
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&output.source_path)));
@@ -475,25 +439,6 @@ fn compile(
     }
 
     let time = Instant::now();
-
-    // IMPORTS
-    let mut import_requests = Vec::new();
-    for import in imports {
-        match import {
-            AstNode::Use(module_path, _) => {
-                import_requests.push(module_path);
-            }
-            _ => {
-                return Err(Error {
-                    msg: "Import must be a string literal. Caught in build. This should not get this far".to_string(),
-                    start_pos: TokenPosition::default(),
-                    end_pos: TokenPosition::default(),
-                    file_path: PathBuf::from(&output.source_path),
-                    error_type: ErrorType::Syntax,
-                });
-            }
-        }
-    }
 
     // For each subdirectory from the dist or dev folder of the output_dir, add a ../ to the dist_url
     // This is for linking to CSS/images/other pages etc. in the HTML
@@ -516,9 +461,8 @@ fn compile(
     let parser_output = match web_parser::parse(
         ast,
         project_config,
-        file_name,
+        &output.source_path.to_string_lossy(),
         &mut Module::new(),
-        &mut exports,
     ) {
         Ok(parser_output) => parser_output,
         Err(e) => {
@@ -528,7 +472,7 @@ fn compile(
 
     // Add the required minimum dom update JS to the start of the parser JS output
     // Any other dom update JS would be dynamically added to the page by the parser only if needed
-    let all_js = format!(
+    let js = format!(
         "{}\n{}",
         generate_dom_update_js(DOMUpdate::InnerHTML),
         parser_output.js
@@ -537,11 +481,9 @@ fn compile(
     // Add the HTML boilerplate and then add the parser output to the page
     let html = match create_html_boilerplate(&project_config.html_meta, release_build) {
         Ok(module_output) => module_output
-            .replace("page-template", &parser_output.html)
-            .replace("@page-css", &parser_output.css)
+            .replace("<!--page-template-->", &parser_output.html)
             .replace("page-title", &parser_output.page_title)
-            .replace("//js", &all_js)
-            .replace("wasm-module-name", file_name),
+            .replace("wasm-module-name", &output.source_path.to_string_lossy()),
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&output.source_path)));
         }
@@ -558,12 +500,15 @@ fn compile(
     //     &parser_output.wat, parser_output.wat_globals
     // );
 
-    exports.extend(parser_output.exported);
-
-    Ok((html, parser_output.wasm, import_requests))
+    Ok(CompileResult {
+        html,
+        js,
+        wasm: parser_output.wasm,
+        import_requests: parser_output.import_requests,
+    })
 }
 
-fn write_output_file(output: &OutputFile) -> Result<(), Error> {
+fn write_output_file(output: &OutputModule) -> Result<(), Error> {
     // If the output directory does not exist, create it
     let file_path = output.output_path.to_owned();
     let parent_dir = match output.output_path.parent() {
@@ -610,6 +555,20 @@ fn write_output_file(output: &OutputFile) -> Result<(), Error> {
             });
         }
     }
+
+    // Write the JS file to the same directory
+    match fs::write(output.output_path.with_extension("js"), &output.js) {
+        Ok(_) => {}
+        Err(e) => {
+            return Err(Error {
+                msg: format!("Error writing JS module file: {:?}", e),
+                start_pos: TokenPosition::default(),
+                end_pos: TokenPosition::default(),
+                file_path,
+                error_type: ErrorType::File,
+            });
+        }
+    };
 
     let wasm = output.wasm.to_owned().finish();
 
@@ -1054,7 +1013,7 @@ fn print_ast_output(ast: &Vec<AstNode>) {
         match node {
             AstNode::Literal(value, _) => {
                 match value.get_type() {
-                    DataType::Scene => {
+                    DataType::Scene(_) => {
                         print_scene(value, 0);
                     }
                     _ => {

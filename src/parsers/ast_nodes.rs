@@ -170,10 +170,10 @@ impl AstNode {
                     }
                 }
 
-                Value::Scene(..) => DataType::Scene,
+                Value::Scene(..) => DataType::Scene(false),
                 Value::Collection(_, data_type) => data_type.to_owned(),
                 Value::StructLiteral(args) => {
-                    let mut data_type = DataType::Inferred;
+                    let mut data_type = DataType::Inferred(false);
                     for arg in args {
                         data_type = arg.data_type.to_owned();
                     }
@@ -207,7 +207,7 @@ impl AstNode {
                     self
                 );
 
-                DataType::Inferred
+                DataType::Inferred(false)
             }
         }
     }
@@ -281,7 +281,7 @@ impl Value {
             Value::Float(_) => DataType::Float(false),
             Value::String(_) => DataType::String(false),
             Value::Bool(_) => DataType::Bool(false),
-            Value::Scene(..) => DataType::Scene,
+            Value::Scene(..) => DataType::Scene(false),
             Value::Collection(_, data_type) => data_type.to_owned(),
             Value::StructLiteral(args) => DataType::Structure(args.to_owned()),
             Value::Function(_, args, _, _, return_type, ..) => {

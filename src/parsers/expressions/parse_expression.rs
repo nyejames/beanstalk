@@ -111,7 +111,7 @@ pub fn create_expression(
                     // It must be a struct
                     // This is enforced! If it's a single expression wrapped in parentheses,
                     // it will be flatted into that single value anyway by struct_to_value
-                    DataType::Inferred => {
+                    DataType::Inferred(_) => {
                         // NO DEFINED TYPES FOR THE struct
                         let structure = new_fixed_collection(
                             x,
@@ -206,13 +206,13 @@ pub fn create_expression(
             }
 
             // Check if name is a reference to another variable or function call
-            Token::Variable(name) => {
+            Token::Variable(name, is_public) => {
                 // This is never reached (I think) if we are inside a struct or collection
                 let new_ref = create_new_var_or_ref(
                     x,
                     name.to_owned(),
                     captured_declarations,
-                    false,
+                    is_public,
                     ast,
                     false,
                 )?;
@@ -366,7 +366,7 @@ pub fn create_expression(
             // Maybe scenes can be added together like strings
             Token::SceneHead | Token::ParentScene => {
 
-                if !DataType::Scene.is_valid_type(data_type) {
+                if !DataType::Scene(false).is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Scene literal used in expression of type: {:?}", data_type),
                         start_pos: x.current_position(),
@@ -675,7 +675,7 @@ pub fn get_accessed_args(
             }
 
             // NAMED ARGUMENT ACCESS
-            Some(Token::Variable(name)) => match data_type {
+            Some(Token::Variable(name, ..)) => match data_type {
                 DataType::Structure(inner_types) => {
                     if let Some(idx) = inner_types.iter().position(|arg| arg.name == *name) {
                         accessed_args.push(idx);

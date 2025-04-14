@@ -6,7 +6,7 @@ pub enum DataType {
     // This helps with compile time constant folding
 
     // Mutable Data Types will have an additional bool to indicate whether they are mutable
-    Inferred, // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
+    Inferred(bool), // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
     Bool(bool),
 
     // Immutable Data Types
@@ -64,7 +64,7 @@ pub enum DataType {
 
     // Special Beanstalk Types
     // Scene types may have more static structure to them in the future
-    Scene,
+    Scene(bool), // is_mutable
 
     // Functions have named arguments
     // These arguments are effectively identical to tuples
@@ -82,6 +82,9 @@ pub enum DataType {
 
 
 impl DataType {
+    
+    
+    // IGNORES MUTABILITY
     pub fn is_valid_type(&self, accepted_type: &mut DataType) -> bool {
         // Has to make sure if either type is a union, that the other type is also a member of the union
         // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
@@ -96,7 +99,7 @@ impl DataType {
         }
 
         match accepted_type {
-            DataType::Inferred => {
+            DataType::Inferred(_) => {
                 *accepted_type = self.to_owned();
                 true
             }
@@ -117,7 +120,7 @@ impl DataType {
 
     pub fn length(&self) -> u32 {
         match self {
-            DataType::Inferred => 0,
+            DataType::Inferred(_) => 0,
             DataType::CoerceToString(_) => 0,
             DataType::Bool(_) => 4,
             DataType::True => 4,
@@ -138,7 +141,7 @@ impl DataType {
             }
             DataType::Function(..) => 2,
             DataType::Type => 4,
-            DataType::Scene => 5,
+            DataType::Scene(_) => 5,
             DataType::Error(_) => 1,
 
             DataType::None => 4,
@@ -148,7 +151,7 @@ impl DataType {
     // Special Types that might change (basically same as rust with a bit more syntax sugar)
     pub fn create_option_datatype(self) -> DataType {
         match self {
-            DataType::Inferred => DataType::Choice(vec![DataType::None, DataType::Inferred]),
+            DataType::Inferred(mutable) => DataType::Choice(vec![DataType::None, DataType::Inferred(mutable)]),
             DataType::CoerceToString(mutable) => {
                 DataType::Choice(vec![DataType::None, DataType::CoerceToString(mutable)])
             }
@@ -181,7 +184,7 @@ impl DataType {
     
     pub fn is_mutable(&self) -> bool {
         match self {
-            DataType::Inferred => false,
+            DataType::Inferred(mutable) => *mutable,
             DataType::CoerceToString(mutable) => *mutable,
             DataType::Bool(mutable) => *mutable,
             DataType::True => false,

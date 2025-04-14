@@ -1,3 +1,4 @@
+use colour::red_ln;
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
 use crate::parsers::ast_nodes::Value;
 use crate::tokenizer::TokenPosition;
@@ -27,6 +28,9 @@ pub fn evaluate_expression(
                         simplified_expression.push(node.to_owned());
                         continue 'outer;
                     },
+                    DataType::Inferred(_) => {
+                        current_type = value.get_type();
+                    },
                     _ => {},
                 }
 
@@ -41,10 +45,6 @@ pub fn evaluate_expression(
                         simplified_expression.push(node.to_owned());
                     }
                 }
-
-                if current_type == DataType::Inferred {
-                    current_type = value.get_type();
-                }
             }
 
             AstNode::FunctionCall(..) => {
@@ -55,7 +55,7 @@ pub fn evaluate_expression(
                 // If the current type is a string or scene, add operator is assumed.
                 match current_type {
 
-                    DataType::String(_) | DataType::Scene => {
+                    DataType::String(_) | DataType::Scene(_) => {
                         if op != &Token::Add {
                             return Err( CompileError {
                                 msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
@@ -164,7 +164,7 @@ pub fn evaluate_expression(
             logical_constant_fold(output_queue, current_type)
         }
 
-        DataType::Scene => {
+        DataType::Scene(_) => {
             concat_scene(&mut simplified_expression)
         }
 
@@ -173,8 +173,12 @@ pub fn evaluate_expression(
         }
 
         DataType::CoerceToString(_) => {
-            // TODO - line number
-            Ok(Value::Runtime(simplified_expression, current_type))
+            let mut new_string = String::new();
+
+            for node in simplified_expression {
+                new_string += &node.get_value().as_string();
+            }
+            Ok(Value::String(new_string))
         }
 
         _ => {

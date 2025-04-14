@@ -1,4 +1,3 @@
-use colour::blue_ln;
 use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
@@ -29,6 +28,7 @@ pub fn create_new_var_or_ref(
         .iter()
         .find(|a| a.name == name)
     {
+        
         return match arg.data_type {
 
             // Function Call
@@ -97,14 +97,8 @@ fn new_variable(
 ) -> Result<AstNode, CompileError> {
     
     // Move past the name
+    let mut data_type = DataType::Inferred(false);
     x.index += 1;
-    let mut data_type = DataType::Inferred;
-    let mut is_mutable = true;
-
-    if x.tokens[x.index] == Token::Mutable {
-        x.index += 1;
-        is_mutable = false;
-    }
 
     match x.tokens[x.index] {
         Token::Assign => {
@@ -128,7 +122,7 @@ fn new_variable(
         }
 
         // Has a type declaration
-        Token::TypeKeyword(ref type_keyword) => {
+        Token::DatatypeLiteral(ref type_keyword) => {
             data_type = type_keyword.to_owned();
             x.index += 1;
 

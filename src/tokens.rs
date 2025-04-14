@@ -15,7 +15,7 @@ pub enum TokenizeMode {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
     // For Compiler
-    ModuleStart(String),
+    ModuleStart(PathBuf),
     Print,
     IO,
     Log,
@@ -25,7 +25,7 @@ pub enum Token {
 
     // Module Import/Export
     Import,
-    Public,
+    From,
 
     // HTML project compiler directives
     Comptime,
@@ -46,7 +46,7 @@ pub enum Token {
 
     // Variables / Functions
     Arrow,
-    Variable(String),
+    Variable(String, bool), // name, is_public
 
     // Literals
     StringLiteral(String),
@@ -82,7 +82,7 @@ pub enum Token {
 
     // Type Declarations
     Mutable,
-    TypeKeyword(DataType),
+    DatatypeLiteral(DataType),
 
     FunctionKeyword,
     AsyncFunctionKeyword,
@@ -205,10 +205,10 @@ impl Token {
             Token::EOF => TokenPosition::default(),
             Token::Import => TokenPosition {
                 line_number: 0,
-                char_column: 6,
+                char_column: 5,
             },
 
-            Token::Variable(name) => TokenPosition {
+            Token::Variable(name, ..) => TokenPosition {
                 line_number: 0,
                 char_column: name.len() as u32,
             },
@@ -221,7 +221,7 @@ impl Token {
             Token::WASM(code) => string_dimensions(code),
             Token::Comment(content) => string_dimensions(content),
 
-            Token::TypeKeyword(data_type) => TokenPosition {
+            Token::DatatypeLiteral(data_type) => TokenPosition {
                 line_number: 0,
                 char_column: data_type.length()
             },

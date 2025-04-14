@@ -6,13 +6,10 @@ use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
 use crate::{
     bs_types::DataType,
-    build::CompiledExport,
     parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
     CompileError, ErrorType,
 };
-use std::collections::HashMap;
-use std::path::PathBuf;
 use wasm_encoder::Module;
 
 pub struct ParserOutput {
@@ -20,9 +17,10 @@ pub struct ParserOutput {
     pub js: String,
     pub css: String,
     pub wasm: Module,
-    pub exported: HashMap<PathBuf, CompiledExport>,
+    pub import_requests: Vec<String>,
     pub page_title: String,
 }
+
 
 // Parse ast into valid WAT, JS, HTML and CSS
 pub fn parse<'a>(
@@ -30,7 +28,6 @@ pub fn parse<'a>(
     config: &'a Config,
     module_path: &'a str,
     wasm_module: &mut Module,
-    exports: &mut HashMap<PathBuf, CompiledExport>,
 ) -> Result<ParserOutput, CompileError> {
     let mut js = String::new();
     // let mut types = TypeSection::new();
@@ -42,11 +39,11 @@ pub fn parse<'a>(
     let mut exp_id: usize = 0;
     let mut page_title = String::new();
 
-    let mut exported: HashMap<PathBuf, CompiledExport> = HashMap::new();
-
     // Keeps track of whether a reference has already been used
     // This is to prevent duplicate JS code for updating the same element
     let mut module_references: Vec<Arg> = Vec::new();
+    
+    let mut import_requests: Vec<String> = Vec::new();
 
     let mut class_id: usize = 0;
 
@@ -78,7 +75,7 @@ pub fn parse<'a>(
             AstNode::VarDeclaration(
                 ref id,
                 ref expr,
-                is_exported,
+                _,
                 ref data_type,
                 ref start_pos,
             ) => {
@@ -94,20 +91,9 @@ pub fn parse<'a>(
                         );
 
                         js.push_str(&var_dec);
-                        if is_exported {
-                            exported.insert(
-                                PathBuf::from(module_path).join(id),
-                                CompiledExport {
-                                    js: var_dec,
-                                    css: String::new(),
-                                    data_type: data_type.to_owned(),
-                                    wasm: Module::new(),
-                                },
-                            );
-                        }
                     }
 
-                    DataType::Scene => {
+                    DataType::Scene(..) => {
                         match expr {
                             Value::Scene(scene_body, scene_styles, id) => {
                                 let mut created_css = String::new();
@@ -135,19 +121,6 @@ pub fn parse<'a>(
 
                                 css.push_str(&created_css);
                                 js.push_str(&var_dec);
-
-                                // If this scene is exported, add the CSS it created to the exported CSS
-                                if is_exported {
-                                    exported.insert(
-                                        PathBuf::from(module_path).join(id),
-                                        CompiledExport {
-                                            js: var_dec,
-                                            css: created_css,
-                                            data_type: data_type.to_owned(),
-                                            wasm: Module::new(),
-                                        },
-                                    );
-                                }
                             }
 
                             _ => {
@@ -168,17 +141,6 @@ pub fn parse<'a>(
                         );
 
                         js.push_str(&var_dec);
-                        if is_exported {
-                            exported.insert(
-                                PathBuf::from(module_path).join(id),
-                                CompiledExport {
-                                    js: var_dec,
-                                    css: String::new(),
-                                    data_type: data_type.to_owned(),
-                                    wasm: Module::new(),
-                                },
-                            );
-                        }
                     }
                     _ => {
                         js.push_str(&format!(
@@ -195,7 +157,7 @@ pub fn parse<'a>(
                 });
             }
 
-            AstNode::Function(name, args, body, is_exported, return_type, ref start_pos, _) => {
+            AstNode::Function(name, args, body, _, _, ref start_pos, _) => {
                 let mut func = format!("function {}(", name);
 
                 for arg in &args {
@@ -209,22 +171,11 @@ pub fn parse<'a>(
                 func.push_str("){");
 
                 // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
-                let func_body = parse(body, config, module_path, wasm_module, exports)?;
+                let func_body = parse(body, config, module_path, wasm_module)?;
 
                 func.push_str(&format!("{}}}", func_body.js));
 
                 js.push_str(&func);
-                if is_exported {
-                    exported.insert(
-                        PathBuf::from(module_path).join(name),
-                        CompiledExport {
-                            js: func,
-                            css: String::new(),
-                            data_type: DataType::Function(args.to_owned(), Box::new(return_type)),
-                            wasm: Module::new(),
-                        },
-                    );
-                }
             }
 
             AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos, _) => {
@@ -249,6 +200,10 @@ pub fn parse<'a>(
 
             AstNode::Css(css_string, ..) => {
                 css.push_str(&css_string);
+            }
+            
+            AstNode::Import(path, ..) => {
+                import_requests.push(path);
             }
 
             // Ignored
@@ -284,7 +239,7 @@ pub fn parse<'a>(
         css,
         wasm: wasm_module.to_owned(),
         page_title,
-        exported,
+        import_requests,
     })
 }
 

@@ -47,41 +47,15 @@ pub fn new_scene(
 
             // This is a declaration of the ID by using the export prefix followed by a variable name
             // This doesn't follow regular declaration rules.
-            Token::Public => {
-                x.index += 1;
-                match &x.current_token() {
-                    Token::Variable(name) => {
-                        scene_id = name.to_string();
-                    }
-                    // Will also accept numbers for the ID
-                    Token::IntLiteral(value) => {
-                        scene_id = value.to_string();
-                    }
-                    _ => {
-                        return Err(CompileError {
-                            msg: "Expected a variable name or number after the public keyword inside a scenehead. Id must be a valid variable name or a number literal".to_string(),
-                            start_pos: x.token_positions[x.index].to_owned(),
-                            end_pos: TokenPosition {
-                                line_number: x.token_positions[x.index].line_number,
-                                char_column: x.token_positions[x.index].char_column + 1,
-                            },
-                            error_type: ErrorType::Syntax,
-                        });
-                    }
-                }
+            Token::Id(name) => {
+                scene_id = name.to_string();
             }
 
             // This could be a config or style for the scene itself
             // So the type must be figured out first to see if it's passed into the scene directly or not
             // It could also be an unlocked style, so unlocked styles are checked first
-            Token::Variable(name) => {
-
-                // Instead of all of this
-                // Should probably just start the parse_expression thing.
-                // Styles can then be filtered out and handled here
-                // Functions that return a style can also be evaluated here
-
-
+            Token::Variable(name, _) => {
+                
                 // Check if this is an unlocked style
                 if let Some(style) = unlocked_styles.to_owned().get(&name) {
                     scene_styles.push(style.to_owned());

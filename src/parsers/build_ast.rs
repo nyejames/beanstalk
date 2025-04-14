@@ -8,7 +8,6 @@ use crate::parsers::ast_nodes::{Arg, Value};
 use crate::tokenizer::TokenPosition;
 use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use std::path::PathBuf;
-use colour::red_ln;
 use crate::parsers::functions::parse_function_call;
 
 pub struct TokenContext {
@@ -38,22 +37,25 @@ impl TokenContext {
 // This is a new scope
 pub fn new_ast(
     x: &mut TokenContext,
-    captured_declarations: &[Arg],
+    captured_declarations: &[Arg], // This includes imports
     return_type: &mut DataType,
-    module: bool,
+    module_path: &PathBuf, // If empty, this isn't a module
     pure: &mut bool, // No side effects or IO
-    // AST, Imports
-) -> Result<(Vec<AstNode>, Vec<AstNode>), CompileError> {
+
+    // AST, Exports
+) -> Result<Vec<AstNode>, CompileError> {
+    
+    let module_path = module_path.to_str().unwrap();
     
     // About 1/10 of the tokens seem to become AST nodes roughly from some very small preliminary tests
     let mut ast = Vec::with_capacity(x.length / 10);
 
-    let mut imports = Vec::new();
-    let mut exported: bool = false;
     let mut needs_to_return = return_type != &DataType::None;
     let mut declarations = captured_declarations.to_vec();
 
     while x.index < x.length {
+        
+        // This should be starting after the imports
         let current_token = x.current_token().to_owned();
 
         match current_token {
@@ -62,40 +64,30 @@ pub fn new_ast(
             }
 
             Token::Import => {
-                if !module {
-                    return Err(CompileError {
-                        msg: "Import found outside of module scope".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 6,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
-                }
-
+                // import "path/to/module"
+                // Currently just adds all exports in the module to this module
+                // So this is just to make sure the wasm or JS adds the imports
+                // format!("<script type=\"module\" src=\"{}\"></script>", requested_module.path.to_string_lossy()).as_str()
                 x.index += 1;
-
-                match &x.current_token() {
-                    // Module path that will have all it's exports dumped into the module
+                match x.current_token() {
                     Token::StringLiteral(value) => {
-                        imports.push(AstNode::Use(
-                            PathBuf::from(value.clone()),
-                            TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column,
-                            },
-                        ));
+                        ast.push(
+                            AstNode::Import(
+                                value.to_owned(),
+                                x.current_position(),
+                            )
+                        )
                     }
+
                     _ => {
                         return Err(CompileError {
-                            msg: "Import must have a valid path as a argument".to_string(),
+                            msg: "Expected a string literal after the 'import' keyword".to_string(),
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {
                                 line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + u32::MAX,
+                                char_column: x.current_position().char_column + 1,
                             },
-                            error_type: ErrorType::Rule,
+                            error_type: ErrorType::Syntax,
                         });
                     }
                 }
@@ -103,7 +95,7 @@ pub fn new_ast(
 
             // Scene literals
             Token::SceneHead | Token::ParentScene => {
-                if !module {
+                if module_path.is_empty() {
                     return Err(CompileError {
                         msg: "Scene literals can only be used at the top level of a module"
                             .to_string(),
@@ -132,12 +124,12 @@ pub fn new_ast(
             }
 
             // New Function or Variable declaration
-            Token::Variable(name) => {
+            Token::Variable(name, is_exported) => {
                 let new_var = create_new_var_or_ref(
                     x,
                     name.to_owned(),
                     &mut declarations,
-                    exported,
+                    is_exported,
                     &ast,
                     false,
                 )?;
@@ -150,12 +142,8 @@ pub fn new_ast(
                 ast.push(new_var);
             }
 
-            Token::Public => {
-                exported = true;
-            }
-
             Token::JS(value) => {
-                if !module {
+                if module_path.is_empty() {
                     return Err(CompileError {
                         msg: "JS block can only be used inside of a module scope (not inside of a function)".to_string(),
                         start_pos: x.current_position(),
@@ -221,7 +209,7 @@ pub fn new_ast(
             }
 
             Token::Return => {
-                if module {
+                if module_path.len() > 0 {
                     return Err(CompileError {
                         msg: "Return statement used outside of function".to_string(),
                         start_pos: x.current_position(),
@@ -270,7 +258,7 @@ pub fn new_ast(
 
             // TOKEN::End SHOULD NEVER BE IN MODULE SCOPE
             Token::End => {
-                if module {
+                if module_path.len() > 0 {
                     return Err(CompileError {
                         msg: "End statement used in module scope (too many end statements used?)"
                             .to_string(),
@@ -319,7 +307,7 @@ pub fn new_ast(
         });
     }
 
-    Ok((ast, imports))
+    Ok(ast)
 }
 
 fn skip_dead_code(x: &mut TokenContext) {
@@ -328,7 +316,7 @@ fn skip_dead_code(x: &mut TokenContext) {
 
     x.index += 1;
     match x.tokens.get(x.index).unwrap_or(&Token::EOF) {
-        Token::TypeKeyword(_) => {
+        Token::DatatypeLiteral(_) => {
             x.index += 1;
             match x.tokens.get(x.index).unwrap_or(&Token::EOF) {
                 Token::Assign => {

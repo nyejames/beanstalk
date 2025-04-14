@@ -17,15 +17,19 @@
   <p>⚠️ The design and direction of the language is still subject to change</p>
   <p> (There isn't even a semantic version yet!)</p>
 
-  <h1>
-    <a href="https://nyejames.github.io/beanstalk">
-      Plans and Documentation
-    </a>
-  </h1>
+[//]: # (  <h1>)
 
-  <p>The first proof of concept for the syntax has been figured out, and now the compiler is being refactored to accomodate these changes</p>
+[//]: # (    <a href="https://nyejames.github.io/beanstalk">)
 
-  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>
+[//]: # (      Plans and Documentation)
+
+[//]: # (    </a>)
+
+[//]: # (  </h1>)
+
+  <p>The first proof of concept for the syntax has been figured out, and now the compiler is being refactored to accommodate these changes</p>
+
+[//]: # (  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>)
   <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>
 
 </div>
@@ -56,7 +60,7 @@ The compiler will also give you all the tools you need to quickly start working 
 The language aims to be great for building a website, making config files or as a lightweight embedded or UI language for apps and games.
 
 ### Compiled Output
-Beanstalk aims to just output Wasm and have it's own backend for doing this, but JS is currently the primary output for web while the language is being created.
+Beanstalk aims to just output Wasm and have its own backend for doing this, but JS is currently the primary output for web while the language is being created.
 More JS will gradually get replaced, but only in cases where stricter runtime types or greater performance is needed.
 
 The compiler aims to output as little bytecode/glue code as possible. No 100kb Wasm files to just print "hello world".
@@ -65,7 +69,7 @@ Being compiled means folding constants, type checking and optimizing the output 
  
 The compiler itself is written in Rust, and uses as few dependencies/libraries as possible to keep it fast and reliable.
 
-### Dependancies currently used in the compiler
+### Dependencies currently used in the compiler
 - [wat2wasm](https://github.com/WebAssembly/wabt) for compiling wat to Wasm
 
 <br>

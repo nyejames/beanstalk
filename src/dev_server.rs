@@ -58,8 +58,7 @@ fn handle_connection(
     output_info_level: i32,
 ) -> Result<(), Error> {
     let buf_reader = BufReader::new(&mut stream);
-
-    // println!("{}", format!("{}/{}/dev/any file should be here", entry_path, path));
+    
     let dir_404 = path.join("dev/404.html");
     let mut contents = match fs::read(&dir_404) {
         Ok(content) => content,
@@ -95,6 +94,7 @@ fn handle_connection(
                     }
                 };
                 status_line = "HTTP/1.1 200 OK";
+
 
             // This is a request to check if the file has been modified
             } else if request.starts_with("HEAD /check") {
@@ -352,11 +352,11 @@ fn get_home_page_path(
                         continue;
                     }
                 } else if page
-                    .file_stem()
+                    .file_name()
                     .unwrap()
                     .to_str()
                     .unwrap()
-                    .starts_with(settings::INDEX_PAGE_KEYWORD)
+                    .starts_with(settings::INDEX_PAGE_NAME)
                 {
                     Some(page)
                 } else {

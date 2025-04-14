@@ -1,4 +1,4 @@
-use colour::{blue_ln, red_ln};
+use std::path::PathBuf;
 use super::{
     ast_nodes::{Arg, AstNode},
     build_ast::new_ast,
@@ -62,7 +62,7 @@ pub fn create_function(
 
     x.index += 1;
 
-    let function_body = new_ast(x, &arg_refs, &mut return_type, false, &mut pure)?.0;
+    let function_body = new_ast(x, &arg_refs, &mut return_type, &PathBuf::new(), &mut pure, )?;
     
     Ok((
         AstNode::Function(
@@ -105,7 +105,7 @@ pub fn create_args(
                     break;
                 }
             }
-            Token::Variable(arg_name) => {
+            Token::Variable(arg_name, ..) => {
                 if !next_in_list {
                     return Err(CompileError {
                         msg: "Should have a comma to separate arguments".to_string(),
@@ -150,7 +150,7 @@ pub fn create_args(
                 x.index += 1;
 
                 let mut data_type = match &x.tokens[x.index] {
-                    Token::TypeKeyword(data_type) => data_type.to_owned(),
+                    Token::DatatypeLiteral(data_type) => data_type.to_owned(),
                     _ => {
                         return Err(CompileError {
                             msg: "Expected type keyword after argument name".to_string(),
@@ -239,7 +239,7 @@ fn parse_return_type(x: &mut TokenContext) -> Result<DataType, CompileError> {
     };
 
     match x.current_token() {
-        Token::TypeKeyword(data_type) => {
+        Token::DatatypeLiteral(data_type) => {
             Ok(data_type.to_owned())
         }
         _ => {
@@ -503,7 +503,7 @@ pub fn parse_function_call(
             x,
             false,
             ast,
-            &mut DataType::Inferred,
+            &mut DataType::Inferred(false),
             true,
             variable_declarations,
         )?

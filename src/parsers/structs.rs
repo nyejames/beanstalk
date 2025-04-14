@@ -69,7 +69,7 @@ pub fn new_fixed_collection(
                 x.index += 1;
             }
 
-            Token::Variable(name) => {
+            Token::Variable(name, is_public) => {
                 if !next_item {
                     return Err(CompileError {
                         msg: "Expected a comma between items in this collection".to_string(),
@@ -86,7 +86,7 @@ pub fn new_fixed_collection(
                     x,
                     name.to_owned(),
                     variable_declarations,
-                    false,
+                    is_public,
                     ast,
                     true,
                 )?;
@@ -120,7 +120,7 @@ pub fn new_fixed_collection(
                 next_item = false;
 
                 let mut data_type = if required_args.is_empty() {
-                    DataType::Inferred
+                    DataType::Inferred(false)
                 } else if required_args.len() < items.len() {
                     return Err(CompileError {
                         msg: "Too many arguments provided to struct".to_string(),

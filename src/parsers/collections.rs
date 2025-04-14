@@ -30,12 +30,13 @@ pub fn _new_collection(
                 let item =
                     create_expression(x, true, ast, collection_type, false, variable_declarations)?;
 
-                if item.get_type() != *collection_type {
+                let item_type = item.get_type();
+                if item_type != *collection_type {
                     return Err(CompileError {
                         msg: format!(
                             "Type mismatch in collection. Expected type: {:?}, got type: {:?}",
                             collection_type,
-                            item.get_type()
+                            item_type
                         ),
                         start_pos: token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
@@ -47,8 +48,11 @@ pub fn _new_collection(
                     });
                 }
 
-                if collection_type == &DataType::Inferred {
-                    *collection_type = item.get_type();
+                match collection_type {
+                    DataType::Inferred(_) => {
+                        *collection_type = item_type;
+                    }
+                    _ => {}
                 }
 
                 items.push(item);
