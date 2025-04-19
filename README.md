@@ -42,12 +42,9 @@ Beanstalk is a lightweight, statically typed and compiled programming language.
 
 The whole language is built around special template strings called 'Scenes'.
 
-The goal is to also be a more general lightweight Wasm based UI building language that could be great for embedding in any application or game.
-No LLVM backend.
+The goal is to also be a more general lightweight Wasm based UI building language that could be great for creating websites, webapps or embedding in any application or game.
 
 HTML projects will use JS, CS and HTML to build websites and tie into the Wasm.
-
-The compiler will also give you all the tools you need to quickly start working on projects.
 
 **Design Goals**
 - Minimal syntax with a focus around text content / typesetting and styling
@@ -55,7 +52,7 @@ The compiler will also give you all the tools you need to quickly start working 
 - Batteries included with powerful built-in standard library
 - Fast compile times to support hot reloading
 - Fast for prototyping and refactoring with default/optional values
-- Eventually Wasm based output
+- No LLVM backend
 
 The language aims to be great for building a website, making config files or as a lightweight embedded or UI language for apps and games.
 
