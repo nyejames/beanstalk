@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use super::{
     ast_nodes::{Arg, AstNode},
     build_ast::new_ast,
@@ -6,11 +5,12 @@ use super::{
 };
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::build_ast::TokenContext;
-use crate::parsers::expressions::parse_expression::get_accessed_args;
-use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, CompileError, ErrorType, Token};
 use crate::parsers::expressions::function_call_inline::inline_function_call;
+use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
+use crate::tokenizer::TokenPosition;
+use crate::{CompileError, ErrorType, Token, bs_types::DataType};
+use std::path::PathBuf;
 
 pub fn create_function(
     x: &mut TokenContext,
@@ -62,8 +62,8 @@ pub fn create_function(
 
     x.index += 1;
 
-    let function_body = new_ast(x, &arg_refs, &mut return_type, &PathBuf::new(), &mut pure, )?;
-    
+    let function_body = new_ast(x, &arg_refs, &mut return_type, &PathBuf::new(), &mut pure)?;
+
     Ok((
         AstNode::Function(
             name,
@@ -85,7 +85,7 @@ pub fn create_args(
     x: &mut TokenContext,
     ast: &[AstNode],
     variable_declarations: &[Arg],
-    pure: &mut bool
+    pure: &mut bool,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args = Vec::<Arg>::new();
 
@@ -113,7 +113,7 @@ pub fn create_args(
                         end_pos: TokenPosition {
                             line_number: x.token_positions[x.index].line_number,
                             char_column: x.token_positions[x.index].char_column
-                                + arg_name.len() as u32,
+                                + arg_name.len() as i32,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -139,7 +139,7 @@ pub fn create_args(
                             end_pos: TokenPosition {
                                 line_number: x.token_positions[x.index].line_number,
                                 char_column: x.token_positions[x.index].char_column
-                                    + arg_name.len() as u32,
+                                    + arg_name.len() as i32,
                             },
                             error_type: ErrorType::Syntax,
                         });
@@ -158,7 +158,7 @@ pub fn create_args(
                             end_pos: TokenPosition {
                                 line_number: x.token_positions[x.index].line_number,
                                 char_column: x.token_positions[x.index].char_column
-                                    + arg_name.len() as u32,
+                                    + arg_name.len() as i32,
                             },
                             error_type: ErrorType::Syntax,
                         });
@@ -239,22 +239,16 @@ fn parse_return_type(x: &mut TokenContext) -> Result<DataType, CompileError> {
     };
 
     match x.current_token() {
-        Token::DatatypeLiteral(data_type) => {
-            Ok(data_type.to_owned())
-        }
-        _ => {
-            Err(
-                CompileError {
-                    msg: "Expected a type keyword after the arrow operator".to_string(),
-                    start_pos: x.current_position(),
-                    end_pos: TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column + 1,
-                    },
-                    error_type: ErrorType::Syntax,
-                }
-            )
-        }
+        Token::DatatypeLiteral(data_type) => Ok(data_type.to_owned()),
+        _ => Err(CompileError {
+            msg: "Expected a type keyword after the arrow operator".to_string(),
+            start_pos: x.current_position(),
+            end_pos: TokenPosition {
+                line_number: x.current_position().line_number,
+                char_column: x.current_position().char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        }),
     }
 }
 
@@ -341,19 +335,18 @@ pub fn create_func_call_args(
 ) -> Result<Vec<Value>, CompileError> {
     // Create a vec of the required args values (arg.value)
     let mut indexes_filled: Vec<usize> = Vec::with_capacity(args_required.len());
-    let mut sorted_values: Vec<Value> = args_required.iter().map(|arg| arg.value.to_owned()).collect();
+    let mut sorted_values: Vec<Value> = args_required
+        .iter()
+        .map(|arg| arg.value.to_owned())
+        .collect();
 
     let args_passed_in = match value_passed_in {
-        Value::StructLiteral(args) => {
-            args
-        }
-        _ => {
-            &Vec::from([Arg {
-                name: "".to_string(),
-                data_type: value_passed_in.get_type(),
-                value: value_passed_in.to_owned(),
-            }])
-        }
+        Value::StructLiteral(args) => args,
+        _ => &Vec::from([Arg {
+            name: "".to_string(),
+            data_type: value_passed_in.get_type(),
+            value: value_passed_in.to_owned(),
+        }]),
     };
 
     if args_passed_in.is_empty() || args_passed_in[0].value == Value::None {
@@ -361,7 +354,10 @@ pub fn create_func_call_args(
             // Make sure there are no required arguments left
             if arg.value != Value::None {
                 return Err(CompileError {
-                    msg: format!("Missed at least one required arguments for struct or function call: {} (type: {:?})", arg.name, arg.data_type),
+                    msg: format!(
+                        "Missed at least one required arguments for struct or function call: {} (type: {:?})",
+                        arg.name, arg.data_type
+                    ),
                     start_pos: token_position.to_owned(),
                     end_pos: TokenPosition {
                         line_number: token_position.line_number,
@@ -382,7 +378,10 @@ pub fn create_func_call_args(
     // And return the value
     if sorted_values.is_empty() {
         return Err(CompileError {
-            msg: format!("Function call does not accept any arguments. Value passed in: {:?}", args_passed_in),
+            msg: format!(
+                "Function call does not accept any arguments. Value passed in: {:?}",
+                args_passed_in
+            ),
             start_pos: token_position.to_owned(),
             end_pos: TokenPosition {
                 line_number: token_position.line_number,
@@ -398,15 +397,20 @@ pub fn create_func_call_args(
     let args_in_sorted = sort_unnamed_args_last(args_passed_in);
 
     'outer: for mut arg in args_in_sorted {
-
         // If argument is unnamed, find the smallest index that hasn't been filled
         if arg.name.is_empty() {
             let min_available = find_first_missing(&indexes_filled);
 
             // Make sure the type is correct
-            if args_required[min_available].data_type.is_valid_type(&mut arg.data_type) {
+            if args_required[min_available]
+                .data_type
+                .is_valid_type(&mut arg.data_type)
+            {
                 return Err(CompileError {
-                    msg: format!("Argument '{}' is of type {:?}, but used in an argument of type: {:?}", arg.name, arg.data_type, args_required[min_available].data_type),
+                    msg: format!(
+                        "Argument '{}' is of type {:?}, but used in an argument of type: {:?}",
+                        arg.name, arg.data_type, args_required[min_available].data_type
+                    ),
                     start_pos: token_position.to_owned(),
                     end_pos: TokenPosition {
                         line_number: token_position.line_number,
@@ -418,7 +422,10 @@ pub fn create_func_call_args(
 
             if sorted_values.len() <= min_available {
                 return Err(CompileError {
-                    msg: format!("Too many arguments passed into function call. Expected: {:?}, Passed in: {:?}", args_required, args_passed_in),
+                    msg: format!(
+                        "Too many arguments passed into function call. Expected: {:?}, Passed in: {:?}",
+                        args_required, args_passed_in
+                    ),
                     start_pos: token_position.to_owned(),
                     end_pos: TokenPosition {
                         line_number: token_position.line_number,
@@ -442,7 +449,10 @@ pub fn create_func_call_args(
         }
 
         return Err(CompileError {
-            msg: format!("Argument '{}' not found in function call. Expected: {:?}, Passed in: {:?}", arg.name, args_required, arg),
+            msg: format!(
+                "Argument '{}' not found in function call. Expected: {:?}, Passed in: {:?}",
+                arg.name, args_required, arg
+            ),
             start_pos: token_position.to_owned(),
             end_pos: TokenPosition {
                 line_number: token_position.line_number,
@@ -476,7 +486,7 @@ pub fn create_func_call_args(
 
 // Built-in functions will do their own thing
 pub fn parse_function_call(
-    x: &mut TokenContext, 
+    x: &mut TokenContext,
     name: String,
     ast: &[AstNode],
     variable_declarations: &mut Vec<Arg>,
@@ -507,7 +517,6 @@ pub fn parse_function_call(
             true,
             variable_declarations,
         )?
-
     } else {
         return Err(CompileError {
             msg: "Expected a parenthesis after function name".to_string(),
@@ -538,7 +547,10 @@ pub fn parse_function_call(
 
     // Inline this function call if it's pure and the function call is pure
     if is_pure && call_value.is_pure() {
-        let original_function = variable_declarations.iter().find(|a| a.name == *name).unwrap();
+        let original_function = variable_declarations
+            .iter()
+            .find(|a| a.name == *name)
+            .unwrap();
         return inline_function_call(&args, &accessed_args, &original_function.value);
     }
 

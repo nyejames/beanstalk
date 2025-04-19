@@ -1,14 +1,14 @@
-use std::collections::HashMap;
 use super::{
     ast_nodes::AstNode, create_scene_node::new_scene,
     expressions::parse_expression::create_expression, variables::create_new_var_or_ref,
 };
 use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Arg, Value};
-use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, CompileError, ErrorType, Token};
-use std::path::PathBuf;
 use crate::parsers::functions::parse_function_call;
+use crate::tokenizer::TokenPosition;
+use crate::{CompileError, ErrorType, Token, bs_types::DataType};
+use std::collections::HashMap;
+use std::path::PathBuf;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -32,6 +32,14 @@ impl TokenContext {
 
         self.token_positions[self.index].to_owned()
     }
+    pub fn default() -> TokenContext {
+        TokenContext {
+            tokens: Vec::new(),
+            index: 0,
+            length: 0,
+            token_positions: Vec::new(),
+        }
+    }
 }
 
 // This is a new scope
@@ -40,13 +48,12 @@ pub fn new_ast(
     captured_declarations: &[Arg], // This includes imports
     return_type: &mut DataType,
     module_path: &PathBuf, // If empty, this isn't a module
-    pure: &mut bool, // No side effects or IO
+    pure: &mut bool,       // No side effects or IO
 
-    // AST, Exports
+                           // AST, Exports
 ) -> Result<Vec<AstNode>, CompileError> {
-    
     let module_path = module_path.to_str().unwrap();
-    
+
     // About 1/10 of the tokens seem to become AST nodes roughly from some very small preliminary tests
     let mut ast = Vec::with_capacity(x.length / 10);
 
@@ -54,43 +61,12 @@ pub fn new_ast(
     let mut declarations = captured_declarations.to_vec();
 
     while x.index < x.length {
-        
         // This should be starting after the imports
         let current_token = x.current_token().to_owned();
 
         match current_token {
             Token::Comment(value) => {
                 ast.push(AstNode::Comment(value.clone()));
-            }
-
-            Token::Import => {
-                // import "path/to/module"
-                // Currently just adds all exports in the module to this module
-                // So this is just to make sure the wasm or JS adds the imports
-                // format!("<script type=\"module\" src=\"{}\"></script>", requested_module.path.to_string_lossy()).as_str()
-                x.index += 1;
-                match x.current_token() {
-                    Token::StringLiteral(value) => {
-                        ast.push(
-                            AstNode::Import(
-                                value.to_owned(),
-                                x.current_position(),
-                            )
-                        )
-                    }
-
-                    _ => {
-                        return Err(CompileError {
-                            msg: "Expected a string literal after the 'import' keyword".to_string(),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + 1,
-                            },
-                            error_type: ErrorType::Syntax,
-                        });
-                    }
-                }
             }
 
             // Scene literals
@@ -102,21 +78,18 @@ pub fn new_ast(
                         start_pos: x.current_position(),
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + u32::MAX,
+                            char_column: x.current_position().char_column + i32::MAX,
                         },
                         error_type: ErrorType::Rule,
                     });
                 }
-                
+
                 // Add the default core HTML styles as the initial unlocked styles
                 let mut unlocked_styles = HashMap::from(get_html_styles());
 
                 let scene = new_scene(x, &ast, &mut declarations, &mut unlocked_styles)?;
 
-                ast.push(AstNode::Literal(
-                    scene,
-                    x.current_position(),
-                ));
+                ast.push(AstNode::Literal(scene, x.current_position()));
             }
 
             Token::ModuleStart(_) => {
@@ -149,7 +122,7 @@ pub fn new_ast(
                         start_pos: x.current_position(),
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + value.len() as u32,
+                            char_column: x.current_position().char_column + value.len() as i32,
                         },
                         error_type: ErrorType::Rule,
                     });
@@ -157,14 +130,16 @@ pub fn new_ast(
 
                 *pure = false;
 
-                ast.push(AstNode::JS(
-                    value.clone(),
-                    x.current_position(),
-                ));
+                ast.push(AstNode::JS(value.clone(), x.current_position()));
             }
 
+            // IGNORED TOKENS
             Token::Newline | Token::Empty | Token::SceneClose => {
                 // Do nothing for now
+            }
+
+            Token::Import => {
+                // Imports are just left in the token stream but don't continue here (At the moment)
             }
 
             // The actual print function doesn't exist in the compiler or standard library
@@ -188,7 +163,6 @@ pub fn new_ast(
                         data_type: DataType::CoerceToString(false),
                         value: Value::None,
                     }],
-
                     // Console.log does not return anything
                     &DataType::None,
                     false,
@@ -196,7 +170,7 @@ pub fn new_ast(
             }
 
             Token::DeadVariable(name) => {
-                // Remove entire declaration or scope of variable declaration
+                // Remove the entire declaration or scope of the variable declaration
                 // So don't put any dead code into the AST
                 skip_dead_code(x);
                 ast.push(AstNode::Warning(
@@ -209,7 +183,7 @@ pub fn new_ast(
             }
 
             Token::Return => {
-                if module_path.len() > 0 {
+                if !module_path.is_empty() {
                     return Err(CompileError {
                         msg: "Return statement used outside of function".to_string(),
                         start_pos: x.current_position(),
@@ -244,10 +218,7 @@ pub fn new_ast(
                 //     *pure = false;
                 // }
 
-                ast.push(AstNode::Return(
-                    return_value,
-                    x.current_position(),
-                ));
+                ast.push(AstNode::Return(return_value, x.current_position()));
 
                 x.index -= 1;
             }
@@ -258,7 +229,7 @@ pub fn new_ast(
 
             // TOKEN::End SHOULD NEVER BE IN MODULE SCOPE
             Token::End => {
-                if module_path.len() > 0 {
+                if !module_path.is_empty() {
                     return Err(CompileError {
                         msg: "End statement used in module scope (too many end statements used?)"
                             .to_string(),

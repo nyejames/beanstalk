@@ -1,5 +1,5 @@
 use crate::parsers::ast_nodes::Value;
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, ErrorType, Token};
+use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
 
 use crate::tokenizer::TokenPosition;
 #[allow(unused_imports)]
@@ -36,7 +36,10 @@ pub fn math_constant_fold(
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
                     return Err(CompileError {
-                        msg: format!("Not enough nodes on the stack for binary operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}", output_stack, stack),
+                        msg: format!(
+                            "Not enough nodes on the stack for binary operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}",
+                            output_stack, stack
+                        ),
                         start_pos: token_position.to_owned(),
                         end_pos: TokenPosition {
                             line_number,
@@ -50,7 +53,7 @@ pub fn math_constant_fold(
                 let lhs = stack.pop().unwrap();
 
                 // Check if top 2 of stack are literals
-                // if at least one is not then this must be a runtime expression
+                // if at least one is not, then this must be a runtime expression
                 // And just push the operator onto the stack instead of evaluating
                 // TO DO: GENERICS FOR THIS TO SUPPORT INTS CORRECTLY
                 let lhs_value = match lhs.get_value() {
@@ -88,7 +91,10 @@ pub fn math_constant_fold(
                         Token::Modulus => lhs_value % rhs_value,
                         _ => {
                             return Err(CompileError {
-                                msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
+                                msg: format!(
+                                    "Unsupported operator found in operator stack when parsing an expression into WAT: {:?}",
+                                    op
+                                ),
                                 start_pos: token_position.to_owned(),
                                 end_pos: TokenPosition {
                                     line_number,
@@ -148,7 +154,10 @@ pub fn logical_constant_fold(
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
                     return Err(CompileError {
-                        msg: format!("Not enough nodes on the stack for logical operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}", output_stack, stack),
+                        msg: format!(
+                            "Not enough nodes on the stack for logical operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}",
+                            output_stack, stack
+                        ),
                         start_pos: token_position.to_owned(),
                         end_pos: TokenPosition {
                             line_number,
@@ -190,14 +199,17 @@ pub fn logical_constant_fold(
                         Token::Or => left_value || right_value,
                         _ => {
                             return Err(CompileError {
-                            msg: format!("Unsupported operator found in operator stack when parsing an expression into WAT: {:?}", op),
-                            start_pos: token_position.to_owned(),
-                            end_pos: TokenPosition {
-                                line_number,
-                                char_column,
-                            },
-                            error_type: ErrorType::Syntax,
-                        });
+                                msg: format!(
+                                    "Unsupported operator found in operator stack when parsing an expression into WAT: {:?}",
+                                    op
+                                ),
+                                start_pos: token_position.to_owned(),
+                                end_pos: TokenPosition {
+                                    line_number,
+                                    char_column,
+                                },
+                                error_type: ErrorType::Syntax,
+                            });
                         }
                     }),
                     TokenPosition {

@@ -1,11 +1,11 @@
+use crate::CompileError;
 use crate::bs_types::DataType;
-use crate::html_output::js_parser::{create_reference_in_js};
+use crate::html_output::js_parser::create_reference_in_js;
 use crate::parsers::ast_nodes::{Arg, Value};
-use crate::settings::HTMLMeta;
-use crate::settings::BS_VAR_PREFIX;
-use crate::{CompileError};
-use std::collections::HashMap;
 use crate::parsers::markdown::to_markdown;
+use crate::settings::BS_VAR_PREFIX;
+use crate::settings::HTMLMeta;
+use std::collections::HashMap;
 
 // Scene Config Type
 // This is passed into a scene head to configure how it should be parsed
@@ -77,12 +77,12 @@ pub struct Wrapper {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WrapperString {
     pub string: String,
-    
+
     // Rules for adding this string to the wrapper
     pub groups: &'static [u32],
     pub incompatible_groups: &'static [u32],
     pub required_groups: &'static [u32],
-    
+
     // If compatible, should this overwrite everything else in the vec
     pub overwrite: bool,
 }
@@ -99,8 +99,9 @@ impl WrapperString {
     }
     pub fn is_compatible(&self, groups: &[u32]) -> bool {
         for group in groups {
-            if self.incompatible_groups.contains(group) ||
-                (!self.required_groups.is_empty() && !self.required_groups.contains(group)) {
+            if self.incompatible_groups.contains(group)
+                || (!self.required_groups.is_empty() && !self.required_groups.contains(group))
+            {
                 return false;
             }
         }
@@ -155,7 +156,6 @@ pub fn parse_scene(
     exp_id: &mut usize,
     config: &HTMLMeta,
 ) -> Result<String, CompileError> {
-
     let SceneIngredients {
         scene_body,
         scene_styles,
@@ -188,12 +188,10 @@ pub fn parse_scene(
     // Resolve how all styles passed into the scene will be merged into one style
     fn merge_wrapper(wrapper: &mut Vec<WrapperString>, style_wrapper: &Vec<WrapperString>) {
         for (i, s) in style_wrapper.iter().enumerate() {
-
             // No wrapper at this index of the vec yet
             // So grow the vec
             if i >= wrapper.len() {
-                wrapper
-                    .resize(i + 1, WrapperString::default());
+                wrapper.resize(i + 1, WrapperString::default());
             }
 
             // Check the wrapper is compatible
@@ -209,7 +207,6 @@ pub fn parse_scene(
     }
 
     for style in scene_styles {
-
         merge_wrapper(&mut final_style.wrapper.before, &style.wrapper.before);
         merge_wrapper(&mut final_style.wrapper.after, &style.wrapper.after);
 
@@ -325,7 +322,6 @@ pub fn parse_scene(
                 content.push_str(&format!("<span class=\"{name}\"></span>"));
 
                 if !declarations.iter().any(|a| &a.name == name) {
-
                     match &data_type {
                         DataType::Structure(items) => {
                             // Automatically unpack all items in the tuple into the scene
@@ -334,14 +330,10 @@ pub fn parse_scene(
                                 let mut elements = String::new();
 
                                 for (index, _) in (**items).iter().enumerate() {
-                                    elements.push_str(&format!(
-                                        "{BS_VAR_PREFIX}{name}[{index}],"
-                                    ));
+                                    elements.push_str(&format!("{BS_VAR_PREFIX}{name}[{index}],"));
                                 }
 
-                                js.push_str(&format!(
-                                    "uInnerHTML(\"{name}\",[{elements}]);"
-                                ));
+                                js.push_str(&format!("uInnerHTML(\"{name}\",[{elements}]);"));
                             } else {
                                 js.push_str(&create_reference_in_js(
                                     name,
@@ -350,7 +342,6 @@ pub fn parse_scene(
                                 ));
                             }
                         }
-
 
                         _ => {
                             js.push_str(&create_reference_in_js(
@@ -387,15 +378,22 @@ pub fn parse_scene(
     // parse the content into markdown
     // If the parent is parsing the markdown already,
     // skip this as it should be done at the highest level possible
-    if final_style.format == StyleFormat::Markdown as i32 && format_context == StyleFormat::None as i32 {
+    if final_style.format == StyleFormat::Markdown as i32
+        && format_context == StyleFormat::None as i32
+    {
         let default_tag = "p";
 
         final_string.push_str(&to_markdown(&content, default_tag));
 
     // TODO - add parsers for each format
-    } else if final_style.format == StyleFormat::Codeblock as i32 && format_context == StyleFormat::Markdown as i32 {
+    } else if final_style.format == StyleFormat::Codeblock as i32
+        && format_context == StyleFormat::Markdown as i32
+    {
         // Add a special object replace character to signal to parent that this tag should not be parsed into markdown
-        final_string.push_str(&format!("\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}", content));
+        final_string.push_str(&format!(
+            "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
+            content
+        ));
     } else {
         final_string.push_str(&content);
     }

@@ -76,7 +76,7 @@ pub fn new_fixed_collection(
                         start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
                             line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + name.len() as u32,
+                            char_column: x.token_positions[x.index].char_column + name.len() as i32,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -157,4 +157,3 @@ pub fn new_fixed_collection(
 
     Ok(items)
 }
-

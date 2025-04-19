@@ -1,12 +1,11 @@
 use crate::parsers::ast_nodes::Value;
 use crate::tokenizer::TokenPosition;
 use crate::{
-    bs_types::DataType, parsers::ast_nodes::AstNode, settings::BS_VAR_PREFIX, CompileError,
-    ErrorType, Token,
+    CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode,
+    settings::BS_VAR_PREFIX,
 };
 
 // Create everything necessary in JS
-// Break out pieces in WASM calls
 pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
 
@@ -44,7 +43,10 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
 
                         _ => {
                             return Err(CompileError {
-                                msg: format!("Compiler Bug (Not Implemented yet): Invalid argument type for function call (js_parser): {:?}", value),
+                                msg: format!(
+                                    "Compiler Bug (Not Implemented yet): Invalid argument type for function call (js_parser): {:?}",
+                                    value
+                                ),
                                 start_pos: start_pos.to_owned(),
                                 end_pos: expr.dimensions(),
                                 error_type: ErrorType::Compiler,
@@ -103,7 +105,10 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
                 }
                 _ => {
                     return Err(CompileError {
-                        msg: format!("Compiler Bug: Haven't implemented this type yet in expression_to_js: {:?}", expression_type),
+                        msg: format!(
+                            "Compiler Bug: Haven't implemented this type yet in expression_to_js: {:?}",
+                            expression_type
+                        ),
                         start_pos: start_pos.to_owned(),
                         end_pos: expr.dimensions(),
                         error_type: ErrorType::Compiler,
@@ -160,12 +165,13 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
             js.push_str("null ");
         }
 
+        Value::Bool(value) => {
+            js.push_str(&value.to_string());
+        }
+
         _ => {
             return Err(CompileError {
-                msg: format!(
-                    "Invalid AST node given to expression_to_js: {:?}",
-                    expr
-                ),
+                msg: format!("Invalid AST node given to expression_to_js: {:?}", expr),
                 start_pos: start_pos.to_owned(),
                 end_pos: expr.dimensions(),
                 error_type: ErrorType::Compiler,

@@ -1,11 +1,11 @@
-use colour::red_ln;
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
 use crate::parsers::ast_nodes::Value;
 use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, parsers::ast_nodes::AstNode, CompileError, ErrorType, Token};
+use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
+use colour::red_ln;
 
-// This function will turn a series of ast nodes into a Value enum
-// A Value enum can also be a runtime expression which contains a series of nodes
+// This function will turn a series of ast nodes into a Value enum.
+// A Value enum can also be a runtime expression that contains a series of nodes.
 // It will fold constants (not working yet) down to a single Value if possible
 pub fn evaluate_expression(
     expr: Vec<AstNode>,
@@ -21,26 +21,23 @@ pub fn evaluate_expression(
     'outer: for node in expr {
         match node {
             AstNode::Literal(ref value, _) => {
-
                 // Ignore shunting yard for strings and coerced strings
                 match current_type {
                     DataType::CoerceToString(_) | DataType::String(_) => {
                         simplified_expression.push(node.to_owned());
                         continue 'outer;
-                    },
+                    }
                     DataType::Inferred(_) => {
                         current_type = value.get_type();
-                    },
-                    _ => {},
+                    }
+                    _ => {}
                 }
 
                 match value {
-
                     Value::Float(_) | Value::Int(_) | Value::Bool(_) => {
                         output_queue.push(node.to_owned());
                     }
 
-                    // Anything else can't be folded at compile time
                     _ => {
                         simplified_expression.push(node.to_owned());
                     }
@@ -52,9 +49,8 @@ pub fn evaluate_expression(
             }
 
             AstNode::BinaryOperator(ref op, ref position) => {
-                // If the current type is a string or scene, add operator is assumed.
+                // If the current type is a string or scene, an add operator is assumed.
                 match current_type {
-
                     DataType::String(_) | DataType::Scene(_) => {
                         if op != &Token::Add {
                             return Err( CompileError {
@@ -83,24 +79,24 @@ pub fn evaluate_expression(
 
                     DataType::Bool(_) => {
                         if *op != Token::Or
-                        || *op != Token::And
-                        || *op != Token::Equal
-                        || *op != Token::Not
-                        || *op != Token::LessThan
-                        || *op != Token::LessThanOrEqual
-                        || *op != Token::GreaterThan
-                        || *op != Token::GreaterThanOrEqual
+                            || *op != Token::And
+                            || *op != Token::Equal
+                            || *op != Token::Not
+                            || *op != Token::LessThan
+                            || *op != Token::LessThanOrEqual
+                            || *op != Token::GreaterThan
+                            || *op != Token::GreaterThanOrEqual
                         {
-                        return Err(CompileError {
-                        msg: "Can only use logical operators in booleans expressions"
-                        .to_string(),
-                        start_pos: position.to_owned(),
-                        end_pos: TokenPosition {
-                        line_number: position.line_number,
-                        char_column: position.char_column + 1,
-                        },
-                        error_type: ErrorType::Syntax,
-                        });
+                            return Err(CompileError {
+                                msg: "Can only use logical operators in booleans expressions"
+                                    .to_string(),
+                                start_pos: position.to_owned(),
+                                end_pos: TokenPosition {
+                                    line_number: position.line_number,
+                                    char_column: position.char_column + 1,
+                                },
+                                error_type: ErrorType::Syntax,
+                            });
                         }
 
                         simplified_expression.push(node.to_owned());
@@ -112,7 +108,7 @@ pub fn evaluate_expression(
                 while let Some(top_op_node) = operators_stack.last() {
                     // Stop if top is not an operator (e.g., left parenthesis)
                     match top_op_node {
-                        AstNode::BinaryOperator(..) | AstNode::LogicalOperator(..) => {},
+                        AstNode::BinaryOperator(..) | AstNode::LogicalOperator(..) => {}
                         _ => {
                             break;
                         }
@@ -130,7 +126,6 @@ pub fn evaluate_expression(
                 }
 
                 operators_stack.push(node.to_owned());
-
             }
 
             _ => {
@@ -164,13 +159,9 @@ pub fn evaluate_expression(
             logical_constant_fold(output_queue, current_type)
         }
 
-        DataType::Scene(_) => {
-            concat_scene(&mut simplified_expression)
-        }
+        DataType::Scene(_) => concat_scene(&mut simplified_expression),
 
-        DataType::String(_) => {
-            concat_strings(&mut simplified_expression)
-        }
+        DataType::String(_) => concat_strings(&mut simplified_expression),
 
         DataType::CoerceToString(_) => {
             let mut new_string = String::new();
@@ -179,6 +170,16 @@ pub fn evaluate_expression(
                 new_string += &node.get_value().as_string();
             }
             Ok(Value::String(new_string))
+        }
+
+        // At this stage, inferred should only be possible if only variables of unknown types
+        // have been used in the expression.
+        // So we need to mark this expression to be evaluated later on in the compiler once we know those types.
+        // This can happen due to imports.
+        DataType::Inferred(_) => {
+            // If there were any explicit numerical types, then this will be passed to math_constant_fold.
+            // This is just to skip calling that function if no numerical constants were found.
+            Ok(Value::Runtime(simplified_expression, current_type))
         }
 
         _ => {

@@ -1,5 +1,5 @@
 use crate::settings::Config;
-use fs_extra::dir::{copy, CopyOptions};
+use fs_extra::dir::{CopyOptions, copy};
 use std::{env, fs, path::PathBuf};
 
 pub fn create_project(

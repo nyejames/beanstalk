@@ -2,13 +2,16 @@ use crate::parsers::ast_nodes::Arg;
 use crate::tokenizer::TokenPosition;
 
 pub fn string_dimensions(s: &str) -> TokenPosition {
-    let (width, height) = s.lines()
+    let (width, height) = s
+        .lines()
         .map(|line| line.len())
-        .fold((0, 0), |(max_width, count), len| (max_width.max(len), count + 1));
-    
+        .fold((0, 0), |(max_width, count), len| {
+            (max_width.max(len), count + 1)
+        });
+
     TokenPosition {
         line_number: height.max(1),
-        char_column: width as u32,
+        char_column: width as i32,
     }
 }
 

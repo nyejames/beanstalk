@@ -1,13 +1,12 @@
 use crate::bs_types::DataType;
-use std::path::PathBuf;
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
+use std::path::PathBuf;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
     Normal,
     SceneBody,
-    Codeblock,
     SceneHead,
     CompilerDirective, // #
 }
@@ -76,7 +75,7 @@ pub enum Token {
     OpenParenthesis,  // (
     CloseParenthesis, // )
     SceneOpen,        // [
-    SceneClose,  // Used to track of the spaces following the scene, not needed now?
+    SceneClose,       // Used to track of the spaces following the scene, not needed now?
 
     As, // Type casting
 
@@ -156,7 +155,6 @@ pub enum Token {
     Ignore, // for commenting out an entire scene
 
     // named tags
-
     CodeKeyword,
 }
 
@@ -210,11 +208,11 @@ impl Token {
 
             Token::Variable(name, ..) => TokenPosition {
                 line_number: 0,
-                char_column: name.len() as u32,
+                char_column: name.len() as i32,
             },
             Token::DeadVariable(name) => TokenPosition {
                 line_number: 0,
-                char_column: name.len() as u32,
+                char_column: name.len() as i32,
             },
             Token::JS(code) => string_dimensions(code),
             Token::CSS(code) => string_dimensions(code),
@@ -223,29 +221,29 @@ impl Token {
 
             Token::DatatypeLiteral(data_type) => TokenPosition {
                 line_number: 0,
-                char_column: data_type.length()
+                char_column: data_type.length() as i32,
             },
 
             Token::StringLiteral(string) => string_dimensions(string),
             Token::PathLiteral(path) => string_dimensions(&path.to_string_lossy()),
             Token::FloatLiteral(value) => TokenPosition {
                 line_number: 0,
-                char_column: value.to_string().len() as u32,
+                char_column: value.to_string().len() as i32,
             },
             Token::IntLiteral(value) => TokenPosition {
                 line_number: 0,
-                char_column: value.to_string().len() as u32,
+                char_column: value.to_string().len() as i32,
             },
             Token::CharLiteral(value) => TokenPosition {
                 line_number: 0,
-                char_column: value.len_utf8() as u32 + 2,
+                char_column: value.len_utf8() as i32 + 2,
             },
             Token::RawStringLiteral(value) => string_dimensions(value),
             Token::BoolLiteral(value) => TokenPosition {
                 line_number: 0,
-                char_column: value.to_string().len() as u32,
+                char_column: value.to_string().len() as i32,
             },
-            
+
             Token::And => TokenPosition {
                 line_number: 0,
                 char_column: 3,
@@ -298,14 +296,14 @@ impl Token {
             Token::EmptyScene(_) => TokenPosition::default(),
             Token::This(value) => TokenPosition {
                 line_number: 0,
-                char_column: 5 + value.len() as u32,
+                char_column: 5 + value.len() as i32,
             },
 
             Token::Ignore => TokenPosition {
                 line_number: 0,
                 char_column: 6,
             },
-            
+
             // most stuff is 2 characters long
             _ => TokenPosition {
                 line_number: 0,

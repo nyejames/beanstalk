@@ -19,20 +19,19 @@ mod parsers {
     pub mod build_ast;
     pub mod collections;
     mod create_scene_node;
-    pub mod markdown;
     pub mod functions;
+    pub mod markdown;
     mod expressions {
         pub mod constant_folding;
         pub mod eval_expression;
-        pub mod parse_expression;
         pub mod function_call_inline;
+        pub mod parse_expression;
     }
-    pub mod structs;
-
+    pub mod codeblock;
     pub mod scene;
+    pub mod structs;
     pub mod util;
     pub mod variables;
-    pub mod codeblock;
 }
 mod html_output {
     pub mod code_block_highlighting;
@@ -312,7 +311,7 @@ fn prompt_user_for_input(msg: String) -> Vec<String> {
     args
 }
 
-fn print_formatted_error(e: Error) {
+fn print_formatted_error(mut e: Error) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => e
@@ -425,10 +424,9 @@ fn print_formatted_error(e: Error) {
 
     // spaces before the relevant part of the line
     print!("{}", " ".repeat(e.start_pos.char_column as usize / 2));
-    red_ln!(
-        "{}",
-        "^".repeat(e.end_pos.char_column as usize - e.start_pos.char_column as usize)
-    );
+
+    let length_of_underline = (e.end_pos.char_column - e.start_pos.char_column).max(1) as usize;
+    red_ln!("{}", "^".repeat(length_of_underline));
 }
 
 fn print_help(commands_only: bool) {
@@ -439,7 +437,9 @@ fn print_help(commands_only: bool) {
     }
     green_ln_bold!("Commands:");
     println!("  new <project name>   - Creates a new HTML project");
-    println!("  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)");
+    println!(
+        "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
+    );
     println!("  build <path>         - Builds a file");
     println!("  release <path>       - Builds a project in release mode");
     println!(

@@ -1,4 +1,4 @@
-use crate::parsers::scene::{WrapperString, PrecedenceStyle, Style, StyleFormat, Wrapper};
+use crate::parsers::scene::{PrecedenceStyle, Style, StyleFormat, Wrapper, WrapperString};
 use std::collections::HashMap;
 
 // Core HTML Styles
@@ -19,7 +19,17 @@ enum BeforeIndex {
 }
 
 const TEMPLATE_BEFORE_WRAPPER: [&str; 11] = [
-    "", " class=\"", "", "\"", " style=\"", "", "\"", " alt=\"", "", "\"", ">",
+    "",
+    " class=\"",
+    "",
+    "\"",
+    " style=\"",
+    "",
+    "\"",
+    " alt=\"",
+    "",
+    "\"",
+    ">",
 ];
 
 // CORE TOP LEVEL STYLES
@@ -77,7 +87,7 @@ pub fn get_html_styles() -> [(String, Style); 4] {
         })),
         ..Style::default()
     };
-    
+
     // HEADER
     let mut before = get_basic_wrapper();
     before[BeforeIndex::TagName1 as usize].string = String::from("<header");
@@ -101,7 +111,7 @@ pub fn get_html_styles() -> [(String, Style); 4] {
         })),
         ..Style::default()
     };
-    
+
     // FOOTER
     let mut before = get_basic_wrapper();
     before[BeforeIndex::TagName1 as usize].string = String::from("<footer");
@@ -129,7 +139,7 @@ pub fn get_html_styles() -> [(String, Style); 4] {
     // Component
     // Canvas
     // App
-    
+
     // These have PascalCase names as they are top level Styles
     [
         ("Page".to_string(), page),
@@ -139,7 +149,6 @@ pub fn get_html_styles() -> [(String, Style); 4] {
         // More here like Section, Component, App, etc..
     ]
 }
-
 
 fn get_basic_unlockable_styles() -> [(String, Style); 4] {
     // UNLOCKABLE STYLES INSIDE CORE STYLES
@@ -160,18 +169,21 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
     // BG,
     // Table,
     // Center,
-    
+
     let mut before = get_basic_wrapper();
     before[BeforeIndex::Classes as usize].string = String::from("bs-center ");
-    let center = ("center".to_string(), Style {
-        wrapper: Wrapper {
-            before,
-            after: Vec::new(),
+    let center = (
+        "center".to_string(),
+        Style {
+            wrapper: Wrapper {
+                before,
+                after: Vec::new(),
+            },
+            format: StyleFormat::Markdown as i32,
+            ..Style::default()
         },
-        format: StyleFormat::Markdown as i32,
-        ..Style::default()
-    });
-    
+    );
+
     // Order,
     // Blank,
     // Hide,
@@ -187,48 +199,57 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
     // Redirect,
 
     // Colors
-    
+
     // red
     let mut before = get_basic_wrapper();
     before[BeforeIndex::TagName1 as usize].string = String::from("<span");
     before[BeforeIndex::Style as usize].string = String::from("color:red;");
-    let red = ("red".to_string(), Style {
-        wrapper: Wrapper {
-            before,
-            after: Vec::new(),
+    let red = (
+        "red".to_string(),
+        Style {
+            wrapper: Wrapper {
+                before,
+                after: Vec::new(),
+            },
+            format: StyleFormat::Markdown as i32,
+            ..Style::default()
         },
-        format: StyleFormat::Markdown as i32,
-        ..Style::default()
-    });
+    );
 
     // green
     let mut before = get_basic_wrapper();
     before[BeforeIndex::TagName1 as usize].string = String::from("<span");
     before[BeforeIndex::Style as usize].string = String::from("color:green;");
-    let green = ("green".to_string(), Style {
-        wrapper: Wrapper {
-            before,
-            after: Vec::new(),
+    let green = (
+        "green".to_string(),
+        Style {
+            wrapper: Wrapper {
+                before,
+                after: Vec::new(),
+            },
+            format: StyleFormat::Markdown as i32,
+            ..Style::default()
         },
-        format: StyleFormat::Markdown as i32,
-        ..Style::default()
-    });
+    );
 
     // blue
     let mut before = get_basic_wrapper();
     before[BeforeIndex::TagName1 as usize].string = String::from("<span");
     before[BeforeIndex::Style as usize].string = String::from("color:blue;");
-    let blue = ("blue".to_string(), Style {
-        wrapper: Wrapper {
-            before,
-            after: Vec::from([WrapperString {
-                string: String::from("</span>"),
-                ..WrapperString::default()
-            }]),
+    let blue = (
+        "blue".to_string(),
+        Style {
+            wrapper: Wrapper {
+                before,
+                after: Vec::from([WrapperString {
+                    string: String::from("</span>"),
+                    ..WrapperString::default()
+                }]),
+            },
+            format: StyleFormat::Markdown as i32,
+            ..Style::default()
         },
-        format: StyleFormat::Markdown as i32,
-        ..Style::default()
-    });
+    );
     // Yellow,
     // Cyan,
     // Magenta,
@@ -238,13 +259,11 @@ fn get_basic_unlockable_styles() -> [(String, Style); 4] {
     // Pink,
     // Purple,
     // Grey,
-    
-
 
     [red, green, blue, center]
 }
 
-fn get_basic_wrapper()  -> Vec<WrapperString> {
+fn get_basic_wrapper() -> Vec<WrapperString> {
     let basic_wrapper: Vec<WrapperString> = TEMPLATE_BEFORE_WRAPPER
         .iter()
         .map(|s| WrapperString {

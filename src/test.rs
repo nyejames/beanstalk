@@ -1,5 +1,5 @@
-use crate::dev_server;
 use crate::Error;
+use crate::dev_server;
 use colour::{green_ln_bold, yellow_ln_bold};
 use std::path::PathBuf;
 

@@ -2,7 +2,7 @@ use super::{ast_nodes::AstNode, expressions::parse_expression::create_expression
 use crate::parsers::ast_nodes::{Arg, Value};
 use crate::parsers::build_ast::TokenContext;
 use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, CompileError, ErrorType, Token};
+use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 
 // This is a dynamic array of one data type
 // TODO - look through and update / test this code as a lot has changed
@@ -35,8 +35,7 @@ pub fn _new_collection(
                     return Err(CompileError {
                         msg: format!(
                             "Type mismatch in collection. Expected type: {:?}, got type: {:?}",
-                            collection_type,
-                            item_type
+                            collection_type, item_type
                         ),
                         start_pos: token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {

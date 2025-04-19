@@ -1,33 +1,39 @@
-use std::collections::HashMap;
 use super::tokens::{Token, TokenizeMode};
 use crate::bs_types::DataType;
 use crate::parsers::build_ast::TokenContext;
 use crate::{CompileError, ErrorType};
+use std::collections::HashMap;
 use std::iter::Peekable;
-use std::path::PathBuf;
+use std::path::Path;
 use std::str::Chars;
-use colour::red_ln;
-use crate::parsers::codeblock::tokenize_codeblock;
 
 // Line number, how many chars in the line
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct TokenPosition {
-    pub line_number: u32,
-    pub char_column: u32,
+    pub line_number: i32,
+    pub char_column: i32,
 }
 
-pub fn tokenize(source_code: &str, module_path: &PathBuf) -> Result<(TokenContext, HashMap<String, DataType>), CompileError> {
-    
+pub struct TokenizerOutput {
+    pub token_context: TokenContext,
+    pub imports: Vec<String>,
+    pub exports: HashMap<String, Vec<String>>,
+}
+pub fn tokenize(
+    source_code: &str,
+    relative_module_path: &Path,
+) -> Result<TokenizerOutput, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / 5;
-    
-    let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
-    let mut exports: HashMap<String, DataType> = HashMap::new();
-    let mut line_number: u32 = 0;
 
-    // Is zero because get_next_token will increment it at the start
-    // Only ModuleStart will have a char column of zero
-    let mut char_column: u32 = 1;
+    let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
+
+    // Path is the key, name is value
+    let mut exports: HashMap<String, Vec<String>> = HashMap::new();
+    let mut imports: Vec<String> = Vec::new();
+
+    let mut line_number: i32 = 1;
+    let mut char_column: i32 = 0;
 
     let mut token_positions: Vec<TokenPosition> = Vec::with_capacity(initial_capacity);
     let mut chars: Peekable<Chars<'_>> = source_code.chars().peekable();
@@ -35,13 +41,13 @@ pub fn tokenize(source_code: &str, module_path: &PathBuf) -> Result<(TokenContex
     let scene_nesting_level: &mut i64 = &mut 0;
 
     // This is pointless atm
-    let mut token: Token = Token::ModuleStart(module_path.to_owned());
+    let mut token: Token = Token::ModuleStart(relative_module_path.to_owned());
 
     loop {
         if token == Token::EOF {
             break;
         }
-        
+
         tokens.push(token);
         token_positions.push(TokenPosition {
             line_number,
@@ -54,10 +60,11 @@ pub fn tokenize(source_code: &str, module_path: &PathBuf) -> Result<(TokenContex
             &mut line_number,
             &mut char_column,
             &mut exports,
-            module_path
+            &mut imports,
+            relative_module_path,
         )?;
     }
-    
+
     tokens.push(token);
     token_positions.push(TokenPosition {
         line_number,
@@ -69,24 +76,29 @@ pub fn tokenize(source_code: &str, module_path: &PathBuf) -> Result<(TokenContex
         token_positions.len(),
         "Compiler Bug: Tokens and line numbers not the same length"
     );
-    
+
     // First creation of TokenContext
-    Ok((TokenContext {
-        length: tokens.len(),
-        tokens,
-        index: 0,
-        token_positions,
-    }, exports))
+    Ok(TokenizerOutput {
+        token_context: TokenContext {
+            length: tokens.len(),
+            tokens,
+            index: 0,
+            token_positions,
+        },
+        imports,
+        exports,
+    })
 }
 
 pub fn get_next_token(
     chars: &mut Peekable<Chars>,
     tokenize_mode: &mut TokenizeMode,
     scene_nesting_level: &mut i64,
-    line_number: &mut u32,
-    char_column: &mut u32,
-    mut exports: &mut HashMap<String, DataType>,
-    module_path: &PathBuf,
+    line_number: &mut i32,
+    char_column: &mut i32,
+    exports: &mut HashMap<String, Vec<String>>,
+    imports: &mut Vec<String>,
+    module_path: &Path,
 ) -> Result<Token, CompileError> {
     let mut current_char = match chars.next() {
         Some(ch) => {
@@ -118,7 +130,7 @@ pub fn get_next_token(
     // Whitespace
     if current_char == '\n' {
         *line_number += 1;
-        *char_column = 1;
+        *char_column = 0;
         return Ok(Token::Newline);
     }
 
@@ -171,7 +183,7 @@ pub fn get_next_token(
 
                         if ch == &'\n' {
                             *line_number += 1;
-                            *char_column = 1;
+                            *char_column = 0;
                         }
 
                         spaces_after_scene += 1;
@@ -191,7 +203,7 @@ pub fn get_next_token(
 
     if current_char == ']' {
         *scene_nesting_level -= 1;
-        
+
         if *scene_nesting_level == 0 {
             *tokenize_mode = TokenizeMode::Normal;
         } else {
@@ -203,19 +215,18 @@ pub fn get_next_token(
 
     // Check if going into scene body
     if current_char == ':' {
-        
-        if tokenize_mode  == &TokenizeMode::Codeblock {
-            chars.next();
-            *char_column += 1;
-            
-            let parsed_codeblock = tokenize_codeblock(chars, line_number, char_column);
-            let codeblock_dimensions = parsed_codeblock.dimensions();
-            *char_column += codeblock_dimensions.char_column;
-            *line_number += codeblock_dimensions.line_number;
-            
-            return Ok(parsed_codeblock);
-        }
-        
+        // if tokenize_mode  == &TokenizeMode::Codeblock {
+        //     chars.next();
+        //     *char_column += 1;
+        //
+        //     let parsed_codeblock = tokenize_codeblock(chars, line_number, char_column);
+        //     let codeblock_dimensions = parsed_codeblock.dimensions();
+        //     *char_column += codeblock_dimensions.char_column;
+        //     *line_number += codeblock_dimensions.line_number;
+        //
+        //     return Ok(parsed_codeblock);
+        // }
+
         if tokenize_mode == &TokenizeMode::SceneHead {
             *tokenize_mode = TokenizeMode::SceneBody;
         }
@@ -235,6 +246,7 @@ pub fn get_next_token(
             line_number,
             char_column,
             false,
+            imports,
         );
     }
 
@@ -287,7 +299,6 @@ pub fn get_next_token(
 
     if current_char == '~' {
         // Check if this is a datatype literal
-
 
         return Ok(Token::Mutable);
     }
@@ -347,7 +358,7 @@ pub fn get_next_token(
                             token_value.push(ch);
 
                             if ch == '\n' {
-                                *char_column = 1;
+                                *char_column = 0;
                                 *line_number += 1;
                             }
 
@@ -365,7 +376,7 @@ pub fn get_next_token(
 
                         if ch == '\n' {
                             *line_number += 1;
-                            *char_column = 1;
+                            *char_column = 0;
                             return Ok(Token::Comment(token_value));
                         }
 
@@ -526,23 +537,46 @@ pub fn get_next_token(
             }
             return Ok(Token::Id(token_value));
         }
-        
+
         *char_column += 1;
         chars.next();
 
-        exports.insert(
-            format!("{}:{}", module_path.to_string_lossy(), token_value),
-            DataType::Inferred(false)
-        );
-        
-        return keyword_or_variable(
+        let var = keyword_or_variable(
             &mut token_value,
             chars,
             tokenize_mode,
             line_number,
             char_column,
             true,
-        )
+            imports,
+        )?;
+
+        let path_from_root = module_path.to_string_lossy().to_string();
+
+        match var {
+            Token::Variable(ref name, _) => match exports.get_mut(&path_from_root) {
+                Some(m) => m.push(name.to_owned()),
+                None => {
+                    exports.insert(path_from_root, vec![name.to_owned()]);
+                }
+            },
+            _ => {
+                return Err(CompileError {
+                    msg: "Expected a name after the export symbol".to_string(),
+                    start_pos: TokenPosition {
+                        line_number: *line_number,
+                        char_column: *char_column,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: *line_number,
+                        char_column: *char_column + token_value.len() as i32,
+                    },
+                    error_type: ErrorType::Syntax,
+                });
+            }
+        }
+
+        return Ok(var);
     }
 
     // Numbers
@@ -601,6 +635,7 @@ pub fn get_next_token(
             line_number,
             char_column,
             false,
+            imports,
         );
     }
 
@@ -627,9 +662,10 @@ fn keyword_or_variable(
     token_value: &mut String,
     chars: &mut Peekable<Chars<'_>>,
     tokenize_mode: &mut TokenizeMode,
-    line_number: &mut u32,
-    char_column: &mut u32,
+    line_number: &mut i32,
+    char_column: &mut i32,
     is_exported: bool,
+    imports: &mut Vec<String>,
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
     loop {
@@ -646,7 +682,7 @@ fn keyword_or_variable(
             }
             None => false,
         };
-        
+
         // Codeblock tokenizing - removed for now
         // if tokenize_mode == &TokenizeMode::SceneHead && token_value == "Code" {
         //     *tokenize_mode= TokenizeMode::Codeblock;
@@ -659,8 +695,9 @@ fn keyword_or_variable(
         // Otherwise break out and check it is a valid variable name
         match token_value.as_str() {
             "import" => {
+                imports.push(tokenize_import(chars, line_number, char_column)?);
                 return Ok(Token::Import);
-            },
+            }
 
             // Control Flow
             END_KEYWORD => return Ok(Token::End),
@@ -687,7 +724,7 @@ fn keyword_or_variable(
             // Data Types
             "true" | "True" => return Ok(Token::BoolLiteral(true)),
             "false" | "False" => return Ok(Token::BoolLiteral(false)),
-            
+
             "Float" => return Ok(Token::DatatypeLiteral(DataType::Float(false))),
             "~Float" => return Ok(Token::DatatypeLiteral(DataType::Float(true))),
             "Int" => return Ok(Token::DatatypeLiteral(DataType::Int(false))),
@@ -696,16 +733,16 @@ fn keyword_or_variable(
             "~String" => return Ok(Token::DatatypeLiteral(DataType::String(true))),
             "Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(false))),
             "~Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(true))),
-            
+
             "Type" => return Ok(Token::DatatypeLiteral(DataType::Type)),
             "None" => return Ok(Token::DatatypeLiteral(DataType::None)),
             "Function" => {
                 return Ok(Token::DatatypeLiteral(DataType::Function(
                     Vec::new(),
                     Box::new(DataType::None),
-                )))
+                )));
             }
-            
+
             "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(false))),
             "~Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(true))),
 
@@ -719,7 +756,7 @@ fn keyword_or_variable(
 
             _ => {}
         }
-        
+
         if tokenize_mode == &TokenizeMode::CompilerDirective {
             match token_value.as_str() {
                 "settings" => {
@@ -749,7 +786,7 @@ fn keyword_or_variable(
                 _ => {}
             }
         }
-        
+
         // VARIABLE
         if is_not_eof && is_valid_identifier(token_value) {
             return Ok(Token::Variable(token_value.to_string(), is_exported));
@@ -767,7 +804,7 @@ fn keyword_or_variable(
         },
         end_pos: TokenPosition {
             line_number: *line_number,
-            char_column: *char_column + token_value.len() as u32,
+            char_column: *char_column + token_value.len() as i32,
         },
         error_type: ErrorType::Syntax,
     })
@@ -782,13 +819,13 @@ fn is_valid_identifier(s: &str) -> bool {
         && s.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
-// A block that starts with : and ends with the 'fin' keyword
+// A block that starts with: and ends with the 'fin' keyword
 // Everything inbetween is returned as a string
 // Throws an error if there is no starting colon or ending 'fin' keyword
 fn string_block(
     chars: &mut Peekable<Chars>,
-    line_number: &u32,
-    char_column: &mut u32,
+    line_number: &i32,
+    char_column: &mut i32,
 ) -> Result<String, CompileError> {
     let mut string_value = String::new();
 
@@ -867,18 +904,18 @@ fn string_block(
 }
 fn tokenize_string(
     chars: &mut Peekable<Chars>,
-    line_number: &mut u32,
-    char_column: &mut u32,
+    line_number: &mut i32,
+    char_column: &mut i32,
 ) -> Result<Token, CompileError> {
     let mut token_value = String::new();
-    
+
     // Currently should be at the character that started the String
     while let Some(ch) = chars.next() {
         *char_column += 1;
 
         if ch == '\n' {
             *line_number += 1;
-            *char_column = 1;
+            *char_column = 0;
         }
 
         // Check for escape characters
@@ -901,8 +938,8 @@ fn tokenize_string(
 fn tokenize_scenebody(
     current_char: char,
     chars: &mut Peekable<Chars>,
-    line_number: &mut u32,
-    char_column: &mut u32,
+    line_number: &mut i32,
+    char_column: &mut i32,
 ) -> Result<Token, CompileError> {
     let mut token_value = String::from(current_char);
 
@@ -910,7 +947,7 @@ fn tokenize_scenebody(
     while let Some(ch) = chars.peek() {
         if ch == &'\n' {
             *line_number += 1;
-            *char_column = 1;
+            *char_column = 0;
         }
 
         // Check for escape characters
@@ -936,88 +973,153 @@ fn tokenize_scenebody(
 }
 
 // Assumes there MUST be an explicit type declaration or will throw an error
-fn tokenize_export_datatype(
+// fn tokenize_export_datatype(
+//     chars: &mut Peekable<Chars>,
+//     line_number: &mut u32,
+//     char_column: &mut u32,
+// ) -> Result<DataType, CompileError> {
+//     let mut token_value = String::new();
+//
+//     // Skip whitespace
+//     while let Some(&c) = chars.peek() {
+//         if c == '\n' {
+//             return Err(CompileError {
+//                 msg: "Cannot have whitespace between the type keyword and the data type".to_string(),
+//                 start_pos: TokenPosition {
+//                     line_number: *line_number,
+//                     char_column: *char_column,
+//                 },
+//                 end_pos: TokenPosition {
+//                     line_number: *line_number,
+//                     char_column: *char_column + 1,
+//                 },
+//                 error_type: ErrorType::Syntax,
+//             });
+//         }
+//
+//         if c.is_whitespace() {
+//             chars.next();
+//             *char_column += 1;
+//             continue;
+//         }
+//         break;
+//     }
+//
+//     loop {
+//         match chars.peek() {
+//             // If there is a char that is not None
+//             // And is an underscore or alphabetic, add it to the token value
+//             Some(char) => {
+//                 if char.is_alphanumeric() || char == &'_' || char == &'~' {
+//                     token_value.push(chars.next().unwrap());
+//                     *char_column += 1;
+//                     continue;
+//                 }
+//             }
+//             None => {},
+//         };
+//
+//         return match token_value.as_str() {
+//             "Float" => Ok(DataType::Float(false)),
+//             "~Float" => Ok(DataType::Float(true)),
+//             "Int" => Ok(DataType::Int(false)),
+//             "~Int" => Ok(DataType::Int(true)),
+//             "String" => Ok(DataType::String(false)),
+//             "~String" => Ok(DataType::String(true)),
+//             "Bool" => Ok(DataType::Bool(false)),
+//             "~Bool" => Ok(DataType::Bool(true)),
+//
+//             "Type" => Ok(DataType::Type),
+//             "None" => Ok(DataType::None),
+//             "Function" => {
+//                 Ok(DataType::Function(
+//                     Vec::new(),
+//                     Box::new(DataType::None),
+//                 ))
+//             }
+//
+//             "Scene" => Ok(DataType::Scene(false)),
+//             "~Scene" => Ok(DataType::Scene(true)),
+//
+//             _ => {
+//                 Err(CompileError {
+//                     msg: format!("Unknown datatype keyword: '{}'. Expected a valid datatype keyword here. Exports must have an explicit datatype set", token_value),
+//                     start_pos: TokenPosition {
+//                         line_number: *line_number,
+//                         char_column: *char_column,
+//                     },
+//                     end_pos: TokenPosition {
+//                         line_number: *line_number,
+//                         char_column: *char_column + token_value.len() as u32,
+//                     },
+//                     error_type: ErrorType::Rule,
+//                 })
+//             }
+//         }
+//     }
+// }
+
+fn tokenize_import(
     chars: &mut Peekable<Chars>,
-    line_number: &mut u32,
-    char_column: &mut u32,
-) -> Result<DataType, CompileError> {
-    let mut token_value = String::new();
-
-    // Skip whitespace
-    while let Some(&c) = chars.peek() {
-        if c == '\n' {
-            return Err(CompileError {
-                msg: "Cannot have whitespace between the type keyword and the data type".to_string(),
-                start_pos: TokenPosition {
-                    line_number: *line_number,
-                    char_column: *char_column,
-                },
-                end_pos: TokenPosition {
-                    line_number: *line_number,
-                    char_column: *char_column + 1,
-                },
-                error_type: ErrorType::Syntax,
-            });
-        }
-
+    line_number: &mut i32,
+    char_column: &mut i32,
+) -> Result<String, CompileError> {
+    // Skip starting whitespace
+    while let Some(c) = chars.peek() {
         if c.is_whitespace() {
-            chars.next();
-            *char_column += 1;
-            continue;
-        }
-        break;
-    }
-    
-    loop {
-        match chars.peek() {
-            // If there is a char that is not None
-            // And is an underscore or alphabetic, add it to the token value
-            Some(char) => {
-                if char.is_alphanumeric() || char == &'_' || char == &'~' {
-                    token_value.push(chars.next().unwrap());
-                    *char_column += 1;
-                    continue;
-                }
-            }
-            None => {},
-        };
-
-        return match token_value.as_str() {
-            "Float" => Ok(DataType::Float(false)),
-            "~Float" => Ok(DataType::Float(true)),
-            "Int" => Ok(DataType::Int(false)),
-            "~Int" => Ok(DataType::Int(true)),
-            "String" => Ok(DataType::String(false)),
-            "~String" => Ok(DataType::String(true)),
-            "Bool" => Ok(DataType::Bool(false)),
-            "~Bool" => Ok(DataType::Bool(true)),
-
-            "Type" => Ok(DataType::Type),
-            "None" => Ok(DataType::None),
-            "Function" => {
-                Ok(DataType::Function(
-                    Vec::new(),
-                    Box::new(DataType::None),
-                ))
-            }
-
-            "Scene" => Ok(DataType::Scene(false)),
-            "~Scene" => Ok(DataType::Scene(true)),
-
-            _ => {
-                Err(CompileError {
-                    msg: format!("Unknown datatype keyword: '{}'. Expected a valid datatype keyword here. Exports must have an explicit datatype set", token_value),
+            if c == &'\n' {
+                return Err(CompileError {
+                    msg: "Unexpected newline in import statement. Import statements must be on a single line. e.g import path/to/file".to_string(),
                     start_pos: TokenPosition {
-                        line_number: *line_number,
+                        line_number: *line_number + 1,
                         char_column: *char_column,
                     },
                     end_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column + token_value.len() as u32,
+                        line_number: *line_number + 1,
+                        char_column: *char_column + 1,
                     },
-                    error_type: ErrorType::Rule,
-                })
+                    error_type: ErrorType::Syntax,
+                });
             }
+
+            *char_column += 1;
+            chars.next();
+            continue;
         }
+
+        break;
     }
+
+    // Parse the import path
+    // This assumes starting the path from the project root directory
+    let mut import_path = String::new();
+    while let Some(c) = chars.peek() {
+        if c.is_whitespace() {
+            if c == &'\n' {
+                *line_number += 1;
+                *char_column = 0;
+            }
+            break;
+        }
+
+        import_path.push(chars.next().unwrap());
+        *char_column += 1;
+    }
+
+    if import_path.is_empty() {
+        return Err(CompileError {
+            msg: "Import path cannot be empty".to_string(),
+            start_pos: TokenPosition {
+                line_number: *line_number,
+                char_column: *char_column,
+            },
+            end_pos: TokenPosition {
+                line_number: *line_number,
+                char_column: *char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        });
+    }
+
+    Ok(import_path)
 }

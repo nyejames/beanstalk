@@ -9,7 +9,7 @@ pub enum MarkdownContext {
 
     // Bool is false if it's inside a P tag
     // If not, this is a naked emphasis tag
-    Em(i32)
+    Em(i32),
 }
 
 // Only very basics (atm): P, Headings, Bold, Italics
@@ -37,7 +37,6 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
     let mut skip_parsing = false;
 
     for ch in chars {
-
         // Special object replace character that signals to ignore parsing a section into markdown
         // This is used to ignore nested scenes that have already been parsed
         // And may not be markdown. e.g. raw strings
@@ -61,7 +60,6 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
             continue;
         }
 
-
         // HANDLING WHITESPACE
         // Ignore indentation on newlines
         if ch == '\t' || ch == ' ' {
@@ -83,11 +81,11 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
                 output.push_str(&format!("<h{}>", heading_strength));
                 context = MarkdownContext::Heading(heading_strength);
                 heading_strength = 0;
-            } else{
+            } else {
                 output.push(ch);
             }
 
-            continue
+            continue;
         }
 
         // Check for new lines
@@ -105,27 +103,27 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
                 newlines = 1;
             }
 
-           // Stop making our heading
-           // Go back to P tag mode
-           if let MarkdownContext::Heading(strength) = context {
-               output.push_str(&format!("</h{}>", strength));
-               context = MarkdownContext::None;
-           }
+            // Stop making our heading
+            // Go back to P tag mode
+            if let MarkdownContext::Heading(strength) = context {
+                output.push_str(&format!("</h{}>", strength));
+                context = MarkdownContext::None;
+            }
 
-           if let MarkdownContext::Default = context {
-               // Close this P tag and start another one
-               // If there are at least 2 newlines after the P tag
-               if newlines >= NEWLINES_BEFORE_NEW_P {
-                   output.push_str(&format!("</{default_tag}>"));
-                   context = MarkdownContext::None;
-               } else {
-                   // Otherwise just add a space
-                   // This is so you don't have to add a space before newlines in P tags
-                   output.push(' ');
-               }
-           }
+            if let MarkdownContext::Default = context {
+                // Close this P tag and start another one
+                // If there are at least 2 newlines after the P tag
+                if newlines >= NEWLINES_BEFORE_NEW_P {
+                    output.push_str(&format!("</{default_tag}>"));
+                    context = MarkdownContext::None;
+                } else {
+                    // Otherwise just add a space
+                    // This is so you don't have to add a space before newlines in P tags
+                    output.push(' ');
+                }
+            }
 
-            continue
+            continue;
         }
 
         // HANDLING SPECIAL CHARACTERS
@@ -136,7 +134,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
             heading_strength += 1;
             prev_whitespace = false;
             newlines = 0;
-            continue
+            continue;
         }
 
         if ch == '*' {
@@ -150,19 +148,17 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
 
                     context = MarkdownContext::Default;
 
-
                     prev_whitespace = false;
                     em_strength = 0;
                 }
 
-                continue
-
+                continue;
             } else if prev_whitespace && em_strength >= 0 {
                 // Possible new emphasis tag
                 em_strength += 1;
                 newlines = 0;
 
-                continue
+                continue;
             }
         }
 
@@ -176,7 +172,10 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
 
             if let MarkdownContext::None = context {
                 context = MarkdownContext::Em(em_strength);
-                output.push_str(&format!("<{default_tag}>{}", em_tag_strength(em_strength, false)));
+                output.push_str(&format!(
+                    "<{default_tag}>{}",
+                    em_tag_strength(em_strength, false)
+                ));
             }
 
             em_strength = 0;
@@ -238,15 +237,15 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
     match context {
         MarkdownContext::Default => {
             output.push_str(&format!("</{default_tag}>"));
-        },
+        }
 
         MarkdownContext::Heading(strength) => {
             output.push_str(&format!("</h{strength}>"));
-        },
+        }
 
         MarkdownContext::Em(strength) => {
             output.push_str(em_tag_strength(strength, true));
-        },
+        }
 
         MarkdownContext::None => {}
     }

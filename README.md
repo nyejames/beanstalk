@@ -27,7 +27,7 @@
 
 [//]: # (  </h1>)
 
-  <p>The first proof of concept for the syntax has been figured out, and now the compiler is being refactored to accommodate these changes</p>
+  <p>The first proof of concept for the syntax has been figured out, and now the compiler is being completely refactored to accommodate these changes</p>
 
 [//]: # (  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>)
   <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>

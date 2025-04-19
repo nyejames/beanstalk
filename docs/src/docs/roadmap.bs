@@ -6,16 +6,21 @@ Beanstalk is still in development. It doesn't even have a version number yet!
 
 Here is a list of current bugs, development goals and planned features.
 
+A lot of tricky stuff is being built out first before more of the easy wins are finished.
+
 ## Ongoing task list
 - Folding (inlining) compile time functions (need to do step through eval in inline_function_call)
+
 - Scenes will parse structs and look for style properties and insert sucessive scenes passed into it into a 'slot' scene if it has one.
 If multiple scenes with slots are added to a scene, they need to be parsed correctly so each successsive scene is passed into the slot of the previous scene.
 If that slot has any styles, the styles need to be applied each time a new scene is added into that slot. 
 Otherwise all the scenes are just passed directly into the slot one by one.
-- Linking!!! get imports working so html library can work properly
-- Build out HTML standard library for styles once they can be folded at compile time
-- Global imports are be done from config file (could be through a #global compiler directive to make it more explicit?)
-- Compile time forced by capitol letter start naming. If pure is found not to be true for one of these functions or variables, it throws an error.
+
+- Runtime and reactive getters/setters for scene mutable variables. Figure out what properties scenes expose that can be manipulated at runtime.
+
+- Type checking and final folding stage after AST creation for imports (and probably all variables too)
+
+- Build out HTML standard library for styles once they can be folded at compile time and/or scenes have full runtime getting/setting working
 
 ## Current Bugs
 
@@ -24,9 +29,9 @@ Otherwise all the scenes are just passed directly into the slot one by one.
 - Boolean expressions and operators
 - If statements
 - Loops
-- Importing/exporting working fully
+- Capitol letter constant enforced
 - Importing HTML, CSS and JS libraries seemlessly into a BS project
-- Scoping and variable shadowing
+- Scoping and variable shadowing?
 
 ## Future plans and ideas
 - Any type?

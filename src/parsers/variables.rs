@@ -8,7 +8,7 @@ use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::functions::parse_function_call;
 use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, CompileError, ErrorType, Token};
+use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 
 pub fn create_new_var_or_ref(
     x: &mut TokenContext,
@@ -21,16 +21,14 @@ pub fn create_new_var_or_ref(
     let token_line_number = x.current_position().line_number;
     let token_start_pos = x.current_position().char_column;
 
-    // If this is a reference to a function or variable
+    // If this is a reference to a function or variable,
     // This to_owned here is gross, probably a better way to avoid this
     if let Some(arg) = variable_declarations
         .to_owned()
         .iter()
         .find(|a| a.name == name)
     {
-        
         return match arg.data_type {
-
             // Function Call
             DataType::Function(ref argument_refs, ref return_type) => {
                 x.index += 1;
@@ -44,13 +42,13 @@ pub fn create_new_var_or_ref(
                     return_type,
                     arg.value.is_pure(),
                 )
-            },
+            }
 
             _ => {
-                // Check to make sure there is no access attempt on any other types
-                // Get accessed arg will return an error if there is an access attempt on the wrong type
-                // This SHOULD always be None (for now) but this is being assigned to the reference here
-                // incase the language changes in the future and properties/methods are added to other types
+                // Check to make sure there is no access attempt on any other types.
+                // Get accessed arg will return an error if there is an access attempt on the wrong type.
+                // This SHOULD always be None (for now), but this is being assigned to the reference here.
+                // In case the language will change in the future, and properties/methods are added to other types
                 let accessed_arg =
                     get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
 
@@ -63,7 +61,7 @@ pub fn create_new_var_or_ref(
                             line_number: token_line_number,
                             char_column: token_start_pos,
                         },
-                    ))
+                    ));
                 }
 
                 Ok(AstNode::Literal(
@@ -95,7 +93,6 @@ fn new_variable(
     variable_declarations: &mut Vec<Arg>,
     inside_collection: bool,
 ) -> Result<AstNode, CompileError> {
-    
     // Move past the name
     let mut data_type = DataType::Inferred(false);
     x.index += 1;
@@ -150,7 +147,7 @@ fn new_variable(
                         start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {
                             line_number: x.token_positions[x.index].line_number,
-                            char_column: x.token_positions[x.index].char_column + name.len() as u32,
+                            char_column: x.token_positions[x.index].char_column + name.len() as i32,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -168,14 +165,14 @@ fn new_variable(
                 start_pos: x.token_positions[x.index].to_owned(),
                 end_pos: TokenPosition {
                     line_number: x.token_positions[x.index].line_number,
-                    char_column: x.token_positions[x.index].char_column + name.len() as u32,
+                    char_column: x.token_positions[x.index].char_column + name.len() as i32,
                 },
                 error_type: ErrorType::Syntax,
             });
         }
     };
 
-    // Current token should be whatever is after assignment operator
+    // The current token should be whatever is after the assignment operator
     let parsed_expr = create_expression(
         x,
         inside_collection,
@@ -225,13 +222,9 @@ fn create_zero_value_var(
             token_position,
         ),
 
-        DataType::Int(_) => AstNode::VarDeclaration(
-            name,
-            Value::Int(0),
-            is_exported,
-            data_type,
-            token_position,
-        ),
+        DataType::Int(_) => {
+            AstNode::VarDeclaration(name, Value::Int(0), is_exported, data_type, token_position)
+        }
 
         DataType::String(_) => AstNode::VarDeclaration(
             name,
@@ -249,12 +242,6 @@ fn create_zero_value_var(
             token_position,
         ),
 
-        _ => AstNode::VarDeclaration(
-            name,
-            Value::None,
-            is_exported,
-            data_type,
-            token_position,
-        ),
+        _ => AstNode::VarDeclaration(name, Value::None, is_exported, data_type, token_position),
     }
 }

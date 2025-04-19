@@ -1,14 +1,12 @@
 use super::js_parser::expression_to_js;
 use crate::html_output::js_parser::combine_vec_to_js;
 use crate::parsers::ast_nodes::{Arg, Value};
-use crate::parsers::scene::{parse_scene, PrecedenceStyle, SceneIngredients, StyleFormat};
+use crate::parsers::scene::{PrecedenceStyle, SceneIngredients, StyleFormat, parse_scene};
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
 use crate::{
-    bs_types::DataType,
-    parsers::ast_nodes::AstNode,
+    CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
-    CompileError, ErrorType,
 };
 use wasm_encoder::Module;
 
@@ -17,10 +15,8 @@ pub struct ParserOutput {
     pub js: String,
     pub css: String,
     pub wasm: Module,
-    pub import_requests: Vec<String>,
     pub page_title: String,
 }
-
 
 // Parse ast into valid WAT, JS, HTML and CSS
 pub fn parse<'a>(
@@ -42,8 +38,6 @@ pub fn parse<'a>(
     // Keeps track of whether a reference has already been used
     // This is to prevent duplicate JS code for updating the same element
     let mut module_references: Vec<Arg> = Vec::new();
-    
-    let mut import_requests: Vec<String> = Vec::new();
 
     let mut class_id: usize = 0;
 
@@ -72,17 +66,18 @@ pub fn parse<'a>(
             }
 
             // JAVASCRIPT / WASM
-            AstNode::VarDeclaration(
-                ref id,
-                ref expr,
-                _,
-                ref data_type,
-                ref start_pos,
-            ) => {
-
+            AstNode::VarDeclaration(ref id, ref expr, ref public, ref data_type, ref start_pos) => {
                 match data_type {
-                    DataType::Float(mutable) | DataType::Int(mutable) | DataType::String(mutable) => {
-                        let assignment_keyword = if *mutable { "const" } else { "let" };
+                    DataType::Float(mutable)
+                    | DataType::Int(mutable)
+                    | DataType::String(mutable) => {
+                        let assignment_keyword = if *mutable {
+                            "let"
+                        } else if *public {
+                            "export const"
+                        } else {
+                            "const"
+                        };
 
                         let var_dec = format!(
                             "{} {BS_VAR_PREFIX}{id}={};",
@@ -201,10 +196,6 @@ pub fn parse<'a>(
             AstNode::Css(css_string, ..) => {
                 css.push_str(&css_string);
             }
-            
-            AstNode::Import(path, ..) => {
-                import_requests.push(path);
-            }
 
             // Ignored
             AstNode::Comment(_) => {}
@@ -239,21 +230,20 @@ pub fn parse<'a>(
         css,
         wasm: wasm_module.to_owned(),
         page_title,
-        import_requests,
     })
 }
 
 // fn collect_closing_tags(closing_tags: &mut Vec<String>) -> String {
 //     let mut tags = String::new();
-// 
+//
 //     closing_tags.reverse();
 //     while let Some(tag) = closing_tags.pop() {
 //         tags.push_str(&tag);
 //     }
-// 
+//
 //     tags
 // }
-// 
+//
 // fn get_src(
 //     value: &Value,
 //     config: &HTMLMeta,
@@ -285,7 +275,7 @@ pub fn parse<'a>(
 //             })
 //         }
 //     };
-// 
+//
 //     if src.starts_with("http") || src.starts_with('/') {
 //         Ok(src)
 //     } else {
@@ -304,43 +294,43 @@ pub fn parse<'a>(
 //     html: &mut String,
 // ) -> usize {
 //     *ele_count += 1;
-// 
+//
 //     let heading = *ele_count <= columns || columns < 2;
 //     let ele_mod = *ele_count % columns;
-// 
+//
 //     if ele_mod == 1 {
 //         // if this is the first element for this row
 //         html.push_str("<tr>");
 //     }
-// 
+//
 //     if heading {
 //         html.push_str("<th scope='col'>");
 //     } else {
 //         html.push_str("<td>");
 //     }
-// 
+//
 //     // Should check if we need to close some tags before the end of this scene
 //     html.push_str(inserted_html);
 //     let idx = html.len();
-// 
+//
 //     if heading {
 //         html.push_str("</th>");
 //     } else {
 //         html.push_str("</td>");
 //     }
-// 
+//
 //     // If this is the last element for this row
 //     if ele_mod == 0 {
 //         html.push_str("</tr>");
-// 
+//
 //         if *ele_count == columns {
 //             html.push_str("</thead><tbody>");
 //         }
 //     }
-// 
+//
 //     idx
 // }
-// 
+//
 // // Also make sure to escape reserved HTML characters and remove any empty lines
 // fn sanitise_content(content: &str) -> String {
 //     content

@@ -5,6 +5,10 @@ pub enum DataType {
     // Mutability is part of the type
     // This helps with compile time constant folding
 
+    // Before we know the type of reference, a pointer is used.
+    // We use this at the AST stage for imports or references when we can't figure out the type yet
+    Pointer,
+
     // Mutable Data Types will have an additional bool to indicate whether they are mutable
     Inferred(bool), // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
     Bool(bool),
@@ -80,14 +84,18 @@ pub enum DataType {
     Type,
 }
 
-
 impl DataType {
-    
-    
     // IGNORES MUTABILITY
     pub fn is_valid_type(&self, accepted_type: &mut DataType) -> bool {
         // Has to make sure if either type is a union, that the other type is also a member of the union
         // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
+
+        // This Pointer type bypasses type checking for now,
+        // As imports or variables we don't know the type of yet,
+        // Must be type checked again at a later stage in the compiler
+        if self == &DataType::Pointer {
+            return true;
+        }
 
         if let DataType::Choice(types) = self {
             for t in types {
@@ -99,6 +107,8 @@ impl DataType {
         }
 
         match accepted_type {
+            // Might be needed here later?
+            // DataType::Pointer => true,
             DataType::Inferred(_) => {
                 *accepted_type = self.to_owned();
                 true
@@ -112,14 +122,13 @@ impl DataType {
                 }
                 false
             }
-            _ => {
-                self == accepted_type
-            },
+            _ => self == accepted_type,
         }
     }
 
     pub fn length(&self) -> u32 {
         match self {
+            DataType::Pointer => 0,
             DataType::Inferred(_) => 0,
             DataType::CoerceToString(_) => 0,
             DataType::Bool(_) => 4,
@@ -151,20 +160,32 @@ impl DataType {
     // Special Types that might change (basically same as rust with a bit more syntax sugar)
     pub fn create_option_datatype(self) -> DataType {
         match self {
-            DataType::Inferred(mutable) => DataType::Choice(vec![DataType::None, DataType::Inferred(mutable)]),
+            DataType::Inferred(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::Inferred(mutable)])
+            }
             DataType::CoerceToString(mutable) => {
                 DataType::Choice(vec![DataType::None, DataType::CoerceToString(mutable)])
             }
-            DataType::Bool(mutable) => DataType::Choice(vec![DataType::None, DataType::Bool(mutable)]),
+            DataType::Bool(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::Bool(mutable)])
+            }
             DataType::True => DataType::Choice(vec![DataType::None, DataType::True]),
             DataType::False => DataType::Choice(vec![DataType::None, DataType::False]),
-            DataType::String(mutable) => DataType::Choice(vec![DataType::None, DataType::String(mutable)]),
-            DataType::Float(mutable) => DataType::Choice(vec![DataType::None, DataType::Float(mutable)]),
-            DataType::Int(mutable) => DataType::Choice(vec![DataType::None, DataType::Int(mutable)]),
+            DataType::String(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::String(mutable)])
+            }
+            DataType::Float(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::Float(mutable)])
+            }
+            DataType::Int(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::Int(mutable)])
+            }
             DataType::Collection(inner_type) => {
                 DataType::Choice(vec![DataType::None, DataType::Collection(inner_type)])
             }
-            DataType::Decimal(mutable) => DataType::Choice(vec![DataType::None, DataType::Decimal(mutable)]),
+            DataType::Decimal(mutable) => {
+                DataType::Choice(vec![DataType::None, DataType::Decimal(mutable)])
+            }
             DataType::Type => DataType::Choice(vec![DataType::None, DataType::Type]),
             DataType::Choice(inner_types) => {
                 DataType::Choice(vec![DataType::None, DataType::Choice(inner_types)])
@@ -175,13 +196,10 @@ impl DataType {
             DataType::Structure(args) => {
                 DataType::Choice(vec![DataType::None, DataType::Structure(args)])
             }
-            _ => DataType::Error(format!(
-                "You can't create an option of {:?} and None",
-                self
-            )),
+            _ => DataType::Error(format!("You can't create an option of {:?} and None", self)),
         }
     }
-    
+
     pub fn is_mutable(&self) -> bool {
         match self {
             DataType::Inferred(mutable) => *mutable,
@@ -208,7 +226,11 @@ impl DataType {
 }
 
 pub fn get_any_number_datatype(mutable: bool) -> DataType {
-    DataType::Choice(vec![DataType::Float(mutable), DataType::Int(mutable), DataType::Decimal(mutable)])
+    DataType::Choice(vec![
+        DataType::Float(mutable),
+        DataType::Int(mutable),
+        DataType::Decimal(mutable),
+    ])
 }
 
 pub fn get_rgba_args() -> DataType {
@@ -276,5 +298,3 @@ pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &[usize
         None => data_type.to_owned(),
     }
 }
-
-

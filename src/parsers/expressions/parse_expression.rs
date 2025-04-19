@@ -4,25 +4,25 @@ use std::collections::HashMap;
 
 use super::eval_expression::evaluate_expression;
 use crate::bs_types::get_any_number_datatype;
+use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::Value;
 use crate::parsers::build_ast::TokenContext;
+use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::tokenizer::TokenPosition;
 use crate::{
+    CompileError, ErrorType, Token,
     bs_types::DataType,
     parsers::{
         ast_nodes::{Arg, AstNode},
         create_scene_node::new_scene,
         structs::new_fixed_collection,
     },
-    CompileError, ErrorType, Token,
 };
-use crate::html_output::html_styles::get_html_styles;
-use crate::parsers::expressions::function_call_inline::inline_function_call;
 
-// If the datatype is a collection
-// The expression must only contain references to collections
-// Or collection literals
+// If the datatype is a collection,
+// the expression must only contain references to collections
+// or collection literals.
 pub fn create_expression(
     x: &mut TokenContext,
     inside_collection: bool,
@@ -39,7 +39,6 @@ pub fn create_expression(
     // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
     let mut next_number_negative = false;
     while x.index < x.length {
-
         let token = x.current_token().to_owned();
         match token {
             // Conditions that close the expression
@@ -52,7 +51,7 @@ pub fn create_expression(
                 } else {
                     x.index += 1;
 
-                    // Mismatched brackets, return an error
+                    // Mismatched brackets return an error
                     return Err(CompileError {
                         msg: "Mismatched parenthesis in expression".to_string(),
                         start_pos: x.current_position(),
@@ -72,7 +71,7 @@ pub fn create_expression(
 
                 x.index += 1;
 
-                // Mismatched brackets, return an error
+                // Mismatched brackets return an error
                 return Err(CompileError {
                     msg: "Mismatched curly brackets in expression".to_string(),
                     start_pos: x.current_position(),
@@ -88,8 +87,9 @@ pub fn create_expression(
                 // Move past the open parenthesis before calling this function again
                 // Removed this at one point for a test caused a wonderful infinite loop
                 x.index += 1;
-    
-                let value = create_expression(x, false, ast, data_type, true, captured_declarations)?;
+
+                let value =
+                    create_expression(x, false, ast, data_type, true, captured_declarations)?;
                 expression.push(AstNode::Literal(value, x.current_position()));
             }
 
@@ -101,13 +101,18 @@ pub fn create_expression(
                     DataType::Structure(inner_types) => {
                         // HAS DEFINED INNER TYPES FOR THE struct
                         // could this still result in None if the inner types are defined and not optional?
-                        let structure =
-                            new_fixed_collection(x, Value::None, inner_types, ast, captured_declarations)?;
+                        let structure = new_fixed_collection(
+                            x,
+                            Value::None,
+                            inner_types,
+                            ast,
+                            captured_declarations,
+                        )?;
 
                         Ok(Value::StructLiteral(structure))
                     }
 
-                    // If this is inside of parenthesis, and we don't know the type.
+                    // If this is inside parenthesis, and we don't know the type.
                     // It must be a struct
                     // This is enforced! If it's a single expression wrapped in parentheses,
                     // it will be flatted into that single value anyway by struct_to_value
@@ -128,18 +133,19 @@ pub fn create_expression(
                     }
 
                     // Need to error here as a collection literal is being made with wrong explicit type
-                    _ => {
-                        Err(CompileError {
-                            msg: format!("Expected a struct literal, but found a collection literal with type: {:?}", data_type),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + 1,
-                            },
-                            error_type: ErrorType::TypeError,
-                        })
-                    }
-                }
+                    _ => Err(CompileError {
+                        msg: format!(
+                            "Expected a struct literal, but found a collection literal with type: {:?}",
+                            data_type
+                        ),
+                        start_pos: x.current_position(),
+                        end_pos: TokenPosition {
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
+                        },
+                        error_type: ErrorType::TypeError,
+                    }),
+                };
             }
 
             Token::EOF | Token::SceneClose | Token::Arrow | Token::Colon | Token::End => {
@@ -154,7 +160,7 @@ pub fn create_expression(
                         error_type: ErrorType::Syntax,
                     });
                 }
-                
+
                 if inside_collection {
                     return Err( CompileError {
                         msg: "Not enough closing curly brackets to close the collection. Need more '}' at the end of the collection".to_string(),
@@ -170,7 +176,7 @@ pub fn create_expression(
             }
 
             Token::Newline => {
-                // Fine if inside of parenthesis (not closed yet)
+                // Fine if inside parenthesis (not closed yet)
                 // Otherwise break out of the expression
                 if inside_parenthesis {
                     x.index += 1;
@@ -205,7 +211,7 @@ pub fn create_expression(
                 });
             }
 
-            // Check if name is a reference to another variable or function call
+            // Check if the name is a reference to another variable or function call
             Token::Variable(name, is_public) => {
                 // This is never reached (I think) if we are inside a struct or collection
                 let new_ref = create_new_var_or_ref(
@@ -221,8 +227,12 @@ pub fn create_expression(
 
                 match new_ref {
                     AstNode::Literal(ref value, ..) => {
-                        // Check type is correct
+                        // Check the type is correct
                         let reference_data_type = value.get_type();
+
+                        // In the case this is an import, and we don't know the type yet,
+                        // The type will be a 'Pointer', which passes this sniff test
+                        // TODO: move all type checking like this to a stage after the AST creation
                         if !reference_data_type.is_valid_type(data_type) {
                             return Err(CompileError {
                                 msg: format!(
@@ -240,9 +250,9 @@ pub fn create_expression(
 
                         expression.push(new_ref);
                     }
-                    
+
                     AstNode::FunctionCall(ref name, ..) => {
-                        // Check type is correct
+                        // Check the type is correct
                         let reference_data_type = new_ref.get_type();
                         if !reference_data_type.is_valid_type(data_type) {
                             return Err(CompileError {
@@ -253,12 +263,13 @@ pub fn create_expression(
                                 start_pos: x.current_position(),
                                 end_pos: TokenPosition {
                                     line_number: x.current_position().line_number,
-                                    char_column: x.current_position().char_column + name.len() as u32,
+                                    char_column: x.current_position().char_column
+                                        + name.len() as i32,
                                 },
                                 error_type: ErrorType::TypeError,
                             });
                         }
-                        
+
                         expression.push(new_ref);
                     }
 
@@ -272,8 +283,7 @@ pub fn create_expression(
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {
                                 line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column
-                                    + name.len() as u32,
+                                char_column: x.current_position().char_column + name.len() as i32,
                             },
                             error_type: ErrorType::Syntax,
                         });
@@ -290,7 +300,7 @@ pub fn create_expression(
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
                             char_column: x.current_position().char_column
-                                + float.to_string().len() as u32,
+                                + float.to_string().len() as i32,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -318,7 +328,7 @@ pub fn create_expression(
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
                             char_column: x.current_position().char_column
-                                + int.to_string().len() as u32,
+                                + int.to_string().len() as i32,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -347,7 +357,8 @@ pub fn create_expression(
                         start_pos: x.current_position(),
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + token.dimensions().char_column,
+                            char_column: x.current_position().char_column
+                                + token.dimensions().char_column,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -365,14 +376,14 @@ pub fn create_expression(
             // Scenes - Create a new scene node
             // Maybe scenes can be added together like strings
             Token::SceneHead | Token::ParentScene => {
-
                 if !DataType::Scene(false).is_valid_type(data_type) {
                     return Err(CompileError {
                         msg: format!("Scene literal used in expression of type: {:?}", data_type),
                         start_pos: x.current_position(),
                         end_pos: TokenPosition {
                             line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + token.dimensions().char_column,
+                            char_column: x.current_position().char_column
+                                + token.dimensions().char_column,
                         },
                         error_type: ErrorType::TypeError,
                     });
@@ -395,7 +406,7 @@ pub fn create_expression(
             }
 
             // OPERATORS
-            // Will push as a string so shunting yard can handle it later just as a string
+            // Will push as a string, so shunting yard can handle it later just as a string
             Token::Negative => {
                 next_number_negative = true;
             }
@@ -583,7 +594,8 @@ pub fn create_expression(
                     start_pos: x.current_position(),
                     end_pos: TokenPosition {
                         line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column + token.dimensions().char_column,
+                        char_column: x.current_position().char_column
+                            + token.dimensions().char_column,
                     },
                     error_type: ErrorType::TypeError,
                 });
@@ -645,7 +657,7 @@ pub fn get_accessed_args(
                                     line_number: x.current_position().line_number,
                                     char_column: x.current_position().char_column + 1,
                                 },
-                                error_type: ErrorType::Rule
+                                error_type: ErrorType::Rule,
                             });
                         }
 
@@ -660,16 +672,15 @@ pub fn get_accessed_args(
                         return Err(CompileError {
                             msg: format!(
                                 "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
-                                collection_name,
-                                data_type
+                                collection_name, data_type
                             ),
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {
                                 line_number: x.current_position().line_number,
                                 char_column: x.current_position().char_column + 1,
                             },
-                            error_type: ErrorType::Rule
-                        })
+                            error_type: ErrorType::Rule,
+                        });
                     }
                 }
             }
@@ -704,7 +715,7 @@ pub fn get_accessed_args(
                             char_column: x.current_position().char_column + 1,
                         },
                         error_type: ErrorType::Rule,
-                    })
+                    });
                 }
             },
 
@@ -720,7 +731,7 @@ pub fn get_accessed_args(
                         char_column: x.current_position().char_column + 1,
                     },
                     error_type: ErrorType::Rule,
-                })
+                });
             }
         }
 

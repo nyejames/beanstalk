@@ -1,28 +1,30 @@
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
-use crate::{build, settings, Error, ErrorType};
+use crate::{Error, ErrorType, build, settings};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, grey_ln, print_bold, red_ln};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{
     fs::{self, metadata},
-    io::{prelude::*, BufReader},
+    io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
     time::Instant,
 };
 
-pub fn start_dev_server(path: &PathBuf, output_info_level: i32) -> Result<(), Error> {
+pub fn start_dev_server(path: &Path, output_info_level: i32) -> Result<(), Error> {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
         Err(e) => {
             return Err(Error {
-                msg: format!("TCP error: {e}. Is there an instance of this local host server already running on {url}?"),
+                msg: format!(
+                    "TCP error: {e}. Is there an instance of this local host server already running on {url}?"
+                ),
                 start_pos: TokenPosition::default(),
                 end_pos: TokenPosition::default(),
                 file_path: PathBuf::new(),
-                error_type: ErrorType::DevServer
-            })
+                error_type: ErrorType::DevServer,
+            });
         }
     };
 
@@ -40,7 +42,7 @@ pub fn start_dev_server(path: &PathBuf, output_info_level: i32) -> Result<(), Er
         let stream = stream.unwrap();
         handle_connection(
             stream,
-            path.clone(),
+            &path,
             &mut modified,
             &mut project_config,
             output_info_level,
@@ -52,15 +54,19 @@ pub fn start_dev_server(path: &PathBuf, output_info_level: i32) -> Result<(), Er
 
 fn handle_connection(
     mut stream: TcpStream,
-    path: PathBuf,
+    path: &Path,
     last_modified: &mut SystemTime,
     project_config: &mut Config,
     output_info_level: i32,
 ) -> Result<(), Error> {
     let buf_reader = BufReader::new(&mut stream);
-    
-    let dir_404 = path.join("dev/404.html");
-    let mut contents = match fs::read(&dir_404) {
+
+    let dir_404 = &path
+        .join(&project_config.dev_folder)
+        .join("404")
+        .with_extension("html");
+
+    let mut contents = match fs::read(dir_404) {
         Ok(content) => content,
         Err(e) => {
             red_ln!(
@@ -80,7 +86,7 @@ fn handle_connection(
         Ok(request) => {
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
-                let p = get_home_page_path(&path, false, project_config)?;
+                let p = get_home_page_path(path, false, project_config)?;
                 contents = match fs::read(&p) {
                     Ok(content) => content,
                     Err(e) => {
@@ -95,7 +101,6 @@ fn handle_connection(
                 };
                 status_line = "HTTP/1.1 200 OK";
 
-
             // This is a request to check if the file has been modified
             } else if request.starts_with("HEAD /check") {
                 // the check request has the page url as a query parameter after the /check
@@ -105,26 +110,26 @@ fn handle_connection(
                     Some(p) => {
                         let page_path = p.split_whitespace().collect::<Vec<&str>>()[0];
                         if page_path == "/" {
-                            get_home_page_path(&path, true, project_config)?
+                            get_home_page_path(path, true, project_config)?
                         } else {
-                            PathBuf::from(&path)
+                            PathBuf::from(path)
                                 .join(&project_config.src)
                                 .join(page_path)
                                 .with_extension("bs")
                         }
                     }
-                    None => get_home_page_path(&path, true, project_config)?,
+                    None => get_home_page_path(path, true, project_config)?,
                 };
 
-                let global_file_path = PathBuf::from(&path)
+                let global_file_path = &PathBuf::from(&path)
                     .join(&project_config.src)
                     .join(settings::GLOBAL_PAGE_KEYWORD)
                     .with_extension("bs");
 
                 // Get the metadata of the file to check if hot reloading is needed
                 // Check if globals have been modified
-                let global_file_modified = if metadata(&global_file_path).is_ok() {
-                    has_been_modified(&global_file_path, last_modified)
+                let global_file_modified = if metadata(global_file_path).is_ok() {
+                    has_been_modified(global_file_path, last_modified)
                 } else {
                     false
                 };
@@ -132,42 +137,44 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified) || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build_project(&path, false, output_info_level)?;
+                    build_project(path, false, output_info_level)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }
             } else if request.starts_with("GET /") {
-                // Get requested path
+                // Get a requested path
                 let file_path = request.split_whitespace().collect::<Vec<&str>>()[1];
 
                 // Set the Content-Type based on the file extension
+                let path_to_file = &path
+                    .join(&project_config.dev_folder)
+                    .join(file_path.strip_prefix("/").unwrap_or(file_path));
 
-                let path_to_file = path.join(format!("dev{file_path}"));
                 let file_requested = if file_path.ends_with(".js") {
                     content_type = "application/javascript";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else if file_path.ends_with(".wasm") {
                     content_type = "application/wasm";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else if file_path.ends_with(".css") {
                     content_type = "text/css";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else if file_path.ends_with(".png") {
                     content_type = "image/png";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else if file_path.ends_with(".jpg") {
                     content_type = "image/jpeg";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else if file_path.ends_with(".ico") {
                     content_type = "image/ico";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else if file_path.ends_with(".webmanifest") {
                     content_type = "application/manifest+json";
-                    fs::read(&path_to_file)
+                    fs::read(path_to_file)
                 } else {
-                    let page_path = &path_to_file.with_extension("html");
-                    fs::read_to_string(page_path).map(|c| c.into_bytes())
+                    let page_path = path_to_file.with_extension("html");
+                    fs::read(page_path)
                 };
 
                 match file_requested {
@@ -186,7 +193,10 @@ fn handle_connection(
                     }
 
                     Err(_) => {
-                        red_ln!("File not found: {:?}", path_to_file);
+                        red_ln!(
+                            "File not found. Site made a GET request for: {:?}",
+                            path_to_file
+                        );
                     }
                 }
             }
@@ -218,7 +228,7 @@ fn handle_connection(
 }
 
 fn build_project(
-    build_path: &PathBuf,
+    build_path: &Path,
     release: bool,
     output_info_level: i32,
 ) -> Result<Config, Error> {
@@ -310,11 +320,11 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> bool {
 }
 
 fn get_home_page_path(
-    path: &PathBuf,
-    src: bool,
+    path: &Path,
+    source_folder: bool,
     project_config: &Config,
 ) -> Result<PathBuf, Error> {
-    let root_src_path = if src {
+    let root_src_path = if source_folder {
         PathBuf::from(&path).join(&project_config.src)
     } else {
         PathBuf::from(&path).join(&project_config.dev_folder)
@@ -333,13 +343,13 @@ fn get_home_page_path(
         }
     };
 
-    // Look for first file that starts with '#page' in the src directory
+    // Look for the first file that starts with '#page' in the src directory
     let mut first_page = None;
     for entry in src_files {
         first_page = match entry {
             Ok(e) => {
                 let page = e.path();
-                if src {
+                if source_folder {
                     if page
                         .file_stem()
                         .unwrap()
@@ -379,8 +389,12 @@ fn get_home_page_path(
         Some(index_page_path) => Ok(index_page_path),
         None => Err(Error {
             msg: format!(
-                "No page found in {} directory: {:?}",
-                if src { "src" } else { "dev" },
+                "No page found in {:?} directory: {:?}",
+                if source_folder {
+                    &project_config.src
+                } else {
+                    &project_config.dev_folder
+                },
                 first_page
             ),
             start_pos: TokenPosition::default(),

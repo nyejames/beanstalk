@@ -1,23 +1,28 @@
 use crate::bs_types::DataType;
-use crate::html_output::dom_hooks::{generate_dom_update_js, DOMUpdate};
+use crate::html_output::dom_hooks::{DOMUpdate, generate_dom_update_js};
 use crate::html_output::generate_html::create_html_boilerplate;
 use crate::html_output::web_parser;
-use crate::parsers::ast_nodes::{AstNode, Value};
-use crate::settings::Config;
-use crate::{settings, Error, ErrorType};
-use crate::{tokenizer, Token};
-use std::collections::HashMap;
-use crate::parsers::build_ast::{new_ast, TokenContext};
+use crate::parsers::ast_nodes::{Arg, AstNode, Value};
+use crate::parsers::build_ast::{TokenContext, new_ast};
+use crate::settings::{BS_VAR_PREFIX, Config};
 use crate::tokenizer::TokenPosition;
-use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
+use crate::{Error, ErrorType, settings};
+use crate::{Token, tokenizer};
+use colour::{
+    blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln,
+    print_bold, print_ln_bold, yellow_ln_bold,
+};
+use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 use wasm_encoder::Module;
 use wasmparser::validate;
 
 pub struct OutputModule {
     source_code: String,
+    tokens: TokenContext,
+    imports: Vec<String>,
     output_path: PathBuf,
     source_path: PathBuf,
     html: String,
@@ -31,6 +36,8 @@ impl OutputModule {
             source_code,
             output_path,
             source_path,
+            tokens: TokenContext::default(),
+            imports: Vec::new(),
             html: String::new(),
             js: String::new(),
             wasm: Module::new(),
@@ -39,13 +46,11 @@ impl OutputModule {
 }
 
 pub fn build(
-    entry_path: &PathBuf,
+    entry_path: &Path,
     release_build: bool,
     output_info_level: i32,
 ) -> Result<Config, Error> {
-    // Hashmap for fast lookup of variable declarations
-    // The key is the path to the export
-    let mut public_exports: HashMap<String, DataType> = HashMap::new();
+    let mut public_exports: HashMap<String, Vec<String>> = HashMap::new();
 
     // Create a new PathBuf from the entry_path
     let entry_dir = match std::env::current_dir() {
@@ -65,22 +70,22 @@ pub fn build(
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
 
-    let mut source_code_to_parse: Vec<OutputModule> = Vec::new();
+    let mut modules_to_parse: Vec<OutputModule> = Vec::new();
     let mut project_config = Config::default();
 
     // check to see if there is a config.bs file in this directory
     // if there is, read it and set the config settings
     // and check where the project entry points are
     enum CompileType {
-        SingleFile(PathBuf, String), // File Name, Source Code
-        MultiFile(PathBuf, String),  // Config file content
+        SingleFile(String), // Source Code
+        MultiFile(String),  // Config Source Code
     }
 
     // Single BS file
     let config = if entry_dir.extension() == Some("bs".as_ref()) {
         let source_code = fs::read_to_string(&entry_dir);
         match source_code {
-            Ok(content) => CompileType::SingleFile(entry_dir.with_extension("html"), content),
+            Ok(content) => CompileType::SingleFile(content),
             Err(e) => {
                 return Err(Error {
                     msg: format!("Error reading file: {:?}", e),
@@ -92,12 +97,12 @@ pub fn build(
             }
         }
 
-    // Full project with config file
+    // Full project with a config file
     } else {
         let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
         let source_code = fs::read_to_string(&config_path);
         match source_code {
-            Ok(content) => CompileType::MultiFile(entry_dir.to_owned(), content),
+            Ok(content) => CompileType::MultiFile(content),
             Err(_) => {
                 return Err(Error {
                     msg: "No config file found in directory".to_string(),
@@ -110,36 +115,41 @@ pub fn build(
         }
     };
 
+    let mut global_imports: Vec<String> = Vec::new();
+
     match config {
-        CompileType::SingleFile(file_path, code) => {
-            source_code_to_parse.push(OutputModule::new(
-                code, 
-                file_path.with_extension("html"), 
-                file_path
+        CompileType::SingleFile(code) => {
+            modules_to_parse.push(OutputModule::new(
+                code,
+                entry_path.with_extension("html"),
+                entry_path.to_owned(),
             ));
         }
 
-        CompileType::MultiFile(entry_dir, config_source_code) => {
-
+        CompileType::MultiFile(config_source_code) => {
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let (mut token_context, exports) = match tokenizer::tokenize(&config_source_code, &config_path) {
+            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path)
+            {
                 Ok(tokens) => tokens,
                 Err(e) => {
                     return Err(e.to_error(config_path));
                 }
             };
 
-            public_exports.extend(exports);
+            // Anything imported into the config file becomes an import of every module in the project
+            // A Global import. So the global_imports will be added as imports to every module
+            global_imports.extend(tokenizer_output.imports);
+            public_exports.extend(tokenizer_output.exports);
 
             let config_ast = match new_ast(
-                &mut token_context,
+                &mut tokenizer_output.token_context,
                 &[],
                 &mut DataType::None,
                 &config_path,
-                &mut true)
-            {
+                &mut true,
+            ) {
                 Ok(ast) => ast,
                 Err(e) => return Err(e.to_error(config_path)),
             };
@@ -153,58 +163,96 @@ pub fn build(
                 false => entry_dir.join(&project_config.dev_folder),
             };
 
-            add_bs_files_to_parse(&mut source_code_to_parse, output_dir, src_dir.to_owned())?;
-
-            project_config.src = src_dir;
+            add_bs_files_to_parse(&mut modules_to_parse, &output_dir, &src_dir)?;
         }
     }
 
-    // First tokenize all files
-    for file in &mut source_code_to_parse {
-        dark_yellow_ln!("{:?}", file.output_path.file_name());
-        
+    // First, tokenize all files
+    for module in &mut modules_to_parse {
+        dark_yellow_ln!("{:?}", module.output_path.file_name());
+
         // For letting the user know how long compile times are taking
         let time = Instant::now();
 
+        // Make the imports and exports line up from the root of the project
+        // So we can get the right key for the exports
+        // Removes the full path and extension
+        let relative_export_path = module
+            .source_path
+            .strip_prefix(&entry_dir)
+            .map_err(|_| Error {
+                msg: "Could not create relative path to this export from the project directory"
+                    .to_string(),
+                start_pos: TokenPosition::default(),
+                end_pos: TokenPosition::default(),
+                file_path: module.source_path.to_owned(),
+                error_type: ErrorType::File,
+            })?
+            .with_extension("");
+
         // TOKENIZER
-        let (mut token_context, exports) = match tokenizer::tokenize(&file.source_code, &file.output_path) {
+        let tokenizer_output = match tokenizer::tokenize(&module.source_code, &relative_export_path)
+        {
             Ok(tokens) => tokens,
             Err(e) => {
-                return Err(e.to_error(PathBuf::from(&file.source_path)));
+                return Err(e.to_error(PathBuf::from(&module.source_path)));
             }
         };
 
-        // Exports are type checked (will be enforced to have an explicit type declaration)
-        // Imports currently are just for anything public in a module, there is no specifying imports atm
-        public_exports.extend(exports);
+        public_exports.extend(tokenizer_output.exports);
+        module.imports = global_imports.to_owned();
+        module.imports.extend(tokenizer_output.imports);
 
         if output_info_level > 5 {
-            print_token_output(&token_context.tokens);
+            print_token_output(&tokenizer_output.token_context.tokens);
         }
+
+        module.tokens = tokenizer_output.token_context;
 
         if output_info_level > 2 {
             print!("Tokenized in: ");
             green_ln!("{:?}", time.elapsed());
         }
+    }
 
+    // Now that we know what all the exports are (and can check they exist),
+    // We can proceed with AST generation
+    for file in &mut modules_to_parse {
         let compile_result = compile(
-            &mut token_context,
             file,
             release_build,
             output_info_level,
             &mut project_config,
+            &public_exports,
         )?;
 
-        let mut js_imports: String = format!("<script type=\"module\" src=\"./{}\"></script>", &file.output_path.with_extension("js").file_name().unwrap().to_string_lossy());
+        let mut js_imports: String = format!(
+            "<script type=\"module\" src=\"./{}\"></script>",
+            &file
+                .output_path
+                .with_extension("js")
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+        );
 
         for import in &compile_result.import_requests {
-            js_imports += format!("<script type=\"module\" src=\"{}.js\"></script>", import).as_str();
+            // Stripping the src folder from the import path,
+            // As this directory is removed in the output directory
+            let trimmed_import = import.strip_prefix("src/").unwrap_or(import);
+
+            js_imports += &format!(
+                "<script type=\"module\" src=\"{}.js\"></script>",
+                trimmed_import
+            );
         }
 
-        file.html = compile_result.html.replace("<!--//js-modules-->", &js_imports);
+        file.html = compile_result
+            .html
+            .replace("<!--//js-modules-->", &js_imports);
         file.wasm = compile_result.wasm;
         file.js = compile_result.js;
-        
+
         // Write the file to the output directory
         write_output_file(file)?;
     }
@@ -255,8 +303,7 @@ pub fn build(
                 || file_path.extension() == Some("js".as_ref())  )
 
                 // If the file is not in the source code to parse, it's not needed
-                && !source_code_to_parse.iter().any(|f| f.output_path.with_extension("") == file_path.with_extension(""))
-            
+                && !modules_to_parse.iter().any(|f| f.output_path.with_extension("") == file_path.with_extension(""))
             {
                 match fs::remove_file(&file_path) {
                     Ok(_) => {
@@ -279,23 +326,23 @@ pub fn build(
     Ok(project_config)
 }
 
-// Look for every subdirectory inside of dir and add all .bs files to the source_code_to_parse
+// Look for every subdirectory inside the dir and add all .bs files to the source_code_to_parse
 pub fn add_bs_files_to_parse(
     source_code_to_parse: &mut Vec<OutputModule>,
-    output_dir: PathBuf,
-    src_dir: PathBuf,
+    output_dir: &Path,
+    project_root_dir: &Path,
 ) -> Result<(), Error> {
     // Can't just use the src_dir from config, because this might be recursively called for new subdirectories
 
     // Read all files in the src directory
-    let all_dir_entries: fs::ReadDir = match fs::read_dir(&src_dir) {
+    let all_dir_entries: fs::ReadDir = match fs::read_dir(project_root_dir) {
         Ok(dir) => dir,
         Err(e) => {
             return Err(Error {
                 msg: format!("Error reading directory (add bs files to parse): {:?}", e),
                 start_pos: TokenPosition::default(),
                 end_pos: TokenPosition::default(),
-                file_path: src_dir,
+                file_path: PathBuf::from(project_root_dir),
                 error_type: ErrorType::File,
             });
         }
@@ -312,10 +359,13 @@ pub fn add_bs_files_to_parse(
                         Ok(content) => content,
                         Err(e) => {
                             return Err(Error {
-                                msg: format!("Error reading a file when reading all bs files in directory: {:?}", e),
+                                msg: format!(
+                                    "Error reading a file when reading all bs files in directory: {:?}",
+                                    e
+                                ),
                                 start_pos: TokenPosition::default(),
                                 end_pos: TokenPosition::default(),
-                                file_path: src_dir,
+                                file_path: PathBuf::from(project_root_dir),
                                 error_type: ErrorType::File,
                             });
                         }
@@ -346,11 +396,11 @@ pub fn add_bs_files_to_parse(
                     };
 
                     let final_output_file = OutputModule::new(
-                        code, 
+                        code,
                         PathBuf::from(&output_dir)
                             .join(file_name)
                             .with_extension("html"),
-                        file_path
+                        file_path,
                     );
 
                     if global {
@@ -365,18 +415,18 @@ pub fn add_bs_files_to_parse(
                     let new_output_dir = output_dir.join(file_path.file_stem().unwrap());
 
                     // Recursively call add_bs_files_to_parse on the new directory
-                    add_bs_files_to_parse(source_code_to_parse, new_output_dir, file_path)?;
+                    add_bs_files_to_parse(source_code_to_parse, &new_output_dir, &file_path)?;
 
                 // HANDLE USING JS / HTML / CSS MIXED INTO THE PROJECT
                 } else if let Some(ext) = file_path.extension() {
-                    // TEMPORARY: JUST PUT THEM DIRECTLY INTO THE OUTPUT DIRECTORY
+                    // TEMPORARY: PUT THEM DIRECTLY INTO THE OUTPUT DIRECTORY
                     if ext == "js" || ext == "html" || ext == "css" {
                         let file_name = file_path.file_name().unwrap().to_str().unwrap();
-                        
+
                         source_code_to_parse.push(OutputModule::new(
-                            String::new(), 
-                            output_dir.join(file_name), 
-                            file_path
+                            String::new(),
+                            output_dir.join(file_name),
+                            file_path,
                         ));
                     }
                 }
@@ -387,7 +437,7 @@ pub fn add_bs_files_to_parse(
                     msg: format!("Error reading file while adding bs files to parse: {:?}", e),
                     start_pos: TokenPosition::default(),
                     end_pos: TokenPosition::default(),
-                    file_path: src_dir,
+                    file_path: PathBuf::from(project_root_dir),
                     error_type: ErrorType::File,
                 });
             }
@@ -405,26 +455,106 @@ struct CompileResult {
 }
 
 fn compile(
-    token_context: &mut TokenContext,
-    output: &OutputModule,
+    module: &mut OutputModule,
     release_build: bool,
     output_info_level: i32,
     project_config: &mut Config,
+    public_exports: &HashMap<String, Vec<String>>,
 ) -> Result<CompileResult, Error> {
     print_bold!("\nCompiling: ");
 
     let time = Instant::now();
 
+    let mut js = String::new();
+
+    // Create declarations out of the imports
+    // We don't know their Type, so we just use the pointer type for them
+    let mut declarations: Vec<Arg> = Vec::new();
+
+    // These are just to insert the HTML module imports into the HTML file.
+    let mut import_requests: Vec<String> = Vec::new();
+    for import in &mut module.imports {
+        // Import the other JS module at the top of this module
+        // Import string will be in this format: "path/module:export"
+        // Or if we are importing everything: "path/module"
+        let split_import_string = import.split(":").collect::<Vec<&str>>();
+
+        // Then strip the src/ from the path if it starts there
+        // This is because the output folder gets rid of the src directory
+        let import_path = split_import_string[0]
+            .strip_prefix("src/")
+            .unwrap_or(split_import_string[0]);
+
+        // Importing everything from the module
+        if split_import_string.len() > 1 {
+            // We need to only put the path into the import requests
+            // This is where we remove the colon
+            import_requests.push(split_import_string[0].to_string());
+
+            js += &format!(
+                "import {BS_VAR_PREFIX}{} from \"./{}.js\";\n",
+                split_import_string[1], import_path
+            );
+
+            declarations.push(Arg {
+                name: split_import_string[1].to_owned(),
+                value: Value::Reference(
+                    split_import_string[1].to_owned(),
+                    DataType::Pointer,
+                    Vec::new(),
+                ),
+                data_type: DataType::Pointer,
+            })
+        } else {
+            import_requests.push(import.to_string());
+
+            // We now need to get the names of all the exports from this module
+            let import_names = match public_exports.get(split_import_string[0]) {
+                Some(exported_names) => exported_names,
+                None => {
+                    return Err(Error {
+                        msg: format!(
+                            "Could not find any exports from module path: {}",
+                            import_path
+                        ),
+                        start_pos: TokenPosition::default(),
+                        end_pos: TokenPosition::default(),
+                        file_path: module.source_path.to_owned(),
+                        error_type: ErrorType::File,
+                    });
+                }
+            };
+
+            let formatted_variable_names = import_names
+                .iter()
+                .map(|name| format!("{}{}, ", BS_VAR_PREFIX, name))
+                .collect::<String>();
+            js += &format!(
+                "import {{{}}} from \"./{}.js\";\n",
+                formatted_variable_names, import_path
+            );
+
+            for name in import_names {
+                declarations.push(Arg {
+                    name: name.to_owned(),
+                    value: Value::Reference(name.to_owned(), DataType::Pointer, Vec::new()),
+                    data_type: DataType::Pointer,
+                })
+            }
+        }
+    }
+
     // AST PARSER
     let ast = match new_ast(
-        token_context,
-        &[], 
+        &mut module.tokens,
+        &declarations,
         &mut DataType::None,
-        &output.source_path,
-        &mut true) {
+        &module.source_path,
+        &mut true,
+    ) {
         Ok(ast) => ast,
         Err(e) => {
-            return Err(e.to_error(PathBuf::from(&output.source_path)));
+            return Err(e.to_error(PathBuf::from(&module.source_path)));
         }
     };
 
@@ -448,7 +578,7 @@ fn compile(
         &project_config.dev_folder
     };
 
-    for ancestor in output.output_path.ancestors().skip(1) {
+    for ancestor in module.output_path.ancestors().skip(1) {
         if let Some(stem) = ancestor.file_stem() {
             if *stem == **output_dir_name {
                 break;
@@ -461,18 +591,18 @@ fn compile(
     let parser_output = match web_parser::parse(
         ast,
         project_config,
-        &output.source_path.to_string_lossy(),
+        &module.source_path.to_string_lossy(),
         &mut Module::new(),
     ) {
         Ok(parser_output) => parser_output,
         Err(e) => {
-            return Err(e.to_error(PathBuf::from(&output.source_path)));
+            return Err(e.to_error(PathBuf::from(&module.source_path)));
         }
     };
 
     // Add the required minimum dom update JS to the start of the parser JS output
     // Any other dom update JS would be dynamically added to the page by the parser only if needed
-    let js = format!(
+    js += &format!(
         "{}\n{}",
         generate_dom_update_js(DOMUpdate::InnerHTML),
         parser_output.js
@@ -483,9 +613,9 @@ fn compile(
         Ok(module_output) => module_output
             .replace("<!--page-template-->", &parser_output.html)
             .replace("page-title", &parser_output.page_title)
-            .replace("wasm-module-name", &output.source_path.to_string_lossy()),
+            .replace("wasm-module-name", &module.source_path.to_string_lossy()),
         Err(e) => {
-            return Err(e.to_error(PathBuf::from(&output.source_path)));
+            return Err(e.to_error(PathBuf::from(&module.source_path)));
         }
     };
 
@@ -504,7 +634,7 @@ fn compile(
         html,
         js,
         wasm: parser_output.wasm,
-        import_requests: parser_output.import_requests,
+        import_requests,
     })
 }
 
@@ -617,7 +747,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -632,7 +762,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -647,7 +777,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -662,7 +792,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -677,7 +807,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -692,7 +822,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -707,7 +837,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -722,7 +852,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
                                 error_type: ErrorType::TypeError,
-                            })
+                            });
                         }
                     };
                 }
@@ -742,7 +872,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -759,7 +889,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -774,7 +904,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -789,7 +919,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -805,7 +935,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -822,7 +952,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
                                                         error_type: ErrorType::TypeError,
-                                                    })
+                                                    });
                                                 }
                                             };
                                     }
@@ -838,7 +968,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -854,7 +984,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -869,7 +999,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -884,7 +1014,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -917,7 +1047,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
                                                         error_type: ErrorType::TypeError,
-                                                    })
+                                                    });
                                                 }
                                             };
                                     }
@@ -933,7 +1063,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -950,7 +1080,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                     end_pos: TokenPosition::default(),
                                                     file_path: PathBuf::from("#config.bs"),
                                                     error_type: ErrorType::TypeError,
-                                                })
+                                                });
                                             }
                                         };
                                     }
@@ -1011,16 +1141,14 @@ fn print_token_output(tokens: &Vec<Token>) {
 fn print_ast_output(ast: &Vec<AstNode>) {
     for node in ast {
         match node {
-            AstNode::Literal(value, _) => {
-                match value.get_type() {
-                    DataType::Scene(_) => {
-                        print_scene(value, 0);
-                    }
-                    _ => {
-                        cyan_ln!("{:?}", value);
-                    }
+            AstNode::Literal(value, _) => match value.get_type() {
+                DataType::Scene(_) => {
+                    print_scene(value, 0);
                 }
-            }
+                _ => {
+                    cyan_ln!("{:?}", value);
+                }
+            },
             AstNode::Comment(..) => {
                 grey_ln!("{:?}", node);
             }

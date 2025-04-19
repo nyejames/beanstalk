@@ -1,11 +1,11 @@
 use crate::bs_types::get_reference_data_type;
 use crate::parsers::scene::Style;
+use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, Token};
+use crate::{Token, bs_types::DataType};
 use colour::red_ln;
 use std::path::PathBuf;
 use wasm_encoder::ValType;
-use crate::parsers::util::string_dimensions;
 
 #[derive(Debug, PartialEq, Clone)]
 // Args are abstractions on top of Datatypes
@@ -22,7 +22,11 @@ impl Arg {
     pub fn to_wasm_type(&self) -> Vec<ValType> {
         match &self.data_type {
             DataType::Float(_) => vec![ValType::F64],
-            DataType::Int(_) | DataType::Bool(_) | DataType::None | DataType::True | DataType::False => {
+            DataType::Int(_)
+            | DataType::Bool(_)
+            | DataType::None
+            | DataType::True
+            | DataType::False => {
                 vec![ValType::I32]
             }
 
@@ -72,7 +76,7 @@ pub enum Value {
         bool,
         DataType,
         TokenPosition,
-        bool
+        bool,
     ),
 
     Scene(Vec<Value>, Vec<Style>, String), // Content Nodes, Styles, ID
@@ -105,21 +109,21 @@ pub enum AstNode {
 
     // Basics
     Function(
-        String, // Name
-        Vec<Arg>, // Args (named)
+        String,       // Name
+        Vec<Arg>,     // Args (named)
         Vec<AstNode>, // Body
-        bool, // Public
-        DataType, // return type
+        bool,         // Public
+        DataType,     // return type
         TokenPosition,
-        bool // Pure
+        bool, // Pure
     ),
     FunctionCall(
         String,
         Vec<Value>, // Arguments passed in
-        DataType, // return type
+        DataType,   // return type
         Vec<usize>, // Accessed args
         TokenPosition,
-        bool // Function is pure
+        bool, // Function is pure
     ),
 
     Comment(String),
@@ -150,7 +154,7 @@ pub enum AstNode {
     LogicalOperator(Token, TokenPosition), // Operator, Line number
     BinaryOperator(Token, TokenPosition),  // Operator, Line number
     UnaryOperator(Token, bool, TokenPosition), // Operator, is_postfix, Line number
-    
+
     Newline,
     Spaces(u32),
 }
@@ -193,13 +197,11 @@ impl AstNode {
             AstNode::Empty(_) => DataType::None,
             AstNode::VarDeclaration(_, _, _, data_type, ..) => data_type.to_owned(),
 
-            AstNode::FunctionCall(_, _, return_type, ..) => {
-                DataType::Structure(Vec::from([Arg {
-                    name: "".to_string(),
-                    data_type: return_type.to_owned(),
-                    value: Value::None,
-                }]))
-            }
+            AstNode::FunctionCall(_, _, return_type, ..) => DataType::Structure(Vec::from([Arg {
+                name: "".to_string(),
+                data_type: return_type.to_owned(),
+                value: Value::None,
+            }])),
 
             _ => {
                 red_ln!(
@@ -218,11 +220,18 @@ impl AstNode {
     // Returns 'Runtime' if it can't be evaluated at compile time
     pub(crate) fn get_value(&self) -> Value {
         match self {
-            AstNode::Literal(value, ..) |
-            AstNode::VarDeclaration(_, value, ..) => value.to_owned(),
+            AstNode::Literal(value, ..) | AstNode::VarDeclaration(_, value, ..) => value.to_owned(),
             AstNode::Function(name, args, body, is_exported, return_type, _, is_pure) => {
-                Value::Function(name.to_owned(), args.to_owned(), body.to_owned(), *is_exported, return_type.to_owned(), TokenPosition::default(), is_pure.to_owned())
-            },
+                Value::Function(
+                    name.to_owned(),
+                    args.to_owned(),
+                    body.to_owned(),
+                    *is_exported,
+                    return_type.to_owned(),
+                    TokenPosition::default(),
+                    is_pure.to_owned(),
+                )
+            }
             _ => Value::None,
         }
     }
@@ -260,7 +269,7 @@ impl AstNode {
             AstNode::Literal(value, _) => value.dimensions(),
 
             AstNode::VarDeclaration(name, _, _, _, token_position) => TokenPosition {
-                line_number: token_position.char_column + name.to_string().len() as u32,
+                line_number: token_position.char_column + name.to_string().len() as i32,
                 char_column: token_position.line_number,
             },
 
@@ -328,7 +337,7 @@ impl Value {
             Value::Function(_, _, _, _, _, _, is_pure) => {
                 // red_ln!("is_pure: {:?}", is_pure);
                 *is_pure
-            },
+            }
             Value::Collection(values, _) => {
                 for value in values {
                     if !value.is_pure() {
@@ -361,12 +370,12 @@ impl Value {
 
             Value::Int(val) => TokenPosition {
                 line_number: 0,
-                char_column: val.to_string().len() as u32,
+                char_column: val.to_string().len() as i32,
             },
 
             Value::Float(val) => TokenPosition {
                 line_number: 0,
-                char_column: val.to_string().len() as u32,
+                char_column: val.to_string().len() as i32,
             },
 
             Value::String(val) => string_dimensions(val),
@@ -387,12 +396,12 @@ impl Value {
 
             Value::Reference(name, ..) => TokenPosition {
                 line_number: 0,
-                char_column: name.len() as u32,
+                char_column: name.len() as i32,
             },
 
             Value::Function(_, _, nodes, ..) => {
                 let mut combined_dimensions = TokenPosition::default();
-                
+
                 // Get the largest dimensions of all the nodes
                 for node in nodes {
                     if node.dimensions().line_number > combined_dimensions.line_number {
