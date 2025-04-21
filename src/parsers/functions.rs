@@ -3,7 +3,7 @@ use super::{
     build_ast::new_ast,
     expressions::parse_expression::create_expression,
 };
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::parsers::expressions::parse_expression::get_accessed_args;
@@ -170,7 +170,7 @@ pub fn create_args(
                 }
 
                 // Check if there is a default value
-                let mut default_value: Value = Value::None;
+                let mut default_value: Expr = Expr::None;
                 if matches!(x.tokens[x.index + 1], Token::Assign) {
                     x.index += 2;
                     // Function args are similar to a struct,
@@ -329,19 +329,19 @@ fn parse_return_type(x: &mut TokenContext) -> Result<DataType, CompileError> {
 // Makes sure they are the correct type
 // TODO: check if any of this actually works
 pub fn create_func_call_args(
-    value_passed_in: &Value,
+    value_passed_in: &Expr,
     args_required: &[Arg],
     token_position: &TokenPosition,
-) -> Result<Vec<Value>, CompileError> {
+) -> Result<Vec<Expr>, CompileError> {
     // Create a vec of the required args values (arg.value)
     let mut indexes_filled: Vec<usize> = Vec::with_capacity(args_required.len());
-    let mut sorted_values: Vec<Value> = args_required
+    let mut sorted_values: Vec<Expr> = args_required
         .iter()
         .map(|arg| arg.value.to_owned())
         .collect();
 
     let args_passed_in = match value_passed_in {
-        Value::StructLiteral(args) => args,
+        Expr::StructLiteral(args) => args,
         _ => &Vec::from([Arg {
             name: "".to_string(),
             data_type: value_passed_in.get_type(),
@@ -349,10 +349,10 @@ pub fn create_func_call_args(
         }]),
     };
 
-    if args_passed_in.is_empty() || args_passed_in[0].value == Value::None {
+    if args_passed_in.is_empty() || args_passed_in[0].value == Expr::None {
         for arg in args_required {
             // Make sure there are no required arguments left
-            if arg.value != Value::None {
+            if arg.value != Expr::None {
                 return Err(CompileError {
                     msg: format!(
                         "Missed at least one required arguments for struct or function call: {} (type: {:?})",
@@ -465,7 +465,7 @@ pub fn create_func_call_args(
     // Check if the sorted args contains any None values
     // If it does, there are missing arguments (error)
     for (i, value) in sorted_values.iter().enumerate() {
-        if value == &Value::None {
+        if value == &Expr::None {
             return Err(CompileError {
                 msg: format!(
                     "Required argument missing from struct/function call: {:?} (type: {:?})",
@@ -540,7 +540,7 @@ pub fn parse_function_call(
         &DataType::Structure(Vec::from([Arg {
             name: "".to_string(),
             data_type: return_type.to_owned(),
-            value: Value::None,
+            value: Expr::None,
         }])),
         &mut Vec::new(),
     )?;

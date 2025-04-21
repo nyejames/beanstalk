@@ -1,14 +1,14 @@
 use crate::CompileError;
-use crate::parsers::ast_nodes::{AstNode, Value};
+use crate::parsers::ast_nodes::{AstNode, Expr};
 
 pub fn inline_function_call(
-    arguments: &[Value],
+    arguments: &[Expr],
     argument_accessed: &[usize],
-    function: &Value,
+    function: &Expr,
 ) -> Result<AstNode, CompileError> {
     // Unpack the function
     let (body, mut declarations, data_type, token_position) = match function {
-        Value::Function(_, req_arguments, body, _, return_type, token_position, _) => (
+        Expr::Function(_, req_arguments, body, _, return_type, token_position, _) => (
             body,
             req_arguments.to_owned(),
             return_type.to_owned(),

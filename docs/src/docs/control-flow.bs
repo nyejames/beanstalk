@@ -7,7 +7,7 @@
 If statements can be used as expressions or statements.
 They can also be used for pattern matching, all with a similar syntax.
 
-[Code:
+[code:
     v = 1
     if v is not 1:
         print("nope")
@@ -15,7 +15,7 @@ They can also be used for pattern matching, all with a similar syntax.
         print("yep")
     zz
 
-    -- If as an expression
+    -- Using if like a match expression
     x = 0
     msg = if x is:
         0: "nope"

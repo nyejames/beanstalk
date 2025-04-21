@@ -4,10 +4,11 @@ use std::collections::HashMap;
 
 use super::eval_expression::evaluate_expression;
 use crate::bs_types::get_any_number_datatype;
-use crate::html_output::html_styles::get_html_styles;
-use crate::parsers::ast_nodes::Value;
+// use crate::html_output::html_styles::get_html_styles;
+use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
-use crate::parsers::expressions::function_call_inline::inline_function_call;
+// use crate::parsers::expressions::function_call_inline::inline_function_call;
+use crate::parsers::scene::SceneType;
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::tokenizer::TokenPosition;
 use crate::{
@@ -30,7 +31,7 @@ pub fn create_expression(
     data_type: &mut DataType,
     inside_parenthesis: bool,
     captured_declarations: &mut Vec<Arg>,
-) -> Result<Value, CompileError> {
+) -> Result<Expr, CompileError> {
     let mut expression: Vec<AstNode> = Vec::new();
     let mut number_union = get_any_number_datatype(false);
 
@@ -45,7 +46,7 @@ pub fn create_expression(
             Token::CloseParenthesis => {
                 if inside_parenthesis {
                     if expression.is_empty() {
-                        return Ok(Value::None);
+                        return Ok(Expr::None);
                     }
                     break;
                 } else {
@@ -103,13 +104,13 @@ pub fn create_expression(
                         // could this still result in None if the inner types are defined and not optional?
                         let structure = new_fixed_collection(
                             x,
-                            Value::None,
+                            Expr::None,
                             inner_types,
                             ast,
                             captured_declarations,
                         )?;
 
-                        Ok(Value::StructLiteral(structure))
+                        Ok(Expr::StructLiteral(structure))
                     }
 
                     // If this is inside parenthesis, and we don't know the type.
@@ -120,7 +121,7 @@ pub fn create_expression(
                         // NO DEFINED TYPES FOR THE struct
                         let structure = new_fixed_collection(
                             x,
-                            Value::None,
+                            Expr::None,
                             // Difference is this is inferred
                             &Vec::new(),
                             ast,
@@ -129,7 +130,7 @@ pub fn create_expression(
 
                         // And then the type is set here
                         *data_type = DataType::Structure(structure.to_owned());
-                        Ok(Value::StructLiteral(structure))
+                        Ok(Expr::StructLiteral(structure))
                     }
 
                     // Need to error here as a collection literal is being made with wrong explicit type
@@ -312,7 +313,7 @@ pub fn create_expression(
                 }
 
                 expression.push(AstNode::Literal(
-                    Value::Float(float),
+                    Expr::Float(float),
                     TokenPosition {
                         line_number: x.current_position().line_number,
                         char_column: x.current_position().char_column,
@@ -342,7 +343,7 @@ pub fn create_expression(
                 };
 
                 expression.push(AstNode::Literal(
-                    Value::Int(int_value),
+                    Expr::Int(int_value),
                     TokenPosition {
                         line_number: x.current_position().line_number,
                         char_column: x.current_position().char_column,
@@ -365,7 +366,7 @@ pub fn create_expression(
                 }
 
                 expression.push(AstNode::Literal(
-                    Value::String(string.to_owned()),
+                    Expr::String(string.to_owned()),
                     TokenPosition {
                         line_number: x.current_position().line_number,
                         char_column: x.current_position().char_column,
@@ -373,8 +374,6 @@ pub fn create_expression(
                 ));
             }
 
-            // Scenes - Create a new scene node
-            // Maybe scenes can be added together like strings
             Token::SceneHead | Token::ParentScene => {
                 if !DataType::Scene(false).is_valid_type(data_type) {
                     return Err(CompileError {
@@ -389,15 +388,36 @@ pub fn create_expression(
                     });
                 }
 
-                // Add the default core HTML styles as the initial unlocked styles
-                let mut unlocked_styles = HashMap::from(get_html_styles());
+                // Add the default core HTML styles as the initially unlocked styles
+                // let mut unlocked_styles = HashMap::from(get_html_styles());
 
-                return new_scene(x, ast, captured_declarations, &mut unlocked_styles);
+                match new_scene(x, ast, captured_declarations, &mut HashMap::new()) {
+                    Ok(SceneType::Scene(scene)) => return Ok(scene),
+
+                    // Ignore comments
+                    Ok(SceneType::Comment) => {}
+
+                    // Error for anything else for now
+                    _ => {
+                        return Err(CompileError {
+                            msg: format!(
+                                "Unexpected scene type used in expression: {:?}",
+                                data_type
+                            ),
+                            start_pos: x.current_position(),
+                            end_pos: TokenPosition {
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
+                            },
+                            error_type: ErrorType::TypeError,
+                        });
+                    }
+                }
             }
 
             Token::BoolLiteral(value) => {
                 expression.push(AstNode::Literal(
-                    Value::Bool(value.to_owned()),
+                    Expr::Bool(value.to_owned()),
                     TokenPosition {
                         line_number: x.current_position().line_number,
                         char_column: x.current_position().char_column,
@@ -409,6 +429,14 @@ pub fn create_expression(
             // Will push as a string, so shunting yard can handle it later just as a string
             Token::Negative => {
                 next_number_negative = true;
+            }
+
+            // Ranges and Loops
+            Token::In => {
+                // Breaks out of the current expression and changes the type to Range
+                *data_type = DataType::Range;
+                x.index += 1;
+                return evaluate_expression(expression, data_type);
             }
 
             // BINARY OPERATORS

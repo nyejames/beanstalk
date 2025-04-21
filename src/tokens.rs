@@ -141,7 +141,7 @@ pub enum Token {
     // Scenes
     ParentScene,
     EmptyScene(usize), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
-
+    Slot,
     SceneHead,
     This(String),
 

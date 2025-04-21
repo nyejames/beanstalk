@@ -24,11 +24,14 @@ Otherwise all the scenes are just passed directly into the slot one by one.
 
 ## Current Bugs
 
+## Vscode plugin
+- Characters like strings inside scenes don't highlight like strings
+
 ## Core Features Being Implemented
-- Finish implementing Style system for scenes (separate from core language into library of keywords)
 - Boolean expressions and operators
 - If statements
 - Loops
+- Finish implementing Style system for scenes (separate from core language into library of keywords)
 - Capitol letter constant enforced
 - Importing HTML, CSS and JS libraries seemlessly into a BS project
 - Scoping and variable shadowing?

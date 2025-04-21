@@ -2,13 +2,14 @@ use super::{
     ast_nodes::AstNode, create_scene_node::new_scene,
     expressions::parse_expression::create_expression, variables::create_new_var_or_ref,
 };
-use crate::html_output::html_styles::get_html_styles;
-use crate::parsers::ast_nodes::{Arg, Value};
+// use crate::html_output::html_styles::get_html_styles;
+use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::functions::parse_function_call;
+use crate::parsers::scene::SceneType;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -18,7 +19,7 @@ pub struct TokenContext {
 }
 impl TokenContext {
     pub fn current_token(&self) -> &Token {
-        // Do we actually ever need to do a bounds check here?
+        // Do we actually ever need to do a bound check here?
         debug_assert!(self.index < self.length);
 
         &self.tokens[self.index]
@@ -47,10 +48,8 @@ pub fn new_ast(
     x: &mut TokenContext,
     captured_declarations: &[Arg], // This includes imports
     return_type: &mut DataType,
-    module_path: &PathBuf, // If empty, this isn't a module
-    pure: &mut bool,       // No side effects or IO
-
-                           // AST, Exports
+    module_path: &Path, // If empty, this isn't a module
+    pure: &mut bool,    // No side effects or IO
 ) -> Result<Vec<AstNode>, CompileError> {
     let module_path = module_path.to_str().unwrap();
 
@@ -63,6 +62,7 @@ pub fn new_ast(
     while x.index < x.length {
         // This should be starting after the imports
         let current_token = x.current_token().to_owned();
+        let start_pos = x.current_position(); // Store start position for potential nodes
 
         match current_token {
             Token::Comment(value) => {
@@ -84,12 +84,28 @@ pub fn new_ast(
                     });
                 }
 
-                // Add the default core HTML styles as the initial unlocked styles
-                let mut unlocked_styles = HashMap::from(get_html_styles());
+                // Add the default core HTML styles as the initially unlocked styles
+                // let mut unlocked_styles = HashMap::from(get_html_styles());
 
-                let scene = new_scene(x, &ast, &mut declarations, &mut unlocked_styles)?;
+                let scene = new_scene(x, &ast, &mut declarations, &mut HashMap::new())?;
 
-                ast.push(AstNode::Literal(scene, x.current_position()));
+                match scene {
+                    SceneType::Scene(expr) => {
+                        ast.push(AstNode::Literal(expr, x.current_position()));
+                    }
+                    SceneType::Slot => {
+                        return Err(CompileError {
+                            msg: "Slot can't be used at the top level of a scene. Slots can only be used inside of other scenes".to_string(),
+                            start_pos: x.current_position(),
+                            end_pos: TokenPosition {
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 5,
+                            },
+                            error_type: ErrorType::Rule,
+                        })
+                    }
+                    _ => {}
+                }
             }
 
             Token::ModuleStart(_) => {
@@ -113,6 +129,126 @@ pub fn new_ast(
                 }
 
                 ast.push(new_var);
+            }
+
+            // Control Flow
+            Token::For => {
+                x.index += 1;
+
+                // Create expressions checks what the condition for the loop is
+                // If it encounters an 'in' keyword, the type becomes a Range
+                // If it encounters a boolean expression, it comes a while loop
+                let mut data_type = DataType::Inferred(false);
+                let item = create_expression(
+                    x,
+                    false, // Not inside parenthesis
+                    &ast,
+                    &mut data_type, // For figuring out the type of loop
+                    false,
+                    &mut declarations,
+                )?;
+
+                match data_type {
+                    // For loop (iterator)
+                    DataType::Range => {
+                        let collection = create_expression(
+                            x,
+                            false,
+                            &ast,
+                            &mut DataType::Range,
+                            false,
+                            &mut declarations,
+                        )?;
+
+                        if x.current_token() != &Token::Colon {
+                            return Err(CompileError {
+                                msg: format!(
+                                    "Expected ':' after for loop condition, found {:?}",
+                                    x.current_token()
+                                ),
+                                start_pos: x.current_position(),
+                                end_pos: x.current_position(),
+                                error_type: ErrorType::Syntax,
+                            });
+                        }
+
+                        x.index += 1; // Consume ':'
+
+                        ast.push(AstNode::ForLoop(
+                            item, // Item name
+                            collection,
+                            new_ast(x, &declarations, return_type, Path::new(""), pure)?,
+                            start_pos,
+                        ))
+                    }
+
+                    // While loop
+                    DataType::Bool(_) => {
+                        if x.current_token() != &Token::Colon {
+                            return Err(CompileError {
+                                msg: format!(
+                                    "Expected ':' after for loop condition, found {:?}",
+                                    x.current_token()
+                                ),
+                                start_pos: x.current_position(),
+                                end_pos: x.current_position(),
+                                error_type: ErrorType::Syntax,
+                            });
+                        }
+
+                        x.index += 1; // Consume ':'
+
+                        ast.push(AstNode::WhileLoop(
+                            item, // Condition
+                            new_ast(x, &declarations, return_type, Path::new(""), pure)?,
+                            start_pos,
+                        ))
+                    }
+
+                    _ => {
+                        return Err(CompileError {
+                            msg: format!(
+                                "Expected 'in' keyword or condition for the loop, found {:?}",
+                                item
+                            ),
+                            start_pos: x.current_position(),
+                            end_pos: x.current_position(),
+                            error_type: ErrorType::Syntax,
+                        });
+                    }
+                }
+            }
+
+            Token::If => {
+                x.index += 1;
+                let condition = create_expression(
+                    x,
+                    false,
+                    &ast,
+                    &mut DataType::Bool(false),
+                    false,
+                    &mut declarations,
+                )?;
+
+                if x.current_token() != &Token::Colon {
+                    return Err(CompileError {
+                        msg: format!(
+                            "Expected ':' after the if condition, found {:?}",
+                            x.current_token()
+                        ),
+                        start_pos: x.current_position(),
+                        end_pos: x.current_position(),
+                        error_type: ErrorType::Syntax,
+                    });
+                }
+
+                x.index += 1; // Consume ':'
+
+                ast.push(AstNode::If(
+                    condition,
+                    new_ast(x, &declarations, return_type, Path::new(""), pure)?,
+                    start_pos,
+                ))
             }
 
             Token::JS(value) => {
@@ -161,7 +297,7 @@ pub fn new_ast(
                     &[Arg {
                         name: "".to_string(),
                         data_type: DataType::CoerceToString(false),
-                        value: Value::None,
+                        value: Expr::None,
                     }],
                     // Console.log does not return anything
                     &DataType::None,

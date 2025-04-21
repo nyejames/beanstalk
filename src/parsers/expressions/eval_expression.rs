@@ -1,8 +1,8 @@
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::Expr;
+use crate::parsers::scene::SceneBody;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
-use colour::red_ln;
 
 // This function will turn a series of ast nodes into a Value enum.
 // A Value enum can also be a runtime expression that contains a series of nodes.
@@ -10,7 +10,7 @@ use colour::red_ln;
 pub fn evaluate_expression(
     expr: Vec<AstNode>,
     type_declaration: &DataType,
-) -> Result<Value, CompileError> {
+) -> Result<Expr, CompileError> {
     let mut current_type = type_declaration.to_owned();
     let mut simplified_expression: Vec<AstNode> = Vec::new();
 
@@ -34,7 +34,7 @@ pub fn evaluate_expression(
                 }
 
                 match value {
-                    Value::Float(_) | Value::Int(_) | Value::Bool(_) => {
+                    Expr::Float(_) | Expr::Int(_) | Expr::Bool(_) => {
                         output_queue.push(node.to_owned());
                     }
 
@@ -169,7 +169,7 @@ pub fn evaluate_expression(
             for node in simplified_expression {
                 new_string += &node.get_value().as_string();
             }
-            Ok(Value::String(new_string))
+            Ok(Expr::String(new_string))
         }
 
         // At this stage, inferred should only be possible if only variables of unknown types
@@ -179,7 +179,7 @@ pub fn evaluate_expression(
         DataType::Inferred(_) => {
             // If there were any explicit numerical types, then this will be passed to math_constant_fold.
             // This is just to skip calling that function if no numerical constants were found.
-            Ok(Value::Runtime(simplified_expression, current_type))
+            Ok(Expr::Runtime(simplified_expression, current_type))
         }
 
         _ => {
@@ -197,15 +197,18 @@ pub fn evaluate_expression(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Value, CompileError> {
-    let mut nodes = Vec::new();
+fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
+    let mut scene_body: SceneBody = SceneBody::default();
     let mut styles = Vec::new();
+    let mut head_nodes = Vec::new();
 
     for node in simplified_expression {
         match node.get_value() {
-            Value::Scene(ref mut body, ref mut vec3, _) => {
-                nodes.append(body);
-                styles.append(vec3);
+            Expr::Scene(body, ref mut scene_styles, ref mut head, ..) => {
+                scene_body.before.extend(body.before);
+                scene_body.after.extend(body.after);
+                styles.append(scene_styles);
+                head_nodes.append(head);
             }
 
             _ => {
@@ -225,27 +228,27 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Value, Compi
         }
     }
 
-    Ok(Value::Scene(nodes, styles, String::new()))
+    Ok(Expr::Scene(scene_body, styles, head_nodes, String::new()))
 }
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Value, CompileError> {
+fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
     let mut new_string = String::new();
 
-    // String simplified expressions are just a list of strings atm
-    // So we can just concatenate them into a single string
-    // This will eventually need to be more complex to handle functions and other string manipulations
-    // The more complex things will be Runtime values
-    // However, there should also be compile-time folding for some of this stuff
+    // String simplified expressions are just a list of strings atm.
+    // So we can just concatenate them into a single String.
+    // This will eventually need to be more complex to handle functions and other string manipulations.
+    // The more complex things will be Runtime values.
+    // However, there should also be compile-time folding for some of this stuff.
 
     for node in simplified_expression {
         match node.get_value() {
-            Value::String(ref string) => {
+            Expr::String(ref string) => {
                 new_string.push_str(string);
             }
 
-            Value::Runtime(_, _) => {
+            Expr::Runtime(_, _) => {
                 return Err(CompileError {
                     msg: "Runtime expressions not supported yet in string expression (concat strings - eval expression). Can only concatenate strings at compile time right now".to_string(),
                     start_pos: TokenPosition {
@@ -278,5 +281,5 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Value, Com
         }
     }
 
-    Ok(Value::String(new_string))
+    Ok(Expr::String(new_string))
 }

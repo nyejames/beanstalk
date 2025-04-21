@@ -407,7 +407,7 @@ pub fn get_next_token(
         }
     }
 
-    // Mathematical operators,
+    // Mathematical operators
     // must peak ahead to check for exponentiation (**) or roots (//) and assign variations
     if current_char == '+' {
         if let Some(&next_char) = chars.peek() {
@@ -538,8 +538,15 @@ pub fn get_next_token(
             return Ok(Token::Id(token_value));
         }
 
-        *char_column += 1;
-        chars.next();
+        // Skip whitespace after the '@'
+        while let Some(&next_char) = chars.peek() {
+            if next_char.is_whitespace() {
+                chars.next();
+                *char_column += 1;
+                continue;
+            }
+            break;
+        }
 
         let var = keyword_or_variable(
             &mut token_value,
@@ -743,10 +750,12 @@ fn keyword_or_variable(
                 )));
             }
 
+            // Scene-related keywords
             "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(false))),
             "~Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(true))),
+            "slot" => return Ok(Token::Slot),
 
-            // Built in standard library functions
+            // Built-in standard library functions
             "print" => return Ok(Token::Print),
             "log" => return Ok(Token::Log),
             "assert" => return Ok(Token::Assert),

@@ -1,26 +1,61 @@
 use crate::CompileError;
 use crate::bs_types::DataType;
 use crate::html_output::js_parser::create_reference_in_js;
-use crate::parsers::ast_nodes::{Arg, Value};
+use crate::parsers::ast_nodes::{Arg, AstNode, Expr};
 use crate::parsers::markdown::to_markdown;
 use crate::settings::BS_VAR_PREFIX;
 use crate::settings::HTMLMeta;
+use colour::red_ln;
 use std::collections::HashMap;
+
+pub enum SceneType {
+    Scene(Expr),
+    Slot,
+    Comment,
+}
+#[derive(Clone, Debug, PartialEq)]
+pub struct SceneBody {
+    pub before: Vec<Expr>,
+    pub after: Vec<Expr>,
+}
+impl SceneBody {
+    pub fn default() -> Self {
+        Self {
+            before: Vec::new(),
+            after: Vec::new(),
+        }
+    }
+    pub fn flatten(&self) -> Vec<&Expr> {
+        let total_len = self.before.len() + self.after.len();
+        let mut flattened = Vec::with_capacity(total_len);
+
+        flattened.extend(&self.before);
+        flattened.extend(&self.after);
+
+        flattened
+    }
+}
 
 // Scene Config Type
 // This is passed into a scene head to configure how it should be parsed
 #[derive(Clone, Debug, PartialEq)]
 pub struct Style {
-    pub wrapper: Wrapper,
+    // pub slot: Wrapper,
 
     // A callback functions for how the string content of the scene should be parsed
     // If at all
     pub format: i32,
 
-    // Removes any parent wrappers lower than this precedence
-    // Before adding its own wrappers
+    // Overrides scenes trying to place this in a slot
     pub parent_override: i32,
 
+    // // Rules for adding this string to the wrapper
+    // pub groups: &'static [u32],
+    // pub incompatible_groups: &'static [u32],
+    // pub required_groups: &'static [u32],
+
+    // If compatible, should this overwrite everything else in the vec.
+    // pub overwrite: bool,
     pub neighbour_rule: NeighbourRule,
 
     // Passes a default style for any children to start with
@@ -30,8 +65,8 @@ pub struct Style {
 
     pub compatibility: SceneCompatibility,
 
-    // Styles that children of this scene can now use
-    pub unlocked_styles: HashMap<String, Style>,
+    // Scenes that this style will unlock
+    pub unlocked_scenes: HashMap<String, Expr>,
 
     // If this is true, no unlocked styles will be inherited from the parent
     pub unlocks_override: bool,
@@ -45,18 +80,14 @@ impl Style {
             neighbour_rule: NeighbourRule::None,
             child_default: None,
             compatibility: SceneCompatibility::All,
-            wrapper: Wrapper {
-                before: Vec::new(),
-                after: Vec::new(),
-            },
-            unlocked_styles: HashMap::new(),
+            unlocked_scenes: HashMap::new(),
             unlocks_override: false,
         }
     }
 }
 
 // A trait for how the content of a scene should be parsed
-// This is used for markdown, codeblocks, comments
+// This is used for Markdown, codeblocks, comments
 // THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum StyleFormat {
@@ -65,48 +96,6 @@ pub enum StyleFormat {
     Metadata = 2,
     Codeblock = 3,
     Comment = 4,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Wrapper {
-    // This can then help specify when to override the previous scene's wrappers at those indexes
-    pub before: Vec<WrapperString>,
-    pub after: Vec<WrapperString>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct WrapperString {
-    pub string: String,
-
-    // Rules for adding this string to the wrapper
-    pub groups: &'static [u32],
-    pub incompatible_groups: &'static [u32],
-    pub required_groups: &'static [u32],
-
-    // If compatible, should this overwrite everything else in the vec
-    pub overwrite: bool,
-}
-
-impl WrapperString {
-    pub fn default() -> WrapperString {
-        WrapperString {
-            string: String::new(),
-            groups: &[],
-            incompatible_groups: &[],
-            required_groups: &[],
-            overwrite: false,
-        }
-    }
-    pub fn is_compatible(&self, groups: &[u32]) -> bool {
-        for group in groups {
-            if self.incompatible_groups.contains(group)
-                || (!self.required_groups.is_empty() && !self.required_groups.contains(group))
-            {
-                return false;
-            }
-        }
-        true
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -124,7 +113,7 @@ impl PrecedenceStyle {
     }
 }
 
-// This will be important for markdown parsing and how scenes might modify neighbouring scenes
+// This will be important for Markdown parsing and how scenes might modify neighbouring scenes
 #[derive(Clone, Debug, PartialEq)]
 pub enum NeighbourRule {
     None,
@@ -139,7 +128,8 @@ pub enum SceneCompatibility {
 }
 
 pub struct SceneIngredients<'a> {
-    pub scene_body: &'a Vec<Value>,
+    pub scene_body: &'a SceneBody,
+    pub scene_head: &'a Vec<AstNode>,
     pub scene_styles: &'a Vec<Style>,
     pub inherited_style: PrecedenceStyle,
     pub scene_id: String,
@@ -159,6 +149,7 @@ pub fn parse_scene(
     let SceneIngredients {
         scene_body,
         scene_styles,
+        scene_head,
         inherited_style,
         scene_id,
         format_context,
@@ -174,50 +165,15 @@ pub fn parse_scene(
         ..Style::default()
     };
 
-    // Add in the wrappers inherited from the parent
-    // Ignore any below the parent override level
-
-    // Get the highest parent override value from the scene styles / inherited style
-    final_style.parent_override = scene_styles
-        .iter()
-        .map(|s| s.parent_override)
-        .max()
-        .unwrap_or(-1)
-        .max(final_style.parent_override);
-
-    // Resolve how all styles passed into the scene will be merged into one style
-    fn merge_wrapper(wrapper: &mut Vec<WrapperString>, style_wrapper: &Vec<WrapperString>) {
-        for (i, s) in style_wrapper.iter().enumerate() {
-            // No wrapper at this index of the vec yet
-            // So grow the vec
-            if i >= wrapper.len() {
-                wrapper.resize(i + 1, WrapperString::default());
-            }
-
-            // Check the wrapper is compatible
-            if s.is_compatible(&wrapper[i].groups) {
-                // Check if this wrapper is overriding the previous one, or just adding to it
-                if s.overwrite {
-                    wrapper[i] = s.to_owned();
-                } else {
-                    wrapper[i].string.push_str(&s.string);
-                }
-            }
-        }
-    }
-
     for style in scene_styles {
-        merge_wrapper(&mut final_style.wrapper.before, &style.wrapper.before);
-        merge_wrapper(&mut final_style.wrapper.after, &style.wrapper.after);
-
         // Format. How will the content be parsed?
-        // Each format has a different precedence, use the highest precedence
+        // Each format has a different precedence, using the highest precedence
         if style.format > final_style.format {
             final_style.format = style.format.to_owned();
         }
 
         // Child default
-        // If the child default is higher precedence than what is set currently
+        // If the child default is higher precedence than what is set currently,
         // Then replace it with this new child default
         // >= means that later declared styles take priority over earlier ones (this can change)
         if let Some(child_default) = &style.child_default {
@@ -251,45 +207,35 @@ pub fn parse_scene(
         final_style.neighbour_rule = style.neighbour_rule.to_owned();
     }
 
-    // Now we start combining everything together into one string
+    // Now we start combining everything into one string
     let mut final_string = String::new();
-
-    // Before wrappers
-    final_string.push_str(
-        &final_style
-            .wrapper
-            .before
-            .iter()
-            .map(|s| s.string.to_owned())
-            .collect::<String>(),
-    );
 
     // Everything inserted into the body
     // This needs to be done now
-    // so any added literals will be parsed by markdown correctly
+    // so Markdown will parse any added literals correctly
     let mut content = String::new();
 
     // Scene content
-    for value in scene_body {
+    for value in scene_body.flatten() {
         match value {
-            Value::String(string) => {
+            Expr::String(string) => {
                 content.push_str(string);
             }
 
-            Value::Float(float) => {
+            Expr::Float(float) => {
                 content.push_str(&float.to_string());
             }
 
-            Value::Int(int) => {
+            Expr::Int(int) => {
                 content.push_str(&int.to_string());
             }
 
-            // Just add the string representation of the bool
-            Value::Bool(value) => {
+            // Add the string representation of the bool
+            Expr::Bool(value) => {
                 content.push_str(&value.to_string());
             }
 
-            Value::Scene(new_scene_nodes, new_scene_styles, _) => {
+            Expr::Scene(new_scene_nodes, new_scene_styles, new_scene_head, _) => {
                 let child_default_style = match &final_style.child_default {
                     Some(child_default) => *child_default.to_owned(),
                     None => PrecedenceStyle::new(),
@@ -299,6 +245,7 @@ pub fn parse_scene(
                     SceneIngredients {
                         scene_body: new_scene_nodes,
                         scene_styles: new_scene_styles,
+                        scene_head: new_scene_head,
                         inherited_style: child_default_style,
                         scene_id: scene_id.to_owned(),
                         format_context: final_style.format,
@@ -314,7 +261,7 @@ pub fn parse_scene(
                 content.push_str(&new_scene);
             }
 
-            Value::Reference(name, data_type, argument_accessed) => {
+            Expr::Reference(name, data_type, argument_accessed) => {
                 // Create a span in the HTML with a class that can be referenced by JS
                 // TO DO: Should be reactive in future so this can change at runtime
 
@@ -354,7 +301,7 @@ pub fn parse_scene(
                 }
             }
 
-            Value::None => {
+            Expr::None => {
                 // Ignore this
                 // Currently 'ignored' or hidden scenes result in a None value being added to a scene,
                 // So it's not an error
@@ -362,21 +309,29 @@ pub fn parse_scene(
             }
 
             // TODO - add / test remaining types, some of them might need unpacking
-            Value::Runtime(..) => {}
-            Value::Function(..) => {}
+            Expr::Runtime(..) => {
+                red_ln!("adding a runtime value to a scene. Not yet supported.");
+            }
+            Expr::Function(..) => {
+                red_ln!("adding a function to a scene. Not yet supported.");
+            }
 
             // At this point, if this structure was a style, those fields and inner scene would have been parsed in scene_node.rs
             // So we can just unpack any other public fields into the scene as strings
-            Value::StructLiteral(_) => {}
+            Expr::StructLiteral(_) => {
+                red_ln!("adding a struct literal to a scene. Not yet supported.");
+            }
 
             // Collections will be unpacked into a scene
-            Value::Collection(_, _) => {}
+            Expr::Collection(_, _) => {
+                red_ln!("adding a collection to a scene. Not yet supported.");
+            }
         }
     }
 
-    // If this is a markdown scene, and the parent isn't one,
-    // parse the content into markdown
-    // If the parent is parsing the markdown already,
+    // If this is a Markdown scene, and the parent isn't one,
+    // parse the content into Markdown
+    // If the parent is parsing the Markdown already,
     // skip this as it should be done at the highest level possible
     if final_style.format == StyleFormat::Markdown as i32
         && format_context == StyleFormat::None as i32
@@ -389,7 +344,7 @@ pub fn parse_scene(
     } else if final_style.format == StyleFormat::Codeblock as i32
         && format_context == StyleFormat::Markdown as i32
     {
-        // Add a special object replace character to signal to parent that this tag should not be parsed into markdown
+        // Add a special object replace character to signal to parent that this tag should not be parsed into Markdown
         final_string.push_str(&format!(
             "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
             content
@@ -399,14 +354,14 @@ pub fn parse_scene(
     }
 
     // After wrappers
-    final_string.push_str(
-        &final_style
-            .wrapper
-            .after
-            .iter()
-            .map(|s| s.string.to_owned())
-            .collect::<String>(),
-    );
+    // final_string.push_str(
+    //     &final_style
+    //         .wrapper
+    //         .after
+    //         .iter()
+    //         .map(|s| s.string.to_owned())
+    //         .collect::<String>(),
+    // );
 
     Ok(final_string)
 }

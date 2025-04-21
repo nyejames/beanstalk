@@ -1,4 +1,4 @@
-use crate::parsers::ast_nodes::{Arg, Value};
+use crate::parsers::ast_nodes::{Arg, Expr};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
@@ -12,6 +12,7 @@ pub enum DataType {
     // Mutable Data Types will have an additional bool to indicate whether they are mutable
     Inferred(bool), // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
     Bool(bool),
+    Range, // Iterable
 
     // Immutable Data Types
     // In practice, these types should not be deliberately used much at all
@@ -22,10 +23,11 @@ pub enum DataType {
     False,
 
     // Strings
-    String(bool), // UTF-8 (will probably just be utf 16 because js for now)
-    // Any type can be used in the expression and will be coerced to a string (for scenes only)
-    // Mathematical operations will still work and take priority, but strings can be used in these expressions
-    // And all types will finally be coerced to strings after everything is evaluated
+    String(bool), // UTF-8 (will probably just be utf 16 because js for now).
+
+    // Any type can be used in the expression and will be coerced to a string (for scenes only).
+    // Mathematical operations will still work and take priority, but strings can be used in these expressions.
+    // All types will finally be coerced to strings after everything is evaluated.
     CoerceToString(bool),
 
     // Numbers
@@ -33,8 +35,8 @@ pub enum DataType {
     Int(bool),
     Decimal(bool),
 
-    // Collections
-    // Collection of a single type, dynamically sized
+    // Collections.
+    // A collection of a single type, dynamically sized
     // Uses curly brackets {}
     Collection(Box<DataType>),
 
@@ -62,7 +64,7 @@ pub enum DataType {
         EITHER:
             DataType::Tuple(Vec::new()) -- this is bad practice but would still result in None
             OR
-            DataType::None -- correct way to say None
+            DataType::None -- the correct way to say None
     */
     Structure(Vec<Arg>),
 
@@ -70,9 +72,9 @@ pub enum DataType {
     // Scene types may have more static structure to them in the future
     Scene(bool), // is_mutable
 
-    // Functions have named arguments
-    // These arguments are effectively identical to tuples
-    // We don't use a Datatypes here (to put two tuples there) as it just adds an extra unwrapping step
+    // Functions have named arguments.
+    // These arguments are effectively identical to tuples.
+    // We don't use a Datatypes here (to put two tuples there) as it just adds an extra unwrapping step.
     // And we want to be able to have optional names / default values for even single arguments
     Function(Vec<Arg>, Box<DataType>), // Arguments, Return type
 
@@ -95,6 +97,18 @@ impl DataType {
         // Must be type checked again at a later stage in the compiler
         if self == &DataType::Pointer {
             return true;
+        }
+
+        if self == &DataType::Range {
+            return matches!(
+                accepted_type,
+                DataType::Collection(_)
+                    | DataType::Structure(_)
+                    | DataType::Float(_)
+                    | DataType::Int(_)
+                    | DataType::Decimal(_)
+                    | DataType::String(_)
+            );
         }
 
         if let DataType::Choice(types) = self {
@@ -122,6 +136,12 @@ impl DataType {
                 }
                 false
             }
+            DataType::Bool(_) => {
+                matches!(
+                    self,
+                    &DataType::Bool(_) | &DataType::Int(_) | &DataType::Float(_)
+                )
+            }
             _ => self == accepted_type,
         }
     }
@@ -132,6 +152,7 @@ impl DataType {
             DataType::Inferred(_) => 0,
             DataType::CoerceToString(_) => 0,
             DataType::Bool(_) => 4,
+            DataType::Range => 0,
             DataType::True => 4,
             DataType::False => 5,
             DataType::String(_) => 6,
@@ -238,22 +259,22 @@ pub fn get_rgba_args() -> DataType {
         Arg {
             name: "red".to_string(),
             data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Value::Float(0.0),
+            value: Expr::Float(0.0),
         },
         Arg {
             name: "green".to_string(),
             data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Value::Float(0.0),
+            value: Expr::Float(0.0),
         },
         Arg {
             name: "blue".to_string(),
             data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Value::Float(0.0),
+            value: Expr::Float(0.0),
         },
         Arg {
             name: "alpha".to_string(),
             data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Value::Float(1.0),
+            value: Expr::Float(1.0),
         },
     ])
 }

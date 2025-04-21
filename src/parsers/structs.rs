@@ -6,7 +6,7 @@ use super::{
     variables::create_new_var_or_ref,
 };
 use crate::bs_types::DataType;
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::parse_expression::create_expression;
 use crate::tokenizer::TokenPosition;
@@ -20,7 +20,7 @@ use crate::{CompileError, ErrorType, Token};
 // This can be created using curly brackets or parenthesis depending on context (function calls)
 pub fn new_fixed_collection(
     x: &mut TokenContext,
-    initial_value: Value,
+    initial_value: Expr,
     required_args: &[Arg],
     ast: &[AstNode],
     variable_declarations: &mut Vec<Arg>,
@@ -28,7 +28,7 @@ pub fn new_fixed_collection(
     let mut item_args = required_args.to_owned();
 
     let mut items: Vec<Arg> = match initial_value {
-        Value::None => Vec::new(),
+        Expr::None => Vec::new(),
         _ => {
             vec![Arg {
                 name: "0".to_string(),

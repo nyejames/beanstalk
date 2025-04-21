@@ -1,5 +1,5 @@
 use crate::bs_types::get_reference_data_type;
-use crate::parsers::scene::Style;
+use crate::parsers::scene::{SceneBody, Style};
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
 use crate::{Token, bs_types::DataType};
@@ -15,7 +15,7 @@ use wasm_encoder::ValType;
 pub struct Arg {
     pub name: String, // Optional Name of the argument (empty string if unnamed)
     pub data_type: DataType,
-    pub value: Value, // Optional Value of the argument - 'None' if no value
+    pub value: Expr, // Optional Value of the argument - 'None' if no value
 }
 
 impl Arg {
@@ -30,7 +30,6 @@ impl Arg {
                 vec![ValType::I32]
             }
 
-            // TODO
             DataType::Decimal(_) => vec![ValType::F64],
 
             DataType::String(_) => vec![ValType::I32, ValType::I32],
@@ -50,10 +49,10 @@ impl Arg {
     }
 }
 
-// The possible values of any type
-// Returns 'Runtime' if the value is not known at compile time
+// The possible values of any type.
+// Return 'Runtime' if the value is not known at compile time
 #[derive(Debug, Clone, PartialEq)]
-pub enum Value {
+pub enum Expr {
     None,
 
     // For variables, function calls and structs / collection access
@@ -79,11 +78,11 @@ pub enum Value {
         bool,
     ),
 
-    Scene(Vec<Value>, Vec<Style>, String), // Content Nodes, Styles, ID
+    Scene(SceneBody, Vec<Style>, Vec<AstNode>, String), // Scene Body, Styles, Scenehead, ID
 
-    Collection(Vec<Value>, DataType),
+    Collection(Vec<Expr>, DataType),
 
-    // Could behave just like a tuple if type isn't specified
+    // Could behave just like a tuple if the type isn't specified
     // And the arguments are not named
     StructLiteral(Vec<Arg>),
 }
@@ -105,7 +104,11 @@ pub enum AstNode {
     Use(PathBuf, TokenPosition), // Path, Line number
 
     // Control Flow
-    Return(Value, TokenPosition), // Return value, Line number
+    Return(Expr, TokenPosition),           // Return value, Line number
+    If(Expr, Vec<AstNode>, TokenPosition), // Condition, If true, Line number
+    Else(Vec<AstNode>, TokenPosition),     // Body, Line number
+    ForLoop(Expr, Expr, Vec<AstNode>, TokenPosition), // Item, Collection, Body, Line number
+    WhileLoop(Expr, Vec<AstNode>, TokenPosition), // Condition, Body, Line number
 
     // Basics
     Function(
@@ -117,9 +120,10 @@ pub enum AstNode {
         TokenPosition,
         bool, // Pure
     ),
+
     FunctionCall(
         String,
-        Vec<Value>, // Arguments passed in
+        Vec<Expr>,  // Arguments passed in
         DataType,   // return type
         Vec<usize>, // Accessed args
         TokenPosition,
@@ -129,11 +133,11 @@ pub enum AstNode {
     Comment(String),
 
     // Variable names should be the full namespace (module path + variable name)
-    VarDeclaration(String, Value, bool, DataType, TokenPosition), // Variable name, Value, Public, Type, Line number
+    VarDeclaration(String, Expr, bool, DataType, TokenPosition), // Variable name, Value, Public, Type, Line number
 
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
-    Print(Value, TokenPosition), // Value, Line number
+    Print(Expr, TokenPosition), // Value, Line number
 
     // Not even sure if this is needed
     JSStringReference(String, TokenPosition), // Variable name, Line number
@@ -144,9 +148,10 @@ pub enum AstNode {
     Wasm(String, TokenPosition), // Code, Line number
 
     // Literals
-    Literal(Value, TokenPosition), // Token, Accessed args, Line number
+    Literal(Expr, TokenPosition), // Token, Accessed args, Line number
 
     SceneTemplate,
+    Slot,
     Empty(TokenPosition), // Line number
 
     // Operators
@@ -163,10 +168,10 @@ impl AstNode {
     pub fn get_type(&self) -> DataType {
         match self {
             AstNode::Literal(value, _) => match value {
-                Value::Float(_) => DataType::Float(false),
-                Value::Int(_) => DataType::Int(false),
-                Value::String(_) => DataType::String(false),
-                Value::Bool(value) => {
+                Expr::Float(_) => DataType::Float(false),
+                Expr::Int(_) => DataType::Int(false),
+                Expr::String(_) => DataType::String(false),
+                Expr::Bool(value) => {
                     if *value {
                         DataType::True
                     } else {
@@ -174,24 +179,24 @@ impl AstNode {
                     }
                 }
 
-                Value::Scene(..) => DataType::Scene(false),
-                Value::Collection(_, data_type) => data_type.to_owned(),
-                Value::StructLiteral(args) => {
+                Expr::Scene(..) => DataType::Scene(false),
+                Expr::Collection(_, data_type) => data_type.to_owned(),
+                Expr::StructLiteral(args) => {
                     let mut data_type = DataType::Inferred(false);
                     for arg in args {
                         data_type = arg.data_type.to_owned();
                     }
                     data_type
                 }
-                Value::Reference(_, data_type, argument_accessed) => {
+                Expr::Reference(_, data_type, argument_accessed) => {
                     get_reference_data_type(data_type, argument_accessed)
                 }
-                Value::Function(_, args, _, _, return_type, ..) => {
+                Expr::Function(_, args, _, _, return_type, ..) => {
                     DataType::Function(args.to_owned(), Box::new(return_type.to_owned()))
                 }
 
-                Value::Runtime(_, data_type) => data_type.to_owned(),
-                Value::None => DataType::None,
+                Expr::Runtime(_, data_type) => data_type.to_owned(),
+                Expr::None => DataType::None,
             },
 
             AstNode::Empty(_) => DataType::None,
@@ -200,7 +205,7 @@ impl AstNode {
             AstNode::FunctionCall(_, _, return_type, ..) => DataType::Structure(Vec::from([Arg {
                 name: "".to_string(),
                 data_type: return_type.to_owned(),
-                value: Value::None,
+                value: Expr::None,
             }])),
 
             _ => {
@@ -218,11 +223,11 @@ impl AstNode {
     // This is pretty much just for literals
     // Returns 'None' if it's not a literal value
     // Returns 'Runtime' if it can't be evaluated at compile time
-    pub(crate) fn get_value(&self) -> Value {
+    pub(crate) fn get_value(&self) -> Expr {
         match self {
             AstNode::Literal(value, ..) | AstNode::VarDeclaration(_, value, ..) => value.to_owned(),
             AstNode::Function(name, args, body, is_exported, return_type, _, is_pure) => {
-                Value::Function(
+                Expr::Function(
                     name.to_owned(),
                     args.to_owned(),
                     body.to_owned(),
@@ -232,7 +237,7 @@ impl AstNode {
                     is_pure.to_owned(),
                 )
             }
-            _ => Value::None,
+            _ => Expr::None,
         }
     }
 
@@ -281,23 +286,23 @@ impl AstNode {
     }
 }
 
-impl Value {
+impl Expr {
     pub fn get_type(&self) -> DataType {
         match self {
-            Value::None => DataType::None,
-            Value::Runtime(_, data_type) => data_type.to_owned(),
-            Value::Int(_) => DataType::Int(false),
-            Value::Float(_) => DataType::Float(false),
-            Value::String(_) => DataType::String(false),
-            Value::Bool(_) => DataType::Bool(false),
-            Value::Scene(..) => DataType::Scene(false),
-            Value::Collection(_, data_type) => data_type.to_owned(),
-            Value::StructLiteral(args) => DataType::Structure(args.to_owned()),
-            Value::Function(_, args, _, _, return_type, ..) => {
+            Expr::None => DataType::None,
+            Expr::Runtime(_, data_type) => data_type.to_owned(),
+            Expr::Int(_) => DataType::Int(false),
+            Expr::Float(_) => DataType::Float(false),
+            Expr::String(_) => DataType::String(false),
+            Expr::Bool(_) => DataType::Bool(false),
+            Expr::Scene(..) => DataType::Scene(false),
+            Expr::Collection(_, data_type) => data_type.to_owned(),
+            Expr::StructLiteral(args) => DataType::Structure(args.to_owned()),
+            Expr::Function(_, args, _, _, return_type, ..) => {
                 DataType::Function(args.to_owned(), Box::new(return_type.to_owned()))
             }
             // Need to check accessed args
-            Value::Reference(_, data_type, argument_accessed) => {
+            Expr::Reference(_, data_type, argument_accessed) => {
                 get_reference_data_type(data_type, argument_accessed)
             }
         }
@@ -305,40 +310,40 @@ impl Value {
 
     pub fn as_string(&self) -> String {
         match self {
-            Value::String(string) => string.to_owned(),
-            Value::Int(int) => int.to_string(),
-            Value::Float(float) => float.to_string(),
-            Value::Bool(bool) => bool.to_string(),
-            Value::Scene(..) => String::new(),
-            Value::Collection(items, ..) => {
+            Expr::String(string) => string.to_owned(),
+            Expr::Int(int) => int.to_string(),
+            Expr::Float(float) => float.to_string(),
+            Expr::Bool(bool) => bool.to_string(),
+            Expr::Scene(..) => String::new(),
+            Expr::Collection(items, ..) => {
                 let mut all_items = String::new();
                 for item in items {
                     all_items.push_str(&item.as_string());
                 }
                 all_items
             }
-            Value::StructLiteral(args) => {
+            Expr::StructLiteral(args) => {
                 let mut all_items = String::new();
                 for arg in args {
                     all_items.push_str(&arg.value.as_string());
                 }
                 all_items
             }
-            Value::Function(..) => String::new(),
-            Value::Reference(..) => String::new(),
-            Value::Runtime(..) => String::new(),
-            Value::None => String::new(),
+            Expr::Function(..) => String::new(),
+            Expr::Reference(..) => String::new(),
+            Expr::Runtime(..) => String::new(),
+            Expr::None => String::new(),
         }
     }
 
     pub fn is_pure(&self) -> bool {
         match self {
-            Value::Runtime(..) | Value::Reference(..) => false,
-            Value::Function(_, _, _, _, _, _, is_pure) => {
+            Expr::Runtime(..) | Expr::Reference(..) => false,
+            Expr::Function(_, _, _, _, _, _, is_pure) => {
                 // red_ln!("is_pure: {:?}", is_pure);
                 *is_pure
             }
-            Value::Collection(values, _) => {
+            Expr::Collection(values, _) => {
                 for value in values {
                     if !value.is_pure() {
                         return false;
@@ -346,7 +351,7 @@ impl Value {
                 }
                 true
             }
-            Value::StructLiteral(args) => {
+            Expr::StructLiteral(args) => {
                 for arg in args {
                     if !arg.value.is_pure() {
                         return false;
@@ -356,31 +361,31 @@ impl Value {
             }
 
             // Not sure about how to handle this yet
-            Value::Scene(..) => false,
+            Expr::Scene(..) => false,
             _ => true,
         }
     }
 
     pub fn dimensions(&self) -> TokenPosition {
         match self {
-            Value::None => TokenPosition {
+            Expr::None => TokenPosition {
                 line_number: 0,
                 char_column: 0,
             },
 
-            Value::Int(val) => TokenPosition {
+            Expr::Int(val) => TokenPosition {
                 line_number: 0,
                 char_column: val.to_string().len() as i32,
             },
 
-            Value::Float(val) => TokenPosition {
+            Expr::Float(val) => TokenPosition {
                 line_number: 0,
                 char_column: val.to_string().len() as i32,
             },
 
-            Value::String(val) => string_dimensions(val),
+            Expr::String(val) => string_dimensions(val),
 
-            Value::Bool(val) => {
+            Expr::Bool(val) => {
                 if *val {
                     TokenPosition {
                         line_number: 4,
@@ -394,12 +399,12 @@ impl Value {
                 }
             }
 
-            Value::Reference(name, ..) => TokenPosition {
+            Expr::Reference(name, ..) => TokenPosition {
                 line_number: 0,
                 char_column: name.len() as i32,
             },
 
-            Value::Function(_, _, nodes, ..) => {
+            Expr::Function(_, _, nodes, ..) => {
                 let mut combined_dimensions = TokenPosition::default();
 
                 // Get the largest dimensions of all the nodes
@@ -420,26 +425,16 @@ impl Value {
             // And get the positions
             // This just gets the widest char line
             // So error formatting will need to clip the line to each length
-            Value::Scene(nodes, ..) => {
-                let first_node = &nodes[0];
-                let last_node = &nodes[nodes.len() - 1];
+            Expr::Scene(nodes, ..) => {
+                let first_node = &nodes.before[0];
+                let last_node = &nodes.after[nodes.after.len() - 1];
                 TokenPosition {
                     line_number: last_node.dimensions().line_number,
                     char_column: last_node.dimensions().char_column
                         - first_node.dimensions().char_column,
                 }
             }
-            Value::Runtime(nodes, ..) => {
-                let first_node = &nodes[0];
-                let last_node = &nodes[nodes.len() - 1];
-                TokenPosition {
-                    line_number: last_node.dimensions().line_number,
-                    char_column: last_node.dimensions().char_column
-                        - first_node.dimensions().char_column,
-                }
-            }
-
-            Value::Collection(nodes, ..) => {
+            Expr::Runtime(nodes, ..) => {
                 let first_node = &nodes[0];
                 let last_node = &nodes[nodes.len() - 1];
                 TokenPosition {
@@ -449,7 +444,17 @@ impl Value {
                 }
             }
 
-            Value::StructLiteral(args) => {
+            Expr::Collection(nodes, ..) => {
+                let first_node = &nodes[0];
+                let last_node = &nodes[nodes.len() - 1];
+                TokenPosition {
+                    line_number: last_node.dimensions().line_number,
+                    char_column: last_node.dimensions().char_column
+                        - first_node.dimensions().char_column,
+                }
+            }
+
+            Expr::StructLiteral(args) => {
                 let mut combined_dimensions = TokenPosition {
                     line_number: args[0].value.dimensions().line_number,
                     char_column: args[0].value.dimensions().char_column,

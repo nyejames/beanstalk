@@ -1,6 +1,6 @@
 use super::js_parser::expression_to_js;
 use crate::html_output::js_parser::combine_vec_to_js;
-use crate::parsers::ast_nodes::{Arg, Value};
+use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::scene::{PrecedenceStyle, SceneIngredients, StyleFormat, parse_scene};
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
@@ -45,11 +45,12 @@ pub fn parse<'a>(
     for node in ast {
         match node {
             // SCENES (HTML)
-            AstNode::Literal(Value::Scene(scene_body, scene_styles, scene_id), _) => {
+            AstNode::Literal(Expr::Scene(scene_body, scene_styles, scene_head, scene_id), _) => {
                 let parsed_scene = parse_scene(
                     SceneIngredients {
                         scene_body: &scene_body,
                         scene_styles: &scene_styles,
+                        scene_head: &scene_head,
                         inherited_style: PrecedenceStyle::new(),
                         scene_id,
                         format_context: StyleFormat::None as i32,
@@ -90,13 +91,14 @@ pub fn parse<'a>(
 
                     DataType::Scene(..) => {
                         match expr {
-                            Value::Scene(scene_body, scene_styles, id) => {
+                            Expr::Scene(scene_body, scene_styles, scene_head, id) => {
                                 let mut created_css = String::new();
 
                                 let scene_to_js_string = parse_scene(
                                     SceneIngredients {
                                         scene_body,
                                         scene_styles,
+                                        scene_head,
                                         inherited_style: PrecedenceStyle::new(),
                                         scene_id: id.to_owned(),
                                         format_context: StyleFormat::None as i32,

@@ -1,4 +1,4 @@
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::Expr;
 use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode,
@@ -6,31 +6,31 @@ use crate::{
 };
 
 // Create everything necessary in JS
-pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<String, CompileError> {
+pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
 
     match expr {
-        Value::Runtime(nodes, expression_type) => {
+        Expr::Runtime(nodes, expression_type) => {
             for node in nodes {
                 match node {
                     AstNode::Literal(value, _) => match value {
-                        Value::Float(value) => {
+                        Expr::Float(value) => {
                             js.push_str(&value.to_string());
                         }
 
-                        Value::Int(value) => {
+                        Expr::Int(value) => {
                             js.push_str(&value.to_string());
                         }
 
-                        Value::String(value) => {
+                        Expr::String(value) => {
                             js.push_str(&format!("\"{}\"", value));
                         }
 
-                        Value::Bool(value) => {
+                        Expr::Bool(value) => {
                             js.push_str(&value.to_string());
                         }
 
-                        Value::Reference(id, _, argument_accessed) => {
+                        Expr::Reference(id, _, argument_accessed) => {
                             // All just JS for now
                             js.push_str(&format!(" {BS_VAR_PREFIX}{id} "));
                             for index in argument_accessed {
@@ -117,20 +117,20 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
             }
         }
 
-        Value::Float(value) => {
+        Expr::Float(value) => {
             js.push_str(&value.to_string());
         }
 
-        Value::Int(value) => {
+        Expr::Int(value) => {
             let as_float = *value as f64;
             js.push_str(&as_float.to_string());
         }
 
-        Value::String(value) => {
+        Expr::String(value) => {
             js.push_str(&format!("\"{}\"", value));
         }
 
-        Value::Reference(name, _, arguments_accessed) => {
+        Expr::Reference(name, _, arguments_accessed) => {
             js.push_str(&format!(" {BS_VAR_PREFIX}{name} "));
             for index in arguments_accessed {
                 js.push_str(&format!("[{}]", index));
@@ -139,7 +139,7 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
 
         // If the expression is just a tuple,
         // then it should automatically destructure into multiple arguments like this
-        Value::StructLiteral(args) => {
+        Expr::StructLiteral(args) => {
             let mut structure = String::from("{{");
             for (index, arg) in args.iter().enumerate() {
                 let arg_name = if arg.name.is_empty() {
@@ -157,15 +157,15 @@ pub fn expression_to_js(expr: &Value, start_pos: &TokenPosition) -> Result<Strin
             }
         }
 
-        Value::Collection(items, _) => {
+        Expr::Collection(items, _) => {
             js.push_str(&combine_vec_to_js(items, start_pos)?);
         }
 
-        Value::None => {
+        Expr::None => {
             js.push_str("null ");
         }
 
-        Value::Bool(value) => {
+        Expr::Bool(value) => {
             js.push_str(&value.to_string());
         }
 
@@ -205,7 +205,7 @@ pub fn create_reference_in_js(
 }
 
 pub fn combine_vec_to_js(
-    collection: &[Value],
+    collection: &[Expr],
     line_number: &TokenPosition,
 ) -> Result<String, CompileError> {
     let mut js = String::new();

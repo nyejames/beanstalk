@@ -2,7 +2,7 @@ use crate::bs_types::DataType;
 use crate::html_output::dom_hooks::{DOMUpdate, generate_dom_update_js};
 use crate::html_output::generate_html::create_html_boilerplate;
 use crate::html_output::web_parser;
-use crate::parsers::ast_nodes::{Arg, AstNode, Value};
+use crate::parsers::ast_nodes::{Arg, AstNode, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::settings::{BS_VAR_PREFIX, Config};
 use crate::tokenizer::TokenPosition;
@@ -498,7 +498,7 @@ fn compile(
 
             declarations.push(Arg {
                 name: split_import_string[1].to_owned(),
-                value: Value::Reference(
+                value: Expr::Reference(
                     split_import_string[1].to_owned(),
                     DataType::Pointer,
                     Vec::new(),
@@ -537,7 +537,7 @@ fn compile(
             for name in import_names {
                 declarations.push(Arg {
                     name: name.to_owned(),
-                    value: Value::Reference(name.to_owned(), DataType::Pointer, Vec::new()),
+                    value: Expr::Reference(name.to_owned(), DataType::Pointer, Vec::new()),
                     data_type: DataType::Pointer,
                 })
             }
@@ -739,7 +739,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
             match name.as_str() {
                 "project" => {
                     project_config.project = match value {
-                        Value::String(value) => value.to_owned(),
+                        Expr::String(value) => value.to_owned(),
                         _ => {
                             return Err(Error {
                                 msg: "Project name must be a string".to_string(),
@@ -754,7 +754,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "src" => {
                     project_config.src = match value {
-                        Value::String(value) => PathBuf::from(value),
+                        Expr::String(value) => PathBuf::from(value),
                         _ => {
                             return Err(Error {
                                 msg: "Source folder must be a string".to_string(),
@@ -769,7 +769,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "dev" => {
                     project_config.dev_folder = match value {
-                        Value::String(value) => PathBuf::from(value),
+                        Expr::String(value) => PathBuf::from(value),
                         _ => {
                             return Err(Error {
                                 msg: "Dev folder must be a string".to_string(),
@@ -784,7 +784,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "release" => {
                     project_config.release_folder = match value {
-                        Value::String(value) => PathBuf::from(value),
+                        Expr::String(value) => PathBuf::from(value),
                         _ => {
                             return Err(Error {
                                 msg: "Release folder must be a string".to_string(),
@@ -799,7 +799,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "name" => {
                     project_config.name = match value {
-                        Value::String(value) => value.to_owned(),
+                        Expr::String(value) => value.to_owned(),
                         _ => {
                             return Err(Error {
                                 msg: "Name must be a string".to_string(),
@@ -814,7 +814,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "version" => {
                     project_config.version = match value {
-                        Value::String(value) => value.to_owned(),
+                        Expr::String(value) => value.to_owned(),
                         _ => {
                             return Err(Error {
                                 msg: "Version must be a string".to_string(),
@@ -829,7 +829,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "author" => {
                     project_config.author = match value {
-                        Value::String(value) => value.to_owned(),
+                        Expr::String(value) => value.to_owned(),
                         _ => {
                             return Err(Error {
                                 msg: "Author must be a string".to_string(),
@@ -844,7 +844,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "license" => {
                     project_config.license = match value {
-                        Value::String(value) => value.to_owned(),
+                        Expr::String(value) => value.to_owned(),
                         _ => {
                             return Err(Error {
                                 msg: "License must be a string".to_string(),
@@ -859,12 +859,12 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                 "html_settings" => {
                     return match value {
-                        Value::StructLiteral(args) => {
+                        Expr::StructLiteral(args) => {
                             for arg in args {
                                 match arg.name.as_str() {
                                     "site_title" => {
                                         project_config.html_meta.site_title = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Site title must be a string".to_string(),
@@ -880,7 +880,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     "page_description" => {
                                         project_config.html_meta.page_description = match &arg.value
                                         {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page description must be a string"
@@ -896,7 +896,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "site_url" => {
                                         project_config.html_meta.site_url = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Site url must be a string".to_string(),
@@ -911,7 +911,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_url" => {
                                         project_config.html_meta.page_url = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page url must be a string".to_string(),
@@ -926,7 +926,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_og_title" => {
                                         project_config.html_meta.page_og_title = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page og title must be a string"
@@ -943,7 +943,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     "page_og_description" => {
                                         project_config.html_meta.page_og_description =
                                             match &arg.value {
-                                                Value::String(value) => value.to_owned(),
+                                                Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
                                                         msg: "Page og description must be a string"
@@ -959,7 +959,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_image_url" => {
                                         project_config.html_meta.page_image_url = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page image url must be a string"
@@ -975,7 +975,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_image_alt" => {
                                         project_config.html_meta.page_image_alt = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page image alt must be a string"
@@ -991,7 +991,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_locale" => {
                                         project_config.html_meta.page_locale = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page locale must be a string".to_string(),
@@ -1006,7 +1006,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_type" => {
                                         project_config.html_meta.page_type = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page type must be a string".to_string(),
@@ -1022,7 +1022,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     "page_twitter_large_image" => {
                                         project_config.html_meta.page_twitter_large_image =
                                             match &arg.value {
-                                                Value::String(value) => value.to_owned(),
+                                                Expr::String(value) => value.to_owned(),
                                                 _ => return Err(Error {
                                                     msg:
                                                         "Page twitter large image must be a string"
@@ -1038,7 +1038,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     "page_canonical_url" => {
                                         project_config.html_meta.page_canonical_url =
                                             match &arg.value {
-                                                Value::String(value) => value.to_owned(),
+                                                Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
                                                         msg: "Page canonical url must be a string"
@@ -1054,7 +1054,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
 
                                     "page_root_url" => {
                                         project_config.html_meta.page_root_url = match &arg.value {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Page root url must be a string"
@@ -1071,7 +1071,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     "image_folder_url" => {
                                         project_config.html_meta.image_folder_url = match &arg.value
                                         {
-                                            Value::String(value) => value.to_owned(),
+                                            Expr::String(value) => value.to_owned(),
                                             _ => {
                                                 return Err(Error {
                                                     msg: "Image folder url must be a string"
@@ -1173,24 +1173,23 @@ fn print_ast_output(ast: &Vec<AstNode>) {
         println!("\n");
     }
 
-    fn print_scene(scene: &Value, scene_nesting_level: u32) {
+    fn print_scene(scene: &Expr, scene_nesting_level: u32) {
         // Indent the scene by how nested it is
         let mut indentation = String::new();
         for _ in 0..scene_nesting_level {
             indentation.push('\t');
         }
 
-        if let Value::Scene(nodes, styles, ..) = scene {
+        if let Expr::Scene(nodes, styles, ..) = scene {
             blue_ln_bold!("\n{}Scene Styles: ", indentation);
             for style in styles {
                 green_ln!("{}  {:?}", indentation, style);
             }
             blue_ln_bold!("{}Scene Body:", indentation);
 
-            for scene_node in nodes {
+            for scene_node in nodes.flatten() {
                 println!("{}  {:?}", indentation, scene_node);
             }
         }
-        println!("\n");
     }
 }

@@ -18,7 +18,7 @@ If it is, the error can then be handled immediately on the same line, or in a ne
 If you use a colon after the ? or ! operator, you will need the zz statement to close the scope. 
 Otherwise, you can handle it inline.
 
-[Code:
+[code:
     func_call_that_can_return_an_error() !:
         -- Error handling code
     zz
@@ -34,7 +34,7 @@ Otherwise, you can handle it inline.
 
 ## Using the ? operator
 
-[Code:
+[code:
     getURL () -> string:
         return getNetworkRequest() ?:
             print("Network did not respond: Using default URL")
@@ -62,7 +62,7 @@ Functions that can panic at runtime should only be used in cases where the progr
 Such as if there is a high risk of undefined behaviour in a critical and complex part of a program.
 Effectively creating a runtime assertion.
 
-[Code:
+[code:
     -- stops the program if 1 is not equal to 1
     -- Runs the code in the block first
     assert(1 is not 1, "1 is not 1 uh oh")

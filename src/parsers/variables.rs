@@ -3,7 +3,7 @@ use super::{
     expressions::parse_expression::create_expression,
     functions::create_function,
 };
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::functions::parse_function_call;
@@ -65,7 +65,7 @@ pub fn create_new_var_or_ref(
                 }
 
                 Ok(AstNode::Literal(
-                    Value::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
+                    Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
                     TokenPosition {
                         line_number: token_line_number,
                         char_column: token_start_pos,
@@ -216,19 +216,19 @@ fn create_zero_value_var(
     match data_type {
         DataType::Float(_) => AstNode::VarDeclaration(
             name,
-            Value::Float(0.0),
+            Expr::Float(0.0),
             is_exported,
             data_type,
             token_position,
         ),
 
         DataType::Int(_) => {
-            AstNode::VarDeclaration(name, Value::Int(0), is_exported, data_type, token_position)
+            AstNode::VarDeclaration(name, Expr::Int(0), is_exported, data_type, token_position)
         }
 
         DataType::String(_) => AstNode::VarDeclaration(
             name,
-            Value::String("".to_string()),
+            Expr::String("".to_string()),
             is_exported,
             data_type,
             token_position,
@@ -236,12 +236,12 @@ fn create_zero_value_var(
 
         DataType::Bool(_) => AstNode::VarDeclaration(
             name,
-            Value::Bool(false),
+            Expr::Bool(false),
             is_exported,
             data_type,
             token_position,
         ),
 
-        _ => AstNode::VarDeclaration(name, Value::None, is_exported, data_type, token_position),
+        _ => AstNode::VarDeclaration(name, Expr::None, is_exported, data_type, token_position),
     }
 }

@@ -1,4 +1,4 @@
-use crate::parsers::ast_nodes::Value;
+use crate::parsers::ast_nodes::Expr;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
 
 use crate::tokenizer::TokenPosition;
@@ -12,7 +12,7 @@ use colour::{blue_ln, green_ln_bold, red_ln};
 pub fn math_constant_fold(
     output_stack: Vec<AstNode>,
     current_type: DataType,
-) -> Result<Value, CompileError> {
+) -> Result<Expr, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
     let mut first_line_number = 0;
 
@@ -57,8 +57,8 @@ pub fn math_constant_fold(
                 // And just push the operator onto the stack instead of evaluating
                 // TO DO: GENERICS FOR THIS TO SUPPORT INTS CORRECTLY
                 let lhs_value = match lhs.get_value() {
-                    Value::Float(value) => value,
-                    Value::Int(value) => value as f64,
+                    Expr::Float(value) => value,
+                    Expr::Int(value) => value as f64,
 
                     // TODO - some runtime thing
                     _ => {
@@ -70,8 +70,8 @@ pub fn math_constant_fold(
                 };
 
                 let rhs_value = match rhs.get_value() {
-                    Value::Float(value) => value,
-                    Value::Int(value) => value as f64,
+                    Expr::Float(value) => value,
+                    Expr::Int(value) => value as f64,
 
                     // TODO - some runtime thing
                     _ => {
@@ -83,7 +83,7 @@ pub fn math_constant_fold(
                 };
 
                 let new_number = AstNode::Literal(
-                    Value::Float(match op {
+                    Expr::Float(match op {
                         Token::Add => lhs_value + rhs_value,
                         Token::Subtract => lhs_value - rhs_value,
                         Token::Multiply => lhs_value * rhs_value,
@@ -127,16 +127,16 @@ pub fn math_constant_fold(
     }
 
     if stack.is_empty() {
-        return Ok(Value::None);
+        return Ok(Expr::None);
     }
 
-    Ok(Value::Runtime(stack, current_type))
+    Ok(Expr::Runtime(stack, current_type))
 }
 
 pub fn logical_constant_fold(
     output_stack: Vec<AstNode>,
     current_type: DataType,
-) -> Result<Value, CompileError> {
+) -> Result<Expr, CompileError> {
     let mut stack: Vec<AstNode> = Vec::new();
 
     let mut first_line_number = 0;
@@ -173,7 +173,7 @@ pub fn logical_constant_fold(
                 // if at least one is not then this must be a runtime expression
                 // And just push the operator onto the stack instead of evaluating
                 let left_value = match left {
-                    AstNode::Literal(Value::Bool(value), ..) => value,
+                    AstNode::Literal(Expr::Bool(value), ..) => value,
                     _ => {
                         stack.push(left);
                         stack.push(right);
@@ -183,7 +183,7 @@ pub fn logical_constant_fold(
                 };
 
                 let right_value = match right {
-                    AstNode::Literal(Value::Bool(value), ..) => value,
+                    AstNode::Literal(Expr::Bool(value), ..) => value,
                     _ => {
                         stack.push(left);
                         stack.push(right);
@@ -193,7 +193,7 @@ pub fn logical_constant_fold(
                 };
 
                 let new_bool = AstNode::Literal(
-                    Value::Bool(match op {
+                    Expr::Bool(match op {
                         Token::Equal => left_value == right_value,
                         Token::And => left_value && right_value,
                         Token::Or => left_value || right_value,
@@ -247,5 +247,5 @@ pub fn logical_constant_fold(
         };
     }
 
-    Ok(Value::Runtime(stack, current_type))
+    Ok(Expr::Runtime(stack, current_type))
 }
