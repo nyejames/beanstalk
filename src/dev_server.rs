@@ -233,7 +233,6 @@ fn build_project(
     output_info_level: i32,
 ) -> Result<Config, Error> {
     dark_cyan_ln!("Building project...");
-    dark_cyan_ln!("Building project...");
     let start = Instant::now();
 
     // TODO - send config file to dev server function and pass it in here

@@ -8,7 +8,7 @@ use crate::bs_types::get_any_number_datatype;
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::parsers::scene::SceneType;
+use crate::parsers::scene::{SceneType, Style};
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::tokenizer::TokenPosition;
 use crate::{
@@ -122,7 +122,7 @@ pub fn create_expression(
                         let structure = new_fixed_collection(
                             x,
                             Expr::None,
-                            // Difference is this is inferred
+                            // The difference is this is inferred
                             &Vec::new(),
                             ast,
                             captured_declarations,
@@ -391,18 +391,20 @@ pub fn create_expression(
                 // Add the default core HTML styles as the initially unlocked styles
                 // let mut unlocked_styles = HashMap::from(get_html_styles());
 
-                match new_scene(x, ast, captured_declarations, &mut HashMap::new()) {
-                    Ok(SceneType::Scene(scene)) => return Ok(scene),
+
+                let scene_type = new_scene(x, ast, captured_declarations, &mut HashMap::new(), Style::default())?;
+                match scene_type {
+                    SceneType::Scene(scene) => return Ok(scene),
 
                     // Ignore comments
-                    Ok(SceneType::Comment) => {}
+                    SceneType::Comment => {}
 
                     // Error for anything else for now
                     _ => {
                         return Err(CompileError {
                             msg: format!(
                                 "Unexpected scene type used in expression: {:?}",
-                                data_type
+                                scene_type
                             ),
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {

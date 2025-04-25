@@ -47,7 +47,7 @@ mod wasm_output {
 }
 use crate::tokenizer::TokenPosition;
 use colour::{
-    dark_cyan, dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln,
+    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln,
     e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
 };
 
@@ -163,7 +163,6 @@ fn main() {
         }
 
         Command::Release(path) => {
-            dark_cyan!("Building project...");
             let start = Instant::now();
 
             // TODO - parse config file instead of using default config
@@ -311,7 +310,7 @@ fn prompt_user_for_input(msg: String) -> Vec<String> {
     args
 }
 
-fn print_formatted_error(mut e: Error) {
+fn print_formatted_error(e: Error) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => e

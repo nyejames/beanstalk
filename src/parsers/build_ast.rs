@@ -5,11 +5,12 @@ use super::{
 // use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::functions::parse_function_call;
-use crate::parsers::scene::SceneType;
+use crate::parsers::scene::{SceneType, Style};
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use colour::red_ln;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -87,7 +88,7 @@ pub fn new_ast(
                 // Add the default core HTML styles as the initially unlocked styles
                 // let mut unlocked_styles = HashMap::from(get_html_styles());
 
-                let scene = new_scene(x, &ast, &mut declarations, &mut HashMap::new())?;
+                let scene = new_scene(x, &ast, &mut declarations, &mut HashMap::new(), Style::default())?;
 
                 match scene {
                     SceneType::Scene(expr) => {
@@ -108,7 +109,8 @@ pub fn new_ast(
                 }
             }
 
-            Token::ModuleStart(_) => {
+            Token::ModuleStart => {
+                // TODO - figure out if we are using this or get rid of it
                 // In the future, need to structure into code blocks
             }
 
@@ -382,6 +384,34 @@ pub fn new_ast(
                 break;
             }
 
+            Token::Settings => {
+                let config = create_new_var_or_ref(
+                    x,
+                    String::from("settings"),
+                    &mut declarations,
+                    false,
+                    &ast,
+                    false,
+                )?;
+
+                let config = match config {
+                    AstNode::VarDeclaration(_, Expr::StructLiteral(args), ..) => args,
+                    _=> {
+                        return Err(CompileError {
+                            msg: format!("Settings must be assigned with a struct literal. Found {:?}", config),
+                            start_pos: x.current_position(),
+                            end_pos: TokenPosition {
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
+                            },
+                            error_type: ErrorType::Compiler,
+                        });
+                    }
+                };
+
+                ast.push(AstNode::Settings(config, x.current_position()));
+            }
+
             // Or stuff that hasn't been implemented yet
             _ => {
                 return Err(CompileError {
@@ -446,7 +476,7 @@ fn skip_dead_code(x: &mut TokenContext) {
         }
     }
 
-    // Skip to end of variable declaration
+    // Skip to the end of variable declaration
     let mut open_parenthesis = 0;
     while let Some(token) = x.tokens.get(x.index) {
         match token {

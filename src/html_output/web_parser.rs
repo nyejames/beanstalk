@@ -1,7 +1,7 @@
 use super::js_parser::expression_to_js;
 use crate::html_output::js_parser::combine_vec_to_js;
 use crate::parsers::ast_nodes::{Arg, Expr};
-use crate::parsers::scene::{PrecedenceStyle, SceneIngredients, StyleFormat, parse_scene};
+use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
 use crate::{
@@ -45,15 +45,15 @@ pub fn parse<'a>(
     for node in ast {
         match node {
             // SCENES (HTML)
-            AstNode::Literal(Expr::Scene(scene_body, scene_styles, scene_head, scene_id), _) => {
+            AstNode::Literal(Expr::Scene(scene_body, scene_style, scene_head, scene_id), _) => {
                 let parsed_scene = parse_scene(
                     SceneIngredients {
                         scene_body: &scene_body,
-                        scene_styles: &scene_styles,
+                        scene_style: &scene_style,
                         scene_head: &scene_head,
-                        inherited_style: PrecedenceStyle::new(),
+                        inherited_style: &None,
                         scene_id,
-                        format_context: StyleFormat::None as i32,
+                        format_context: StyleFormat::None,
                     },
                     &mut js,
                     &mut css,
@@ -67,7 +67,7 @@ pub fn parse<'a>(
             }
 
             // JAVASCRIPT / WASM
-            AstNode::VarDeclaration(ref id, ref expr, ref public, ref data_type, ref start_pos) => {
+            AstNode::VarDeclaration(ref name, ref expr, ref public, ref data_type, ref start_pos) => {
                 match data_type {
                     DataType::Float(mutable)
                     | DataType::Int(mutable)
@@ -81,7 +81,7 @@ pub fn parse<'a>(
                         };
 
                         let var_dec = format!(
-                            "{} {BS_VAR_PREFIX}{id}={};",
+                            "{} {BS_VAR_PREFIX}{name}={};",
                             assignment_keyword,
                             expression_to_js(expr, start_pos)?
                         );
@@ -97,11 +97,11 @@ pub fn parse<'a>(
                                 let scene_to_js_string = parse_scene(
                                     SceneIngredients {
                                         scene_body,
-                                        scene_styles,
+                                        scene_style: scene_styles,
                                         scene_head,
-                                        inherited_style: PrecedenceStyle::new(),
+                                        inherited_style: &None,
                                         scene_id: id.to_owned(),
-                                        format_context: StyleFormat::None as i32,
+                                        format_context: StyleFormat::None,
                                     },
                                     &mut js,
                                     &mut created_css,
@@ -112,7 +112,7 @@ pub fn parse<'a>(
                                 )?;
 
                                 let var_dec = format!(
-                                    "const {BS_VAR_PREFIX}{id} = `{}`;",
+                                    "const {BS_VAR_PREFIX}{name} = `{}`;",
                                     scene_to_js_string
                                 );
 
@@ -133,7 +133,7 @@ pub fn parse<'a>(
 
                     DataType::Structure(_) => {
                         let var_dec = format!(
-                            "const {BS_VAR_PREFIX}{id}={};",
+                            "const {BS_VAR_PREFIX}{name}={};",
                             expression_to_js(expr, start_pos)?
                         );
 
@@ -141,14 +141,14 @@ pub fn parse<'a>(
                     }
                     _ => {
                         js.push_str(&format!(
-                            "const {BS_VAR_PREFIX}{id}={};",
+                            "const {BS_VAR_PREFIX}{name}={};",
                             expression_to_js(expr, start_pos)?
                         ));
                     }
                 };
 
                 module_references.push(Arg {
-                    name: id.to_owned(),
+                    name: name.to_owned(),
                     data_type: data_type.to_owned(),
                     value: expr.to_owned(),
                 });

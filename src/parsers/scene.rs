@@ -1,24 +1,25 @@
 use crate::CompileError;
 use crate::bs_types::DataType;
 use crate::html_output::js_parser::create_reference_in_js;
-use crate::parsers::ast_nodes::{Arg, AstNode, Expr};
+use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::markdown::to_markdown;
 use crate::settings::BS_VAR_PREFIX;
 use crate::settings::HTMLMeta;
 use colour::red_ln;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub enum SceneType {
     Scene(Expr),
     Slot,
     Comment,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneBody {
+pub struct SceneContent {
     pub before: Vec<Expr>,
     pub after: Vec<Expr>,
 }
-impl SceneBody {
+impl SceneContent {
     pub fn default() -> Self {
         Self {
             before: Vec::new(),
@@ -44,10 +45,10 @@ pub struct Style {
 
     // A callback functions for how the string content of the scene should be parsed
     // If at all
-    pub format: i32,
+    pub format: StyleFormat,
 
-    // Overrides scenes trying to place this in a slot
-    pub parent_override: i32,
+    // Overrides other styles
+    pub precedence: i32,
 
     // // Rules for adding this string to the wrapper
     // pub groups: &'static [u32],
@@ -61,7 +62,7 @@ pub struct Style {
     // Passes a default style for any children to start with
     // Wrappers can be overridden with parent overrides
     // Or child wrappers that are higher precedence
-    pub child_default: Option<Box<PrecedenceStyle>>,
+    pub child_default: Option<Box<Style>>,
 
     pub compatibility: SceneCompatibility,
 
@@ -75,8 +76,8 @@ pub struct Style {
 impl Style {
     pub fn default() -> Style {
         Style {
-            format: StyleFormat::None as i32,
-            parent_override: -1,
+            format: StyleFormat::None,
+            precedence: -1,
             neighbour_rule: NeighbourRule::None,
             child_default: None,
             compatibility: SceneCompatibility::All,
@@ -97,22 +98,6 @@ pub enum StyleFormat {
     Codeblock = 3,
     Comment = 4,
 }
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct PrecedenceStyle {
-    pub style: Style,
-    pub precedence: i32,
-}
-
-impl PrecedenceStyle {
-    pub(crate) fn new() -> PrecedenceStyle {
-        PrecedenceStyle {
-            style: Style::default(),
-            precedence: -1,
-        }
-    }
-}
-
 // This will be important for Markdown parsing and how scenes might modify neighbouring scenes
 #[derive(Clone, Debug, PartialEq)]
 pub enum NeighbourRule {
@@ -128,12 +113,12 @@ pub enum SceneCompatibility {
 }
 
 pub struct SceneIngredients<'a> {
-    pub scene_body: &'a SceneBody,
-    pub scene_head: &'a Vec<AstNode>,
-    pub scene_styles: &'a Vec<Style>,
-    pub inherited_style: PrecedenceStyle,
+    pub scene_body: &'a SceneContent,
+    pub scene_head: &'a SceneContent,
+    pub scene_style: &'a Style,
+    pub inherited_style: &'a Option<Style>,
     pub scene_id: String,
-    pub format_context: i32,
+    pub format_context: StyleFormat,
 }
 
 // Returns a regular string containing the parsed scene
@@ -148,7 +133,7 @@ pub fn parse_scene(
 ) -> Result<String, CompileError> {
     let SceneIngredients {
         scene_body,
-        scene_styles,
+        scene_style,
         scene_head,
         inherited_style,
         scene_id,
@@ -156,56 +141,33 @@ pub fn parse_scene(
     } = scene_ingredients;
 
     // Set everything apart from the wrappers for the new style
-    let mut final_style = Style {
-        format: inherited_style.style.format,
-        neighbour_rule: inherited_style.style.neighbour_rule,
-        child_default: inherited_style.style.child_default,
-        compatibility: inherited_style.style.compatibility,
-        unlocks_override: inherited_style.style.unlocks_override,
-        ..Style::default()
+    let mut final_style = match inherited_style {
+        Some(style) => style.to_owned(),
+        None => Style::default(),
     };
 
-    for style in scene_styles {
-        // Format. How will the content be parsed?
-        // Each format has a different precedence, using the highest precedence
-        if style.format > final_style.format {
-            final_style.format = style.format.to_owned();
-        }
-
-        // Child default
-        // If the child default is higher precedence than what is set currently,
-        // Then replace it with this new child default
-        // >= means that later declared styles take priority over earlier ones (this can change)
-        if let Some(child_default) = &style.child_default {
-            match &final_style.child_default {
-                Some(final_child_default) => {
-                    if child_default.precedence > final_child_default.precedence {
-                        final_style.child_default = style.child_default.to_owned();
-                    }
-                }
-                None => {
-                    final_style.child_default = style.child_default.to_owned();
-                }
-            }
-        }
-
-        // Compatibility
-        // More restrictive compatibility takes precedence over less restrictive ones
-        match style.compatibility {
-            SceneCompatibility::None => {
-                if final_style.compatibility != SceneCompatibility::None {
-                    final_style.compatibility = SceneCompatibility::None;
-                }
-            }
-            // TODO: check compatibility of scenes
-            _ => {}
-        }
-
-        // Inlining rule
-        // TODO: what the hell is this?
-        // Something to do with how surrounding scenes are parsed with this one.
-        final_style.neighbour_rule = style.neighbour_rule.to_owned();
+    // Format. How will the content be parsed?
+    // Each format has a different precedence, using the highest precedence
+    if scene_style.format > final_style.format {
+        final_style.format = scene_style.format.to_owned();
     }
+
+    // Compatibility
+    // More restrictive compatibility takes precedence over less restrictive ones
+    // match style.compatibility {
+    //     SceneCompatibility::None => {
+    //         if final_style.compatibility != SceneCompatibility::None {
+    //             final_style.compatibility = SceneCompatibility::None;
+    //         }
+    //     }
+    //     // TODO: check compatibility of scenes
+    //     _ => {}
+    // }
+
+    // Inlining rule
+    // TODO: what the hell is this?
+    // Something to do with how surrounding scenes are parsed with this one.
+    // final_style.neighbour_rule = style.neighbour_rule.to_owned();
 
     // Now we start combining everything into one string
     let mut final_string = String::new();
@@ -235,20 +197,16 @@ pub fn parse_scene(
                 content.push_str(&value.to_string());
             }
 
-            Expr::Scene(new_scene_nodes, new_scene_styles, new_scene_head, _) => {
-                let child_default_style = match &final_style.child_default {
-                    Some(child_default) => *child_default.to_owned(),
-                    None => PrecedenceStyle::new(),
-                };
+            Expr::Scene(new_scene_nodes, new_scene_style, new_scene_head, new_scene_id) => {
 
                 let new_scene = parse_scene(
                     SceneIngredients {
                         scene_body: new_scene_nodes,
-                        scene_styles: new_scene_styles,
+                        scene_style: new_scene_style,
                         scene_head: new_scene_head,
-                        inherited_style: child_default_style,
-                        scene_id: scene_id.to_owned(),
-                        format_context: final_style.format,
+                        inherited_style: &final_style.child_default.to_owned().map(|b| *b),
+                        scene_id: new_scene_id.to_owned(),
+                        format_context: final_style.format.to_owned(),
                     },
                     js,
                     css,
@@ -258,11 +216,11 @@ pub fn parse_scene(
                     config,
                 )?;
 
-                content.push_str(&new_scene);
+                final_string.push_str(&new_scene);
             }
 
             Expr::Reference(name, data_type, argument_accessed) => {
-                // Create a span in the HTML with a class that can be referenced by JS
+                // Create a span in the HTML with a class that JS can reference
                 // TO DO: Should be reactive in future so this can change at runtime
 
                 // TODO: should only do this in markdown mode
@@ -329,30 +287,6 @@ pub fn parse_scene(
         }
     }
 
-    // If this is a Markdown scene, and the parent isn't one,
-    // parse the content into Markdown
-    // If the parent is parsing the Markdown already,
-    // skip this as it should be done at the highest level possible
-    if final_style.format == StyleFormat::Markdown as i32
-        && format_context == StyleFormat::None as i32
-    {
-        let default_tag = "p";
-
-        final_string.push_str(&to_markdown(&content, default_tag));
-
-    // TODO - add parsers for each format
-    } else if final_style.format == StyleFormat::Codeblock as i32
-        && format_context == StyleFormat::Markdown as i32
-    {
-        // Add a special object replace character to signal to parent that this tag should not be parsed into Markdown
-        final_string.push_str(&format!(
-            "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
-            content
-        ));
-    } else {
-        final_string.push_str(&content);
-    }
-
     // After wrappers
     // final_string.push_str(
     //     &final_style
@@ -362,6 +296,30 @@ pub fn parse_scene(
     //         .map(|s| s.string.to_owned())
     //         .collect::<String>(),
     // );
+
+    // If this is a Markdown scene, and the parent isn't one,
+    // parse the content into Markdown
+    // If the parent is parsing the Markdown already,
+    // skip this as it should be done at the highest level possible
+    if final_style.format == StyleFormat::Markdown
+        && format_context == StyleFormat::None
+    {
+        let default_tag = "p";
+
+        final_string.push_str(&to_markdown(&content, default_tag));
+
+    // TODO - add parsers for each format
+    } else if final_style.format == StyleFormat::Codeblock
+        && format_context == StyleFormat::Markdown
+    {
+        // Add a special object replace character to signal to parent that this tag should not be parsed into Markdown
+        final_string.push_str(&format!(
+            "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
+            content
+        ));
+    } else {
+        final_string.push_str(&content);
+    }
 
     Ok(final_string)
 }

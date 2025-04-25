@@ -1,5 +1,5 @@
 use crate::bs_types::get_reference_data_type;
-use crate::parsers::scene::{SceneBody, Style};
+use crate::parsers::scene::{SceneContent, Style};
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
 use crate::{Token, bs_types::DataType};
@@ -78,7 +78,7 @@ pub enum Expr {
         bool,
     ),
 
-    Scene(SceneBody, Vec<Style>, Vec<AstNode>, String), // Scene Body, Styles, Scenehead, ID
+    Scene(SceneContent, Style, SceneContent, String), // Scene Body, Styles, Scene head, ID
 
     Collection(Vec<Expr>, DataType),
 
@@ -94,7 +94,7 @@ pub enum AstNode {
     Warning(String, TokenPosition), // Message, Line number, Start pos, End pos
 
     // Config settings
-    Settings(Vec<AstNode>, TokenPosition), // Settings, Line number
+    Settings(Vec<Arg>, TokenPosition), // Settings, Line number
 
     // Named import path for the module
     Import(String, TokenPosition), // Path, Line number

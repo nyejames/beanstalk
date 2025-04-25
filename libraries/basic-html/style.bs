@@ -1,7 +1,9 @@
 -- STANDARD HTML LIBRARY FOR SCENES
 
-@Html_Scene = [
+@Html_Scene = [#markdown:
     <[@tag] class="[@classes]" style="[@styles]" alt="[@alt]">
-        [slot]
+        [#slot]
     </[@tag]>
+    [#child_default #markdown]
+    [#unlock]
 ]

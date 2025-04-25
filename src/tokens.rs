@@ -8,19 +8,18 @@ pub enum TokenizeMode {
     Normal,
     SceneBody,
     SceneHead,
-    CompilerDirective, // #
 }
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
     // For Compiler
-    ModuleStart(PathBuf),
+    ModuleStart,
     Print,
     IO,
     Log,
     Panic,
     DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
-    EOF,                  // End of file
+    EOF,                  // End of the file
 
     // Module Import/Export
     Import,
@@ -36,6 +35,11 @@ pub enum Token {
     JS(String),   // JS codeblock
     CSS(String),  // CSS codeblock
     WASM(String), // WAT codeblock (for testing WASM)
+
+    // Scene Style properties
+    Markdown, // Makes the scene Markdown
+    Unlock,   // Scenes with this property will be unlocked for all child scenes of the parent
+    ChildDefault, // This scene will become a template default for all child scenes of the parent
 
     // Standard Library (eventually - to be moved there)
     Math,
@@ -191,7 +195,7 @@ impl Token {
                 line_number: 0,
                 char_column: 5,
             },
-            Token::ModuleStart(_) => TokenPosition {
+            Token::ModuleStart => TokenPosition {
                 line_number: 0,
                 char_column: 0,
             },

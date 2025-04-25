@@ -1,6 +1,6 @@
 use super::constant_folding::{logical_constant_fold, math_constant_fold};
 use crate::parsers::ast_nodes::Expr;
-use crate::parsers::scene::SceneBody;
+use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
 
@@ -198,17 +198,20 @@ pub fn evaluate_expression(
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
 fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
-    let mut scene_body: SceneBody = SceneBody::default();
-    let mut styles = Vec::new();
-    let mut head_nodes = Vec::new();
+    let mut scene_body: SceneContent = SceneContent::default();
+    let mut style = Style::default();
+    let mut head_nodes: SceneContent = SceneContent::default();
 
     for node in simplified_expression {
         match node.get_value() {
-            Expr::Scene(body, ref mut scene_styles, ref mut head, ..) => {
+            Expr::Scene(body, ref mut scene_style, head, ..) => {
                 scene_body.before.extend(body.before);
                 scene_body.after.extend(body.after);
-                styles.append(scene_styles);
-                head_nodes.append(head);
+                
+                // TODO - scene style precedence
+                // Some styles will override others
+                head_nodes.before.extend(head.before);
+                head_nodes.after.extend(head.after);
             }
 
             _ => {
@@ -228,7 +231,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
         }
     }
 
-    Ok(Expr::Scene(scene_body, styles, head_nodes, String::new()))
+    Ok(Expr::Scene(scene_body, style, head_nodes, String::new()))
 }
 
 // TODO - needs to check what can be concatenated at compile time

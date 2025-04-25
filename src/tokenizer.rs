@@ -2,9 +2,7 @@ use super::tokens::{Token, TokenizeMode};
 use crate::bs_types::DataType;
 use crate::parsers::build_ast::TokenContext;
 use crate::{CompileError, ErrorType};
-use std::collections::HashMap;
 use std::iter::Peekable;
-use std::path::Path;
 use std::str::Chars;
 
 // Line number, how many chars in the line
@@ -17,23 +15,23 @@ pub struct TokenPosition {
 pub struct TokenizerOutput {
     pub token_context: TokenContext,
     pub imports: Vec<String>,
-    pub exports: HashMap<String, Vec<String>>,
+    pub export_indexes: Vec<usize>,
 }
 pub fn tokenize(
     source_code: &str,
-    relative_module_path: &Path,
 ) -> Result<TokenizerOutput, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / 5;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
-
-    // Path is the key, name is value
-    let mut exports: HashMap<String, Vec<String>> = HashMap::new();
+    
+    let mut exports: Vec<usize> = Vec::new();
     let mut imports: Vec<String> = Vec::new();
 
-    let mut line_number: i32 = 1;
-    let mut char_column: i32 = 0;
+    let mut token_position: TokenPosition = TokenPosition {
+        line_number: 1,
+        char_column: 0,
+    };
 
     let mut token_positions: Vec<TokenPosition> = Vec::with_capacity(initial_capacity);
     let mut chars: Peekable<Chars<'_>> = source_code.chars().peekable();
@@ -41,35 +39,30 @@ pub fn tokenize(
     let scene_nesting_level: &mut i64 = &mut 0;
 
     // This is pointless atm
-    let mut token: Token = Token::ModuleStart(relative_module_path.to_owned());
+    let mut token: Token = Token::ModuleStart;
 
     loop {
         if token == Token::EOF {
             break;
         }
 
+        // dark_cyan_ln!("Token: {:?}. Mode: {:?}", token, tokenize_mode);
         tokens.push(token);
-        token_positions.push(TokenPosition {
-            line_number,
-            char_column,
-        });
+        token_positions.push(token_position.clone());
+        
         token = get_next_token(
             &mut chars,
             &mut tokenize_mode,
             scene_nesting_level,
-            &mut line_number,
-            &mut char_column,
+            &mut token_position,
             &mut exports,
             &mut imports,
-            relative_module_path,
+            &tokens,
         )?;
     }
 
     tokens.push(token);
-    token_positions.push(TokenPosition {
-        line_number,
-        char_column,
-    });
+    token_positions.push(token_position);
 
     debug_assert_eq!(
         tokens.len(),
@@ -86,7 +79,7 @@ pub fn tokenize(
             token_positions,
         },
         imports,
-        exports,
+        export_indexes: exports,
     })
 }
 
@@ -94,15 +87,14 @@ pub fn get_next_token(
     chars: &mut Peekable<Chars>,
     tokenize_mode: &mut TokenizeMode,
     scene_nesting_level: &mut i64,
-    line_number: &mut i32,
-    char_column: &mut i32,
-    exports: &mut HashMap<String, Vec<String>>,
+    token_position: &mut TokenPosition,
+    exports: &mut Vec<usize>,
     imports: &mut Vec<String>,
-    module_path: &Path,
+    tokens: &[Token],
 ) -> Result<Token, CompileError> {
     let mut current_char = match chars.next() {
         Some(ch) => {
-            *char_column += 1;
+            token_position.char_column += 1;
             ch
         }
         None => return Ok(Token::EOF),
@@ -114,7 +106,7 @@ pub fn get_next_token(
     // Also used in scenes for raw outputs
     if current_char == '`' {
         for ch in chars.by_ref() {
-            *char_column += 1;
+            token_position.char_column += 1;
 
             if ch == '`' {
                 return Ok(Token::RawStringLiteral(token_value));
@@ -124,20 +116,20 @@ pub fn get_next_token(
     }
 
     if tokenize_mode == &TokenizeMode::SceneBody && current_char != ']' && current_char != '[' {
-        return tokenize_scenebody(current_char, chars, line_number, char_column);
+        return tokenize_scenebody(current_char, chars, token_position);
     }
 
     // Whitespace
     if current_char == '\n' {
-        *line_number += 1;
-        *char_column = 0;
+        token_position.line_number += 1;
+        token_position.char_column = 0;
         return Ok(Token::Newline);
     }
 
     while current_char.is_whitespace() {
         current_char = match chars.next() {
             Some(ch) => {
-                *char_column += 1;
+                token_position.char_column += 1;
                 ch
             }
             None => return Ok(Token::EOF),
@@ -151,12 +143,12 @@ pub fn get_next_token(
                 return Err(CompileError {
                     msg: "Cannot have nested scenes inside of a scene head, must be inside the scene body. Use a colon to start the scene body.".to_string(),
                     start_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column
                     },
                     end_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column + 1
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + 1
                     },
                     error_type: ErrorType::Syntax,
                 });
@@ -172,7 +164,7 @@ pub fn get_next_token(
                 // [] is an empty scene
                 if chars.peek() == Some(&']') {
                     chars.next();
-                    *char_column += 1;
+                    token_position.char_column += 1;
 
                     let mut spaces_after_scene = 0;
 
@@ -182,14 +174,14 @@ pub fn get_next_token(
                         }
 
                         if ch == &'\n' {
-                            *line_number += 1;
-                            *char_column = 0;
+                            token_position.line_number += 1;
+                            token_position.char_column = 0;
                         }
 
                         spaces_after_scene += 1;
 
                         chars.next();
-                        *char_column += 1;
+                        token_position.char_column += 1;
                     }
 
                     return Ok(Token::EmptyScene(spaces_after_scene));
@@ -213,16 +205,16 @@ pub fn get_next_token(
         return Ok(Token::SceneClose);
     }
 
-    // Check if going into scene body
+    // Check if going into the scene body
     if current_char == ':' {
         // if tokenize_mode  == &TokenizeMode::Codeblock {
         //     chars.next();
-        //     *char_column += 1;
+        //     token_position.char_column += 1;
         //
-        //     let parsed_codeblock = tokenize_codeblock(chars, line_number, char_column);
+        //     let parsed_codeblock = tokenize_codeblock(chars, token_position);
         //     let codeblock_dimensions = parsed_codeblock.dimensions();
-        //     *char_column += codeblock_dimensions.char_column;
-        //     *line_number += codeblock_dimensions.line_number;
+        //     token_position.char_column += codeblock_dimensions.char_column;
+        //     token_position.line_number += codeblock_dimensions.line_number;
         //
         //     return Ok(parsed_codeblock);
         // }
@@ -234,25 +226,18 @@ pub fn get_next_token(
         return Ok(Token::Colon);
     }
 
-    //Window
+    // Compiler Directives
     if current_char == '#' {
-        *tokenize_mode = TokenizeMode::CompilerDirective;
-
-        //Get compiler directive token
-        return keyword_or_variable(
+        return compiler_directive(
             &mut token_value,
             chars,
-            tokenize_mode,
-            line_number,
-            char_column,
-            false,
-            imports,
+            token_position,
         );
     }
 
     // Check for string literals
     if current_char == '"' {
-        return tokenize_string(chars, line_number, char_column);
+        return tokenize_string(chars, token_position);
     }
 
     // Check for character literals
@@ -272,12 +257,12 @@ pub fn get_next_token(
                 current_char
             ),
             start_pos: TokenPosition {
-                line_number: *line_number,
-                char_column: *char_column,
+                line_number: token_position.line_number,
+                char_column: token_position.char_column,
             },
             end_pos: TokenPosition {
-                line_number: *line_number,
-                char_column: *char_column + 1,
+                line_number: token_position.line_number,
+                char_column: token_position.char_column + 1,
             },
             error_type: ErrorType::Syntax,
         });
@@ -343,23 +328,23 @@ pub fn get_next_token(
             // Comments
             if next_char == '-' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 // Check for multiline
                 if let Some(&next_next_char) = chars.peek() {
                     if next_next_char == '-' {
                         // Multiline Comment (---)
                         chars.next();
-                        *char_column += 1;
+                        token_position.char_column += 1;
 
                         // Multiline Comment
                         for ch in chars.by_ref() {
-                            *char_column += 1;
+                            token_position.char_column += 1;
                             token_value.push(ch);
 
                             if ch == '\n' {
-                                *char_column = 0;
-                                *line_number += 1;
+                                token_position.char_column = 0;
+                                token_position.line_number += 1;
                             }
 
                             if token_value.ends_with("---") {
@@ -372,11 +357,11 @@ pub fn get_next_token(
 
                     // Inline Comment
                     for ch in chars.by_ref() {
-                        *char_column += 1;
+                        token_position.char_column += 1;
 
                         if ch == '\n' {
-                            *line_number += 1;
-                            *char_column = 0;
+                            token_position.line_number += 1;
+                            token_position.char_column = 0;
                             return Ok(Token::Comment(token_value));
                         }
 
@@ -387,14 +372,14 @@ pub fn get_next_token(
             } else {
                 if next_char == '=' {
                     chars.next();
-                    *char_column += 1;
+                    token_position.char_column += 1;
 
                     return Ok(Token::SubtractAssign);
                 }
 
                 if next_char == '>' {
                     chars.next();
-                    *char_column += 1;
+                    token_position.char_column += 1;
 
                     return Ok(Token::Arrow);
                 }
@@ -413,7 +398,7 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::AddAssign);
             }
@@ -425,7 +410,7 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::MultiplyAssign);
             }
@@ -437,12 +422,12 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '/' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 if let Some(&next_next_char) = chars.peek() {
                     if next_next_char == '=' {
                         chars.next();
-                        *char_column += 1;
+                        token_position.char_column += 1;
 
                         return Ok(Token::RootAssign);
                     }
@@ -451,7 +436,7 @@ pub fn get_next_token(
             }
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::DivideAssign);
             }
@@ -463,18 +448,18 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::ModulusAssign);
             }
             if next_char == '%' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 if let Some(&next_next_char) = chars.peek() {
                     if next_next_char == '=' {
                         chars.next();
-                        *char_column += 1;
+                        token_position.char_column += 1;
 
                         return Ok(Token::RemainderAssign);
                     }
@@ -489,7 +474,7 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::ExponentAssign);
             }
@@ -503,7 +488,7 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::GreaterThanOrEqual);
             }
@@ -515,7 +500,7 @@ pub fn get_next_token(
         if let Some(&next_char) = chars.peek() {
             if next_char == '=' {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 return Ok(Token::LessThanOrEqual);
             }
@@ -530,7 +515,7 @@ pub fn get_next_token(
             while let Some(&next_char) = chars.peek() {
                 if next_char.is_alphanumeric() || next_char == '_' {
                     token_value.push(chars.next().unwrap());
-                    *char_column += 1;
+                    token_position.char_column += 1;
                     continue;
                 }
                 break;
@@ -542,7 +527,7 @@ pub fn get_next_token(
         while let Some(&next_char) = chars.peek() {
             if next_char.is_whitespace() {
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
                 continue;
             }
             break;
@@ -551,38 +536,12 @@ pub fn get_next_token(
         let var = keyword_or_variable(
             &mut token_value,
             chars,
-            tokenize_mode,
-            line_number,
-            char_column,
+            token_position,
             true,
             imports,
         )?;
-
-        let path_from_root = module_path.to_string_lossy().to_string();
-
-        match var {
-            Token::Variable(ref name, _) => match exports.get_mut(&path_from_root) {
-                Some(m) => m.push(name.to_owned()),
-                None => {
-                    exports.insert(path_from_root, vec![name.to_owned()]);
-                }
-            },
-            _ => {
-                return Err(CompileError {
-                    msg: "Expected a name after the export symbol".to_string(),
-                    start_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: *line_number,
-                        char_column: *char_column + token_value.len() as i32,
-                    },
-                    error_type: ErrorType::Syntax,
-                });
-            }
-        }
-
+        
+        exports.push(tokens.len());
         return Ok(var);
     }
 
@@ -604,24 +563,24 @@ pub fn get_next_token(
                     return Err(CompileError {
                         msg: "Cannot have more than one decimal point in a number".to_string(),
                         start_pos: TokenPosition {
-                            line_number: *line_number,
-                            char_column: *char_column,
+                            line_number: token_position.line_number,
+                            char_column: token_position.char_column,
                         },
                         end_pos: TokenPosition {
-                            line_number: *line_number,
-                            char_column: *char_column + 1,
+                            line_number: token_position.line_number,
+                            char_column: token_position.char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
                 }
                 token_value.push(chars.next().unwrap());
-                *char_column += 1;
+                token_position.char_column += 1;
                 continue;
             }
 
             if next_char.is_numeric() {
                 token_value.push(chars.next().unwrap());
-                *char_column += 1;
+                token_position.char_column += 1;
             } else {
                 break;
             }
@@ -638,9 +597,7 @@ pub fn get_next_token(
         return keyword_or_variable(
             &mut token_value,
             chars,
-            tokenize_mode,
-            line_number,
-            char_column,
+            token_position,
             false,
             imports,
         );
@@ -652,12 +609,12 @@ pub fn get_next_token(
             current_char, tokenize_mode
         ),
         start_pos: TokenPosition {
-            line_number: *line_number,
-            char_column: *char_column,
+            line_number: token_position.line_number,
+            char_column: token_position.char_column,
         },
         end_pos: TokenPosition {
-            line_number: *line_number,
-            char_column: *char_column + 1,
+            line_number: token_position.line_number,
+            char_column: token_position.char_column + 1,
         },
         error_type: ErrorType::Syntax,
     })
@@ -668,9 +625,7 @@ const END_KEYWORD: &str = "zz";
 fn keyword_or_variable(
     token_value: &mut String,
     chars: &mut Peekable<Chars<'_>>,
-    tokenize_mode: &mut TokenizeMode,
-    line_number: &mut i32,
-    char_column: &mut i32,
+    token_position: &mut TokenPosition,
     is_exported: bool,
     imports: &mut Vec<String>,
 ) -> Result<Token, CompileError> {
@@ -682,7 +637,7 @@ fn keyword_or_variable(
             Some(char) => {
                 if char.is_alphanumeric() || *char == '_' {
                     token_value.push(chars.next().unwrap());
-                    *char_column += 1;
+                    token_position.char_column += 1;
                     continue;
                 }
                 true
@@ -702,7 +657,7 @@ fn keyword_or_variable(
         // Otherwise break out and check it is a valid variable name
         match token_value.as_str() {
             "import" => {
-                imports.push(tokenize_import(chars, line_number, char_column)?);
+                imports.push(tokenize_import(chars, token_position)?);
                 return Ok(Token::Import);
             }
 
@@ -753,7 +708,6 @@ fn keyword_or_variable(
             // Scene-related keywords
             "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(false))),
             "~Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(true))),
-            "slot" => return Ok(Token::Slot),
 
             // Built-in standard library functions
             "print" => return Ok(Token::Print),
@@ -764,36 +718,6 @@ fn keyword_or_variable(
             "io" => return Ok(Token::IO),
 
             _ => {}
-        }
-
-        if tokenize_mode == &TokenizeMode::CompilerDirective {
-            match token_value.as_str() {
-                "settings" => {
-                    *tokenize_mode = TokenizeMode::Normal;
-                    return Ok(Token::Settings);
-                }
-                "title" => {
-                    *tokenize_mode = TokenizeMode::Normal;
-                    return Ok(Token::Title);
-                }
-                "date" => {
-                    *tokenize_mode = TokenizeMode::Normal;
-                    return Ok(Token::Date);
-                }
-                "JS" => {
-                    *tokenize_mode = TokenizeMode::Normal;
-                    return Ok(Token::JS(string_block(chars, line_number, char_column)?));
-                }
-                "WASM" => {
-                    *tokenize_mode = TokenizeMode::Normal;
-                    return Ok(Token::WASM(string_block(chars, line_number, char_column)?));
-                }
-                "CSS" => {
-                    *tokenize_mode = TokenizeMode::Normal;
-                    return Ok(Token::CSS(string_block(chars, line_number, char_column)?));
-                }
-                _ => {}
-            }
         }
 
         // VARIABLE
@@ -808,15 +732,80 @@ fn keyword_or_variable(
     Err(CompileError {
         msg: format!("Invalid variable name: {}", token_value),
         start_pos: TokenPosition {
-            line_number: *line_number,
-            char_column: *char_column,
+            line_number: token_position.line_number,
+            char_column: token_position.char_column,
         },
         end_pos: TokenPosition {
-            line_number: *line_number,
-            char_column: *char_column + token_value.len() as i32,
+            line_number: token_position.line_number,
+            char_column: token_position.char_column + token_value.len() as i32,
         },
         error_type: ErrorType::Syntax,
     })
+}
+
+fn compiler_directive(
+    token_value: &mut String,
+    chars: &mut Peekable<Chars<'_>>,
+    token_position: &mut TokenPosition,
+) -> Result<Token, CompileError> {
+
+    loop {
+        if chars.peek().is_some_and(|c| c.is_alphanumeric() || c == &'_') {
+            token_value.push(chars.next().unwrap());
+            token_position.char_column += 1;
+            continue;
+        }
+
+        return match token_value.as_str() {
+            "settings" => {
+                Ok(Token::Settings)
+            }
+            "title" => {
+                Ok(Token::Title)
+            }
+            "date" => {
+                Ok(Token::Date)
+            }
+            "JS" => {
+                Ok(Token::JS(string_block(chars, token_position)?))
+            }
+            "WASM" => {
+                Ok(Token::WASM(string_block(chars, token_position)?))
+            }
+            "CSS" => {
+                Ok(Token::CSS(string_block(chars, token_position)?))
+            }
+
+            // Scene Style properties
+            "markdown" => {
+                Ok(Token::Markdown)
+            }
+            "unlock" => {
+                Ok(Token::Unlock)
+            }
+            "child_default" => {
+                Ok(Token::ChildDefault)
+            }
+            "slot" => {
+                Ok(Token::Slot)
+            }
+
+            _ => {
+                Err(CompileError {
+                    msg: format!("Invalid compiler directive: #{}", token_value),
+                    start_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + token_value.len() as i32,
+                    },
+                    error_type: ErrorType::Syntax,
+                })
+            }
+        }
+    }
 }
 
 // Checking if the variable name is valid
@@ -833,8 +822,7 @@ fn is_valid_identifier(s: &str) -> bool {
 // Throws an error if there is no starting colon or ending 'fin' keyword
 fn string_block(
     chars: &mut Peekable<Chars>,
-    line_number: &i32,
-    char_column: &mut i32,
+    token_position: &mut TokenPosition,
 ) -> Result<String, CompileError> {
     let mut string_value = String::new();
 
@@ -842,7 +830,7 @@ fn string_block(
         // Skip whitespace before the first colon that starts the block
         if ch.is_whitespace() {
             chars.next();
-            *char_column += 1;
+            token_position.char_column += 1;
 
             continue;
         }
@@ -852,18 +840,18 @@ fn string_block(
             return Err(CompileError {
                 msg: "Block must start with a colon".to_string(),
                 start_pos: TokenPosition {
-                    line_number: *line_number,
-                    char_column: *char_column,
+                    line_number: token_position.line_number,
+                    char_column: token_position.char_column,
                 },
                 end_pos: TokenPosition {
-                    line_number: *line_number,
-                    char_column: *char_column + 1,
+                    line_number: token_position.line_number,
+                    char_column: token_position.char_column + 1,
                 },
                 error_type: ErrorType::Syntax,
             });
         } else {
             chars.next();
-            *char_column += 1;
+            token_position.char_column += 1;
 
             break;
         }
@@ -877,19 +865,19 @@ fn string_block(
                 string_value.push(*char);
 
                 chars.next();
-                *char_column += 1;
+                token_position.char_column += 1;
             }
             None => {
                 if !closing_end_keyword {
                     return Err(CompileError {
                         msg: format!("block must end with '{}' keyword", END_KEYWORD),
                         start_pos: TokenPosition {
-                            line_number: *line_number,
-                            char_column: *char_column,
+                            line_number: token_position.line_number,
+                            char_column: token_position.char_column,
                         },
                         end_pos: TokenPosition {
-                            line_number: *line_number,
-                            char_column: *char_column,
+                            line_number: token_position.line_number,
+                            char_column: token_position.char_column,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -913,24 +901,23 @@ fn string_block(
 }
 fn tokenize_string(
     chars: &mut Peekable<Chars>,
-    line_number: &mut i32,
-    char_column: &mut i32,
+    token_position: &mut TokenPosition,
 ) -> Result<Token, CompileError> {
     let mut token_value = String::new();
 
     // Currently should be at the character that started the String
     while let Some(ch) = chars.next() {
-        *char_column += 1;
+        token_position.char_column += 1;
 
         if ch == '\n' {
-            *line_number += 1;
-            *char_column = 0;
+            token_position.line_number += 1;
+            token_position.char_column = 0;
         }
 
         // Check for escape characters
         if ch == '\\' {
             if let Some(next_char) = chars.next() {
-                *char_column += 1;
+                token_position.char_column += 1;
 
                 token_value.push(next_char);
             }
@@ -947,32 +934,31 @@ fn tokenize_string(
 fn tokenize_scenebody(
     current_char: char,
     chars: &mut Peekable<Chars>,
-    line_number: &mut i32,
-    char_column: &mut i32,
+    token_position: &mut TokenPosition,
 ) -> Result<Token, CompileError> {
     let mut token_value = String::from(current_char);
 
     // Currently should be at the character that started the String
     while let Some(ch) = chars.peek() {
         if ch == &'\n' {
-            *line_number += 1;
-            *char_column = 0;
+            token_position.line_number += 1;
+            token_position.char_column = 0;
         }
 
         // Check for escape characters
         if ch == &'\\' {
             chars.next();
-            *char_column += 1;
+            token_position.char_column += 1;
 
             if let Some(next_char) = chars.next() {
-                *char_column += 1;
+                token_position.char_column += 1;
                 token_value.push(next_char);
             }
         } else if ch == &'[' || ch == &']' {
             return Ok(Token::StringLiteral(token_value));
         }
 
-        *char_column += 1;
+        token_position.char_column += 1;
 
         // Should always be a valid char
         token_value.push(chars.next().unwrap());
@@ -982,96 +968,94 @@ fn tokenize_scenebody(
 }
 
 // Assumes there MUST be an explicit type declaration or will throw an error
-// fn tokenize_export_datatype(
-//     chars: &mut Peekable<Chars>,
-//     line_number: &mut u32,
-//     char_column: &mut u32,
-// ) -> Result<DataType, CompileError> {
-//     let mut token_value = String::new();
-//
-//     // Skip whitespace
-//     while let Some(&c) = chars.peek() {
-//         if c == '\n' {
-//             return Err(CompileError {
-//                 msg: "Cannot have whitespace between the type keyword and the data type".to_string(),
-//                 start_pos: TokenPosition {
-//                     line_number: *line_number,
-//                     char_column: *char_column,
-//                 },
-//                 end_pos: TokenPosition {
-//                     line_number: *line_number,
-//                     char_column: *char_column + 1,
-//                 },
-//                 error_type: ErrorType::Syntax,
-//             });
-//         }
-//
-//         if c.is_whitespace() {
-//             chars.next();
-//             *char_column += 1;
-//             continue;
-//         }
-//         break;
-//     }
-//
-//     loop {
-//         match chars.peek() {
-//             // If there is a char that is not None
-//             // And is an underscore or alphabetic, add it to the token value
-//             Some(char) => {
-//                 if char.is_alphanumeric() || char == &'_' || char == &'~' {
-//                     token_value.push(chars.next().unwrap());
-//                     *char_column += 1;
-//                     continue;
-//                 }
-//             }
-//             None => {},
-//         };
-//
-//         return match token_value.as_str() {
-//             "Float" => Ok(DataType::Float(false)),
-//             "~Float" => Ok(DataType::Float(true)),
-//             "Int" => Ok(DataType::Int(false)),
-//             "~Int" => Ok(DataType::Int(true)),
-//             "String" => Ok(DataType::String(false)),
-//             "~String" => Ok(DataType::String(true)),
-//             "Bool" => Ok(DataType::Bool(false)),
-//             "~Bool" => Ok(DataType::Bool(true)),
-//
-//             "Type" => Ok(DataType::Type),
-//             "None" => Ok(DataType::None),
-//             "Function" => {
-//                 Ok(DataType::Function(
-//                     Vec::new(),
-//                     Box::new(DataType::None),
-//                 ))
-//             }
-//
-//             "Scene" => Ok(DataType::Scene(false)),
-//             "~Scene" => Ok(DataType::Scene(true)),
-//
-//             _ => {
-//                 Err(CompileError {
-//                     msg: format!("Unknown datatype keyword: '{}'. Expected a valid datatype keyword here. Exports must have an explicit datatype set", token_value),
-//                     start_pos: TokenPosition {
-//                         line_number: *line_number,
-//                         char_column: *char_column,
-//                     },
-//                     end_pos: TokenPosition {
-//                         line_number: *line_number,
-//                         char_column: *char_column + token_value.len() as u32,
-//                     },
-//                     error_type: ErrorType::Rule,
-//                 })
-//             }
-//         }
-//     }
-// }
+fn tokenize_export_datatype(
+    chars: &mut Peekable<Chars>,
+    token_position: &mut TokenPosition,
+) -> Result<DataType, CompileError> {
+    let mut token_value = String::new();
+
+    // Skip whitespace
+    while let Some(&c) = chars.peek() {
+        if c == '\n' {
+            return Err(CompileError {
+                msg: "Cannot have whitespace between the type keyword and the data type".to_string(),
+                start_pos: TokenPosition {
+                    line_number: token_position.line_number,
+                    char_column: token_position.char_column,
+                },
+                end_pos: TokenPosition {
+                    line_number: token_position.line_number,
+                    char_column: token_position.char_column + 1,
+                },
+                error_type: ErrorType::Syntax,
+            });
+        }
+
+        if c.is_whitespace() {
+            chars.next();
+            token_position.char_column += 1;
+            continue;
+        }
+        break;
+    }
+
+    loop {
+        match chars.peek() {
+            // If there is a char that is not None
+            // And is an underscore or alphabetic, add it to the token value
+            Some(char) => {
+                if char.is_alphanumeric() || char == &'_' || char == &'~' {
+                    token_value.push(chars.next().unwrap());
+                    token_position.char_column += 1;
+                    continue;
+                }
+            }
+            None => {},
+        };
+
+        return match token_value.as_str() {
+            "Float" => Ok(DataType::Float(false)),
+            "~Float" => Ok(DataType::Float(true)),
+            "Int" => Ok(DataType::Int(false)),
+            "~Int" => Ok(DataType::Int(true)),
+            "String" => Ok(DataType::String(false)),
+            "~String" => Ok(DataType::String(true)),
+            "Bool" => Ok(DataType::Bool(false)),
+            "~Bool" => Ok(DataType::Bool(true)),
+
+            "Type" => Ok(DataType::Type),
+            "None" => Ok(DataType::None),
+            "Function" => {
+                Ok(DataType::Function(
+                    Vec::new(),
+                    Box::new(DataType::None),
+                ))
+            }
+
+            "Scene" => Ok(DataType::Scene(false)),
+            "~Scene" => Ok(DataType::Scene(true)),
+
+            _ => {
+                Err(CompileError {
+                    msg: format!("Unknown datatype keyword: '{}'. Expected a valid datatype keyword here. Exports must have an explicit datatype set", token_value),
+                    start_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column,
+                    },
+                    end_pos: TokenPosition {
+                        line_number: token_position.line_number,
+                        char_column: token_position.char_column + token_value.len() as i32,
+                    },
+                    error_type: ErrorType::Rule,
+                })
+            }
+        }
+    }
+}
 
 fn tokenize_import(
     chars: &mut Peekable<Chars>,
-    line_number: &mut i32,
-    char_column: &mut i32,
+    token_position: &mut TokenPosition,
 ) -> Result<String, CompileError> {
     // Skip starting whitespace
     while let Some(c) = chars.peek() {
@@ -1080,18 +1064,18 @@ fn tokenize_import(
                 return Err(CompileError {
                     msg: "Unexpected newline in import statement. Import statements must be on a single line. e.g import path/to/file".to_string(),
                     start_pos: TokenPosition {
-                        line_number: *line_number + 1,
-                        char_column: *char_column,
+                        line_number: token_position.line_number + 1,
+                        char_column: token_position.char_column,
                     },
                     end_pos: TokenPosition {
-                        line_number: *line_number + 1,
-                        char_column: *char_column + 1,
+                        line_number: token_position.line_number + 1,
+                        char_column: token_position.char_column + 1,
                     },
                     error_type: ErrorType::Syntax,
                 });
             }
 
-            *char_column += 1;
+            token_position.char_column += 1;
             chars.next();
             continue;
         }
@@ -1105,26 +1089,26 @@ fn tokenize_import(
     while let Some(c) = chars.peek() {
         if c.is_whitespace() {
             if c == &'\n' {
-                *line_number += 1;
-                *char_column = 0;
+                token_position.line_number += 1;
+                token_position.char_column = 0;
             }
             break;
         }
 
         import_path.push(chars.next().unwrap());
-        *char_column += 1;
+        token_position.char_column += 1;
     }
 
     if import_path.is_empty() {
         return Err(CompileError {
             msg: "Import path cannot be empty".to_string(),
             start_pos: TokenPosition {
-                line_number: *line_number,
-                char_column: *char_column,
+                line_number: token_position.line_number,
+                char_column: token_position.char_column,
             },
             end_pos: TokenPosition {
-                line_number: *line_number,
-                char_column: *char_column + 1,
+                line_number: token_position.line_number,
+                char_column: token_position.char_column + 1,
             },
             error_type: ErrorType::Syntax,
         });

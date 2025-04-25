@@ -1,6 +1,7 @@
+use std::fmt::format;
 use std::str::Chars;
 
-// Custom flavoured Markdown parser
+// Custom-flavoured Markdown parser
 #[derive(PartialEq, Debug, Clone)]
 pub enum MarkdownContext {
     None,
@@ -11,6 +12,8 @@ pub enum MarkdownContext {
     // If not, this is a naked emphasis tag
     Em(i32),
 }
+
+pub const HIDDEN_SKIP_CHAR: char = '\u{FFFC}';
 
 // Only very basics (atm): P, Headings, Bold, Italics
 // May add some more later
@@ -39,8 +42,8 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
     for ch in chars {
         // Special object replace character that signals to ignore parsing a section into markdown
         // This is used to ignore nested scenes that have already been parsed
-        // And may not be markdown. e.g. raw strings
-        if ch == '\u{FFFC}' {
+        // And may not be mark down. e.g. raw strings
+        if ch == HIDDEN_SKIP_CHAR {
             skip_parsing = !skip_parsing;
             continue;
         }
@@ -193,29 +196,30 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         }
 
         // Escape HTML characters that might lead to accidental HTML injection
-        // You can't write HTML in this flavour of markdown
-        if ch == '<' {
-            output.push_str("&lt;");
-            continue;
-        }
-        if ch == '>' {
-            output.push_str("&gt;");
-            continue;
-        }
-        if ch == '&' {
-            output.push_str("&amp;");
-            continue;
-        }
-        if ch == '"' {
-            output.push_str("&quot;");
-            continue;
-        }
-        if ch == '\'' {
-            output.push_str("&#39;");
-            continue;
-        }
+        // You can't write HTML in this flavour of Markdown
+        // TODO: need to make this skippable for slots and such
+        // if ch == '<' {
+        //     output.push_str("&lt;");
+        //     continue;
+        // }
+        // if ch == '>' {
+        //     output.push_str("&gt;");
+        //     continue;
+        // }
+        // if ch == '&' {
+        //     output.push_str("&amp;");
+        //     continue;
+        // }
+        // if ch == '"' {
+        //     output.push_str("&quot;");
+        //     continue;
+        // }
+        // if ch == '\'' {
+        //     output.push_str("&#39;");
+        //     continue;
+        // }
 
-        // If it's fallen through then strengths and newlines can be reset
+        // If it's fallen through, then strengths and newlines can be reset
 
         // If heading strength or emphasis is positive (or negative for emphasis)
         // Before it's reset, those characters need to be added to the output
@@ -233,7 +237,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         output.push(ch);
     }
 
-    // Close off final tag if needed
+    // Close off the final tag if needed
     match context {
         MarkdownContext::Default => {
             output.push_str(&format!("</{default_tag}>"));
@@ -250,6 +254,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
         MarkdownContext::None => {}
     }
 
+    // format!("{HIDDEN_SKIP_CHAR}{output}{HIDDEN_SKIP_CHAR}")
     output
 }
 
