@@ -96,7 +96,7 @@ pub enum ErrorType {
     Suggestion,
     Caution,
     Syntax,
-    TypeError,
+    Type,
     Rule,
     File,
     Compiler,
@@ -326,16 +326,15 @@ fn print_formatted_error(e: Error) {
         Ok(file) => file
             .lines()
             .nth(e.start_pos.line_number as usize)
-            .unwrap_or_else(|| {
-                red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
-                ""
-            })
+            .unwrap_or_default()
             .to_string(),
         Err(_) => {
-            red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ File path is invalid: {}", e.file_path.display());
+            // red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ File path is invalid: {}", e.file_path.display());
             "".to_string()
         }
     };
+
+    // red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
 
     // e_dark_yellow!("Error: ");
 
@@ -370,7 +369,7 @@ fn print_formatted_error(e: Error) {
             e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
         }
 
-        ErrorType::TypeError => {
+        ErrorType::Type => {
             print!("\n( ͡° ͜ʖ ͡°) ");
             dark_red_ln!("{}", relative_dir);
             println!(" ( ._. ) ");

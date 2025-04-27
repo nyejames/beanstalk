@@ -65,7 +65,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
                         Operator::Root => js.push_str(" ** (1/2)"),
 
                         // Logical
-                        Operator::Equal => js.push_str(" === "),
+                        Operator::Equality => js.push_str(" === "),
                         Operator::NotEqual => js.push_str(" !== "),
                         Operator::GreaterThan => js.push_str(" > "),
                         Operator::GreaterThanOrEqual => js.push_str(" >= "),

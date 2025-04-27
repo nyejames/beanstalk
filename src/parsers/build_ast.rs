@@ -232,6 +232,11 @@ pub fn new_ast(
                     &mut declarations,
                 )?;
 
+                // TODO - fold evaluated if statements
+                // If this condition isn't runtime, 
+                // The statement can be removed completely;
+                // I THINK, NOT SURE HOW 'ELSE' AND ALL THAT WORK YET
+
                 if x.current_token() != &Token::Colon {
                     return Err(CompileError {
                         msg: format!(

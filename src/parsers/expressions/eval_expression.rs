@@ -1,4 +1,4 @@
-use super::constant_folding::{logical_constant_fold, constant_fold};
+use super::constant_folding::constant_fold;
 use crate::parsers::ast_nodes::{Operator, Expr};
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
@@ -21,27 +21,17 @@ pub fn evaluate_expression(
     'outer: for node in expr {
         match node {
             AstNode::Literal(ref value, _) => {
-                // Ignore shunting yard for strings and coerced strings
-                match current_type {
-                    DataType::CoerceToString(_) | DataType::String(_) => {
-                        simplified_expression.push(node.to_owned());
-                        continue 'outer;
-                    }
-                    DataType::Inferred(_) => {
-                        current_type = value.get_type();
-                    }
-                    _ => {}
+
+                if let DataType::Inferred(_) = current_type {
+                    current_type = value.get_type();
+                }
+                
+                if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
+                    simplified_expression.push(node);
+                    continue 'outer;
                 }
 
-                match value {
-                    Expr::Float(_) | Expr::Int(_) | Expr::Bool(_) => {
-                        output_queue.push(node.to_owned());
-                    }
-
-                    _ => {
-                        simplified_expression.push(node.to_owned());
-                    }
-                }
+                output_queue.push(node.to_owned());
             }
 
             AstNode::FunctionCall(..) => {
@@ -49,11 +39,10 @@ pub fn evaluate_expression(
             }
 
             AstNode::Operator(ref op, ref position) => {
-                // If the current type is a string or scene, an added operator is assumed.
                 match current_type {
                     DataType::String(_) | DataType::Scene(_) => {
                         if op != &Operator::Add {
-                            return Err( CompileError {
+                            return Err(CompileError {
                                 msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
                                 start_pos: position.to_owned(),
                                 end_pos: TokenPosition {
@@ -63,44 +52,23 @@ pub fn evaluate_expression(
                                 error_type: ErrorType::Syntax,
                             });
                         }
-
-                        // We don't push the node into the simplified expression atm
-                        // As the only kind of string expression is contaminating them,
-                        // So simplified string expressions are just a list of strings
-                        // Maybe other kinds of string expression will be valid in the future, so more logic is needed here
-                        // simplified_expression.push(node.to_owned());
                         continue 'outer;
                     }
 
                     DataType::CoerceToString(_) => {
-                        simplified_expression.push(node.to_owned());
+                        simplified_expression.push(node);
                         continue 'outer;
                     }
 
                     _ => {}
                 }
 
-                while let Some(top_op_node) = operators_stack.last() {
-                    // Stop if top is not an operator (e.g. left parenthesis)
-                    match top_op_node {
-                        AstNode::Operator(..) => {}
-                        _ => {
-                            break;
-                        }
-                    }
+                let node_precedence = node.get_precedence();
+                let left_associative = node.is_left_associative();
 
-                    let o2_precedence = top_op_node.get_precedence();
-                    let node_precedence = node.get_precedence();
+                pop_higher_precedence(&mut operators_stack, &mut output_queue, node_precedence, left_associative);
 
-                    if o2_precedence >= node_precedence {
-                        output_queue.push(operators_stack.pop().unwrap()); // Pop from stack to output
-                    } else {
-                        // Current 'node' has higher precedence, stop popping
-                        break;
-                    }
-                }
-
-                operators_stack.push(node.to_owned());
+                operators_stack.push(node);
             }
 
             _ => {
@@ -126,13 +94,6 @@ pub fn evaluate_expression(
     }
 
     match current_type {
-        DataType::Bool(_) => {
-            for operator in operators_stack {
-                output_queue.push(operator);
-            }
-
-            logical_constant_fold(output_queue, current_type)
-        }
 
         DataType::Scene(_) => concat_scene(&mut simplified_expression),
 
@@ -170,6 +131,29 @@ pub fn evaluate_expression(
     }
 }
 
+fn pop_higher_precedence(
+    operators_stack: &mut Vec<AstNode>,
+    output_queue: &mut Vec<AstNode>,
+    current_precedence: u32,
+    left_associative: bool,
+) {
+    while let Some(top_op_node) = operators_stack.last() {
+        let o2_precedence = top_op_node.get_precedence();
+
+        let should_pop = if left_associative {
+            o2_precedence >= current_precedence
+        } else {
+            o2_precedence > current_precedence
+        };
+
+        if should_pop {
+            output_queue.push(operators_stack.pop().unwrap());
+        } else {
+            break;
+        }
+    }
+}
+
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
 fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
@@ -182,7 +166,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
             Expr::Scene(body, ref mut scene_style, head, ..) => {
                 scene_body.before.extend(body.before);
                 scene_body.after.extend(body.after);
-                
+
                 // TODO - scene style precedence
                 // Some styles will override others
                 head_nodes.before.extend(head.before);
@@ -208,6 +192,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
 
     Ok(Expr::Scene(scene_body, style, head_nodes, String::new()))
 }
+
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
@@ -261,3 +246,4 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Comp
 
     Ok(Expr::String(new_string))
 }
+

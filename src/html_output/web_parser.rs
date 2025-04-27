@@ -125,7 +125,7 @@ pub fn parse<'a>(
                                     msg: "Scene declaration must be a scene".to_string(),
                                     start_pos: start_pos.to_owned(),
                                     end_pos: expr.dimensions(),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -191,11 +191,11 @@ pub fn parse<'a>(
             }
 
             AstNode::If(condition, if_true, start_pos) => {
-                let if_statement = format!(
+                js.push_str(&format!(
                     "if ({}) {{\n{}\n}}",
                     expression_to_js(&condition, &start_pos)?,
                     parse(if_true, config, module_path, wasm_module)?.js
-                );
+                ));
             }
 
             // DIRECT INSERTION OF JS / CSS / HTML into page
@@ -207,26 +207,9 @@ pub fn parse<'a>(
                 css.push_str(&css_string);
             }
 
-            // Ignored
-            AstNode::Comment(_) => {}
+            // Ignore Everything Else
+            _ => {},
 
-            _ => {
-                return Err(CompileError {
-                    msg: format!(
-                        "Unknown AST node found when parsing AST in web parser: {:?}",
-                        node
-                    ),
-                    start_pos: TokenPosition {
-                        line_number: 0,
-                        char_column: 0,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: 0,
-                        char_column: 0,
-                    },
-                    error_type: ErrorType::Compiler,
-                });
-            }
         }
     }
 

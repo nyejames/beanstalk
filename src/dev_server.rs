@@ -66,17 +66,7 @@ fn handle_connection(
         .join("404")
         .with_extension("html");
 
-    let mut contents = match fs::read(dir_404) {
-        Ok(content) => content,
-        Err(e) => {
-            red_ln!(
-                "Error reading 404 file (is there a 404 file in the {:?} directory?): {:?}",
-                dir_404,
-                e
-            );
-            vec![]
-        }
-    };
+    let mut contents = fs::read(dir_404).unwrap_or_default();
 
     let mut status_line = "HTTP/1.1 404 NOT FOUND";
     let mut content_type = "text/html";
@@ -232,15 +222,13 @@ fn build_project(
     release: bool,
     output_info_level: i32,
 ) -> Result<Config, Error> {
-    dark_cyan_ln!("Building project...");
+    dark_cyan_ln!("Reading project config...");
     let start = Instant::now();
 
-    // TODO - send config file to dev server function and pass it in here
     let config = build::build(build_path, release, output_info_level)?;
 
     let duration = start.elapsed();
-    grey_ln!("------------------------------------");
-    print!("\nProject built in: ");
+    print!("\nConfig read in: ");
     green_ln_bold!("{:?}", duration);
 
     Ok(config)

@@ -28,10 +28,7 @@ pub fn tokenize(
     let mut exports: Vec<usize> = Vec::new();
     let mut imports: Vec<String> = Vec::new();
 
-    let mut token_position: TokenPosition = TokenPosition {
-        line_number: 1,
-        char_column: 0,
-    };
+    let mut token_position: TokenPosition = TokenPosition::default();
 
     let mut token_positions: Vec<TokenPosition> = Vec::with_capacity(initial_capacity);
     let mut chars: Peekable<Chars<'_>> = source_code.chars().peekable();

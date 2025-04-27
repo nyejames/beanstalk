@@ -3,7 +3,7 @@ use colour::{grey_ln, red_ln};
 use std::collections::HashMap;
 
 use super::eval_expression::evaluate_expression;
-use crate::bs_types::get_any_number_datatype;
+//use crate::bs_types::get_any_number_datatype;
 // use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Operator, Expr};
 use crate::parsers::build_ast::TokenContext;
@@ -33,7 +33,7 @@ pub fn create_expression(
     captured_declarations: &mut Vec<Arg>,
 ) -> Result<Expr, CompileError> {
     let mut expression: Vec<AstNode> = Vec::new();
-    let mut number_union = get_any_number_datatype(false);
+    // let mut number_union = get_any_number_datatype(false);
 
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
@@ -144,7 +144,7 @@ pub fn create_expression(
                             line_number: x.current_position().line_number,
                             char_column: x.current_position().char_column + 1,
                         },
-                        error_type: ErrorType::TypeError,
+                        error_type: ErrorType::Type,
                     }),
                 };
             }
@@ -224,53 +224,12 @@ pub fn create_expression(
                     false,
                 )?;
 
-                // red_ln!("new ref: {:?}", new_ref);
-
                 match new_ref {
                     AstNode::Literal(ref value, ..) => {
-                        // Check the type is correct
-                        let reference_data_type = value.get_type();
-
-                        // In the case this is an import, and we don't know the type yet,
-                        // The type will be a 'Pointer', which passes this sniff test
-                        // TODO: move all type checking like this to a stage after the AST creation
-                        if !reference_data_type.is_valid_type(data_type) {
-                            return Err(CompileError {
-                                msg: format!(
-                                    "Variable '{}' is of type {:?}, but used in an expression of type {:?}",
-                                    name, reference_data_type, data_type
-                                ),
-                                start_pos: x.current_position(),
-                                end_pos: TokenPosition {
-                                    line_number: x.current_position().line_number,
-                                    char_column: x.current_position().char_column + 1,
-                                },
-                                error_type: ErrorType::TypeError,
-                            });
-                        }
-
                         expression.push(new_ref);
                     }
 
-                    AstNode::FunctionCall(ref name, ..) => {
-                        // Check the type is correct
-                        let reference_data_type = new_ref.get_type();
-                        if !reference_data_type.is_valid_type(data_type) {
-                            return Err(CompileError {
-                                msg: format!(
-                                    "Function call '{}' is of type {:?}, but used in an expression of type {:?}",
-                                    name, reference_data_type, data_type
-                                ),
-                                start_pos: x.current_position(),
-                                end_pos: TokenPosition {
-                                    line_number: x.current_position().line_number,
-                                    char_column: x.current_position().char_column
-                                        + name.len() as i32,
-                                },
-                                error_type: ErrorType::TypeError,
-                            });
-                        }
-
+                    AstNode::FunctionCall(..) => {
                         expression.push(new_ref);
                     }
 
@@ -294,19 +253,6 @@ pub fn create_expression(
 
             // Check if is a literal
             Token::FloatLiteral(mut float) => {
-                if !DataType::Float(false).is_valid_type(data_type) {
-                    return Err(CompileError {
-                        msg: format!("Float literal used in expression of type: {:?}", data_type),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column
-                                + float.to_string().len() as i32,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
-
                 if next_number_negative {
                     float = -float;
                     next_number_negative = false;
@@ -319,19 +265,6 @@ pub fn create_expression(
             }
 
             Token::IntLiteral(int) => {
-                if !DataType::Int(false).is_valid_type(data_type) {
-                    return Err(CompileError {
-                        msg: format!("Int literal used in expression of type: {:?}", data_type),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column
-                                + int.to_string().len() as i32,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
-
                 let int_value = if next_number_negative {
                     next_number_negative = false;
                     -int
@@ -346,19 +279,6 @@ pub fn create_expression(
             }
 
             Token::StringLiteral(ref string) => {
-                if !DataType::String(false).is_valid_type(data_type) {
-                    return Err(CompileError {
-                        msg: format!("String literal used in expression of type: {:?}", data_type),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column
-                                + token.dimensions().char_column,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
-
                 expression.push(AstNode::Literal(
                     Expr::String(string.to_owned()),
                     x.current_position(),
@@ -366,23 +286,6 @@ pub fn create_expression(
             }
 
             Token::SceneHead | Token::ParentScene => {
-                if !DataType::Scene(false).is_valid_type(data_type) {
-                    return Err(CompileError {
-                        msg: format!("Scene literal used in expression of type: {:?}", data_type),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column
-                                + token.dimensions().char_column,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
-
-                // Add the default core HTML styles as the initially unlocked styles
-                // let mut unlocked_styles = HashMap::from(get_html_styles());
-
-
                 let scene_type = new_scene(x, ast, captured_declarations, &mut HashMap::new(), Style::default())?;
                 match scene_type {
                     SceneType::Scene(scene) => return Ok(scene),
@@ -402,7 +305,7 @@ pub fn create_expression(
                                 line_number: x.current_position().line_number,
                                 char_column: x.current_position().char_column + 1,
                             },
-                            error_type: ErrorType::TypeError,
+                            error_type: ErrorType::Type,
                         });
                     }
                 }
@@ -438,21 +341,6 @@ pub fn create_expression(
             }
 
             Token::Subtract => {
-                if !data_type.is_valid_type(&mut number_union) {
-                    return Err(CompileError {
-                        msg: format!(
-                            "Subtraction can't be used in expression of type: {:?}",
-                            data_type
-                        ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
-
                 expression.push(AstNode::Operator(
                     Operator::Subtract,
                     x.current_position(),
@@ -460,20 +348,6 @@ pub fn create_expression(
             }
 
             Token::Multiply => {
-                if !data_type.is_valid_type(&mut number_union) {
-                    return Err(CompileError {
-                        msg: format!(
-                            "Multiplication can't be used in expression of type: {:?}",
-                            data_type
-                        ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
                 expression.push(AstNode::Operator(
                     Operator::Multiply,
                     x.current_position(),
@@ -481,41 +355,20 @@ pub fn create_expression(
             }
 
             Token::Divide => {
-                if !number_union.is_valid_type(data_type) {
-                    return Err(CompileError {
-                        msg: format!(
-                            "Division can't be used in expression of type: {:?}",
-                            data_type
-                        ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
                 expression.push(AstNode::Operator(
                     Operator::Divide,
                     x.current_position(),
                 ));
             }
 
+            Token::Exponent => {
+                expression.push(AstNode::Operator(
+                    Operator::Exponent,
+                    x.current_position(),
+                ));
+            }
+
             Token::Modulus => {
-                if !number_union.is_valid_type(data_type) {
-                    return Err(CompileError {
-                        msg: format!(
-                            "Modulus can't be used in expression of type: {:?}",
-                            data_type
-                        ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::TypeError,
-                    });
-                }
                 expression.push(AstNode::Operator(
                     Operator::Modulus,
                     x.current_position(),
@@ -533,7 +386,7 @@ pub fn create_expression(
                     ));
                 } else {
                     expression.push(AstNode::Operator(
-                        Operator::Equal,
+                        Operator::Equality,
                         x.current_position(),
                     ));
                 }
@@ -588,7 +441,7 @@ pub fn create_expression(
                         char_column: x.current_position().char_column
                             + token.dimensions().char_column,
                     },
-                    error_type: ErrorType::TypeError,
+                    error_type: ErrorType::Type,
                 });
             }
         }

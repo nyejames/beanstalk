@@ -87,6 +87,151 @@ pub enum Expr {
     StructLiteral(Vec<Arg>),
 }
 
+impl Expr {
+    // Evaluates a binary operation between two expressions based on the operator
+    // This helps with constant folding by handling type-specific operations
+    pub fn evaluate_operator(&self, rhs: &Expr, op: &Operator) -> Option<Expr> {
+        match (self, rhs) {
+            // Float operations
+            (Expr::Float(lhs_val), Expr::Float(rhs_val)) => {
+                match op {
+                    Operator::Add => Some(Expr::Float(lhs_val + rhs_val)),
+                    Operator::Subtract => Some(Expr::Float(lhs_val - rhs_val)),
+                    Operator::Multiply => Some(Expr::Float(lhs_val * rhs_val)),
+                    Operator::Divide => Some(Expr::Float(lhs_val / rhs_val)),
+                    Operator::Modulus => Some(Expr::Float(lhs_val % rhs_val)),
+                    Operator::Exponent => Some(Expr::Float(lhs_val.powf(*rhs_val))),
+                    
+                    // Logical operations with float operands
+                    Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
+                    Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
+                    Operator::GreaterThan => Some(Expr::Bool(lhs_val > rhs_val)),
+                    Operator::GreaterThanOrEqual => Some(Expr::Bool(lhs_val >= rhs_val)),
+                    Operator::LessThan => Some(Expr::Bool(lhs_val < rhs_val)),
+                    Operator::LessThanOrEqual => Some(Expr::Bool(lhs_val <= rhs_val)),
+                    _ => None, // Other operations are not applicable to floats
+                }
+            },
+            
+            // Integer operations
+            (Expr::Int(lhs_val), Expr::Int(rhs_val)) => {
+                match op {
+                    Operator::Add => Some(Expr::Int(lhs_val + rhs_val)),
+                    Operator::Subtract => Some(Expr::Int(lhs_val - rhs_val)),
+                    Operator::Multiply => Some(Expr::Int(lhs_val * rhs_val)),
+                    Operator::Divide => {
+                        // Handle division by zero and integer division
+                        if *rhs_val == 0 {
+                            None
+                        } else {
+                            Some(Expr::Int(lhs_val / rhs_val))
+                        }
+                    },
+                    Operator::Modulus => {
+                        if *rhs_val == 0 {
+                            None
+                        } else {
+                            Some(Expr::Int(lhs_val % rhs_val))
+                        }
+                    },
+                    Operator::Exponent => {
+                        // For integer exponentiation, we need to be careful with negative exponents
+                        if *rhs_val < 0 {
+                            // Convert to float for negative exponents
+                            let lhs_float = *lhs_val as f64;
+                            let rhs_float = *rhs_val as f64;
+                            Some(Expr::Float(lhs_float.powf(rhs_float)))
+                        } else {
+                            // Use integer exponentiation for positive exponents
+                            Some(Expr::Int(lhs_val.pow(*rhs_val as u32)))
+                        }
+                    },
+                    
+                    // Logical operations with integer operands
+                    Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
+                    Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
+                    Operator::GreaterThan => Some(Expr::Bool(lhs_val > rhs_val)),
+                    Operator::GreaterThanOrEqual => Some(Expr::Bool(lhs_val >= rhs_val)),
+                    Operator::LessThan => Some(Expr::Bool(lhs_val < rhs_val)),
+                    Operator::LessThanOrEqual => Some(Expr::Bool(lhs_val <= rhs_val)),
+                    _ => None, // Other operations not applicable to integers
+                }
+            },
+            
+            // Boolean operations
+            (Expr::Bool(lhs_val), Expr::Bool(rhs_val)) => {
+                match op {
+                    Operator::And => Some(Expr::Bool(*lhs_val && *rhs_val)),
+                    Operator::Or => Some(Expr::Bool(*lhs_val || *rhs_val)),
+                    Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
+                    Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
+                    _ => None, // Other operations not applicable to booleans
+                }
+            },
+            
+            // String operations
+            (Expr::String(lhs_val), Expr::String(rhs_val)) => {
+                match op {
+                    Operator::Add => Some(Expr::String(format!("{}{}", lhs_val, rhs_val))),
+                    Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
+                    Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
+                    _ => None, // Other operations not applicable to strings
+                }
+            },
+
+
+            // Mixed types - Float and Int
+            // TODO - probably not use this at all?
+            
+            // Mixed types - Int and Float
+            // (Expr::Int(lhs_val), Expr::Float(rhs_val)) => {
+            //     let lhs_float = *lhs_val as f64;
+            //     match op {
+            //         Operator::Add => Some(Expr::Float(lhs_float + rhs_val)),
+            //         Operator::Subtract => Some(Expr::Float(lhs_float - rhs_val)),
+            //         Operator::Multiply => Some(Expr::Float(lhs_float * rhs_val)),
+            //         Operator::Divide => Some(Expr::Float(lhs_float / rhs_val)),
+            //         Operator::Modulus => Some(Expr::Float(lhs_float % rhs_val)),
+            //         Operator::Exponent => Some(Expr::Float(lhs_float.powf(*rhs_val))),
+            //
+            //         // Logical operations
+            //         Operator::Equal => Some(Expr::Bool(lhs_float == *rhs_val)),
+            //         Operator::NotEqual => Some(Expr::Bool(lhs_float != *rhs_val)),
+            //         Operator::GreaterThan => Some(Expr::Bool(lhs_float > *rhs_val)),
+            //         Operator::GreaterThanOrEqual => Some(Expr::Bool(lhs_float >= *rhs_val)),
+            //         Operator::LessThan => Some(Expr::Bool(lhs_float < *rhs_val)),
+            //         Operator::LessThanOrEqual => Some(Expr::Bool(lhs_float <= *rhs_val)),
+            //         _ => None,
+            //     }
+            // },
+
+            // (Expr::Float(lhs_val), Expr::Int(rhs_val)) => {
+            //     let rhs_float = *rhs_val as f64;
+            //     match op {
+            //         Operator::Add => Some(Expr::Float(lhs_val + rhs_float)),
+            //         Operator::Subtract => Some(Expr::Float(lhs_val - rhs_float)),
+            //         Operator::Multiply => Some(Expr::Float(lhs_val * rhs_float)),
+            //         Operator::Divide => Some(Expr::Float(lhs_val / rhs_float)),
+            //         Operator::Modulus => Some(Expr::Float(lhs_val % rhs_float)),
+            //         Operator::Exponent => Some(Expr::Float(lhs_val.powf(rhs_float))),
+            //
+            //         // Logical operations
+            //         Operator::Equal => Some(Expr::Bool(*lhs_val == rhs_float)),
+            //         Operator::NotEqual => Some(Expr::Bool(*lhs_val != rhs_float)),
+            //         Operator::GreaterThan => Some(Expr::Bool(*lhs_val > rhs_float)),
+            //         Operator::GreaterThanOrEqual => Some(Expr::Bool(*lhs_val >= rhs_float)),
+            //         Operator::LessThan => Some(Expr::Bool(*lhs_val < rhs_float)),
+            //         Operator::LessThanOrEqual => Some(Expr::Bool(*lhs_val <= rhs_float)),
+            //         _ => None,
+            //     }
+            // },
+            
+            // Any other combination of types
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Operator {
     Add,
@@ -105,7 +250,7 @@ pub enum Operator {
     GreaterThanOrEqual,
     LessThan,
     LessThanOrEqual,
-    Equal,
+    Equality,
     NotEqual,
 }
 
@@ -119,7 +264,7 @@ pub enum AstNode {
     Settings(Vec<Arg>, TokenPosition), // Settings, Line number
 
     // Named import path for the module
-    Import(String, TokenPosition), // Path, Line number
+    // Import(String, TokenPosition), // Path, Line number
 
     // Path to a module that will automatically import all styles and scenes
     // into the scope of the current module. Doesn't automatically import variables or functions into the scope
@@ -167,7 +312,7 @@ pub enum AstNode {
     // Other language code blocks
     JS(String, TokenPosition),   // Code, Line number
     Css(String, TokenPosition),  // Code, Line number
-    Wasm(String, TokenPosition), // Code, Line number
+    // Wasm(String, TokenPosition), // Code, Line number
 
     // Literals
     Literal(Expr, TokenPosition), // Token, Accessed args, Line number
@@ -265,25 +410,39 @@ impl AstNode {
     pub fn get_precedence(&self) -> u32 {
         match self {
             AstNode::Operator(op, _) => match op {
-                Operator::Add => 2,
-                Operator::Subtract => 2,
-                Operator::Multiply => 3,
-                Operator::Divide => 3,
-                Operator::Modulus => 3,
-                // Operator::Remainder => 3,
-                Operator::Root => 3,
-                Operator::Exponent => 4,
-                Operator::LessThan => 5,
-                Operator::LessThanOrEqual => 5,
-                Operator::GreaterThan => 5,
-                Operator::GreaterThanOrEqual => 5,
-                Operator::And => 6,
-                Operator::Or => 7,
-                Operator::Equal => 8,
-                Operator::NotEqual => 8,
+                // Highest precedence: exponentiation
+                Operator::Exponent => 5,
+                Operator::Root => 5,
+
+                // High precedence: multiplication, division, modulus
+                Operator::Multiply => 4,
+                Operator::Divide => 4,
+                Operator::Modulus => 4,
+
+                // Medium precedence: addition, subtraction
+                Operator::Add => 3,
+                Operator::Subtract => 3,
+
+                // Comparisons
+                Operator::LessThan => 2,
+                Operator::LessThanOrEqual => 2,
+                Operator::GreaterThan => 2,
+                Operator::GreaterThanOrEqual => 2,
+                Operator::Equality => 2,
+                Operator::NotEqual => 2,
+
+                // Logical AND
+                Operator::And => 1,
+
+                // Logical OR
+                Operator::Or => 0,
             },
             _ => 0,
         }
+    }
+
+    pub fn is_left_associative(&self) -> bool {
+        !matches!(self, AstNode::Operator(Operator::Exponent, ..))
     }
 
     pub fn dimensions(&self) -> TokenPosition {

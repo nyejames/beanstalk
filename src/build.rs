@@ -6,12 +6,9 @@ use crate::parsers::ast_nodes::{Arg, AstNode, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::settings::{BS_VAR_PREFIX, Config};
 use crate::tokenizer::TokenPosition;
-use crate::{Error, ErrorType, settings, CompileError};
+use crate::{Error, ErrorType, settings};
 use crate::{Token, tokenizer};
-use colour::{
-    blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln,
-    print_bold, print_ln_bold, yellow_ln_bold,
-};
+use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -159,7 +156,6 @@ pub fn build(
                 Err(e) => return Err(e.to_error(config_path)),
             };
 
-            // get all exported variables from the config file
             get_config_from_ast(&config_ast, &mut project_config)?;
 
             let src_dir = entry_dir.join(&project_config.src);
@@ -245,7 +241,7 @@ pub fn build(
                     
                     // This is a struct type
                     // The struct type needs to be parsed first before this is exported to other modules
-                    Token::Variable(struct_name, _) => {
+                    Token::Variable(..) => {
                         todo!("Struct export types");
                     }
                     
@@ -806,7 +802,7 @@ fn write_output_file(output: &OutputModule) -> Result<(), Error> {
 
 fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Result<(), Error> {
     for node in ast {
-        if let AstNode::Settings(args, position) = node {
+        if let AstNode::Settings(args, ..) = node {
             for arg in args {
                 match arg.name.as_str() {
                     "project" => {
@@ -818,7 +814,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -833,7 +829,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -848,7 +844,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -863,7 +859,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -878,7 +874,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -893,7 +889,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -908,7 +904,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -923,7 +919,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                     start_pos: TokenPosition::default(),
                                     end_pos: TokenPosition::default(),
                                     file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::TypeError,
+                                    error_type: ErrorType::Type,
                                 });
                             }
                         };
@@ -943,7 +939,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -960,7 +956,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -975,7 +971,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -990,7 +986,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1006,7 +1002,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1023,7 +1019,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                             start_pos: TokenPosition::default(),
                                                             end_pos: TokenPosition::default(),
                                                             file_path: PathBuf::from("#config.bs"),
-                                                            error_type: ErrorType::TypeError,
+                                                            error_type: ErrorType::Type,
                                                         });
                                                     }
                                                 };
@@ -1039,7 +1035,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1055,7 +1051,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1070,7 +1066,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1085,7 +1081,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1102,7 +1098,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     }),
                                                 };
                                         }
@@ -1118,7 +1114,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                             start_pos: TokenPosition::default(),
                                                             end_pos: TokenPosition::default(),
                                                             file_path: PathBuf::from("#config.bs"),
-                                                            error_type: ErrorType::TypeError,
+                                                            error_type: ErrorType::Type,
                                                         });
                                                     }
                                                 };
@@ -1134,7 +1130,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1151,7 +1147,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::TypeError,
+                                                        error_type: ErrorType::Type,
                                                     });
                                                 }
                                             };
@@ -1166,7 +1162,7 @@ fn get_config_from_ast(ast: &Vec<AstNode>, project_config: &mut Config) -> Resul
                                 start_pos: TokenPosition::default(),
                                 end_pos: TokenPosition::default(),
                                 file_path: PathBuf::from("#config.bs"),
-                                error_type: ErrorType::TypeError,
+                                error_type: ErrorType::Type,
                             }),
                         };
                     }

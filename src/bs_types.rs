@@ -1,3 +1,4 @@
+use colour::red_ln;
 use crate::parsers::ast_nodes::{Arg, Expr};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,15 +93,26 @@ impl DataType {
         // Has to make sure if either type is a union, that the other type is also a member of the union
         // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
 
-        // This Pointer type bypasses type checking for now,
-        // As imports or variables we don't know the type of yet,
-        // Must be type checked again at a later stage in the compiler
-        if self == &DataType::Pointer {
-            return true;
-        }
+        match self {
+            DataType::Bool(_) => {
+                return matches!(
+                    accepted_type,
+                    DataType::Bool(_) | DataType::Int(_) | DataType::Float(_)
+                )
+            }
 
-        if self == &DataType::Range {
-            return matches!(
+            DataType::Choice(types) => {
+
+                for t in types {
+                    if !t.is_valid_type(accepted_type) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            DataType::Range => {
+                return matches!(
                 accepted_type,
                 DataType::Collection(_)
                     | DataType::Structure(_)
@@ -108,16 +120,15 @@ impl DataType {
                     | DataType::Int(_)
                     | DataType::Decimal(_)
                     | DataType::String(_)
-            );
-        }
-
-        if let DataType::Choice(types) = self {
-            for t in types {
-                if t.is_valid_type(accepted_type) {
-                    return true;
-                }
+                );
             }
-            return false;
+
+            // This will probably be deleted soon
+            DataType::Pointer => {
+                return true;
+            }
+
+            _ => {}
         }
 
         match accepted_type {
@@ -128,20 +139,23 @@ impl DataType {
                 true
             }
             DataType::CoerceToString(_) => true,
+
             DataType::Choice(types) => {
                 for t in types {
-                    if self == t {
-                        return true;
+                    if !self.is_valid_type(t) {
+                        return false;
                     }
                 }
-                false
+                true
             }
+
             DataType::Bool(_) => {
                 matches!(
                     self,
                     &DataType::Bool(_) | &DataType::Int(_) | &DataType::Float(_)
                 )
             }
+
             _ => self == accepted_type,
         }
     }

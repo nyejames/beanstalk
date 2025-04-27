@@ -43,7 +43,7 @@ pub fn _new_collection(
                             char_column: token_positions[x.index].char_column
                                 + item.dimensions().char_column,
                         },
-                        error_type: ErrorType::TypeError,
+                        error_type: ErrorType::Type,
                     });
                 }
 
