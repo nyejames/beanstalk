@@ -420,6 +420,8 @@ pub fn add_bs_files_to_parse(
 
                 // If it's a .bs file, add it to the list of files to compile
                 if file_path.extension() == Some("bs".as_ref()) {
+                    
+                    
                     let code = match fs::read_to_string(&file_path) {
                         Ok(content) => content,
                         Err(e) => {
@@ -435,6 +437,11 @@ pub fn add_bs_files_to_parse(
                             });
                         }
                     };
+                    
+                    // If code is empty, skip compiling this module
+                    if code.is_empty() {
+                        continue;
+                    }
 
                     let mut global = false;
 

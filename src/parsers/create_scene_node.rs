@@ -8,7 +8,7 @@ use crate::parsers::scene::{SceneContent, SceneType, Style, StyleFormat};
 use crate::parsers::structs::new_fixed_collection;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-use colour::yellow_ln;
+use colour::{red_ln, yellow_ln};
 use std::collections::HashMap;
 // const DEFAULT_SLOT_NAME: &str = "_slot";
 
@@ -138,7 +138,10 @@ pub fn new_scene(
 
                             continue;
                         }
-                        _ => arg.value.to_owned(),
+                        _ => {
+                            red_ln!("{:?}", arg);
+                            arg.value.to_owned()
+                        },
                     }
                 } else {
                     return Err(CompileError {
@@ -217,6 +220,7 @@ pub fn new_scene(
                     //     // Anything that isn't a style field should be added to the scene body
                     //     this_scene_body.push(Expr::StructLiteral(structure_args));
                     // }
+                    
                     Expr::Scene(body, style, ..) => {
                         scene_style.child_default = style.child_default.to_owned();
 

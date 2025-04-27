@@ -1,15 +1,14 @@
-use crate::parsers::ast_nodes::Expr;
-use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
+use crate::parsers::ast_nodes::{Expr, Operator};
+use crate::{CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode};
 
 use crate::tokenizer::TokenPosition;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln_bold, red_ln};
 
-// TODO - currently doesn't work lol
 // This will evaluate everything possible at compile time
 // returns either a literal or an evaluated runtime expression
 // Output stack must be in RPN order
-pub fn math_constant_fold(
+pub fn constant_fold(
     output_stack: Vec<AstNode>,
     current_type: DataType,
 ) -> Result<Expr, CompileError> {
@@ -23,7 +22,7 @@ pub fn math_constant_fold(
         // red_ln!("output_stack: {:?}", stack);
 
         match node {
-            AstNode::BinaryOperator(op, token_position) => {
+            AstNode::Operator(op, token_position) => {
                 let line_number = token_position.line_number;
                 let char_column = token_position.char_column;
 
@@ -84,15 +83,25 @@ pub fn math_constant_fold(
 
                 let new_number = AstNode::Literal(
                     Expr::Float(match op {
-                        Token::Add => lhs_value + rhs_value,
-                        Token::Subtract => lhs_value - rhs_value,
-                        Token::Multiply => lhs_value * rhs_value,
-                        Token::Divide => lhs_value / rhs_value,
-                        Token::Modulus => lhs_value % rhs_value,
+                        Operator::Add => lhs_value + rhs_value,
+                        Operator::Subtract => lhs_value - rhs_value,
+                        Operator::Multiply => lhs_value * rhs_value,
+                        Operator::Divide => lhs_value / rhs_value,
+                        Operator::Modulus => lhs_value % rhs_value,
+                        Operator::Exponent => lhs_value.powf(rhs_value),
+
+                        // we might need to have something more crazy for built-in roots
+                        // x = 2^ceil(numbits(N)/2)
+                        //     loop:
+                        // y = floor((x + floor(N/x))/2)
+                        // if y >= x
+                        //     return x
+                        // x = y
+
                         _ => {
                             return Err(CompileError {
                                 msg: format!(
-                                    "Unsupported operator found in operator stack when parsing an expression into WAT: {:?}",
+                                    "You can't use a {:?} operator in a mathematical expression.",
                                     op
                                 ),
                                 start_pos: token_position.to_owned(),
@@ -143,7 +152,7 @@ pub fn logical_constant_fold(
 
     for node in &output_stack {
         match node {
-            AstNode::LogicalOperator(op, token_position) => {
+            AstNode::Operator(op, token_position) => {
                 let line_number = token_position.line_number;
                 let char_column = token_position.char_column;
 
@@ -194,9 +203,10 @@ pub fn logical_constant_fold(
 
                 let new_bool = AstNode::Literal(
                     Expr::Bool(match op {
-                        Token::Equal => left_value == right_value,
-                        Token::And => left_value && right_value,
-                        Token::Or => left_value || right_value,
+                        Operator::Equal => left_value == right_value,
+                        Operator::NotEqual => left_value != right_value,
+                        Operator::And => left_value && right_value,
+                        Operator::Or => left_value || right_value,
                         _ => {
                             return Err(CompileError {
                                 msg: format!(

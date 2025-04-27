@@ -2,7 +2,7 @@ use crate::bs_types::get_reference_data_type;
 use crate::parsers::scene::{SceneContent, Style};
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
-use crate::{Token, bs_types::DataType};
+use crate::{bs_types::DataType};
 use colour::red_ln;
 use std::path::PathBuf;
 use wasm_encoder::ValType;
@@ -87,6 +87,28 @@ pub enum Expr {
     StructLiteral(Vec<Arg>),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum Operator {
+    Add,
+    Subtract,
+    Multiply,
+    Divide,
+    Modulus,
+    // Remainder,
+    Root,
+    Exponent,
+
+    // Logical
+    And,
+    Or,
+    GreaterThan,
+    GreaterThanOrEqual,
+    LessThan,
+    LessThanOrEqual,
+    Equal,
+    NotEqual,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     // Warning Message
@@ -156,9 +178,8 @@ pub enum AstNode {
 
     // Operators
     // Operator, Precedence
-    LogicalOperator(Token, TokenPosition), // Operator, Line number
-    BinaryOperator(Token, TokenPosition),  // Operator, Line number
-    UnaryOperator(Token, bool, TokenPosition), // Operator, is_postfix, Line number
+    Operator(Operator, TokenPosition),  // Operator, Line number
+    // UnaryOperator(Token, bool, TokenPosition), // Operator, is_postfix, Line number
 
     Newline,
     Spaces(u32),
@@ -243,27 +264,23 @@ impl AstNode {
 
     pub fn get_precedence(&self) -> u32 {
         match self {
-            AstNode::BinaryOperator(op, _) => match op {
-                Token::Add => 2,
-                Token::Subtract => 2,
-                Token::Multiply => 3,
-                Token::Divide => 3,
-                Token::Modulus => 3,
-                Token::Remainder => 3,
-                Token::Root => 3,
-                Token::Exponent => 4,
-                _ => 0,
-            },
-
-            AstNode::LogicalOperator(op, _) => match op {
-                Token::Equal => 5,
-                Token::LessThan => 5,
-                Token::LessThanOrEqual => 5,
-                Token::GreaterThan => 5,
-                Token::GreaterThanOrEqual => 5,
-                Token::And => 6,
-                Token::Or => 7,
-                _ => 0,
+            AstNode::Operator(op, _) => match op {
+                Operator::Add => 2,
+                Operator::Subtract => 2,
+                Operator::Multiply => 3,
+                Operator::Divide => 3,
+                Operator::Modulus => 3,
+                // Operator::Remainder => 3,
+                Operator::Root => 3,
+                Operator::Exponent => 4,
+                Operator::LessThan => 5,
+                Operator::LessThanOrEqual => 5,
+                Operator::GreaterThan => 5,
+                Operator::GreaterThanOrEqual => 5,
+                Operator::And => 6,
+                Operator::Or => 7,
+                Operator::Equal => 8,
+                Operator::NotEqual => 8,
             },
             _ => 0,
         }

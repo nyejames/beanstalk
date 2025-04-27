@@ -678,7 +678,7 @@ fn keyword_or_variable(
             "async" => return Ok(Token::AsyncFunctionKeyword),
 
             // Logical
-            "is" => return Ok(Token::Equal),
+            "is" => return Ok(Token::Is),
             "not" => return Ok(Token::Not),
             "and" => return Ok(Token::And),
             "or" => return Ok(Token::Or),

@@ -1,4 +1,4 @@
-use crate::parsers::ast_nodes::Expr;
+use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode,
@@ -54,22 +54,25 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
                         }
                     },
 
-                    AstNode::BinaryOperator(op, token_position) => match op {
-                        Token::Add => js.push_str(" + "),
-                        Token::Subtract => js.push_str(" - "),
-                        Token::Multiply => js.push_str(" * "),
-                        Token::Divide => js.push_str(" / "),
-                        _ => {
-                            return Err(CompileError {
-                                msg: "Unsupported operator found in operator stack when parsing an expression into JS".to_string(),
-                                start_pos: token_position.to_owned(),
-                                end_pos: TokenPosition {
-                                    line_number: token_position.line_number,
-                                    char_column: token_position.char_column + 1,
-                                },
-                                error_type: ErrorType::Compiler,
-                            });
-                        }
+                    AstNode::Operator(op, token_position) => match op {
+                        Operator::Add => js.push_str(" + "),
+                        Operator::Subtract => js.push_str(" - "),
+                        Operator::Multiply => js.push_str(" * "),
+                        Operator::Divide => js.push_str(" / "),
+                        Operator::Exponent => js.push_str(" ** "),
+                        Operator::Modulus => js.push_str(" % "),
+                        // Operator::Remainder => js.push_str(" % "),
+                        Operator::Root => js.push_str(" ** (1/2)"),
+
+                        // Logical
+                        Operator::Equal => js.push_str(" === "),
+                        Operator::NotEqual => js.push_str(" !== "),
+                        Operator::GreaterThan => js.push_str(" > "),
+                        Operator::GreaterThanOrEqual => js.push_str(" >= "),
+                        Operator::LessThan => js.push_str(" < "),
+                        Operator::LessThanOrEqual => js.push_str(" <= "),
+                        Operator::And => js.push_str(" && "),
+                        Operator::Or => js.push_str(" || "),
                     },
 
                     AstNode::FunctionCall(name, args, _, arguments_accessed, ..) => {

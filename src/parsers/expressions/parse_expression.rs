@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use super::eval_expression::evaluate_expression;
 use crate::bs_types::get_any_number_datatype;
 // use crate::html_output::html_styles::get_html_styles;
-use crate::parsers::ast_nodes::Expr;
+use crate::parsers::ast_nodes::{Operator, Expr};
 use crate::parsers::build_ast::TokenContext;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::parsers::scene::{SceneType, Style};
@@ -314,10 +314,7 @@ pub fn create_expression(
 
                 expression.push(AstNode::Literal(
                     Expr::Float(float),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                    x.current_position(),
                 ));
             }
 
@@ -344,10 +341,7 @@ pub fn create_expression(
 
                 expression.push(AstNode::Literal(
                     Expr::Int(int_value),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                    x.current_position(),
                 ));
             }
 
@@ -367,10 +361,7 @@ pub fn create_expression(
 
                 expression.push(AstNode::Literal(
                     Expr::String(string.to_owned()),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                    x.current_position(),
                 ));
             }
 
@@ -420,10 +411,7 @@ pub fn create_expression(
             Token::BoolLiteral(value) => {
                 expression.push(AstNode::Literal(
                     Expr::Bool(value.to_owned()),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                    x.current_position(),
                 ));
             }
 
@@ -443,12 +431,9 @@ pub fn create_expression(
 
             // BINARY OPERATORS
             Token::Add => {
-                expression.push(AstNode::BinaryOperator(
-                    token.to_owned(),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::Add,
+                    x.current_position(),
                 ));
             }
 
@@ -468,12 +453,9 @@ pub fn create_expression(
                     });
                 }
 
-                expression.push(AstNode::BinaryOperator(
-                    token.to_owned(),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::Subtract,
+                    x.current_position(),
                 ));
             }
 
@@ -492,12 +474,9 @@ pub fn create_expression(
                         error_type: ErrorType::TypeError,
                     });
                 }
-                expression.push(AstNode::BinaryOperator(
-                    token.to_owned(),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::Multiply,
+                    x.current_position(),
                 ));
             }
 
@@ -516,12 +495,9 @@ pub fn create_expression(
                         error_type: ErrorType::TypeError,
                     });
                 }
-                expression.push(AstNode::BinaryOperator(
-                    token.to_owned(),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::Divide,
+                    x.current_position(),
                 ));
             }
 
@@ -540,78 +516,63 @@ pub fn create_expression(
                         error_type: ErrorType::TypeError,
                     });
                 }
-                expression.push(AstNode::BinaryOperator(
-                    token.to_owned(),
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::Modulus,
+                    x.current_position(),
                 ));
             }
 
             // LOGICAL OPERATORS
-            Token::Equal => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::Equal,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
-                ));
+            Token::Is => {
+                // Check if the next token is a not
+                if let Some(Token::Not) = x.tokens.get(x.index + 1) {
+                    x.index += 1;
+                    expression.push(AstNode::Operator(
+                        Operator::NotEqual,
+                        x.current_position(),
+                    ));
+                } else {
+                    expression.push(AstNode::Operator(
+                        Operator::Equal,
+                        x.current_position(),
+                    ));
+                }
             }
 
             Token::LessThan => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::LessThan,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::LessThan,
+                    x.current_position(),
                 ));
             }
             Token::LessThanOrEqual => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::LessThanOrEqual,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::LessThanOrEqual,
+                    x.current_position(),
                 ));
             }
             Token::GreaterThan => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::GreaterThan,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::GreaterThan,
+                    x.current_position(),
                 ));
             }
             Token::GreaterThanOrEqual => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::GreaterThanOrEqual,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::GreaterThanOrEqual,
+                    x.current_position(),
                 ));
             }
             Token::And => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::And,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::And,
+                    x.current_position(),
                 ));
             }
             Token::Or => {
-                expression.push(AstNode::LogicalOperator(
-                    Token::Or,
-                    TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column,
-                    },
+                expression.push(AstNode::Operator(
+                    Operator::Or,
+                    x.current_position(),
                 ));
             }
 

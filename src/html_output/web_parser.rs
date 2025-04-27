@@ -190,6 +190,14 @@ pub fn parse<'a>(
                 js.push_str(&format!("return {};", expression_to_js(expr, &start_pos)?));
             }
 
+            AstNode::If(condition, if_true, start_pos) => {
+                let if_statement = format!(
+                    "if ({}) {{\n{}\n}}",
+                    expression_to_js(&condition, &start_pos)?,
+                    parse(if_true, config, module_path, wasm_module)?.js
+                );
+            }
+
             // DIRECT INSERTION OF JS / CSS / HTML into page
             AstNode::JS(js_string, ..) => {
                 js.push_str(&js_string);

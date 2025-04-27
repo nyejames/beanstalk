@@ -1,8 +1,8 @@
-use super::constant_folding::{logical_constant_fold, math_constant_fold};
-use crate::parsers::ast_nodes::Expr;
+use super::constant_folding::{logical_constant_fold, constant_fold};
+use crate::parsers::ast_nodes::{Operator, Expr};
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
-use crate::{CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode};
+use crate::{CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode};
 
 // This function will turn a series of ast nodes into a Value enum.
 // A Value enum can also be a runtime expression that contains a series of nodes.
@@ -48,11 +48,11 @@ pub fn evaluate_expression(
                 simplified_expression.push(node.to_owned());
             }
 
-            AstNode::BinaryOperator(ref op, ref position) => {
-                // If the current type is a string or scene, an add operator is assumed.
+            AstNode::Operator(ref op, ref position) => {
+                // If the current type is a string or scene, an added operator is assumed.
                 match current_type {
                     DataType::String(_) | DataType::Scene(_) => {
-                        if op != &Token::Add {
+                        if op != &Operator::Add {
                             return Err( CompileError {
                                 msg: "Can only use the '+' operator to manipulate strings or scenes inside expressions".to_string(),
                                 start_pos: position.to_owned(),
@@ -65,9 +65,9 @@ pub fn evaluate_expression(
                         }
 
                         // We don't push the node into the simplified expression atm
-                        // As the only kind of string expression is contaminating them
+                        // As the only kind of string expression is contaminating them,
                         // So simplified string expressions are just a list of strings
-                        // Maybe other kinds of string expression will be valid in the future so more logic is needed here
+                        // Maybe other kinds of string expression will be valid in the future, so more logic is needed here
                         // simplified_expression.push(node.to_owned());
                         continue 'outer;
                     }
@@ -77,38 +77,13 @@ pub fn evaluate_expression(
                         continue 'outer;
                     }
 
-                    DataType::Bool(_) => {
-                        if *op != Token::Or
-                            || *op != Token::And
-                            || *op != Token::Equal
-                            || *op != Token::Not
-                            || *op != Token::LessThan
-                            || *op != Token::LessThanOrEqual
-                            || *op != Token::GreaterThan
-                            || *op != Token::GreaterThanOrEqual
-                        {
-                            return Err(CompileError {
-                                msg: "Can only use logical operators in booleans expressions"
-                                    .to_string(),
-                                start_pos: position.to_owned(),
-                                end_pos: TokenPosition {
-                                    line_number: position.line_number,
-                                    char_column: position.char_column + 1,
-                                },
-                                error_type: ErrorType::Syntax,
-                            });
-                        }
-
-                        simplified_expression.push(node.to_owned());
-                        continue 'outer;
-                    }
                     _ => {}
                 }
 
                 while let Some(top_op_node) = operators_stack.last() {
-                    // Stop if top is not an operator (e.g., left parenthesis)
+                    // Stop if top is not an operator (e.g. left parenthesis)
                     match top_op_node {
-                        AstNode::BinaryOperator(..) | AstNode::LogicalOperator(..) => {}
+                        AstNode::Operator(..) => {}
                         _ => {
                             break;
                         }
@@ -190,7 +165,7 @@ pub fn evaluate_expression(
             }
 
             // Evaluate all constants in the maths expression
-            math_constant_fold(output_queue, current_type)
+            constant_fold(output_queue, current_type)
         }
     }
 }

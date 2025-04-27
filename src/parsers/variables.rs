@@ -1,4 +1,3 @@
-use colour::red_ln;
 use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
@@ -19,8 +18,6 @@ pub fn create_new_var_or_ref(
     ast: &[AstNode],
     inside_collection: bool, // This allows parse_expression to know that new variable declarations are valid
 ) -> Result<AstNode, CompileError> {
-    let token_line_number = x.current_position().line_number;
-    let token_start_pos = x.current_position().char_column;
 
     // If this is a reference to a function or variable,
     // This to_owned here is gross, probably a better way to avoid this
@@ -58,19 +55,13 @@ pub fn create_new_var_or_ref(
                 if arg.value.is_pure() {
                     return Ok(AstNode::Literal(
                         arg.value.to_owned(),
-                        TokenPosition {
-                            line_number: token_line_number,
-                            char_column: token_start_pos,
-                        },
+                        x.current_position(),
                     ));
                 }
 
                 Ok(AstNode::Literal(
                     Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
-                    TokenPosition {
-                        line_number: token_line_number,
-                        char_column: token_start_pos,
-                    },
+                    x.current_position(),
                 ))
             }
         };

@@ -198,7 +198,6 @@ pub fn parse_scene(
             }
 
             Expr::Scene(new_scene_nodes, new_scene_style, new_scene_head, new_scene_id) => {
-
                 let new_scene = parse_scene(
                     SceneIngredients {
                         scene_body: new_scene_nodes,
@@ -216,7 +215,7 @@ pub fn parse_scene(
                     config,
                 )?;
 
-                final_string.push_str(&new_scene);
+                content.push_str(&new_scene);
             }
 
             Expr::Reference(name, data_type, argument_accessed) => {
@@ -320,6 +319,8 @@ pub fn parse_scene(
     } else {
         final_string.push_str(&content);
     }
+    
+    red_ln!("{}", final_string);
 
     Ok(final_string)
 }

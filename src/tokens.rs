@@ -118,7 +118,7 @@ pub enum Token {
 
     // Logical Operators in order of precedence
     Not,
-    Equal,
+    Is,
     LessThan,
     LessThanOrEqual,
     GreaterThan,
