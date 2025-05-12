@@ -1,11 +1,11 @@
 use super::{
-    ast_nodes::{Arg, AstNode},
+    ast_nodes::Arg,
     expressions::parse_expression::create_expression,
 };
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::scene::{SceneContent, SceneType, Style, StyleFormat};
-use crate::parsers::structs::new_fixed_collection;
+use crate::parsers::structs::create_args;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use colour::{red_ln, yellow_ln};
@@ -15,8 +15,7 @@ use std::collections::HashMap;
 // Recursive function to parse scenes
 pub fn new_scene(
     x: &mut TokenContext,
-    ast: &[AstNode],
-    declarations: &mut Vec<Arg>,
+    declarations: &[Arg],
     unlocked_scenes: &mut HashMap<String, Expr>,
     mut scene_style: Style, 
 ) -> Result<SceneType, CompileError> {
@@ -31,7 +30,7 @@ pub fn new_scene(
 
     let mut scene_id: String = String::new();
 
-    x.index += 1;
+    x.advance();
 
     // SCENE HEAD PARSING
     while x.index < x.length {
@@ -39,7 +38,7 @@ pub fn new_scene(
 
         let inside_brackets = token == Token::OpenParenthesis;
 
-        x.index += 1;
+        x.advance();
 
         match token {
             Token::Colon => {
@@ -47,7 +46,7 @@ pub fn new_scene(
             }
 
             Token::SceneClose => {
-                x.index -= 1;
+                x.go_back();
 
                 // Flatted the scene_body array in a single vec
                 return Ok(SceneType::Scene(Expr::Scene(
@@ -74,7 +73,7 @@ pub fn new_scene(
             }
 
             // If this is a scene, we have to do some clever parsing here
-            Token::Variable(name, _) => {
+            Token::Variable(name, ..) => {
                 // TODO - sort all this out.
                 // Should unlocked styles just be passed in as normal declarations?
 
@@ -116,7 +115,7 @@ pub fn new_scene(
                     //     declarations,
                     // )?
 
-                    match &arg.value {
+                    match &arg.expr {
                         Expr::Scene(body, style, ..) => {
                             scene_style.child_default = style.child_default.to_owned();
 
@@ -140,7 +139,7 @@ pub fn new_scene(
                         }
                         _ => {
                             red_ln!("{:?}", arg);
-                            arg.value.to_owned()
+                            arg.expr.to_owned()
                         },
                     }
                 } else {
@@ -159,68 +158,6 @@ pub fn new_scene(
                 };
 
                 match value {
-                    // OLD STYLE STRUCT THING (may not do it like this anymore)
-                    // Expr::StructLiteral(structure) => {
-                    //     let mut structure_args: Vec<Arg> = Vec::new();
-                    //     let mut style: Style = Style::default();
-                    //
-                    //     for arg in structure {
-                    //         match arg.name.as_str() {
-                    //             // pub format: StyleFormat,
-                    //             //
-                    //             // // Removes any parent wrappers lower than this precedence
-                    //             // // Before adding its own wrappers
-                    //             // pub parent_override: i32,
-                    //             //
-                    //             // pub neighbour_rule: NeighbourRule,
-                    //             //
-                    //             // // Passes a default style for any children to start with
-                    //             // // Wrappers can be overridden with parent overrides
-                    //             // // Or child wrappers that are higher precedence
-                    //             // pub child_default: Option<Box<PrecedenceStyle>>,
-                    //             //
-                    //             // pub compatibility: SceneCompatibility,
-                    //             //
-                    //             // // Styles that children of this scene can now use
-                    //             // pub unlocked_styles: HashMap<String, Style>,
-                    //             //
-                    //             // // If this is true, no unlocked styles will be inherited from the parent
-                    //             // pub unlocks_override: bool,
-                    //             "format" => {
-                    //                 style.format = match arg.value {
-                    //                     Expr::Int(int) => int,
-                    //                     _ => {
-                    //                         return Err(CompileError {
-                    //                             msg: "Expected an integer for the format field of a scene".to_string(),
-                    //                             start_pos: arg.value.dimensions(),
-                    //                             end_pos: TokenPosition {
-                    //                                 line_number: arg.value.dimensions().line_number,
-                    //                                 char_column: arg.value.dimensions().char_column + arg.name.len() as i32,
-                    //                             },
-                    //                             error_type: ErrorType::Syntax,
-                    //                         });
-                    //                     }
-                    //                 };
-                    //             }
-                    //
-                    //             _ => {
-                    //                 structure_args.push(arg);
-                    //             }
-                    //         }
-                    //     }
-                    //
-                    //     // Insert this style's unlocked styles into the unlocked styles map
-                    //     for (name, style) in style.unlocked_scenes.iter() {
-                    //         // Should this overwrite? Or skip if already unlocked?
-                    //         unlocked_scenes.insert(name.to_owned(), style.to_owned());
-                    //     }
-                    //
-                    //     scene_styles.push(style);
-                    //
-                    //     // Anything that isn't a style field should be added to the scene body
-                    //     this_scene_body.push(Expr::StructLiteral(structure_args));
-                    // }
-                    
                     Expr::Scene(body, style, ..) => {
                         scene_style.child_default = style.child_default.to_owned();
 
@@ -253,12 +190,10 @@ pub fn new_scene(
             | Token::IntLiteral(_)
             | Token::StringLiteral(_)
             | Token::RawStringLiteral(_) => {
-                x.index -= 1;
+                x.go_back();
 
                 this_scene_body.push(create_expression(
                     x,
-                    false,
-                    ast,
                     &mut DataType::CoerceToString(false),
                     inside_brackets,
                     declarations,
@@ -284,9 +219,9 @@ pub fn new_scene(
 
             Token::OpenParenthesis => {
                 let structure =
-                    new_fixed_collection(x, Expr::None, &Vec::new(), ast, declarations)?;
+                    create_args(x, Expr::None, &Vec::new(), declarations)?;
 
-                this_scene_body.push(Expr::StructLiteral(structure));
+                this_scene_body.push(Expr::Args(structure));
             }
 
             Token::Ignore => {
@@ -301,7 +236,7 @@ pub fn new_scene(
                         Token::SceneClose => {
                             extra_scene_opens -= 1;
                             if extra_scene_opens == 0 {
-                                x.index += 1; // Skip the closing scene close
+                                x.advance(); // Skip the closing scene close
                                 break;
                             }
                         }
@@ -313,7 +248,7 @@ pub fn new_scene(
                         }
                         _ => {}
                     }
-                    x.index += 1;
+                    x.advance();
                 }
 
                 return Ok(SceneType::Comment);
@@ -351,7 +286,7 @@ pub fn new_scene(
             }
 
             Token::SceneHead => {
-                let nested_scene = new_scene(x, ast, declarations, unlocked_scenes, scene_style.to_owned())?;
+                let nested_scene = new_scene(x, declarations, unlocked_scenes, scene_style.to_owned())?;
 
                 match nested_scene {
                     SceneType::Scene(scene) => {
@@ -416,7 +351,7 @@ pub fn new_scene(
             }
         }
 
-        x.index += 1;
+        x.advance();
     }
 
     // The body of this scene is now added to the final scene body

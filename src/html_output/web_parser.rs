@@ -1,14 +1,14 @@
-use super::js_parser::expression_to_js;
+use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::html_output::js_parser::combine_vec_to_js;
 use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::settings::Config;
-use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
 };
 use wasm_encoder::Module;
+use crate::tokens::VarVisibility;
 
 pub struct ParserOutput {
     pub html: String,
@@ -19,10 +19,9 @@ pub struct ParserOutput {
 }
 
 // Parse ast into valid WAT, JS, HTML and CSS
-pub fn parse<'a>(
-    ast: Vec<AstNode>,
-    config: &'a Config,
-    module_path: &'a str,
+pub fn parse(
+    ast: &[AstNode],
+    config: &Config,
     wasm_module: &mut Module,
 ) -> Result<ParserOutput, CompileError> {
     let mut js = String::new();
@@ -52,7 +51,7 @@ pub fn parse<'a>(
                         scene_style: &scene_style,
                         scene_head: &scene_head,
                         inherited_style: &None,
-                        scene_id,
+                        scene_id: scene_id.to_owned(),
                         format_context: StyleFormat::None,
                     },
                     &mut js,
@@ -67,26 +66,43 @@ pub fn parse<'a>(
             }
 
             // JAVASCRIPT / WASM
-            AstNode::VarDeclaration(ref name, ref expr, ref public, ref data_type, ref start_pos) => {
+            AstNode::VarDeclaration(name, expr, public, data_type, start_pos) => {
                 match data_type {
                     DataType::Float(mutable)
                     | DataType::Int(mutable)
                     | DataType::String(mutable) => {
-                        let assignment_keyword = if *mutable {
-                            "let"
-                        } else if *public {
-                            "export const"
-                        } else {
-                            "const"
+
+                        let var_dec = match public {
+                            VarVisibility::Public | VarVisibility::Private => {
+                                if *mutable {
+                                    &format!(
+                                        "this.{BS_VAR_PREFIX}{name}={};",
+                                        expression_to_js(expr, start_pos)?
+                                    )
+                                } else {
+                                    &format!(
+                                        "static {BS_VAR_PREFIX}{name}={};",
+                                        expression_to_js(expr, start_pos)?
+                                    )
+                                }
+                            }
+
+                            VarVisibility::Temporary => {
+                                if *mutable {
+                                    &format!(
+                                        "let {BS_VAR_PREFIX}{name}={};",
+                                        expression_to_js(expr, start_pos)?
+                                    )
+                                } else {
+                                    &format!(
+                                        "const {BS_VAR_PREFIX}{name}={};",
+                                        expression_to_js(expr, start_pos)?
+                                    )
+                                }
+                            }
                         };
 
-                        let var_dec = format!(
-                            "{} {BS_VAR_PREFIX}{name}={};",
-                            assignment_keyword,
-                            expression_to_js(expr, start_pos)?
-                        );
-
-                        js.push_str(&var_dec);
+                        js.push_str(var_dec);
                     }
 
                     DataType::Scene(..) => {
@@ -131,13 +147,47 @@ pub fn parse<'a>(
                         };
                     }
 
-                    DataType::Structure(_) => {
+                    DataType::Arguments(_) => {
                         let var_dec = format!(
                             "const {BS_VAR_PREFIX}{name}={};",
                             expression_to_js(expr, start_pos)?
                         );
 
                         js.push_str(&var_dec);
+                    }
+                    
+                    DataType::Block(..) => {
+                        match expr {
+                            Expr::Block(args, body, ..) => {
+                                let mut func = format!("function {}(", name);
+
+                                for arg in args {
+                                    func.push_str(&format!(
+                                        "{BS_VAR_PREFIX}{} = {},",
+                                        arg.name,
+                                        expression_to_js(&arg.expr, start_pos)?
+                                    ));
+                                }
+
+                                func.push_str("){");
+
+                                // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
+                                let func_body = parse(body, config, wasm_module)?;
+
+                                func.push_str(&format!("{}}}", func_body.js));
+
+                                js.push_str(&func);
+                            }
+                            _ => {
+                                return Err(CompileError {
+                                    msg: "Function declaration must be a function".to_string(),
+                                    start_pos: start_pos.to_owned(),
+                                    end_pos: expr.dimensions(),
+                                    error_type: ErrorType::Type,
+                                });
+                            }
+                        }
+ 
                     }
                     _ => {
                         js.push_str(&format!(
@@ -150,29 +200,8 @@ pub fn parse<'a>(
                 module_references.push(Arg {
                     name: name.to_owned(),
                     data_type: data_type.to_owned(),
-                    value: expr.to_owned(),
+                    expr: expr.to_owned(),
                 });
-            }
-
-            AstNode::Function(name, args, body, _, _, ref start_pos, _) => {
-                let mut func = format!("function {}(", name);
-
-                for arg in &args {
-                    func.push_str(&format!(
-                        "{BS_VAR_PREFIX}{} = {},",
-                        arg.name,
-                        expression_to_js(&arg.value, start_pos)?
-                    ));
-                }
-
-                func.push_str("){");
-
-                // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
-                let func_body = parse(body, config, module_path, wasm_module)?;
-
-                func.push_str(&format!("{}}}", func_body.js));
-
-                js.push_str(&func);
             }
 
             AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos, _) => {
@@ -186,19 +215,21 @@ pub fn parse<'a>(
                 }
             }
 
-            AstNode::Return(ref expr, start_pos) => {
-                js.push_str(&format!("return {};", expression_to_js(expr, &start_pos)?));
+            AstNode::Return(expressions, start_pos) => {
+                js.push_str(&format!("return {};", expressions_to_js(expressions, &start_pos)?));
             }
 
             AstNode::If(condition, if_true, start_pos) => {
+                let if_block_body = if_true.get_block_nodes();
+                
                 js.push_str(&format!(
                     "if ({}) {{\n{}\n}}",
                     expression_to_js(&condition, &start_pos)?,
-                    parse(if_true, config, module_path, wasm_module)?.js
+                    parse(if_block_body, config, wasm_module)?.js
                 ));
             }
 
-            // DIRECT INSERTION OF JS / CSS / HTML into page
+            // DIRECT INSERTION OF JS / CSS into the page
             AstNode::JS(js_string, ..) => {
                 js.push_str(&js_string);
             }

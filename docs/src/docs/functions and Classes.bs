@@ -1,0 +1,155 @@
+[navbar]
+
+[header center: [title(1): FUNCTIONS]]
+[page:
+
+Beanstalk programs are made out of blocks.
+
+These blocks can have private or public state, run procedures and optionally return values.
+
+[#code:
+
+    -- The name of the block at the top
+    main:
+        -- Some code goes in here!
+    zz
+]
+
+
+The simplest form of block just returns an instance of itself.
+This is how you create structs.
+
+Blocks can also have default scenes that will be unpacked into a scene automatically if put into a scene head.
+
+[#code:
+    main:
+        -- Temporary variable that only exists when the block is called
+        default_time = 1.0
+
+        -- Private property unique to each instance of this block
+        $time ~= default_time
+
+        -- A public method of this block
+        @setTime |new_time Float|:
+            time = new_time
+        zz
+        
+        [: default scene inside!]
+    zz
+
+    -- A scene with the block passed in
+    -- This scene and all its child scenes will automatically have access to the exported properties inside of Main
+    -- If this scene is from a block that has variables with the same names as properties of the block passed in,
+    -- The variables from the parent block will override those variables
+    [main:
+        the time is: [time]
+    ]
+
+]
+
+## The arrow operator
+The arrow operator is used to define the signature of a function. 
+If the function returns a value, it must be specified by the type signature.
+
+[#code:
+    -- We should define the shape of our errors
+    Error |msg String, type Int = 0|:
+        @msg String = msg
+        @type Int = type
+    zz
+
+    multipleReturns |x Int| -> Int, Bool:
+        value = x + 1
+        return (value, value > 0)
+    zz
+
+    -- Calling a function
+    value, positive = multipleReturns(5)
+
+
+    canError |x String| -> String, Error?:       
+        return fetch(x)
+    zz
+
+    -- Creating a new type by defining a type constructor
+    -- This works like a function that also has properties and methods
+    -- This function just returns self, which is implicit
+    Enemy |id| -> Self:
+        @id Int = id -- Public constant state
+        $hp Int ~= 100 -- Private state
+
+        @modify_hp |amount Int|:
+            hp += amount
+        zz
+
+        @is_alive || -> Bool:
+            return hp > 0
+        zz
+    zz
+
+    removeEnemy |enemies ~{Enemy}, enemy_id Int| -> error?:
+        for enemy in enemies:
+            if enemy.id is enemy_id:
+                enemies.pull(enemy #index)
+                return
+            zz
+        zz
+
+        return !("Enemy not found")
+    zz
+
+    recoversFromError || -> String:
+        return canError("example.com") !:
+            print("Error: ", ..)
+            return ""
+        zz
+    zz
+
+    panics ||:
+        canError ?:
+            print("Error: ", ..)
+            #panic 
+        zz
+    zz
+
+]
+
+## Anonymous Functions
+Anonymous functions are a way to pass functions as values.
+
+[#code: 
+    -- Anonymous function
+    |x Int| -> Int: return x + 1
+
+    || -> String: return "Hello, World!"
+
+    -- Anonymous function that has side effects
+    |increase Int|: timer += increase
+]
+
+## Concurrent Functions
+In a similar style to Go. Beanstalk plans on having concurrent functions with message passing.
+
+
+## Possible chanining syntax
+[#code: 
+    -- Chaning
+    capitalize(~"hello") (.. + " world") + repeat("!", 5) print(..)
+
+    -- Chaining over multiple lines
+    return (
+        double(-4)
+        absolute(..)
+        multiply(.., 3) + 2
+        toString(..)
+    )
+
+    name_reversed = (
+        getUserData(id) ?= ""
+        parseData(..).name reverse(..)
+    )
+]
+
+]
+
+[Footer]

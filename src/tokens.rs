@@ -10,14 +10,17 @@ pub enum TokenizeMode {
     SceneHead,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum VarVisibility {
+    Temporary,
+    Public,
+    Private,
+}
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
     // For Compiler
     ModuleStart,
-    Print,
-    IO,
-    Log,
-    Panic,
     DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
     EOF,                  // End of the file
 
@@ -26,6 +29,11 @@ pub enum Token {
     From,
 
     // HTML project compiler directives
+    Print,
+    Log,
+    Panic,
+    Assert,
+
     Comptime,
     Settings,
     Page,
@@ -38,8 +46,9 @@ pub enum Token {
 
     // Scene Style properties
     Markdown, // Makes the scene Markdown
-    Unlock,   // Scenes with this property will be unlocked for all child scenes of the parent
     ChildDefault, // This scene will become a template default for all child scenes of the parent
+    Ignore, // for commenting out an entire scene
+    CodeKeyword,
 
     // Standard Library (eventually - to be moved there)
     Math,
@@ -49,7 +58,7 @@ pub enum Token {
 
     // Variables / Functions
     Arrow,
-    Variable(String, bool), // name, is_public
+    Variable(String, VarVisibility, bool), // name, is_public, is_mutable
 
     // Literals
     StringLiteral(String),
@@ -63,6 +72,8 @@ pub enum Token {
     // Collections
     OpenCurly,  // {
     CloseCurly, // }
+
+    ArgConstructor, // |
 
     // Structure of Syntax
     Newline,
@@ -87,14 +98,12 @@ pub enum Token {
     Mutable,
     DatatypeLiteral(DataType),
 
-    FunctionKeyword,
-    AsyncFunctionKeyword,
+    Async,
 
-    // Result Type / Option Type
     Bang,
     QuestionMark,
 
-    //Mathematical Operators in order of precedence
+    //Mathematical Operators
     Negative,
 
     Exponent,
@@ -136,8 +145,8 @@ pub enum Token {
     Break,
     Continue,
     Return,
+    Then,
     Defer,
-    Assert,
 
     // Memory Management
     Copy,
@@ -147,19 +156,13 @@ pub enum Token {
     EmptyScene(usize), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
     Slot,
     SceneHead,
-    This(String),
-
-    // HTTP
-    Dollar,
+    Dolla,
 
     Id(String), // ID for scenes
 
     Empty,
     // Pre(String), // Content inside raw elements. Might change to not be a format tag in the future
-    Ignore, // for commenting out an entire scene
 
-    // named tags
-    CodeKeyword,
 }
 
 impl Token {
@@ -298,9 +301,9 @@ impl Token {
             },
 
             Token::EmptyScene(_) => TokenPosition::default(),
-            Token::This(value) => TokenPosition {
+            Token::Dolla => TokenPosition {
                 line_number: 0,
-                char_column: 5 + value.len() as i32,
+                char_column: 1,
             },
 
             Token::Ignore => TokenPosition {

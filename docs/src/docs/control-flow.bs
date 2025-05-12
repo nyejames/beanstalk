@@ -16,27 +16,14 @@ They can also be used for pattern matching, all with a similar syntax.
     zz
 
     -- Using if like a match expression
-    x = 0
-    msg = if x is:
-        0: "nope"
-        else: "defintely nope"
+    x = 5
+    msg = if x is 0: 
+        "nope"
+    else: 
+        "defintely nope"
     zz
 
     print(msg) -- prints "defintely nope"
-]
-
-# Pattern matching
-[code:
-    -- Pattern matching
-    -- Must be exhaustive
-    thing = 69
-    match thing:
-        0: print("zero")
-        < 0: print("negative")
-        > 1: print("big number")
-        else: print("only one")
-    zz
-
 ]
 
 # Loops
@@ -49,15 +36,7 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         print(thing)
     zz
 
-    for c in collection_of_choices:
-        if c is cool: 
-            print(cool.value)
-        else: 
-            print(cool.value)
-        zz
-    zz
-
-    for -20 to big_number:
+    for -20 to big_number #reversed:
         print("hello")
     zz
 
@@ -66,8 +45,10 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         print(n)
     zz
 
+    -- Getting the index rather than the value
+    -- If the value is unused the compiler can optimise this
     for item in collection:
-        print(item.index)
+        print(item #index)
     zz
 
     -- Using a loop in a scene
@@ -82,6 +63,28 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     -- Name: Priya
     -- Name: Sam
     -- Name: Chad
+]
+
+# Pattern matching
+[code:
+    -- Pattern matching
+    -- Must be exhaustive
+    thing = 69
+    if thing:
+        0: print("zero")
+        < 0: print("negative")
+        > 1: print("big number")
+        else: print("only one")
+    zz
+
+    for c in collection_of_choices:
+        if c is cool: 
+            print(..)
+        else: 
+            print(..)
+        zz
+    zz
+
 ]
 
 [Footer]

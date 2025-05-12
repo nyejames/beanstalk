@@ -1,9 +1,10 @@
-use super::tokens::{Token, TokenizeMode};
+use super::tokens::{Token, TokenizeMode, VarVisibility};
 use crate::bs_types::DataType;
 use crate::parsers::build_ast::TokenContext;
 use crate::{CompileError, ErrorType};
 use std::iter::Peekable;
 use std::str::Chars;
+use crate::parsers::ast_nodes::Arg;
 
 // Line number, how many chars in the line
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -204,7 +205,7 @@ pub fn get_next_token(
 
     // Check if going into the scene body
     if current_char == ':' {
-        // if tokenize_mode  == &TokenizeMode::Codeblock {
+        // if tokenize_mode == &TokenizeMode::Codeblock {
         //     chars.next();
         //     token_position.char_column += 1;
         //
@@ -279,12 +280,6 @@ pub fn get_next_token(
         return Ok(Token::Assign);
     }
 
-    if current_char == '~' {
-        // Check if this is a datatype literal
-
-        return Ok(Token::Mutable);
-    }
-
     if current_char == ',' {
         return Ok(Token::Comma);
     }
@@ -293,30 +288,27 @@ pub fn get_next_token(
         return Ok(Token::Dot);
     }
 
-    if current_char == '$' {
-        return Ok(Token::This(token_value));
-    }
-
     // Collections
     if current_char == '{' {
         return Ok(Token::OpenCurly);
     }
-
     if current_char == '}' {
         return Ok(Token::CloseCurly);
     }
+    
+    // Structs
+    if current_char == '|' {
+        return Ok(Token::ArgConstructor)
+    }
 
-    //Error handling
+    // Currently not using bangs
     if current_char == '!' {
         return Ok(Token::Bang);
     }
 
+    // Option type
     if current_char == '?' {
         return Ok(Token::QuestionMark);
-    }
-
-    if current_char == ';' {
-        return Ok(Token::Semicolon);
     }
 
     // Comments / Subtraction / Negative / Scene Head / Arrow
@@ -505,6 +497,29 @@ pub fn get_next_token(
         }
     }
 
+    if current_char == '~' {
+        // Skip whitespace after the '~'
+        while let Some(&next_char) = chars.peek() {
+            if next_char.is_whitespace() {
+                chars.next();
+                token_position.char_column += 1;
+                continue;
+            }
+            break;
+        }
+
+        let var = keyword_or_variable(
+            &mut token_value,
+            chars,
+            token_position,
+            VarVisibility::Temporary,
+            true,
+            imports,
+        )?;
+
+        return Ok(var);
+    }
+
     // Exporting variables out of the module or scope (public declaration)
     // When used in a scene head, it's an ID for that scene
     if current_char == '@' {
@@ -534,11 +549,48 @@ pub fn get_next_token(
             &mut token_value,
             chars,
             token_position,
-            true,
+            VarVisibility::Public,
+            false,
             imports,
         )?;
         
         exports.push(tokens.len());
+        return Ok(var);
+    }
+
+    if current_char == '$' {
+        // What does this mean?
+        // if tokenize_mode == &TokenizeMode::SceneHead {
+        //     while let Some(&next_char) = chars.peek() {
+        //         if next_char.is_alphanumeric() || next_char == '_' {
+        //             token_value.push(chars.next().unwrap());
+        //             token_position.char_column += 1;
+        //             continue;
+        //         }
+        //         break;
+        //     }
+        //     return Ok(Token::Id(token_value));
+        // }
+
+        // Skip whitespace after the '$'
+        while let Some(&next_char) = chars.peek() {
+            if next_char.is_whitespace() {
+                chars.next();
+                token_position.char_column += 1;
+                continue;
+            }
+            break;
+        }
+
+        let var = keyword_or_variable(
+            &mut token_value,
+            chars,
+            token_position,
+            VarVisibility::Private,
+            false,
+            imports,
+        )?;
+
         return Ok(var);
     }
 
@@ -589,12 +641,19 @@ pub fn get_next_token(
         return Ok(Token::FloatLiteral(token_value.parse::<f64>().unwrap()));
     }
 
+    // Currently unused
+    if current_char == ';' {
+        return Ok(Token::Semicolon);
+    }
+
+
     if current_char.is_alphabetic() {
         token_value.push(current_char);
         return keyword_or_variable(
             &mut token_value,
             chars,
             token_position,
+            VarVisibility::Temporary,
             false,
             imports,
         );
@@ -623,7 +682,8 @@ fn keyword_or_variable(
     token_value: &mut String,
     chars: &mut Peekable<Chars<'_>>,
     token_position: &mut TokenPosition,
-    is_exported: bool,
+    visibility: VarVisibility,
+    is_mutable: bool,
     imports: &mut Vec<String>,
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
@@ -666,13 +726,13 @@ fn keyword_or_variable(
             "for" => return Ok(Token::For),
             "from" => return Ok(Token::From),
             "break" => return Ok(Token::Break),
+            "then" => return Ok(Token::Then),
             "defer" => return Ok(Token::Defer),
             "in" => return Ok(Token::In),
             "as" => return Ok(Token::As),
             "copy" => return Ok(Token::Copy),
 
-            "fn" => return Ok(Token::FunctionKeyword),
-            "async" => return Ok(Token::AsyncFunctionKeyword),
+            "async" => return Ok(Token::Async),
 
             // Logical
             "is" => return Ok(Token::Is),
@@ -681,45 +741,25 @@ fn keyword_or_variable(
             "or" => return Ok(Token::Or),
 
             // Data Types
-            "true" | "True" => return Ok(Token::BoolLiteral(true)),
-            "false" | "False" => return Ok(Token::BoolLiteral(false)),
+            "true" | "True" => return Ok(Token::BoolLiteral(is_mutable)),
+            "false" | "False" => return Ok(Token::BoolLiteral(is_mutable)),
 
-            "Float" => return Ok(Token::DatatypeLiteral(DataType::Float(false))),
-            "~Float" => return Ok(Token::DatatypeLiteral(DataType::Float(true))),
-            "Int" => return Ok(Token::DatatypeLiteral(DataType::Int(false))),
-            "~Int" => return Ok(Token::DatatypeLiteral(DataType::Int(true))),
-            "String" => return Ok(Token::DatatypeLiteral(DataType::String(false))),
-            "~String" => return Ok(Token::DatatypeLiteral(DataType::String(true))),
-            "Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(false))),
-            "~Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(true))),
+            "Float" => return Ok(Token::DatatypeLiteral(DataType::Float(is_mutable))),
+            "Int" => return Ok(Token::DatatypeLiteral(DataType::Int(is_mutable))),
+            "String" => return Ok(Token::DatatypeLiteral(DataType::String(is_mutable))),
+            "Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(is_mutable))),
 
-            "Type" => return Ok(Token::DatatypeLiteral(DataType::Type)),
             "None" => return Ok(Token::DatatypeLiteral(DataType::None)),
-            "Function" => {
-                return Ok(Token::DatatypeLiteral(DataType::Function(
-                    Vec::new(),
-                    Box::new(DataType::None),
-                )));
-            }
 
             // Scene-related keywords
-            "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(false))),
-            "~Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(true))),
-
-            // Built-in standard library functions
-            "print" => return Ok(Token::Print),
-            "log" => return Ok(Token::Log),
-            "assert" => return Ok(Token::Assert),
-            "panic" => return Ok(Token::Panic),
-
-            "io" => return Ok(Token::IO),
+            "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(is_mutable))),
 
             _ => {}
         }
 
         // VARIABLE
         if is_not_eof && is_valid_identifier(token_value) {
-            return Ok(Token::Variable(token_value.to_string(), is_exported));
+            return Ok(Token::Variable(token_value.to_string(), visibility, is_mutable));
         } else {
             break;
         }
@@ -754,6 +794,14 @@ fn compiler_directive(
         }
 
         return match token_value.as_str() {
+
+            // Built-in functions
+            "print" =>  Ok(Token::Print),
+            "assert" => Ok(Token::Assert),
+            "panic" => Ok(Token::Panic),
+            "log" => Ok(Token::Log),
+
+            // Compiler settings
             "settings" => {
                 Ok(Token::Settings)
             }
@@ -763,6 +811,8 @@ fn compiler_directive(
             "date" => {
                 Ok(Token::Date)
             }
+
+            // External language blocks
             "JS" => {
                 Ok(Token::JS(string_block(chars, token_position)?))
             }
@@ -776,9 +826,6 @@ fn compiler_directive(
             // Scene Style properties
             "markdown" => {
                 Ok(Token::Markdown)
-            }
-            "unlock" => {
-                Ok(Token::Unlock)
             }
             "child_default" => {
                 Ok(Token::ChildDefault)
@@ -962,92 +1009,6 @@ fn tokenize_scenebody(
     }
 
     Ok(Token::StringLiteral(token_value))
-}
-
-// Assumes there MUST be an explicit type declaration or will throw an error
-fn tokenize_export_datatype(
-    chars: &mut Peekable<Chars>,
-    token_position: &mut TokenPosition,
-) -> Result<DataType, CompileError> {
-    let mut token_value = String::new();
-
-    // Skip whitespace
-    while let Some(&c) = chars.peek() {
-        if c == '\n' {
-            return Err(CompileError {
-                msg: "Cannot have whitespace between the type keyword and the data type".to_string(),
-                start_pos: TokenPosition {
-                    line_number: token_position.line_number,
-                    char_column: token_position.char_column,
-                },
-                end_pos: TokenPosition {
-                    line_number: token_position.line_number,
-                    char_column: token_position.char_column + 1,
-                },
-                error_type: ErrorType::Syntax,
-            });
-        }
-
-        if c.is_whitespace() {
-            chars.next();
-            token_position.char_column += 1;
-            continue;
-        }
-        break;
-    }
-
-    loop {
-        match chars.peek() {
-            // If there is a char that is not None
-            // And is an underscore or alphabetic, add it to the token value
-            Some(char) => {
-                if char.is_alphanumeric() || char == &'_' || char == &'~' {
-                    token_value.push(chars.next().unwrap());
-                    token_position.char_column += 1;
-                    continue;
-                }
-            }
-            None => {},
-        };
-
-        return match token_value.as_str() {
-            "Float" => Ok(DataType::Float(false)),
-            "~Float" => Ok(DataType::Float(true)),
-            "Int" => Ok(DataType::Int(false)),
-            "~Int" => Ok(DataType::Int(true)),
-            "String" => Ok(DataType::String(false)),
-            "~String" => Ok(DataType::String(true)),
-            "Bool" => Ok(DataType::Bool(false)),
-            "~Bool" => Ok(DataType::Bool(true)),
-
-            "Type" => Ok(DataType::Type),
-            "None" => Ok(DataType::None),
-            "Function" => {
-                Ok(DataType::Function(
-                    Vec::new(),
-                    Box::new(DataType::None),
-                ))
-            }
-
-            "Scene" => Ok(DataType::Scene(false)),
-            "~Scene" => Ok(DataType::Scene(true)),
-
-            _ => {
-                Err(CompileError {
-                    msg: format!("Unknown datatype keyword: '{}'. Expected a valid datatype keyword here. Exports must have an explicit datatype set", token_value),
-                    start_pos: TokenPosition {
-                        line_number: token_position.line_number,
-                        char_column: token_position.char_column,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: token_position.line_number,
-                        char_column: token_position.char_column + token_value.len() as i32,
-                    },
-                    error_type: ErrorType::Rule,
-                })
-            }
-        }
-    }
 }
 
 fn tokenize_import(

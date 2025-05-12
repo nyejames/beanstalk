@@ -38,8 +38,8 @@ pub fn constant_fold(
                 let rhs = stack.pop().unwrap();
                 let lhs = stack.pop().unwrap();
 
-                let lhs_expr = lhs.get_value();
-                let rhs_expr = rhs.get_value();
+                let lhs_expr = lhs.get_expr();
+                let rhs_expr = rhs.get_expr();
                 
                 // Check if both operands are literals that can be folded
                 // We can only fold constants at compile time
@@ -107,7 +107,7 @@ pub fn constant_fold(
     }
 
     if stack.len() == 1 {
-        return Ok(stack[0].get_value());
+        return Ok(stack[0].get_expr());
     }
 
     if stack.is_empty() {

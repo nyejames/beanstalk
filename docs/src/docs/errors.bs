@@ -6,9 +6,7 @@
 Errors are treated as values in Beanstalk, 
 any function that can return an error must have its error handled.
 
-The ? operator is used to signify an option of a type or none.
-
-The ! operator is used to signify an option of an error or none.
+The ? operator is used exclusively for indicating and handling errors.
 
 Both can be combined in the case that None, Error or a data type can be returned.
 

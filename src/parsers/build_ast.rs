@@ -9,8 +9,8 @@ use crate::parsers::scene::{SceneType, Style};
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use std::collections::HashMap;
-use std::path::Path;
-use colour::red_ln;
+use crate::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::tokens::VarVisibility;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -34,6 +34,12 @@ impl TokenContext {
 
         self.token_positions[self.index].to_owned()
     }
+    pub fn advance(&mut self) {
+        self.index += 1;
+    }
+    pub fn go_back(&mut self) {
+        self.index -= 1;
+    }
     pub fn default() -> TokenContext {
         TokenContext {
             tokens: Vec::new(),
@@ -47,18 +53,18 @@ impl TokenContext {
 // This is a new scope
 pub fn new_ast(
     x: &mut TokenContext,
-    captured_declarations: &[Arg], // This includes imports
-    return_type: &mut DataType,
-    module_path: &Path, // If empty, this isn't a module
-    pure: &mut bool,    // No side effects or IO
-) -> Result<Vec<AstNode>, CompileError> {
-    let module_path = module_path.to_str().unwrap();
 
+    // This Maybe should be separating imports, as this is args and imports
+    // And only imports should be captured by nested blocks
+    captured_declarations: &[Arg],
+
+    returns: &[DataType],
+) -> Result<Expr, CompileError> {
     // About 1/10 of the tokens seem to become AST nodes roughly from some very small preliminary tests
     let mut ast = Vec::with_capacity(x.length / 10);
-
-    let mut needs_to_return = return_type != &DataType::None;
     let mut declarations = captured_declarations.to_vec();
+
+    let mut exports = Vec::new();
 
     while x.index < x.length {
         // This should be starting after the imports
@@ -72,23 +78,10 @@ pub fn new_ast(
 
             // Scene literals
             Token::SceneHead | Token::ParentScene => {
-                if module_path.is_empty() {
-                    return Err(CompileError {
-                        msg: "Scene literals can only be used at the top level of a module"
-                            .to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + i32::MAX,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
-                }
-
                 // Add the default core HTML styles as the initially unlocked styles
                 // let mut unlocked_styles = HashMap::from(get_html_styles());
 
-                let scene = new_scene(x, &ast, &mut declarations, &mut HashMap::new(), Style::default())?;
+                let scene = new_scene(x, &mut declarations, &mut HashMap::new(), Style::default())?;
 
                 match scene {
                     SceneType::Scene(expr) => {
@@ -115,19 +108,41 @@ pub fn new_ast(
             }
 
             // New Function or Variable declaration
-            Token::Variable(name, is_exported) => {
+            Token::Variable(ref name, is_exported, ..) => {
                 let new_var = create_new_var_or_ref(
                     x,
-                    name.to_owned(),
-                    &mut declarations,
-                    is_exported,
-                    &ast,
-                    false,
+                    name,
+                    &declarations,
+                    &is_exported,
                 )?;
+                
+                // Make sure this is a new variable declaration and not a reference
+                match &new_var {
+                    AstNode::VarDeclaration(_, expr, _, data_type, ..) => {
+                        let arg = Arg {
+                            name: name.to_owned(),
+                            data_type: data_type.to_owned(),
+                            expr: expr.to_owned(),
+                        };
 
-                if !new_var.get_value().is_pure() {
-                    // red_ln!("flipping pure for {}", name);
-                    *pure = false;
+                        declarations.push(arg.to_owned());
+
+                        if is_exported == VarVisibility::Public {
+                            exports.push(arg)
+                        }
+                    }
+
+                    _ => {
+                        return Err(CompileError {
+                            msg: format!("Expected variable, function declaration, or function call. Found {:?}", new_var),
+                            start_pos: x.current_position(),
+                            end_pos: TokenPosition {
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
+                            },
+                            error_type: ErrorType::Compiler,
+                        });
+                    }
                 }
 
                 ast.push(new_var);
@@ -143,8 +158,6 @@ pub fn new_ast(
                 let mut data_type = DataType::Inferred(false);
                 let item = create_expression(
                     x,
-                    false, // Not inside parenthesis
-                    &ast,
                     &mut data_type, // For figuring out the type of loop
                     false,
                     &mut declarations,
@@ -155,8 +168,6 @@ pub fn new_ast(
                     DataType::Range => {
                         let collection = create_expression(
                             x,
-                            false,
-                            &ast,
                             &mut DataType::Range,
                             false,
                             &mut declarations,
@@ -179,7 +190,7 @@ pub fn new_ast(
                         ast.push(AstNode::ForLoop(
                             item, // Item name
                             collection,
-                            new_ast(x, &declarations, return_type, Path::new(""), pure)?,
+                            new_ast(x, &declarations, returns)?,
                             start_pos,
                         ))
                     }
@@ -202,7 +213,7 @@ pub fn new_ast(
 
                         ast.push(AstNode::WhileLoop(
                             item, // Condition
-                            new_ast(x, &declarations, return_type, Path::new(""), pure)?,
+                            new_ast(x, &declarations, returns)?,
                             start_pos,
                         ))
                     }
@@ -225,8 +236,6 @@ pub fn new_ast(
                 x.index += 1;
                 let condition = create_expression(
                     x,
-                    false,
-                    &ast,
                     &mut DataType::Bool(false),
                     false,
                     &mut declarations,
@@ -253,26 +262,13 @@ pub fn new_ast(
 
                 ast.push(AstNode::If(
                     condition,
-                    new_ast(x, &declarations, return_type, Path::new(""), pure)?,
+                    // This
+                    new_ast(x, &declarations, returns)?,
                     start_pos,
                 ))
             }
 
             Token::JS(value) => {
-                if module_path.is_empty() {
-                    return Err(CompileError {
-                        msg: "JS block can only be used inside of a module scope (not inside of a function)".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + value.len() as i32,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
-                }
-
-                *pure = false;
-
                 ast.push(AstNode::JS(value.clone(), x.current_position()));
             }
 
@@ -285,30 +281,21 @@ pub fn new_ast(
                 // Imports are just left in the token stream but don't continue here (At the moment)
             }
 
-            // The actual print function doesn't exist in the compiler or standard library
-            // This is a small compile time speed improvement as print is used all the time
-            // Standard library function 'io' might have a bunch of special print functions inside it
-            // e.g io.red("red hello")
             Token::Print => {
-                // This module is no longer pure
-                *pure = false;
-
                 // Move past the print keyword
                 x.index += 1;
 
                 ast.push(parse_function_call(
                     x,
-                    String::from("console.log"),
-                    &ast,
+                    "console.log",
                     &mut declarations,
                     &[Arg {
                         name: "".to_string(),
                         data_type: DataType::CoerceToString(false),
-                        value: Expr::None,
+                        expr: Expr::None,
                     }],
                     // Console.log does not return anything
-                    &DataType::None,
-                    false,
+                    &[],
                 )?);
             }
 
@@ -326,43 +313,16 @@ pub fn new_ast(
             }
 
             Token::Return => {
-                if !module_path.is_empty() {
-                    return Err(CompileError {
-                        msg: "Return statement used outside of function".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 6,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
-                }
-
-                if !needs_to_return {
-                    return Err(CompileError {
-                        msg: "Return statement used in function that doesn't return a value"
-                            .to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 6,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
-                }
-
-                needs_to_return = false;
                 x.index += 1;
-
-                let return_value =
-                    create_expression(x, false, &ast, return_type, false, &mut declarations)?;
+                
+                let return_values =
+                    create_multiple_expressions(x, &mut returns.to_owned(), &mut declarations)?;
 
                 // if !return_value.is_pure() {
                 //     *pure = false;
                 // }
 
-                ast.push(AstNode::Return(return_value, x.current_position()));
-
+                ast.push(AstNode::Return(return_values, x.current_position()));
                 x.index -= 1;
             }
 
@@ -372,19 +332,6 @@ pub fn new_ast(
 
             // TOKEN::End SHOULD NEVER BE IN MODULE SCOPE
             Token::End => {
-                if !module_path.is_empty() {
-                    return Err(CompileError {
-                        msg: "End statement used in module scope (too many end statements used?)"
-                            .to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 3,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
-                }
-
                 x.index += 1;
                 break;
             }
@@ -392,15 +339,13 @@ pub fn new_ast(
             Token::Settings => {
                 let config = create_new_var_or_ref(
                     x,
-                    String::from("settings"),
+                    "settings",
                     &mut declarations,
-                    false,
-                    &ast,
-                    false,
+                    &VarVisibility::Public,
                 )?;
 
                 let config = match config {
-                    AstNode::VarDeclaration(_, Expr::StructLiteral(args), ..) => args,
+                    AstNode::VarDeclaration(_, Expr::Args(args), ..) => args,
                     _=> {
                         return Err(CompileError {
                             msg: format!("Settings must be assigned with a struct literal. Found {:?}", config),
@@ -437,19 +382,11 @@ pub fn new_ast(
         x.index += 1;
     }
 
-    if needs_to_return {
-        return Err(CompileError {
-            msg: "Function does not return a value".to_string(),
-            start_pos: x.token_positions[x.index - 1].to_owned(),
-            end_pos: TokenPosition {
-                line_number: x.token_positions[x.index - 1].line_number,
-                char_column: x.token_positions[x.index - 1].char_column + 1,
-            },
-            error_type: ErrorType::Rule,
-        });
-    }
-
-    Ok(ast)
+    Ok(Expr::Block(
+        Vec::from(captured_declarations),
+        ast,
+        returns.to_owned(),
+    ))
 }
 
 fn skip_dead_code(x: &mut TokenContext) {

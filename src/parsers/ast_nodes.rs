@@ -1,4 +1,4 @@
-use crate::bs_types::get_reference_data_type;
+use crate::bs_types::get_accessed_data_type;
 use crate::parsers::scene::{SceneContent, Style};
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
@@ -6,6 +6,7 @@ use crate::{bs_types::DataType};
 use colour::red_ln;
 use std::path::PathBuf;
 use wasm_encoder::ValType;
+use crate::tokens::VarVisibility;
 
 #[derive(Debug, PartialEq, Clone)]
 // Args are abstractions on top of Datatypes
@@ -15,7 +16,7 @@ use wasm_encoder::ValType;
 pub struct Arg {
     pub name: String, // Optional Name of the argument (empty string if unnamed)
     pub data_type: DataType,
-    pub value: Expr, // Optional Value of the argument - 'None' if no value
+    pub expr: Expr, // Optional Value of the argument - 'None' if no value
 }
 
 impl Arg {
@@ -35,9 +36,7 @@ impl Arg {
             DataType::String(_) => vec![ValType::I32, ValType::I32],
             DataType::CoerceToString(_) => vec![ValType::I32, ValType::I32],
 
-            DataType::Type => vec![ValType::I32],
-
-            DataType::Structure(args) => args
+            DataType::Arguments(args) => args
                 .iter()
                 .flat_map(|arg| arg.to_wasm_type())
                 .collect::<Vec<ValType>>(),
@@ -58,7 +57,7 @@ pub enum Expr {
     // For variables, function calls and structs / collection access
     // Name, DataType, Specific argument accessed
     // Arg accessed might be useful for built-in methods on any type
-    Reference(String, DataType, Vec<usize>),
+    Reference(String, DataType, Vec<String>),
 
     Runtime(Vec<AstNode>, DataType),
 
@@ -67,24 +66,18 @@ pub enum Expr {
     String(String),
     Bool(bool),
 
-    // Because functions can be values
-    Function(
-        String,
-        Vec<Arg>,
-        Vec<AstNode>,
-        bool,
-        DataType,
-        TokenPosition,
-        bool,
+    // Because blocks (functions / classes) can all be values
+    Block(
+        Vec<Arg>, // arguments
+        Vec<AstNode>, // body
+        Vec<DataType> // return args
     ),
 
     Scene(SceneContent, Style, SceneContent, String), // Scene Body, Styles, Scene head, ID
 
     Collection(Vec<Expr>, DataType),
 
-    // Could behave just like a tuple if the type isn't specified
-    // And the arguments are not named
-    StructLiteral(Vec<Arg>),
+    Args(Vec<Arg>),
 }
 
 impl Expr {
@@ -178,56 +171,15 @@ impl Expr {
                     _ => None, // Other operations not applicable to strings
                 }
             },
-
-
-            // Mixed types - Float and Int
-            // TODO - probably not use this at all?
-            
-            // Mixed types - Int and Float
-            // (Expr::Int(lhs_val), Expr::Float(rhs_val)) => {
-            //     let lhs_float = *lhs_val as f64;
-            //     match op {
-            //         Operator::Add => Some(Expr::Float(lhs_float + rhs_val)),
-            //         Operator::Subtract => Some(Expr::Float(lhs_float - rhs_val)),
-            //         Operator::Multiply => Some(Expr::Float(lhs_float * rhs_val)),
-            //         Operator::Divide => Some(Expr::Float(lhs_float / rhs_val)),
-            //         Operator::Modulus => Some(Expr::Float(lhs_float % rhs_val)),
-            //         Operator::Exponent => Some(Expr::Float(lhs_float.powf(*rhs_val))),
-            //
-            //         // Logical operations
-            //         Operator::Equal => Some(Expr::Bool(lhs_float == *rhs_val)),
-            //         Operator::NotEqual => Some(Expr::Bool(lhs_float != *rhs_val)),
-            //         Operator::GreaterThan => Some(Expr::Bool(lhs_float > *rhs_val)),
-            //         Operator::GreaterThanOrEqual => Some(Expr::Bool(lhs_float >= *rhs_val)),
-            //         Operator::LessThan => Some(Expr::Bool(lhs_float < *rhs_val)),
-            //         Operator::LessThanOrEqual => Some(Expr::Bool(lhs_float <= *rhs_val)),
-            //         _ => None,
-            //     }
-            // },
-
-            // (Expr::Float(lhs_val), Expr::Int(rhs_val)) => {
-            //     let rhs_float = *rhs_val as f64;
-            //     match op {
-            //         Operator::Add => Some(Expr::Float(lhs_val + rhs_float)),
-            //         Operator::Subtract => Some(Expr::Float(lhs_val - rhs_float)),
-            //         Operator::Multiply => Some(Expr::Float(lhs_val * rhs_float)),
-            //         Operator::Divide => Some(Expr::Float(lhs_val / rhs_float)),
-            //         Operator::Modulus => Some(Expr::Float(lhs_val % rhs_float)),
-            //         Operator::Exponent => Some(Expr::Float(lhs_val.powf(rhs_float))),
-            //
-            //         // Logical operations
-            //         Operator::Equal => Some(Expr::Bool(*lhs_val == rhs_float)),
-            //         Operator::NotEqual => Some(Expr::Bool(*lhs_val != rhs_float)),
-            //         Operator::GreaterThan => Some(Expr::Bool(*lhs_val > rhs_float)),
-            //         Operator::GreaterThanOrEqual => Some(Expr::Bool(*lhs_val >= rhs_float)),
-            //         Operator::LessThan => Some(Expr::Bool(*lhs_val < rhs_float)),
-            //         Operator::LessThanOrEqual => Some(Expr::Bool(*lhs_val <= rhs_float)),
-            //         _ => None,
-            //     }
-            // },
             
             // Any other combination of types
             _ => None,
+        }
+    }
+    pub fn get_block_nodes(&self) -> &[AstNode] {
+        match self {
+            Expr::Block(_, nodes, ..) => nodes,
+            _ => &[],
         }
     }
 }
@@ -271,28 +223,18 @@ pub enum AstNode {
     Use(PathBuf, TokenPosition), // Path, Line number
 
     // Control Flow
-    Return(Expr, TokenPosition),           // Return value, Line number
-    If(Expr, Vec<AstNode>, TokenPosition), // Condition, If true, Line number
+    Return(Vec<Expr>, TokenPosition),           // Return value, Line number
+    If(Expr, Expr, TokenPosition), // Condition, If true, Line number
     Else(Vec<AstNode>, TokenPosition),     // Body, Line number
-    ForLoop(Expr, Expr, Vec<AstNode>, TokenPosition), // Item, Collection, Body, Line number
-    WhileLoop(Expr, Vec<AstNode>, TokenPosition), // Condition, Body, Line number
+    ForLoop(Expr, Expr, Expr, TokenPosition), // Item, Collection, Body, Line number
+    WhileLoop(Expr, Expr, TokenPosition), // Condition, Body, Line number
 
     // Basics
-    Function(
-        String,       // Name
-        Vec<Arg>,     // Args (named)
-        Vec<AstNode>, // Body
-        bool,         // Public
-        DataType,     // return type
-        TokenPosition,
-        bool, // Pure
-    ),
-
     FunctionCall(
         String,
         Vec<Expr>,  // Arguments passed in
-        DataType,   // return type
-        Vec<usize>, // Accessed args
+        Vec<DataType>,   // return types
+        Vec<String>, // Accessed args
         TokenPosition,
         bool, // Function is pure
     ),
@@ -300,7 +242,7 @@ pub enum AstNode {
     Comment(String),
 
     // Variable names should be the full namespace (module path + variable name)
-    VarDeclaration(String, Expr, bool, DataType, TokenPosition), // Variable name, Value, Public, Type, Line number
+    VarDeclaration(String, Expr, VarVisibility, DataType, TokenPosition), // Variable name, Value, Visibility, Type, Line number
 
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
@@ -347,7 +289,7 @@ impl AstNode {
 
                 Expr::Scene(..) => DataType::Scene(false),
                 Expr::Collection(_, data_type) => data_type.to_owned(),
-                Expr::StructLiteral(args) => {
+                Expr::Args(args) => {
                     let mut data_type = DataType::Inferred(false);
                     for arg in args {
                         data_type = arg.data_type.to_owned();
@@ -355,10 +297,10 @@ impl AstNode {
                     data_type
                 }
                 Expr::Reference(_, data_type, argument_accessed) => {
-                    get_reference_data_type(data_type, argument_accessed)
+                    get_accessed_data_type(data_type, argument_accessed)
                 }
-                Expr::Function(_, args, _, _, return_type, ..) => {
-                    DataType::Function(args.to_owned(), Box::new(return_type.to_owned()))
+                Expr::Block(args, _, return_types, ..) => {
+                    DataType::Block(args.to_owned(), return_types.to_owned())
                 }
 
                 Expr::Runtime(_, data_type) => data_type.to_owned(),
@@ -368,11 +310,13 @@ impl AstNode {
             AstNode::Empty(_) => DataType::None,
             AstNode::VarDeclaration(_, _, _, data_type, ..) => data_type.to_owned(),
 
-            AstNode::FunctionCall(_, _, return_type, ..) => DataType::Structure(Vec::from([Arg {
-                name: "".to_string(),
-                data_type: return_type.to_owned(),
-                value: Expr::None,
-            }])),
+            AstNode::FunctionCall(_, _, return_types, ..) => {
+                DataType::Arguments(return_types.iter().map(|t| Arg {
+                    name: String::new(),
+                    data_type: t.to_owned(),
+                    expr: Expr::None,
+                }).collect())
+            },
 
             _ => {
                 red_ln!(
@@ -389,20 +333,9 @@ impl AstNode {
     // This is pretty much just for literals
     // Returns 'None' if it's not a literal value
     // Returns 'Runtime' if it can't be evaluated at compile time
-    pub(crate) fn get_value(&self) -> Expr {
+    pub(crate) fn get_expr(&self) -> Expr {
         match self {
             AstNode::Literal(value, ..) | AstNode::VarDeclaration(_, value, ..) => value.to_owned(),
-            AstNode::Function(name, args, body, is_exported, return_type, _, is_pure) => {
-                Expr::Function(
-                    name.to_owned(),
-                    args.to_owned(),
-                    body.to_owned(),
-                    *is_exported,
-                    return_type.to_owned(),
-                    TokenPosition::default(),
-                    is_pure.to_owned(),
-                )
-            }
             _ => Expr::None,
         }
     }
@@ -473,13 +406,13 @@ impl Expr {
             Expr::Bool(_) => DataType::Bool(false),
             Expr::Scene(..) => DataType::Scene(false),
             Expr::Collection(_, data_type) => data_type.to_owned(),
-            Expr::StructLiteral(args) => DataType::Structure(args.to_owned()),
-            Expr::Function(_, args, _, _, return_type, ..) => {
-                DataType::Function(args.to_owned(), Box::new(return_type.to_owned()))
+            Expr::Args(args) => DataType::Arguments(args.to_owned()),
+            Expr::Block(args, _, return_type, ..) => {
+                DataType::Block(args.to_owned(), return_type.to_owned())
             }
             // Need to check accessed args
             Expr::Reference(_, data_type, argument_accessed) => {
-                get_reference_data_type(data_type, argument_accessed)
+                get_accessed_data_type(data_type, argument_accessed)
             }
         }
     }
@@ -498,14 +431,14 @@ impl Expr {
                 }
                 all_items
             }
-            Expr::StructLiteral(args) => {
+            Expr::Args(args) => {
                 let mut all_items = String::new();
                 for arg in args {
-                    all_items.push_str(&arg.value.as_string());
+                    all_items.push_str(&arg.expr.as_string());
                 }
                 all_items
             }
-            Expr::Function(..) => String::new(),
+            Expr::Block(..) => String::new(),
             Expr::Reference(..) => String::new(),
             Expr::Runtime(..) => String::new(),
             Expr::None => String::new(),
@@ -514,11 +447,7 @@ impl Expr {
 
     pub fn is_pure(&self) -> bool {
         match self {
-            Expr::Runtime(..) | Expr::Reference(..) => false,
-            Expr::Function(_, _, _, _, _, _, is_pure) => {
-                // red_ln!("is_pure: {:?}", is_pure);
-                *is_pure
-            }
+            Expr::Runtime(..) | Expr::Reference(..) | Expr::Block(..) => false,
             Expr::Collection(values, _) => {
                 for value in values {
                     if !value.is_pure() {
@@ -527,9 +456,9 @@ impl Expr {
                 }
                 true
             }
-            Expr::StructLiteral(args) => {
+            Expr::Args(args) => {
                 for arg in args {
-                    if !arg.value.is_pure() {
+                    if !arg.expr.is_pure() {
                         return false;
                     }
                 }
@@ -580,7 +509,7 @@ impl Expr {
                 char_column: name.len() as i32,
             },
 
-            Expr::Function(_, _, nodes, ..) => {
+            Expr::Block(_, nodes, ..) => {
                 let mut combined_dimensions = TokenPosition::default();
 
                 // Get the largest dimensions of all the nodes
@@ -630,14 +559,14 @@ impl Expr {
                 }
             }
 
-            Expr::StructLiteral(args) => {
+            Expr::Args(args) => {
                 let mut combined_dimensions = TokenPosition {
-                    line_number: args[0].value.dimensions().line_number,
-                    char_column: args[0].value.dimensions().char_column,
+                    line_number: args[0].expr.dimensions().line_number,
+                    char_column: args[0].expr.dimensions().char_column,
                 };
 
                 for arg in args {
-                    combined_dimensions.char_column += arg.value.dimensions().char_column;
+                    combined_dimensions.char_column += arg.expr.dimensions().char_column;
                 }
 
                 combined_dimensions

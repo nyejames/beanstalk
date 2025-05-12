@@ -4,41 +4,35 @@ use super::{
     functions::create_function,
 };
 use crate::parsers::ast_nodes::Expr;
-use crate::parsers::build_ast::TokenContext;
+use crate::parsers::build_ast::{new_ast, TokenContext};
 use crate::parsers::expressions::parse_expression::get_accessed_args;
-use crate::parsers::functions::parse_function_call;
+use crate::parsers::functions::{create_block_signature, parse_function_call};
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
+use crate::parsers::scene::{SceneContent, Style};
+use crate::tokens::VarVisibility;
 
 pub fn create_new_var_or_ref(
     x: &mut TokenContext,
-    name: String,
-    variable_declarations: &mut Vec<Arg>,
-    is_exported: bool,
-    ast: &[AstNode],
-    inside_collection: bool, // This allows parse_expression to know that new variable declarations are valid
+    name: &str,
+    variable_declarations: &[Arg],
+    visibility: &VarVisibility,
 ) -> Result<AstNode, CompileError> {
 
     // If this is a reference to a function or variable,
     // This to_owned here is gross, probably a better way to avoid this
-    if let Some(arg) = variable_declarations
-        .to_owned()
-        .iter()
-        .find(|a| a.name == name)
-    {
+    if let Some(arg) = get_reference(&name, variable_declarations) {
         return match arg.data_type {
             // Function Call
-            DataType::Function(ref argument_refs, ref return_type) => {
-                x.index += 1;
+            DataType::Block(ref argument_refs, ref return_types) => {
+                x.advance();
                 // blue_ln!("arg value purity: {:?}, for {}",  arg.value.is_pure(), name);
                 parse_function_call(
                     x,
                     name,
-                    ast,
                     variable_declarations,
                     argument_refs,
-                    return_type,
-                    arg.value.is_pure(),
+                    return_types,
                 )
             }
 
@@ -48,13 +42,13 @@ pub fn create_new_var_or_ref(
                 // This SHOULD always be None (for now), but this is being assigned to the reference here.
                 // In case the language will change in the future, and properties/methods are added to other types
                 let accessed_arg =
-                    get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
+                    get_accessed_args(x, &arg.name, &[arg.data_type.to_owned()], &mut Vec::new())?;
 
                 // If the value isn't wrapped in a runtime value,
                 // Replace the reference with a literal value
-                if arg.value.is_pure() {
+                if arg.expr.is_pure() {
                     return Ok(AstNode::Literal(
-                        arg.value.to_owned(),
+                        arg.expr.to_owned(),
                         x.current_position(),
                     ));
                 }
@@ -64,69 +58,103 @@ pub fn create_new_var_or_ref(
                     x.current_position(),
                 ))
             }
-        };
-    }
+        }
+    };
 
-    new_variable(
+    let arg = new_arg(
         x,
         name,
-        is_exported,
-        ast,
-        &mut *variable_declarations,
-        inside_collection,
-    )
+        variable_declarations
+    )?;
+
+    Ok(AstNode::VarDeclaration(
+        arg.name,
+        arg.expr,
+        visibility.to_owned(),
+        arg.data_type,
+        x.current_position(),
+    ))
 }
 
-fn new_variable(
+pub fn new_arg(
     x: &mut TokenContext,
-    name: String,
-    is_exported: bool,
-    ast: &[AstNode],
-    variable_declarations: &mut Vec<Arg>,
-    inside_collection: bool,
-) -> Result<AstNode, CompileError> {
+    name: &str,
+    variable_declarations: &[Arg],
+) -> Result<Arg, CompileError> {
     // Move past the name
     let mut data_type = DataType::Inferred(false);
-    x.index += 1;
+    x.advance();
 
-    match x.tokens[x.index] {
+    match x.current_token() {
         Token::Assign => {
-            x.index += 1;
+            x.advance();
 
-            if x.tokens[x.index] == Token::FunctionKeyword {
-                x.index += 1;
-                let (function, arg_refs, return_type) =
-                    create_function(x, name.to_owned(), is_exported, ast, variable_declarations)?;
-
-                if !inside_collection {
-                    variable_declarations.push(Arg {
-                        name: name.to_owned(),
-                        data_type: DataType::Function(arg_refs.clone(), Box::new(return_type)),
-                        value: function.get_value(),
-                    });
-                }
+            if x.current_token() == &Token::ArgConstructor {
+                x.advance();
+                let function =
+                    create_function(x, name.to_owned(), variable_declarations)?;
 
                 return Ok(function);
             }
         }
+        
+        // New Block with args
+        Token::ArgConstructor => {
+            x.advance();
+            let (constructor_args, return_type) = create_block_signature(
+                x,
+                &mut true,
+                variable_declarations,
+            )?;
+
+            return Ok(
+                Arg {
+                    name: name.to_owned(),
+                    expr: new_ast(
+                        x,
+                        &constructor_args,
+                        &return_type,
+                    )?,
+                    data_type: DataType::Block(constructor_args, return_type),
+                }
+            )
+        }
+        
+        // Block with no args. Only returns itself.
+        Token::Colon => {
+            x.advance();
+
+            return Ok(
+                Arg {
+                    name: name.to_owned(),
+                    expr: new_ast(
+                        x,
+                        // TODO: separate imports from parent block so these can be used in the scope
+                        &[], // No args for this block
+
+                        // This implies it will return an instance of itself
+                        &[],
+                    )?,
+                    data_type: DataType::Block(Vec::new(), Vec::new()),
+                }
+            )
+        }
 
         // Has a type declaration
-        Token::DatatypeLiteral(ref type_keyword) => {
+        Token::DatatypeLiteral(type_keyword) => {
             data_type = type_keyword.to_owned();
-            x.index += 1;
+            x.advance();
 
-            match x.tokens[x.index] {
+            match x.current_token() {
                 Token::Assign => {
-                    x.index += 1;
+                    x.advance();
                 }
 
-                // If end of statement, then it's a zero value variable
+                // If end of statement, then it's a zero-value variable
                 Token::Comma | Token::EOF | Token::Newline => {
                     return Ok(create_zero_value_var(
                         data_type,
                         name.to_string(),
-                        is_exported,
-                        x.token_positions[x.index].to_owned(),
                     ));
                 }
 
@@ -165,75 +193,90 @@ fn new_variable(
     };
 
     // The current token should be whatever is after the assignment operator
-    let parsed_expr = create_expression(
-        x,
-        inside_collection,
-        ast,
-        &mut data_type,
-        false,
-        variable_declarations,
-    )?;
+    
+    // Check if this whole expression is nested in brackets.
+    // This is just so we don't wastefully call create_expression recursively right away
+    let parsed_expr = match x.current_token() {
+        Token::OpenParenthesis => {
+            x.advance();
+            create_expression(
+                x,
+                &mut data_type,
+                true,
+                variable_declarations,
+            )?
+        }
+        _ => {
+            create_expression(
+                x,
+                &mut data_type,
+                false,
+                variable_declarations,
+            )?
+        }
+    };
 
-    // println!("parsed expr: {:?}", parsed_expr);
-
-    // Check if a type of collection / struct has been created
-    // Or whether it is a literal or expression
-    // If the expression is an empty expression when the variable is NOT a function, return an error
-    let var_value = parsed_expr;
-    let new_var = AstNode::VarDeclaration(
-        name.to_string(),
-        var_value.to_owned(),
-        is_exported,
-        data_type.to_owned(),
-        x.token_positions[x.index].to_owned(),
-    );
-
-    if !inside_collection {
-        variable_declarations.push(Arg {
-            name: name.to_string(),
-            data_type,
-            value: var_value,
-        });
-    }
-
-    Ok(new_var)
+    Ok(Arg {
+        name: name.to_owned(),
+        expr: parsed_expr,
+        data_type,
+    })
 }
 
 fn create_zero_value_var(
     data_type: DataType,
     name: String,
-    is_exported: bool,
-    token_position: TokenPosition,
-) -> AstNode {
+) -> Arg {
     match data_type {
-        DataType::Float(_) => AstNode::VarDeclaration(
+        DataType::Float(_) => Arg {
             name,
-            Expr::Float(0.0),
-            is_exported,
+            expr: Expr::Float(0.0),
             data_type,
-            token_position,
-        ),
+        },
 
-        DataType::Int(_) => {
-            AstNode::VarDeclaration(name, Expr::Int(0), is_exported, data_type, token_position)
-        }
-
-        DataType::String(_) => AstNode::VarDeclaration(
+        DataType::Int(_) => Arg {
             name,
-            Expr::String("".to_string()),
-            is_exported,
+            expr: Expr::Int(0),
             data_type,
-            token_position,
-        ),
+        },
 
-        DataType::Bool(_) => AstNode::VarDeclaration(
+        DataType::Bool(_) => Arg {
             name,
-            Expr::Bool(false),
-            is_exported,
+            expr: Expr::Bool(false),
             data_type,
-            token_position,
-        ),
+        },
 
-        _ => AstNode::VarDeclaration(name, Expr::None, is_exported, data_type, token_position),
+        DataType::Scene(_) => Arg {
+            name,
+            expr: Expr::Scene(
+                SceneContent::default(),
+                Style::default(),
+                SceneContent::default(),
+                String::default()
+            ),
+            data_type,
+        },
+
+        DataType::String(_) | DataType::CoerceToString(_) => Arg {
+            name,
+            expr: Expr::String(String::new()),
+            data_type,
+        },
+
+        _ => Arg {
+            name,
+            expr: Expr::None,
+            data_type,
+        },
     }
+}
+
+pub fn get_reference(
+    name: &str,
+    variable_declarations: &[Arg],
+) -> Option<Arg> {
+    variable_declarations
+        .iter()
+        .rfind(|a| a.name == name)
+        .map(|a| a.to_owned())
 }

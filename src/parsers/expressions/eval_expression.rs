@@ -90,7 +90,7 @@ pub fn evaluate_expression(
 
     // If nothing to evaluate at compile time, just one value, return that value
     if simplified_expression.len() == 1 {
-        return Ok(simplified_expression[0].get_value());
+        return Ok(simplified_expression[0].get_expr());
     }
 
     match current_type {
@@ -103,7 +103,7 @@ pub fn evaluate_expression(
             let mut new_string = String::new();
 
             for node in simplified_expression {
-                new_string += &node.get_value().as_string();
+                new_string += &node.get_expr().as_string();
             }
             Ok(Expr::String(new_string))
         }
@@ -162,7 +162,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
     let mut head_nodes: SceneContent = SceneContent::default();
 
     for node in simplified_expression {
-        match node.get_value() {
+        match node.get_expr() {
             Expr::Scene(body, ref mut scene_style, head, ..) => {
                 scene_body.before.extend(body.before);
                 scene_body.after.extend(body.after);
@@ -206,7 +206,7 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Comp
     // However, there should also be compile-time folding for some of this stuff.
 
     for node in simplified_expression {
-        match node.get_value() {
+        match node.get_expr() {
             Expr::String(ref string) => {
                 new_string.push_str(string);
             }

@@ -3,11 +3,8 @@ use colour::{grey_ln, red_ln};
 use std::collections::HashMap;
 
 use super::eval_expression::evaluate_expression;
-//use crate::bs_types::get_any_number_datatype;
-// use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Operator, Expr};
 use crate::parsers::build_ast::TokenContext;
-// use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::parsers::scene::{SceneType, Style};
 use crate::parsers::variables::create_new_var_or_ref;
 use crate::tokenizer::TokenPosition;
@@ -17,23 +14,61 @@ use crate::{
     parsers::{
         ast_nodes::{Arg, AstNode},
         create_scene_node::new_scene,
-        structs::new_fixed_collection,
+        structs::create_args,
     },
 };
+
+// For multiple returns
+pub fn create_multiple_expressions(
+    x: &mut TokenContext,
+    data_types: &mut Vec<DataType>,
+    captured_declarations: &[Arg],
+) -> Result<Vec<Expr>, CompileError> {
+    let mut expressions: Vec<Expr> = Vec::new();
+
+    while x.index < x.length {
+        let expression = create_expression(
+            x,
+            &mut data_types[data_types.len() - 1].clone(),
+            false,
+            captured_declarations,
+        )?;
+
+        // Make sure there was a comma after the expression
+        // Unless this is the last expression
+        if x.current_token() != &Token::Comma {
+            if expressions.len() < data_types.len() - 1 {
+                return Err(CompileError {
+                    msg: "Missing comma to separate expressions. Have you provided enough values?".to_string(),
+                    start_pos: x.current_position(),
+                    end_pos: x.current_position(),
+                    error_type: ErrorType::Syntax,
+                })
+            }
+        } else {
+            x.advance(); // Skip the comma
+        }
+
+        expressions.push(expression);
+    }
+
+    Ok(expressions)
+}
 
 // If the datatype is a collection,
 // the expression must only contain references to collections
 // or collection literals.
 pub fn create_expression(
     x: &mut TokenContext,
-    inside_collection: bool,
-    ast: &[AstNode],
     data_type: &mut DataType,
-    inside_parenthesis: bool,
-    captured_declarations: &mut Vec<Arg>,
+    consume_closing_parenthesis: bool,
+    captured_declarations: &[Arg],
 ) -> Result<Expr, CompileError> {
     let mut expression: Vec<AstNode> = Vec::new();
     // let mut number_union = get_any_number_datatype(false);
+
+    // Ignore any newlines at the start of the expression
+    while x.index < x.length && x.current_token() == &Token::Newline {}
 
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
@@ -42,75 +77,46 @@ pub fn create_expression(
     while x.index < x.length {
         let token = x.current_token().to_owned();
         match token {
-            // Conditions that close the expression
+
             Token::CloseParenthesis => {
-                if inside_parenthesis {
-                    if expression.is_empty() {
-                        return Ok(Expr::None);
-                    }
-                    break;
-                } else {
-                    x.index += 1;
-
-                    // Mismatched brackets return an error
-                    return Err(CompileError {
-                        msg: "Mismatched parenthesis in expression".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::Syntax,
-                    });
-                }
-            }
-
-            Token::CloseCurly => {
-                if inside_collection {
-                    break;
+                if consume_closing_parenthesis {
+                    x.advance();
                 }
 
-                x.index += 1;
-
-                // Mismatched brackets return an error
-                return Err(CompileError {
-                    msg: "Mismatched curly brackets in expression".to_string(),
-                    start_pos: x.current_position(),
-                    end_pos: TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column + 1,
-                    },
-                    error_type: ErrorType::Syntax,
-                });
+                if expression.is_empty() {
+                    return Ok(Expr::None);
+                }
+                
+                break;
             }
 
             Token::OpenParenthesis => {
                 // Move past the open parenthesis before calling this function again
                 // Removed this at one point for a test caused a wonderful infinite loop
-                x.index += 1;
+                x.advance();
 
                 let value =
-                    create_expression(x, false, ast, data_type, true, captured_declarations)?;
+                    create_expression(x, data_type, true, captured_declarations)?;
+
                 expression.push(AstNode::Literal(value, x.current_position()));
             }
 
             Token::OpenCurly => {
-                x.index += 1;
+                x.advance();
 
                 return match data_type {
                     // TODO - do we need to handle unions here? or are they always collapsed into one type before being parsed?
-                    DataType::Structure(inner_types) => {
+                    DataType::Arguments(inner_types) => {
                         // HAS DEFINED INNER TYPES FOR THE struct
                         // could this still result in None if the inner types are defined and not optional?
-                        let structure = new_fixed_collection(
+                        let structure = create_args(
                             x,
                             Expr::None,
                             inner_types,
-                            ast,
                             captured_declarations,
                         )?;
 
-                        Ok(Expr::StructLiteral(structure))
+                        Ok(Expr::Args(structure))
                     }
 
                     // If this is inside parenthesis, and we don't know the type.
@@ -119,18 +125,17 @@ pub fn create_expression(
                     // it will be flatted into that single value anyway by struct_to_value
                     DataType::Inferred(_) => {
                         // NO DEFINED TYPES FOR THE struct
-                        let structure = new_fixed_collection(
+                        let structure = create_args(
                             x,
                             Expr::None,
                             // The difference is this is inferred
                             &Vec::new(),
-                            ast,
                             captured_declarations,
                         )?;
 
                         // And then the type is set here
-                        *data_type = DataType::Structure(structure.to_owned());
-                        Ok(Expr::StructLiteral(structure))
+                        *data_type = DataType::Arguments(structure.to_owned());
+                        Ok(Expr::Args(structure))
                     }
 
                     // Need to error here as a collection literal is being made with wrong explicit type
@@ -149,8 +154,8 @@ pub fn create_expression(
                 };
             }
 
-            Token::EOF | Token::SceneClose | Token::Arrow | Token::Colon | Token::End => {
-                if inside_parenthesis {
+            Token::CloseCurly | Token::Comma | Token::EOF | Token::SceneClose | Token::Arrow | Token::Colon | Token::End => {
+                if consume_closing_parenthesis {
                     return Err( CompileError {
                         msg: "Not enough closing parenthesis for expression. Need more ')' at the end of the expression".to_string(),
                         start_pos: x.current_position(),
@@ -162,70 +167,32 @@ pub fn create_expression(
                     });
                 }
 
-                if inside_collection {
-                    return Err( CompileError {
-                        msg: "Not enough closing curly brackets to close the collection. Need more '}' at the end of the collection".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::Syntax,
-                    });
-                }
                 break;
             }
 
             Token::Newline => {
                 // Fine if inside parenthesis (not closed yet)
                 // Otherwise break out of the expression
-                if inside_parenthesis {
-                    x.index += 1;
+                if consume_closing_parenthesis {
+                    x.advance();
                     continue;
                 } else {
                     break;
                 }
             }
 
-            Token::Comma => {
-                // This is just one element inside a struct
-                if inside_collection {
-                    break;
-                }
-
-                x.index += 1;
-
-                // TODO - this is a bit of a mess
-                // Are we going to have special rules for return statements and return signatures?
-                // So we can just use this function for everything?
-                // Or does it make more sense to just use the parse_return_type function for cases without parenthesis?
-                // This function already breaks out if there is an End token or Colon token (if not inside parenthesis)
-
-                return Err(CompileError {
-                    msg: "Comma found outside of curly brackets (collection): If this is error is for return arguments, this might change in the future".to_string(),
-                    start_pos: x.current_position(),
-                    end_pos: TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column + 1,
-                    },
-                    error_type: ErrorType::Syntax,
-                });
-            }
-
             // Check if the name is a reference to another variable or function call
-            Token::Variable(name, is_public) => {
+            Token::Variable(ref name, ref visibility, ..) => {
                 // This is never reached (I think) if we are inside a struct or collection
                 let new_ref = create_new_var_or_ref(
                     x,
-                    name.to_owned(),
+                    name,
                     captured_declarations,
-                    is_public,
-                    ast,
-                    false,
+                    visibility,
                 )?;
 
                 match new_ref {
-                    AstNode::Literal(ref value, ..) => {
+                    AstNode::Literal(..) => {
                         expression.push(new_ref);
                     }
 
@@ -286,7 +253,7 @@ pub fn create_expression(
             }
 
             Token::SceneHead | Token::ParentScene => {
-                let scene_type = new_scene(x, ast, captured_declarations, &mut HashMap::new(), Style::default())?;
+                let scene_type = new_scene(x, captured_declarations, &mut HashMap::new(), Style::default())?;
                 match scene_type {
                     SceneType::Scene(scene) => return Ok(scene),
 
@@ -328,7 +295,7 @@ pub fn create_expression(
             Token::In => {
                 // Breaks out of the current expression and changes the type to Range
                 *data_type = DataType::Range;
-                x.index += 1;
+                x.advance();
                 return evaluate_expression(expression, data_type);
             }
 
@@ -379,7 +346,7 @@ pub fn create_expression(
             Token::Is => {
                 // Check if the next token is a not
                 if let Some(Token::Not) = x.tokens.get(x.index + 1) {
-                    x.index += 1;
+                    x.advance();
                     expression.push(AstNode::Operator(
                         Operator::NotEqual,
                         x.current_position(),
@@ -446,7 +413,7 @@ pub fn create_expression(
             }
         }
 
-        x.index += 1;
+        x.advance();
     }
 
     evaluate_expression(expression, data_type)
@@ -454,11 +421,11 @@ pub fn create_expression(
 
 pub fn get_accessed_args(
     x: &mut TokenContext,
-    collection_name: &String,
-    data_type: &DataType,
-    accessed_args: &mut Vec<usize>,
-) -> Result<Vec<usize>, CompileError> {
-    // Check if there is an access
+    collection_name: &str,
+    data_types: &[DataType],
+    accessed_args: &mut Vec<String>,
+) -> Result<Vec<String>, CompileError> {
+    // Check if there is access
     // Should be at the variable name in the token stream
     if let Some(Token::Dot) = x.tokens.get(x.index + 1) {
         // Move past the dot
@@ -471,7 +438,7 @@ pub fn get_accessed_args(
                 // Usize will flip to max number if negative
                 // Maybe in future negative indexes with be supported (minus from the end)
 
-                // for now just error if it's negative
+                // for now just an error if it's negative
                 if index < &0 {
                     return Err(CompileError {
                         msg: format!(
@@ -488,32 +455,41 @@ pub fn get_accessed_args(
                 }
 
                 let idx: usize = *index as usize;
-                match data_type {
-                    DataType::Structure(inner_types) => {
-                        if idx >= inner_types.len() {
-                            return Err(CompileError {
-                                msg: format!(
-                                    "Index {} out of range for any arguments in '{}'",
-                                    idx, collection_name
-                                ),
-                                start_pos: x.current_position(),
-                                end_pos: TokenPosition {
-                                    line_number: x.current_position().line_number,
-                                    char_column: x.current_position().char_column + 1,
-                                },
-                                error_type: ErrorType::Rule,
-                            });
-                        }
+                if idx >= data_types.len() {
+                    return Err(CompileError {
+                        msg: format!(
+                            "Index {} out of range for any arguments in '{}'",
+                            idx, collection_name
+                        ),
+                        start_pos: x.current_position(),
+                        end_pos: TokenPosition {
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
+                        },
+                        error_type: ErrorType::Rule,
+                    });
+                };
 
-                        accessed_args.push(idx);
+                let data_type = &data_types[idx];
+                return match data_type {
+                    DataType::Arguments(inner_args) => {
+                        accessed_args.push(idx.to_string());
+
+                        let inner_types = inner_args.iter().map(|arg| arg.data_type.to_owned()).collect::<Vec<DataType>>();
+
+                        // Recursively call this function until there are no more accessed args
+                        get_accessed_args(x, collection_name, &inner_types, accessed_args)
                     }
 
-                    DataType::Collection(..) => {
-                        accessed_args.push(idx);
+                    DataType::Collection(data_type) => {
+                        accessed_args.push(idx.to_string());
+
+                        // Recursively call this function until there are no more accessed args
+                        get_accessed_args(x, collection_name, &[*data_type.to_owned()], accessed_args)
                     }
 
                     _ => {
-                        return Err(CompileError {
+                        Err(CompileError {
                             msg: format!(
                                 "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
                                 collection_name, data_type
@@ -524,20 +500,32 @@ pub fn get_accessed_args(
                                 char_column: x.current_position().char_column + 1,
                             },
                             error_type: ErrorType::Rule,
-                        });
+                        })
                     }
                 }
             }
 
             // NAMED ARGUMENT ACCESS
-            Some(Token::Variable(name, ..)) => match data_type {
-                DataType::Structure(inner_types) => {
-                    if let Some(idx) = inner_types.iter().position(|arg| arg.name == *name) {
-                        accessed_args.push(idx);
-                    } else {
+            Some(Token::Variable(name, ..)) => {
+                // Make sure this data type is arguments (named values)
+                // Collect any returned types that are arguments
+                let mut arguments = Vec::new();
+                
+                for data_type in data_types {
+                    match data_type {
+                        DataType::Arguments(inner_args) => {
+                            arguments.extend(inner_args);
+                        }
+                        _ => {}
+                    }
+                }
+                
+                let access = match arguments.iter().find(|arg| arg.name == *name) {
+                    Some(access) => *access,
+                    None => {
                         return Err(CompileError {
                             msg: format!(
-                                "Name '{}' not found in struct '{}'",
+                                "Name '{}' not found inside '{}'",
                                 name, collection_name
                             ),
                             start_pos: x.current_position(),
@@ -546,20 +534,28 @@ pub fn get_accessed_args(
                                 char_column: x.current_position().char_column + 1,
                             },
                             error_type: ErrorType::Rule,
+                        })
+                    }
+                };
+
+                match &access.data_type {
+                    DataType::Arguments(inner_types) => {
+                        if let Some(idx) = inner_types.iter().position(|arg| arg.name == *name) {
+                            accessed_args.push(access.name.to_owned());
+                        }
+                    }
+
+                    _ => {
+                        return Err(CompileError {
+                            msg: "Parse expression named access for non argument type (compiler error - may change in future)".to_string(),
+                            start_pos: x.current_position(),
+                            end_pos: TokenPosition {
+                                line_number: x.current_position().line_number,
+                                char_column: x.current_position().char_column + 1,
+                            },
+                            error_type: ErrorType::Compiler,
                         });
                     }
-                }
-
-                _ => {
-                    return Err(CompileError {
-                        msg: "Compiler only supports named access for structs".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::Rule,
-                    });
                 }
             },
 
@@ -578,9 +574,6 @@ pub fn get_accessed_args(
                 });
             }
         }
-
-        // Recursively call this function until there are no more accessed args
-        return get_accessed_args(x, collection_name, data_type, accessed_args);
     }
 
     Ok(Vec::new())

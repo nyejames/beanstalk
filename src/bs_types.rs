@@ -1,4 +1,4 @@
-use colour::red_ln;
+use std::ops::Index;
 use crate::parsers::ast_nodes::{Arg, Expr};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -8,17 +8,15 @@ pub enum DataType {
 
     // Before we know the type of reference, a pointer is used.
     // We use this at the AST stage for imports or references when we can't figure out the type yet
-    Pointer,
+    Pointer(String),
 
     // Mutable Data Types will have an additional bool to indicate whether they are mutable
-    Inferred(bool), // Type is inferred, this only gets to the emitter stage if it will definitely be JS rather than WASM
+    Inferred(bool), // Type is inferred
     Bool(bool),
     Range, // Iterable
 
     // Immutable Data Types
     // In practice, these types should not be deliberately used much at all
-    // The result / option types will be worked with directly instead
-    Error(String),
     None, // The None result of an option, or empty argument
     True,
     False,
@@ -37,54 +35,23 @@ pub enum DataType {
     Decimal(bool),
 
     // Collections.
-    // A collection of a single type, dynamically sized
-    // Uses curly brackets {}
+    // A collection of single types, dynamically sized
     Collection(Box<DataType>),
 
-    // Structures (structs)
-    // They are just one or more arguments (can be named and have default values) inside of regular brackets ()
-    // They can have mixed types but must be a fixed size (like structs)
-    // Since this is a list of args, there is some unique implicit behaviour with these tuples
-    // An empty tuple is equivalent to None
-    // A tuple of one item is equivalent to that item (this is automatically casted by the language)
-    // TODO - Could a tuple of one item as a datatype represent a tuple that can have any number of arguments of that type when being created?
-    // (but it maintains a fixed size once it's created - basically an Array)
-    // This would superficially just be a fixed array type (like a collection but with a fixed size)
-    // It would need it's own syntax for specifying it's size
-
-    /*
-        Examples for compiler stuff:
-
-        - A function call that takes any sized list of ints would have its argument datatype be:
-        DataType::Tuple(Box::new(DataType::Int))
-
-        - A function call that can take any argument (will be converted into a string)
-        DataType::CoerceToString
-
-        - A function call that takes no arguments
-        EITHER:
-            DataType::Tuple(Vec::new()) -- this is bad practice but would still result in None
-            OR
-            DataType::None -- the correct way to say None
-    */
-    Structure(Vec<Arg>),
+    // Used for constructing new types
+    Arguments(Vec<Arg>),
 
     // Special Beanstalk Types
     // Scene types may have more static structure to them in the future
     Scene(bool), // is_mutable
 
-    // Functions have named arguments.
-    // These arguments are effectively identical to tuples.
-    // We don't use a Datatypes here (to put two tuples there) as it just adds an extra unwrapping step.
-    // And we want to be able to have optional names / default values for even single arguments
-    Function(Vec<Arg>, Box<DataType>), // Arguments, Return type
+    // Blocks are either functions or classes or both depending on their signature
+    Block(Vec<Arg>, Vec<DataType>), // Arguments, Returned args
 
     // Type Types
     // Unions allow types such as option and result
-    Choice(Vec<DataType>), // Union of types
-
-    // For generics
-    Type,
+    Choices(Vec<DataType>), // Union of types
+    Option(Box<DataType>), // Shorthand for a choice of a type or None
 }
 
 impl DataType {
@@ -101,7 +68,7 @@ impl DataType {
                 )
             }
 
-            DataType::Choice(types) => {
+            DataType::Choices(types) => {
 
                 for t in types {
                     if !t.is_valid_type(accepted_type) {
@@ -115,7 +82,7 @@ impl DataType {
                 return matches!(
                 accepted_type,
                 DataType::Collection(_)
-                    | DataType::Structure(_)
+                    | DataType::Arguments(_)
                     | DataType::Float(_)
                     | DataType::Int(_)
                     | DataType::Decimal(_)
@@ -123,8 +90,7 @@ impl DataType {
                 );
             }
 
-            // This will probably be deleted soon
-            DataType::Pointer => {
+            DataType::Pointer(..) => {
                 return true;
             }
 
@@ -140,7 +106,7 @@ impl DataType {
             }
             DataType::CoerceToString(_) => true,
 
-            DataType::Choice(types) => {
+            DataType::Choices(types) => {
                 for t in types {
                     if !self.is_valid_type(t) {
                         return false;
@@ -162,7 +128,7 @@ impl DataType {
 
     pub fn length(&self) -> u32 {
         match self {
-            DataType::Pointer => 0,
+            DataType::Pointer(name) => name.len() as u32,
             DataType::Inferred(_) => 0,
             DataType::CoerceToString(_) => 0,
             DataType::Bool(_) => 4,
@@ -175,63 +141,45 @@ impl DataType {
             DataType::Decimal(_) => 6,
             DataType::Collection(inner_type) => inner_type.length(),
 
-            DataType::Structure(_) => 1,
-            DataType::Choice(inner_types) => {
+            DataType::Arguments(_) => 1,
+            DataType::Choices(inner_types) => {
                 let mut length = 0;
                 for arg in inner_types {
                     length += arg.length();
                 }
                 length
             }
-            DataType::Function(..) => 2,
-            DataType::Type => 4,
+            DataType::Block(..) => 2,
             DataType::Scene(_) => 5,
-            DataType::Error(_) => 1,
 
+            DataType::Option(inner_type) => inner_type.length() + 1,
             DataType::None => 4,
         }
     }
 
-    // Special Types that might change (basically same as rust with a bit more syntax sugar)
-    pub fn create_option_datatype(self) -> DataType {
+    // Special Types that might change (basically the same as rust with more syntax sugar)
+    pub fn to_option(self) -> DataType {
         match self {
-            DataType::Inferred(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::Inferred(mutable)])
-            }
-            DataType::CoerceToString(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::CoerceToString(mutable)])
-            }
-            DataType::Bool(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::Bool(mutable)])
-            }
-            DataType::True => DataType::Choice(vec![DataType::None, DataType::True]),
-            DataType::False => DataType::Choice(vec![DataType::None, DataType::False]),
-            DataType::String(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::String(mutable)])
-            }
-            DataType::Float(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::Float(mutable)])
-            }
-            DataType::Int(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::Int(mutable)])
-            }
-            DataType::Collection(inner_type) => {
-                DataType::Choice(vec![DataType::None, DataType::Collection(inner_type)])
-            }
-            DataType::Decimal(mutable) => {
-                DataType::Choice(vec![DataType::None, DataType::Decimal(mutable)])
-            }
-            DataType::Type => DataType::Choice(vec![DataType::None, DataType::Type]),
-            DataType::Choice(inner_types) => {
-                DataType::Choice(vec![DataType::None, DataType::Choice(inner_types)])
-            }
-            DataType::Function(args, return_type) => {
-                DataType::Choice(vec![DataType::None, DataType::Function(args, return_type)])
-            }
-            DataType::Structure(args) => {
-                DataType::Choice(vec![DataType::None, DataType::Structure(args)])
-            }
-            _ => DataType::Error(format!("You can't create an option of {:?} and None", self)),
+            DataType::Bool(mutable) => DataType::Option(Box::new(DataType::Bool(mutable))),
+            DataType::Float(mutable) => DataType::Option(Box::new(DataType::Float(mutable))),
+            DataType::Int(mutable) => DataType::Option(Box::new(DataType::Int(mutable))),
+            DataType::Decimal(mutable) => DataType::Option(Box::new(DataType::Decimal(mutable))),
+            DataType::String(mutable) => DataType::Option(Box::new(DataType::String(mutable))),
+            DataType::Collection(inner_type) => DataType::Option(Box::new(DataType::Collection(inner_type))),
+            DataType::Arguments(args) => DataType::Option(Box::new(DataType::Arguments(args))),
+            DataType::Block(args, return_type) => DataType::Option(Box::new(DataType::Block(args, return_type))),
+            DataType::Scene(mutable) => DataType::Option(Box::new(DataType::Scene(mutable))),
+            DataType::Pointer(name) => DataType::Option(Box::new(DataType::Pointer(name))),
+            DataType::Inferred(mutable) => DataType::Option(Box::new(DataType::Inferred(mutable))),
+            DataType::CoerceToString(mutable) => DataType::Option(Box::new(DataType::CoerceToString(mutable))),
+            DataType::True => DataType::Option(Box::new(DataType::True)),
+            DataType::False => DataType::Option(Box::new(DataType::False)),
+            DataType::Choices(inner_types) => DataType::Option(Box::new(DataType::Choices(inner_types))),
+
+            // TODO: Probably should error for these
+            DataType::None => DataType::Option(Box::new(DataType::None)),
+            DataType::Range => DataType::Option(Box::new(DataType::Range)),
+            DataType::Option(_) => DataType::Option(Box::new(DataType::Option(Box::new(self)))),
         }
     }
 
@@ -247,7 +195,7 @@ impl DataType {
             DataType::Int(mutable) => *mutable,
             DataType::Decimal(mutable) => *mutable,
             DataType::Collection(inner_type) => inner_type.is_mutable(),
-            DataType::Structure(args) => {
+            DataType::Arguments(args) => {
                 for arg in args {
                     if arg.data_type.is_mutable() {
                         return true;
@@ -261,7 +209,7 @@ impl DataType {
 }
 
 pub fn get_any_number_datatype(mutable: bool) -> DataType {
-    DataType::Choice(vec![
+    DataType::Choices(vec![
         DataType::Float(mutable),
         DataType::Int(mutable),
         DataType::Decimal(mutable),
@@ -269,56 +217,52 @@ pub fn get_any_number_datatype(mutable: bool) -> DataType {
 }
 
 pub fn get_rgba_args() -> DataType {
-    DataType::Structure(vec![
+    DataType::Arguments(vec![
         Arg {
             name: "red".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Expr::Float(0.0),
+            data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
+            expr: Expr::Float(0.0),
         },
         Arg {
             name: "green".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Expr::Float(0.0),
+            data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
+            expr: Expr::Float(0.0),
         },
         Arg {
             name: "blue".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Expr::Float(0.0),
+            data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
+            expr: Expr::Float(0.0),
         },
         Arg {
             name: "alpha".to_string(),
-            data_type: DataType::Choice(vec![DataType::Float(false), DataType::Int(false)]),
-            value: Expr::Float(1.0),
+            data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
+            expr: Expr::Float(1.0),
         },
     ])
 }
 
-pub fn get_reference_data_type(data_type: &DataType, arguments_accessed: &[usize]) -> DataType {
+pub fn get_accessed_data_type(data_type: &DataType, arguments_accessed: &[String]) -> DataType {
     match arguments_accessed.first() {
         Some(index) => match &data_type {
-            DataType::Structure(inner_types) => {
-                // This should never happen (caught earlier in compiler)
-                debug_assert!(index < &inner_types.len());
-                debug_assert!(index >= &0);
-
+            DataType::Arguments(inner_types) => {
                 // This part could be recursively check if there are more arguments to access
                 if arguments_accessed.len() > 1 {
-                    get_reference_data_type(
-                        &inner_types[*index].data_type,
+                    get_accessed_data_type(
+                        &inner_types.iter().find(|t| t.name == *index).unwrap().data_type,
                         &arguments_accessed[1..],
                     )
                 } else {
-                    inner_types[*index].data_type.to_owned()
+                    inner_types.iter().find(|t| t.name == *index).unwrap().data_type.to_owned()
                 }
             }
 
-            DataType::Collection(inner_type) | DataType::Function(_, inner_type) => {
+            DataType::Collection(inner_type) => {
                 // This part could be recursive as get_type() can call this function again
                 let inner_type = *inner_type.to_owned();
                 if arguments_accessed.len() > 1 {
                     // Could be trying to access a non-collection or struct,
                     // But this should be caught earlier in the compiler
-                    get_reference_data_type(&inner_type, &arguments_accessed[1..])
+                    get_accessed_data_type(&inner_type, &arguments_accessed[1..])
                 } else {
                     inner_type
                 }

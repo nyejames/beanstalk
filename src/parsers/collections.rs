@@ -9,15 +9,14 @@ use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 // TODO: string keys to make it a map
 pub fn _new_collection(
     x: &mut TokenContext,
-    ast: &[AstNode],
     token_positions: &[TokenPosition],
     collection_type: &mut DataType,
-    variable_declarations: &mut Vec<Arg>,
+    variable_declarations: &mut [Arg],
 ) -> Result<Expr, CompileError> {
     let mut items: Vec<Expr> = Vec::new();
 
-    // Should always start with current token being an open curly brace
-    // So skip to first value
+    // Should always start with the current token being an open curly brace, 
+    // So skip to the first value
     x.index += 1;
 
     while x.index < x.length {
@@ -28,7 +27,7 @@ pub fn _new_collection(
 
             _ => {
                 let item =
-                    create_expression(x, true, ast, collection_type, false, variable_declarations)?;
+                    create_expression(x, collection_type, false, variable_declarations)?;
 
                 let item_type = item.get_type();
                 if item_type != *collection_type {

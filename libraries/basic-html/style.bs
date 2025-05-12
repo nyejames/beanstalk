@@ -1,9 +1,26 @@
 -- STANDARD HTML LIBRARY FOR SCENES
 
-@Html_Scene = [#markdown:
-    <[@tag] class="[@classes]" style="[@styles]" alt="[@alt]">
-        [#slot]
-    </[@tag]>
-    [#child_default #markdown]
-    [#unlock]
-]
+-- Main structure
+-- These will contain all of the default scene wrappers needed
+html_basics |section String|:
+    $styles ~{String}
+
+    @addStyle |style String|:
+        -- TODO: Needs to check if the same style already exists, if so, don't add it
+        styles.push([style:,])
+    zz
+
+    @title |num Int| -> Scene:
+        title_size = 4 * (num * 0.5)
+        return [:
+            <div style="size:[title_size]em"><div/>
+        ]
+    zz
+
+    [#markdown:
+        <[section] class="container" style="[~styles]">[#slot]</[section]>
+    ]
+zz
+
+@page = html_basics("main")
+@header = html_basics("head")

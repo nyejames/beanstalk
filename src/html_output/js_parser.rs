@@ -1,9 +1,27 @@
 use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::tokenizer::TokenPosition;
 use crate::{
-    CompileError, ErrorType, Token, bs_types::DataType, parsers::ast_nodes::AstNode,
+    CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
 };
+
+
+// If there are multiple values, it gets wrapped in an array
+pub fn expressions_to_js(
+    expressions: &[Expr],
+    line_number: &TokenPosition,
+) -> Result<String, CompileError> {
+    let mut js = String::new();
+    for expr in expressions {
+        js.push_str(&expression_to_js(expr, line_number)?);
+    }
+
+    if expressions.len() > 0 {
+        return Ok(format!("[{}]", js))
+    }
+
+    Ok(js)
+}
 
 // Create everything necessary in JS
 pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String, CompileError> {
@@ -54,7 +72,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
                         }
                     },
 
-                    AstNode::Operator(op, token_position) => match op {
+                    AstNode::Operator(op, ..) => match op {
                         Operator::Add => js.push_str(" + "),
                         Operator::Subtract => js.push_str(" - "),
                         Operator::Multiply => js.push_str(" * "),
@@ -142,7 +160,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
 
         // If the expression is just a tuple,
         // then it should automatically destructure into multiple arguments like this
-        Expr::StructLiteral(args) => {
+        Expr::Args(args) => {
             let mut structure = String::from("{{");
             for (index, arg) in args.iter().enumerate() {
                 let arg_name = if arg.name.is_empty() {
@@ -151,7 +169,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
                     arg.name.to_owned()
                 };
 
-                let arg_value = expression_to_js(&arg.value, start_pos)?;
+                let arg_value = expression_to_js(&arg.expr, start_pos)?;
 
                 structure.push_str(&format!(
                     "{arg_name}:{arg_value}{}",
@@ -188,16 +206,16 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
 pub fn create_reference_in_js(
     name: &String,
     data_type: &DataType,
-    accessed_args: &Vec<usize>,
+    accessed_args: &Vec<String>,
 ) -> String {
     match data_type {
         // DataType::Float | DataType::Int => {
         //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
         // }
-        DataType::Structure(_) | DataType::Collection(_) => {
+        DataType::Arguments(_) | DataType::Collection(_) => {
             let mut accesses = String::new();
-            for index in accessed_args {
-                accesses.push_str(&format!("[{}]", index));
+            for access in accessed_args {
+                accesses.push_str(&format!("[{}]", access));
             }
             format!("uInnerHTML(\"{name}\",{BS_VAR_PREFIX}{name}{accesses});")
         }

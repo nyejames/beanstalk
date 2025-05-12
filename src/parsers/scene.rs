@@ -227,7 +227,7 @@ pub fn parse_scene(
 
                 if !declarations.iter().any(|a| &a.name == name) {
                     match &data_type {
-                        DataType::Structure(items) => {
+                        DataType::Arguments(items) => {
                             // Automatically unpack all items in the tuple into the scene
                             // If no items accessed
                             if argument_accessed.is_empty() {
@@ -269,13 +269,13 @@ pub fn parse_scene(
             Expr::Runtime(..) => {
                 red_ln!("adding a runtime value to a scene. Not yet supported.");
             }
-            Expr::Function(..) => {
+            Expr::Block(..) => {
                 red_ln!("adding a function to a scene. Not yet supported.");
             }
 
             // At this point, if this structure was a style, those fields and inner scene would have been parsed in scene_node.rs
             // So we can just unpack any other public fields into the scene as strings
-            Expr::StructLiteral(_) => {
+            Expr::Args(_) => {
                 red_ln!("adding a struct literal to a scene. Not yet supported.");
             }
 
