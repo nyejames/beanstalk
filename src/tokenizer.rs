@@ -1,10 +1,10 @@
 use super::tokens::{Token, TokenizeMode, VarVisibility};
 use crate::bs_types::DataType;
+use crate::parsers::ast_nodes::Arg;
 use crate::parsers::build_ast::TokenContext;
 use crate::{CompileError, ErrorType};
 use std::iter::Peekable;
 use std::str::Chars;
-use crate::parsers::ast_nodes::Arg;
 
 // Line number, how many chars in the line
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -18,14 +18,12 @@ pub struct TokenizerOutput {
     pub imports: Vec<String>,
     pub export_indexes: Vec<usize>,
 }
-pub fn tokenize(
-    source_code: &str,
-) -> Result<TokenizerOutput, CompileError> {
+pub fn tokenize(source_code: &str) -> Result<TokenizerOutput, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / 5;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
-    
+
     let mut exports: Vec<usize> = Vec::new();
     let mut imports: Vec<String> = Vec::new();
 
@@ -47,7 +45,7 @@ pub fn tokenize(
         // dark_cyan_ln!("Token: {:?}. Mode: {:?}", token, tokenize_mode);
         tokens.push(token);
         token_positions.push(token_position.clone());
-        
+
         token = get_next_token(
             &mut chars,
             &mut tokenize_mode,
@@ -226,11 +224,7 @@ pub fn get_next_token(
 
     // Compiler Directives
     if current_char == '#' {
-        return compiler_directive(
-            &mut token_value,
-            chars,
-            token_position,
-        );
+        return compiler_directive(&mut token_value, chars, token_position);
     }
 
     // Check for string literals
@@ -295,10 +289,10 @@ pub fn get_next_token(
     if current_char == '}' {
         return Ok(Token::CloseCurly);
     }
-    
+
     // Structs
     if current_char == '|' {
-        return Ok(Token::ArgConstructor)
+        return Ok(Token::ArgConstructor);
     }
 
     // Currently not using bangs
@@ -553,7 +547,7 @@ pub fn get_next_token(
             false,
             imports,
         )?;
-        
+
         exports.push(tokens.len());
         return Ok(var);
     }
@@ -645,7 +639,6 @@ pub fn get_next_token(
     if current_char == ';' {
         return Ok(Token::Semicolon);
     }
-
 
     if current_char.is_alphabetic() {
         token_value.push(current_char);
@@ -759,7 +752,11 @@ fn keyword_or_variable(
 
         // VARIABLE
         if is_not_eof && is_valid_identifier(token_value) {
-            return Ok(Token::Variable(token_value.to_string(), visibility, is_mutable));
+            return Ok(Token::Variable(
+                token_value.to_string(),
+                visibility,
+                is_mutable,
+            ));
         } else {
             break;
         }
@@ -785,70 +782,51 @@ fn compiler_directive(
     chars: &mut Peekable<Chars<'_>>,
     token_position: &mut TokenPosition,
 ) -> Result<Token, CompileError> {
-
     loop {
-        if chars.peek().is_some_and(|c| c.is_alphanumeric() || c == &'_') {
+        if chars
+            .peek()
+            .is_some_and(|c| c.is_alphanumeric() || c == &'_')
+        {
             token_value.push(chars.next().unwrap());
             token_position.char_column += 1;
             continue;
         }
 
         return match token_value.as_str() {
-
             // Built-in functions
-            "print" =>  Ok(Token::Print),
+            "print" => Ok(Token::Print),
             "assert" => Ok(Token::Assert),
             "panic" => Ok(Token::Panic),
             "log" => Ok(Token::Log),
 
             // Compiler settings
-            "settings" => {
-                Ok(Token::Settings)
-            }
-            "title" => {
-                Ok(Token::Title)
-            }
-            "date" => {
-                Ok(Token::Date)
-            }
+            "settings" => Ok(Token::Settings),
+            "title" => Ok(Token::Title),
+            "date" => Ok(Token::Date),
 
             // External language blocks
-            "JS" => {
-                Ok(Token::JS(string_block(chars, token_position)?))
-            }
-            "WASM" => {
-                Ok(Token::WASM(string_block(chars, token_position)?))
-            }
-            "CSS" => {
-                Ok(Token::CSS(string_block(chars, token_position)?))
-            }
+            "JS" => Ok(Token::JS(string_block(chars, token_position)?)),
+            "WASM" => Ok(Token::WASM(string_block(chars, token_position)?)),
+            "CSS" => Ok(Token::CSS(string_block(chars, token_position)?)),
 
             // Scene Style properties
-            "markdown" => {
-                Ok(Token::Markdown)
-            }
-            "child_default" => {
-                Ok(Token::ChildDefault)
-            }
-            "slot" => {
-                Ok(Token::Slot)
-            }
+            "markdown" => Ok(Token::Markdown),
+            "child_default" => Ok(Token::ChildDefault),
+            "slot" => Ok(Token::Slot),
 
-            _ => {
-                Err(CompileError {
-                    msg: format!("Invalid compiler directive: #{}", token_value),
-                    start_pos: TokenPosition {
-                        line_number: token_position.line_number,
-                        char_column: token_position.char_column,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: token_position.line_number,
-                        char_column: token_position.char_column + token_value.len() as i32,
-                    },
-                    error_type: ErrorType::Syntax,
-                })
-            }
-        }
+            _ => Err(CompileError {
+                msg: format!("Invalid compiler directive: #{}", token_value),
+                start_pos: TokenPosition {
+                    line_number: token_position.line_number,
+                    char_column: token_position.char_column,
+                },
+                end_pos: TokenPosition {
+                    line_number: token_position.line_number,
+                    char_column: token_position.char_column + token_value.len() as i32,
+                },
+                error_type: ErrorType::Syntax,
+            }),
+        };
     }
 }
 

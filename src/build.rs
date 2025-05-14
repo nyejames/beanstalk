@@ -8,7 +8,10 @@ use crate::settings::{BS_VAR_PREFIX, Config};
 use crate::tokenizer::TokenPosition;
 use crate::{Error, ErrorType, settings};
 use crate::{Token, tokenizer};
-use colour::{blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln, print_bold, print_ln_bold, yellow_ln_bold};
+use colour::{
+    blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln,
+    print_bold, print_ln_bold, yellow_ln_bold,
+};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -134,8 +137,7 @@ pub fn build(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code)
-            {
+            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code) {
                 Ok(tokens) => tokens,
                 Err(e) => {
                     return Err(e.to_error(config_path));
@@ -145,11 +147,7 @@ pub fn build(
             // Anything imported into the config file becomes an import of every module in the project
             global_imports.extend(tokenizer_output.imports);
 
-            let config_block = match new_ast(
-                &mut tokenizer_output.token_context,
-                &[],
-                &mut [],
-            ) {
+            let config_block = match new_ast(&mut tokenizer_output.token_context, &[], &mut []) {
                 Ok(expr) => expr,
                 Err(e) => return Err(e.to_error(config_path)),
             };
@@ -190,8 +188,7 @@ pub fn build(
             .with_extension("");
 
         // TOKENIZER
-        let tokenizer_output = match tokenizer::tokenize(&module.source_code)
-        {
+        let tokenizer_output = match tokenizer::tokenize(&module.source_code) {
             Ok(tokens) => tokens,
             Err(e) => {
                 return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -210,15 +207,17 @@ pub fn build(
                 Token::Variable(name, ..) => name.to_owned(),
                 _ => {
                     return Err(Error {
-                        msg: format ! (
-                        "Exports must be variables. Attempting to export a {:?}.",
-                        export
+                        msg: format!(
+                            "Exports must be variables. Attempting to export a {:?}.",
+                            export
                         ),
-                        start_pos: tokenizer_output.token_context.token_positions[ * export_index].to_owned(),
-                        end_pos: tokenizer_output.token_context.token_positions[ * export_index].to_owned(),
+                        start_pos: tokenizer_output.token_context.token_positions[*export_index]
+                            .to_owned(),
+                        end_pos: tokenizer_output.token_context.token_positions[*export_index]
+                            .to_owned(),
                         file_path: module.source_path.to_owned(),
                         error_type: ErrorType::Syntax,
-                    })
+                    });
                 }
             };
 
@@ -227,38 +226,41 @@ pub fn build(
             if let Some(next_token) = tokenizer_output.token_context.tokens.get(export_index + 1) {
                 match next_token {
                     Token::DatatypeLiteral(datatype) => {
-                        
                         // Can unwrap here as we always create an entry for this module earlier
-                        public_exports.get_mut(&export_path).unwrap().push(
-                            TokenExport {
+                        public_exports
+                            .get_mut(&export_path)
+                            .unwrap()
+                            .push(TokenExport {
                                 name: export_name,
                                 datatype: datatype.to_owned(),
-                            }
-                        )
+                            })
                     }
-                    
+
                     // This is a struct type
                     // The struct type needs to be parsed first before this is exported to other modules
                     Token::Variable(..) => {
                         todo!("Struct export types");
                     }
-                    
+
                     _ => {
                         return Err(Error {
-                            msg: format ! (
-                            "All exports must have an explicit type declaration. {:?} doesn't have one.",
-                            export
+                            msg: format!(
+                                "All exports must have an explicit type declaration. {:?} doesn't have one.",
+                                export
                             ),
-                            start_pos: tokenizer_output.token_context.token_positions[ * export_index].to_owned(),
-                            end_pos: tokenizer_output.token_context.token_positions[ * export_index].to_owned(),
+                            start_pos: tokenizer_output.token_context.token_positions
+                                [*export_index]
+                                .to_owned(),
+                            end_pos: tokenizer_output.token_context.token_positions[*export_index]
+                                .to_owned(),
                             file_path: module.source_path.to_owned(),
                             error_type: ErrorType::Syntax,
-                        })
+                        });
                     }
                 }
             }
         }
-        
+
         module.imports = global_imports.to_owned();
         module.imports.extend(tokenizer_output.imports);
 
@@ -273,7 +275,7 @@ pub fn build(
             green_ln!("{:?}", time.elapsed());
         }
     }
-    
+
     // Resolving exports / imports
 
     for file in &mut modules_to_parse {
@@ -414,8 +416,6 @@ pub fn add_bs_files_to_parse(
 
                 // If it's a .bs file, add it to the list of files to compile
                 if file_path.extension() == Some("bs".as_ref()) {
-                    
-                    
                     let code = match fs::read_to_string(&file_path) {
                         Ok(content) => content,
                         Err(e) => {
@@ -431,7 +431,7 @@ pub fn add_bs_files_to_parse(
                             });
                         }
                     };
-                    
+
                     // If code is empty, skip compiling this module
                     if code.is_empty() {
                         continue;
@@ -603,7 +603,11 @@ fn compile(
             for export in import_names {
                 declarations.push(Arg {
                     name: export.name.to_owned(),
-                    expr: Expr::Reference(export.name.to_owned(), export.datatype.to_owned(), Vec::new()),
+                    expr: Expr::Reference(
+                        export.name.to_owned(),
+                        export.datatype.to_owned(),
+                        Vec::new(),
+                    ),
                     data_type: export.datatype.to_owned(),
                 })
             }
@@ -611,11 +615,7 @@ fn compile(
     }
 
     // AST PARSER
-    let ast = match new_ast(
-        &mut module.tokens,
-        &declarations,
-        &[],
-    ) {
+    let ast = match new_ast(&mut module.tokens, &declarations, &[]) {
         Ok(block) => block.get_block_nodes().to_owned(),
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -652,11 +652,7 @@ fn compile(
     }
 
     // PARSING INTO HTML
-    let parser_output = match web_parser::parse(
-        &ast,
-        project_config,
-        &mut Module::new(),
-    ) {
+    let parser_output = match web_parser::parse(&ast, project_config, &mut Module::new()) {
         Ok(parser_output) => parser_output,
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -930,7 +926,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
-                                                        msg: "Site title must be a string".to_string(),
+                                                        msg: "Site title must be a string"
+                                                            .to_string(),
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
@@ -941,7 +938,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_description" => {
-                                            project_config.html_meta.page_description = match &arg.expr
+                                            project_config.html_meta.page_description = match &arg
+                                                .expr
                                             {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
@@ -962,7 +960,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
-                                                        msg: "Site url must be a string".to_string(),
+                                                        msg: "Site url must be a string"
+                                                            .to_string(),
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
@@ -977,7 +976,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
-                                                        msg: "Page url must be a string".to_string(),
+                                                        msg: "Page url must be a string"
+                                                            .to_string(),
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
@@ -988,7 +988,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_og_title" => {
-                                            project_config.html_meta.page_og_title = match &arg.expr {
+                                            project_config.html_meta.page_og_title = match &arg.expr
+                                            {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -1021,35 +1022,37 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_image_url" => {
-                                            project_config.html_meta.page_image_url = match &arg.expr {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page image url must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
+                                            project_config.html_meta.page_image_url =
+                                                match &arg.expr {
+                                                    Expr::String(value) => value.to_owned(),
+                                                    _ => {
+                                                        return Err(Error {
+                                                            msg: "Page image url must be a string"
+                                                                .to_string(),
+                                                            start_pos: TokenPosition::default(),
+                                                            end_pos: TokenPosition::default(),
+                                                            file_path: PathBuf::from("#config.bs"),
+                                                            error_type: ErrorType::Type,
+                                                        });
+                                                    }
+                                                };
                                         }
 
                                         "page_image_alt" => {
-                                            project_config.html_meta.page_image_alt = match &arg.expr {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page image alt must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
+                                            project_config.html_meta.page_image_alt =
+                                                match &arg.expr {
+                                                    Expr::String(value) => value.to_owned(),
+                                                    _ => {
+                                                        return Err(Error {
+                                                            msg: "Page image alt must be a string"
+                                                                .to_string(),
+                                                            start_pos: TokenPosition::default(),
+                                                            end_pos: TokenPosition::default(),
+                                                            file_path: PathBuf::from("#config.bs"),
+                                                            error_type: ErrorType::Type,
+                                                        });
+                                                    }
+                                                };
                                         }
 
                                         "page_locale" => {
@@ -1057,7 +1060,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
-                                                        msg: "Page locale must be a string".to_string(),
+                                                        msg: "Page locale must be a string"
+                                                            .to_string(),
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
@@ -1072,7 +1076,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
-                                                        msg: "Page type must be a string".to_string(),
+                                                        msg: "Page type must be a string"
+                                                            .to_string(),
                                                         start_pos: TokenPosition::default(),
                                                         end_pos: TokenPosition::default(),
                                                         file_path: PathBuf::from("#config.bs"),
@@ -1104,19 +1109,20 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                                     Expr::String(value) => value.to_owned(),
                                                     _ => {
                                                         return Err(Error {
-                                                            msg: "Page canonical url must be a string"
-                                                                .to_string(),
-                                                            start_pos: TokenPosition::default(),
-                                                            end_pos: TokenPosition::default(),
-                                                            file_path: PathBuf::from("#config.bs"),
-                                                            error_type: ErrorType::Type,
-                                                        });
+                                                        msg: "Page canonical url must be a string"
+                                                            .to_string(),
+                                                        start_pos: TokenPosition::default(),
+                                                        end_pos: TokenPosition::default(),
+                                                        file_path: PathBuf::from("#config.bs"),
+                                                        error_type: ErrorType::Type,
+                                                    });
                                                     }
                                                 };
                                         }
 
                                         "page_root_url" => {
-                                            project_config.html_meta.page_root_url = match &arg.expr {
+                                            project_config.html_meta.page_root_url = match &arg.expr
+                                            {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -1132,7 +1138,8 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "image_folder_url" => {
-                                            project_config.html_meta.image_folder_url = match &arg.expr
+                                            project_config.html_meta.image_folder_url = match &arg
+                                                .expr
                                             {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {

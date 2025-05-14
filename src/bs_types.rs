@@ -1,5 +1,5 @@
-use std::ops::Index;
 use crate::parsers::ast_nodes::{Arg, Expr};
+use std::ops::Index;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
@@ -51,7 +51,7 @@ pub enum DataType {
     // Type Types
     // Unions allow types such as option and result
     Choices(Vec<DataType>), // Union of types
-    Option(Box<DataType>), // Shorthand for a choice of a type or None
+    Option(Box<DataType>),  // Shorthand for a choice of a type or None
 }
 
 impl DataType {
@@ -65,11 +65,10 @@ impl DataType {
                 return matches!(
                     accepted_type,
                     DataType::Bool(_) | DataType::Int(_) | DataType::Float(_)
-                )
+                );
             }
 
             DataType::Choices(types) => {
-
                 for t in types {
                     if !t.is_valid_type(accepted_type) {
                         return false;
@@ -80,13 +79,13 @@ impl DataType {
 
             DataType::Range => {
                 return matches!(
-                accepted_type,
-                DataType::Collection(_)
-                    | DataType::Arguments(_)
-                    | DataType::Float(_)
-                    | DataType::Int(_)
-                    | DataType::Decimal(_)
-                    | DataType::String(_)
+                    accepted_type,
+                    DataType::Collection(_)
+                        | DataType::Arguments(_)
+                        | DataType::Float(_)
+                        | DataType::Int(_)
+                        | DataType::Decimal(_)
+                        | DataType::String(_)
                 );
             }
 
@@ -165,16 +164,24 @@ impl DataType {
             DataType::Int(mutable) => DataType::Option(Box::new(DataType::Int(mutable))),
             DataType::Decimal(mutable) => DataType::Option(Box::new(DataType::Decimal(mutable))),
             DataType::String(mutable) => DataType::Option(Box::new(DataType::String(mutable))),
-            DataType::Collection(inner_type) => DataType::Option(Box::new(DataType::Collection(inner_type))),
+            DataType::Collection(inner_type) => {
+                DataType::Option(Box::new(DataType::Collection(inner_type)))
+            }
             DataType::Arguments(args) => DataType::Option(Box::new(DataType::Arguments(args))),
-            DataType::Block(args, return_type) => DataType::Option(Box::new(DataType::Block(args, return_type))),
+            DataType::Block(args, return_type) => {
+                DataType::Option(Box::new(DataType::Block(args, return_type)))
+            }
             DataType::Scene(mutable) => DataType::Option(Box::new(DataType::Scene(mutable))),
             DataType::Pointer(name) => DataType::Option(Box::new(DataType::Pointer(name))),
             DataType::Inferred(mutable) => DataType::Option(Box::new(DataType::Inferred(mutable))),
-            DataType::CoerceToString(mutable) => DataType::Option(Box::new(DataType::CoerceToString(mutable))),
+            DataType::CoerceToString(mutable) => {
+                DataType::Option(Box::new(DataType::CoerceToString(mutable)))
+            }
             DataType::True => DataType::Option(Box::new(DataType::True)),
             DataType::False => DataType::Option(Box::new(DataType::False)),
-            DataType::Choices(inner_types) => DataType::Option(Box::new(DataType::Choices(inner_types))),
+            DataType::Choices(inner_types) => {
+                DataType::Option(Box::new(DataType::Choices(inner_types)))
+            }
 
             // TODO: Probably should error for these
             DataType::None => DataType::Option(Box::new(DataType::None)),
@@ -248,11 +255,20 @@ pub fn get_accessed_data_type(data_type: &DataType, arguments_accessed: &[String
                 // This part could be recursively check if there are more arguments to access
                 if arguments_accessed.len() > 1 {
                     get_accessed_data_type(
-                        &inner_types.iter().find(|t| t.name == *index).unwrap().data_type,
+                        &inner_types
+                            .iter()
+                            .find(|t| t.name == *index)
+                            .unwrap()
+                            .data_type,
                         &arguments_accessed[1..],
                     )
                 } else {
-                    inner_types.iter().find(|t| t.name == *index).unwrap().data_type.to_owned()
+                    inner_types
+                        .iter()
+                        .find(|t| t.name == *index)
+                        .unwrap()
+                        .data_type
+                        .to_owned()
                 }
             }
 

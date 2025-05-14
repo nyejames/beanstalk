@@ -15,7 +15,7 @@ pub fn _new_collection(
 ) -> Result<Expr, CompileError> {
     let mut items: Vec<Expr> = Vec::new();
 
-    // Should always start with the current token being an open curly brace, 
+    // Should always start with the current token being an open curly brace,
     // So skip to the first value
     x.index += 1;
 
@@ -26,8 +26,7 @@ pub fn _new_collection(
             }
 
             _ => {
-                let item =
-                    create_expression(x, collection_type, false, variable_declarations)?;
+                let item = create_expression(x, collection_type, false, variable_declarations)?;
 
                 let item_type = item.get_type();
                 if item_type != *collection_type {

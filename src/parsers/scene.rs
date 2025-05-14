@@ -300,9 +300,7 @@ pub fn parse_scene(
     // parse the content into Markdown
     // If the parent is parsing the Markdown already,
     // skip this as it should be done at the highest level possible
-    if final_style.format == StyleFormat::Markdown
-        && format_context == StyleFormat::None
-    {
+    if final_style.format == StyleFormat::Markdown && format_context == StyleFormat::None {
         let default_tag = "p";
 
         final_string.push_str(&to_markdown(&content, default_tag));
@@ -319,7 +317,7 @@ pub fn parse_scene(
     } else {
         final_string.push_str(&content);
     }
-    
+
     red_ln!("{}", final_string);
 
     Ok(final_string)

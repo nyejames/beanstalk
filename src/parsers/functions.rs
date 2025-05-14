@@ -1,3 +1,4 @@
+use colour::red;
 use super::{
     ast_nodes::{Arg, AstNode},
     build_ast::new_ast,
@@ -5,12 +6,12 @@ use super::{
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::parsers::expressions::parse_expression::get_accessed_args;
+use crate::parsers::expressions::parse_expression::{create_multiple_expressions, get_accessed_args};
 use crate::parsers::structs::create_args;
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 use crate::parsers::variables::new_arg;
 use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType, CompileError, ErrorType, Token};
+use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 
 pub fn create_function(
     x: &mut TokenContext,
@@ -29,10 +30,7 @@ pub fn create_function(
     Ok(Arg {
         name,
         expr: function_body,
-        data_type: DataType::Block(
-            func_args,
-            return_types
-        )
+        data_type: DataType::Block(func_args, return_types),
     })
 }
 
@@ -43,11 +41,7 @@ pub fn create_block_signature(
     pure: &mut bool,
     variable_declarations: &[Arg],
 ) -> Result<(Vec<Arg>, Vec<DataType>), CompileError> {
-    let args = create_arg_constructor(
-        x,
-        variable_declarations,
-        pure,
-    )?;
+    let args = create_arg_constructor(x, variable_declarations, pure)?;
 
     match x.current_token() {
         Token::Arrow => {
@@ -56,7 +50,8 @@ pub fn create_block_signature(
 
         // Function does not return anything
         Token::Colon => {
-            return Ok((args, Vec::new()))
+            x.advance();
+            return Ok((args, Vec::new()));
         }
 
         _ => {
@@ -65,7 +60,7 @@ pub fn create_block_signature(
                 start_pos: x.current_position(),
                 end_pos: x.current_position(),
                 error_type: ErrorType::Syntax,
-            })
+            });
         }
     }
 
@@ -74,7 +69,6 @@ pub fn create_block_signature(
     let mut next_in_list: bool = true;
     while x.index < x.length {
         match x.current_token() {
-
             Token::DatatypeLiteral(data_type) => {
                 if !next_in_list {
                     return Err(CompileError {
@@ -90,8 +84,8 @@ pub fn create_block_signature(
 
                 return_types.push(data_type.to_owned());
                 x.advance();
-            },
-            
+            }
+
             Token::Variable(name, ..) => {
                 if !next_in_list {
                     return Err(CompileError {
@@ -107,11 +101,11 @@ pub fn create_block_signature(
 
                 return_types.push(DataType::Pointer(name.to_owned()));
                 x.advance();
-            },
+            }
 
             Token::Colon => {
                 x.advance();
-                return Ok((args, return_types))
+                return Ok((args, return_types));
             }
 
             Token::Comma => {
@@ -140,21 +134,20 @@ pub fn create_block_signature(
                         char_column: x.current_position().char_column + 1,
                     },
                     error_type: ErrorType::Syntax,
-                })
+                });
             }
         }
     }
 
     Err(CompileError {
-            msg: "Expected a colon after the type definitions".to_string(),
-            start_pos: x.current_position(),
-            end_pos: TokenPosition {
-                line_number: x.current_position().line_number,
-                char_column: x.current_position().char_column + 1,
-            },
-            error_type: ErrorType::Syntax,
-        }
-    )
+        msg: "Expected a colon after the type definitions".to_string(),
+        start_pos: x.current_position(),
+        end_pos: TokenPosition {
+            line_number: x.current_position().line_number,
+            char_column: x.current_position().char_column + 1,
+        },
+        error_type: ErrorType::Syntax,
+    })
 }
 
 // For Function Calls or new instances of a predefined struct type (basically like a struct)
@@ -320,7 +313,7 @@ pub fn parse_function_call(
 ) -> Result<AstNode, CompileError> {
     // Assumes starting at the first token after the name of the function call
     let mut is_pure = true;
-    
+
     // make sure there is an open parenthesis
     if x.current_token() != &Token::OpenParenthesis {
         return Err(CompileError {
@@ -333,29 +326,60 @@ pub fn parse_function_call(
             error_type: ErrorType::Syntax,
         });
     }
-    
+
     x.advance();
-    
+
     // Create expressions until hitting a closed parenthesis
     // TODO: named arguments
-    let expressions = create_args(
-        x,
-        Expr::None,
-        argument_refs,
-        variable_declarations
-    )?;
+    let required_argument_types = argument_refs
+        .iter()
+        .map(|arg| arg.data_type.to_owned())
+        .collect::<Vec<DataType>>();
 
+    let expressions = if required_argument_types.is_empty() {
+        // make sure there is a closing parenthesis
+        if x.current_token() != &Token::CloseParenthesis {
+            return Err(CompileError {
+                msg: "This function doesn't accept any arguments. Close it right away with a closing parenthesis instead.".to_string(),
+                start_pos: x.current_position(),
+                end_pos: TokenPosition {
+                    line_number: x.current_position().line_number,
+                    char_column: x.current_position().char_column + 1,
+                },
+                error_type: ErrorType::Syntax,
+            })
+
+        }
+
+        Vec::new()
+
+    } else {
+        create_multiple_expressions(x, &required_argument_types, variable_declarations)?
+    };
+
+    // Make sure there is a closing parenthesis
+    if x.current_token() != &Token::CloseParenthesis {
+        return Err(CompileError {
+            msg: format!("Missing a closing parenthesis at the end of the function call, found a '{:?}' instead", x.current_token()),
+            start_pos: x.current_position(),
+            end_pos: TokenPosition {
+                line_number: x.current_position().line_number,
+                char_column: x.current_position().char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        });
+    }
+
+    x.advance();
+
+    // TODO
     // Makes sure the call value is correct for the function call
     // If so, the function call args are sorted into their correct order (if some are named or optional)
-    let args = create_func_call_args(&expressions, argument_refs, &x.current_position())?;
+    // Once this is always working then default args can be removed from the JS output
+    // let args = create_func_call_args(&expressions, argument_refs, &x.current_position())?;
 
     // look for which arguments are being accessed from the function call
-    let accessed_args = get_accessed_args(
-        x,
-        name,
-        &returns,
-        &mut Vec::new(),
-    )?;
+    let accessed_args = get_accessed_args(x, name, &returns, &mut Vec::new())?;
 
     // Inline this function call if it's pure and the function call is pure
     // if is_pure && call_value.is_pure() {
@@ -368,7 +392,7 @@ pub fn parse_function_call(
 
     Ok(AstNode::FunctionCall(
         name.to_owned(),
-        args,
+        expressions,
         returns.to_owned(),
         accessed_args,
         x.current_position(),
@@ -383,7 +407,7 @@ fn create_arg_constructor(
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args = Vec::<Arg>::new();
     let mut next_in_list: bool = true;
-    
+
     if x.current_token() != &Token::ArgConstructor {
         return Err(CompileError {
             msg: "Expected a | after the function name".to_string(),
@@ -399,9 +423,7 @@ fn create_arg_constructor(
     x.advance();
 
     while x.index < x.tokens.len() {
-
         match x.current_token().to_owned() {
-
             Token::ArgConstructor => {
                 x.advance();
                 return Ok(args);
@@ -422,11 +444,7 @@ fn create_arg_constructor(
                 }
 
                 // Create a new variable
-                let argument = new_arg(
-                    x,
-                    &arg_name,
-                    variable_declarations,
-                )?;
+                let argument = new_arg(x, &arg_name, variable_declarations)?;
 
                 if argument.data_type.is_mutable() {
                     *pure = false;
@@ -438,12 +456,16 @@ fn create_arg_constructor(
             }
 
             Token::Comma => {
+                x.advance();
                 next_in_list = true;
             }
 
             _ => {
                 return Err(CompileError {
-                    msg: format!("Unexpected token used in function arguments: {:?}", x.current_token()),
+                    msg: format!(
+                        "Unexpected token used in function arguments: {:?}",
+                        x.current_token()
+                    ),
                     start_pos: x.token_positions[x.index].to_owned(),
                     end_pos: TokenPosition {
                         line_number: x.token_positions[x.index].line_number,
@@ -453,8 +475,6 @@ fn create_arg_constructor(
                 });
             }
         }
-
-        x.advance();
     }
 
     Ok(args)

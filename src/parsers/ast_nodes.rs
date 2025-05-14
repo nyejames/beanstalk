@@ -1,12 +1,12 @@
+use crate::bs_types::DataType;
 use crate::bs_types::get_accessed_data_type;
 use crate::parsers::scene::{SceneContent, Style};
 use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
-use crate::{bs_types::DataType};
+use crate::tokens::VarVisibility;
 use colour::red_ln;
 use std::path::PathBuf;
 use wasm_encoder::ValType;
-use crate::tokens::VarVisibility;
 
 #[derive(Debug, PartialEq, Clone)]
 // Args are abstractions on top of Datatypes
@@ -68,9 +68,9 @@ pub enum Expr {
 
     // Because blocks (functions / classes) can all be values
     Block(
-        Vec<Arg>, // arguments
-        Vec<AstNode>, // body
-        Vec<DataType> // return args
+        Vec<Arg>,      // arguments
+        Vec<AstNode>,  // body
+        Vec<DataType>, // return args
     ),
 
     Scene(SceneContent, Style, SceneContent, String), // Scene Body, Styles, Scene head, ID
@@ -94,7 +94,7 @@ impl Expr {
                     Operator::Divide => Some(Expr::Float(lhs_val / rhs_val)),
                     Operator::Modulus => Some(Expr::Float(lhs_val % rhs_val)),
                     Operator::Exponent => Some(Expr::Float(lhs_val.powf(*rhs_val))),
-                    
+
                     // Logical operations with float operands
                     Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
                     Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
@@ -104,8 +104,8 @@ impl Expr {
                     Operator::LessThanOrEqual => Some(Expr::Bool(lhs_val <= rhs_val)),
                     _ => None, // Other operations are not applicable to floats
                 }
-            },
-            
+            }
+
             // Integer operations
             (Expr::Int(lhs_val), Expr::Int(rhs_val)) => {
                 match op {
@@ -119,14 +119,14 @@ impl Expr {
                         } else {
                             Some(Expr::Int(lhs_val / rhs_val))
                         }
-                    },
+                    }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
                             None
                         } else {
                             Some(Expr::Int(lhs_val % rhs_val))
                         }
-                    },
+                    }
                     Operator::Exponent => {
                         // For integer exponentiation, we need to be careful with negative exponents
                         if *rhs_val < 0 {
@@ -138,8 +138,8 @@ impl Expr {
                             // Use integer exponentiation for positive exponents
                             Some(Expr::Int(lhs_val.pow(*rhs_val as u32)))
                         }
-                    },
-                    
+                    }
+
                     // Logical operations with integer operands
                     Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
                     Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
@@ -149,8 +149,8 @@ impl Expr {
                     Operator::LessThanOrEqual => Some(Expr::Bool(lhs_val <= rhs_val)),
                     _ => None, // Other operations not applicable to integers
                 }
-            },
-            
+            }
+
             // Boolean operations
             (Expr::Bool(lhs_val), Expr::Bool(rhs_val)) => {
                 match op {
@@ -160,8 +160,8 @@ impl Expr {
                     Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
                     _ => None, // Other operations not applicable to booleans
                 }
-            },
-            
+            }
+
             // String operations
             (Expr::String(lhs_val), Expr::String(rhs_val)) => {
                 match op {
@@ -170,8 +170,8 @@ impl Expr {
                     Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
                     _ => None, // Other operations not applicable to strings
                 }
-            },
-            
+            }
+
             // Any other combination of types
             _ => None,
         }
@@ -181,6 +181,9 @@ impl Expr {
             Expr::Block(_, nodes, ..) => nodes,
             _ => &[],
         }
+    }
+    pub fn is_foldable(&self) -> bool {
+        matches!(self, Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_))
     }
 }
 
@@ -223,18 +226,18 @@ pub enum AstNode {
     Use(PathBuf, TokenPosition), // Path, Line number
 
     // Control Flow
-    Return(Vec<Expr>, TokenPosition),           // Return value, Line number
-    If(Expr, Expr, TokenPosition), // Condition, If true, Line number
-    Else(Vec<AstNode>, TokenPosition),     // Body, Line number
+    Return(Vec<Expr>, TokenPosition),  // Return value, Line number
+    If(Expr, Expr, TokenPosition),     // Condition, If true, Line number
+    Else(Vec<AstNode>, TokenPosition), // Body, Line number
     ForLoop(Expr, Expr, Expr, TokenPosition), // Item, Collection, Body, Line number
     WhileLoop(Expr, Expr, TokenPosition), // Condition, Body, Line number
 
     // Basics
     FunctionCall(
         String,
-        Vec<Expr>,  // Arguments passed in
-        Vec<DataType>,   // return types
-        Vec<String>, // Accessed args
+        Vec<Expr>,     // Arguments passed in
+        Vec<DataType>, // return types
+        Vec<String>,   // Accessed args
         TokenPosition,
         bool, // Function is pure
     ),
@@ -252,8 +255,8 @@ pub enum AstNode {
     JSStringReference(String, TokenPosition), // Variable name, Line number
 
     // Other language code blocks
-    JS(String, TokenPosition),   // Code, Line number
-    Css(String, TokenPosition),  // Code, Line number
+    JS(String, TokenPosition),  // Code, Line number
+    Css(String, TokenPosition), // Code, Line number
     // Wasm(String, TokenPosition), // Code, Line number
 
     // Literals
@@ -265,9 +268,8 @@ pub enum AstNode {
 
     // Operators
     // Operator, Precedence
-    Operator(Operator, TokenPosition),  // Operator, Line number
+    Operator(Operator, TokenPosition), // Operator, Line number
     // UnaryOperator(Token, bool, TokenPosition), // Operator, is_postfix, Line number
-
     Newline,
     Spaces(u32),
 }
@@ -310,13 +312,16 @@ impl AstNode {
             AstNode::Empty(_) => DataType::None,
             AstNode::VarDeclaration(_, _, _, data_type, ..) => data_type.to_owned(),
 
-            AstNode::FunctionCall(_, _, return_types, ..) => {
-                DataType::Arguments(return_types.iter().map(|t| Arg {
-                    name: String::new(),
-                    data_type: t.to_owned(),
-                    expr: Expr::None,
-                }).collect())
-            },
+            AstNode::FunctionCall(_, _, return_types, ..) => DataType::Arguments(
+                return_types
+                    .iter()
+                    .map(|t| Arg {
+                        name: String::new(),
+                        data_type: t.to_owned(),
+                        expr: Expr::None,
+                    })
+                    .collect(),
+            ),
 
             _ => {
                 red_ln!(

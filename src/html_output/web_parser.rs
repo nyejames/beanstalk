@@ -3,12 +3,12 @@ use crate::html_output::js_parser::combine_vec_to_js;
 use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::settings::Config;
+use crate::tokens::VarVisibility;
 use crate::{
     CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
 };
 use wasm_encoder::Module;
-use crate::tokens::VarVisibility;
 
 pub struct ParserOutput {
     pub html: String,
@@ -71,7 +71,6 @@ pub fn parse(
                     DataType::Float(mutable)
                     | DataType::Int(mutable)
                     | DataType::String(mutable) => {
-
                         let var_dec = match public {
                             VarVisibility::Public | VarVisibility::Private => {
                                 if *mutable {
@@ -155,7 +154,7 @@ pub fn parse(
 
                         js.push_str(&var_dec);
                     }
-                    
+
                     DataType::Block(..) => {
                         match expr {
                             Expr::Block(args, body, ..) => {
@@ -187,7 +186,6 @@ pub fn parse(
                                 });
                             }
                         }
- 
                     }
                     _ => {
                         js.push_str(&format!(
@@ -206,7 +204,7 @@ pub fn parse(
 
             AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos, _) => {
                 js.push_str(&format!(
-                    " {}({})",
+                    " {}({});",
                     name,
                     combine_vec_to_js(&arguments, &start_pos)?
                 ));
@@ -216,12 +214,15 @@ pub fn parse(
             }
 
             AstNode::Return(expressions, start_pos) => {
-                js.push_str(&format!("return {};", expressions_to_js(expressions, &start_pos)?));
+                js.push_str(&format!(
+                    "return {};",
+                    expressions_to_js(expressions, &start_pos)?
+                ));
             }
 
             AstNode::If(condition, if_true, start_pos) => {
                 let if_block_body = if_true.get_block_nodes();
-                
+
                 js.push_str(&format!(
                     "if ({}) {{\n{}\n}}",
                     expression_to_js(&condition, &start_pos)?,
@@ -239,8 +240,7 @@ pub fn parse(
             }
 
             // Ignore Everything Else
-            _ => {},
-
+            _ => {}
         }
     }
 

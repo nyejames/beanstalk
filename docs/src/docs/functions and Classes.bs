@@ -87,7 +87,7 @@ If the function returns a value, it must be specified by the type signature.
         zz
     zz
 
-    removeEnemy |enemies ~{Enemy}, enemy_id Int| -> error?:
+    removeEnemy |enemies ~{Enemy}, enemy_id Int| -> Error?:
         for enemy in enemies:
             if enemy.id is enemy_id:
                 enemies.pull(enemy #index)
@@ -95,7 +95,7 @@ If the function returns a value, it must be specified by the type signature.
             zz
         zz
 
-        return !("Enemy not found")
+        return Error("Enemy not found")
     zz
 
     recoversFromError || -> String:

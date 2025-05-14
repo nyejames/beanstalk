@@ -3,7 +3,7 @@ use colour::{grey_ln, red_ln};
 use std::collections::HashMap;
 
 use super::eval_expression::evaluate_expression;
-use crate::parsers::ast_nodes::{Operator, Expr};
+use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::scene::{SceneType, Style};
 use crate::parsers::variables::create_new_var_or_ref;
@@ -18,38 +18,53 @@ use crate::{
     },
 };
 
-// For multiple returns
+// For multiple returns or function calls
+// MUST know all the types
 pub fn create_multiple_expressions(
     x: &mut TokenContext,
-    data_types: &mut Vec<DataType>,
+    data_types: &[DataType],
     captured_declarations: &[Arg],
 ) -> Result<Vec<Expr>, CompileError> {
     let mut expressions: Vec<Expr> = Vec::new();
+    let mut type_index = 0;
 
-    while x.index < x.length {
+    while x.index < x.length && type_index < data_types.len() {
         let expression = create_expression(
             x,
-            &mut data_types[data_types.len() - 1].clone(),
+            &mut data_types[type_index].to_owned(),
             false,
             captured_declarations,
         )?;
 
-        // Make sure there was a comma after the expression
-        // Unless this is the last expression
-        if x.current_token() != &Token::Comma {
-            if expressions.len() < data_types.len() - 1 {
-                return Err(CompileError {
-                    msg: "Missing comma to separate expressions. Have you provided enough values?".to_string(),
-                    start_pos: x.current_position(),
-                    end_pos: x.current_position(),
-                    error_type: ErrorType::Syntax,
-                })
-            }
-        } else {
-            x.advance(); // Skip the comma
-        }
-
         expressions.push(expression);
+        type_index += 1;
+
+        // Check for tokens breaking out of the expression chain
+        match x.current_token() {
+            &Token::Comma => {
+                if type_index >= data_types.len() {
+                    return Err(CompileError {
+                        msg: format!("Too many arguments provided. Expected: {}. Provided: {}.", data_types.len(), expressions.len()),
+                        start_pos: x.current_position(),
+                        end_pos: x.current_position(),
+                        error_type: ErrorType::Type,
+                    });
+                }
+
+                x.advance(); // Skip the comma
+            }
+            _ => {
+                if type_index < data_types.len() {
+                    return Err(CompileError {
+                        msg: "Missing a required argument. Have you provided enough values?"
+                            .to_string(),
+                        start_pos: x.current_position(),
+                        end_pos: x.current_position(),
+                        error_type: ErrorType::Type,
+                    });
+                }
+            }
+        }
     }
 
     Ok(expressions)
@@ -77,7 +92,6 @@ pub fn create_expression(
     while x.index < x.length {
         let token = x.current_token().to_owned();
         match token {
-
             Token::CloseParenthesis => {
                 if consume_closing_parenthesis {
                     x.advance();
@@ -86,7 +100,7 @@ pub fn create_expression(
                 if expression.is_empty() {
                     return Ok(Expr::None);
                 }
-                
+
                 break;
             }
 
@@ -95,8 +109,7 @@ pub fn create_expression(
                 // Removed this at one point for a test caused a wonderful infinite loop
                 x.advance();
 
-                let value =
-                    create_expression(x, data_type, true, captured_declarations)?;
+                let value = create_expression(x, data_type, true, captured_declarations)?;
 
                 expression.push(AstNode::Literal(value, x.current_position()));
             }
@@ -109,12 +122,8 @@ pub fn create_expression(
                     DataType::Arguments(inner_types) => {
                         // HAS DEFINED INNER TYPES FOR THE struct
                         // could this still result in None if the inner types are defined and not optional?
-                        let structure = create_args(
-                            x,
-                            Expr::None,
-                            inner_types,
-                            captured_declarations,
-                        )?;
+                        let structure =
+                            create_args(x, Expr::None, inner_types, captured_declarations)?;
 
                         Ok(Expr::Args(structure))
                     }
@@ -154,7 +163,14 @@ pub fn create_expression(
                 };
             }
 
-            Token::CloseCurly | Token::Comma | Token::EOF | Token::SceneClose | Token::Arrow | Token::Colon | Token::End => {
+            Token::CloseCurly
+            | Token::ArgConstructor
+            | Token::Comma
+            | Token::EOF
+            | Token::SceneClose
+            | Token::Arrow
+            | Token::Colon
+            | Token::End => {
                 if consume_closing_parenthesis {
                     return Err( CompileError {
                         msg: "Not enough closing parenthesis for expression. Need more ')' at the end of the expression".to_string(),
@@ -184,12 +200,7 @@ pub fn create_expression(
             // Check if the name is a reference to another variable or function call
             Token::Variable(ref name, ref visibility, ..) => {
                 // This is never reached (I think) if we are inside a struct or collection
-                let new_ref = create_new_var_or_ref(
-                    x,
-                    name,
-                    captured_declarations,
-                    visibility,
-                )?;
+                let new_ref = create_new_var_or_ref(x, name, captured_declarations, visibility)?;
 
                 match new_ref {
                     AstNode::Literal(..) => {
@@ -225,10 +236,7 @@ pub fn create_expression(
                     next_number_negative = false;
                 }
 
-                expression.push(AstNode::Literal(
-                    Expr::Float(float),
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Literal(Expr::Float(float), x.current_position()));
             }
 
             Token::IntLiteral(int) => {
@@ -239,10 +247,7 @@ pub fn create_expression(
                     int
                 };
 
-                expression.push(AstNode::Literal(
-                    Expr::Int(int_value),
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Literal(Expr::Int(int_value), x.current_position()));
             }
 
             Token::StringLiteral(ref string) => {
@@ -253,7 +258,12 @@ pub fn create_expression(
             }
 
             Token::SceneHead | Token::ParentScene => {
-                let scene_type = new_scene(x, captured_declarations, &mut HashMap::new(), Style::default())?;
+                let scene_type = new_scene(
+                    x,
+                    captured_declarations,
+                    &mut HashMap::new(),
+                    Style::default(),
+                )?;
                 match scene_type {
                     SceneType::Scene(scene) => return Ok(scene),
 
@@ -301,45 +311,27 @@ pub fn create_expression(
 
             // BINARY OPERATORS
             Token::Add => {
-                expression.push(AstNode::Operator(
-                    Operator::Add,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Add, x.current_position()));
             }
 
             Token::Subtract => {
-                expression.push(AstNode::Operator(
-                    Operator::Subtract,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Subtract, x.current_position()));
             }
 
             Token::Multiply => {
-                expression.push(AstNode::Operator(
-                    Operator::Multiply,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Multiply, x.current_position()));
             }
 
             Token::Divide => {
-                expression.push(AstNode::Operator(
-                    Operator::Divide,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Divide, x.current_position()));
             }
 
             Token::Exponent => {
-                expression.push(AstNode::Operator(
-                    Operator::Exponent,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Exponent, x.current_position()));
             }
 
             Token::Modulus => {
-                expression.push(AstNode::Operator(
-                    Operator::Modulus,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Modulus, x.current_position()));
             }
 
             // LOGICAL OPERATORS
@@ -347,23 +339,14 @@ pub fn create_expression(
                 // Check if the next token is a not
                 if let Some(Token::Not) = x.tokens.get(x.index + 1) {
                     x.advance();
-                    expression.push(AstNode::Operator(
-                        Operator::NotEqual,
-                        x.current_position(),
-                    ));
+                    expression.push(AstNode::Operator(Operator::NotEqual, x.current_position()));
                 } else {
-                    expression.push(AstNode::Operator(
-                        Operator::Equality,
-                        x.current_position(),
-                    ));
+                    expression.push(AstNode::Operator(Operator::Equality, x.current_position()));
                 }
             }
 
             Token::LessThan => {
-                expression.push(AstNode::Operator(
-                    Operator::LessThan,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::LessThan, x.current_position()));
             }
             Token::LessThanOrEqual => {
                 expression.push(AstNode::Operator(
@@ -384,16 +367,10 @@ pub fn create_expression(
                 ));
             }
             Token::And => {
-                expression.push(AstNode::Operator(
-                    Operator::And,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::And, x.current_position()));
             }
             Token::Or => {
-                expression.push(AstNode::Operator(
-                    Operator::Or,
-                    x.current_position(),
-                ));
+                expression.push(AstNode::Operator(Operator::Or, x.current_position()));
             }
 
             _ => {
@@ -475,7 +452,10 @@ pub fn get_accessed_args(
                     DataType::Arguments(inner_args) => {
                         accessed_args.push(idx.to_string());
 
-                        let inner_types = inner_args.iter().map(|arg| arg.data_type.to_owned()).collect::<Vec<DataType>>();
+                        let inner_types = inner_args
+                            .iter()
+                            .map(|arg| arg.data_type.to_owned())
+                            .collect::<Vec<DataType>>();
 
                         // Recursively call this function until there are no more accessed args
                         get_accessed_args(x, collection_name, &inner_types, accessed_args)
@@ -485,56 +465,47 @@ pub fn get_accessed_args(
                         accessed_args.push(idx.to_string());
 
                         // Recursively call this function until there are no more accessed args
-                        get_accessed_args(x, collection_name, &[*data_type.to_owned()], accessed_args)
+                        get_accessed_args(
+                            x,
+                            collection_name,
+                            &[*data_type.to_owned()],
+                            accessed_args,
+                        )
                     }
 
-                    _ => {
-                        Err(CompileError {
-                            msg: format!(
-                                "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
-                                collection_name, data_type
-                            ),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + 1,
-                            },
-                            error_type: ErrorType::Rule,
-                        })
-                    }
-                }
+                    _ => Err(CompileError {
+                        msg: format!(
+                            "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
+                            collection_name, data_type
+                        ),
+                        start_pos: x.current_position(),
+                        end_pos: TokenPosition {
+                            line_number: x.current_position().line_number,
+                            char_column: x.current_position().char_column + 1,
+                        },
+                        error_type: ErrorType::Rule,
+                    }),
+                };
             }
 
             // NAMED ARGUMENT ACCESS
             Some(Token::Variable(name, ..)) => {
                 // Make sure this data type is arguments (named values)
                 // Collect any returned types that are arguments
-                let mut arguments = Vec::new();
-                
-                for data_type in data_types {
-                    match data_type {
-                        DataType::Arguments(inner_args) => {
-                            arguments.extend(inner_args);
-                        }
-                        _ => {}
-                    }
-                }
-                
+                let arguments = get_arguments_from_datatypes(data_types.to_owned());
+
                 let access = match arguments.iter().find(|arg| arg.name == *name) {
-                    Some(access) => *access,
+                    Some(access) => access,
                     None => {
                         return Err(CompileError {
-                            msg: format!(
-                                "Name '{}' not found inside '{}'",
-                                name, collection_name
-                            ),
+                            msg: format!("Name '{}' not found inside '{}'", name, collection_name),
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {
                                 line_number: x.current_position().line_number,
                                 char_column: x.current_position().char_column + 1,
                             },
                             error_type: ErrorType::Rule,
-                        })
+                        });
                     }
                 };
 
@@ -557,7 +528,7 @@ pub fn get_accessed_args(
                         });
                     }
                 }
-            },
+            }
 
             _ => {
                 return Err(CompileError {
@@ -577,4 +548,19 @@ pub fn get_accessed_args(
     }
 
     Ok(Vec::new())
+}
+
+pub fn get_arguments_from_datatypes(data_types: Vec<DataType>) -> Vec<Arg> {
+    let mut arguments = Vec::new();
+
+    for data_type in data_types {
+        match data_type {
+            DataType::Arguments(inner_args) => {
+                arguments.extend(inner_args);
+            }
+            _ => {}
+        }
+    }
+
+    arguments
 }

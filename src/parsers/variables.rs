@@ -1,16 +1,15 @@
 use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
-    functions::create_function,
 };
 use crate::parsers::ast_nodes::Expr;
-use crate::parsers::build_ast::{new_ast, TokenContext};
+use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::functions::{create_block_signature, parse_function_call};
-use crate::tokenizer::TokenPosition;
-use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use crate::parsers::scene::{SceneContent, Style};
+use crate::tokenizer::TokenPosition;
 use crate::tokens::VarVisibility;
+use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 
 pub fn create_new_var_or_ref(
     x: &mut TokenContext,
@@ -18,22 +17,15 @@ pub fn create_new_var_or_ref(
     variable_declarations: &[Arg],
     visibility: &VarVisibility,
 ) -> Result<AstNode, CompileError> {
-
     // If this is a reference to a function or variable,
     // This to_owned here is gross, probably a better way to avoid this
-    if let Some(arg) = get_reference(&name, variable_declarations) {
+    if let Some(arg) = get_reference(name, variable_declarations) {
         return match arg.data_type {
             // Function Call
             DataType::Block(ref argument_refs, ref return_types) => {
                 x.advance();
                 // blue_ln!("arg value purity: {:?}, for {}",  arg.value.is_pure(), name);
-                parse_function_call(
-                    x,
-                    name,
-                    variable_declarations,
-                    argument_refs,
-                    return_types,
-                )
+                parse_function_call(x, name, variable_declarations, argument_refs, return_types)
             }
 
             _ => {
@@ -46,26 +38,23 @@ pub fn create_new_var_or_ref(
 
                 // If the value isn't wrapped in a runtime value,
                 // Replace the reference with a literal value
-                if arg.expr.is_pure() {
-                    return Ok(AstNode::Literal(
-                        arg.expr.to_owned(),
-                        x.current_position(),
-                    ));
-                }
+
+                // DISABLED AS THIS ACTUALLY ISN'T GREAT FOR PERFORMANCE
+
+                // Todo: Evaluate when to do this correctly
+                // if arg.expr.is_pure() {
+                //     return Ok(AstNode::Literal(arg.expr.to_owned(), x.current_position()));
+                // }
 
                 Ok(AstNode::Literal(
                     Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
                     x.current_position(),
                 ))
             }
-        }
+        };
     };
 
-    let arg = new_arg(
-        x,
-        name,
-        variable_declarations
-    )?;
+    let arg = new_arg(x, name, variable_declarations)?;
 
     Ok(AstNode::VarDeclaration(
         arg.name,
@@ -88,56 +77,35 @@ pub fn new_arg(
     match x.current_token() {
         Token::Assign => {
             x.advance();
-
-            if x.current_token() == &Token::ArgConstructor {
-                x.advance();
-                let function =
-                    create_function(x, name.to_owned(), variable_declarations)?;
-
-                return Ok(function);
-            }
         }
-        
+
         // New Block with args
         Token::ArgConstructor => {
-            x.advance();
-            let (constructor_args, return_type) = create_block_signature(
-                x,
-                &mut true,
-                variable_declarations,
-            )?;
+            let (constructor_args, return_type) =
+                create_block_signature(x, &mut true, variable_declarations)?;
 
-            return Ok(
-                Arg {
-                    name: name.to_owned(),
-                    expr: new_ast(
-                        x,
-                        &constructor_args,
-                        &return_type,
-                    )?,
-                    data_type: DataType::Block(constructor_args, return_type),
-                }
-            )
+            return Ok(Arg {
+                name: name.to_owned(),
+                expr: new_ast(x, &constructor_args, &return_type)?,
+                data_type: DataType::Block(constructor_args, return_type),
+            });
         }
-        
+
         // Block with no args. Only returns itself.
         Token::Colon => {
             x.advance();
 
-            return Ok(
-                Arg {
-                    name: name.to_owned(),
-                    expr: new_ast(
-                        x,
-                        // TODO: separate imports from parent block so these can be used in the scope
-                        &[], // No args for this block
-
-                        // This implies it will return an instance of itself
-                        &[],
-                    )?,
-                    data_type: DataType::Block(Vec::new(), Vec::new()),
-                }
-            )
+            return Ok(Arg {
+                name: name.to_owned(),
+                expr: new_ast(
+                    x,
+                    // TODO: separate imports from parent block so these can be used in the scope
+                    &[], // No args for this block
+                    // This implies it will return an instance of itself
+                    &[],
+                )?,
+                data_type: DataType::Block(Vec::new(), Vec::new()),
+            });
         }
 
         // Has a type declaration
@@ -151,11 +119,8 @@ pub fn new_arg(
                 }
 
                 // If end of statement, then it's a zero-value variable
-                Token::Comma | Token::EOF | Token::Newline => {
-                    return Ok(create_zero_value_var(
-                        data_type,
-                        name.to_string(),
-                    ));
+                Token::Comma | Token::EOF | Token::Newline | Token::ArgConstructor => {
+                    return Ok(create_zero_value_var(data_type, name.to_string()));
                 }
 
                 _ => {
@@ -193,27 +158,15 @@ pub fn new_arg(
     };
 
     // The current token should be whatever is after the assignment operator
-    
+
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
     let parsed_expr = match x.current_token() {
         Token::OpenParenthesis => {
             x.advance();
-            create_expression(
-                x,
-                &mut data_type,
-                true,
-                variable_declarations,
-            )?
+            create_expression(x, &mut data_type, true, variable_declarations)?
         }
-        _ => {
-            create_expression(
-                x,
-                &mut data_type,
-                false,
-                variable_declarations,
-            )?
-        }
+        _ => create_expression(x, &mut data_type, false, variable_declarations)?,
     };
 
     Ok(Arg {
@@ -223,10 +176,7 @@ pub fn new_arg(
     })
 }
 
-fn create_zero_value_var(
-    data_type: DataType,
-    name: String,
-) -> Arg {
+fn create_zero_value_var(data_type: DataType, name: String) -> Arg {
     match data_type {
         DataType::Float(_) => Arg {
             name,
@@ -252,7 +202,7 @@ fn create_zero_value_var(
                 SceneContent::default(),
                 Style::default(),
                 SceneContent::default(),
-                String::default()
+                String::default(),
             ),
             data_type,
         },
@@ -271,10 +221,7 @@ fn create_zero_value_var(
     }
 }
 
-pub fn get_reference(
-    name: &str,
-    variable_declarations: &[Arg],
-) -> Option<Arg> {
+pub fn get_reference(name: &str, variable_declarations: &[Arg]) -> Option<Arg> {
     variable_declarations
         .iter()
         .rfind(|a| a.name == name)

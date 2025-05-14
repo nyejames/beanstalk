@@ -5,7 +5,6 @@ use crate::{
     settings::BS_VAR_PREFIX,
 };
 
-
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(
     expressions: &[Expr],
@@ -17,7 +16,7 @@ pub fn expressions_to_js(
     }
 
     if expressions.len() > 0 {
-        return Ok(format!("[{}]", js))
+        return Ok(format!("[{}]", js));
     }
 
     Ok(js)
@@ -119,7 +118,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
             }
 
             match expression_type {
-                DataType::String(_) | DataType::Float(_) | DataType::Int(_) => {}
+                DataType::String(_) | DataType::Float(_) | DataType::Int(_) | DataType::Bool(_) => {}
                 DataType::CoerceToString(_) => {
                     js.insert_str(0, "String(");
                     js.push(')');
@@ -182,9 +181,8 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
             js.push_str(&combine_vec_to_js(items, start_pos)?);
         }
 
-        Expr::None => {
-            js.push_str("null ");
-        }
+        // None pretty much only exists at compile time
+        Expr::None => {}
 
         Expr::Bool(value) => {
             js.push_str(&value.to_string());

@@ -45,9 +45,9 @@ pub enum Token {
     WASM(String), // WAT codeblock (for testing WASM)
 
     // Scene Style properties
-    Markdown, // Makes the scene Markdown
+    Markdown,     // Makes the scene Markdown
     ChildDefault, // This scene will become a template default for all child scenes of the parent
-    Ignore, // for commenting out an entire scene
+    Ignore,       // for commenting out an entire scene
     CodeKeyword,
 
     // Standard Library (eventually - to be moved there)
@@ -162,7 +162,6 @@ pub enum Token {
 
     Empty,
     // Pre(String), // Content inside raw elements. Might change to not be a format tag in the future
-
 }
 
 impl Token {

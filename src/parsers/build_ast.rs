@@ -4,13 +4,15 @@ use super::{
 };
 // use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Arg, Expr};
+use crate::parsers::expressions::parse_expression::{
+    create_multiple_expressions, get_arguments_from_datatypes,
+};
 use crate::parsers::functions::parse_function_call;
 use crate::parsers::scene::{SceneType, Style};
 use crate::tokenizer::TokenPosition;
+use crate::tokens::VarVisibility;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use std::collections::HashMap;
-use crate::parsers::expressions::parse_expression::create_multiple_expressions;
-use crate::tokens::VarVisibility;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -109,14 +111,9 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             Token::Variable(ref name, is_exported, ..) => {
-                let new_var = create_new_var_or_ref(
-                    x,
-                    name,
-                    &declarations,
-                    &is_exported,
-                )?;
-                
-                // Make sure this is a new variable declaration and not a reference
+                let new_var = create_new_var_or_ref(x, name, &declarations, &is_exported)?;
+
+                // Make sure this is a new variable declaration or function call
                 match &new_var {
                     AstNode::VarDeclaration(_, expr, _, data_type, ..) => {
                         let arg = Arg {
@@ -132,9 +129,15 @@ pub fn new_ast(
                         }
                     }
 
+                    // Chill
+                    AstNode::FunctionCall(..) => {}
+
                     _ => {
                         return Err(CompileError {
-                            msg: format!("Expected variable, function declaration, or function call. Found {:?}", new_var),
+                            msg: format!(
+                                "Expected variable, function declaration, or function call. Found {:?}",
+                                new_var
+                            ),
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {
                                 line_number: x.current_position().line_number,
@@ -166,12 +169,8 @@ pub fn new_ast(
                 match data_type {
                     // For loop (iterator)
                     DataType::Range => {
-                        let collection = create_expression(
-                            x,
-                            &mut DataType::Range,
-                            false,
-                            &mut declarations,
-                        )?;
+                        let collection =
+                            create_expression(x, &mut DataType::Range, false, &mut declarations)?;
 
                         if x.current_token() != &Token::Colon {
                             return Err(CompileError {
@@ -234,15 +233,11 @@ pub fn new_ast(
 
             Token::If => {
                 x.index += 1;
-                let condition = create_expression(
-                    x,
-                    &mut DataType::Bool(false),
-                    false,
-                    &mut declarations,
-                )?;
+                let condition =
+                    create_expression(x, &mut DataType::Bool(false), false, &declarations)?;
 
                 // TODO - fold evaluated if statements
-                // If this condition isn't runtime, 
+                // If this condition isn't runtime,
                 // The statement can be removed completely;
                 // I THINK, NOT SURE HOW 'ELSE' AND ALL THAT WORK YET
 
@@ -288,7 +283,7 @@ pub fn new_ast(
                 ast.push(parse_function_call(
                     x,
                     "console.log",
-                    &mut declarations,
+                    &declarations,
                     &[Arg {
                         name: "".to_string(),
                         data_type: DataType::CoerceToString(false),
@@ -314,9 +309,9 @@ pub fn new_ast(
 
             Token::Return => {
                 x.index += 1;
-                
+
                 let return_values =
-                    create_multiple_expressions(x, &mut returns.to_owned(), &mut declarations)?;
+                    create_multiple_expressions(x, returns, &declarations)?;
 
                 // if !return_value.is_pure() {
                 //     *pure = false;
@@ -337,18 +332,19 @@ pub fn new_ast(
             }
 
             Token::Settings => {
-                let config = create_new_var_or_ref(
-                    x,
-                    "settings",
-                    &mut declarations,
-                    &VarVisibility::Public,
-                )?;
+                let config =
+                    create_new_var_or_ref(x, "settings", &declarations, &VarVisibility::Public)?;
 
                 let config = match config {
-                    AstNode::VarDeclaration(_, Expr::Args(args), ..) => args,
-                    _=> {
+                    AstNode::VarDeclaration(_, Expr::Block(_, _, return_datatypes), ..) => {
+                        get_arguments_from_datatypes(return_datatypes)
+                    }
+                    _ => {
                         return Err(CompileError {
-                            msg: format!("Settings must be assigned with a struct literal. Found {:?}", config),
+                            msg: format!(
+                                "Settings must be assigned with a struct literal. Found {:?}",
+                                config
+                            ),
                             start_pos: x.current_position(),
                             end_pos: TokenPosition {
                                 line_number: x.current_position().line_number,

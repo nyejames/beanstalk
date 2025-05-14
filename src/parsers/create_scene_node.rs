@@ -1,7 +1,4 @@
-use super::{
-    ast_nodes::Arg,
-    expressions::parse_expression::create_expression,
-};
+use super::{ast_nodes::Arg, expressions::parse_expression::create_expression};
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::scene::{SceneContent, SceneType, Style, StyleFormat};
@@ -17,9 +14,8 @@ pub fn new_scene(
     x: &mut TokenContext,
     declarations: &[Arg],
     unlocked_scenes: &mut HashMap<String, Expr>,
-    mut scene_style: Style, 
+    mut scene_style: Style,
 ) -> Result<SceneType, CompileError> {
-
     // These are variables or special keywords passed into the scene head
     let mut scene_head: SceneContent = SceneContent::default();
 
@@ -67,7 +63,7 @@ pub fn new_scene(
             // That has a special ID based on the parent scene's ID
             // So the compiler can insert things into the slot using the special ID automatically
             Token::Slot => return Ok(SceneType::Slot),
-            
+
             Token::Markdown => {
                 scene_style.format = StyleFormat::Markdown;
             }
@@ -79,9 +75,8 @@ pub fn new_scene(
 
                 // Check if this is an unlocked scene
                 if let Some(Expr::Scene(body, style, ..)) = unlocked_scenes.to_owned().get(&name) {
-                    
                     scene_style.child_default = style.child_default.to_owned();
-                    
+
                     if style.unlocks_override {
                         unlocked_scenes.clear();
                     }
@@ -140,7 +135,7 @@ pub fn new_scene(
                         _ => {
                             red_ln!("{:?}", arg);
                             arg.expr.to_owned()
-                        },
+                        }
                     }
                 } else {
                     return Err(CompileError {
@@ -218,8 +213,7 @@ pub fn new_scene(
             }
 
             Token::OpenParenthesis => {
-                let structure =
-                    create_args(x, Expr::None, &Vec::new(), declarations)?;
+                let structure = create_args(x, Expr::None, &Vec::new(), declarations)?;
 
                 this_scene_body.push(Expr::Args(structure));
             }
@@ -286,7 +280,8 @@ pub fn new_scene(
             }
 
             Token::SceneHead => {
-                let nested_scene = new_scene(x, declarations, unlocked_scenes, scene_style.to_owned())?;
+                let nested_scene =
+                    new_scene(x, declarations, unlocked_scenes, scene_style.to_owned())?;
 
                 match nested_scene {
                     SceneType::Scene(scene) => {

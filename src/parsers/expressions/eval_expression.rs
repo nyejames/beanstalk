@@ -1,5 +1,5 @@
 use super::constant_folding::constant_fold;
-use crate::parsers::ast_nodes::{Operator, Expr};
+use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode};
@@ -21,11 +21,10 @@ pub fn evaluate_expression(
     'outer: for node in expr {
         match node {
             AstNode::Literal(ref value, _) => {
-
                 if let DataType::Inferred(_) = current_type {
                     current_type = value.get_type();
                 }
-                
+
                 if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
                     simplified_expression.push(node);
                     continue 'outer;
@@ -66,7 +65,12 @@ pub fn evaluate_expression(
                 let node_precedence = node.get_precedence();
                 let left_associative = node.is_left_associative();
 
-                pop_higher_precedence(&mut operators_stack, &mut output_queue, node_precedence, left_associative);
+                pop_higher_precedence(
+                    &mut operators_stack,
+                    &mut output_queue,
+                    node_precedence,
+                    left_associative,
+                );
 
                 operators_stack.push(node);
             }
@@ -94,7 +98,6 @@ pub fn evaluate_expression(
     }
 
     match current_type {
-
         DataType::Scene(_) => concat_scene(&mut simplified_expression),
 
         DataType::String(_) => concat_strings(&mut simplified_expression),
@@ -193,7 +196,6 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
     Ok(Expr::Scene(scene_body, style, head_nodes, String::new()))
 }
 
-
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
 fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
@@ -246,4 +248,3 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Comp
 
     Ok(Expr::String(new_string))
 }
-

@@ -46,8 +46,8 @@ mod wasm_output {
 }
 use crate::tokenizer::TokenPosition;
 use colour::{
-    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln,
-    e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
+    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln, e_magenta_ln,
+    e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
 };
 
 pub use tokens::Token;

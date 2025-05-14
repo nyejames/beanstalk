@@ -17,7 +17,6 @@ pub fn constant_fold(
     for node in &output_stack {
         match node {
             AstNode::Operator(op, token_position) => {
-
                 if token_position.line_number != first_line_number {
                     first_line_number = token_position.line_number;
                 }
@@ -40,62 +39,28 @@ pub fn constant_fold(
 
                 let lhs_expr = lhs.get_expr();
                 let rhs_expr = rhs.get_expr();
-                
-                // Check if both operands are literals that can be folded
-                // We can only fold constants at compile time
-                let is_foldable_literal = matches!(
-                    (&lhs_expr, &rhs_expr),
-                    // Numeric types 
-                    (Expr::Float(_), _) | (Expr::Int(_), _) | 
-                    (_, Expr::Float(_)) | (_, Expr::Int(_)) |
-                    // Boolean types
-                    (Expr::Bool(_), _) | (_, Expr::Bool(_)) |
-                    // String types  
-                    (Expr::String(_), _) | (_, Expr::String(_)) |
-                    // None type
-                    (Expr::None, _) | (_, Expr::None)
-                );
-                
-                // Special case for logical operators - they always work on literals regardless of type
-                let is_logical_op = matches!(
-                    op,
-                    Operator::Equality | Operator::NotEqual | 
-                    Operator::And | Operator::Or |
-                    Operator::GreaterThan | Operator::GreaterThanOrEqual |
-                    Operator::LessThan | Operator::LessThanOrEqual
-                );
-                
-                // We can fold if they're both literals, or if it's a logical operation on any types
-                if !is_foldable_literal && !is_logical_op {
-                    // Not foldable at compile time, push back to stack as runtime expression
-                    stack.push(lhs);
-                    stack.push(rhs);
-                    stack.push(node.to_owned());
-                    continue;
-                }
-                
+
+                // // We can fold if they're both literals
+                // if !lhs_expr.is_foldable() || !rhs_expr.is_foldable() {
+                //     // Not foldable at compile time, push back to stack as runtime expression
+                //     stack.push(lhs);
+                //     stack.push(rhs);
+                //     stack.push(node.to_owned());
+                //     continue;
+                // }
+
                 // Try to evaluate the operation
                 if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op) {
                     // Successfully evaluated - push a result onto the stack
-                    let new_literal = AstNode::Literal(
-                        result,
-                        token_position.to_owned(),
-                    );
+                    let new_literal = AstNode::Literal(result, token_position.to_owned());
                     stack.push(new_literal);
                 } else {
-                    
-                    // Operation isn't supported between these specific types
-                    return Err(CompileError {
-                        msg: format!(
-                            "Cannot apply {:?} operator to values of types {:?} and {:?}.",
-                            op,
-                            lhs_expr,
-                            rhs_expr
-                        ),
-                        start_pos: token_position.to_owned(),
-                        end_pos: token_position.to_owned(),
-                        error_type: ErrorType::Type,
-                    });
+                    // This won't be a type error as that is checked earlier.
+                    // Not foldable at compile time, push back to stack as runtime expression
+                    stack.push(lhs);
+                    stack.push(node.to_owned());
+                    stack.push(rhs);
+                    continue;
                 }
             }
 
@@ -105,6 +70,8 @@ pub fn constant_fold(
             }
         }
     }
+
+    red_ln!("result stack: {:?}", stack);
 
     if stack.len() == 1 {
         return Ok(stack[0].get_expr());

@@ -73,11 +73,7 @@ pub fn create_args(
                     });
                 }
 
-                let item_arg = new_arg(
-                    x,
-                    name,
-                    variable_declarations,
-                )?;
+                let item_arg = new_arg(x, name, variable_declarations)?;
 
                 items.push(item_arg.to_owned());
                 item_args.push(item_arg);
@@ -117,8 +113,7 @@ pub fn create_args(
                     required_args[items.len()].data_type.to_owned()
                 };
 
-                let arg_value =
-                    create_expression(x, &mut data_type, false, variable_declarations)?;
+                let arg_value = create_expression(x, &mut data_type, false, variable_declarations)?;
 
                 // Get the arg of this struct item
                 let item_arg = match item_args.get(items.len()) {
