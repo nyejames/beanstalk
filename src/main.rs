@@ -10,10 +10,12 @@ pub mod bs_types;
 mod build;
 mod create_new_project;
 pub mod dev_server;
+mod release_optimizers;
 mod settings;
 mod test;
 mod tokenizer;
 mod tokens;
+
 mod parsers {
     pub mod ast_nodes;
     pub mod build_ast;
@@ -28,6 +30,7 @@ mod parsers {
         pub mod parse_expression;
     }
     pub mod codeblock;
+    pub mod loops;
     pub mod scene;
     pub mod structs;
     pub mod util;
@@ -137,7 +140,7 @@ fn main() {
 
     match command {
         Command::NewHTMLProject(path) => {
-            let args = prompt_user_for_input("Project name: ".to_string());
+            let args = prompt_user_for_input("Project name: ");
             let name_args = args.first();
 
             let project_name = match name_args {
@@ -219,7 +222,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             // Check type of project
             match args.get(1).map(String::as_str) {
                 Some("html") => {
-                    let dir = &prompt_user_for_input("Enter project path: ".to_string());
+                    let dir = &prompt_user_for_input("Enter project path: ");
 
                     if dir.len() == 1 {
                         let dir = dir[0].to_string();
@@ -299,7 +302,7 @@ fn check_if_valid_directory_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn prompt_user_for_input(msg: String) -> Vec<String> {
+fn prompt_user_for_input(msg: &str) -> Vec<String> {
     let mut input = String::new();
     print!("{}", msg);
     io::stdout().flush().unwrap(); // Make sure the prompt is immediately displayed

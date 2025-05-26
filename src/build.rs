@@ -2,6 +2,7 @@ use crate::bs_types::DataType;
 use crate::html_output::dom_hooks::{DOMUpdate, generate_dom_update_js};
 use crate::html_output::generate_html::create_html_boilerplate;
 use crate::html_output::web_parser;
+use crate::html_output::web_parser::Target;
 use crate::parsers::ast_nodes::{Arg, AstNode, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::settings::{BS_VAR_PREFIX, Config};
@@ -32,9 +33,9 @@ pub struct OutputModule {
 }
 
 impl OutputModule {
-    pub fn new(source_code: String, output_path: PathBuf, source_path: PathBuf) -> Self {
+    pub fn new(source_code: impl Into<String>, output_path: PathBuf, source_path: PathBuf) -> Self {
         OutputModule {
-            source_code,
+            source_code: source_code.into(),
             output_path,
             source_path,
             tokens: TokenContext::default(),
@@ -47,17 +48,12 @@ impl OutputModule {
     }
 }
 
-struct TokenExport {
-    name: String,
-    datatype: DataType,
-}
-
 pub fn build(
     entry_path: &Path,
     release_build: bool,
     output_info_level: i32,
 ) -> Result<Config, Error> {
-    let mut public_exports: HashMap<String, Vec<TokenExport>> = HashMap::new();
+    let mut public_exports: HashMap<String, Vec<Token>> = HashMap::new();
 
     // Create a new PathBuf from the entry_path
     let entry_dir = match std::env::current_dir() {
@@ -137,12 +133,13 @@ pub fn build(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code) {
-                Ok(tokens) => tokens,
-                Err(e) => {
-                    return Err(e.to_error(config_path));
-                }
-            };
+            let mut tokenizer_output =
+                match tokenizer::tokenize(&config_source_code, &settings::CONFIG_FILE_NAME) {
+                    Ok(tokens) => tokens,
+                    Err(e) => {
+                        return Err(e.to_error(config_path));
+                    }
+                };
 
             // Anything imported into the config file becomes an import of every module in the project
             global_imports.extend(tokenizer_output.imports);
@@ -166,7 +163,10 @@ pub fn build(
 
     // First, tokenise all files
     for module in &mut modules_to_parse {
-        dark_yellow_ln!("{:?}", module.output_path.file_name());
+        // TODO: Yuck, will this always unwrap ok?
+        let file_name = module.output_path.file_stem().unwrap().to_str().unwrap();
+
+        dark_yellow_ln!("{:?}", file_name);
 
         // For letting the user know how long compile times are taking
         let time = Instant::now();
@@ -188,7 +188,7 @@ pub fn build(
             .with_extension("");
 
         // TOKENIZER
-        let tokenizer_output = match tokenizer::tokenize(&module.source_code) {
+        let tokenizer_output = match tokenizer::tokenize(&module.source_code, file_name) {
             Ok(tokens) => tokens,
             Err(e) => {
                 return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -198,68 +198,6 @@ pub fn build(
         // Create a new export entry for this module
         let export_path = relative_export_path.to_string_lossy().to_string();
         public_exports.insert(export_path.to_owned(), Vec::new());
-
-        // Check if the exports have a known type
-        for export_index in &tokenizer_output.export_indexes {
-            let export = &tokenizer_output.token_context.tokens[*export_index];
-
-            let export_name = match export {
-                Token::Variable(name, ..) => name.to_owned(),
-                _ => {
-                    return Err(Error {
-                        msg: format!(
-                            "Exports must be variables. Attempting to export a {:?}.",
-                            export
-                        ),
-                        start_pos: tokenizer_output.token_context.token_positions[*export_index]
-                            .to_owned(),
-                        end_pos: tokenizer_output.token_context.token_positions[*export_index]
-                            .to_owned(),
-                        file_path: module.source_path.to_owned(),
-                        error_type: ErrorType::Syntax,
-                    });
-                }
-            };
-
-            // If the next token is a variable, it must be a type we don't know
-            // Otherwise it should be a type token
-            if let Some(next_token) = tokenizer_output.token_context.tokens.get(export_index + 1) {
-                match next_token {
-                    Token::DatatypeLiteral(datatype) => {
-                        // Can unwrap here as we always create an entry for this module earlier
-                        public_exports
-                            .get_mut(&export_path)
-                            .unwrap()
-                            .push(TokenExport {
-                                name: export_name,
-                                datatype: datatype.to_owned(),
-                            })
-                    }
-
-                    // This is a struct type
-                    // The struct type needs to be parsed first before this is exported to other modules
-                    Token::Variable(..) => {
-                        todo!("Struct export types");
-                    }
-
-                    _ => {
-                        return Err(Error {
-                            msg: format!(
-                                "All exports must have an explicit type declaration. {:?} doesn't have one.",
-                                export
-                            ),
-                            start_pos: tokenizer_output.token_context.token_positions
-                                [*export_index]
-                                .to_owned(),
-                            end_pos: tokenizer_output.token_context.token_positions[*export_index]
-                                .to_owned(),
-                            file_path: module.source_path.to_owned(),
-                            error_type: ErrorType::Syntax,
-                        });
-                    }
-                }
-            }
-        }
 
         module.imports = global_imports.to_owned();
         module.imports.extend(tokenizer_output.imports);
@@ -311,7 +249,6 @@ pub fn build(
         file.html = compile_result
             .html
             .replace("<!--//js-modules-->", &js_imports);
-        file.wasm = compile_result.wasm;
         file.js = compile_result.js;
 
         // Write the file to the output directory
@@ -490,7 +427,7 @@ pub fn add_bs_files_to_parse(
                         let file_name = file_path.file_name().unwrap().to_str().unwrap();
 
                         source_code_to_parse.push(OutputModule::new(
-                            String::new(),
+                            "",
                             output_dir.join(file_name),
                             file_path,
                         ));
@@ -516,7 +453,6 @@ pub fn add_bs_files_to_parse(
 struct CompileResult {
     html: String,
     js: String,
-    wasm: Module,
     import_requests: Vec<String>,
 }
 
@@ -525,7 +461,7 @@ fn compile(
     release_build: bool,
     output_info_level: i32,
     project_config: &mut Config,
-    public_exports: &HashMap<String, Vec<TokenExport>>,
+    public_exports: &HashMap<String, Vec<Token>>,
 ) -> Result<CompileResult, Error> {
     print_bold!("\nCompiling: ");
 
@@ -593,7 +529,7 @@ fn compile(
 
             let formatted_variable_names = import_names
                 .iter()
-                .map(|export| format!("{}{}, ", BS_VAR_PREFIX, export.name))
+                .map(|export| format!("{}{}, ", BS_VAR_PREFIX, export.get_name()))
                 .collect::<String>();
             js += &format!(
                 "import {{{}}} from \"./{}.js\";\n",
@@ -602,13 +538,9 @@ fn compile(
 
             for export in import_names {
                 declarations.push(Arg {
-                    name: export.name.to_owned(),
-                    expr: Expr::Reference(
-                        export.name.to_owned(),
-                        export.datatype.to_owned(),
-                        Vec::new(),
-                    ),
-                    data_type: export.datatype.to_owned(),
+                    name: export.get_name(),
+                    expr: Expr::Reference(export.get_name(), DataType::Inferred(false), Vec::new()),
+                    data_type: DataType::Inferred(false),
                 })
             }
         }
@@ -652,7 +584,12 @@ fn compile(
     }
 
     // PARSING INTO HTML
-    let parser_output = match web_parser::parse(&ast, project_config, &mut Module::new()) {
+
+    // Temporarily always setting target to web
+    // until different project outputs are available in the future
+    let target = &Target::Web;
+
+    let parser_output = match web_parser::parse(&ast, "", target) {
         Ok(parser_output) => parser_output,
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -664,14 +601,13 @@ fn compile(
     js += &format!(
         "{}\n{}",
         generate_dom_update_js(DOMUpdate::InnerHTML),
-        parser_output.js
+        parser_output.code_module
     );
 
     // Add the HTML boilerplate and then add the parser output to the page
     let html = match create_html_boilerplate(&project_config.html_meta, release_build) {
         Ok(module_output) => module_output
-            .replace("<!--page-template-->", &parser_output.html)
-            .replace("page-title", &parser_output.page_title)
+            .replace("<!--page-template-->", &parser_output.content_output)
             .replace("wasm-module-name", &module.source_path.to_string_lossy()),
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -692,7 +628,6 @@ fn compile(
     Ok(CompileResult {
         html,
         js,
-        wasm: parser_output.wasm,
         import_requests,
     })
 }
@@ -1186,7 +1121,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
     Ok(())
 }
 
-fn print_token_output(tokens: &Vec<Token>) {
+fn print_token_output(tokens: &[Token]) {
     yellow_ln_bold!("TOKENIZING FILE\n");
 
     for token in tokens {
@@ -1212,7 +1147,7 @@ fn print_token_output(tokens: &Vec<Token>) {
 fn print_ast_output(ast: &[AstNode]) {
     for node in ast {
         match node {
-            AstNode::Literal(value, _) => match value.get_type() {
+            AstNode::Reference(value, _) => match value.get_type(false) {
                 DataType::Scene(_) => {
                     print_scene(value, 0);
                 }
@@ -1221,9 +1156,9 @@ fn print_ast_output(ast: &[AstNode]) {
                 }
             },
             AstNode::Comment(..) => {
-                grey_ln!("{:?}", node);
+                // grey_ln!("{:?}", node);
             }
-            AstNode::VarDeclaration(name, expr, ..) => {
+            AstNode::Declaration(name, expr, ..) => {
                 blue_ln!("Variable: {:?}", name);
                 green_ln_bold!("Expr: {:?}", expr);
             }

@@ -1,6 +1,5 @@
 use super::tokens::{Token, TokenizeMode, VarVisibility};
 use crate::bs_types::DataType;
-use crate::parsers::ast_nodes::Arg;
 use crate::parsers::build_ast::TokenContext;
 use crate::{CompileError, ErrorType};
 use std::iter::Peekable;
@@ -16,15 +15,15 @@ pub struct TokenPosition {
 pub struct TokenizerOutput {
     pub token_context: TokenContext,
     pub imports: Vec<String>,
-    pub export_indexes: Vec<usize>,
+    pub exports: Vec<Token>,
 }
-pub fn tokenize(source_code: &str) -> Result<TokenizerOutput, CompileError> {
+pub fn tokenize(source_code: &str, module_name: &str) -> Result<TokenizerOutput, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / 5;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
 
-    let mut exports: Vec<usize> = Vec::new();
+    let mut exports: Vec<Token> = Vec::new();
     let mut imports: Vec<String> = Vec::new();
 
     let mut token_position: TokenPosition = TokenPosition::default();
@@ -34,8 +33,7 @@ pub fn tokenize(source_code: &str) -> Result<TokenizerOutput, CompileError> {
     let mut tokenize_mode: TokenizeMode = TokenizeMode::Normal;
     let scene_nesting_level: &mut i64 = &mut 0;
 
-    // This is pointless atm
-    let mut token: Token = Token::ModuleStart;
+    let mut token: Token = Token::ModuleStart(module_name.to_owned());
 
     loop {
         if token == Token::EOF {
@@ -53,7 +51,7 @@ pub fn tokenize(source_code: &str) -> Result<TokenizerOutput, CompileError> {
             &mut token_position,
             &mut exports,
             &mut imports,
-            &tokens,
+            &tokens.last().unwrap(),
         )?;
     }
 
@@ -75,7 +73,7 @@ pub fn tokenize(source_code: &str) -> Result<TokenizerOutput, CompileError> {
             token_positions,
         },
         imports,
-        export_indexes: exports,
+        exports: exports,
     })
 }
 
@@ -84,9 +82,9 @@ pub fn get_next_token(
     tokenize_mode: &mut TokenizeMode,
     scene_nesting_level: &mut i64,
     token_position: &mut TokenPosition,
-    exports: &mut Vec<usize>,
+    exports: &mut Vec<Token>,
     imports: &mut Vec<String>,
-    tokens: &[Token],
+    previous_token: &Token,
 ) -> Result<Token, CompileError> {
     let mut current_char = match chars.next() {
         Some(ch) => {
@@ -203,18 +201,6 @@ pub fn get_next_token(
 
     // Check if going into the scene body
     if current_char == ':' {
-        // if tokenize_mode == &TokenizeMode::Codeblock {
-        //     chars.next();
-        //     token_position.char_column += 1;
-        //
-        //     let parsed_codeblock = tokenize_codeblock(chars, token_position);
-        //     let codeblock_dimensions = parsed_codeblock.dimensions();
-        //     token_position.char_column += codeblock_dimensions.char_column;
-        //     token_position.line_number += codeblock_dimensions.line_number;
-        //
-        //     return Ok(parsed_codeblock);
-        // }
-
         if tokenize_mode == &TokenizeMode::SceneHead {
             *tokenize_mode = TokenizeMode::SceneBody;
         }
@@ -492,26 +478,7 @@ pub fn get_next_token(
     }
 
     if current_char == '~' {
-        // Skip whitespace after the '~'
-        while let Some(&next_char) = chars.peek() {
-            if next_char.is_whitespace() {
-                chars.next();
-                token_position.char_column += 1;
-                continue;
-            }
-            break;
-        }
-
-        let var = keyword_or_variable(
-            &mut token_value,
-            chars,
-            token_position,
-            VarVisibility::Temporary,
-            true,
-            imports,
-        )?;
-
-        return Ok(var);
+        return Ok(Token::Mutable);
     }
 
     // Exporting variables out of the module or scope (public declaration)
@@ -529,63 +496,11 @@ pub fn get_next_token(
             return Ok(Token::Id(token_value));
         }
 
-        // Skip whitespace after the '@'
-        while let Some(&next_char) = chars.peek() {
-            if next_char.is_whitespace() {
-                chars.next();
-                token_position.char_column += 1;
-                continue;
-            }
-            break;
-        }
-
-        let var = keyword_or_variable(
-            &mut token_value,
-            chars,
-            token_position,
-            VarVisibility::Public,
-            false,
-            imports,
-        )?;
-
-        exports.push(tokens.len());
-        return Ok(var);
+        return Ok(Token::Public);
     }
 
     if current_char == '$' {
-        // What does this mean?
-        // if tokenize_mode == &TokenizeMode::SceneHead {
-        //     while let Some(&next_char) = chars.peek() {
-        //         if next_char.is_alphanumeric() || next_char == '_' {
-        //             token_value.push(chars.next().unwrap());
-        //             token_position.char_column += 1;
-        //             continue;
-        //         }
-        //         break;
-        //     }
-        //     return Ok(Token::Id(token_value));
-        // }
-
-        // Skip whitespace after the '$'
-        while let Some(&next_char) = chars.peek() {
-            if next_char.is_whitespace() {
-                chars.next();
-                token_position.char_column += 1;
-                continue;
-            }
-            break;
-        }
-
-        let var = keyword_or_variable(
-            &mut token_value,
-            chars,
-            token_position,
-            VarVisibility::Private,
-            false,
-            imports,
-        )?;
-
-        return Ok(var);
+        return Ok(Token::Private);
     }
 
     // Numbers
@@ -646,9 +561,9 @@ pub fn get_next_token(
             &mut token_value,
             chars,
             token_position,
-            VarVisibility::Temporary,
-            false,
             imports,
+            exports,
+            previous_token,
         );
     }
 
@@ -675,10 +590,12 @@ fn keyword_or_variable(
     token_value: &mut String,
     chars: &mut Peekable<Chars<'_>>,
     token_position: &mut TokenPosition,
-    visibility: VarVisibility,
-    is_mutable: bool,
     imports: &mut Vec<String>,
+    exports: &mut Vec<Token>,
+    previous_token: &Token,
 ) -> Result<Token, CompileError> {
+    let mutable_modifier: bool = matches!(previous_token, Token::Mutable);
+
     // Match variables or keywords
     loop {
         let is_not_eof = match chars.peek() {
@@ -734,29 +651,38 @@ fn keyword_or_variable(
             "or" => return Ok(Token::Or),
 
             // Data Types
-            "true" | "True" => return Ok(Token::BoolLiteral(is_mutable)),
-            "false" | "False" => return Ok(Token::BoolLiteral(is_mutable)),
+            "true" | "True" => return Ok(Token::BoolLiteral(mutable_modifier)),
+            "false" | "False" => return Ok(Token::BoolLiteral(mutable_modifier)),
 
-            "Float" => return Ok(Token::DatatypeLiteral(DataType::Float(is_mutable))),
-            "Int" => return Ok(Token::DatatypeLiteral(DataType::Int(is_mutable))),
-            "String" => return Ok(Token::DatatypeLiteral(DataType::String(is_mutable))),
-            "Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(is_mutable))),
+            "Float" => return Ok(Token::DatatypeLiteral(DataType::Float(mutable_modifier))),
+            "Int" => return Ok(Token::DatatypeLiteral(DataType::Int(mutable_modifier))),
+            "String" => return Ok(Token::DatatypeLiteral(DataType::String(mutable_modifier))),
+            "Bool" => return Ok(Token::DatatypeLiteral(DataType::Bool(mutable_modifier))),
 
             "None" => return Ok(Token::DatatypeLiteral(DataType::None)),
 
             // Scene-related keywords
-            "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(is_mutable))),
+            "Scene" => return Ok(Token::DatatypeLiteral(DataType::Scene(mutable_modifier))),
 
             _ => {}
         }
 
         // VARIABLE
         if is_not_eof && is_valid_identifier(token_value) {
-            return Ok(Token::Variable(
-                token_value.to_string(),
-                visibility,
-                is_mutable,
-            ));
+            // Check if this declaration has any modifiers in front of it
+            let visibility = match previous_token {
+                Token::Private => VarVisibility::Private,
+                Token::Public => {
+                    exports.push(Token::Variable(
+                        token_value.to_string(),
+                        VarVisibility::Public,
+                    ));
+                    VarVisibility::Public
+                }
+                _ => VarVisibility::Temporary,
+            };
+
+            return Ok(Token::Variable(token_value.to_string(), visibility));
         } else {
             break;
         }

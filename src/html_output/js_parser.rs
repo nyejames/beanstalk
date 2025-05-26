@@ -1,18 +1,22 @@
-use crate::parsers::ast_nodes::{Expr, Operator};
+use crate::html_output::web_parser::{JS_INDENT, Target, parse};
+use crate::parsers::ast_nodes::{Arg, Expr, Operator};
+use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
 };
+use colour::red_ln;
 
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(
     expressions: &[Expr],
     line_number: &TokenPosition,
+    indentation: &str,
 ) -> Result<String, CompileError> {
     let mut js = String::new();
     for expr in expressions {
-        js.push_str(&expression_to_js(expr, line_number)?);
+        js.push_str(&expression_to_js(expr, line_number, indentation)?);
     }
 
     if expressions.len() > 0 {
@@ -23,14 +27,18 @@ pub fn expressions_to_js(
 }
 
 // Create everything necessary in JS
-pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String, CompileError> {
+pub fn expression_to_js(
+    expr: &Expr,
+    start_pos: &TokenPosition,
+    indentation: &str,
+) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
 
     match expr {
         Expr::Runtime(nodes, expression_type) => {
             for node in nodes {
                 match node {
-                    AstNode::Literal(value, _) => match value {
+                    AstNode::Reference(value, _) => match value {
                         Expr::Float(value) => {
                             js.push_str(&value.to_string());
                         }
@@ -49,7 +57,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
 
                         Expr::Reference(id, _, argument_accessed) => {
                             // All just JS for now
-                            js.push_str(&format!(" {BS_VAR_PREFIX}{id} "));
+                            js.push_str(&format!("{BS_VAR_PREFIX}{id}"));
                             for index in argument_accessed {
                                 js.push_str(&format!("[{}]", index));
                             }
@@ -94,7 +102,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
 
                     AstNode::FunctionCall(name, args, _, arguments_accessed, ..) => {
                         js.push_str(&format!(
-                            " {}({})",
+                            "{BS_VAR_PREFIX}{}({})",
                             name,
                             combine_vec_to_js(args, start_pos)?
                         ));
@@ -115,12 +123,15 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
                         });
                     }
                 }
+
+                js.push(' '); // Formatting
             }
 
             match expression_type {
-                DataType::String(_) | DataType::Float(_) | DataType::Int(_) | DataType::Bool(_) => {}
+                DataType::String(_) | DataType::Float(_) | DataType::Int(_) | DataType::Bool(_) => {
+                }
                 DataType::CoerceToString(_) => {
-                    js.insert_str(0, "String(");
+                    js.insert_str(0, " String(");
                     js.push(')');
                 }
                 _ => {
@@ -151,7 +162,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
         }
 
         Expr::Reference(name, _, arguments_accessed) => {
-            js.push_str(&format!(" {BS_VAR_PREFIX}{name} "));
+            js.push_str(&format!("{BS_VAR_PREFIX}{name}"));
             for index in arguments_accessed {
                 js.push_str(&format!("[{}]", index));
             }
@@ -160,7 +171,7 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
         // If the expression is just a tuple,
         // then it should automatically destructure into multiple arguments like this
         Expr::Args(args) => {
-            let mut structure = String::from("{{");
+            let mut structure = String::from("{{\n");
             for (index, arg) in args.iter().enumerate() {
                 let arg_name = if arg.name.is_empty() {
                     index.to_string()
@@ -168,43 +179,77 @@ pub fn expression_to_js(expr: &Expr, start_pos: &TokenPosition) -> Result<String
                     arg.name.to_owned()
                 };
 
-                let arg_value = expression_to_js(&arg.expr, start_pos)?;
+                let arg_value = expression_to_js(&arg.expr, start_pos, indentation)?;
 
                 structure.push_str(&format!(
-                    "{arg_name}:{arg_value}{}",
-                    if index < args.len() - 1 { "," } else { "" }
+                    "{indentation}{JS_INDENT}{arg_name}: {arg_value}{}",
+                    if index < args.len() - 1 { ",\n" } else { "" }
                 ));
             }
+
+            structure.push_str("\n}}\n");
+            js.push_str(&structure);
         }
 
         Expr::Collection(items, _) => {
             js.push_str(&combine_vec_to_js(items, start_pos)?);
         }
 
-        // None pretty much only exists at compile time
-        Expr::None => {}
-
         Expr::Bool(value) => {
             js.push_str(&value.to_string());
         }
 
-        _ => {
-            return Err(CompileError {
-                msg: format!("Invalid AST node given to expression_to_js: {:?}", expr),
-                start_pos: start_pos.to_owned(),
-                end_pos: expr.dimensions(),
-                error_type: ErrorType::Compiler,
-            });
+        // Scenes are basically just template strings when used entirely in JS
+        Expr::Scene(scene_body, scene_style, scene_head, scene_id) => {
+            let parsed_scene = parse_scene(
+                SceneIngredients {
+                    scene_body,
+                    scene_style,
+                    scene_head,
+                    scene_id: scene_id.to_owned(),
+                    inherited_style: &None,
+                    format_context: StyleFormat::JSString,
+                },
+                &mut js,
+                &mut String::new(),
+            )?;
+
+            js.push_str(&format!("`{parsed_scene}`"));
+        }
+
+        // None pretty much only exists at compile time
+        Expr::None => {}
+
+        Expr::Block(args, body, ..) => {
+            let mut func = "(".to_string();
+
+            for arg in args {
+                func.push_str(&format!(
+                    "{BS_VAR_PREFIX}{} = {},",
+                    arg.name,
+                    expression_to_js(&arg.expr, start_pos, "")?
+                ));
+            }
+
+            // Lambda
+            func.push_str(") => {\n");
+
+            // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
+            let func_body = parse(body, indentation, &Target::JS)?;
+
+            func.push_str(&format!("{}\n}}\n", func_body.code_module));
+
+            js.push_str(&func);
         }
     }
 
     Ok(js)
 }
 
-pub fn create_reference_in_js(
-    name: &String,
+pub fn create_reactive_reference(
+    name: &str,
     data_type: &DataType,
-    accessed_args: &Vec<String>,
+    accessed_args: &[String],
 ) -> String {
     match data_type {
         // DataType::Float | DataType::Int => {
@@ -215,10 +260,10 @@ pub fn create_reference_in_js(
             for access in accessed_args {
                 accesses.push_str(&format!("[{}]", access));
             }
-            format!("uInnerHTML(\"{name}\",{BS_VAR_PREFIX}{name}{accesses});")
+            format!("\nuInnerHTML(\"{name}\",{name}{accesses});\n")
         }
         _ => {
-            format!("uInnerHTML(\"{name}\",{BS_VAR_PREFIX}{name});")
+            format!("\nuInnerHTML(\"{name}\",{name});\n")
         }
     }
 }
@@ -230,10 +275,10 @@ pub fn combine_vec_to_js(
     let mut js = String::new();
 
     for (i, node) in collection.iter().enumerate() {
-        // Make sure correct commas at end of each element but not last one
+        // Make sure correct commas at the end of each element but not the last one
         js.push_str(&format!(
             "{}{}",
-            expression_to_js(node, line_number)?,
+            expression_to_js(node, line_number, "")?,
             if i < collection.len() - 1 { "," } else { "" }
         ));
     }

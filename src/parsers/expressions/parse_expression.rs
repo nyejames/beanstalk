@@ -1,12 +1,9 @@
-#[allow(unused_imports)]
-use colour::{grey_ln, red_ln};
-use std::collections::HashMap;
-
 use super::eval_expression::evaluate_expression;
 use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::parsers::build_ast::TokenContext;
+use crate::parsers::collections::new_collection;
 use crate::parsers::scene::{SceneType, Style};
-use crate::parsers::variables::create_new_var_or_ref;
+use crate::parsers::variables::{create_reference, get_reference};
 use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, Token,
@@ -17,23 +14,28 @@ use crate::{
         structs::create_args,
     },
 };
+use colour::blue_ln;
+#[allow(unused_imports)]
+use colour::{grey_ln, red_ln};
+use std::collections::HashMap;
 
 // For multiple returns or function calls
 // MUST know all the types
 pub fn create_multiple_expressions(
     x: &mut TokenContext,
-    data_types: &[DataType],
+    returned_types: &[DataType],
     captured_declarations: &[Arg],
 ) -> Result<Vec<Expr>, CompileError> {
     let mut expressions: Vec<Expr> = Vec::new();
     let mut type_index = 0;
 
-    while x.index < x.length && type_index < data_types.len() {
+    while x.index < x.length && type_index < returned_types.len() {
         let expression = create_expression(
             x,
-            &mut data_types[type_index].to_owned(),
+            &mut returned_types[type_index].to_owned(),
             false,
             captured_declarations,
+            &[],
         )?;
 
         expressions.push(expression);
@@ -42,11 +44,15 @@ pub fn create_multiple_expressions(
         // Check for tokens breaking out of the expression chain
         match x.current_token() {
             &Token::Comma => {
-                if type_index >= data_types.len() {
+                if type_index >= returned_types.len() {
                     return Err(CompileError {
-                        msg: format!("Too many arguments provided. Expected: {}. Provided: {}.", data_types.len(), expressions.len()),
-                        start_pos: x.current_position(),
-                        end_pos: x.current_position(),
+                        msg: format!(
+                            "Too many arguments provided. Expected: {}. Provided: {}.",
+                            returned_types.len(),
+                            expressions.len()
+                        ),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_start_position(),
                         error_type: ErrorType::Type,
                     });
                 }
@@ -54,12 +60,12 @@ pub fn create_multiple_expressions(
                 x.advance(); // Skip the comma
             }
             _ => {
-                if type_index < data_types.len() {
+                if type_index < returned_types.len() {
                     return Err(CompileError {
                         msg: "Missing a required argument. Have you provided enough values?"
                             .to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: x.current_position(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_start_position(),
                         error_type: ErrorType::Type,
                     });
                 }
@@ -78,8 +84,9 @@ pub fn create_expression(
     data_type: &mut DataType,
     consume_closing_parenthesis: bool,
     captured_declarations: &[Arg],
+    starting_expression: &[AstNode],
 ) -> Result<Expr, CompileError> {
-    let mut expression: Vec<AstNode> = Vec::new();
+    let mut expression: Vec<AstNode> = Vec::from(starting_expression);
     // let mut number_union = get_any_number_datatype(false);
 
     // Ignore any newlines at the start of the expression
@@ -109,57 +116,44 @@ pub fn create_expression(
                 // Removed this at one point for a test caused a wonderful infinite loop
                 x.advance();
 
-                let value = create_expression(x, data_type, true, captured_declarations)?;
+                let value = create_expression(x, data_type, true, captured_declarations, &[])?;
 
-                expression.push(AstNode::Literal(value, x.current_position()));
+                expression.push(AstNode::Reference(value, x.token_start_position()));
             }
 
+            // COLLECTION
             Token::OpenCurly => {
-                x.advance();
-
-                return match data_type {
-                    // TODO - do we need to handle unions here? or are they always collapsed into one type before being parsed?
-                    DataType::Arguments(inner_types) => {
-                        // HAS DEFINED INNER TYPES FOR THE struct
-                        // could this still result in None if the inner types are defined and not optional?
-                        let structure =
-                            create_args(x, Expr::None, inner_types, captured_declarations)?;
-
-                        Ok(Expr::Args(structure))
+                match data_type {
+                    DataType::Collection(inner_type) => {
+                        expression.push(AstNode::Reference(
+                            new_collection(x, inner_type, captured_declarations)?,
+                            x.token_start_position(),
+                        ));
                     }
 
-                    // If this is inside parenthesis, and we don't know the type.
-                    // It must be a struct
-                    // This is enforced! If it's a single expression wrapped in parentheses,
-                    // it will be flatted into that single value anyway by struct_to_value
-                    DataType::Inferred(_) => {
-                        // NO DEFINED TYPES FOR THE struct
-                        let structure = create_args(
-                            x,
-                            Expr::None,
-                            // The difference is this is inferred
-                            &Vec::new(),
-                            captured_declarations,
-                        )?;
-
-                        // And then the type is set here
-                        *data_type = DataType::Arguments(structure.to_owned());
-                        Ok(Expr::Args(structure))
+                    DataType::Inferred(mutable) => {
+                        expression.push(AstNode::Reference(
+                            new_collection(
+                                x,
+                                &DataType::Inferred(mutable.to_owned()),
+                                captured_declarations,
+                            )?,
+                            x.token_start_position(),
+                        ));
                     }
 
-                    // Need to error here as a collection literal is being made with wrong explicit type
-                    _ => Err(CompileError {
-                        msg: format!(
-                            "Expected a struct literal, but found a collection literal with type: {:?}",
-                            data_type
-                        ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
-                        error_type: ErrorType::Type,
-                    }),
+                    // Need to error here as a collection literal is being made with the wrong type declaration
+                    _ => {
+                        return Err(CompileError {
+                            msg: format!(
+                                "Expected a collection, but assigned variable with a literal type of: {:?}",
+                                data_type
+                            ),
+                            start_pos: x.token_start_position(),
+                            end_pos: x.token_end_position(),
+                            error_type: ErrorType::Type,
+                        });
+                    }
                 };
             }
 
@@ -174,11 +168,8 @@ pub fn create_expression(
                 if consume_closing_parenthesis {
                     return Err( CompileError {
                         msg: "Not enough closing parenthesis for expression. Need more ')' at the end of the expression".to_string(),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
                         error_type: ErrorType::Syntax,
                     });
                 }
@@ -198,34 +189,16 @@ pub fn create_expression(
             }
 
             // Check if the name is a reference to another variable or function call
-            Token::Variable(ref name, ref visibility, ..) => {
-                // This is never reached (I think) if we are inside a struct or collection
-                let new_ref = create_new_var_or_ref(x, name, captured_declarations, visibility)?;
-
-                match new_ref {
-                    AstNode::Literal(..) => {
-                        expression.push(new_ref);
-                    }
-
-                    AstNode::FunctionCall(..) => {
-                        expression.push(new_ref);
-                    }
-
-                    _ => {
-                        return Err(CompileError {
-                            msg: format!(
-                                "Variable '{}' is not a valid reference - it's a: {:?}",
-                                name,
-                                new_ref.get_type()
-                            ),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + name.len() as i32,
-                            },
-                            error_type: ErrorType::Syntax,
-                        });
-                    }
+            Token::Variable(ref name, ..) => {
+                if let Some(arg) = get_reference(name, captured_declarations) {
+                    expression.push(create_reference(x, &arg, captured_declarations)?);
+                } else {
+                    return Err(CompileError {
+                        msg: format!("Variable '{}' does not exist in this scope.", name,),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Syntax,
+                    });
                 }
             }
 
@@ -236,7 +209,10 @@ pub fn create_expression(
                     next_number_negative = false;
                 }
 
-                expression.push(AstNode::Literal(Expr::Float(float), x.current_position()));
+                expression.push(AstNode::Reference(
+                    Expr::Float(float),
+                    x.token_start_position(),
+                ));
             }
 
             Token::IntLiteral(int) => {
@@ -247,13 +223,16 @@ pub fn create_expression(
                     int
                 };
 
-                expression.push(AstNode::Literal(Expr::Int(int_value), x.current_position()));
+                expression.push(AstNode::Reference(
+                    Expr::Int(int_value),
+                    x.token_start_position(),
+                ));
             }
 
             Token::StringLiteral(ref string) => {
-                expression.push(AstNode::Literal(
+                expression.push(AstNode::Reference(
                     Expr::String(string.to_owned()),
-                    x.current_position(),
+                    x.token_start_position(),
                 ));
             }
 
@@ -264,6 +243,7 @@ pub fn create_expression(
                     &mut HashMap::new(),
                     Style::default(),
                 )?;
+
                 match scene_type {
                     SceneType::Scene(scene) => return Ok(scene),
 
@@ -277,11 +257,8 @@ pub fn create_expression(
                                 "Unexpected scene type used in expression: {:?}",
                                 scene_type
                             ),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + 1,
-                            },
+                            start_pos: x.token_start_position(),
+                            end_pos: x.token_end_position(),
                             error_type: ErrorType::Type,
                         });
                     }
@@ -289,9 +266,9 @@ pub fn create_expression(
             }
 
             Token::BoolLiteral(value) => {
-                expression.push(AstNode::Literal(
+                expression.push(AstNode::Reference(
                     Expr::Bool(value.to_owned()),
-                    x.current_position(),
+                    x.token_start_position(),
                 ));
             }
 
@@ -311,27 +288,42 @@ pub fn create_expression(
 
             // BINARY OPERATORS
             Token::Add => {
-                expression.push(AstNode::Operator(Operator::Add, x.current_position()));
+                expression.push(AstNode::Operator(Operator::Add, x.token_start_position()));
             }
 
             Token::Subtract => {
-                expression.push(AstNode::Operator(Operator::Subtract, x.current_position()));
+                expression.push(AstNode::Operator(
+                    Operator::Subtract,
+                    x.token_start_position(),
+                ));
             }
 
             Token::Multiply => {
-                expression.push(AstNode::Operator(Operator::Multiply, x.current_position()));
+                expression.push(AstNode::Operator(
+                    Operator::Multiply,
+                    x.token_start_position(),
+                ));
             }
 
             Token::Divide => {
-                expression.push(AstNode::Operator(Operator::Divide, x.current_position()));
+                expression.push(AstNode::Operator(
+                    Operator::Divide,
+                    x.token_start_position(),
+                ));
             }
 
             Token::Exponent => {
-                expression.push(AstNode::Operator(Operator::Exponent, x.current_position()));
+                expression.push(AstNode::Operator(
+                    Operator::Exponent,
+                    x.token_start_position(),
+                ));
             }
 
             Token::Modulus => {
-                expression.push(AstNode::Operator(Operator::Modulus, x.current_position()));
+                expression.push(AstNode::Operator(
+                    Operator::Modulus,
+                    x.token_start_position(),
+                ));
             }
 
             // LOGICAL OPERATORS
@@ -339,39 +331,51 @@ pub fn create_expression(
                 // Check if the next token is a not
                 if let Some(Token::Not) = x.tokens.get(x.index + 1) {
                     x.advance();
-                    expression.push(AstNode::Operator(Operator::NotEqual, x.current_position()));
+                    expression.push(AstNode::Operator(
+                        Operator::NotEqual,
+                        x.token_start_position(),
+                    ));
                 } else {
-                    expression.push(AstNode::Operator(Operator::Equality, x.current_position()));
+                    expression.push(AstNode::Operator(
+                        Operator::Equality,
+                        x.token_start_position(),
+                    ));
                 }
             }
 
             Token::LessThan => {
-                expression.push(AstNode::Operator(Operator::LessThan, x.current_position()));
+                expression.push(AstNode::Operator(
+                    Operator::LessThan,
+                    x.token_start_position(),
+                ));
             }
             Token::LessThanOrEqual => {
                 expression.push(AstNode::Operator(
                     Operator::LessThanOrEqual,
-                    x.current_position(),
+                    x.token_start_position(),
                 ));
             }
             Token::GreaterThan => {
                 expression.push(AstNode::Operator(
                     Operator::GreaterThan,
-                    x.current_position(),
+                    x.token_start_position(),
                 ));
             }
             Token::GreaterThanOrEqual => {
                 expression.push(AstNode::Operator(
                     Operator::GreaterThanOrEqual,
-                    x.current_position(),
+                    x.token_start_position(),
                 ));
             }
             Token::And => {
-                expression.push(AstNode::Operator(Operator::And, x.current_position()));
+                expression.push(AstNode::Operator(Operator::And, x.token_start_position()));
             }
             Token::Or => {
-                expression.push(AstNode::Operator(Operator::Or, x.current_position()));
+                expression.push(AstNode::Operator(Operator::Or, x.token_start_position()));
             }
+
+            // For mutating references
+            Token::AddAssign => {}
 
             _ => {
                 return Err(CompileError {
@@ -379,12 +383,8 @@ pub fn create_expression(
                         "Invalid Value used in expression: '{:?}'. Expressions must be assigned with only valid datatypes",
                         token
                     ),
-                    start_pos: x.current_position(),
-                    end_pos: TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column
-                            + token.dimensions().char_column,
-                    },
+                    start_pos: x.token_start_position(),
+                    end_pos: x.token_end_position(),
                     error_type: ErrorType::Type,
                 });
             }
@@ -422,11 +422,8 @@ pub fn get_accessed_args(
                             "Can't use negative index: {} to access a collection or struct '{}'",
                             x.index, collection_name
                         ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
                         error_type: ErrorType::Rule,
                     });
                 }
@@ -438,11 +435,8 @@ pub fn get_accessed_args(
                             "Index {} out of range for any arguments in '{}'",
                             idx, collection_name
                         ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
                         error_type: ErrorType::Rule,
                     });
                 };
@@ -478,11 +472,8 @@ pub fn get_accessed_args(
                             "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
                             collection_name, data_type
                         ),
-                        start_pos: x.current_position(),
-                        end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
-                        },
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
                         error_type: ErrorType::Rule,
                     }),
                 };
@@ -492,18 +483,15 @@ pub fn get_accessed_args(
             Some(Token::Variable(name, ..)) => {
                 // Make sure this data type is arguments (named values)
                 // Collect any returned types that are arguments
-                let arguments = get_arguments_from_datatypes(data_types.to_owned());
+                let arguments = get_self_args_from_return_types(data_types.to_owned());
 
                 let access = match arguments.iter().find(|arg| arg.name == *name) {
                     Some(access) => access,
                     None => {
                         return Err(CompileError {
                             msg: format!("Name '{}' not found inside '{}'", name, collection_name),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + 1,
-                            },
+                            start_pos: x.token_start_position(),
+                            end_pos: x.token_end_position(),
                             error_type: ErrorType::Rule,
                         });
                     }
@@ -511,7 +499,7 @@ pub fn get_accessed_args(
 
                 match &access.data_type {
                     DataType::Arguments(inner_types) => {
-                        if let Some(idx) = inner_types.iter().position(|arg| arg.name == *name) {
+                        if inner_types.iter().any(|arg| arg.name == *name) {
                             accessed_args.push(access.name.to_owned());
                         }
                     }
@@ -519,11 +507,8 @@ pub fn get_accessed_args(
                     _ => {
                         return Err(CompileError {
                             msg: "Parse expression named access for non argument type (compiler error - may change in future)".to_string(),
-                            start_pos: x.current_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.current_position().line_number,
-                                char_column: x.current_position().char_column + 1,
-                            },
+                            start_pos: x.token_start_position(),
+                            end_pos: x.token_end_position(),
                             error_type: ErrorType::Compiler,
                         });
                     }
@@ -536,11 +521,8 @@ pub fn get_accessed_args(
                         "Expected an index or name to access struct '{}'",
                         collection_name
                     ),
-                    start_pos: x.current_position(),
-                    end_pos: TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column + 1,
-                    },
+                    start_pos: x.token_start_position(),
+                    end_pos: x.token_end_position(),
                     error_type: ErrorType::Rule,
                 });
             }
@@ -550,15 +532,13 @@ pub fn get_accessed_args(
     Ok(Vec::new())
 }
 
-pub fn get_arguments_from_datatypes(data_types: Vec<DataType>) -> Vec<Arg> {
+// This is used to unpack all the 'self' values of a block into multiple arguments
+pub fn get_self_args_from_return_types(data_types: Vec<DataType>) -> Vec<Arg> {
     let mut arguments = Vec::new();
 
     for data_type in data_types {
-        match data_type {
-            DataType::Arguments(inner_args) => {
-                arguments.extend(inner_args);
-            }
-            _ => {}
+        if let DataType::Arguments(inner_args) = data_type {
+            arguments.extend(inner_args);
         }
     }
 

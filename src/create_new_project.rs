@@ -4,7 +4,7 @@ use std::{env, fs, path::PathBuf};
 
 pub fn create_project(
     user_project_path: PathBuf,
-    project_name: &String,
+    project_name: &str,
 ) -> Result<(), fs_extra::error::Error> {
     // Get the current directory
     let current_dir = env::current_dir()?;
@@ -12,7 +12,7 @@ pub fn create_project(
     // Create the full path to the user specified path
     let full_path = current_dir.join(user_project_path);
 
-    // Create user specified path
+    // Create a user specified path
     fs::create_dir_all(&full_path)?;
 
     let options = CopyOptions::new(); // Default options

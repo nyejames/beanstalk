@@ -21,40 +21,60 @@ pub fn generate_dom_update_js(update: DOMUpdate) -> &'static str {
 
     match update {
         DOMUpdate::InnerHTML => {
-            "function uInnerHTML(id,update){
-                const es = document.getElementsByClassName(id);
-                if (Array.isArray(update)){update = update.join(' ')}
-                for (let i = 0;i<es.length;i++) {
-                  es[i].innerHTML=update
-                }
-            }"
+            r#"
+function uInnerHTML(id, update) {
+    const elements = document.getElementsByClassName(id);
+    
+    if (Array.isArray(update)) {
+        update = update.join(' ')
+    }
+    
+    for (let i = 0; i < elements.length; i++) {
+        elements[i].innerHTML = update
+    }
+}"#
         }
         DOMUpdate::AppendChild => {
-            "function uAppendChild(id,update){
-                const es = document.getElementsByClassName(id);
-                if (Array.isArray(update)){update = update.join(' ')}
-                for (let i = 0;i<es.length;i++) {
-                  es[i].appendChild(update)
-                }
-            }"
+            r#"
+function uAppendChild(id, update) {
+    const elements = document.getElementsByClassName(id);
+    
+    if (Array.isArray(update)) {
+        update = update.join(' ')
+    }
+    
+    for (let i = 0; i < elements.length; i++) {
+        elements[i].appendChild(update)
+    }
+}"#
         }
         DOMUpdate::RemoveChild => {
-            "function uRemoveChild(id,update){
-                const es = document.getElementsByClassName(id);
-                if (Array.isArray(update)){update = update.join(' ')}
-                for (let i = 0;i<es.length;i++) {
-                  es[i].removeChild(update)
-                }
-            }"
+            r#"
+function uRemoveChild(id, update) {
+    const elements = document.getElementsByClassName(id);
+    
+    if (Array.isArray(update)) {
+        update = update.join(' ')
+    }
+    
+    for (let i = 0; i < elements.length; i++) {
+        elements[i].removeChild(update)
+    }
+}"#
         }
         DOMUpdate::ReplaceChild => {
-            "function uReplaceChild(id,update){
-                const es = document.getElementsByClassName(id);
-                if (Array.isArray(update)){update = update.join(' ')}
-                for (let i = 0;i<es.length;i++) {
-                  es[i].replaceChild(update)
-                }
-            }"
+            r#"
+function uReplaceChild(id, update) {
+    const elements = document.getElementsByClassName(id);
+    
+    if (Array.isArray(update)) {
+        update = update.join(' ')
+    }
+    
+    for (let i = 0; i < elements.length; i++) {
+        elements[i].replaceChild(update)
+    }
+}"#
         }
     }
 }

@@ -2,13 +2,13 @@ use crate::parsers::util::NumericalParsing;
 
 // This function will take a code block and a language and return a highlighted version of the code block.
 // It parses the code block then adds spans with classes for each token.
-pub fn _highlight_code_block(code_block: &str, language: &String) -> String {
+pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
     let mut highlighted_code = String::new();
     let mut chars = code_block.chars().peekable();
     let mut char_scope: Option<char> = None;
     let mut keyword = String::new();
 
-    let comment = match language.as_str() {
+    let comment = match language {
         "js" | "javascript" => "//",
         "python" | "py" => "#",
         _ => "--",

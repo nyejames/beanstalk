@@ -1,13 +1,14 @@
-use colour::red;
 use super::{
     ast_nodes::{Arg, AstNode},
     build_ast::new_ast,
 };
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
+use colour::red;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::parsers::expressions::parse_expression::{create_multiple_expressions, get_accessed_args};
-use crate::parsers::structs::create_args;
+use crate::parsers::expressions::parse_expression::{
+    create_multiple_expressions, get_accessed_args,
+};
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 use crate::parsers::variables::new_arg;
 use crate::tokenizer::TokenPosition;
@@ -57,8 +58,8 @@ pub fn create_block_signature(
         _ => {
             return Err(CompileError {
                 msg: "Expected an arrow operator or colon after function arguments".to_string(),
-                start_pos: x.current_position(),
-                end_pos: x.current_position(),
+                start_pos: x.token_start_position(),
+                end_pos: x.token_start_position(),
                 error_type: ErrorType::Syntax,
             });
         }
@@ -73,10 +74,10 @@ pub fn create_block_signature(
                 if !next_in_list {
                     return Err(CompileError {
                         msg: "Should have a comma to separate return types".to_string(),
-                        start_pos: x.current_position(),
+                        start_pos: x.token_start_position(),
                         end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
+                            line_number: x.token_start_position().line_number,
+                            char_column: x.token_start_position().char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -90,10 +91,10 @@ pub fn create_block_signature(
                 if !next_in_list {
                     return Err(CompileError {
                         msg: "Should have a comma to separate return types".to_string(),
-                        start_pos: x.current_position(),
+                        start_pos: x.token_start_position(),
                         end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
+                            line_number: x.token_start_position().line_number,
+                            char_column: x.token_start_position().char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -112,10 +113,10 @@ pub fn create_block_signature(
                 if next_in_list {
                     return Err(CompileError {
                         msg: "Should only have 1 comma separating return types".to_string(),
-                        start_pos: x.current_position(),
+                        start_pos: x.token_start_position(),
                         end_pos: TokenPosition {
-                            line_number: x.current_position().line_number,
-                            char_column: x.current_position().char_column + 1,
+                            line_number: x.token_start_position().line_number,
+                            char_column: x.token_start_position().char_column + 1,
                         },
                         error_type: ErrorType::Syntax,
                     });
@@ -128,10 +129,10 @@ pub fn create_block_signature(
             _ => {
                 return Err(CompileError {
                     msg: "Expected a type keyword after the arrow operator".to_string(),
-                    start_pos: x.current_position(),
+                    start_pos: x.token_start_position(),
                     end_pos: TokenPosition {
-                        line_number: x.current_position().line_number,
-                        char_column: x.current_position().char_column + 1,
+                        line_number: x.token_start_position().line_number,
+                        char_column: x.token_start_position().char_column + 1,
                     },
                     error_type: ErrorType::Syntax,
                 });
@@ -141,10 +142,10 @@ pub fn create_block_signature(
 
     Err(CompileError {
         msg: "Expected a colon after the type definitions".to_string(),
-        start_pos: x.current_position(),
+        start_pos: x.token_start_position(),
         end_pos: TokenPosition {
-            line_number: x.current_position().line_number,
-            char_column: x.current_position().char_column + 1,
+            line_number: x.token_start_position().line_number,
+            char_column: x.token_start_position().char_column + 1,
         },
         error_type: ErrorType::Syntax,
     })
@@ -317,11 +318,14 @@ pub fn parse_function_call(
     // make sure there is an open parenthesis
     if x.current_token() != &Token::OpenParenthesis {
         return Err(CompileError {
-            msg: "Expected a parenthesis after function call".to_string(),
-            start_pos: x.current_position(),
+            msg: format!(
+                "Expected a parenthesis after function call. Found {:?} instead.",
+                x.current_token()
+            ),
+            start_pos: x.token_start_position(),
             end_pos: TokenPosition {
-                line_number: x.current_position().line_number,
-                char_column: x.current_position().char_column + 1,
+                line_number: x.token_start_position().line_number,
+                char_column: x.token_start_position().char_column + 1,
             },
             error_type: ErrorType::Syntax,
         });
@@ -341,18 +345,16 @@ pub fn parse_function_call(
         if x.current_token() != &Token::CloseParenthesis {
             return Err(CompileError {
                 msg: "This function doesn't accept any arguments. Close it right away with a closing parenthesis instead.".to_string(),
-                start_pos: x.current_position(),
+                start_pos: x.token_start_position(),
                 end_pos: TokenPosition {
-                    line_number: x.current_position().line_number,
-                    char_column: x.current_position().char_column + 1,
+                    line_number: x.token_start_position().line_number,
+                    char_column: x.token_start_position().char_column + 1,
                 },
                 error_type: ErrorType::Syntax,
-            })
-
+            });
         }
 
         Vec::new()
-
     } else {
         create_multiple_expressions(x, &required_argument_types, variable_declarations)?
     };
@@ -360,11 +362,14 @@ pub fn parse_function_call(
     // Make sure there is a closing parenthesis
     if x.current_token() != &Token::CloseParenthesis {
         return Err(CompileError {
-            msg: format!("Missing a closing parenthesis at the end of the function call, found a '{:?}' instead", x.current_token()),
-            start_pos: x.current_position(),
+            msg: format!(
+                "Missing a closing parenthesis at the end of the function call, found a '{:?}' instead",
+                x.current_token()
+            ),
+            start_pos: x.token_start_position(),
             end_pos: TokenPosition {
-                line_number: x.current_position().line_number,
-                char_column: x.current_position().char_column + 1,
+                line_number: x.token_start_position().line_number,
+                char_column: x.token_start_position().char_column + 1,
             },
             error_type: ErrorType::Syntax,
         });
@@ -395,7 +400,7 @@ pub fn parse_function_call(
         expressions,
         returns.to_owned(),
         accessed_args,
-        x.current_position(),
+        x.token_start_position(),
         is_pure,
     ))
 }
@@ -411,10 +416,10 @@ fn create_arg_constructor(
     if x.current_token() != &Token::ArgConstructor {
         return Err(CompileError {
             msg: "Expected a | after the function name".to_string(),
-            start_pos: x.current_position(),
+            start_pos: x.token_start_position(),
             end_pos: TokenPosition {
-                line_number: x.current_position().line_number,
-                char_column: x.current_position().char_column + 1,
+                line_number: x.token_start_position().line_number,
+                char_column: x.token_start_position().char_column + 1,
             },
             error_type: ErrorType::Syntax,
         });

@@ -1,9 +1,9 @@
 use crate::Error;
 use crate::dev_server;
 use colour::{green_ln_bold, yellow_ln_bold};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-pub fn test_build(entry_path: &PathBuf) -> Result<(), Error> {
+pub fn test_build(entry_path: &Path) -> Result<(), Error> {
     // TODO - Compiler tests
     // Eventually this should perform a test suit for the compiler
     // Atm, it just automatically sets the output info level to highest
@@ -11,7 +11,7 @@ pub fn test_build(entry_path: &PathBuf) -> Result<(), Error> {
 
     // CBA to make the full CLI for this atm,
     // so this number will be edited depending on what part if the compiler is being worked on
-    let output_info_level = 10;
+    let output_info_level = 4;
 
     // Read content from a test file
     yellow_ln_bold!("\nTESTING FILE\n");

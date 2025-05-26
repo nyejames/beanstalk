@@ -1,23 +1,25 @@
-use super::{ast_nodes::AstNode, expressions::parse_expression::create_expression};
+use super::expressions::parse_expression::create_expression;
 use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::build_ast::TokenContext;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
+use colour::red_ln;
 
 // This is a dynamic array of one data type
 // TODO - look through and update / test this code as a lot has changed
 // TODO: string keys to make it a map
-pub fn _new_collection(
+pub fn new_collection(
     x: &mut TokenContext,
-    token_positions: &[TokenPosition],
-    collection_type: &mut DataType,
-    variable_declarations: &mut [Arg],
+    collection_type: &DataType,
+    variable_declarations: &[Arg],
 ) -> Result<Expr, CompileError> {
     let mut items: Vec<Expr> = Vec::new();
 
     // Should always start with the current token being an open curly brace,
     // So skip to the first value
-    x.index += 1;
+    x.advance();
+
+    let mut next_item: bool = true;
 
     while x.index < x.length {
         match x.current_token() {
@@ -25,38 +27,48 @@ pub fn _new_collection(
                 break;
             }
 
-            _ => {
-                let item = create_expression(x, collection_type, false, variable_declarations)?;
+            Token::Newline => {
+                x.advance();
+            }
 
-                let item_type = item.get_type();
-                if item_type != *collection_type {
+            Token::Comma => {
+                if next_item {
                     return Err(CompileError {
-                        msg: format!(
-                            "Type mismatch in collection. Expected type: {:?}, got type: {:?}",
-                            collection_type, item_type
-                        ),
-                        start_pos: token_positions[x.index].to_owned(),
-                        end_pos: TokenPosition {
-                            line_number: token_positions[x.index].line_number,
-                            char_column: token_positions[x.index].char_column
-                                + item.dimensions().char_column,
-                        },
-                        error_type: ErrorType::Type,
+                        msg: "Expected a collection item after the comma".to_string(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Syntax,
                     });
                 }
 
-                match collection_type {
-                    DataType::Inferred(_) => {
-                        *collection_type = item_type;
-                    }
-                    _ => {}
+                next_item = true;
+                x.advance();
+            }
+
+            _ => {
+                if !next_item {
+                    return Err(CompileError {
+                        msg: "Expected a comma between items in this collection".to_string(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Syntax,
+                    });
                 }
 
+                let mut collection_inner_type = collection_type.to_owned();
+                let item = create_expression(
+                    x,
+                    &mut collection_inner_type,
+                    false,
+                    variable_declarations,
+                    &[],
+                )?;
+
                 items.push(item);
+
+                next_item = false;
             }
         }
-
-        x.index += 1;
     }
 
     Ok(Expr::Collection(items, collection_type.to_owned()))

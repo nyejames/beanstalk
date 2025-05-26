@@ -213,6 +213,56 @@ impl DataType {
             _ => false,
         }
     }
+
+    pub fn is_iterable(&self) -> bool {
+        match self {
+            DataType::Range => true,
+            DataType::Collection(_) => true,
+            DataType::Arguments(_) => true,
+            DataType::String(_) => true,
+            DataType::Float(_) => true,
+            DataType::Int(_) => true,
+            DataType::Decimal(_) => true,
+            DataType::Pointer(_) => true,
+            DataType::Inferred(_) => true, // Will need to be type checked later
+            _ => false,
+        }
+    }
+
+    pub fn get_iterable_type(&self) -> DataType {
+        match self {
+            DataType::Collection(inner_type) => *inner_type.to_owned(),
+            _ => self.to_owned(),
+        }
+    }
+
+    pub fn to_mutable(&self) -> DataType {
+        match self {
+            DataType::Inferred(_) => DataType::Inferred(true),
+            DataType::CoerceToString(_) => DataType::CoerceToString(true),
+            DataType::Bool(_) => DataType::Bool(true),
+            DataType::String(_) => DataType::String(true),
+            DataType::Float(_) => DataType::Float(true),
+            DataType::Int(_) => DataType::Int(true),
+            DataType::Decimal(_) => DataType::Decimal(true),
+            DataType::Collection(inner_type) => {
+                DataType::Collection(Box::new(inner_type.to_mutable()))
+            }
+            DataType::Arguments(args) => {
+                let mut new_args = Vec::new();
+                for arg in args {
+                    new_args.push(Arg {
+                        name: arg.name.to_owned(),
+                        data_type: arg.data_type.to_mutable(),
+                        expr: arg.expr.to_owned(),
+                    });
+                }
+
+                DataType::Arguments(new_args)
+            }
+            _ => self.to_owned(),
+        }
+    }
 }
 
 pub fn get_any_number_datatype(mutable: bool) -> DataType {

@@ -2,67 +2,39 @@ use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
 };
-use crate::parsers::ast_nodes::Expr;
+use crate::parsers::ast_nodes::{AssignmentOperator, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::functions::{create_block_signature, parse_function_call};
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
-use crate::tokens::VarVisibility;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 
-pub fn create_new_var_or_ref(
+pub fn create_reference(
     x: &mut TokenContext,
-    name: &str,
+    arg: &Arg,
     variable_declarations: &[Arg],
-    visibility: &VarVisibility,
 ) -> Result<AstNode, CompileError> {
-    // If this is a reference to a function or variable,
-    // This to_owned here is gross, probably a better way to avoid this
-    if let Some(arg) = get_reference(name, variable_declarations) {
-        return match arg.data_type {
-            // Function Call
-            DataType::Block(ref argument_refs, ref return_types) => {
-                x.advance();
-                // blue_ln!("arg value purity: {:?}, for {}",  arg.value.is_pure(), name);
-                parse_function_call(x, name, variable_declarations, argument_refs, return_types)
-            }
+    match arg.data_type {
+        // Function Call
+        DataType::Block(ref argument_refs, ref return_types) => parse_function_call(
+            x,
+            &arg.name,
+            variable_declarations,
+            argument_refs,
+            return_types,
+        ),
 
-            _ => {
-                // Check to make sure there is no access attempt on any other types.
-                // Get accessed arg will return an error if there is an access attempt on the wrong type.
-                // This SHOULD always be None (for now), but this is being assigned to the reference here.
-                // In case the language will change in the future, and properties/methods are added to other types
-                let accessed_arg =
-                    get_accessed_args(x, &arg.name, &[arg.data_type.to_owned()], &mut Vec::new())?;
+        _ => {
+            let accessed_args =
+                get_accessed_args(x, &arg.name, &[arg.data_type.to_owned()], &mut Vec::new())?;
 
-                // If the value isn't wrapped in a runtime value,
-                // Replace the reference with a literal value
-
-                // DISABLED AS THIS ACTUALLY ISN'T GREAT FOR PERFORMANCE
-
-                // Todo: Evaluate when to do this correctly
-                // if arg.expr.is_pure() {
-                //     return Ok(AstNode::Literal(arg.expr.to_owned(), x.current_position()));
-                // }
-
-                Ok(AstNode::Literal(
-                    Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_arg),
-                    x.current_position(),
-                ))
-            }
-        };
-    };
-
-    let arg = new_arg(x, name, variable_declarations)?;
-
-    Ok(AstNode::VarDeclaration(
-        arg.name,
-        arg.expr,
-        visibility.to_owned(),
-        arg.data_type,
-        x.current_position(),
-    ))
+            Ok(AstNode::Reference(
+                Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_args),
+                x.token_start_position(),
+            ))
+        }
+    }
 }
 
 pub fn new_arg(
@@ -71,8 +43,17 @@ pub fn new_arg(
     variable_declarations: &[Arg],
 ) -> Result<Arg, CompileError> {
     // Move past the name
-    let mut data_type = DataType::Inferred(false);
     x.advance();
+
+    let mutable = match x.current_token() {
+        Token::Mutable => {
+            x.advance();
+            true
+        }
+        _ => false,
+    };
+
+    let mut data_type = DataType::Inferred(mutable);
 
     match x.current_token() {
         Token::Assign => {
@@ -84,9 +65,16 @@ pub fn new_arg(
             let (constructor_args, return_type) =
                 create_block_signature(x, &mut true, variable_declarations)?;
 
+            // Capture the variables from the surrounding scope (this might change in the future)
+            // Maybe only public variables are captured?
+            let mut combined =
+                Vec::with_capacity(constructor_args.len() + variable_declarations.len());
+            combined.extend_from_slice(&constructor_args);
+            combined.extend_from_slice(variable_declarations);
+
             return Ok(Arg {
                 name: name.to_owned(),
-                expr: new_ast(x, &constructor_args, &return_type)?,
+                expr: new_ast(x, &combined, &return_type)?,
                 data_type: DataType::Block(constructor_args, return_type),
             });
         }
@@ -111,6 +99,7 @@ pub fn new_arg(
         // Has a type declaration
         Token::DatatypeLiteral(type_keyword) => {
             data_type = type_keyword.to_owned();
+
             x.advance();
 
             match x.current_token() {
@@ -120,7 +109,7 @@ pub fn new_arg(
 
                 // If end of statement, then it's a zero-value variable
                 Token::Comma | Token::EOF | Token::Newline | Token::ArgConstructor => {
-                    return Ok(create_zero_value_var(data_type, name.to_string()));
+                    return Ok(create_zero_value_var(data_type, name));
                 }
 
                 _ => {
@@ -138,6 +127,78 @@ pub fn new_arg(
                     });
                 }
             }
+        }
+
+        // Collection Type Declaration
+        Token::OpenCurly => {
+            x.advance();
+
+            // Check if the datatype inside the curly braces is mutable
+            let mutable = match x.current_token() {
+                Token::Mutable => {
+                    x.advance();
+                    true
+                }
+                _ => false,
+            };
+
+            // Check if there is a type inside the curly braces
+            data_type = match x.current_token().to_owned() {
+                Token::DatatypeLiteral(data_type) => {
+                    x.advance();
+                    DataType::Collection(Box::new(data_type))
+                }
+                _ => DataType::Collection(Box::new(DataType::Inferred(mutable))),
+            };
+
+            // Make sure there is a closing curly brace
+            match x.current_token() {
+                Token::CloseCurly => {
+                    x.advance();
+                }
+                _ => {
+                    return Err(CompileError {
+                        msg: "Missing closing curly brace for collection type declaration"
+                            .to_owned(),
+                        start_pos: x.token_positions[x.index].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: x.token_positions[x.index].line_number,
+                            char_column: x.token_positions[x.index].char_column + name.len() as i32,
+                        },
+                        error_type: ErrorType::Syntax,
+                    });
+                }
+            }
+
+            // Should have an assignment operator now
+            match x.current_token() {
+                Token::Assign => {
+                    x.advance();
+                }
+
+                // If end of statement, then it's a zero-value variable
+                Token::Comma | Token::EOF | Token::Newline | Token::ArgConstructor => {
+                    return Ok(create_zero_value_var(data_type, name));
+                }
+
+                _ => {
+                    return Err(CompileError {
+                        msg: "Missing assignment operator for collection type declaration"
+                            .to_owned(),
+                        start_pos: x.token_positions[x.index].to_owned(),
+                        end_pos: TokenPosition {
+                            line_number: x.token_positions[x.index].line_number,
+                            char_column: x.token_positions[x.index].char_column + name.len() as i32,
+                        },
+                        error_type: ErrorType::Syntax,
+                    });
+                }
+            }
+        }
+
+        Token::Newline => {
+            // Ignore
+            x.advance();
         }
 
         // Anything else is a syntax error
@@ -164,9 +225,9 @@ pub fn new_arg(
     let parsed_expr = match x.current_token() {
         Token::OpenParenthesis => {
             x.advance();
-            create_expression(x, &mut data_type, true, variable_declarations)?
+            create_expression(x, &mut data_type, true, variable_declarations, &[])?
         }
-        _ => create_expression(x, &mut data_type, false, variable_declarations)?,
+        _ => create_expression(x, &mut data_type, false, variable_declarations, &[])?,
     };
 
     Ok(Arg {
@@ -176,28 +237,135 @@ pub fn new_arg(
     })
 }
 
-fn create_zero_value_var(data_type: DataType, name: String) -> Arg {
+pub fn mutated_arg(
+    x: &mut TokenContext,
+    arg: Arg,
+    captured_declarations: &[Arg],
+) -> Result<AstNode, CompileError> {
+    if !arg.data_type.is_mutable() {
+        return Err(CompileError {
+            msg: format!(
+                "Variable of type: {:?} is not mutable. Add a '~' to the variable declaration if you want it to be mutable!",
+                arg.data_type
+            ),
+            start_pos: x.token_positions[x.index].to_owned(),
+            end_pos: TokenPosition {
+                line_number: x.token_positions[x.index].line_number,
+                char_column: x.token_positions[x.index].char_column + arg.name.len() as i32,
+            },
+            error_type: ErrorType::Syntax,
+        });
+    }
+
+    let accessed_args =
+        get_accessed_args(x, &arg.name, &[arg.data_type.to_owned()], &mut Vec::new())?;
+
+    // Move past the name
+    x.advance();
+
+    let (parsed_expr, assignment_op) = match x.current_token() {
+        Token::Assign => {
+            x.advance();
+            (
+                create_expression(
+                    x,
+                    &mut arg.data_type.to_owned(),
+                    false,
+                    captured_declarations,
+                    &[],
+                )?,
+                AssignmentOperator::Assign,
+            )
+        }
+
+        Token::AddAssign => (
+            create_expression(
+                x,
+                &mut arg.data_type.to_owned(),
+                false,
+                captured_declarations,
+                &[],
+            )?,
+            AssignmentOperator::AddAssign,
+        ),
+
+        Token::SubtractAssign => (
+            create_expression(
+                x,
+                &mut arg.data_type.to_owned(),
+                false,
+                captured_declarations,
+                &[],
+            )?,
+            AssignmentOperator::SubtractAssign,
+        ),
+
+        Token::MultiplyAssign => (
+            create_expression(
+                x,
+                &mut arg.data_type.to_owned(),
+                false,
+                captured_declarations,
+                &[],
+            )?,
+            AssignmentOperator::MultiplyAssign,
+        ),
+
+        Token::DivideAssign => (
+            create_expression(
+                x,
+                &mut arg.data_type.to_owned(),
+                false,
+                captured_declarations,
+                &[],
+            )?,
+            AssignmentOperator::DivideAssign,
+        ),
+
+        _ => {
+            return Err(CompileError {
+                msg: format!("Invalid expression for mutation: {:?}", x.tokens[x.index]),
+                start_pos: x.token_positions[x.index].to_owned(),
+                end_pos: TokenPosition {
+                    line_number: x.token_positions[x.index].line_number,
+                    char_column: x.token_positions[x.index].char_column + arg.name.len() as i32,
+                },
+                error_type: ErrorType::Syntax,
+            });
+        }
+    };
+
+    Ok(AstNode::Mutation(
+        arg.name,
+        assignment_op,
+        parsed_expr,
+        accessed_args,
+        x.token_start_position(),
+    ))
+}
+
+fn create_zero_value_var(data_type: DataType, name: impl Into<String>) -> Arg {
     match data_type {
         DataType::Float(_) => Arg {
-            name,
+            name: name.into(),
             expr: Expr::Float(0.0),
             data_type,
         },
 
         DataType::Int(_) => Arg {
-            name,
+            name: name.into(),
             expr: Expr::Int(0),
             data_type,
         },
 
         DataType::Bool(_) => Arg {
-            name,
+            name: name.into(),
             expr: Expr::Bool(false),
             data_type,
         },
 
         DataType::Scene(_) => Arg {
-            name,
+            name: name.into(),
             expr: Expr::Scene(
                 SceneContent::default(),
                 Style::default(),
@@ -208,13 +376,13 @@ fn create_zero_value_var(data_type: DataType, name: String) -> Arg {
         },
 
         DataType::String(_) | DataType::CoerceToString(_) => Arg {
-            name,
+            name: name.into(),
             expr: Expr::String(String::new()),
             data_type,
         },
 
         _ => Arg {
-            name,
+            name: name.into(),
             expr: Expr::None,
             data_type,
         },

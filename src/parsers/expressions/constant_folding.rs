@@ -52,7 +52,7 @@ pub fn constant_fold(
                 // Try to evaluate the operation
                 if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op) {
                     // Successfully evaluated - push a result onto the stack
-                    let new_literal = AstNode::Literal(result, token_position.to_owned());
+                    let new_literal = AstNode::Reference(result, token_position.to_owned());
                     stack.push(new_literal);
                 } else {
                     // This won't be a type error as that is checked earlier.
@@ -70,8 +70,6 @@ pub fn constant_fold(
             }
         }
     }
-
-    red_ln!("result stack: {:?}", stack);
 
     if stack.len() == 1 {
         return Ok(stack[0].get_expr());

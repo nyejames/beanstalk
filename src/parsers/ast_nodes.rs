@@ -168,7 +168,7 @@ impl Expr {
                     Operator::Add => Some(Expr::String(format!("{}{}", lhs_val, rhs_val))),
                     Operator::Equality => Some(Expr::Bool(lhs_val == rhs_val)),
                     Operator::NotEqual => Some(Expr::Bool(lhs_val != rhs_val)),
-                    _ => None, // Other operations not applicable to strings
+                    _ => None, // Other operations are not applicable to strings
                 }
             }
 
@@ -183,7 +183,21 @@ impl Expr {
         }
     }
     pub fn is_foldable(&self) -> bool {
-        matches!(self, Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_))
+        matches!(
+            self,
+            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
+        )
+    }
+
+    pub fn is_collection(&self) -> bool {
+        match self {
+            Expr::Collection(..) => true,
+            Expr::Reference(_, data_type, ..) => match data_type {
+                DataType::Collection(_) => true,
+                _ => false,
+            },
+            _ => false,
+        }
     }
 }
 
@@ -209,6 +223,27 @@ pub enum Operator {
     NotEqual,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum AssignmentOperator {
+    Assign,
+    AddAssign,
+    SubtractAssign,
+    MultiplyAssign,
+    DivideAssign,
+}
+
+impl AssignmentOperator {
+    pub fn to_js(&self) -> String {
+        match self {
+            AssignmentOperator::Assign => "=".to_string(),
+            AssignmentOperator::AddAssign => "+=".to_string(),
+            AssignmentOperator::SubtractAssign => "-=".to_string(),
+            AssignmentOperator::MultiplyAssign => "*=".to_string(),
+            AssignmentOperator::DivideAssign => "/=".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNode {
     // Warning Message
@@ -229,8 +264,9 @@ pub enum AstNode {
     Return(Vec<Expr>, TokenPosition),  // Return value, Line number
     If(Expr, Expr, TokenPosition),     // Condition, If true, Line number
     Else(Vec<AstNode>, TokenPosition), // Body, Line number
-    ForLoop(Expr, Expr, Expr, TokenPosition), // Item, Collection, Body, Line number
-    WhileLoop(Expr, Expr, TokenPosition), // Condition, Body, Line number
+
+    ForLoop(Box<Arg>, Expr, Expr, TokenPosition), // Item, Collection, Body, Line number
+    WhileLoop(Expr, Expr, TokenPosition),         // Condition, Body, Line number
 
     // Basics
     FunctionCall(
@@ -245,7 +281,7 @@ pub enum AstNode {
     Comment(String),
 
     // Variable names should be the full namespace (module path + variable name)
-    VarDeclaration(String, Expr, VarVisibility, DataType, TokenPosition), // Variable name, Value, Visibility, Type, Line number
+    Declaration(String, Expr, VarVisibility, DataType, TokenPosition), // Variable name, Value, Visibility, Type, Line number
 
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
@@ -260,7 +296,10 @@ pub enum AstNode {
     // Wasm(String, TokenPosition), // Code, Line number
 
     // Literals
-    Literal(Expr, TokenPosition), // Token, Accessed args, Line number
+    Reference(Expr, TokenPosition),  // Token, Line number
+    Expression(Expr, TokenPosition), // Token, Line number
+    // Name, Assignment operator, Value, Accessed args, Line number
+    Mutation(String, AssignmentOperator, Expr, Vec<String>, TokenPosition),
 
     SceneTemplate,
     Slot,
@@ -277,7 +316,7 @@ pub enum AstNode {
 impl AstNode {
     pub fn get_type(&self) -> DataType {
         match self {
-            AstNode::Literal(value, _) => match value {
+            AstNode::Reference(value, _) => match value {
                 Expr::Float(_) => DataType::Float(false),
                 Expr::Int(_) => DataType::Int(false),
                 Expr::String(_) => DataType::String(false),
@@ -310,7 +349,7 @@ impl AstNode {
             },
 
             AstNode::Empty(_) => DataType::None,
-            AstNode::VarDeclaration(_, _, _, data_type, ..) => data_type.to_owned(),
+            AstNode::Declaration(_, _, _, data_type, ..) => data_type.to_owned(),
 
             AstNode::FunctionCall(_, _, return_types, ..) => DataType::Arguments(
                 return_types
@@ -334,14 +373,10 @@ impl AstNode {
         }
     }
 
-    // Gets the compile time value of the node
-    // This is pretty much just for literals
-    // Returns 'None' if it's not a literal value
-    // Returns 'Runtime' if it can't be evaluated at compile time
     pub(crate) fn get_expr(&self) -> Expr {
         match self {
-            AstNode::Literal(value, ..) | AstNode::VarDeclaration(_, value, ..) => value.to_owned(),
-            _ => Expr::None,
+            AstNode::Reference(value, ..) | AstNode::Declaration(_, value, ..) => value.to_owned(),
+            _ => Expr::Runtime(Vec::from([self.to_owned()]), self.get_type()),
         }
     }
 
@@ -385,9 +420,9 @@ impl AstNode {
 
     pub fn dimensions(&self) -> TokenPosition {
         match self {
-            AstNode::Literal(value, _) => value.dimensions(),
+            AstNode::Reference(value, _) => value.dimensions(),
 
-            AstNode::VarDeclaration(name, _, _, _, token_position) => TokenPosition {
+            AstNode::Declaration(name, _, _, _, token_position) => TokenPosition {
                 line_number: token_position.char_column + name.to_string().len() as i32,
                 char_column: token_position.line_number,
             },
@@ -398,18 +433,43 @@ impl AstNode {
             },
         }
     }
+
+    pub fn get_position(&self) -> TokenPosition {
+        match self {
+            AstNode::Reference(.., position) => position.to_owned(),
+            AstNode::Declaration(.., position) => position.to_owned(),
+            AstNode::Operator(.., position) => position.to_owned(),
+            AstNode::WhileLoop(.., position) => position.to_owned(),
+            AstNode::ForLoop(.., position) => position.to_owned(),
+            AstNode::If(.., position) => position.to_owned(),
+            AstNode::Else(.., position) => position.to_owned(),
+            AstNode::Return(.., position) => position.to_owned(),
+            AstNode::JS(.., position) => position.to_owned(),
+            AstNode::Css(.., position) => position.to_owned(),
+            AstNode::Use(.., position) => position.to_owned(),
+            AstNode::Settings(.., position) => position.to_owned(),
+            AstNode::Expression(.., position) => position.to_owned(),
+            AstNode::Mutation(.., position) => position.to_owned(),
+            AstNode::Print(.., position) => position.to_owned(),
+            AstNode::Warning(.., position) => position.to_owned(),
+            _ => TokenPosition {
+                line_number: 0,
+                char_column: 0,
+            },
+        }
+    }
 }
 
 impl Expr {
-    pub fn get_type(&self) -> DataType {
+    pub fn get_type(&self, is_mutable: bool) -> DataType {
         match self {
             Expr::None => DataType::None,
             Expr::Runtime(_, data_type) => data_type.to_owned(),
-            Expr::Int(_) => DataType::Int(false),
-            Expr::Float(_) => DataType::Float(false),
-            Expr::String(_) => DataType::String(false),
-            Expr::Bool(_) => DataType::Bool(false),
-            Expr::Scene(..) => DataType::Scene(false),
+            Expr::Int(_) => DataType::Int(is_mutable),
+            Expr::Float(_) => DataType::Float(is_mutable),
+            Expr::String(_) => DataType::String(is_mutable),
+            Expr::Bool(_) => DataType::Bool(is_mutable),
+            Expr::Scene(..) => DataType::Scene(is_mutable),
             Expr::Collection(_, data_type) => data_type.to_owned(),
             Expr::Args(args) => DataType::Arguments(args.to_owned()),
             Expr::Block(args, _, return_type, ..) => {
@@ -536,14 +596,15 @@ impl Expr {
             // This just gets the widest char line
             // So error formatting will need to clip the line to each length
             Expr::Scene(nodes, ..) => {
-                let first_node = &nodes.before[0];
-                let last_node = &nodes.after[nodes.after.len() - 1];
+                let first_node = &nodes.before.first().unwrap_or(&Expr::None);
+                let last_node = &nodes.after.last().unwrap_or(&Expr::None);
                 TokenPosition {
                     line_number: last_node.dimensions().line_number,
                     char_column: last_node.dimensions().char_column
                         - first_node.dimensions().char_column,
                 }
             }
+
             Expr::Runtime(nodes, ..) => {
                 let first_node = &nodes[0];
                 let last_node = &nodes[nodes.len() - 1];
@@ -576,6 +637,17 @@ impl Expr {
 
                 combined_dimensions
             }
+        }
+    }
+
+    pub fn is_iterable(&self) -> bool {
+        match self {
+            Expr::Collection(..) => true,
+            Expr::Int(_) => true,
+            Expr::Float(_) => true,
+            Expr::Runtime(_, data_type) => data_type.is_iterable(),
+            Expr::String(_) => true,
+            _ => false,
         }
     }
 }

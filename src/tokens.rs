@@ -20,7 +20,7 @@ pub enum VarVisibility {
 #[derive(PartialEq, Debug, Clone)]
 pub enum Token {
     // For Compiler
-    ModuleStart,
+    ModuleStart(String),  // Contains module name space
     DeadVariable(String), // Name. Variable that is never used, to be removed in the AST
     EOF,                  // End of the file
 
@@ -58,7 +58,7 @@ pub enum Token {
 
     // Variables / Functions
     Arrow,
-    Variable(String, VarVisibility, bool), // name, is_public, is_mutable
+    Variable(String, VarVisibility), // name, visibility, is_mutable
 
     // Literals
     StringLiteral(String),
@@ -96,6 +96,8 @@ pub enum Token {
 
     // Type Declarations
     Mutable,
+    Public,
+    Private,
     DatatypeLiteral(DataType),
 
     Async,
@@ -197,10 +199,12 @@ impl Token {
                 line_number: 0,
                 char_column: 5,
             },
-            Token::ModuleStart => TokenPosition {
+
+            Token::ModuleStart(..) => TokenPosition {
                 line_number: 0,
                 char_column: 0,
             },
+
             Token::Newline => TokenPosition {
                 line_number: 1,
                 char_column: 0,
@@ -315,6 +319,17 @@ impl Token {
                 line_number: 0,
                 char_column: 2,
             },
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        match self {
+            Token::Variable(name, ..) => name.clone(),
+            Token::DeadVariable(name) => name.clone(),
+            Token::Comment(content) => content.clone(),
+            Token::RawStringLiteral(value) => value.clone(),
+            Token::StringLiteral(string) => string.clone(),
+            _ => String::new(),
         }
     }
 }

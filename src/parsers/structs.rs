@@ -1,5 +1,6 @@
 #[allow(unused_imports)]
 use colour::grey_ln;
+use std::ops::Add;
 
 use super::ast_nodes::Arg;
 use crate::bs_types::DataType;
@@ -23,7 +24,10 @@ pub fn create_args(
         _ => {
             vec![Arg {
                 name: "0".to_string(),
-                data_type: initial_value.get_type(),
+
+                // TODO: Should items be able to be declared as mutable here?
+                // check for mutable token before?
+                data_type: initial_value.get_type(false),
                 expr: initial_value,
             }]
         }
@@ -53,11 +57,11 @@ pub fn create_args(
                     });
                 }
                 next_item = true;
-                x.index += 1;
+                x.advance();
             }
 
             Token::Newline => {
-                x.index += 1;
+                x.advance();
             }
 
             Token::Variable(ref name, ..) => {
@@ -113,7 +117,8 @@ pub fn create_args(
                     required_args[items.len()].data_type.to_owned()
                 };
 
-                let arg_value = create_expression(x, &mut data_type, false, variable_declarations)?;
+                let arg_value =
+                    create_expression(x, &mut data_type, false, variable_declarations, &[])?;
 
                 // Get the arg of this struct item
                 let item_arg = match item_args.get(items.len()) {

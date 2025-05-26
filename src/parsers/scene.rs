@@ -1,10 +1,11 @@
-use crate::CompileError;
 use crate::bs_types::DataType;
-use crate::html_output::js_parser::create_reference_in_js;
-use crate::parsers::ast_nodes::{Arg, Expr};
+use crate::html_output::js_parser::create_reactive_reference;
+use crate::html_output::web_parser::{Target, parse};
+use crate::parsers::ast_nodes::Expr;
 use crate::parsers::markdown::to_markdown;
 use crate::settings::BS_VAR_PREFIX;
-use crate::settings::HTMLMeta;
+use crate::tokenizer::TokenPosition;
+use crate::{CompileError, ErrorType};
 use colour::red_ln;
 use std::collections::HashMap;
 
@@ -97,6 +98,9 @@ pub enum StyleFormat {
     Metadata = 2,
     Codeblock = 3,
     Comment = 4,
+    Raw = 5,
+    JSString = 6,
+    WasmString = 7,
 }
 // This will be important for Markdown parsing and how scenes might modify neighbouring scenes
 #[derive(Clone, Debug, PartialEq)]
@@ -124,12 +128,8 @@ pub struct SceneIngredients<'a> {
 // Returns a regular string containing the parsed scene
 pub fn parse_scene(
     scene_ingredients: SceneIngredients,
-    js: &mut String,
+    code: &mut String,
     css: &mut String,
-    declarations: &mut Vec<Arg>,
-    class_id: &mut usize,
-    exp_id: &mut usize,
-    config: &HTMLMeta,
 ) -> Result<String, CompileError> {
     let SceneIngredients {
         scene_body,
@@ -207,12 +207,8 @@ pub fn parse_scene(
                         scene_id: new_scene_id.to_owned(),
                         format_context: final_style.format.to_owned(),
                     },
-                    js,
+                    code,
                     css,
-                    declarations,
-                    class_id,
-                    exp_id,
-                    config,
                 )?;
 
                 content.push_str(&new_scene);
@@ -222,38 +218,22 @@ pub fn parse_scene(
                 // Create a span in the HTML with a class that JS can reference
                 // TO DO: Should be reactive in future so this can change at runtime
 
-                // TODO: should only do this in markdown mode
-                content.push_str(&format!("<span class=\"{name}\"></span>"));
+                match format_context {
+                    StyleFormat::Markdown => {
+                        content.push_str(&format!("<span class=\"{BS_VAR_PREFIX}{name}\"></span>"));
+                        code.push_str(&create_reactive_reference(
+                            name,
+                            data_type,
+                            argument_accessed,
+                        ));
+                    }
 
-                if !declarations.iter().any(|a| &a.name == name) {
-                    match &data_type {
-                        DataType::Arguments(items) => {
-                            // Automatically unpack all items in the tuple into the scene
-                            // If no items accessed
-                            if argument_accessed.is_empty() {
-                                let mut elements = String::new();
+                    StyleFormat::JSString => {
+                        content.push_str(&format!("${{{BS_VAR_PREFIX}{name}}}"));
+                    }
 
-                                for (index, _) in (**items).iter().enumerate() {
-                                    elements.push_str(&format!("{BS_VAR_PREFIX}{name}[{index}],"));
-                                }
-
-                                js.push_str(&format!("uInnerHTML(\"{name}\",[{elements}]);"));
-                            } else {
-                                js.push_str(&create_reference_in_js(
-                                    name,
-                                    data_type,
-                                    argument_accessed,
-                                ));
-                            }
-                        }
-
-                        _ => {
-                            js.push_str(&create_reference_in_js(
-                                name,
-                                data_type,
-                                argument_accessed,
-                            ));
-                        }
+                    _ => {
+                        content.push_str(&format!("{BS_VAR_PREFIX}{name}"));
                     }
                 }
             }
@@ -265,36 +245,62 @@ pub fn parse_scene(
                 // Hopefully the compiler will always catch unintended use of None in scenes
             }
 
-            // TODO - add / test remaining types, some of them might need unpacking
-            Expr::Runtime(..) => {
-                red_ln!("adding a runtime value to a scene. Not yet supported.");
-            }
+            Expr::Runtime(nodes, data_type) => match format_context {
+                StyleFormat::Markdown => {
+                    let new_parsed = parse(nodes, "", &Target::JS)?;
+
+                    content.push_str(&format!("<span class=\"{scene_id}\"></span>"));
+
+                    code.push_str(&format!("let {scene_id} = {}", new_parsed.code_module));
+                    code.push_str(&create_reactive_reference(&scene_id, data_type, &[]));
+                }
+
+                StyleFormat::JSString => {
+                    let new_parsed = parse(nodes, "", &Target::JS)?;
+                    content.push_str(&format!("`${{{}}}`", new_parsed.content_output));
+                    code.push_str(&new_parsed.code_module);
+                }
+
+                _ => {
+                    let new_parsed = parse(nodes, "", &Target::Raw)?;
+
+                    content.push_str(&new_parsed.content_output.to_string());
+                    code.push_str(&new_parsed.code_module);
+                }
+            },
+
             Expr::Block(..) => {
-                red_ln!("adding a function to a scene. Not yet supported.");
+                return Err(CompileError {
+                    msg: "New blocks can't be declared inside of Scene Heads".to_string(),
+                    start_pos: TokenPosition::default(),
+                    end_pos: TokenPosition::default(),
+                    error_type: ErrorType::Rule,
+                });
             }
 
             // At this point, if this structure was a style, those fields and inner scene would have been parsed in scene_node.rs
             // So we can just unpack any other public fields into the scene as strings
             Expr::Args(_) => {
-                red_ln!("adding a struct literal to a scene. Not yet supported.");
+                return Err(CompileError {
+                    msg: "You can't declare new variables inside of Scene Heads".to_string(),
+                    start_pos: TokenPosition::default(),
+                    end_pos: TokenPosition::default(),
+                    error_type: ErrorType::Rule,
+                });
             }
 
             // Collections will be unpacked into a scene
             Expr::Collection(_, _) => {
-                red_ln!("adding a collection to a scene. Not yet supported.");
+                return Err(CompileError {
+                    msg: "Collections inside scene heads not yet implemented in the compiler."
+                        .to_string(),
+                    start_pos: TokenPosition::default(),
+                    end_pos: TokenPosition::default(),
+                    error_type: ErrorType::Compiler,
+                });
             }
         }
     }
-
-    // After wrappers
-    // final_string.push_str(
-    //     &final_style
-    //         .wrapper
-    //         .after
-    //         .iter()
-    //         .map(|s| s.string.to_owned())
-    //         .collect::<String>(),
-    // );
 
     // If this is a Markdown scene, and the parent isn't one,
     // parse the content into Markdown
@@ -309,7 +315,7 @@ pub fn parse_scene(
     } else if final_style.format == StyleFormat::Codeblock
         && format_context == StyleFormat::Markdown
     {
-        // Add a special object replace character to signal to parent that this tag should not be parsed into Markdown
+        // Add a special object replace character to signal to the parent that this tag should not be parsed into Markdown
         final_string.push_str(&format!(
             "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
             content
@@ -317,8 +323,6 @@ pub fn parse_scene(
     } else {
         final_string.push_str(&content);
     }
-
-    red_ln!("{}", final_string);
 
     Ok(final_string)
 }

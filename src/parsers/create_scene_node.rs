@@ -3,9 +3,11 @@ use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::scene::{SceneContent, SceneType, Style, StyleFormat};
 use crate::parsers::structs::create_args;
+use crate::parsers::variables::create_reference;
+use crate::settings::BS_VAR_PREFIX;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-use colour::{red_ln, yellow_ln};
+use colour::yellow_ln;
 use std::collections::HashMap;
 // const DEFAULT_SLOT_NAME: &str = "_slot";
 
@@ -24,7 +26,24 @@ pub fn new_scene(
     let mut scene_body: SceneContent = SceneContent::default();
     let mut this_scene_body: Vec<Expr> = Vec::new();
 
-    let mut scene_id: String = String::new();
+    // Set a default ID just in case none is set manually
+    // This guarantees each scene ID will be unique
+    let module_name = match x.tokens.first() {
+        Some(Token::ModuleStart(name)) => name.to_owned(),
+        _ => {
+            return Err(CompileError {
+                msg: "No module name found for this scene".to_owned(),
+                start_pos: x.token_positions[x.index].to_owned(),
+                end_pos: TokenPosition {
+                    line_number: x.token_positions[x.index].line_number,
+                    char_column: x.token_positions[x.index].char_column + 1,
+                },
+                error_type: ErrorType::Compiler,
+            });
+        }
+    };
+
+    let mut scene_id: String = format!("sceneID_{module_name}_{}", x.index);
 
     x.advance();
 
@@ -44,7 +63,8 @@ pub fn new_scene(
             Token::SceneClose => {
                 x.go_back();
 
-                // Flatted the scene_body array in a single vec
+                create_final_scene_body(&mut scene_body, this_scene_body);
+
                 return Ok(SceneType::Scene(Expr::Scene(
                     scene_body,
                     scene_style,
@@ -56,7 +76,7 @@ pub fn new_scene(
             // This is a declaration of the ID by using the export prefix followed by a variable name
             // This doesn't follow regular declaration rules.
             Token::Id(name) => {
-                scene_id = name.to_string();
+                scene_id = format!("{BS_VAR_PREFIX}{}", name);
             }
 
             // For now, this will function as a special scene in the compiler
@@ -98,18 +118,7 @@ pub fn new_scene(
 
                 // Otherwise, check if it's a regular scene or variable reference
                 // If this is a reference to a function or variable
-                let value = if let Some(arg) = declarations.iter().find(|a| a.name == name) {
-                    // Here we need to evaluate the expression
-                    // This is because functions can be folded into styles (or at least eventually can be)
-                    // create_expression(
-                    //     x,
-                    //     false,
-                    //     ast,
-                    //     &mut DataType::Inferred(false),
-                    //     false,
-                    //     declarations,
-                    // )?
-
+                if let Some(arg) = declarations.iter().find(|a| a.name == name) {
                     match &arg.expr {
                         Expr::Scene(body, style, ..) => {
                             scene_style.child_default = style.child_default.to_owned();
@@ -133,8 +142,14 @@ pub fn new_scene(
                             continue;
                         }
                         _ => {
-                            red_ln!("{:?}", arg);
-                            arg.expr.to_owned()
+                            let expr = create_expression(
+                                x,
+                                &mut DataType::CoerceToString(false),
+                                inside_brackets,
+                                declarations,
+                                &[],
+                            )?;
+                            this_scene_body.push(expr);
                         }
                     }
                 } else {
@@ -151,32 +166,6 @@ pub fn new_scene(
                         error_type: ErrorType::Syntax,
                     });
                 };
-
-                match value {
-                    Expr::Scene(body, style, ..) => {
-                        scene_style.child_default = style.child_default.to_owned();
-
-                        if style.unlocks_override {
-                            unlocked_scenes.clear();
-                        }
-
-                        // Insert this style's unlocked scenes into the unlocked scenes map
-                        if !style.unlocked_scenes.is_empty() {
-                            for (name, style) in style.unlocked_scenes.iter() {
-                                // Should this overwrite? Or skip if already unlocked?
-                                unlocked_scenes.insert(name.to_owned(), style.to_owned());
-                            }
-                        }
-
-                        // Unpack this scene into this scene's body
-                        scene_body.before.extend(body.before.to_owned());
-                        scene_body.after.extend(body.after.to_owned());
-
-                        continue;
-                    }
-
-                    _ => this_scene_body.push(value),
-                }
             }
 
             // Expressions to Parse
@@ -192,6 +181,7 @@ pub fn new_scene(
                     &mut DataType::CoerceToString(false),
                     inside_brackets,
                     declarations,
+                    &[],
                 )?);
             }
 
@@ -213,7 +203,7 @@ pub fn new_scene(
             }
 
             Token::OpenParenthesis => {
-                let structure = create_args(x, Expr::None, &Vec::new(), declarations)?;
+                let structure = create_args(x, Expr::None, &[], declarations)?;
 
                 this_scene_body.push(Expr::Args(structure));
             }
@@ -350,7 +340,7 @@ pub fn new_scene(
     }
 
     // The body of this scene is now added to the final scene body
-    scene_body.after.splice(0..0, this_scene_body);
+    create_final_scene_body(&mut scene_body, this_scene_body);
 
     Ok(SceneType::Scene(Expr::Scene(
         scene_body,
@@ -358,4 +348,8 @@ pub fn new_scene(
         scene_head,
         scene_id,
     )))
+}
+
+fn create_final_scene_body(scene_body: &mut SceneContent, this_scene_body: Vec<Expr>) {
+    scene_body.after.splice(0..0, this_scene_body);
 }

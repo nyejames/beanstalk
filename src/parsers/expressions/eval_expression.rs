@@ -9,9 +9,8 @@ use crate::{CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::Ast
 // It will fold constants (not working yet) down to a single Value if possible
 pub fn evaluate_expression(
     expr: Vec<AstNode>,
-    type_declaration: &DataType,
+    current_type: &mut DataType,
 ) -> Result<Expr, CompileError> {
-    let mut current_type = type_declaration.to_owned();
     let mut simplified_expression: Vec<AstNode> = Vec::new();
 
     // SHUNTING YARD ALGORITHM
@@ -20,9 +19,9 @@ pub fn evaluate_expression(
 
     'outer: for node in expr {
         match node {
-            AstNode::Literal(ref value, _) => {
-                if let DataType::Inferred(_) = current_type {
-                    current_type = value.get_type();
+            AstNode::Reference(ref value, _) => {
+                if let DataType::Inferred(is_mutable) = current_type {
+                    *current_type = value.get_type(is_mutable.to_owned());
                 }
 
                 if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
@@ -118,7 +117,10 @@ pub fn evaluate_expression(
         DataType::Inferred(_) => {
             // If there were any explicit numerical types, then this will be passed to math_constant_fold.
             // This is just to skip calling that function if no numerical constants were found.
-            Ok(Expr::Runtime(simplified_expression, current_type))
+            Ok(Expr::Runtime(
+                simplified_expression,
+                current_type.to_owned(),
+            ))
         }
 
         _ => {
@@ -129,7 +131,7 @@ pub fn evaluate_expression(
             }
 
             // Evaluate all constants in the maths expression
-            constant_fold(output_queue, current_type)
+            constant_fold(output_queue, current_type.to_owned())
         }
     }
 }
@@ -199,39 +201,34 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
 fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
-    let mut new_string = String::new();
-
-    // String simplified expressions are just a list of strings atm.
-    // So we can just concatenate them into a single String.
-    // This will eventually need to be more complex to handle functions and other string manipulations.
-    // The more complex things will be Runtime values.
-    // However, there should also be compile-time folding for some of this stuff.
-
+    let mut final_string_expression: Vec<AstNode> = Vec::with_capacity(1);
     for node in simplified_expression {
-        match node.get_expr() {
+        let expr = node.get_expr();
+        match expr {
             Expr::String(ref string) => {
-                new_string.push_str(string);
+                let mut last_node = final_string_expression.last();
+                match &mut last_node {
+                    Some(AstNode::Expression(expr, ..)) => {
+                        expr.evaluate_operator(&Expr::String(string.to_string()), &Operator::Add);
+                    }
+                    _ => {
+                        final_string_expression
+                            .push(AstNode::Operator(Operator::Add, node.get_position()));
+                        final_string_expression.push(node.to_owned());
+                    }
+                }
             }
 
-            Expr::Runtime(_, _) => {
-                return Err(CompileError {
-                    msg: "Runtime expressions not supported yet in string expression (concat strings - eval expression). Can only concatenate strings at compile time right now".to_string(),
-                    start_pos: TokenPosition {
-                        line_number: 0,
-                        char_column: 0,
-                    },
-                    end_pos: TokenPosition {
-                        line_number: 0,
-                        char_column: 0,
-                    },
-                    error_type: ErrorType::Compiler,
-                });
+            Expr::Runtime(_, _) => final_string_expression.push(node.to_owned()),
+
+            Expr::Reference(..) => {
+                final_string_expression.push(AstNode::Operator(Operator::Add, node.get_position()));
+                final_string_expression.push(node.to_owned());
             }
 
             _ => {
                 return Err(CompileError {
-                    msg: "Non-string (or runtime string expression) used in string expression (concat strings - eval expression).
-                    Compiler should have already caught this, so 'Evaluate Expression' has not done it's job successfully".to_string(),
+                    msg: format!("Used value of type: {:?} in string expression", node),
                     start_pos: TokenPosition {
                         line_number: 0,
                         char_column: 0,
@@ -240,11 +237,18 @@ fn concat_strings(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Comp
                         line_number: 0,
                         char_column: 0,
                     },
-                    error_type: ErrorType::Compiler,
+                    error_type: ErrorType::Type,
                 });
             }
         }
     }
 
-    Ok(Expr::String(new_string))
+    if final_string_expression.len() == 1 {
+        return Ok(final_string_expression[0].to_owned().get_expr());
+    }
+
+    Ok(Expr::Runtime(
+        final_string_expression,
+        DataType::String(false),
+    ))
 }

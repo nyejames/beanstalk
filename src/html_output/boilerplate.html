@@ -19,13 +19,16 @@
 <link rel="manifest"href="page-dist-url/site-favicons-folder-url/site.webmanifest">
 <link rel="stylesheet" href="page-dist-url/css/bs-css-core.css" />
 </head><body>
+
 <!--//js-modules-->
+
 <!--page-template-->
 <script type="module">
   // WebAssembly.instantiateStreaming(fetch("./wasm-module-name.wasm")).then((obj)=>{
   //   let wsx = obj.instance.exports;wsx.set_wasm_globals();
   // ;});
   function checkIfFileChanged() {
+
     const currentUrl = window.location.pathname;
     const requestUrl = `/check?page=${currentUrl}`;
 
@@ -36,7 +39,9 @@
         }
       }).catch(console.error);
   }
+  
   setInterval(() => checkIfFileChanged(), 600);
+
 </script>
 </body>
 </html>
