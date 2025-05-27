@@ -1,9 +1,8 @@
 use crate::bs_types::DataType;
 use crate::bs_types::get_accessed_data_type;
 use crate::parsers::scene::{SceneContent, Style};
-use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
-use crate::tokens::VarVisibility;
+use crate::tokens::{string_dimensions, VarVisibility};
 use colour::red_ln;
 use std::path::PathBuf;
 use wasm_encoder::ValType;
@@ -36,7 +35,7 @@ impl Arg {
             DataType::String(_) => vec![ValType::I32, ValType::I32],
             DataType::CoerceToString(_) => vec![ValType::I32, ValType::I32],
 
-            DataType::Arguments(args) => args
+            DataType::Object(args) => args
                 .iter()
                 .flat_map(|arg| arg.to_wasm_type())
                 .collect::<Vec<ValType>>(),
@@ -73,7 +72,7 @@ pub enum Expr {
         Vec<DataType>, // return args
     ),
 
-    Scene(SceneContent, Style, SceneContent, String), // Scene Body, Styles, Scene head, ID
+    Scene(SceneContent, Style, String), // Scene Body, Styles, Scene head, ID
 
     Collection(Vec<Expr>, DataType),
 
@@ -253,7 +252,7 @@ pub enum AstNode {
     // Config settings
     Settings(Vec<Arg>, TokenPosition), // Settings, Line number
 
-    // Named import path for the module
+    // Named an import path for the module
     // Import(String, TokenPosition), // Path, Line number
 
     // Path to a module that will automatically import all styles and scenes
@@ -275,7 +274,7 @@ pub enum AstNode {
         Vec<DataType>, // return types
         Vec<String>,   // Accessed args
         TokenPosition,
-        bool, // Function is pure
+        // bool, // Function is pure
     ),
 
     Comment(String),
@@ -351,7 +350,7 @@ impl AstNode {
             AstNode::Empty(_) => DataType::None,
             AstNode::Declaration(_, _, _, data_type, ..) => data_type.to_owned(),
 
-            AstNode::FunctionCall(_, _, return_types, ..) => DataType::Arguments(
+            AstNode::FunctionCall(_, _, return_types, ..) => DataType::Object(
                 return_types
                     .iter()
                     .map(|t| Arg {
@@ -471,7 +470,7 @@ impl Expr {
             Expr::Bool(_) => DataType::Bool(is_mutable),
             Expr::Scene(..) => DataType::Scene(is_mutable),
             Expr::Collection(_, data_type) => data_type.to_owned(),
-            Expr::Args(args) => DataType::Arguments(args.to_owned()),
+            Expr::Args(args) => DataType::Object(args.to_owned()),
             Expr::Block(args, _, return_type, ..) => {
                 DataType::Block(args.to_owned(), return_type.to_owned())
             }

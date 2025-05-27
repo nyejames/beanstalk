@@ -2,7 +2,8 @@ use crate::parsers::util::NumericalParsing;
 
 // This function will take a code block and a language and return a highlighted version of the code block.
 // It parses the code block then adds spans with classes for each token.
-pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
+
+pub fn highlight_html_code_block(code_block: &str, language: &str) -> String {
     let mut highlighted_code = String::new();
     let mut chars = code_block.chars().peekable();
     let mut char_scope: Option<char> = None;
@@ -44,12 +45,12 @@ pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
         }
 
         match c {
-            c if match &comment.chars().nth(0) {
+            c if match &comment.chars().next() {
                 Some(ch) => c == ch,
                 None => false,
             } =>
             {
-                // Check if next nth characters are the same as the comment
+                // Check if the next nth characters are the same as the comment
                 let mut comment_char_matches = 0;
 
                 'outer: while let Some(c) = chars.peek() {
@@ -63,12 +64,12 @@ pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
                         keyword.push(*c);
 
                         if comment_char_matches == comm_len {
-                            // Now we know it's a comment we can start adding everything to the block
+                            // Now we know it's a comment, we can start adding everything to the block
                             highlighted_code
                                 .push_str(&format!("<span class='bs-code-comment'>{keyword}"));
 
-                            // Add chars until first newline, then break out of comment
-                            // Will also break out if it's the end of the
+                            // Add chars until the first newline, then break out of comment
+                            // Will also break out if it's the end
                             chars.next();
                             while let Some(c) = chars.peek() {
                                 if c == &'\n' {
@@ -85,7 +86,7 @@ pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
                         // If it didn't end up matching the comment,
                         // The characters need to be highlighted normally and added to the block
                         // keyword.push(*c);
-                        let not_comment_string = _highlight_code_block(&keyword, language);
+                        let not_comment_string = highlight_html_code_block(&keyword, language);
                         highlighted_code.push_str(&not_comment_string);
                         break 'outer;
                     }
@@ -123,13 +124,11 @@ pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
                 } else if type_is_in_language(keyword.as_str(), language) {
                     highlighted_code
                         .push_str(&format!("<span class='bs-code-type'>{keyword}</span>"));
+                } else if keyword.chars().next().is_some_and(|c| c.is_uppercase()) {
+                    highlighted_code
+                        .push_str(&format!("<span class='bs-code-struct'>{keyword}</span>"));
                 } else {
-                    if keyword.chars().nth(0).is_some_and(|c| c.is_uppercase()) {
-                        highlighted_code
-                            .push_str(&format!("<span class='bs-code-struct'>{keyword}</span>"));
-                    } else {
-                        highlighted_code.push_str(&format!("{keyword}"));
-                    }
+                    highlighted_code.push_str(&keyword.to_string());
                 }
                 keyword.clear();
                 continue;
@@ -143,7 +142,7 @@ pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
                 let mut whitespace = 0;
                 chars.next();
                 while let Some(c) = chars.peek() {
-                    if c._is_non_newline_whitespace() && whitespace <= indentations {
+                    if c.is_non_newline_whitespace() && whitespace <= indentations {
                         whitespace += 1;
                         chars.next();
                     } else {
@@ -168,25 +167,19 @@ pub fn _highlight_code_block(code_block: &str, language: &str) -> String {
 
 fn keyword_is_in_language(keyword: &str, language: &str) -> bool {
     match language {
-        "js" | "javascript" => match keyword {
-            "if" | "else" | "while" | "for" | "return" | "break" | "continue" | "in" => true,
-            _ => false,
-        },
-        _ => match keyword {
-            "if" | "else" | "while" | "return" | "break" | "continue" | "loop" | "end"
-            | "defer" | "panic" | "print" | "in" | "as" => true,
-            _ => false,
-        },
+        "js" | "javascript" => matches!(keyword, "if" | "else" | "while" | "for" | "return" | "break" | "continue" | "in"),
+        _ => matches!(keyword, "if" | "else" | "while" | "return" | "break" | "continue" | "loop" | "end"
+            | "defer" | "panic" | "print" | "in" | "as"),
     }
 }
 
-fn type_is_in_language(type_: &str, language: &str) -> bool {
+fn type_is_in_language(type_keyword: &str, language: &str) -> bool {
     match language {
-        _ => match type_ {
-            "Int" | "Float" | "Unit" | "Bool" | "String" | "Scene" | "Choice" | "choice"
-            | "copy" | "Type" | "Error" | "Style" | "Path" | "True" | "False" | "true"
-            | "false" | "fn" | "type" => true,
-            _ => false,
-        },
+        "ts" | "typescript" => matches!(type_keyword, "Int" | "Float" | "Unit" | "Bool" | "String" | "Scene" | "Choice" | "choice"
+        | "copy" | "Type" | "Error" | "Style" | "Path" | "True" | "False" | "true"
+        | "false" | "fn" | "type"),
+        
+        _ => false,
     }
+    
 }

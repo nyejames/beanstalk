@@ -1,7 +1,7 @@
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
 use crate::{Error, ErrorType, build, settings};
-use colour::{blue_ln, dark_cyan_ln, green_ln_bold, grey_ln, print_bold, red_ln};
+use colour::{blue_ln, dark_cyan_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{

@@ -3,7 +3,6 @@ use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 use crate::parsers::scene::{SceneContent, SceneType, Style, StyleFormat};
 use crate::parsers::structs::create_args;
-use crate::parsers::variables::create_reference;
 use crate::settings::BS_VAR_PREFIX;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
@@ -16,10 +15,10 @@ pub fn new_scene(
     x: &mut TokenContext,
     declarations: &[Arg],
     unlocked_scenes: &mut HashMap<String, Expr>,
-    mut scene_style: Style,
+    scene_style: &mut Style,
 ) -> Result<SceneType, CompileError> {
     // These are variables or special keywords passed into the scene head
-    let mut scene_head: SceneContent = SceneContent::default();
+    // let mut scene_head: SceneContent = SceneContent::default();
 
     // The content of the scene
     // There are 3 Vecs here as any slots from scenes in the scene head need to be inserted around the body
@@ -67,8 +66,7 @@ pub fn new_scene(
 
                 return Ok(SceneType::Scene(Expr::Scene(
                     scene_body,
-                    scene_style,
-                    scene_head,
+                    scene_style.to_owned(),
                     scene_id,
                 )));
             }
@@ -210,7 +208,7 @@ pub fn new_scene(
 
             Token::Ignore => {
                 // Should also clear any styles or tags in the scene
-                scene_style = Style::default();
+                *scene_style = Style::default();
 
                 // Keep track of how many scene opens there are
                 // This is to make sure the scene close is at the correct place
@@ -271,7 +269,7 @@ pub fn new_scene(
 
             Token::SceneHead => {
                 let nested_scene =
-                    new_scene(x, declarations, unlocked_scenes, scene_style.to_owned())?;
+                    new_scene(x, declarations, unlocked_scenes, scene_style)?;
 
                 match nested_scene {
                     SceneType::Scene(scene) => {
@@ -344,8 +342,7 @@ pub fn new_scene(
 
     Ok(SceneType::Scene(Expr::Scene(
         scene_body,
-        scene_style,
-        scene_head,
+        scene_style.to_owned(),
         scene_id,
     )))
 }

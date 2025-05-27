@@ -4,7 +4,6 @@ use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::parsers::expressions::parse_expression::create_expression;
 use crate::parsers::variables::get_reference;
 use crate::{CompileError, ErrorType, Token};
-use colour::red_ln;
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 pub fn create_loop(
@@ -40,15 +39,15 @@ pub fn create_loop(
                         // create while loop
                         Ok(AstNode::WhileLoop(
                             condition,
-                            new_ast(x, captured_declarations, returned_types)?,
+                            new_ast(x, captured_declarations, returned_types, false)?,
                             x.token_start_position(),
                         ))
                     }
 
                     _ => Err(CompileError {
                         msg: format!(
-                            "A loop condition using an existing variable must be a boolean expression (true or false). Found a {:?} expression",
-                            data_type
+                            "A loop condition using an existing variable must be a boolean expression (true or false). Found a {} expression",
+                            data_type.to_string()
                         ),
                         start_pos: x.token_start_position(),
                         end_pos: x.token_start_position(),
@@ -112,7 +111,7 @@ pub fn create_loop(
             Ok(AstNode::ForLoop(
                 Box::new(loop_arg),
                 iterated_item,
-                new_ast(x, &combined, returned_types)?,
+                new_ast(x, &combined, returned_types, false)?,
                 x.token_start_position(),
             ))
         }

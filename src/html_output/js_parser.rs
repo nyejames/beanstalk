@@ -1,12 +1,11 @@
 use crate::html_output::web_parser::{JS_INDENT, Target, parse};
-use crate::parsers::ast_nodes::{Arg, Expr, Operator};
+use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
 };
-use colour::red_ln;
 
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(
@@ -200,18 +199,16 @@ pub fn expression_to_js(
         }
 
         // Scenes are basically just template strings when used entirely in JS
-        Expr::Scene(scene_body, scene_style, scene_head, scene_id) => {
+        Expr::Scene(scene_body, scene_style, scene_id) => {
             let parsed_scene = parse_scene(
                 SceneIngredients {
                     scene_body,
                     scene_style,
-                    scene_head,
                     scene_id: scene_id.to_owned(),
                     inherited_style: &None,
                     format_context: StyleFormat::JSString,
                 },
                 &mut js,
-                &mut String::new(),
             )?;
 
             js.push_str(&format!("`{parsed_scene}`"));
@@ -255,7 +252,7 @@ pub fn create_reactive_reference(
         // DataType::Float | DataType::Int => {
         //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
         // }
-        DataType::Arguments(_) | DataType::Collection(_) => {
+        DataType::Object(_) | DataType::Collection(_) => {
             let mut accesses = String::new();
             for access in accessed_args {
                 accesses.push_str(&format!("[{}]", access));

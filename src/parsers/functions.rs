@@ -1,39 +1,14 @@
 use super::{
     ast_nodes::{Arg, AstNode},
-    build_ast::new_ast,
 };
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
-use colour::red;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::parsers::expressions::parse_expression::{
-    create_multiple_expressions, get_accessed_args,
-};
+use crate::parsers::expressions::parse_expression::{create_multiple_expressions, get_accessed_args, create_args_from_types};
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 use crate::parsers::variables::new_arg;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-
-pub fn create_function(
-    x: &mut TokenContext,
-    name: String,
-    variable_declarations: &[Arg],
-) -> Result<Arg, CompileError> {
-    let mut pure = true;
-
-    // get args (tokens should currently be at the start of the args)
-    debug_assert!(x.current_token() == &Token::ArgConstructor);
-
-    let (func_args, return_types) = create_block_signature(x, &mut pure, variable_declarations)?;
-
-    let function_body = new_ast(x, &func_args, &return_types)?;
-
-    Ok(Arg {
-        name,
-        expr: function_body,
-        data_type: DataType::Block(func_args, return_types),
-    })
-}
 
 // Arg names and types are required
 // Can have default values
@@ -157,7 +132,7 @@ pub fn create_block_signature(
 // Replace names with their correct index order
 // Makes sure they are the correct type
 // TODO: check if any of this actually works
-pub fn create_func_call_args(
+pub fn _create_func_call_args(
     args_passed_in: &[Arg],
     args_required: &[Arg],
     token_position: &TokenPosition,
@@ -313,7 +288,7 @@ pub fn parse_function_call(
     returns: &[DataType],
 ) -> Result<AstNode, CompileError> {
     // Assumes starting at the first token after the name of the function call
-    let mut is_pure = true;
+    // let mut is_pure = true;
 
     // make sure there is an open parenthesis
     if x.current_token() != &Token::OpenParenthesis {
@@ -384,7 +359,8 @@ pub fn parse_function_call(
     // let args = create_func_call_args(&expressions, argument_refs, &x.current_position())?;
 
     // look for which arguments are being accessed from the function call
-    let accessed_args = get_accessed_args(x, name, &returns, &mut Vec::new())?;
+    let return_type = create_args_from_types(returns);
+    let accessed_args = get_accessed_args(x, name, &DataType::Object(return_type), &mut Vec::new())?;
 
     // Inline this function call if it's pure and the function call is pure
     // if is_pure && call_value.is_pure() {
@@ -401,7 +377,6 @@ pub fn parse_function_call(
         returns.to_owned(),
         accessed_args,
         x.token_start_position(),
-        is_pure,
     ))
 }
 

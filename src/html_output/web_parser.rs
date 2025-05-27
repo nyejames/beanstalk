@@ -7,7 +7,6 @@ use crate::{
     CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode,
     settings::BS_VAR_PREFIX,
 };
-use colour::green_ln;
 
 pub const JS_INDENT: &str = "    ";
 
@@ -20,12 +19,17 @@ pub struct ParserOutput {
 
     // Eventually will have a separate "bindings" string
     // This will be glue code specific to the target output environment
-    // For web this will just be the JS that will glute the Wasm modules together
+    // For web this will just be the JS that will glue the Wasm modules together
     // pub bindings: String,
-    pub css: String,
+
+    // May not ever use.
+    // Might just stick with inlined styles.
+    // Classes can be used for more complex built-in styling that will go in the standard HTML project BS CSS reset file.
+    // pub css: String,
 }
 
 #[derive(PartialEq)]
+#[allow(dead_code)]
 pub enum Target {
     Web,
     Wasm,
@@ -58,7 +62,7 @@ pub fn parse(
 
         match node {
             // Scenes at the top level of a block
-            AstNode::Reference(Expr::Scene(scene_body, scene_style, scene_head, scene_id), _) => {
+            AstNode::Reference(Expr::Scene(scene_body, scene_style, scene_id), _) => {
                 code_module.push_str(&format!("\n{indentation}"));
                 let top_level_scene_format = match target {
                     Target::Web => StyleFormat::Markdown,
@@ -71,13 +75,11 @@ pub fn parse(
                     SceneIngredients {
                         scene_body,
                         scene_style,
-                        scene_head,
                         inherited_style: &None,
                         scene_id: scene_id.to_owned(),
                         format_context: top_level_scene_format,
                     },
                     &mut code_module,
-                    &mut css,
                 )?;
 
                 match target {
@@ -143,20 +145,16 @@ pub fn parse(
 
                     DataType::Scene(..) => {
                         match expr {
-                            Expr::Scene(scene_body, scene_styles, scene_head, id) => {
-                                let mut created_css = String::new();
-
+                            Expr::Scene(scene_body, scene_styles, id) => {
                                 let scene_to_js_string = parse_scene(
                                     SceneIngredients {
                                         scene_body,
                                         scene_style: scene_styles,
-                                        scene_head,
                                         inherited_style: &None,
                                         scene_id: id.to_owned(),
                                         format_context: StyleFormat::JSString,
                                     },
                                     &mut code_module,
-                                    &mut created_css,
                                 )?;
 
                                 let var_dec = format!(
@@ -164,7 +162,6 @@ pub fn parse(
                                     scene_to_js_string
                                 );
 
-                                css.push_str(&created_css);
                                 code_module.push_str(&var_dec);
                             }
 
@@ -179,7 +176,7 @@ pub fn parse(
                         };
                     }
 
-                    DataType::Arguments(_) => {
+                    DataType::Object(_) => {
                         let var_dec = format!(
                             "const {BS_VAR_PREFIX}{name} = {};",
                             expression_to_js(expr, start_pos, "")?
@@ -257,7 +254,7 @@ pub fn parse(
                 ));
             }
 
-            AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos, _) => {
+            AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos) => {
                 code_module.push_str(indentation);
                 code_module.push_str(&format!(
                     "{BS_VAR_PREFIX}{}({});",
@@ -359,6 +356,5 @@ pub fn parse(
     Ok(ParserOutput {
         content_output,
         code_module,
-        css,
     })
 }

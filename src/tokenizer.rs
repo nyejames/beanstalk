@@ -51,7 +51,7 @@ pub fn tokenize(source_code: &str, module_name: &str) -> Result<TokenizerOutput,
             &mut token_position,
             &mut exports,
             &mut imports,
-            &tokens.last().unwrap(),
+            tokens.last().unwrap(),
         )?;
     }
 
@@ -73,7 +73,7 @@ pub fn tokenize(source_code: &str, module_name: &str) -> Result<TokenizerOutput,
             token_positions,
         },
         imports,
-        exports: exports,
+        exports,
     })
 }
 

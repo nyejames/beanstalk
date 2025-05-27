@@ -5,7 +5,7 @@ use std::str::Chars;
 // Ignores everything except for the closing brackets
 // If there is a greater number of closing brackets than opening brackets,
 // Close the codeblock and return the token
-pub fn tokenize_codeblock(
+pub fn _tokenize_codeblock(
     chars: &mut Peekable<Chars>,
     line_number: &mut u32,
     char_column: &mut u32,

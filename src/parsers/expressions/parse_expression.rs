@@ -4,17 +4,14 @@ use crate::parsers::build_ast::TokenContext;
 use crate::parsers::collections::new_collection;
 use crate::parsers::scene::{SceneType, Style};
 use crate::parsers::variables::{create_reference, get_reference};
-use crate::tokenizer::TokenPosition;
 use crate::{
     CompileError, ErrorType, Token,
     bs_types::DataType,
     parsers::{
         ast_nodes::{Arg, AstNode},
         create_scene_node::new_scene,
-        structs::create_args,
     },
 };
-use colour::blue_ln;
 #[allow(unused_imports)]
 use colour::{grey_ln, red_ln};
 use std::collections::HashMap;
@@ -241,7 +238,7 @@ pub fn create_expression(
                     x,
                     captured_declarations,
                     &mut HashMap::new(),
-                    Style::default(),
+                    &mut Style::default(),
                 )?;
 
                 match scene_type {
@@ -398,17 +395,18 @@ pub fn create_expression(
 
 pub fn get_accessed_args(
     x: &mut TokenContext,
-    collection_name: &str,
-    data_types: &[DataType],
+    accessed_var_name: &str,
+    data_type: &DataType,
     accessed_args: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     // Check if there is access
     // Should be at the variable name in the token stream
     if let Some(Token::Dot) = x.tokens.get(x.index + 1) {
+
         // Move past the dot
         x.index += 2;
 
-        match x.tokens.get(x.index) {
+        return match x.tokens.get(x.index) {
             // INTEGER INDEX ACCESS
             Some(Token::IntLiteral(index)) => {
                 // Check this is a valid index
@@ -420,7 +418,7 @@ pub fn get_accessed_args(
                     return Err(CompileError {
                         msg: format!(
                             "Can't use negative index: {} to access a collection or struct '{}'",
-                            x.index, collection_name
+                            x.index, accessed_var_name
                         ),
                         start_pos: x.token_start_position(),
                         end_pos: x.token_end_position(),
@@ -429,21 +427,21 @@ pub fn get_accessed_args(
                 }
 
                 let idx: usize = *index as usize;
-                if idx >= data_types.len() {
-                    return Err(CompileError {
-                        msg: format!(
-                            "Index {} out of range for any arguments in '{}'",
-                            idx, collection_name
-                        ),
-                        start_pos: x.token_start_position(),
-                        end_pos: x.token_end_position(),
-                        error_type: ErrorType::Rule,
-                    });
-                };
 
-                let data_type = &data_types[idx];
-                return match data_type {
-                    DataType::Arguments(inner_args) => {
+                match data_type {
+                    DataType::Object(inner_args) => {
+                        if idx >= inner_args.len() {
+                            return Err(CompileError {
+                                msg: format!(
+                                    "Index {} is out of bounds of returned arguments for '{}'",
+                                    idx, accessed_var_name
+                                ),
+                                start_pos: x.token_start_position(),
+                                end_pos: x.token_end_position(),
+                                error_type: ErrorType::Rule,
+                            });
+                        }
+
                         accessed_args.push(idx.to_string());
 
                         let inner_types = inner_args
@@ -452,17 +450,20 @@ pub fn get_accessed_args(
                             .collect::<Vec<DataType>>();
 
                         // Recursively call this function until there are no more accessed args
-                        get_accessed_args(x, collection_name, &inner_types, accessed_args)
+                        get_accessed_args(x, accessed_var_name, &inner_types[idx], accessed_args)
                     }
 
                     DataType::Collection(data_type) => {
                         accessed_args.push(idx.to_string());
 
+                        // TODO: no protection from out of bounds at compile time
+                        // This is a good place to start thinking about runtime checks and error handling
+
                         // Recursively call this function until there are no more accessed args
                         get_accessed_args(
                             x,
-                            collection_name,
-                            &[*data_type.to_owned()],
+                            accessed_var_name,
+                            data_type,
                             accessed_args,
                         )
                     }
@@ -470,75 +471,80 @@ pub fn get_accessed_args(
                     _ => Err(CompileError {
                         msg: format!(
                             "Can't access '{}' with an index as it's a {:?}. Only collections can be accessed with an index",
-                            collection_name, data_type
+                            accessed_var_name, data_type
                         ),
                         start_pos: x.token_start_position(),
                         end_pos: x.token_end_position(),
                         error_type: ErrorType::Rule,
                     }),
-                };
+                }
             }
 
             // NAMED ARGUMENT ACCESS
             Some(Token::Variable(name, ..)) => {
-                // Make sure this data type is arguments (named values)
-                // Collect any returned types that are arguments
-                let arguments = get_self_args_from_return_types(data_types.to_owned());
+                
+                match data_type {
+                    DataType::Object(inner_args) => {
+                        let access = match inner_args.iter().find(|arg| arg.name == *name) {
+                            Some(access) => access,
+                            None => {
+                                return Err(CompileError {
+                                    msg: format!("Name '{}' not found inside '{}'", name, accessed_var_name),
+                                    start_pos: x.token_start_position(),
+                                    end_pos: x.token_end_position(),
+                                    error_type: ErrorType::Rule,
+                                });
+                            }
+                        };
 
-                let access = match arguments.iter().find(|arg| arg.name == *name) {
-                    Some(access) => access,
-                    None => {
-                        return Err(CompileError {
-                            msg: format!("Name '{}' not found inside '{}'", name, collection_name),
-                            start_pos: x.token_start_position(),
-                            end_pos: x.token_end_position(),
-                            error_type: ErrorType::Rule,
-                        });
-                    }
-                };
+                        accessed_args.push(access.name.to_owned());
 
-                match &access.data_type {
-                    DataType::Arguments(inner_types) => {
-                        if inner_types.iter().any(|arg| arg.name == *name) {
-                            accessed_args.push(access.name.to_owned());
-                        }
+                        get_accessed_args(
+                            x,
+                            accessed_var_name,
+                            data_type,
+                            accessed_args,
+                        )
                     }
 
                     _ => {
-                        return Err(CompileError {
-                            msg: "Parse expression named access for non argument type (compiler error - may change in future)".to_string(),
+                        Err(CompileError {
+                            msg: format!(
+                                "Can't find any method or property called '{}' on {}. Only arguments can be accessed with a name",
+                                accessed_var_name, data_type.to_string()
+                            ),
                             start_pos: x.token_start_position(),
                             end_pos: x.token_end_position(),
-                            error_type: ErrorType::Compiler,
-                        });
+                            error_type: ErrorType::Rule,
+                        })
                     }
                 }
             }
 
             _ => {
-                return Err(CompileError {
+                Err(CompileError {
                     msg: format!(
                         "Expected an index or name to access struct '{}'",
-                        collection_name
+                        accessed_var_name
                     ),
                     start_pos: x.token_start_position(),
                     end_pos: x.token_end_position(),
                     error_type: ErrorType::Rule,
-                });
+                })
             }
         }
     }
 
-    Ok(Vec::new())
+    Ok(accessed_args.to_owned())
 }
 
 // This is used to unpack all the 'self' values of a block into multiple arguments
-pub fn get_self_args_from_return_types(data_types: Vec<DataType>) -> Vec<Arg> {
+pub fn create_args_from_types(data_types: &[DataType]) -> Vec<Arg> {
     let mut arguments = Vec::new();
 
     for data_type in data_types {
-        if let DataType::Arguments(inner_args) = data_type {
-            arguments.extend(inner_args);
+        if let DataType::Object(inner_args) = data_type {
+            arguments.extend(inner_args.to_owned());
         }
     }
 

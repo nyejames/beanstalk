@@ -1,18 +1,14 @@
 use crate::parsers::ast_nodes::Arg;
-use crate::tokenizer::TokenPosition;
 
-pub fn string_dimensions(s: &str) -> TokenPosition {
-    let (width, height) = s
-        .lines()
-        .map(|line| line.len())
-        .fold((0, 0), |(max_width, count), len| {
-            (max_width.max(len), count + 1)
-        });
-
-    TokenPosition {
-        line_number: height.max(1),
-        char_column: width as i32,
-    }
+// This crate currently has a lot of dead code.
+// But some of these may become useful again in the future.
+// So main.rs is using #[allow(dead_code)] on this crate. This attribute should be removed in the future.
+pub fn combine_two_slices_to_vec<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
+    let mut combined = Vec::with_capacity(a.len() + b.len());
+    combined.extend_from_slice(a);
+    combined.extend_from_slice(b);
+    
+    combined
 }
 
 pub fn find_first_missing(indexes_filled: &[usize]) -> usize {
@@ -83,12 +79,12 @@ pub fn _count_newlines_at_start_of_string(s: &str) -> usize {
 
 // Traits for builtin types to help with parsing
 pub trait NumericalParsing {
-    fn _is_non_newline_whitespace(&self) -> bool;
+    fn is_non_newline_whitespace(&self) -> bool;
     fn is_number_operation_char(&self) -> bool;
     fn is_bracket(&self) -> bool;
 }
 impl NumericalParsing for char {
-    fn _is_non_newline_whitespace(&self) -> bool {
+    fn is_non_newline_whitespace(&self) -> bool {
         self.is_whitespace() && self != &'\n'
     }
     fn is_number_operation_char(&self) -> bool {

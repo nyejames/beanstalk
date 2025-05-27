@@ -1,4 +1,3 @@
-use std::fmt::format;
 use std::str::Chars;
 
 // Custom-flavoured Markdown parser

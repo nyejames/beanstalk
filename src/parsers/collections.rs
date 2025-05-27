@@ -1,9 +1,7 @@
 use super::expressions::parse_expression::create_expression;
 use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::build_ast::TokenContext;
-use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-use colour::red_ln;
 
 // This is a dynamic array of one data type
 // TODO - look through and update / test this code as a lot has changed

@@ -1,4 +1,3 @@
-use crate::bs_types::DataType;
 use crate::html_output::js_parser::create_reactive_reference;
 use crate::html_output::web_parser::{Target, parse};
 use crate::parsers::ast_nodes::Expr;
@@ -6,8 +5,8 @@ use crate::parsers::markdown::to_markdown;
 use crate::settings::BS_VAR_PREFIX;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType};
-use colour::red_ln;
 use std::collections::HashMap;
+use crate::html_output::code_block_highlighting::highlight_html_code_block;
 
 #[derive(Debug)]
 pub enum SceneType {
@@ -58,7 +57,6 @@ pub struct Style {
 
     // If compatible, should this overwrite everything else in the vec.
     // pub overwrite: bool,
-    pub neighbour_rule: NeighbourRule,
 
     // Passes a default style for any children to start with
     // Wrappers can be overridden with parent overrides
@@ -79,7 +77,6 @@ impl Style {
         Style {
             format: StyleFormat::None,
             precedence: -1,
-            neighbour_rule: NeighbourRule::None,
             child_default: None,
             compatibility: SceneCompatibility::All,
             unlocked_scenes: HashMap::new(),
@@ -102,11 +99,6 @@ pub enum StyleFormat {
     JSString = 6,
     WasmString = 7,
 }
-// This will be important for Markdown parsing and how scenes might modify neighbouring scenes
-#[derive(Clone, Debug, PartialEq)]
-pub enum NeighbourRule {
-    None,
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SceneCompatibility {
@@ -118,7 +110,6 @@ pub enum SceneCompatibility {
 
 pub struct SceneIngredients<'a> {
     pub scene_body: &'a SceneContent,
-    pub scene_head: &'a SceneContent,
     pub scene_style: &'a Style,
     pub inherited_style: &'a Option<Style>,
     pub scene_id: String,
@@ -129,12 +120,10 @@ pub struct SceneIngredients<'a> {
 pub fn parse_scene(
     scene_ingredients: SceneIngredients,
     code: &mut String,
-    css: &mut String,
 ) -> Result<String, CompileError> {
     let SceneIngredients {
         scene_body,
         scene_style,
-        scene_head,
         inherited_style,
         scene_id,
         format_context,
@@ -197,18 +186,16 @@ pub fn parse_scene(
                 content.push_str(&value.to_string());
             }
 
-            Expr::Scene(new_scene_nodes, new_scene_style, new_scene_head, new_scene_id) => {
+            Expr::Scene(new_scene_nodes, new_scene_style, new_scene_id) => {
                 let new_scene = parse_scene(
                     SceneIngredients {
                         scene_body: new_scene_nodes,
                         scene_style: new_scene_style,
-                        scene_head: new_scene_head,
                         inherited_style: &final_style.child_default.to_owned().map(|b| *b),
                         scene_id: new_scene_id.to_owned(),
                         format_context: final_style.format.to_owned(),
                     },
                     code,
-                    css,
                 )?;
 
                 content.push_str(&new_scene);
@@ -306,20 +293,24 @@ pub fn parse_scene(
     // parse the content into Markdown
     // If the parent is parsing the Markdown already,
     // skip this as it should be done at the highest level possible
-    if final_style.format == StyleFormat::Markdown && format_context == StyleFormat::None {
+    if final_style.format == StyleFormat::Markdown && format_context != StyleFormat::Markdown {
         let default_tag = "p";
 
         final_string.push_str(&to_markdown(&content, default_tag));
 
-    // TODO - add parsers for each format
+    // If the parent is outputting Markdown and the style is now a Codeblock
+    // Codeblocks can't have children, so there's no need to check that like above
     } else if final_style.format == StyleFormat::Codeblock
         && format_context == StyleFormat::Markdown
     {
         // Add a special object replace character to signal to the parent that this tag should not be parsed into Markdown
         final_string.push_str(&format!(
             "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
-            content
+            highlight_html_code_block(&content, "bs")
         ));
+
+    // No need to do any additional parsing to the content
+    // Might already be parsed by the parent, or just raw
     } else {
         final_string.push_str(&content);
     }

@@ -164,18 +164,28 @@ fn pop_higher_precedence(
 fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, CompileError> {
     let mut scene_body: SceneContent = SceneContent::default();
     let mut style = Style::default();
-    let mut head_nodes: SceneContent = SceneContent::default();
 
     for node in simplified_expression {
         match node.get_expr() {
-            Expr::Scene(body, ref mut scene_style, head, ..) => {
+            Expr::Scene(body, ref mut scene_style, ..) => {
                 scene_body.before.extend(body.before);
                 scene_body.after.extend(body.after);
 
+                if !style.unlocks_override {
+                    if scene_style.unlocks_override {
+                        style.unlocks_override = true;
+                        style.unlocked_scenes = scene_style.unlocked_scenes.to_owned();
+                    } else {
+                        style.unlocked_scenes.extend(scene_style.unlocked_scenes.to_owned());
+                    }
+                }
+
                 // TODO - scene style precedence
-                // Some styles will override others
-                head_nodes.before.extend(head.before);
-                head_nodes.after.extend(head.after);
+                // Some styles will override others based on their precedence
+                style.format = scene_style.format.to_owned();
+                style.child_default = scene_style.child_default.to_owned();
+                style.compatibility = scene_style.compatibility.to_owned();
+                style.precedence = scene_style.precedence.to_owned();
             }
 
             _ => {
@@ -195,7 +205,7 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
         }
     }
 
-    Ok(Expr::Scene(scene_body, style, head_nodes, String::new()))
+    Ok(Expr::Scene(scene_body, style, String::new()))
 }
 
 // TODO - needs to check what can be concatenated at compile time

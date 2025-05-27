@@ -1,5 +1,4 @@
 use crate::bs_types::DataType;
-use crate::parsers::util::string_dimensions;
 use crate::tokenizer::TokenPosition;
 use std::path::PathBuf;
 
@@ -167,7 +166,7 @@ pub enum Token {
 }
 
 impl Token {
-    pub(crate) fn dimensions(&self) -> TokenPosition {
+    pub fn dimensions(&self) -> TokenPosition {
         match self {
             // Might change
             Token::Settings => TokenPosition {
@@ -331,5 +330,20 @@ impl Token {
             Token::StringLiteral(string) => string.clone(),
             _ => String::new(),
         }
+    }
+    
+}
+
+pub fn string_dimensions(s: &str) -> TokenPosition {
+    let (width, height) = s
+        .lines()
+        .map(|line| line.len())
+        .fold((0, 0), |(max_width, count), len| {
+            (max_width.max(len), count + 1)
+        });
+
+    TokenPosition {
+        line_number: height.max(1),
+        char_column: width as i32,
     }
 }

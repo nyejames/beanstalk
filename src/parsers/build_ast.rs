@@ -5,16 +5,15 @@ use super::{
 // use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Arg, Expr};
 use crate::parsers::expressions::parse_expression::{
-    create_multiple_expressions, get_self_args_from_return_types,
+    create_multiple_expressions, create_args_from_types,
 };
 use crate::parsers::functions::parse_function_call;
 use crate::parsers::loops::create_loop;
 use crate::parsers::scene::{SceneType, Style};
-use crate::parsers::variables::{create_reference, get_reference, mutated_arg, new_arg};
+use crate::parsers::variables::{get_reference, mutated_arg, new_arg};
 use crate::tokenizer::TokenPosition;
 use crate::tokens::VarVisibility;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-use colour::green_ln_bold;
 use std::collections::HashMap;
 
 pub struct TokenContext {
@@ -76,12 +75,9 @@ impl TokenContext {
 // This is a new scope
 pub fn new_ast(
     x: &mut TokenContext,
-
-    // This Maybe should be separating imports, as this is args and imports
-    // And only imports should be captured by nested blocks
     captured_declarations: &[Arg],
-
     returns: &[DataType],
+    global_scope: bool,
 ) -> Result<Expr, CompileError> {
     // About 1/10 of the tokens seem to become AST nodes roughly from some very small preliminary tests
     let mut ast = Vec::with_capacity(x.length / 10);
@@ -104,7 +100,7 @@ pub fn new_ast(
                 // Add the default core HTML styles as the initially unlocked styles
                 // let mut unlocked_styles = HashMap::from(get_html_styles());
 
-                let scene = new_scene(x, &declarations, &mut HashMap::new(), Style::default())?;
+                let scene = new_scene(x, &declarations, &mut HashMap::new(), &mut Style::default())?;
 
                 match scene {
                     SceneType::Scene(expr) => {
@@ -195,7 +191,7 @@ pub fn new_ast(
                 ast.push(AstNode::If(
                     condition,
                     // This
-                    new_ast(x, &declarations, returns)?,
+                    new_ast(x, &declarations, returns, global_scope)?,
                     start_pos,
                 ))
             }
@@ -271,7 +267,7 @@ pub fn new_ast(
 
                 let config = match config.expr {
                     Expr::Block(_, _, return_data_types) => {
-                        get_self_args_from_return_types(return_data_types)
+                        create_args_from_types(&return_data_types)
                     }
                     _ => {
                         return Err(CompileError {

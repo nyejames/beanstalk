@@ -9,11 +9,23 @@ Here is a list of current bugs, development goals and planned features.
 A lot of tricky stuff is being built out first before more of the easy wins are finished.
 
 ## Ongoing task list
-- Finish getting loops right
-- enforce commas in scenes
-- Runtime stuff needs to be outputted fully
+- Built in array methods (bake directly into the compiler)
+
+- Module scope does need to be separated. 
+Anything immutable in module scope becomes a constant and possibily static. 
+Scene literals should only be allowed in module scope, 
+and how they are handled by the compiler will depend on the type of project.
+
+- Type checking exports and linking them all with proper types. Custom types first.
+
 - Type checking stage after AST creation.
 Figure out all infferred types, custom Types will be trickiest and most important
+
+- enforce commas in scenes
+
+- Runtime stuff needs to be outputted fully
+
+
 
 - Scenes will parse blocks and look for style properties and insert sucessive scenes passed into it into a 'slot' scene if it has one.
 If multiple scenes with slots are added to a scene, they need to be parsed correctly so each successsive scene is passed into the slot of the previous scene.

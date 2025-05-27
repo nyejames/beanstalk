@@ -1,4 +1,4 @@
-use crate::parsers::ast_nodes::{Expr, Operator};
+use crate::parsers::ast_nodes::Expr;
 use crate::{CompileError, ErrorType, bs_types::DataType, parsers::ast_nodes::AstNode};
 
 #[allow(unused_imports)]

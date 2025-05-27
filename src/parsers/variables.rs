@@ -9,6 +9,7 @@ use crate::parsers::functions::{create_block_signature, parse_function_call};
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
+use crate::parsers::util::combine_two_slices_to_vec;
 
 pub fn create_reference(
     x: &mut TokenContext,
@@ -27,7 +28,7 @@ pub fn create_reference(
 
         _ => {
             let accessed_args =
-                get_accessed_args(x, &arg.name, &[arg.data_type.to_owned()], &mut Vec::new())?;
+                get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
 
             Ok(AstNode::Reference(
                 Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_args),
@@ -67,14 +68,11 @@ pub fn new_arg(
 
             // Capture the variables from the surrounding scope (this might change in the future)
             // Maybe only public variables are captured?
-            let mut combined =
-                Vec::with_capacity(constructor_args.len() + variable_declarations.len());
-            combined.extend_from_slice(&constructor_args);
-            combined.extend_from_slice(variable_declarations);
+            let combined = combine_two_slices_to_vec(&constructor_args, variable_declarations);
 
             return Ok(Arg {
                 name: name.to_owned(),
-                expr: new_ast(x, &combined, &return_type)?,
+                expr: new_ast(x, &combined, &return_type, false)?,
                 data_type: DataType::Block(constructor_args, return_type),
             });
         }
@@ -88,9 +86,10 @@ pub fn new_arg(
                 expr: new_ast(
                     x,
                     // TODO: separate imports from parent block so these can be used in the scope
-                    &[], // No args for this block
+                    variable_declarations, // No args for this block
                     // This implies it will return an instance of itself
                     &[],
+                    false,
                 )?,
                 data_type: DataType::Block(Vec::new(), Vec::new()),
             });
@@ -258,7 +257,7 @@ pub fn mutated_arg(
     }
 
     let accessed_args =
-        get_accessed_args(x, &arg.name, &[arg.data_type.to_owned()], &mut Vec::new())?;
+        get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
 
     // Move past the name
     x.advance();
@@ -369,7 +368,6 @@ fn create_zero_value_var(data_type: DataType, name: impl Into<String>) -> Arg {
             expr: Expr::Scene(
                 SceneContent::default(),
                 Style::default(),
-                SceneContent::default(),
                 String::default(),
             ),
             data_type,

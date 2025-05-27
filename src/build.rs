@@ -144,7 +144,7 @@ pub fn build(
             // Anything imported into the config file becomes an import of every module in the project
             global_imports.extend(tokenizer_output.imports);
 
-            let config_block = match new_ast(&mut tokenizer_output.token_context, &[], &mut []) {
+            let config_block = match new_ast(&mut tokenizer_output.token_context, &[], &mut [], true) {
                 Ok(expr) => expr,
                 Err(e) => return Err(e.to_error(config_path)),
             };
@@ -197,7 +197,7 @@ pub fn build(
 
         // Create a new export entry for this module
         let export_path = relative_export_path.to_string_lossy().to_string();
-        public_exports.insert(export_path.to_owned(), Vec::new());
+        public_exports.insert(export_path.to_owned(), tokenizer_output.exports);
 
         module.imports = global_imports.to_owned();
         module.imports.extend(tokenizer_output.imports);
@@ -547,7 +547,7 @@ fn compile(
     }
 
     // AST PARSER
-    let ast = match new_ast(&mut module.tokens, &declarations, &[]) {
+    let ast = match new_ast(&mut module.tokens, &declarations, &[], true) {
         Ok(block) => block.get_block_nodes().to_owned(),
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));

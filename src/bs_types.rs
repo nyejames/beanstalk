@@ -1,5 +1,4 @@
 use crate::parsers::ast_nodes::{Arg, Expr};
-use std::ops::Index;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
@@ -39,14 +38,14 @@ pub enum DataType {
     Collection(Box<DataType>),
 
     // Used for constructing new types
-    Arguments(Vec<Arg>),
+    Object(Vec<Arg>),
 
     // Special Beanstalk Types
     // Scene types may have more static structure to them in the future
     Scene(bool), // is_mutable
 
     // Blocks are either functions or classes or both depending on their signature
-    Block(Vec<Arg>, Vec<DataType>), // Arguments, Returned args
+    Block(Vec<Arg>, Vec<DataType>), // Exported properties/methods, Returned args
 
     // Type Types
     // Unions allow types such as option and result
@@ -81,7 +80,7 @@ impl DataType {
                 return matches!(
                     accepted_type,
                     DataType::Collection(_)
-                        | DataType::Arguments(_)
+                        | DataType::Object(_)
                         | DataType::Float(_)
                         | DataType::Int(_)
                         | DataType::Decimal(_)
@@ -140,7 +139,7 @@ impl DataType {
             DataType::Decimal(_) => 6,
             DataType::Collection(inner_type) => inner_type.length(),
 
-            DataType::Arguments(_) => 1,
+            DataType::Object(_) => 1,
             DataType::Choices(inner_types) => {
                 let mut length = 0;
                 for arg in inner_types {
@@ -167,7 +166,7 @@ impl DataType {
             DataType::Collection(inner_type) => {
                 DataType::Option(Box::new(DataType::Collection(inner_type)))
             }
-            DataType::Arguments(args) => DataType::Option(Box::new(DataType::Arguments(args))),
+            DataType::Object(args) => DataType::Option(Box::new(DataType::Object(args))),
             DataType::Block(args, return_type) => {
                 DataType::Option(Box::new(DataType::Block(args, return_type)))
             }
@@ -202,7 +201,7 @@ impl DataType {
             DataType::Int(mutable) => *mutable,
             DataType::Decimal(mutable) => *mutable,
             DataType::Collection(inner_type) => inner_type.is_mutable(),
-            DataType::Arguments(args) => {
+            DataType::Object(args) => {
                 for arg in args {
                     if arg.data_type.is_mutable() {
                         return true;
@@ -218,7 +217,7 @@ impl DataType {
         match self {
             DataType::Range => true,
             DataType::Collection(_) => true,
-            DataType::Arguments(_) => true,
+            DataType::Object(_) => true,
             DataType::String(_) => true,
             DataType::Float(_) => true,
             DataType::Int(_) => true,
@@ -248,7 +247,7 @@ impl DataType {
             DataType::Collection(inner_type) => {
                 DataType::Collection(Box::new(inner_type.to_mutable()))
             }
-            DataType::Arguments(args) => {
+            DataType::Object(args) => {
                 let mut new_args = Vec::new();
                 for arg in args {
                     new_args.push(Arg {
@@ -258,9 +257,55 @@ impl DataType {
                     });
                 }
 
-                DataType::Arguments(new_args)
+                DataType::Object(new_args)
             }
             _ => self.to_owned(),
+        }
+    }
+    
+    pub fn to_string(&self) -> String {
+        match self {
+            DataType::Inferred(mutable) => format!("{} Inferred", if *mutable {"mutable"} else {""}),
+            DataType::CoerceToString(mutable) => format!("{} CoerceToString", if *mutable {"mutable"} else {""}),
+            DataType::Bool(mutable) => format!("{} Bool", if *mutable {"mutable"} else {""}),
+            DataType::String(mutable) => format!("{} String", if *mutable {"mutable"} else {""}),
+            DataType::Float(mutable) => format!("{} Float", if *mutable {"mutable"} else {""}),
+            DataType::Int(mutable) => format!("{} Int", if *mutable {"mutable"} else {""}),
+            DataType::Decimal(mutable) => format!("{} Decimal", if *mutable {"mutable"} else {""}),
+            DataType::Collection(inner_type) => format!("{} Collection", inner_type.to_string()),
+            DataType::Object(args) => {
+                let mut arg_str = String::new();
+                for arg in args {
+                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.data_type.to_string()));
+                }
+                format!("{} Arguments({})", self.to_string(), arg_str)
+            }
+            DataType::Block(args, return_types) => {
+                let mut arg_str = String::new();
+                let mut returns_string = String::new();
+                for arg in args {
+                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.data_type.to_string()));
+                }
+                for return_type in return_types {
+                    returns_string.push_str(&format!("{}, ", return_type.to_string()));
+                }
+                
+                format!("Block({} -> {})", arg_str, returns_string)
+            }
+            DataType::Scene(mutable) => format!("{} Scene", if *mutable {"mutable"} else {""}),
+            DataType::Pointer(name) => format!("{} Pointer", name),
+            DataType::None => "None".to_owned(),
+            DataType::True => "True".to_owned(),
+            DataType::False => "False".to_owned(),
+            DataType::Range => "Range".to_owned(),
+            DataType::Option(inner_type) => format!("Option({})", inner_type.to_string()),
+            DataType::Choices(inner_types) => {
+                let mut inner_types_str = String::new();
+                for inner_type in inner_types {
+                    inner_types_str.push_str(&format!("{}, ", inner_type.to_string()));
+                }
+                format!("Choices({})", inner_types_str)
+            }
         }
     }
 }
@@ -274,7 +319,7 @@ pub fn get_any_number_datatype(mutable: bool) -> DataType {
 }
 
 pub fn get_rgba_args() -> DataType {
-    DataType::Arguments(vec![
+    DataType::Object(vec![
         Arg {
             name: "red".to_string(),
             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
@@ -301,7 +346,7 @@ pub fn get_rgba_args() -> DataType {
 pub fn get_accessed_data_type(data_type: &DataType, arguments_accessed: &[String]) -> DataType {
     match arguments_accessed.first() {
         Some(index) => match &data_type {
-            DataType::Arguments(inner_types) => {
+            DataType::Object(inner_types) => {
                 // This part could be recursively check if there are more arguments to access
                 if arguments_accessed.len() > 1 {
                     get_accessed_data_type(

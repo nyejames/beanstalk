@@ -33,6 +33,7 @@ mod parsers {
     pub mod loops;
     pub mod scene;
     pub mod structs;
+    #[allow(dead_code)]
     pub mod util;
     pub mod variables;
 }
@@ -115,8 +116,10 @@ pub struct Error {
 // Compiler Output_info_levels
 // Will need to be converted to cli args eventually
 // So cba to do enum yet because this might just change to strings or something
+#[allow(dead_code)]
 const SHOW_TOKENS: i32 = 6;
 const SHOW_AST: i32 = 5;
+#[allow(dead_code)]
 const SHOW_WAT: i32 = 4;
 const SHOW_TIMINGS: i32 = 3;
 const DONT_SHOW_TIMINGS: i32 = 2;
@@ -184,7 +187,7 @@ fn main() {
         Command::Test => {
             println!("Testing...");
             let test_path = PathBuf::from("test_output");
-            match test::test_build(&test_path) {
+            match test::test_build(&test_path, SHOW_AST) {
                 Ok(_) => {}
                 Err(e) => {
                     print_formatted_error(e);
