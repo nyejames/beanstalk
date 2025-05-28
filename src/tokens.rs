@@ -57,7 +57,10 @@ pub enum Token {
 
     // Variables / Functions
     Arrow,
-    Variable(String, VarVisibility), // name, visibility, is_mutable
+
+    // Mutability modifier here is only if this is used as a reference
+    // The type of a new variable declaration will otherwise carry the info about it's mutability
+    Variable(String, VarVisibility, bool), // name, visibility
 
     // Literals
     StringLiteral(String),

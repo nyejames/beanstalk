@@ -502,11 +502,12 @@ fn compile(
                 name: split_import_string[1].to_owned(),
                 expr: Expr::Reference(
                     split_import_string[1].to_owned(),
-                    DataType::Pointer(split_import_string[1].to_owned()),
+                    DataType::UnknownReference(split_import_string[1].to_owned(), false),
                     Vec::new(),
                 ),
-                data_type: DataType::Pointer(split_import_string[1].to_owned()),
+                data_type: DataType::UnknownReference(split_import_string[1].to_owned(), false),
             })
+            
         } else {
             import_requests.push(import.to_string());
 

@@ -110,10 +110,7 @@ pub fn new_ast(
                         return Err(CompileError {
                             msg: "Slot can't be used at the top level of a scene. Slots can only be used inside of other scenes".to_string(),
                             start_pos: x.token_start_position(),
-                            end_pos: TokenPosition {
-                                line_number: x.token_start_position().line_number,
-                                char_column: x.token_start_position().char_column + 5,
-                            },
+                            end_pos: x.token_end_position(),
                             error_type: ErrorType::Rule,
                         })
                     }
@@ -127,7 +124,18 @@ pub fn new_ast(
             }
 
             // New Function or Variable declaration
-            Token::Variable(ref name, visibility) => {
+            Token::Variable(ref name, visibility, mutable) => {
+                
+                // There should be no 'mutable' modifier if a variable name is used on the RHS of an expression
+                if mutable {
+                    return Err( CompileError {
+                        msg: "Mutability modifiers can only be used on types or on references on the right hand side of an expression".to_string(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Rule,
+                    });
+                }
+                
                 if let Some(arg) = get_reference(name, &declarations) {
                     // Then the associated mutation afterwards
                     ast.push(mutated_arg(x, arg, &declarations)?);
@@ -273,7 +281,7 @@ pub fn new_ast(
                         return Err(CompileError {
                             msg: "Settings must be a block".to_string(),
                             start_pos: x.token_start_position(),
-                            end_pos: x.token_start_position(),
+                            end_pos: x.token_end_position(),
                             error_type: ErrorType::Syntax,
                         });
                     }

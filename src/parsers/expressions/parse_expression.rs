@@ -507,6 +507,37 @@ pub fn get_accessed_args(
                         )
                     }
 
+                    // TODO: Built-in methods.
+                    // These should probably move into the standard library in the future.
+                    // When new methods can be implemented for Types then it makes sense to rewrite them like that.
+                    // For now the uber fast option is for all primitive types (collections, numbers, strings) to just have built-in custom code for their built-in methods.
+                    DataType::Collection(..) => {
+                        match name.as_str() {
+                            "push" | "pop" | "remove" | "clear" => {
+                                // This needs to be resolved to built-in calls in the backend
+                                accessed_args.push(name.to_owned());
+                            }
+                            _ => {
+                                return Err(CompileError {
+                                    msg: format!(
+                                        "Couldn't find the method '{}' on {}. Check the docs for a list of methods availble for collections",
+                                        name, accessed_var_name
+                                    ),
+                                    start_pos: x.token_start_position(),
+                                    end_pos: x.token_end_position(),
+                                    error_type: ErrorType::Rule,
+                                });
+                            }
+                        }
+
+                        get_accessed_args(
+                            x,
+                            accessed_var_name,
+                            data_type,
+                            accessed_args,
+                        )
+                    }
+
                     _ => {
                         Err(CompileError {
                             msg: format!(

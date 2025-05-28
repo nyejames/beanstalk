@@ -191,10 +191,7 @@ impl Expr {
     pub fn is_collection(&self) -> bool {
         match self {
             Expr::Collection(..) => true,
-            Expr::Reference(_, data_type, ..) => match data_type {
-                DataType::Collection(_) => true,
-                _ => false,
-            },
+            Expr::Reference(_, data_type, ..) => matches!(data_type, DataType::Collection(_)),
             _ => false,
         }
     }

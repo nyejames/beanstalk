@@ -676,13 +676,14 @@ fn keyword_or_variable(
                     exports.push(Token::Variable(
                         token_value.to_string(),
                         VarVisibility::Public,
+                        mutable_modifier,
                     ));
                     VarVisibility::Public
                 }
                 _ => VarVisibility::Temporary,
             };
 
-            return Ok(Token::Variable(token_value.to_string(), visibility));
+            return Ok(Token::Variable(token_value.to_string(), visibility, mutable_modifier));
         } else {
             break;
         }

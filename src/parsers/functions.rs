@@ -43,8 +43,10 @@ pub fn create_block_signature(
     // Parse return types
     let mut return_types = Vec::new();
     let mut next_in_list: bool = true;
+    
     while x.index < x.length {
         match x.current_token() {
+
             Token::DatatypeLiteral(data_type) => {
                 if !next_in_list {
                     return Err(CompileError {
@@ -62,7 +64,7 @@ pub fn create_block_signature(
                 x.advance();
             }
 
-            Token::Variable(name, ..) => {
+            Token::Variable(name, _, mutable) => {
                 if !next_in_list {
                     return Err(CompileError {
                         msg: "Should have a comma to separate return types".to_string(),
@@ -75,7 +77,7 @@ pub fn create_block_signature(
                     });
                 }
 
-                return_types.push(DataType::Pointer(name.to_owned()));
+                return_types.push(DataType::UnknownReference(name.to_owned(), mutable.to_owned()));
                 x.advance();
             }
 

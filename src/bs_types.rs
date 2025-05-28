@@ -5,12 +5,14 @@ pub enum DataType {
     // Mutability is part of the type
     // This helps with compile time constant folding
 
-    // Before we know the type of reference, a pointer is used.
+    // Custom types (references to user types) must store their name to be type-checked later and replaced with the correct shape.
     // We use this at the AST stage for imports or references when we can't figure out the type yet
-    Pointer(String),
+    UnknownReference(String, bool),
 
-    // Mutable Data Types will have an additional bool to indicate whether they are mutable
-    Inferred(bool), // Type is inferred
+    // Type is inferred, This only exists before the type checking stage
+    // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile
+    Inferred(bool),
+
     Bool(bool),
     Range, // Iterable
 
@@ -88,7 +90,7 @@ impl DataType {
                 );
             }
 
-            DataType::Pointer(..) => {
+            DataType::UnknownReference(..) => {
                 return true;
             }
 
@@ -126,7 +128,7 @@ impl DataType {
 
     pub fn length(&self) -> u32 {
         match self {
-            DataType::Pointer(name) => name.len() as u32,
+            DataType::UnknownReference(name, mutable) => name.len() as u32 + if *mutable { 1 } else { 0 },
             DataType::Inferred(_) => 0,
             DataType::CoerceToString(_) => 0,
             DataType::Bool(_) => 4,
@@ -171,7 +173,7 @@ impl DataType {
                 DataType::Option(Box::new(DataType::Block(args, return_type)))
             }
             DataType::Scene(mutable) => DataType::Option(Box::new(DataType::Scene(mutable))),
-            DataType::Pointer(name) => DataType::Option(Box::new(DataType::Pointer(name))),
+            DataType::UnknownReference(name, mutable) => DataType::Option(Box::new(DataType::UnknownReference(name, mutable))),
             DataType::Inferred(mutable) => DataType::Option(Box::new(DataType::Inferred(mutable))),
             DataType::CoerceToString(mutable) => {
                 DataType::Option(Box::new(DataType::CoerceToString(mutable)))
@@ -222,7 +224,7 @@ impl DataType {
             DataType::Float(_) => true,
             DataType::Int(_) => true,
             DataType::Decimal(_) => true,
-            DataType::Pointer(_) => true,
+            DataType::UnknownReference(..) => false,
             DataType::Inferred(_) => true, // Will need to be type checked later
             _ => false,
         }
@@ -293,7 +295,7 @@ impl DataType {
                 format!("Block({} -> {})", arg_str, returns_string)
             }
             DataType::Scene(mutable) => format!("{} Scene", if *mutable {"mutable"} else {""}),
-            DataType::Pointer(name) => format!("{} Pointer", name),
+            DataType::UnknownReference(name, ..) => format!("{} Pointer", name),
             DataType::None => "None".to_owned(),
             DataType::True => "True".to_owned(),
             DataType::False => "False".to_owned(),
