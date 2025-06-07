@@ -1,10 +1,13 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use super::{
     ast_nodes::{Arg, AstNode},
 };
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::parsers::expressions::parse_expression::{create_multiple_expressions, get_accessed_args, create_args_from_types};
+use crate::parsers::expressions::parse_expression::{create_multiple_expressions, create_args_from_types};
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 use crate::parsers::variables::new_arg;
 use crate::tokenizer::TokenPosition;
@@ -43,7 +46,7 @@ pub fn create_block_signature(
     // Parse return types
     let mut return_types = Vec::new();
     let mut next_in_list: bool = true;
-    
+
     while x.index < x.length {
         match x.current_token() {
 
@@ -143,13 +146,13 @@ pub fn _create_func_call_args(
     let mut indexes_filled: Vec<usize> = Vec::with_capacity(args_required.len());
     let mut sorted_values: Vec<Expr> = args_required
         .iter()
-        .map(|arg| arg.expr.to_owned())
+        .map(|arg| arg.default_value.to_owned())
         .collect();
 
-    if args_passed_in.is_empty() || args_passed_in[0].expr == Expr::None {
+    if args_passed_in.is_empty() || args_passed_in[0].default_value == Expr::None {
         for arg in args_required {
             // Make sure there are no required arguments left
-            if arg.expr != Expr::None {
+            if arg.default_value != Expr::None {
                 return Err(CompileError {
                     msg: format!(
                         "Missed at least one required argument for struct or function call: {} (type: {:?})",
@@ -232,14 +235,14 @@ pub fn _create_func_call_args(
                 });
             }
 
-            sorted_values[min_available] = arg.expr.to_owned();
+            sorted_values[min_available] = arg.default_value.to_owned();
             indexes_filled.push(min_available);
             continue;
         }
 
         for (j, arg_required) in args_required.iter().enumerate() {
             if arg_required.name == arg.name {
-                sorted_values[j] = arg.expr.to_owned();
+                sorted_values[j] = arg.default_value.to_owned();
                 indexes_filled.push(j);
                 continue 'outer;
             }
@@ -285,56 +288,14 @@ pub fn _create_func_call_args(
 pub fn parse_function_call(
     x: &mut TokenContext,
     name: &str,
-    variable_declarations: &[Arg],
-    argument_refs: &[Arg],
+    captured_declarations: &[Arg],
+    required_arguments: &[Arg],
     returns: &[DataType],
 ) -> Result<AstNode, CompileError> {
     // Assumes starting at the first token after the name of the function call
-    // let mut is_pure = true;
-
-    // make sure there is an open parenthesis
-    if x.current_token() != &Token::OpenParenthesis {
-        return Err(CompileError {
-            msg: format!(
-                "Expected a parenthesis after function call. Found {:?} instead.",
-                x.current_token()
-            ),
-            start_pos: x.token_start_position(),
-            end_pos: TokenPosition {
-                line_number: x.token_start_position().line_number,
-                char_column: x.token_start_position().char_column + 1,
-            },
-            error_type: ErrorType::Syntax,
-        });
-    }
-
-    x.advance();
 
     // Create expressions until hitting a closed parenthesis
-    // TODO: named arguments
-    let required_argument_types = argument_refs
-        .iter()
-        .map(|arg| arg.data_type.to_owned())
-        .collect::<Vec<DataType>>();
-
-    let expressions = if required_argument_types.is_empty() {
-        // make sure there is a closing parenthesis
-        if x.current_token() != &Token::CloseParenthesis {
-            return Err(CompileError {
-                msg: "This function doesn't accept any arguments. Close it right away with a closing parenthesis instead.".to_string(),
-                start_pos: x.token_start_position(),
-                end_pos: TokenPosition {
-                    line_number: x.token_start_position().line_number,
-                    char_column: x.token_start_position().char_column + 1,
-                },
-                error_type: ErrorType::Syntax,
-            });
-        }
-
-        Vec::new()
-    } else {
-        create_multiple_expressions(x, &required_argument_types, variable_declarations)?
-    };
+    let expressions = create_function_arguments(x, required_arguments, captured_declarations)?;
 
     // Make sure there is a closing parenthesis
     if x.current_token() != &Token::CloseParenthesis {
@@ -361,8 +322,8 @@ pub fn parse_function_call(
     // let args = create_func_call_args(&expressions, argument_refs, &x.current_position())?;
 
     // look for which arguments are being accessed from the function call
-    let return_type = create_args_from_types(returns);
-    let accessed_args = get_accessed_args(x, name, &DataType::Object(return_type), &mut Vec::new())?;
+    // let return_type = create_args_from_types(returns);
+    // let accessed_args = get_accessed_args(x, name, &DataType::Object(return_type), &mut Vec::new(), captured_declarations)?;
 
     // Inline this function call if it's pure and the function call is pure
     // if is_pure && call_value.is_pure() {
@@ -377,9 +338,59 @@ pub fn parse_function_call(
         name.to_owned(),
         expressions,
         returns.to_owned(),
-        accessed_args,
         x.token_start_position(),
     ))
+}
+
+pub fn create_function_arguments(
+    x: &mut TokenContext,
+    required_arguments: &[Arg],
+    variable_declarations: &[Arg]
+) -> Result<Vec<Expr>, CompileError> {
+    // Starts at the first token after the function name
+
+    // make sure there is an open parenthesis
+    if x.current_token() != &Token::OpenParenthesis {
+        return Err(CompileError {
+            msg: format!(
+                "Expected a parenthesis after function call. Found {:?} instead.",
+                x.current_token()
+            ),
+            start_pos: x.token_start_position(),
+            end_pos: TokenPosition {
+                line_number: x.token_start_position().line_number,
+                char_column: x.token_start_position().char_column + 1,
+            },
+            error_type: ErrorType::Syntax,
+        });
+    }
+
+    x.advance();
+
+    if required_arguments.is_empty() {
+        // Make sure there is a closing parenthesis
+        if x.current_token() != &Token::CloseParenthesis {
+            return Err(CompileError {
+                msg: "This function doesn't accept any arguments. Close it right away with a closing parenthesis instead.".to_string(),
+                start_pos: x.token_start_position(),
+                end_pos: TokenPosition {
+                    line_number: x.token_start_position().line_number,
+                    char_column: x.token_start_position().char_column + 1,
+                },
+                error_type: ErrorType::Syntax,
+            });
+        }
+
+        Ok(Vec::new())
+    } else {
+        
+        let required_argument_types = required_arguments
+            .iter()
+            .map(|arg| arg.data_type.to_owned())
+            .collect::<Vec<DataType>>();
+        
+        create_multiple_expressions(x, &required_argument_types, variable_declarations)
+    }
 }
 
 fn create_arg_constructor(

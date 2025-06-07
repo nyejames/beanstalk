@@ -10,9 +10,10 @@ Elements inside of collections are mutable.
 
 Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
 
-Elements inside of collections are accessed using the .get().
+Elements inside of collections are accessed using the .get() method.
 
-array.get(0) is the equivalent of array[0] in most C like languages. There is no square or curly brackets notation.
+array.get(0) is the equivalent of array[0] in most C like languages. 
+There is no square or curly brackets notation.
 
 There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be fast.
 

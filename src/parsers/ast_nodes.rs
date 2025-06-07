@@ -1,5 +1,4 @@
 use crate::bs_types::DataType;
-use crate::bs_types::get_accessed_data_type;
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
 use crate::tokens::{string_dimensions, VarVisibility};
@@ -15,7 +14,7 @@ use wasm_encoder::ValType;
 pub struct Arg {
     pub name: String, // Optional Name of the argument (empty string if unnamed)
     pub data_type: DataType,
-    pub expr: Expr, // Optional Value of the argument - 'None' if no value
+    pub default_value: Expr, // Optional Value of the argument - 'None' if no value
 }
 
 impl Arg {
@@ -56,7 +55,7 @@ pub enum Expr {
     // For variables, function calls and structs / collection access
     // Name, DataType, Specific argument accessed
     // Arg accessed might be useful for built-in methods on any type
-    Reference(String, DataType, Vec<String>),
+    Reference(String, DataType),
 
     Runtime(Vec<AstNode>, DataType),
 
@@ -257,6 +256,7 @@ pub enum AstNode {
     Use(PathBuf, TokenPosition), // Path, Line number
 
     // Control Flow
+    Access,
     Return(Vec<Expr>, TokenPosition),  // Return value, Line number
     If(Expr, Expr, TokenPosition),     // Condition, If true, Line number
     Else(Vec<AstNode>, TokenPosition), // Body, Line number
@@ -269,7 +269,6 @@ pub enum AstNode {
         String,
         Vec<Expr>,     // Arguments passed in
         Vec<DataType>, // return types
-        Vec<String>,   // Accessed args
         TokenPosition,
         // bool, // Function is pure
     ),
@@ -294,8 +293,9 @@ pub enum AstNode {
     // Literals
     Reference(Expr, TokenPosition),  // Token, Line number
     Expression(Expr, TokenPosition), // Token, Line number
-    // Name, Assignment operator, Value, Accessed args, Line number
-    Mutation(String, AssignmentOperator, Expr, Vec<String>, TokenPosition),
+    
+    // Name, Assignment operator, Value, Line number
+    Mutation(String, AssignmentOperator, Expr, TokenPosition),
 
     SceneTemplate,
     Slot,
@@ -333,8 +333,8 @@ impl AstNode {
                     }
                     data_type
                 }
-                Expr::Reference(_, data_type, argument_accessed) => {
-                    get_accessed_data_type(data_type, argument_accessed)
+                Expr::Reference(_, data_type) => {
+                    data_type.to_owned()
                 }
                 Expr::Block(args, _, return_types, ..) => {
                     DataType::Block(args.to_owned(), return_types.to_owned())
@@ -353,7 +353,7 @@ impl AstNode {
                     .map(|t| Arg {
                         name: String::new(),
                         data_type: t.to_owned(),
-                        expr: Expr::None,
+                        default_value: Expr::None,
                     })
                     .collect(),
             ),
@@ -472,8 +472,8 @@ impl Expr {
                 DataType::Block(args.to_owned(), return_type.to_owned())
             }
             // Need to check accessed args
-            Expr::Reference(_, data_type, argument_accessed) => {
-                get_accessed_data_type(data_type, argument_accessed)
+            Expr::Reference(_, data_type) => {
+                data_type.to_owned()
             }
         }
     }
@@ -495,7 +495,7 @@ impl Expr {
             Expr::Args(args) => {
                 let mut all_items = String::new();
                 for arg in args {
-                    all_items.push_str(&arg.expr.as_string());
+                    all_items.push_str(&arg.default_value.as_string());
                 }
                 all_items
             }
@@ -519,7 +519,7 @@ impl Expr {
             }
             Expr::Args(args) => {
                 for arg in args {
-                    if !arg.expr.is_pure() {
+                    if !arg.default_value.is_pure() {
                         return false;
                     }
                 }
@@ -623,12 +623,12 @@ impl Expr {
 
             Expr::Args(args) => {
                 let mut combined_dimensions = TokenPosition {
-                    line_number: args[0].expr.dimensions().line_number,
-                    char_column: args[0].expr.dimensions().char_column,
+                    line_number: args[0].default_value.dimensions().line_number,
+                    char_column: args[0].default_value.dimensions().char_column,
                 };
 
                 for arg in args {
-                    combined_dimensions.char_column += arg.expr.dimensions().char_column;
+                    combined_dimensions.char_column += arg.default_value.dimensions().char_column;
                 }
 
                 combined_dimensions

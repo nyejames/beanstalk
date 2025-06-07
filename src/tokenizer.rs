@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use super::tokens::{Token, TokenizeMode, VarVisibility};
 use crate::bs_types::DataType;
 use crate::parsers::build_ast::TokenContext;
@@ -121,9 +124,9 @@ pub fn get_next_token(
     }
 
     while current_char.is_whitespace() {
+        token_position.char_column += 1;
         current_char = match chars.next() {
             Some(ch) => {
-                token_position.char_column += 1;
                 ch
             }
             None => return Ok(Token::EOF),
@@ -203,6 +206,16 @@ pub fn get_next_token(
     if current_char == ':' {
         if tokenize_mode == &TokenizeMode::SceneHead {
             *tokenize_mode = TokenizeMode::SceneBody;
+            return Ok(Token::Colon);
+        }
+        
+        // ::
+        if let Some(&next_char) = chars.peek() {
+            if next_char == ':' {
+                chars.next();
+                token_position.char_column += 1;
+                return Ok(Token::Private);
+            }
         }
 
         return Ok(Token::Colon);
@@ -499,10 +512,6 @@ pub fn get_next_token(
         return Ok(Token::Public);
     }
 
-    if current_char == '$' {
-        return Ok(Token::Private);
-    }
-
     // Numbers
     if current_char.is_numeric() {
         token_value.push(current_char);
@@ -778,9 +787,14 @@ fn string_block(
     while let Some(ch) = chars.peek() {
         // Skip whitespace before the first colon that starts the block
         if ch.is_whitespace() {
+            if ch == &'\n' {
+                token_position.line_number += 1;
+                token_position.char_column = 0;
+            } else {
+                token_position.char_column += 1;
+            }
+            
             chars.next();
-            token_position.char_column += 1;
-
             continue;
         }
 

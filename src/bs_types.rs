@@ -47,7 +47,7 @@ pub enum DataType {
     Scene(bool), // is_mutable
 
     // Blocks are either functions or classes or both depending on their signature
-    Block(Vec<Arg>, Vec<DataType>), // Exported properties/methods, Returned args
+    Block(Vec<Arg>, Vec<DataType>), // Arg constructor, Returned args
 
     // Type Types
     // Unions allow types such as option and result
@@ -255,7 +255,7 @@ impl DataType {
                     new_args.push(Arg {
                         name: arg.name.to_owned(),
                         data_type: arg.data_type.to_mutable(),
-                        expr: arg.expr.to_owned(),
+                        default_value: arg.default_value.to_owned(),
                     });
                 }
 
@@ -325,62 +325,52 @@ pub fn get_rgba_args() -> DataType {
         Arg {
             name: "red".to_string(),
             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-            expr: Expr::Float(0.0),
+            default_value: Expr::Float(0.0),
         },
         Arg {
             name: "green".to_string(),
             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-            expr: Expr::Float(0.0),
+            default_value: Expr::Float(0.0),
         },
         Arg {
             name: "blue".to_string(),
             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-            expr: Expr::Float(0.0),
+            default_value: Expr::Float(0.0),
         },
         Arg {
             name: "alpha".to_string(),
             data_type: DataType::Choices(vec![DataType::Float(false), DataType::Int(false)]),
-            expr: Expr::Float(1.0),
+            default_value: Expr::Float(1.0),
         },
     ])
 }
 
-pub fn get_accessed_data_type(data_type: &DataType, arguments_accessed: &[String]) -> DataType {
-    match arguments_accessed.first() {
-        Some(index) => match &data_type {
+pub fn get_accessed_data_type(data_type: &DataType, members_accessed: &[Arg]) -> DataType {
+    match members_accessed.first() {
+        Some(member) => match &data_type {
             DataType::Object(inner_types) => {
                 // This part could be recursively check if there are more arguments to access
-                if arguments_accessed.len() > 1 {
+                if members_accessed.len() > 1 {
                     get_accessed_data_type(
                         &inner_types
                             .iter()
-                            .find(|t| t.name == *index)
+                            .find(|t| t.name == member.name)
                             .unwrap()
                             .data_type,
-                        &arguments_accessed[1..],
+                        &members_accessed[1..],
                     )
+
                 } else {
                     inner_types
                         .iter()
-                        .find(|t| t.name == *index)
+                        .find(|t| t.name == member.name)
                         .unwrap()
                         .data_type
                         .to_owned()
                 }
             }
 
-            DataType::Collection(inner_type) => {
-                // This part could be recursive as get_type() can call this function again
-                let inner_type = *inner_type.to_owned();
-                if arguments_accessed.len() > 1 {
-                    // Could be trying to access a non-collection or struct,
-                    // But this should be caught earlier in the compiler
-                    get_accessed_data_type(&inner_type, &arguments_accessed[1..])
-                } else {
-                    inner_type
-                }
-            }
-
+            // Needs to check built-in methods same as get_accessed_args() does
             _ => {
                 // TODO - get any implemented or built in methods on this data type
                 data_type.to_owned()

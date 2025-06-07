@@ -11,10 +11,12 @@ A lot of tricky stuff is being built out first before more of the easy wins are 
 ## Ongoing task list
 - Built in array methods (bake directly into the compiler)
 
-- Module scope does need to be separated. 
-Anything immutable in module scope becomes a constant and possibily static. 
-Scene literals should only be allowed in module scope, 
-and how they are handled by the compiler will depend on the type of project.
+- Experiment with no explicit types in declarations at all, this space is only reserved for
+variable visibilitiy or modifiers such as public, private and it's mutability.
+
+- Newlines should only break expressions if 
+    1. the next token does not continue an expession in the case of not being an operator
+    2. the token before the newline expects the next part of the expression
 
 - Type checking exports and linking them all with proper types. Custom types first.
 

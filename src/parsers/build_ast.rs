@@ -1,12 +1,13 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use super::{
     ast_nodes::AstNode, create_scene_node::new_scene,
     expressions::parse_expression::create_expression,
 };
 // use crate::html_output::html_styles::get_html_styles;
 use crate::parsers::ast_nodes::{Arg, Expr};
-use crate::parsers::expressions::parse_expression::{
-    create_multiple_expressions, create_args_from_types,
-};
+use crate::parsers::expressions::parse_expression::{create_multiple_expressions, create_args_from_types};
 use crate::parsers::functions::parse_function_call;
 use crate::parsers::loops::create_loop;
 use crate::parsers::scene::{SceneType, Style};
@@ -15,6 +16,7 @@ use crate::tokenizer::TokenPosition;
 use crate::tokens::VarVisibility;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
 use std::collections::HashMap;
+use crate::parsers::builtin_methods::get_builtin_methods;
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
@@ -84,7 +86,7 @@ pub fn new_ast(
     let mut declarations = captured_declarations.to_vec();
 
     let mut exports = Vec::new();
-
+    
     while x.index < x.length {
         // This should be starting after the imports
         let current_token = x.current_token().to_owned();
@@ -99,6 +101,16 @@ pub fn new_ast(
             Token::SceneHead | Token::ParentScene => {
                 // Add the default core HTML styles as the initially unlocked styles
                 // let mut unlocked_styles = HashMap::from(get_html_styles());
+
+                if !global_scope {
+                    return Err(CompileError {
+                        msg: "Scene literals can only be used at the top level of a module. \n
+                        This is because they are handled differently by the compiler depending on the type of project".to_string(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Rule,
+                    });
+                }
 
                 let scene = new_scene(x, &declarations, &mut HashMap::new(), &mut Style::default())?;
 
@@ -125,7 +137,7 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             Token::Variable(ref name, visibility, mutable) => {
-                
+
                 // There should be no 'mutable' modifier if a variable name is used on the RHS of an expression
                 if mutable {
                     return Err( CompileError {
@@ -135,10 +147,95 @@ pub fn new_ast(
                         error_type: ErrorType::Rule,
                     });
                 }
-                
+
                 if let Some(arg) = get_reference(name, &declarations) {
-                    // Then the associated mutation afterwards
-                    ast.push(mutated_arg(x, arg, &declarations)?);
+                    // Then the associated mutation afterwards.
+                    // Move past the name
+                    x.advance();
+
+                    ast.push(AstNode::Reference(
+                        arg.default_value.to_owned(),
+                        x.token_start_position(),
+                    ));
+                    
+                    // We will need to keep pushing nodes if there are accesses after method calls
+                    while x.current_token() == &Token::Dot {
+
+                        ast.push(AstNode::Access);
+
+                        // Move past the dot
+                        x.advance();
+
+                        // Currently, there is no just integer access.
+                        // Only properties or methods are accessed on objects and collections
+                        // Collections have a .get() method for accessing elements
+
+                        if let Token::Variable(name, ..) = x.current_token().to_owned() {
+
+                            // NAMED ARGUMENT ACCESS
+                            let members = match &arg.data_type {
+                                DataType::Object(inner_args) => inner_args,
+                                DataType::Block(_, returned_args) => &create_args_from_types(returned_args),
+                                _ => { &get_builtin_methods(&arg.data_type) }
+                            };
+
+                            if members.is_empty() {
+                                return Err(CompileError {
+                                    msg: format!(
+                                        "{} is of type {} and has no public methods or properties.",
+                                        arg.name, arg.data_type.to_string()
+                                    ),
+                                    start_pos: x.token_start_position(),
+                                    end_pos: x.token_end_position(),
+                                    error_type: ErrorType::Rule,
+                                })
+                            }
+
+                            let access = match members.iter().find(|member| member.name == *name) {
+                                Some(access) => access,
+                                None => {
+                                    return Err(CompileError {
+                                        msg: format!("Can't find property or method '{}' inside '{}'", name, arg.name),
+                                        start_pos: x.token_start_position(),
+                                        end_pos: x.token_end_position(),
+                                        error_type: ErrorType::Rule,
+                                    });
+                                }
+                            };
+
+                            // Move past the name
+                            x.advance();
+
+                            match &access.data_type {
+                                DataType::Block(required_arguments, returned_types) => {
+                                    ast.push(parse_function_call(
+                                        x,
+                                        &*name,
+                                        captured_declarations,
+                                        &required_arguments,
+                                        &returned_types
+                                    )?)
+                                }
+
+                                // Property access
+                                _ => {
+                                    ast.push(
+                                        mutated_arg(x, arg.to_owned(), captured_declarations)?
+                                    )
+                                }
+                            }
+
+                        } else {
+                            return Err(CompileError {
+                                msg: "Expected a name after the dot (accessing a member of the variable such as a method or property)".to_string(),
+                                start_pos: x.token_start_position(),
+                                end_pos: x.token_end_position(),
+                                error_type: ErrorType::Syntax,
+                            })
+                        }
+                    }
+
+                // NEW VARIABLE DECLARATION
                 } else {
                     let arg = new_arg(x, name, &declarations)?;
 
@@ -150,7 +247,7 @@ pub fn new_ast(
 
                     ast.push(AstNode::Declaration(
                         name.to_owned(),
-                        arg.expr.to_owned(),
+                        arg.default_value.to_owned(),
                         visibility.to_owned(),
                         arg.data_type,
                         x.token_start_position(),
@@ -209,7 +306,7 @@ pub fn new_ast(
             }
 
             // IGNORED TOKENS
-            Token::Newline | Token::Empty | Token::SceneClose => {
+            Token::Newline | Token::Empty => {
                 // Do nothing for now
             }
 
@@ -228,7 +325,7 @@ pub fn new_ast(
                     &[Arg {
                         name: "".to_string(),
                         data_type: DataType::CoerceToString(false),
-                        expr: Expr::None,
+                        default_value: Expr::None,
                     }],
                     // Console.log does not return anything
                     &[],
@@ -249,6 +346,15 @@ pub fn new_ast(
             }
 
             Token::Return => {
+                if global_scope {
+                    return Err(CompileError {
+                        msg: "Can't use the return keyword at the top level of a module. Return can only be used inside a block.".to_string(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Rule,
+                    });
+                }
+
                 x.advance();
 
                 let return_values = create_multiple_expressions(x, returns, &declarations)?;
@@ -271,9 +377,18 @@ pub fn new_ast(
             }
 
             Token::Settings => {
+                if !global_scope {
+                    return Err(CompileError {
+                        msg: "Settings can only be created at the top level of a module, #settings can't be changed inside of blocks".to_string(),
+                        start_pos: x.token_start_position(),
+                        end_pos: x.token_end_position(),
+                        error_type: ErrorType::Rule,
+                    });
+                }
+
                 let config = new_arg(x, "config", &declarations)?;
 
-                let config = match config.expr {
+                let config = match config.default_value {
                     Expr::Block(_, _, return_data_types) => {
                         create_args_from_types(&return_data_types)
                     }

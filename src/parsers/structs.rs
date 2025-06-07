@@ -27,7 +27,7 @@ pub fn create_args(
                 // TODO: Should items be able to be declared as mutable here?
                 // check for mutable token before?
                 data_type: initial_value.get_type(false),
-                expr: initial_value,
+                default_value: initial_value,
             }]
         }
     };
@@ -125,7 +125,7 @@ pub fn create_args(
                     None => Arg {
                         name: item_name,
                         data_type: data_type.to_owned(),
-                        expr: arg_value,
+                        default_value: arg_value,
                     },
                 };
 

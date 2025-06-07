@@ -101,7 +101,7 @@ pub fn create_loop(
             let loop_arg = Arg {
                 name: name.to_owned(),
                 data_type: iterable_type.get_iterable_type(),
-                expr: Expr::None,
+                default_value: Expr::None,
             };
 
             let mut combined = Vec::with_capacity(1 + captured_declarations.len());

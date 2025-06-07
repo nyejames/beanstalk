@@ -6,23 +6,20 @@
 Errors are treated as values in Beanstalk, 
 any function that can return an error must have its error handled.
 
-Both can be combined in the case that None, Error or a data type can be returned.
+The bang symbol ! is used for handling and creating new Error types.
 
-You can also use these operators to unwrap a None or Error value. 
-If it is, the error can then be handled immediately on the same line, or in a new block using a colon.
-
-If you use a colon after the ? or ! operator, you will need the zz statement to close the scope. 
-Otherwise, you can handle it inline.
 
 [code:
+    CustomErr Error 
+
     func_call_that_can_return_an_error() !:
         -- Error handling code
     zz
 
     -- This function can return a String or None
-    parent_func () -> string?:
+    parent_func () -> String, Error?:
         return func_call_that_can_return_an_error() !:
-            print("Error: ", error)
+            #print("Error: ", error)
             return None
         zz
     zz
@@ -31,7 +28,7 @@ Otherwise, you can handle it inline.
 ## Using the ? operator
 
 [code:
-    getURL () -> string:
+    getURL || -> String:
         return getNetworkRequest() ?:
             print("Network did not respond: Using default URL")
             return "example.com"
@@ -39,7 +36,7 @@ Otherwise, you can handle it inline.
     zz
 
     -- Returns a string or None
-    getURL () -> string?:
+    getURL || -> String?:
         return getNetworkRequest()
     zz
 ]
@@ -61,14 +58,8 @@ Effectively creating a runtime assertion.
 [code:
     -- stops the program if 1 is not equal to 1
     -- Runs the code in the block first
-    assert(1 is not 1, "1 is not 1 uh oh")
-
-    function_that_can_panic fn(the_truth Bool) -> panic?:
-        if the_truth is False: panic("The truth is not true")
-        
-        -- This code will not run if the_truth is false
-        return None
-    zz
+    #assert(1 is not 1, "1 is not 1 uh oh")
+    #panic
 ]
 
 [Footer]

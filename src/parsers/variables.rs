@@ -1,10 +1,12 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
 };
 use crate::parsers::ast_nodes::{AssignmentOperator, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
-use crate::parsers::expressions::parse_expression::get_accessed_args;
 use crate::parsers::functions::{create_block_signature, parse_function_call};
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
@@ -14,24 +16,25 @@ use crate::parsers::util::combine_two_slices_to_vec;
 pub fn create_reference(
     x: &mut TokenContext,
     arg: &Arg,
-    variable_declarations: &[Arg],
+    captured_declarations: &[Arg],
 ) -> Result<AstNode, CompileError> {
+
+    // Move past the name
+    x.advance();
+
     match arg.data_type {
         // Function Call
         DataType::Block(ref argument_refs, ref return_types) => parse_function_call(
             x,
             &arg.name,
-            variable_declarations,
+            captured_declarations,
             argument_refs,
             return_types,
         ),
 
         _ => {
-            let accessed_args =
-                get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
-
             Ok(AstNode::Reference(
-                Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned(), accessed_args),
+                Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned()),
                 x.token_start_position(),
             ))
         }
@@ -72,7 +75,7 @@ pub fn new_arg(
 
             return Ok(Arg {
                 name: name.to_owned(),
-                expr: new_ast(x, &combined, &return_type, false)?,
+                default_value: new_ast(x, &combined, &return_type, false)?,
                 data_type: DataType::Block(constructor_args, return_type),
             });
         }
@@ -83,7 +86,7 @@ pub fn new_arg(
 
             return Ok(Arg {
                 name: name.to_owned(),
-                expr: new_ast(
+                default_value: new_ast(
                     x,
                     // TODO: separate imports from parent block so these can be used in the scope
                     variable_declarations, // No args for this block
@@ -231,7 +234,7 @@ pub fn new_arg(
 
     Ok(Arg {
         name: name.to_owned(),
-        expr: parsed_expr,
+        default_value: parsed_expr,
         data_type,
     })
 }
@@ -241,6 +244,7 @@ pub fn mutated_arg(
     arg: Arg,
     captured_declarations: &[Arg],
 ) -> Result<AstNode, CompileError> {
+
     if !arg.data_type.is_mutable() {
         return Err(CompileError {
             msg: format!(
@@ -256,74 +260,21 @@ pub fn mutated_arg(
         });
     }
 
-    let accessed_args =
-        get_accessed_args(x, &arg.name, &arg.data_type, &mut Vec::new())?;
+    let assignment_op = match x.current_token() {
+        Token::Assign => AssignmentOperator::Assign,
 
-    // Move past the name
-    x.advance();
+        Token::AddAssign => AssignmentOperator::AddAssign,
 
-    let (parsed_expr, assignment_op) = match x.current_token() {
-        Token::Assign => {
-            x.advance();
-            (
-                create_expression(
-                    x,
-                    &mut arg.data_type.to_owned(),
-                    false,
-                    captured_declarations,
-                    &[],
-                )?,
-                AssignmentOperator::Assign,
-            )
-        }
+        Token::SubtractAssign => AssignmentOperator::SubtractAssign,
 
-        Token::AddAssign => (
-            create_expression(
-                x,
-                &mut arg.data_type.to_owned(),
-                false,
-                captured_declarations,
-                &[],
-            )?,
-            AssignmentOperator::AddAssign,
-        ),
+        Token::MultiplyAssign => AssignmentOperator::MultiplyAssign,
 
-        Token::SubtractAssign => (
-            create_expression(
-                x,
-                &mut arg.data_type.to_owned(),
-                false,
-                captured_declarations,
-                &[],
-            )?,
-            AssignmentOperator::SubtractAssign,
-        ),
-
-        Token::MultiplyAssign => (
-            create_expression(
-                x,
-                &mut arg.data_type.to_owned(),
-                false,
-                captured_declarations,
-                &[],
-            )?,
-            AssignmentOperator::MultiplyAssign,
-        ),
-
-        Token::DivideAssign => (
-            create_expression(
-                x,
-                &mut arg.data_type.to_owned(),
-                false,
-                captured_declarations,
-                &[],
-            )?,
-            AssignmentOperator::DivideAssign,
-        ),
-
+        Token::DivideAssign => AssignmentOperator::DivideAssign,
+        
+        // TODO: match on a bunch more things and throw more detailed errors about how this must be a mutation
         _ => {
             return Err(CompileError {
-                msg: format!("Invalid expression for mutation: {:?}", x.tokens[x.index]),
+                msg: format!("Invalid operator for mutation: {:?}", x.tokens[x.index]),
                 start_pos: x.token_positions[x.index].to_owned(),
                 end_pos: TokenPosition {
                     line_number: x.token_positions[x.index].line_number,
@@ -334,11 +285,20 @@ pub fn mutated_arg(
         }
     };
 
+    x.advance();
+    
+    let parsed_expression = create_expression(
+        x,
+        &mut arg.data_type.to_owned(),
+        false,
+        captured_declarations,
+        &[],
+    )?;
+
     Ok(AstNode::Mutation(
         arg.name,
         assignment_op,
-        parsed_expr,
-        accessed_args,
+        parsed_expression,
         x.token_start_position(),
     ))
 }
@@ -347,25 +307,25 @@ fn create_zero_value_var(data_type: DataType, name: impl Into<String>) -> Arg {
     match data_type {
         DataType::Float(_) => Arg {
             name: name.into(),
-            expr: Expr::Float(0.0),
+            default_value: Expr::Float(0.0),
             data_type,
         },
 
         DataType::Int(_) => Arg {
             name: name.into(),
-            expr: Expr::Int(0),
+            default_value: Expr::Int(0),
             data_type,
         },
 
         DataType::Bool(_) => Arg {
             name: name.into(),
-            expr: Expr::Bool(false),
+            default_value: Expr::Bool(false),
             data_type,
         },
 
         DataType::Scene(_) => Arg {
             name: name.into(),
-            expr: Expr::Scene(
+            default_value: Expr::Scene(
                 SceneContent::default(),
                 Style::default(),
                 String::default(),
@@ -375,13 +335,13 @@ fn create_zero_value_var(data_type: DataType, name: impl Into<String>) -> Arg {
 
         DataType::String(_) | DataType::CoerceToString(_) => Arg {
             name: name.into(),
-            expr: Expr::String(String::new()),
+            default_value: Expr::String(String::new()),
             data_type,
         },
 
         _ => Arg {
             name: name.into(),
-            expr: Expr::None,
+            default_value: Expr::None,
             data_type,
         },
     }

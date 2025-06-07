@@ -4,14 +4,14 @@
 -- These will contain all of the default scene wrappers needed
 html_basics |section String| -> Scene:
     
-    styles ~{String} : {}
+    ::styles {~String} = {}
 
-    addStyle |style String|:
+    @addStyle |style String|:
         -- TODO: Needs to check if the same style already exists, if so, don't add it
-        styles.push(style)
+        ::styles.push(style)
     zz
 
-    title |num Int| -> Scene:
+    @title |num Int| -> Scene:
         title_size = 4 * (num * 0.5)
         return [:
             <div style="size:[title_size]em"><div/>
@@ -19,7 +19,7 @@ html_basics |section String| -> Scene:
     zz
 
     return [#markdown:
-        <[section] class="container" style="[~styles]">[#slot]</[section]>
+        <[section] class="container" style="[::styles]">[#slot]</[section]>
     ]
 zz
 

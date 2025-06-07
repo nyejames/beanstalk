@@ -1,5 +1,8 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use crate::html_output::web_parser::{JS_INDENT, Target, parse};
-use crate::parsers::ast_nodes::{Expr, Operator};
+use crate::parsers::ast_nodes::{Arg, Expr, Operator};
 use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::tokenizer::TokenPosition;
 use crate::{
@@ -10,12 +13,11 @@ use crate::{
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(
     expressions: &[Expr],
-    line_number: &TokenPosition,
     indentation: &str,
 ) -> Result<String, CompileError> {
     let mut js = String::new();
     for expr in expressions {
-        js.push_str(&expression_to_js(expr, line_number, indentation)?);
+        js.push_str(&expression_to_js(expr, indentation)?);
     }
 
     if expressions.len() > 0 {
@@ -28,7 +30,6 @@ pub fn expressions_to_js(
 // Create everything necessary in JS
 pub fn expression_to_js(
     expr: &Expr,
-    start_pos: &TokenPosition,
     indentation: &str,
 ) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
@@ -54,15 +55,9 @@ pub fn expression_to_js(
                             js.push_str(&value.to_string());
                         }
 
-                        Expr::Reference(id, _, argument_accessed) => {
+                        Expr::Reference(id, ..) => {
                             // All just JS for now
                             js.push_str(&format!("{BS_VAR_PREFIX}{id}"));
-                            for index in argument_accessed {
-                                js.push_str(&format!("[{}]", index));
-                            }
-                            /*
-                                js.push_str(&format!("wsx.get_{BS_VAR_PREFIX}{id}()"));
-                            */
                         }
 
                         _ => {
@@ -71,7 +66,7 @@ pub fn expression_to_js(
                                     "Compiler Bug (Not Implemented yet): Invalid argument type for function call (js_parser): {:?}",
                                     value
                                 ),
-                                start_pos: start_pos.to_owned(),
+                                start_pos: TokenPosition::default(),
                                 end_pos: expr.dimensions(),
                                 error_type: ErrorType::Compiler,
                             });
@@ -99,15 +94,13 @@ pub fn expression_to_js(
                         Operator::Or => js.push_str(" || "),
                     },
 
-                    AstNode::FunctionCall(name, args, _, arguments_accessed, ..) => {
+                    AstNode::FunctionCall(name, args, ..) => {
                         js.push_str(&format!(
                             "{BS_VAR_PREFIX}{}({})",
                             name,
-                            combine_vec_to_js(args, start_pos)?
+                            combine_vec_to_js(args)?,
                         ));
-                        for index in arguments_accessed {
-                            js.push_str(&format!("[{}]", index));
-                        }
+
                     }
 
                     _ => {
@@ -116,7 +109,7 @@ pub fn expression_to_js(
                                 "unknown AST node found in expression when parsing an expression into JS: {:?}",
                                 node
                             ),
-                            start_pos: start_pos.to_owned(),
+                            start_pos: TokenPosition::default(),
                             end_pos: expr.dimensions(),
                             error_type: ErrorType::Compiler,
                         });
@@ -139,7 +132,7 @@ pub fn expression_to_js(
                             "Compiler Bug: Haven't implemented this type yet in expression_to_js: {:?}",
                             expression_type
                         ),
-                        start_pos: start_pos.to_owned(),
+                        start_pos: TokenPosition::default(),
                         end_pos: expr.dimensions(),
                         error_type: ErrorType::Compiler,
                     });
@@ -160,11 +153,8 @@ pub fn expression_to_js(
             js.push_str(&format!("\"{}\"", value));
         }
 
-        Expr::Reference(name, _, arguments_accessed) => {
+        Expr::Reference(name, ..) => {
             js.push_str(&format!("{BS_VAR_PREFIX}{name}"));
-            for index in arguments_accessed {
-                js.push_str(&format!("[{}]", index));
-            }
         }
 
         // If the expression is just a tuple,
@@ -178,7 +168,7 @@ pub fn expression_to_js(
                     arg.name.to_owned()
                 };
 
-                let arg_value = expression_to_js(&arg.expr, start_pos, indentation)?;
+                let arg_value = expression_to_js(&arg.default_value, indentation)?;
 
                 structure.push_str(&format!(
                     "{indentation}{JS_INDENT}{arg_name}: {arg_value}{}",
@@ -191,7 +181,7 @@ pub fn expression_to_js(
         }
 
         Expr::Collection(items, _) => {
-            js.push_str(&combine_vec_to_js(items, start_pos)?);
+            js.push_str(&combine_vec_to_js(items)?);
         }
 
         Expr::Bool(value) => {
@@ -224,7 +214,7 @@ pub fn expression_to_js(
                 func.push_str(&format!(
                     "{BS_VAR_PREFIX}{} = {},",
                     arg.name,
-                    expression_to_js(&arg.expr, start_pos, "")?
+                    expression_to_js(&arg.default_value, "")?
                 ));
             }
 
@@ -246,18 +236,13 @@ pub fn expression_to_js(
 pub fn create_reactive_reference(
     name: &str,
     data_type: &DataType,
-    accessed_args: &[String],
 ) -> String {
     match data_type {
         // DataType::Float | DataType::Int => {
         //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
         // }
         DataType::Object(_) | DataType::Collection(_) => {
-            let mut accesses = String::new();
-            for access in accessed_args {
-                accesses.push_str(&format!("[{}]", access));
-            }
-            format!("\nuInnerHTML(\"{name}\",{name}{accesses});\n")
+            format!("\nuInnerHTML(\"{name}\",{name});\n")
         }
         _ => {
             format!("\nuInnerHTML(\"{name}\",{name});\n")
@@ -267,7 +252,6 @@ pub fn create_reactive_reference(
 
 pub fn combine_vec_to_js(
     collection: &[Expr],
-    line_number: &TokenPosition,
 ) -> Result<String, CompileError> {
     let mut js = String::new();
 
@@ -275,10 +259,39 @@ pub fn combine_vec_to_js(
         // Make sure correct commas at the end of each element but not the last one
         js.push_str(&format!(
             "{}{}",
-            expression_to_js(node, line_number, "")?,
+            expression_to_js(node, "")?,
             if i < collection.len() - 1 { "," } else { "" }
         ));
     }
 
     Ok(js)
 }
+
+// pub fn access_args_to_js(accessed_members: &[Arg]) -> String {
+//     let mut js = String::new();
+// 
+//     for member in accessed_members {
+//         match member.data_type {
+//             DataType::Block(..) => { 
+//                 let arguments_js = expressions_to_js(arguments, "").unwrap_or_else(|_| "".to_owned());
+//                 js.push_str(
+//                     &format!(".{}({})", name, arguments_js)
+//                 )
+//                 match data_type {
+//                     DataType::Block(..) => {
+// 
+//                     }
+//                     _ => {
+// 
+//                     }
+//                 }
+// 
+//             }
+//             _ => {
+//                 js.push_str(&format!(".{}", member.name));
+//             }
+//         }
+//     }
+// 
+//     js
+// }

@@ -5,6 +5,10 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use colour::{
+    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln, e_magenta_ln,
+    e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
+};
 
 pub mod bs_types;
 mod build;
@@ -36,6 +40,7 @@ mod parsers {
     #[allow(dead_code)]
     pub mod util;
     pub mod variables;
+    pub mod builtin_methods;
 }
 mod html_output {
     pub mod code_block_highlighting;
@@ -49,10 +54,7 @@ mod wasm_output {
     pub mod wat_to_wasm;
 }
 use crate::tokenizer::TokenPosition;
-use colour::{
-    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln, e_magenta_ln,
-    e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
-};
+
 
 pub use tokens::Token;
 
@@ -132,7 +134,7 @@ fn main() {
         return;
     }
 
-    let command = match get_command(&compiler_args[1..].to_vec()) {
+    let command = match get_command(&compiler_args[1..]) {
         Ok(command) => command,
         Err(e) => {
             red_ln!("{}", e);
@@ -325,12 +327,14 @@ fn print_formatted_error(e: Error) {
             .to_string_lossy(),
         Err(_) => e.file_path.to_string_lossy(),
     };
+    
+    let line_number = e.start_pos.line_number as usize;
 
     // Read the file and get the actual line as a string from the code
     let line = match fs::read_to_string(&e.file_path) {
         Ok(file) => file
             .lines()
-            .nth(e.start_pos.line_number as usize)
+            .nth(line_number)
             .unwrap_or_default()
             .to_string(),
         Err(_) => {
@@ -351,7 +355,7 @@ fn print_formatted_error(e: Error) {
             println!(" ( ._. ) ");
             e_dark_blue_ln!("Suggestion");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
+            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::Caution => {
@@ -361,7 +365,7 @@ fn print_formatted_error(e: Error) {
 
             e_yellow_ln!("Caution");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
+            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::Syntax => {
@@ -371,7 +375,7 @@ fn print_formatted_error(e: Error) {
 
             e_red_ln!("Syntax");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
+            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::Type => {
@@ -381,7 +385,7 @@ fn print_formatted_error(e: Error) {
 
             e_red_ln!("Type Error");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
+            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::Rule => {
@@ -391,7 +395,7 @@ fn print_formatted_error(e: Error) {
 
             e_red_ln!("Rule");
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
+            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::File => {
@@ -408,7 +412,7 @@ fn print_formatted_error(e: Error) {
             e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
 
             e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", e.start_pos.line_number + 1);
+            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::DevServer => {

@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use crate::html_output::js_parser::create_reactive_reference;
 use crate::html_output::web_parser::{Target, parse};
 use crate::parsers::ast_nodes::Expr;
@@ -201,7 +204,7 @@ pub fn parse_scene(
                 content.push_str(&new_scene);
             }
 
-            Expr::Reference(name, data_type, argument_accessed) => {
+            Expr::Reference(name, data_type) => {
                 // Create a span in the HTML with a class that JS can reference
                 // TO DO: Should be reactive in future so this can change at runtime
 
@@ -211,7 +214,6 @@ pub fn parse_scene(
                         code.push_str(&create_reactive_reference(
                             name,
                             data_type,
-                            argument_accessed,
                         ));
                     }
 
@@ -239,7 +241,7 @@ pub fn parse_scene(
                     content.push_str(&format!("<span class=\"{scene_id}\"></span>"));
 
                     code.push_str(&format!("let {scene_id} = {}", new_parsed.code_module));
-                    code.push_str(&create_reactive_reference(&scene_id, data_type, &[]));
+                    code.push_str(&create_reactive_reference(&scene_id, data_type));
                 }
 
                 StyleFormat::JSString => {

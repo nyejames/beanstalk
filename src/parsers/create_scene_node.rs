@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use super::{ast_nodes::Arg, expressions::parse_expression::create_expression};
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
@@ -6,7 +9,6 @@ use crate::parsers::structs::create_args;
 use crate::settings::BS_VAR_PREFIX;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-use colour::yellow_ln;
 use std::collections::HashMap;
 // const DEFAULT_SLOT_NAME: &str = "_slot";
 
@@ -117,7 +119,7 @@ pub fn new_scene(
                 // Otherwise, check if it's a regular scene or variable reference
                 // If this is a reference to a function or variable
                 if let Some(arg) = declarations.iter().find(|a| a.name == name) {
-                    match &arg.expr {
+                    match &arg.default_value {
                         Expr::Scene(body, style, ..) => {
                             scene_style.child_default = style.child_default.to_owned();
 
@@ -187,7 +189,7 @@ pub fn new_scene(
                 // TODO - decide if this should be enforced as a syntax error or allowed
                 // Currently working around commas not ever being needed in scene heads
                 // So may enforce it with full error in the future (especially if it causes havoc in the emitter stage)
-                yellow_ln!(
+                red_ln!(
                     "Warning: Should there be a comma in the scene head? (ignored by compiler)"
                 );
             }

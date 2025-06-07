@@ -500,10 +500,9 @@ fn compile(
 
             declarations.push(Arg {
                 name: split_import_string[1].to_owned(),
-                expr: Expr::Reference(
+                default_value: Expr::Reference(
                     split_import_string[1].to_owned(),
                     DataType::UnknownReference(split_import_string[1].to_owned(), false),
-                    Vec::new(),
                 ),
                 data_type: DataType::UnknownReference(split_import_string[1].to_owned(), false),
             })
@@ -540,7 +539,7 @@ fn compile(
             for export in import_names {
                 declarations.push(Arg {
                     name: export.get_name(),
-                    expr: Expr::Reference(export.get_name(), DataType::Inferred(false), Vec::new()),
+                    default_value: Expr::Reference(export.get_name(), DataType::Inferred(false)),
                     data_type: DataType::Inferred(false),
                 })
             }
@@ -733,7 +732,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
             for arg in args {
                 match arg.name.as_str() {
                     "project" => {
-                        project_config.project = match &arg.expr {
+                        project_config.project = match &arg.default_value {
                             Expr::String(value) => value.to_owned(),
                             _ => {
                                 return Err(Error {
@@ -748,7 +747,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "src" => {
-                        project_config.src = match &arg.expr {
+                        project_config.src = match &arg.default_value {
                             Expr::String(value) => PathBuf::from(value),
                             _ => {
                                 return Err(Error {
@@ -763,7 +762,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "dev" => {
-                        project_config.dev_folder = match &arg.expr {
+                        project_config.dev_folder = match &arg.default_value {
                             Expr::String(value) => PathBuf::from(value),
                             _ => {
                                 return Err(Error {
@@ -778,7 +777,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "release" => {
-                        project_config.release_folder = match &arg.expr {
+                        project_config.release_folder = match &arg.default_value {
                             Expr::String(value) => PathBuf::from(value),
                             _ => {
                                 return Err(Error {
@@ -793,7 +792,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "name" => {
-                        project_config.name = match &arg.expr {
+                        project_config.name = match &arg.default_value {
                             Expr::String(value) => value.to_owned(),
                             _ => {
                                 return Err(Error {
@@ -808,7 +807,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "version" => {
-                        project_config.version = match &arg.expr {
+                        project_config.version = match &arg.default_value {
                             Expr::String(value) => value.to_owned(),
                             _ => {
                                 return Err(Error {
@@ -823,7 +822,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "author" => {
-                        project_config.author = match &arg.expr {
+                        project_config.author = match &arg.default_value {
                             Expr::String(value) => value.to_owned(),
                             _ => {
                                 return Err(Error {
@@ -838,7 +837,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "license" => {
-                        project_config.license = match &arg.expr {
+                        project_config.license = match &arg.default_value {
                             Expr::String(value) => value.to_owned(),
                             _ => {
                                 return Err(Error {
@@ -853,12 +852,12 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                     }
 
                     "html_settings" => {
-                        return match &arg.expr {
+                        return match &arg.default_value {
                             Expr::Args(args) => {
                                 for arg in args {
                                     match arg.name.as_str() {
                                         "site_title" => {
-                                            project_config.html_meta.site_title = match &arg.expr {
+                                            project_config.html_meta.site_title = match &arg.default_value {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -875,7 +874,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "page_description" => {
                                             project_config.html_meta.page_description = match &arg
-                                                .expr
+                                                .default_value
                                             {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
@@ -892,7 +891,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "site_url" => {
-                                            project_config.html_meta.site_url = match &arg.expr {
+                                            project_config.html_meta.site_url = match &arg.default_value {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -908,7 +907,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_url" => {
-                                            project_config.html_meta.page_url = match &arg.expr {
+                                            project_config.html_meta.page_url = match &arg.default_value {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -924,7 +923,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_og_title" => {
-                                            project_config.html_meta.page_og_title = match &arg.expr
+                                            project_config.html_meta.page_og_title = match &arg.default_value
                                             {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
@@ -942,7 +941,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "page_og_description" => {
                                             project_config.html_meta.page_og_description =
-                                                match &arg.expr {
+                                                match &arg.default_value {
                                                     Expr::String(value) => value.to_owned(),
                                                     _ => {
                                                         return Err(Error {
@@ -959,7 +958,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "page_image_url" => {
                                             project_config.html_meta.page_image_url =
-                                                match &arg.expr {
+                                                match &arg.default_value {
                                                     Expr::String(value) => value.to_owned(),
                                                     _ => {
                                                         return Err(Error {
@@ -976,7 +975,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "page_image_alt" => {
                                             project_config.html_meta.page_image_alt =
-                                                match &arg.expr {
+                                                match &arg.default_value {
                                                     Expr::String(value) => value.to_owned(),
                                                     _ => {
                                                         return Err(Error {
@@ -992,7 +991,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_locale" => {
-                                            project_config.html_meta.page_locale = match &arg.expr {
+                                            project_config.html_meta.page_locale = match &arg.default_value {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -1008,7 +1007,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_type" => {
-                                            project_config.html_meta.page_type = match &arg.expr {
+                                            project_config.html_meta.page_type = match &arg.default_value {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
                                                     return Err(Error {
@@ -1025,7 +1024,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "page_twitter_large_image" => {
                                             project_config.html_meta.page_twitter_large_image =
-                                                match &arg.expr {
+                                                match &arg.default_value {
                                                     Expr::String(value) => value.to_owned(),
                                                     _ => return Err(Error {
                                                         msg:
@@ -1041,7 +1040,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "page_canonical_url" => {
                                             project_config.html_meta.page_canonical_url =
-                                                match &arg.expr {
+                                                match &arg.default_value {
                                                     Expr::String(value) => value.to_owned(),
                                                     _ => {
                                                         return Err(Error {
@@ -1057,7 +1056,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
                                         }
 
                                         "page_root_url" => {
-                                            project_config.html_meta.page_root_url = match &arg.expr
+                                            project_config.html_meta.page_root_url = match &arg.default_value
                                             {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {
@@ -1075,7 +1074,7 @@ fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(
 
                                         "image_folder_url" => {
                                             project_config.html_meta.image_folder_url = match &arg
-                                                .expr
+                                                .default_value
                                             {
                                                 Expr::String(value) => value.to_owned(),
                                                 _ => {

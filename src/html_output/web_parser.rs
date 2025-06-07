@@ -1,3 +1,6 @@
+#[allow(unused_imports)]
+use colour::{red_ln, blue_ln, green_ln};
+
 use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::html_output::js_parser::combine_vec_to_js;
 use crate::parsers::ast_nodes::{Arg, Expr};
@@ -115,12 +118,12 @@ pub fn parse(
                                 if *mutable {
                                     &format!(
                                         "this.{BS_VAR_PREFIX}{name} = {};",
-                                        expression_to_js(expr, start_pos, "")?
+                                        expression_to_js(expr, "")?
                                     )
                                 } else {
                                     &format!(
                                         "static {BS_VAR_PREFIX}{name} = {};",
-                                        expression_to_js(expr, start_pos, "")?
+                                        expression_to_js(expr, "")?
                                     )
                                 }
                             }
@@ -129,12 +132,12 @@ pub fn parse(
                                 if *mutable {
                                     &format!(
                                         "let {BS_VAR_PREFIX}{name} = {};",
-                                        expression_to_js(expr, start_pos, "")?
+                                        expression_to_js(expr, "")?
                                     )
                                 } else {
                                     &format!(
                                         "const {BS_VAR_PREFIX}{name} = {};",
-                                        expression_to_js(expr, start_pos, "")?
+                                        expression_to_js(expr, "")?
                                     )
                                 }
                             }
@@ -179,7 +182,7 @@ pub fn parse(
                     DataType::Object(_) => {
                         let var_dec = format!(
                             "const {BS_VAR_PREFIX}{name} = {};",
-                            expression_to_js(expr, start_pos, "")?
+                            expression_to_js(expr, "")?
                         );
 
                         code_module.push_str(&var_dec);
@@ -194,7 +197,7 @@ pub fn parse(
                                     func.push_str(&format!(
                                         "{BS_VAR_PREFIX}{} = {},",
                                         arg.name,
-                                        expression_to_js(&arg.expr, start_pos, "")?
+                                        expression_to_js(&arg.default_value, "")?
                                     ));
                                 }
 
@@ -226,7 +229,7 @@ pub fn parse(
                     _ => {
                         code_module.push_str(&format!(
                             "const {BS_VAR_PREFIX}{name} = {};",
-                            expression_to_js(expr, start_pos, "")?
+                            expression_to_js(expr, "")?
                         ));
                     }
                 };
@@ -234,54 +237,47 @@ pub fn parse(
                 module_references.push(Arg {
                     name: name.to_owned(),
                     data_type: data_type.to_owned(),
-                    expr: expr.to_owned(),
+                    default_value: expr.to_owned(),
                 });
             }
 
-            AstNode::Mutation(name, assignment_op, expr, argument_accessed, start_pos) => {
+            AstNode::Mutation(name, assignment_op, expr, ..) => {
                 code_module.push_str(&format!("\n{indentation}"));
 
-                code_module.push_str(&format!("{BS_VAR_PREFIX}{name}",));
-
-                for index in argument_accessed {
-                    code_module.push_str(&format!("[{}]", index));
-                }
+                code_module.push_str(&format!("{BS_VAR_PREFIX}{name} "));
 
                 code_module.push_str(&format!(
                     " {} {};",
                     assignment_op.to_js(),
-                    expression_to_js(expr, start_pos, "")?
+                    expression_to_js(expr, "")?
                 ));
             }
 
-            AstNode::FunctionCall(name, arguments, _, argument_accessed, start_pos) => {
+            AstNode::FunctionCall(name, arguments, ..) => {
                 code_module.push_str(indentation);
                 code_module.push_str(&format!(
-                    "{BS_VAR_PREFIX}{}({});",
+                    "{BS_VAR_PREFIX}{}({})",
                     name,
-                    combine_vec_to_js(arguments, start_pos)?
+                    combine_vec_to_js(arguments)?
                 ));
-                for index in argument_accessed {
-                    code_module.push_str(&format!("[{}]", index));
-                }
             }
 
-            AstNode::Return(expressions, start_pos) => {
+            AstNode::Return(expressions, ..) => {
                 code_module.push_str(&format!("\n{indentation}"));
                 code_module.push_str(&format!(
                     "return {};",
-                    expressions_to_js(expressions, start_pos, "")?
+                    expressions_to_js(expressions, "")?
                 ));
             }
 
-            AstNode::If(condition, if_true, start_pos) => {
+            AstNode::If(condition, if_true, ..) => {
                 code_module.push_str(&format!("\n\n{indentation}"));
 
                 let if_block_body = if_true.get_block_nodes();
 
                 code_module.push_str(&format!(
                     "if ({}) {{\n{}\n{indentation}}}\n{indentation}",
-                    expression_to_js(condition, start_pos, "")?,
+                    expression_to_js(condition, "")?,
                     parse(if_block_body, &format!("{indentation}{JS_INDENT}"), target)?.code_module
                 ));
             }
@@ -295,7 +291,7 @@ pub fn parse(
                 css.push_str(css_string);
             }
 
-            AstNode::ForLoop(index, iterated_item, loop_body, start_pos) => {
+            AstNode::ForLoop(index, iterated_item, loop_body, ..) => {
                 code_module.push_str(&format!("\n\n{indentation}"));
 
                 let length_access = if iterated_item.is_collection() {
@@ -308,19 +304,19 @@ pub fn parse(
                     "for (let {BS_VAR_PREFIX}{} = 0; {BS_VAR_PREFIX}{} < {}{}; {BS_VAR_PREFIX}{}++) {{{}\n{indentation}}}\n{indentation}",
                     index.name,
                     index.name,
-                    expression_to_js(iterated_item, start_pos, "")?,
+                    expression_to_js(iterated_item, "")?,
                     length_access,
                     index.name,
                     parse(loop_body.get_block_nodes(), &format!("{indentation}{JS_INDENT}"), target)?.code_module
                 ));
             }
 
-            AstNode::WhileLoop(condition, loop_body, start_pos) => {
+            AstNode::WhileLoop(condition, loop_body, ..) => {
                 code_module.push_str(&format!("\n\n{indentation}"));
 
                 code_module.push_str(&format!(
                     "while ({}) {{\n{}\n{indentation}}}\n{indentation}",
-                    expression_to_js(condition, start_pos, "")?,
+                    expression_to_js(condition, "")?,
                     parse(
                         loop_body.get_block_nodes(),
                         &format!("{indentation}{JS_INDENT}"),
@@ -331,7 +327,7 @@ pub fn parse(
             }
 
             AstNode::Expression(expr, ..) => {
-                code_module.push_str(&expression_to_js(expr, &node.dimensions(), "")?);
+                code_module.push_str(&expression_to_js(expr, "")?);
             }
 
             // Ignore Everything Else
