@@ -1,6 +1,7 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
+use crate::html_output::code_block_highlighting::highlight_html_code_block;
 use crate::html_output::js_parser::create_reactive_reference;
 use crate::html_output::web_parser::{Target, parse};
 use crate::parsers::ast_nodes::Expr;
@@ -9,7 +10,6 @@ use crate::settings::BS_VAR_PREFIX;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType};
 use std::collections::HashMap;
-use crate::html_output::code_block_highlighting::highlight_html_code_block;
 
 #[derive(Debug)]
 pub enum SceneType {
@@ -211,10 +211,7 @@ pub fn parse_scene(
                 match format_context {
                     StyleFormat::Markdown => {
                         content.push_str(&format!("<span class=\"{BS_VAR_PREFIX}{name}\"></span>"));
-                        code.push_str(&create_reactive_reference(
-                            name,
-                            data_type,
-                        ));
+                        code.push_str(&create_reactive_reference(name, data_type));
                     }
 
                     StyleFormat::JSString => {

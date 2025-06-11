@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
 use super::{ast_nodes::Arg, expressions::parse_expression::create_expression};
 use crate::parsers::ast_nodes::Expr;
@@ -27,7 +27,7 @@ pub fn new_scene(
     let mut scene_body: SceneContent = SceneContent::default();
     let mut this_scene_body: Vec<Expr> = Vec::new();
 
-    // Set a default ID just in case none is set manually
+    // Set a default ID just in case none is set manually, 
     // This guarantees each scene ID will be unique
     let module_name = match x.tokens.first() {
         Some(Token::ModuleStart(name)) => name.to_owned(),
@@ -270,8 +270,7 @@ pub fn new_scene(
             }
 
             Token::SceneHead => {
-                let nested_scene =
-                    new_scene(x, declarations, unlocked_scenes, scene_style)?;
+                let nested_scene = new_scene(x, declarations, unlocked_scenes, scene_style)?;
 
                 match nested_scene {
                     SceneType::Scene(scene) => {

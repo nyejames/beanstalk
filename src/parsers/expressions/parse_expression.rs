@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
 use super::eval_expression::evaluate_expression;
 use crate::parsers::ast_nodes::{Expr, Operator};
@@ -16,8 +16,8 @@ use crate::{
     },
 };
 use std::collections::HashMap;
-use crate::parsers::builtin_methods::get_builtin_methods;
-use crate::parsers::functions::create_function_arguments;
+// use crate::parsers::builtin_methods::get_builtin_methods;
+// use crate::parsers::functions::create_function_arguments;
 
 // For multiple returns or function calls
 // MUST know all the types
@@ -89,9 +89,6 @@ pub fn create_expression(
     let mut expression: Vec<AstNode> = Vec::from(starting_expression);
     // let mut number_union = get_any_number_datatype(false);
 
-    // Ignore any newlines at the start of the expression
-    while x.index < x.length && x.current_token() == &Token::Newline {}
-
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
     // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
@@ -102,6 +99,9 @@ pub fn create_expression(
             Token::CloseParenthesis => {
                 if consume_closing_parenthesis {
                     x.advance();
+
+                    // This is for the case this parenthesis is consumed
+                    x.skip_newlines();
                 }
 
                 if expression.is_empty() {
@@ -181,20 +181,36 @@ pub fn create_expression(
                 // Fine if inside parenthesis (not closed yet)
                 // Otherwise break out of the expression
                 if consume_closing_parenthesis {
-                    x.advance();
+                    x.skip_newlines();
                     continue;
                 } else {
-                    break;
+
+                    // Check ahead if the next token must continue the expression
+                    // So something like:
+                    // x = 1 + 2
+                    // + 3
+                    // '+' would be a valid continuation,
+                    // as '+' doesn't make sense outside expressions like this anyway
+                    x.skip_newlines();
+
+                    match x.current_token() {
+                        Token::Add | Token::Subtract | Token::Multiply |
+                        Token::Root | Token::Divide | Token::Modulus |
+                        Token::Is | Token::GreaterThan | Token::GreaterThanOrEqual |
+                        Token::LessThan | Token::LessThanOrEqual | Token::Exponent |
+                        Token::Not | Token::Or | Token::Remainder |
+                        Token::RemainderAssign | Token::Log
+                        => continue,
+                        _ => break,
+                    }
                 }
             }
 
             // Check if the name is a reference to another variable or function call
             Token::Variable(ref name, ..) => {
                 if let Some(arg) = get_reference(name, captured_declarations) {
-
                     expression.push(create_reference(x, &arg, captured_declarations)?);
                     continue; // Will have moved onto the next token already
-
                 } else {
                     return Err(CompileError {
                         msg: format!("Variable '{}' does not exist in this scope.", name,),
@@ -240,6 +256,7 @@ pub fn create_expression(
             }
 
             Token::SceneHead | Token::ParentScene => {
+
                 let scene_type = new_scene(
                     x,
                     captured_declarations,
@@ -411,5 +428,3 @@ pub fn create_args_from_types(data_types: &[DataType]) -> Vec<Arg> {
 
     arguments
 }
-
-

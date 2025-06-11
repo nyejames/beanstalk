@@ -128,7 +128,9 @@ impl DataType {
 
     pub fn length(&self) -> u32 {
         match self {
-            DataType::UnknownReference(name, mutable) => name.len() as u32 + if *mutable { 1 } else { 0 },
+            DataType::UnknownReference(name, mutable) => {
+                name.len() as u32 + if *mutable { 1 } else { 0 }
+            }
             DataType::Inferred(_) => 0,
             DataType::CoerceToString(_) => 0,
             DataType::Bool(_) => 4,
@@ -173,7 +175,9 @@ impl DataType {
                 DataType::Option(Box::new(DataType::Block(args, return_type)))
             }
             DataType::Scene(mutable) => DataType::Option(Box::new(DataType::Scene(mutable))),
-            DataType::UnknownReference(name, mutable) => DataType::Option(Box::new(DataType::UnknownReference(name, mutable))),
+            DataType::UnknownReference(name, mutable) => {
+                DataType::Option(Box::new(DataType::UnknownReference(name, mutable)))
+            }
             DataType::Inferred(mutable) => DataType::Option(Box::new(DataType::Inferred(mutable))),
             DataType::CoerceToString(mutable) => {
                 DataType::Option(Box::new(DataType::CoerceToString(mutable)))
@@ -264,16 +268,24 @@ impl DataType {
             _ => self.to_owned(),
         }
     }
-    
+
     pub fn to_string(&self) -> String {
         match self {
-            DataType::Inferred(mutable) => format!("{} Inferred", if *mutable {"mutable"} else {""}),
-            DataType::CoerceToString(mutable) => format!("{} CoerceToString", if *mutable {"mutable"} else {""}),
-            DataType::Bool(mutable) => format!("{} Bool", if *mutable {"mutable"} else {""}),
-            DataType::String(mutable) => format!("{} String", if *mutable {"mutable"} else {""}),
-            DataType::Float(mutable) => format!("{} Float", if *mutable {"mutable"} else {""}),
-            DataType::Int(mutable) => format!("{} Int", if *mutable {"mutable"} else {""}),
-            DataType::Decimal(mutable) => format!("{} Decimal", if *mutable {"mutable"} else {""}),
+            DataType::Inferred(mutable) => {
+                format!("{} Inferred", if *mutable { "mutable" } else { "" })
+            }
+            DataType::CoerceToString(mutable) => {
+                format!("{} CoerceToString", if *mutable { "mutable" } else { "" })
+            }
+            DataType::Bool(mutable) => format!("{} Bool", if *mutable { "mutable" } else { "" }),
+            DataType::String(mutable) => {
+                format!("{} String", if *mutable { "mutable" } else { "" })
+            }
+            DataType::Float(mutable) => format!("{} Float", if *mutable { "mutable" } else { "" }),
+            DataType::Int(mutable) => format!("{} Int", if *mutable { "mutable" } else { "" }),
+            DataType::Decimal(mutable) => {
+                format!("{} Decimal", if *mutable { "mutable" } else { "" })
+            }
             DataType::Collection(inner_type) => format!("{} Collection", inner_type.to_string()),
             DataType::Object(args) => {
                 let mut arg_str = String::new();
@@ -291,10 +303,10 @@ impl DataType {
                 for return_type in return_types {
                     returns_string.push_str(&format!("{}, ", return_type.to_string()));
                 }
-                
+
                 format!("Block({} -> {})", arg_str, returns_string)
             }
-            DataType::Scene(mutable) => format!("{} Scene", if *mutable {"mutable"} else {""}),
+            DataType::Scene(mutable) => format!("{} Scene", if *mutable { "mutable" } else { "" }),
             DataType::UnknownReference(name, ..) => format!("{} Pointer", name),
             DataType::None => "None".to_owned(),
             DataType::True => "True".to_owned(),
@@ -359,7 +371,6 @@ pub fn get_accessed_data_type(data_type: &DataType, members_accessed: &[Arg]) ->
                             .data_type,
                         &members_accessed[1..],
                     )
-
                 } else {
                     inner_types
                         .iter()

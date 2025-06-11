@@ -7,7 +7,7 @@ pub fn combine_two_slices_to_vec<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
     let mut combined = Vec::with_capacity(a.len() + b.len());
     combined.extend_from_slice(a);
     combined.extend_from_slice(b);
-    
+
     combined
 }
 

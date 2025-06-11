@@ -1,16 +1,12 @@
 use crate::bs_types::DataType;
 use crate::parsers::scene::{SceneContent, Style};
 use crate::tokenizer::TokenPosition;
-use crate::tokens::{string_dimensions, VarVisibility};
+use crate::tokens::{VarVisibility, string_dimensions};
 use colour::red_ln;
 use std::path::PathBuf;
 use wasm_encoder::ValType;
 
 #[derive(Debug, PartialEq, Clone)]
-// Args are abstractions on top of Datatypes
-// They are used to store the name, data type and optional value of an argument
-// These are used for structs and functions
-// Args should basically disappear once the AST is parsed. Everything will be converted into just indexes
 pub struct Arg {
     pub name: String, // Optional Name of the argument (empty string if unnamed)
     pub data_type: DataType,
@@ -69,6 +65,7 @@ pub enum Expr {
         Vec<Arg>,      // arguments
         Vec<AstNode>,  // body
         Vec<DataType>, // return args
+        Vec<Arg>,      // exports
     ),
 
     Scene(SceneContent, Style, String), // Scene Body, Styles, Scene head, ID
@@ -180,6 +177,13 @@ impl Expr {
             _ => &[],
         }
     }
+    pub fn get_block_exports(&self) -> &[Arg] {
+        match self {
+            Expr::Block(_, _, _, exports) => exports,
+            _ => &[],
+        }
+    }
+
     pub fn is_foldable(&self) -> bool {
         matches!(
             self,
@@ -293,7 +297,7 @@ pub enum AstNode {
     // Literals
     Reference(Expr, TokenPosition),  // Token, Line number
     Expression(Expr, TokenPosition), // Token, Line number
-    
+
     // Name, Assignment operator, Value, Line number
     Mutation(String, AssignmentOperator, Expr, TokenPosition),
 
@@ -333,9 +337,7 @@ impl AstNode {
                     }
                     data_type
                 }
-                Expr::Reference(_, data_type) => {
-                    data_type.to_owned()
-                }
+                Expr::Reference(_, data_type) => data_type.to_owned(),
                 Expr::Block(args, _, return_types, ..) => {
                     DataType::Block(args.to_owned(), return_types.to_owned())
                 }
@@ -472,9 +474,7 @@ impl Expr {
                 DataType::Block(args.to_owned(), return_type.to_owned())
             }
             // Need to check accessed args
-            Expr::Reference(_, data_type) => {
-                data_type.to_owned()
-            }
+            Expr::Reference(_, data_type) => data_type.to_owned(),
         }
     }
 

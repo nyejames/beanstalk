@@ -1,9 +1,9 @@
-use crate::Error;
+use crate::{Error, Flag};
 use crate::dev_server;
 use colour::{green_ln_bold, yellow_ln_bold};
 use std::path::Path;
 
-pub fn test_build(entry_path: &Path, output_info_level: i32) -> Result<(), Error> {
+pub fn test_build(entry_path: &Path, flags: &[Flag]) -> Result<(), Error> {
     // TODO - Compiler tests
     // Eventually this should perform a test suit for the compiler
     // Atm, it just automatically sets the output info level to highest
@@ -13,7 +13,7 @@ pub fn test_build(entry_path: &Path, output_info_level: i32) -> Result<(), Error
     yellow_ln_bold!("\nTESTING FILE\n");
 
     if entry_path.is_dir() {
-        dev_server::start_dev_server(entry_path, output_info_level)?;
+        dev_server::start_dev_server(entry_path, flags)?;
     }
 
     green_ln_bold!("Test complete!");

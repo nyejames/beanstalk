@@ -1,13 +1,11 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
-use super::{
-    ast_nodes::{Arg, AstNode},
-};
+use super::ast_nodes::{Arg, AstNode};
 use crate::parsers::ast_nodes::Expr;
 use crate::parsers::build_ast::TokenContext;
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::parsers::expressions::parse_expression::{create_multiple_expressions, create_args_from_types};
+use crate::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::parsers::util::{find_first_missing, sort_unnamed_args_last};
 use crate::parsers::variables::new_arg;
 use crate::tokenizer::TokenPosition;
@@ -49,7 +47,6 @@ pub fn create_block_signature(
 
     while x.index < x.length {
         match x.current_token() {
-
             Token::DatatypeLiteral(data_type) => {
                 if !next_in_list {
                     return Err(CompileError {
@@ -80,7 +77,10 @@ pub fn create_block_signature(
                     });
                 }
 
-                return_types.push(DataType::UnknownReference(name.to_owned(), mutable.to_owned()));
+                return_types.push(DataType::UnknownReference(
+                    name.to_owned(),
+                    mutable.to_owned(),
+                ));
                 x.advance();
             }
 
@@ -345,7 +345,7 @@ pub fn parse_function_call(
 pub fn create_function_arguments(
     x: &mut TokenContext,
     required_arguments: &[Arg],
-    variable_declarations: &[Arg]
+    variable_declarations: &[Arg],
 ) -> Result<Vec<Expr>, CompileError> {
     // Starts at the first token after the function name
 
@@ -383,12 +383,11 @@ pub fn create_function_arguments(
 
         Ok(Vec::new())
     } else {
-        
         let required_argument_types = required_arguments
             .iter()
             .map(|arg| arg.data_type.to_owned())
             .collect::<Vec<DataType>>();
-        
+
         create_multiple_expressions(x, &required_argument_types, variable_declarations)
     }
 }

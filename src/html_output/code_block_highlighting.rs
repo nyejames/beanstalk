@@ -167,19 +167,53 @@ pub fn highlight_html_code_block(code_block: &str, language: &str) -> String {
 
 fn keyword_is_in_language(keyword: &str, language: &str) -> bool {
     match language {
-        "js" | "javascript" => matches!(keyword, "if" | "else" | "while" | "for" | "return" | "break" | "continue" | "in"),
-        _ => matches!(keyword, "if" | "else" | "while" | "return" | "break" | "continue" | "loop" | "end"
-            | "defer" | "panic" | "print" | "in" | "as"),
+        "js" | "javascript" => matches!(
+            keyword,
+            "if" | "else" | "while" | "for" | "return" | "break" | "continue" | "in"
+        ),
+        _ => matches!(
+            keyword,
+            "if" | "else"
+                | "while"
+                | "return"
+                | "break"
+                | "continue"
+                | "loop"
+                | "end"
+                | "defer"
+                | "panic"
+                | "print"
+                | "in"
+                | "as"
+        ),
     }
 }
 
 fn type_is_in_language(type_keyword: &str, language: &str) -> bool {
     match language {
-        "ts" | "typescript" => matches!(type_keyword, "Int" | "Float" | "Unit" | "Bool" | "String" | "Scene" | "Choice" | "choice"
-        | "copy" | "Type" | "Error" | "Style" | "Path" | "True" | "False" | "true"
-        | "false" | "fn" | "type"),
-        
+        "ts" | "typescript" => matches!(
+            type_keyword,
+            "Int"
+                | "Float"
+                | "Unit"
+                | "Bool"
+                | "String"
+                | "Scene"
+                | "Choice"
+                | "choice"
+                | "copy"
+                | "Type"
+                | "Error"
+                | "Style"
+                | "Path"
+                | "True"
+                | "False"
+                | "true"
+                | "false"
+                | "fn"
+                | "type"
+        ),
+
         _ => false,
     }
-    
 }

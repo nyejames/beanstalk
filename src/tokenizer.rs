@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
 use super::tokens::{Token, TokenizeMode, VarVisibility};
 use crate::bs_types::DataType;
@@ -126,9 +126,7 @@ pub fn get_next_token(
     while current_char.is_whitespace() {
         token_position.char_column += 1;
         current_char = match chars.next() {
-            Some(ch) => {
-                ch
-            }
+            Some(ch) => ch,
             None => return Ok(Token::EOF),
         };
     }
@@ -208,7 +206,7 @@ pub fn get_next_token(
             *tokenize_mode = TokenizeMode::SceneBody;
             return Ok(Token::Colon);
         }
-        
+
         // ::
         if let Some(&next_char) = chars.peek() {
             if next_char == ':' {
@@ -692,7 +690,11 @@ fn keyword_or_variable(
                 _ => VarVisibility::Temporary,
             };
 
-            return Ok(Token::Variable(token_value.to_string(), visibility, mutable_modifier));
+            return Ok(Token::Variable(
+                token_value.to_string(),
+                visibility,
+                mutable_modifier,
+            ));
         } else {
             break;
         }
@@ -793,7 +795,7 @@ fn string_block(
             } else {
                 token_position.char_column += 1;
             }
-            
+
             chars.next();
             continue;
         }

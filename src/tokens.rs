@@ -58,9 +58,9 @@ pub enum Token {
     // Variables / Functions
     Arrow,
 
-    // Mutability modifier here is only if this is used as a reference
+    // Mutability modifier here is only if this is used as a reference,
     // The type of a new variable declaration will otherwise carry the info about it's mutability
-    Variable(String, VarVisibility, bool), // name, visibility
+    Variable(String, VarVisibility, bool), // name, visibility, mutability (if passed as a reference)
 
     // Literals
     StringLiteral(String),
@@ -331,10 +331,10 @@ impl Token {
             Token::Comment(content) => content.clone(),
             Token::RawStringLiteral(value) => value.clone(),
             Token::StringLiteral(string) => string.clone(),
+            Token::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }
     }
-    
 }
 
 pub fn string_dimensions(s: &str) -> TokenPosition {

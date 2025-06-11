@@ -1,8 +1,8 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
 use crate::html_output::web_parser::{JS_INDENT, Target, parse};
-use crate::parsers::ast_nodes::{Arg, Expr, Operator};
+use crate::parsers::ast_nodes::{Expr, Operator};
 use crate::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
 use crate::tokenizer::TokenPosition;
 use crate::{
@@ -11,10 +11,7 @@ use crate::{
 };
 
 // If there are multiple values, it gets wrapped in an array
-pub fn expressions_to_js(
-    expressions: &[Expr],
-    indentation: &str,
-) -> Result<String, CompileError> {
+pub fn expressions_to_js(expressions: &[Expr], indentation: &str) -> Result<String, CompileError> {
     let mut js = String::new();
     for expr in expressions {
         js.push_str(&expression_to_js(expr, indentation)?);
@@ -28,10 +25,7 @@ pub fn expressions_to_js(
 }
 
 // Create everything necessary in JS
-pub fn expression_to_js(
-    expr: &Expr,
-    indentation: &str,
-) -> Result<String, CompileError> {
+pub fn expression_to_js(expr: &Expr, indentation: &str) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
 
     match expr {
@@ -100,7 +94,6 @@ pub fn expression_to_js(
                             name,
                             combine_vec_to_js(args)?,
                         ));
-
                     }
 
                     _ => {
@@ -233,10 +226,7 @@ pub fn expression_to_js(
     Ok(js)
 }
 
-pub fn create_reactive_reference(
-    name: &str,
-    data_type: &DataType,
-) -> String {
+pub fn create_reactive_reference(name: &str, data_type: &DataType) -> String {
     match data_type {
         // DataType::Float | DataType::Int => {
         //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
@@ -250,9 +240,7 @@ pub fn create_reactive_reference(
     }
 }
 
-pub fn combine_vec_to_js(
-    collection: &[Expr],
-) -> Result<String, CompileError> {
+pub fn combine_vec_to_js(collection: &[Expr]) -> Result<String, CompileError> {
     let mut js = String::new();
 
     for (i, node) in collection.iter().enumerate() {
@@ -269,29 +257,29 @@ pub fn combine_vec_to_js(
 
 // pub fn access_args_to_js(accessed_members: &[Arg]) -> String {
 //     let mut js = String::new();
-// 
+//
 //     for member in accessed_members {
 //         match member.data_type {
-//             DataType::Block(..) => { 
+//             DataType::Block(..) => {
 //                 let arguments_js = expressions_to_js(arguments, "").unwrap_or_else(|_| "".to_owned());
 //                 js.push_str(
 //                     &format!(".{}({})", name, arguments_js)
 //                 )
 //                 match data_type {
 //                     DataType::Block(..) => {
-// 
+//
 //                     }
 //                     _ => {
-// 
+//
 //                     }
 //                 }
-// 
+//
 //             }
 //             _ => {
 //                 js.push_str(&format!(".{}", member.name));
 //             }
 //         }
 //     }
-// 
+//
 //     js
 // }

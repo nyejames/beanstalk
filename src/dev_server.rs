@@ -1,6 +1,6 @@
 use crate::settings::Config;
 use crate::tokenizer::TokenPosition;
-use crate::{Error, ErrorType, build, settings};
+use crate::{Error, ErrorType, build, settings, Flag};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 
-pub fn start_dev_server(path: &Path, output_info_level: i32) -> Result<(), Error> {
+pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Error> {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
@@ -31,7 +31,7 @@ pub fn start_dev_server(path: &Path, output_info_level: i32) -> Result<(), Error
     // Is checking to make sure the path is a directory
     let path = get_current_dir()?.join(path);
 
-    let mut project_config = build_project(&path, false, output_info_level)?;
+    let mut project_config = build_project(&path, false, flags)?;
 
     let mut modified = SystemTime::UNIX_EPOCH;
 
@@ -45,7 +45,7 @@ pub fn start_dev_server(path: &Path, output_info_level: i32) -> Result<(), Error
             &path,
             &mut modified,
             &mut project_config,
-            output_info_level,
+            flags,
         )?;
     }
 
@@ -57,7 +57,7 @@ fn handle_connection(
     path: &Path,
     last_modified: &mut SystemTime,
     project_config: &mut Config,
-    output_info_level: i32,
+    flags: &[Flag],
 ) -> Result<(), Error> {
     let buf_reader = BufReader::new(&mut stream);
 
@@ -127,7 +127,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified) || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build_project(path, false, output_info_level)?;
+                    build_project(path, false, flags)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
@@ -220,12 +220,12 @@ fn handle_connection(
 fn build_project(
     build_path: &Path,
     release: bool,
-    output_info_level: i32,
+    flags: &[Flag],
 ) -> Result<Config, Error> {
     dark_cyan_ln!("Reading project config...");
     let start = Instant::now();
 
-    let config = build::build(build_path, release, output_info_level)?;
+    let config = build::build(build_path, release, flags)?;
 
     let duration = start.elapsed();
     print!("\nConfig read in: ");

@@ -1,5 +1,5 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
+use colour::{blue_ln, green_ln, red_ln};
 
 use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::html_output::js_parser::combine_vec_to_js;
@@ -19,7 +19,6 @@ pub struct ParserOutput {
 
     // This is JS atm, but will be Wasm in the future
     pub code_module: String,
-
     // Eventually will have a separate "bindings" string
     // This will be glue code specific to the target output environment
     // For web this will just be the JS that will glue the Wasm modules together
@@ -264,10 +263,7 @@ pub fn parse(
 
             AstNode::Return(expressions, ..) => {
                 code_module.push_str(&format!("\n{indentation}"));
-                code_module.push_str(&format!(
-                    "return {};",
-                    expressions_to_js(expressions, "")?
-                ));
+                code_module.push_str(&format!("return {};", expressions_to_js(expressions, "")?));
             }
 
             AstNode::If(condition, if_true, ..) => {

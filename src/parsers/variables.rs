@@ -1,6 +1,5 @@
 #[allow(unused_imports)]
-use colour::{red_ln, blue_ln, green_ln};
-
+use colour::{blue_ln, green_ln, red_ln};
 use super::{
     ast_nodes::{Arg, AstNode},
     expressions::parse_expression::create_expression,
@@ -9,16 +8,15 @@ use crate::parsers::ast_nodes::{AssignmentOperator, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
 use crate::parsers::functions::{create_block_signature, parse_function_call};
 use crate::parsers::scene::{SceneContent, Style};
+use crate::parsers::util::combine_two_slices_to_vec;
 use crate::tokenizer::TokenPosition;
 use crate::{CompileError, ErrorType, Token, bs_types::DataType};
-use crate::parsers::util::combine_two_slices_to_vec;
 
 pub fn create_reference(
     x: &mut TokenContext,
     arg: &Arg,
     captured_declarations: &[Arg],
 ) -> Result<AstNode, CompileError> {
-
     // Move past the name
     x.advance();
 
@@ -32,12 +30,10 @@ pub fn create_reference(
             return_types,
         ),
 
-        _ => {
-            Ok(AstNode::Reference(
-                Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned()),
-                x.token_start_position(),
-            ))
-        }
+        _ => Ok(AstNode::Reference(
+            Expr::Reference(arg.name.to_owned(), arg.data_type.to_owned()),
+            x.token_start_position(),
+        )),
     }
 }
 
@@ -89,7 +85,7 @@ pub fn new_arg(
                 default_value: new_ast(
                     x,
                     // TODO: separate imports from parent block so these can be used in the scope
-                    variable_declarations, // No args for this block
+                    variable_declarations,
                     // This implies it will return an instance of itself
                     &[],
                     false,
@@ -244,7 +240,6 @@ pub fn mutated_arg(
     arg: Arg,
     captured_declarations: &[Arg],
 ) -> Result<AstNode, CompileError> {
-
     if !arg.data_type.is_mutable() {
         return Err(CompileError {
             msg: format!(
@@ -270,7 +265,7 @@ pub fn mutated_arg(
         Token::MultiplyAssign => AssignmentOperator::MultiplyAssign,
 
         Token::DivideAssign => AssignmentOperator::DivideAssign,
-        
+
         // TODO: match on a bunch more things and throw more detailed errors about how this must be a mutation
         _ => {
             return Err(CompileError {
@@ -286,7 +281,7 @@ pub fn mutated_arg(
     };
 
     x.advance();
-    
+
     let parsed_expression = create_expression(
         x,
         &mut arg.data_type.to_owned(),

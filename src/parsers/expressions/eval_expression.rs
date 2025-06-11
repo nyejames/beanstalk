@@ -19,11 +19,24 @@ pub fn evaluate_expression(
 
     'outer: for node in expr {
         match node {
-            AstNode::Reference(ref value, _) => {
+            AstNode::Reference(ref value, ..) => {
                 if let DataType::Inferred(is_mutable) = current_type {
                     *current_type = value.get_type(is_mutable.to_owned());
                 }
 
+                if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
+                    simplified_expression.push(node);
+                    continue 'outer;
+                }
+
+                output_queue.push(node.to_owned());
+            }
+
+            AstNode::Expression(ref value, ..) => {
+                if let DataType::Inferred(is_mutable) = current_type {
+                    *current_type = value.get_type(is_mutable.to_owned());
+                }
+                
                 if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
                     simplified_expression.push(node);
                     continue 'outer;
@@ -176,7 +189,9 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expr, Compil
                         style.unlocks_override = true;
                         style.unlocked_scenes = scene_style.unlocked_scenes.to_owned();
                     } else {
-                        style.unlocked_scenes.extend(scene_style.unlocked_scenes.to_owned());
+                        style
+                            .unlocked_scenes
+                            .extend(scene_style.unlocked_scenes.to_owned());
                     }
                 }
 

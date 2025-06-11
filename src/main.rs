@@ -1,3 +1,7 @@
+use colour::{
+    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln, e_magenta_ln,
+    e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
+};
 use std::path::PathBuf;
 use std::time::Instant;
 use std::{
@@ -5,15 +9,13 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use colour::{
-    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln, e_magenta_ln,
-    e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
-};
 
 pub mod bs_types;
 mod build;
 mod create_new_project;
 pub mod dev_server;
+mod file_output;
+mod module_dependencies;
 mod release_optimizers;
 mod settings;
 mod test;
@@ -33,6 +35,7 @@ mod parsers {
         pub mod function_call_inline;
         pub mod parse_expression;
     }
+    pub mod builtin_methods;
     pub mod codeblock;
     pub mod loops;
     pub mod scene;
@@ -40,7 +43,6 @@ mod parsers {
     #[allow(dead_code)]
     pub mod util;
     pub mod variables;
-    pub mod builtin_methods;
 }
 mod html_output {
     pub mod code_block_highlighting;
@@ -55,7 +57,6 @@ mod wasm_output {
 }
 use crate::tokenizer::TokenPosition;
 
-
 pub use tokens::Token;
 
 enum Command {
@@ -64,6 +65,15 @@ enum Command {
     Release(PathBuf),
     Test,
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
+}
+
+#[derive(PartialEq)]
+#[derive(Debug)]
+pub enum Flag {
+    ShowTokens,
+    ShowAst,
+    DisableWarnings,
+    DisableTimers,
 }
 
 pub struct CompileError {
@@ -115,17 +125,6 @@ pub struct Error {
     error_type: ErrorType,
 }
 
-// Compiler Output_info_levels
-// Will need to be converted to cli args eventually
-// So cba to do enum yet because this might just change to strings or something
-#[allow(dead_code)]
-const SHOW_TOKENS: i32 = 6;
-const SHOW_AST: i32 = 5;
-#[allow(dead_code)]
-const SHOW_WAT: i32 = 4;
-const SHOW_TIMINGS: i32 = 3;
-const DONT_SHOW_TIMINGS: i32 = 2;
-
 fn main() {
     let compiler_args: Vec<String> = env::args().collect();
 
@@ -142,6 +141,10 @@ fn main() {
             return;
         }
     };
+
+    // Gather a list of any additional flags
+    let flags = get_flags(&compiler_args);
+    grey_ln!("flags {:#?}", flags);
 
     match command {
         Command::NewHTMLProject(path) => {
@@ -173,7 +176,7 @@ fn main() {
             let start = Instant::now();
 
             // TODO - parse config file instead of using default config
-            match build::build(&path, true, SHOW_TIMINGS) {
+            match build::build(&path, true, &flags) {
                 Ok(_) => {
                     let duration = start.elapsed();
                     grey_ln!("------------------------------------");
@@ -189,7 +192,7 @@ fn main() {
         Command::Test => {
             println!("Testing...");
             let test_path = PathBuf::from("test_output");
-            match test::test_build(&test_path, SHOW_AST) {
+            match test::test_build(&test_path, &flags) {
                 Ok(_) => {}
                 Err(e) => {
                     print_formatted_error(e);
@@ -200,7 +203,7 @@ fn main() {
         Command::Dev(ref path) => {
             println!("Starting dev server...");
 
-            match dev_server::start_dev_server(path, DONT_SHOW_TIMINGS) {
+            match dev_server::start_dev_server(path, &flags) {
                 Ok(_) => {
                     println!("Dev server shutting down ... ");
                 }
@@ -285,6 +288,23 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     }
 }
 
+fn get_flags(args: &[String]) -> Vec<Flag> {
+    let mut flags = Vec::new();
+    
+    for arg in args {
+        match arg.as_str() {
+            "--tokens"  => flags.push(Flag::ShowTokens),
+            "--ast"  => flags.push(Flag::ShowAst),
+            "--hide-warnings" => flags.push(Flag::DisableWarnings),
+            "--hide-timers" => flags.push(Flag::DisableTimers),
+
+            _ => {}
+        }
+    }
+
+    flags
+}
+
 fn check_if_valid_directory_path(path: &str) -> Result<(), String> {
     let path = Path::new(path);
 
@@ -327,7 +347,7 @@ fn print_formatted_error(e: Error) {
             .to_string_lossy(),
         Err(_) => e.file_path.to_string_lossy(),
     };
-    
+
     let line_number = e.start_pos.line_number as usize;
 
     // Read the file and get the actual line as a string from the code

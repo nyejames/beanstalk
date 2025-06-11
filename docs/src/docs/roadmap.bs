@@ -11,8 +11,10 @@ A lot of tricky stuff is being built out first before more of the easy wins are 
 ## Ongoing task list
 - Built in array methods (bake directly into the compiler)
 
-- Experiment with no explicit types in declarations at all, this space is only reserved for
-variable visibilitiy or modifiers such as public, private and it's mutability.
+- Scoping for variables that are part of state. 
+Are they passed automatically to functions inside of the classes? 
+Or should there be an implit argument that each class has (this. style thing)
+that all functions on that object have access to.
 
 - Newlines should only break expressions if 
     1. the next token does not continue an expession in the case of not being an operator

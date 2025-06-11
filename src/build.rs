@@ -5,9 +5,9 @@ use crate::html_output::web_parser;
 use crate::html_output::web_parser::Target;
 use crate::parsers::ast_nodes::{Arg, AstNode, Expr};
 use crate::parsers::build_ast::{TokenContext, new_ast};
-use crate::settings::{BS_VAR_PREFIX, Config};
+use crate::settings::{BS_VAR_PREFIX, Config, get_config_from_ast};
 use crate::tokenizer::TokenPosition;
-use crate::{Error, ErrorType, settings};
+use crate::{Error, ErrorType, settings, Flag};
 use crate::{Token, tokenizer};
 use colour::{
     blue_ln, blue_ln_bold, cyan_ln, dark_yellow_ln, green_bold, green_ln, green_ln_bold, grey_ln,
@@ -18,29 +18,54 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use wasm_encoder::Module;
-use wasmparser::validate;
+// use wasmparser::validate;
+use crate::file_output::write_output_file;
+use crate::module_dependencies::resolve_module_dependencies;
+
+pub struct TemplateModule {
+    pub source_path: PathBuf,
+    pub output_path: PathBuf,
+    source_code: String,
+    pub tokens: TokenContext,
+    pub import_requests: Vec<String>,
+    pub exports: HashMap<String, Vec<Token>>,
+}
 
 pub struct OutputModule {
-    source_code: String,
     tokens: TokenContext,
-    imports: Vec<String>,
-    exports: Vec<usize>,
-    output_path: PathBuf,
-    source_path: PathBuf,
-    html: String,
-    js: String,
-    wasm: Module,
+    imports: HashMap<String, Vec<Token>>,
+    pub output_path: PathBuf,
+    pub source_path: PathBuf,
+    pub html: String,
+    pub js: String,
+    pub wasm: Module,
+}
+
+impl TemplateModule {
+    pub fn new(source_code: impl Into<String>, source_path: &Path, output_path: &Path) -> Self {
+        TemplateModule {
+            source_code: source_code.into(),
+            output_path: output_path.to_path_buf(),
+            source_path: source_path.to_path_buf(),
+            tokens: TokenContext::default(),
+            import_requests: Vec::new(),
+            exports: HashMap::new(),
+        }
+    }
 }
 
 impl OutputModule {
-    pub fn new(source_code: impl Into<String>, output_path: PathBuf, source_path: PathBuf) -> Self {
+    pub fn new(
+        output_path: PathBuf,
+        tokens: TokenContext,
+        imports: HashMap<String, Vec<Token>>,
+        source_path: PathBuf,
+    ) -> Self {
         OutputModule {
-            source_code: source_code.into(),
             output_path,
+            tokens,
+            imports,
             source_path,
-            tokens: TokenContext::default(),
-            imports: Vec::new(),
-            exports: Vec::new(),
             html: String::new(),
             js: String::new(),
             wasm: Module::new(),
@@ -51,10 +76,8 @@ impl OutputModule {
 pub fn build(
     entry_path: &Path,
     release_build: bool,
-    output_info_level: i32,
+    flags: &[Flag],
 ) -> Result<Config, Error> {
-    let mut public_exports: HashMap<String, Vec<Token>> = HashMap::new();
-
     // Create a new PathBuf from the entry_path
     let entry_dir = match std::env::current_dir() {
         Ok(dir) => dir.join(entry_path),
@@ -73,7 +96,7 @@ pub fn build(
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
 
-    let mut modules_to_parse: Vec<OutputModule> = Vec::new();
+    let mut modules_to_parse: Vec<TemplateModule> = Vec::new();
     let mut project_config = Config::default();
 
     // check to see if there is a config.bs file in this directory
@@ -122,11 +145,7 @@ pub fn build(
 
     match config {
         CompileType::SingleFile(code) => {
-            modules_to_parse.push(OutputModule::new(
-                code,
-                entry_path.with_extension("html"),
-                entry_path.to_owned(),
-            ));
+            modules_to_parse.push(TemplateModule::new(code, entry_path, &entry_path.with_extension("html")));
         }
 
         CompileType::MultiFile(config_source_code) => {
@@ -134,7 +153,7 @@ pub fn build(
 
             // Parse the config file
             let mut tokenizer_output =
-                match tokenizer::tokenize(&config_source_code, &settings::CONFIG_FILE_NAME) {
+                match tokenizer::tokenize(&config_source_code, settings::CONFIG_FILE_NAME) {
                     Ok(tokens) => tokens,
                     Err(e) => {
                         return Err(e.to_error(config_path));
@@ -144,7 +163,7 @@ pub fn build(
             // Anything imported into the config file becomes an import of every module in the project
             global_imports.extend(tokenizer_output.imports);
 
-            let config_block = match new_ast(&mut tokenizer_output.token_context, &[], &mut [], true) {
+            let config_block = match new_ast(&mut tokenizer_output.token_context, &[], &[], true) {
                 Ok(expr) => expr,
                 Err(e) => return Err(e.to_error(config_path)),
             };
@@ -161,10 +180,14 @@ pub fn build(
         }
     }
 
-    // First, tokenise all files
+    // ----------------------------------
+    // BUILD REST OF PROJECT AFTER CONFIG
+    // ----------------------------------
+
+    // TOKENIZE MODULES
     for module in &mut modules_to_parse {
         // TODO: Yuck, will this always unwrap ok?
-        let file_name = module.output_path.file_stem().unwrap().to_str().unwrap();
+        let file_name = module.source_path.file_stem().unwrap().to_str().unwrap();
 
         dark_yellow_ln!("{:?}", file_name);
 
@@ -197,37 +220,44 @@ pub fn build(
 
         // Create a new export entry for this module
         let export_path = relative_export_path.to_string_lossy().to_string();
-        public_exports.insert(export_path.to_owned(), tokenizer_output.exports);
 
-        module.imports = global_imports.to_owned();
-        module.imports.extend(tokenizer_output.imports);
+        module.import_requests = global_imports.to_owned();
+        module.import_requests.extend(tokenizer_output.imports);
 
-        if output_info_level > 5 {
+        module
+            .exports
+            .insert(export_path.to_owned(), tokenizer_output.exports);
+
+        if flags.contains(&Flag::ShowTokens) {
             print_token_output(&tokenizer_output.token_context.tokens);
         }
 
         module.tokens = tokenizer_output.token_context;
 
-        if output_info_level > 2 {
+        if !flags.contains(&Flag::DisableTimers) {
             print!("Tokenized in: ");
             green_ln!("{:?}", time.elapsed());
         }
     }
 
-    // Resolving exports / imports
+    // RESOLVING MODULE DEPENDENCIES
+    let (mut tokenised_modules, project_exports) = resolve_module_dependencies(&modules_to_parse)?;
 
-    for file in &mut modules_to_parse {
-        let compile_result = compile(
-            file,
+    // PARSING MODULES INTO AN AST
+    // And creating the output files
+
+    for module in &mut tokenised_modules {
+        let compile_result = compile_module(
+            module,
             release_build,
-            output_info_level,
+            flags,
             &mut project_config,
-            &public_exports,
+            &project_exports,
         )?;
 
         let mut js_imports: String = format!(
             "<script type=\"module\" src=\"./{}\"></script>",
-            &file
+            &module
                 .output_path
                 .with_extension("js")
                 .file_name()
@@ -235,10 +265,10 @@ pub fn build(
                 .to_string_lossy()
         );
 
-        for import in &compile_result.import_requests {
+        for import in &mut module.imports {
             // Stripping the src folder from the import path,
             // As this directory is removed in the output directory
-            let trimmed_import = import.strip_prefix("src/").unwrap_or(import);
+            let trimmed_import = import.0.strip_prefix("src/").unwrap_or(import.0);
 
             js_imports += &format!(
                 "<script type=\"module\" src=\"{}.js\"></script>",
@@ -246,13 +276,13 @@ pub fn build(
             );
         }
 
-        file.html = compile_result
+        module.html = compile_result
             .html
             .replace("<!--//js-modules-->", &js_imports);
-        file.js = compile_result.js;
+        module.js = compile_result.js;
 
         // Write the file to the output directory
-        write_output_file(file)?;
+        write_output_file(module)?;
     }
 
     // Any HTML files in the output dir not on the list of files to compile should be deleted
@@ -300,8 +330,8 @@ pub fn build(
                 || file_path.extension() == Some("wasm".as_ref()))
                 || file_path.extension() == Some("js".as_ref())  )
 
-                // If the file is not in the source code to parse, it's not needed
-                && !modules_to_parse.iter().any(|f| f.output_path.with_extension("") == file_path.with_extension(""))
+                // If the file is not in the source code to parse, it's unnecessary
+                && !tokenised_modules.iter().any(|f| f.output_path.with_extension("") == file_path.with_extension(""))
             {
                 match fs::remove_file(&file_path) {
                     Ok(_) => {
@@ -326,7 +356,7 @@ pub fn build(
 
 // Look for every subdirectory inside the dir and add all .bs files to the source_code_to_parse
 pub fn add_bs_files_to_parse(
-    source_code_to_parse: &mut Vec<OutputModule>,
+    source_code_to_parse: &mut Vec<TemplateModule>,
     output_dir: &Path,
     project_root_dir: &Path,
 ) -> Result<(), Error> {
@@ -398,12 +428,12 @@ pub fn add_bs_files_to_parse(
                         }
                     };
 
-                    let final_output_file = OutputModule::new(
+                    let final_output_file = TemplateModule::new(
                         code,
-                        PathBuf::from(&output_dir)
+                        &file_path,
+                        &PathBuf::from(&output_dir)
                             .join(file_name)
                             .with_extension("html"),
-                        file_path,
                     );
 
                     if global {
@@ -426,11 +456,8 @@ pub fn add_bs_files_to_parse(
                     if ext == "js" || ext == "html" || ext == "css" {
                         let file_name = file_path.file_name().unwrap().to_str().unwrap();
 
-                        source_code_to_parse.push(OutputModule::new(
-                            "",
-                            output_dir.join(file_name),
-                            file_path,
-                        ));
+                        source_code_to_parse
+                            .push(TemplateModule::new("", &file_path, &output_dir.join(file_name)));
                     }
                 }
             }
@@ -453,113 +480,57 @@ pub fn add_bs_files_to_parse(
 struct CompileResult {
     html: String,
     js: String,
-    import_requests: Vec<String>,
 }
 
-fn compile(
+fn compile_module(
     module: &mut OutputModule,
     release_build: bool,
-    output_info_level: i32,
+    flags: &[Flag],
     project_config: &mut Config,
-    public_exports: &HashMap<String, Vec<Token>>,
+    project_exports: &[Arg],
 ) -> Result<CompileResult, Error> {
     print_bold!("\nCompiling: ");
 
     let time = Instant::now();
-
     let mut js = String::new();
 
-    // Create declarations out of the imports
-    // We don't know their Type, so we just use the pointer type for them
-    let mut declarations: Vec<Arg> = Vec::new();
-
     // These are just to insert the HTML module imports into the HTML file.
-    let mut import_requests: Vec<String> = Vec::new();
-    for import in &mut module.imports {
+    let mut import_requests: Vec<&Token> = Vec::new();
+    for import in &module.imports {
         // Import the other JS module at the top of this module
         // Import string will be in this format: "path/module:export"
         // Or if we are importing everything: "path/module"
-        let split_import_string = import.split(":").collect::<Vec<&str>>();
 
         // Then strip the src/ from the path if it starts there
         // This is because the output folder gets rid of the src directory
-        let import_path = split_import_string[0]
-            .strip_prefix("src/")
-            .unwrap_or(split_import_string[0]);
+        let import_path = import.0.strip_prefix("src/").unwrap_or(import.0);
 
         // Importing everything from the module
-        if split_import_string.len() > 1 {
-            // We need to only put the path into the import requests
-            // This is where we remove the colon
-            import_requests.push(split_import_string[0].to_string());
-
-            js += &format!(
-                "import {BS_VAR_PREFIX}{} from \"./{}.js\";\n",
-                split_import_string[1], import_path
-            );
-
-            declarations.push(Arg {
-                name: split_import_string[1].to_owned(),
-                default_value: Expr::Reference(
-                    split_import_string[1].to_owned(),
-                    DataType::UnknownReference(split_import_string[1].to_owned(), false),
-                ),
-                data_type: DataType::UnknownReference(split_import_string[1].to_owned(), false),
-            })
-            
-        } else {
-            import_requests.push(import.to_string());
-
-            // We now need to get the names of all the exports from this module
-            let import_names = match public_exports.get(split_import_string[0]) {
-                Some(exported_names) => exported_names,
-                None => {
-                    return Err(Error {
-                        msg: format!(
-                            "Could not find any exports from module path: {}",
-                            import_path
-                        ),
-                        start_pos: TokenPosition::default(),
-                        end_pos: TokenPosition::default(),
-                        file_path: module.source_path.to_owned(),
-                        error_type: ErrorType::File,
-                    });
-                }
-            };
-
-            let formatted_variable_names = import_names
-                .iter()
-                .map(|export| format!("{}{}, ", BS_VAR_PREFIX, export.get_name()))
-                .collect::<String>();
-            js += &format!(
-                "import {{{}}} from \"./{}.js\";\n",
-                formatted_variable_names, import_path
-            );
-
-            for export in import_names {
-                declarations.push(Arg {
-                    name: export.get_name(),
-                    default_value: Expr::Reference(export.get_name(), DataType::Inferred(false)),
-                    data_type: DataType::Inferred(false),
-                })
-            }
+        js += &format!("import {{");
+        for import in import.1 {
+            import_requests.push(import);
+            let import_name = import.get_name();
+            js += &format!("{BS_VAR_PREFIX}{import_name}, ");
         }
+        js += &format!("}} from \"./{import_path}.js\";\n");
     }
 
     // AST PARSER
-    let ast = match new_ast(&mut module.tokens, &declarations, &[], true) {
-        Ok(block) => block.get_block_nodes().to_owned(),
+    let block = match new_ast(&mut module.tokens, project_exports, &[], true) {
+        Ok(block) => block,
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));
         }
     };
 
-    if output_info_level > 4 {
+    let ast = block.get_block_nodes();
+
+    if flags.contains(&Flag::ShowAst) {
         yellow_ln_bold!("CREATING AST\n");
-        print_ast_output(&ast);
+        print_ast_output(ast);
     }
 
-    if output_info_level > 2 {
+    if !flags.contains(&Flag::DisableTimers) {
         print!("AST created in: ");
         green_ln!("{:?}", time.elapsed());
     }
@@ -589,7 +560,7 @@ fn compile(
     // until different project outputs are available in the future
     let target = &Target::Web;
 
-    let parser_output = match web_parser::parse(&ast, "", target) {
+    let parser_output = match web_parser::parse(ast, "", target) {
         Ok(parser_output) => parser_output,
         Err(e) => {
             return Err(e.to_error(PathBuf::from(&module.source_path)));
@@ -614,7 +585,7 @@ fn compile(
         }
     };
 
-    if output_info_level > 2 {
+    if !flags.contains(&Flag::DisableTimers) {
         print!("HTML/CSS/WAT/JS generated in: ");
         green_ln!("{:?}", time.elapsed());
     }
@@ -625,500 +596,7 @@ fn compile(
     //     &parser_output.wat, parser_output.wat_globals
     // );
 
-    Ok(CompileResult {
-        html,
-        js,
-        import_requests,
-    })
-}
-
-fn write_output_file(output: &OutputModule) -> Result<(), Error> {
-    // If the output directory does not exist, create it
-    let file_path = output.output_path.to_owned();
-    let parent_dir = match output.output_path.parent() {
-        Some(dir) => dir,
-        None => {
-            return Err(Error {
-                msg: format!(
-                    "Error getting parent directory of output file when writing: {:?}",
-                    file_path
-                ),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path: output.output_path.to_owned(),
-                error_type: ErrorType::File,
-            });
-        }
-    };
-
-    // Create the needed directory if it doesn't exist
-    if fs::metadata(parent_dir).is_err() {
-        match fs::create_dir_all(parent_dir) {
-            Ok(_) => {}
-            Err(e) => {
-                return Err(Error {
-                    msg: format!("Error creating directory: {:?}", e),
-                    start_pos: TokenPosition::default(),
-                    end_pos: TokenPosition::default(),
-                    file_path: output.output_path.to_owned(),
-                    error_type: ErrorType::File,
-                });
-            }
-        }
-    }
-
-    match fs::write(&output.output_path, &output.html) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(Error {
-                msg: format!("Error writing file: {:?}", e),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path,
-                error_type: ErrorType::File,
-            });
-        }
-    }
-
-    // Write the JS file to the same directory
-    match fs::write(output.output_path.with_extension("js"), &output.js) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(Error {
-                msg: format!("Error writing JS module file: {:?}", e),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path,
-                error_type: ErrorType::File,
-            });
-        }
-    };
-
-    let wasm = output.wasm.to_owned().finish();
-
-    match validate(&wasm) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(Error {
-                msg: format!("Error validating WASM module: {:?}", e),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path,
-                error_type: ErrorType::File,
-            });
-        }
-    };
-
-    // Write the wasm file to the same directory
-    match fs::write(output.output_path.with_extension("wasm"), wasm) {
-        Ok(_) => {}
-        Err(e) => {
-            return Err(Error {
-                msg: format!("Error writing WASM module file: {:?}", e),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path,
-                error_type: ErrorType::File,
-            });
-        }
-    }
-
-    Ok(())
-}
-
-fn get_config_from_ast(ast: &[AstNode], project_config: &mut Config) -> Result<(), Error> {
-    for node in ast {
-        if let AstNode::Settings(args, ..) = node {
-            for arg in args {
-                match arg.name.as_str() {
-                    "project" => {
-                        project_config.project = match &arg.default_value {
-                            Expr::String(value) => value.to_owned(),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Project name must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "src" => {
-                        project_config.src = match &arg.default_value {
-                            Expr::String(value) => PathBuf::from(value),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Source folder must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "dev" => {
-                        project_config.dev_folder = match &arg.default_value {
-                            Expr::String(value) => PathBuf::from(value),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Dev folder must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "release" => {
-                        project_config.release_folder = match &arg.default_value {
-                            Expr::String(value) => PathBuf::from(value),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Release folder must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "name" => {
-                        project_config.name = match &arg.default_value {
-                            Expr::String(value) => value.to_owned(),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Name must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "version" => {
-                        project_config.version = match &arg.default_value {
-                            Expr::String(value) => value.to_owned(),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Version must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "author" => {
-                        project_config.author = match &arg.default_value {
-                            Expr::String(value) => value.to_owned(),
-                            _ => {
-                                return Err(Error {
-                                    msg: "Author must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "license" => {
-                        project_config.license = match &arg.default_value {
-                            Expr::String(value) => value.to_owned(),
-                            _ => {
-                                return Err(Error {
-                                    msg: "License must be a string".to_string(),
-                                    start_pos: TokenPosition::default(),
-                                    end_pos: TokenPosition::default(),
-                                    file_path: PathBuf::from("#config.bs"),
-                                    error_type: ErrorType::Type,
-                                });
-                            }
-                        };
-                    }
-
-                    "html_settings" => {
-                        return match &arg.default_value {
-                            Expr::Args(args) => {
-                                for arg in args {
-                                    match arg.name.as_str() {
-                                        "site_title" => {
-                                            project_config.html_meta.site_title = match &arg.default_value {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Site title must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "page_description" => {
-                                            project_config.html_meta.page_description = match &arg
-                                                .default_value
-                                            {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page description must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "site_url" => {
-                                            project_config.html_meta.site_url = match &arg.default_value {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Site url must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "page_url" => {
-                                            project_config.html_meta.page_url = match &arg.default_value {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page url must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "page_og_title" => {
-                                            project_config.html_meta.page_og_title = match &arg.default_value
-                                            {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page og title must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "page_og_description" => {
-                                            project_config.html_meta.page_og_description =
-                                                match &arg.default_value {
-                                                    Expr::String(value) => value.to_owned(),
-                                                    _ => {
-                                                        return Err(Error {
-                                                            msg: "Page og description must be a string"
-                                                                .to_string(),
-                                                            start_pos: TokenPosition::default(),
-                                                            end_pos: TokenPosition::default(),
-                                                            file_path: PathBuf::from("#config.bs"),
-                                                            error_type: ErrorType::Type,
-                                                        });
-                                                    }
-                                                };
-                                        }
-
-                                        "page_image_url" => {
-                                            project_config.html_meta.page_image_url =
-                                                match &arg.default_value {
-                                                    Expr::String(value) => value.to_owned(),
-                                                    _ => {
-                                                        return Err(Error {
-                                                            msg: "Page image url must be a string"
-                                                                .to_string(),
-                                                            start_pos: TokenPosition::default(),
-                                                            end_pos: TokenPosition::default(),
-                                                            file_path: PathBuf::from("#config.bs"),
-                                                            error_type: ErrorType::Type,
-                                                        });
-                                                    }
-                                                };
-                                        }
-
-                                        "page_image_alt" => {
-                                            project_config.html_meta.page_image_alt =
-                                                match &arg.default_value {
-                                                    Expr::String(value) => value.to_owned(),
-                                                    _ => {
-                                                        return Err(Error {
-                                                            msg: "Page image alt must be a string"
-                                                                .to_string(),
-                                                            start_pos: TokenPosition::default(),
-                                                            end_pos: TokenPosition::default(),
-                                                            file_path: PathBuf::from("#config.bs"),
-                                                            error_type: ErrorType::Type,
-                                                        });
-                                                    }
-                                                };
-                                        }
-
-                                        "page_locale" => {
-                                            project_config.html_meta.page_locale = match &arg.default_value {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page locale must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "page_type" => {
-                                            project_config.html_meta.page_type = match &arg.default_value {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page type must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "page_twitter_large_image" => {
-                                            project_config.html_meta.page_twitter_large_image =
-                                                match &arg.default_value {
-                                                    Expr::String(value) => value.to_owned(),
-                                                    _ => return Err(Error {
-                                                        msg:
-                                                        "Page twitter large image must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    }),
-                                                };
-                                        }
-
-                                        "page_canonical_url" => {
-                                            project_config.html_meta.page_canonical_url =
-                                                match &arg.default_value {
-                                                    Expr::String(value) => value.to_owned(),
-                                                    _ => {
-                                                        return Err(Error {
-                                                        msg: "Page canonical url must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                    }
-                                                };
-                                        }
-
-                                        "page_root_url" => {
-                                            project_config.html_meta.page_root_url = match &arg.default_value
-                                            {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Page root url must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-
-                                        "image_folder_url" => {
-                                            project_config.html_meta.image_folder_url = match &arg
-                                                .default_value
-                                            {
-                                                Expr::String(value) => value.to_owned(),
-                                                _ => {
-                                                    return Err(Error {
-                                                        msg: "Image folder url must be a string"
-                                                            .to_string(),
-                                                        start_pos: TokenPosition::default(),
-                                                        end_pos: TokenPosition::default(),
-                                                        file_path: PathBuf::from("#config.bs"),
-                                                        error_type: ErrorType::Type,
-                                                    });
-                                                }
-                                            };
-                                        }
-                                        _ => {}
-                                    }
-                                }
-                                Ok(())
-                            }
-                            _ => Err(Error {
-                                msg: "HTML settings must be a struct".to_string(),
-                                start_pos: TokenPosition::default(),
-                                end_pos: TokenPosition::default(),
-                                file_path: PathBuf::from("#config.bs"),
-                                error_type: ErrorType::Type,
-                            }),
-                        };
-                    }
-
-                    _ => {}
-                }
-            }
-
-            // if *is_exported {
-            //     exported_variables.push(Arg {
-            //         name: name.to_owned(),
-            //         data_type: data_type.to_owned(),
-            //         value: value.to_owned(),
-            //     });
-            // }
-        }
-    }
-
-    Ok(())
+    Ok(CompileResult { html, js })
 }
 
 fn print_token_output(tokens: &[Token]) {
