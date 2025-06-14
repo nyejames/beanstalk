@@ -35,16 +35,12 @@ impl TokenContext {
     }
 
     pub fn token_start_position(&self) -> TokenPosition {
-        debug_assert!(self.index <= self.length);
-
-        if self.index == self.length {
-            return self.token_positions[self.index - 1].to_owned();
-        }
-
+        debug_assert!(self.index < self.length, "Token in block {:?} is out of bounds", self.get_block_name());
         self.token_positions[self.index].to_owned()
     }
+
     pub fn token_end_position(&self) -> TokenPosition {
-        debug_assert!(self.index <= self.length);
+        debug_assert!(self.index <= self.length, "Token in block {:?} is out of bounds", self.get_block_name());
 
         if self.index == self.length {
             return self.token_positions[self.index - 1].to_owned();
@@ -62,9 +58,10 @@ impl TokenContext {
     }
 
     pub fn advance(&mut self) {
-        // Some tokens allow any number of newlines after them,
-        // without breaking a statement or expression
         match self.current_token() {
+
+            // Some tokens allow any number of newlines after them,
+            // without breaking a statement or expression
             &Token::Colon |
             &Token::OpenParenthesis |
             &Token::ArgConstructor |
@@ -94,6 +91,12 @@ impl TokenContext {
             &Token::GreaterThanOrEqual => {
                 self.index += 1;
                 self.skip_newlines();
+            }
+
+            // Can't advance past End of File
+            &Token::EOF => {
+                // Show a warning for compiler development purposes
+                red_ln!("Compiler tried to advance past EOF inside {}", self.get_block_name());
             }
 
             _ => {
@@ -139,6 +142,11 @@ pub fn new_ast(
     // About 1/10 of the tokens seem to become AST nodes roughly from some very small preliminary tests
     let mut ast = Vec::with_capacity(x.length / 10);
     let mut new_declarations = arguments_passed_in.to_vec();
+
+    blue_ln!("Creating new scope for {}, with new_declarations: {:#?}", 
+        x.get_block_name(), 
+        new_declarations.iter().map(|a| a.name.to_owned()).collect::<Vec<String>>()
+    );
 
     let mut exports = Vec::new();
 
@@ -300,9 +308,9 @@ pub fn new_ast(
                         exports.push(arg.to_owned());
                     }
 
-                    red_ln!("new variable declaration: {}", arg.name);
-
                     new_declarations.push(arg.to_owned());
+
+                    blue_ln!("Adding declaration: {} to scope for {}", name, x.get_block_name());
 
                     ast.push(AstNode::Declaration(
                         name.to_owned(),
@@ -425,7 +433,8 @@ pub fn new_ast(
                 // }
 
                 ast.push(AstNode::Return(return_values, x.token_start_position()));
-                x.index -= 1;
+                
+                // x.index -= 1;
             }
 
             Token::End | Token::EOF => {

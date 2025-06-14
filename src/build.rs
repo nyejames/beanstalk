@@ -638,7 +638,7 @@ fn print_ast_output(ast: &[AstNode]) {
             }
             AstNode::Declaration(name, expr, ..) => {
                 blue_ln!("Variable: {:?}", name);
-                green_ln_bold!("Expr: {:?}", expr);
+                green_ln_bold!("Expr: {:#?}", expr);
             }
             AstNode::FunctionCall(name, args, ..) => {
                 blue_ln!("Function Call: {:?}", name);

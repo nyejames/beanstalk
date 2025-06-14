@@ -144,7 +144,7 @@ fn main() {
 
     // Gather a list of any additional flags
     let flags = get_flags(&compiler_args);
-    grey_ln!("flags {:#?}", flags);
+    // grey_ln!("compiler settings {:#?}", flags);
 
     match command {
         Command::NewHTMLProject(path) => {
@@ -190,7 +190,6 @@ fn main() {
         }
 
         Command::Test => {
-            println!("Testing...");
             let test_path = PathBuf::from("test_output");
             match test::test_build(&test_path, &flags) {
                 Ok(_) => {}

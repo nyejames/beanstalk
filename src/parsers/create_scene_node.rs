@@ -25,26 +25,9 @@ pub fn new_scene(
     // The content of the scene
     // There are 3 Vecs here as any slots from scenes in the scene head need to be inserted around the body
     let mut scene_body: SceneContent = SceneContent::default();
-    let mut this_scene_body: Vec<Expr> = Vec::new();
+    let mut this_scene_body: Vec<Expr> = Vec::new();;
 
-    // Set a default ID just in case none is set manually, 
-    // This guarantees each scene ID will be unique
-    let module_name = match x.tokens.first() {
-        Some(Token::ModuleStart(name)) => name.to_owned(),
-        _ => {
-            return Err(CompileError {
-                msg: "No module name found for this scene".to_owned(),
-                start_pos: x.token_positions[x.index].to_owned(),
-                end_pos: TokenPosition {
-                    line_number: x.token_positions[x.index].line_number,
-                    char_column: x.token_positions[x.index].char_column + 1,
-                },
-                error_type: ErrorType::Compiler,
-            });
-        }
-    };
-
-    let mut scene_id: String = format!("sceneID_{module_name}_{}", x.index);
+    let mut scene_id: String = format!("sceneID_{}_{}", x.get_block_name(), x.index);
 
     x.advance();
 
@@ -141,6 +124,7 @@ pub fn new_scene(
 
                             continue;
                         }
+
                         _ => {
                             let expr = create_expression(
                                 x,
@@ -153,10 +137,12 @@ pub fn new_scene(
                         }
                     }
                 } else {
+
                     return Err(CompileError {
                         msg: format!(
-                            "Cannot declare new variables inside of a scene head. Variable '{}' is not declared",
-                            name
+                            "Cannot declare new variables inside of a scene head. Variable '{}' is not declared. 
+                            \n Here are all the variables in scope: {:#?}",
+                            name, declarations.iter().map(|a| a.name.to_owned()).collect::<Vec<String>>()
                         ),
                         start_pos: x.token_positions[x.index].to_owned(),
                         end_pos: TokenPosition {

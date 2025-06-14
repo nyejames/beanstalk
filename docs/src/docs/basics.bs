@@ -55,33 +55,22 @@ The @ symbol before a name is used to export variables and functions outside of 
 
 ## Assignment
 
-### Variable with optional type annotation (tilde means this is a mutable and can change)
+### Variables (tilde ~ means this is a mutable and can change)
 [Code:
+    int_var ~Int = 0
     float_var ~Float = 0.0
+    string_var ~String = "boo!"
+    bool_var ~Bool = true
+    collection_var ~{String} = {}
+    scene_var ~[] = []
 ]
 
-Any mutable variable declaration can be found by searching the variable name, followed by a tilde '~'.
-If the variable is immutable then you it should only have one instance of its name followed by an equals sign, so it can be searched that way.
-
-### Mutable variables with inferred types
-[Code: 
-    int_var ~= 0
-    float_var ~= 0.0
-    string_var ~= "boo!"
-    bool_var ~= true
-    collection_var ~= {}
-    scene_var ~= []
-]
-
-Type annotations are not needed for variables if they are being initialised with a value.
+Type annotations are needed for new variables.
 
 ## Static Assignment
 [Code:
-    -- UTF-16 string with type annotation
-    my_brain ~String = "Dumb"
-
-    -- 64 bit immutable float with inferred type
-    number = 69.420
+    -- 64 bit immutable float
+    number Float = 69.420
 
     -- Becomes an immutable reference to the value
     -- For primatives this is actually just an immutable copy,
