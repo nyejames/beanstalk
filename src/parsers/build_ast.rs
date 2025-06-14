@@ -27,6 +27,7 @@ pub struct TokenContext {
     pub length: usize,
     pub token_positions: Vec<TokenPosition>,
 }
+
 impl TokenContext {
     pub fn current_token(&self) -> &Token {
         debug_assert!(self.index < self.length, "Token in block {:?} is out of bounds", self.get_block_name());
@@ -66,6 +67,8 @@ impl TokenContext {
             &Token::OpenParenthesis |
             &Token::ArgConstructor |
             &Token::Comma |
+
+            &Token::End |
 
             &Token::Assign |
             &Token::AddAssign |
@@ -143,11 +146,6 @@ pub fn new_ast(
     let mut ast = Vec::with_capacity(x.length / 10);
     let mut new_declarations = arguments_passed_in.to_vec();
 
-    blue_ln!("Creating new scope for {}, with new_declarations: {:#?}", 
-        x.get_block_name(), 
-        new_declarations.iter().map(|a| a.name.to_owned()).collect::<Vec<String>>()
-    );
-
     let mut exports = Vec::new();
 
     while x.index < x.length {
@@ -157,7 +155,8 @@ pub fn new_ast(
 
         match current_token {
             Token::Comment(..) => {
-                // ast.push(AstNode::Comment(value.clone()));
+                // Comments are ignored during AST creation.
+                x.advance();
             }
 
             // Scene literals
@@ -195,8 +194,8 @@ pub fn new_ast(
             }
 
             Token::ModuleStart(..) => {
-                // Ignored during AST creation but used to look up the name of the module efficiently
-                // Is used to help name space variable names to avoid clashes with scenes across modules
+                // Module start token is only used for naming; skip it.
+                x.advance();
             }
 
             // New Function or Variable declaration
@@ -319,13 +318,16 @@ pub fn new_ast(
                         arg.data_type,
                         x.token_start_position(),
                     ));
+
+                    // Move past the token that terminates this declaration (newline, comma, etc.)
+                    x.advance();
                 }
             }
 
-            // Modifiers
+            // Modifiers that were consumed by the tokenizer but have already been acted upon.
             Token::Public | Token::Private | Token::Mutable => {
-                // Ignoring for now as the tokenizer is doing the important stuff
-                // TODO - add some helpful errors if these are used in the wrong context here
+                // Simply move past the modifier token.
+                x.advance();
             }
 
             // Control Flow
@@ -370,15 +372,18 @@ pub fn new_ast(
 
             Token::JS(value) => {
                 ast.push(AstNode::JS(value.clone(), x.token_start_position()));
+                x.advance();
             }
 
             // IGNORED TOKENS
             Token::Newline | Token::Empty => {
-                // Do nothing for now
+                // Skip standalone newlines / empty tokens
+                x.advance();
             }
 
             Token::Import => {
-                // Imports are just left in the token stream but don't continue here (At the moment)
+                // Imports remain in the token stream for later passes; skip the token here.
+                x.advance();
             }
 
             Token::Print => {
@@ -486,8 +491,6 @@ pub fn new_ast(
                 });
             }
         }
-
-        x.advance();
     }
 
     Ok(Expr::Block(
