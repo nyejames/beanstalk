@@ -1,9 +1,9 @@
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::scene::{SceneContent, Style};
+use crate::compiler::parsers::template::{TemplateContent, Style};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_rule_error;
 
@@ -23,7 +23,7 @@ impl Expression {
             ExpressionKind::Int(int) => int.to_string(),
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
-            ExpressionKind::Scene(..) => String::new(),
+            ExpressionKind::Template(..) => String::new(),
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
                 for item in items {
@@ -159,10 +159,10 @@ impl Expression {
             location,
         }
     }
-    pub fn scene(body: SceneContent, styles: Style, id: String, location: TextLocation) -> Self {
+    pub fn template(body: TemplateContent, styles: Style, id: String, location: TextLocation) -> Self {
         Self {
-            data_type: DataType::Scene(false),
-            kind: ExpressionKind::Scene(body, styles, id),
+            data_type: DataType::Template(false),
+            kind: ExpressionKind::Template(body, styles, id),
             location,
         }
     }
@@ -173,8 +173,11 @@ impl Expression {
 
     // Evaluates a binary operation between two expressions based on the operator
     // This helps with constant folding by handling type-specific operations
-    pub fn evaluate_operator(&self, rhs: &Expression, op: &Operator) -> Result<Option<Expression>, CompileError> {
-        
+    pub fn evaluate_operator(
+        &self,
+        rhs: &Expression,
+        op: &Operator,
+    ) -> Result<Option<Expression>, CompileError> {
         let kind: ExpressionKind = match (&self.kind, &rhs.kind) {
             // Float operations
             (ExpressionKind::Float(lhs_val), ExpressionKind::Float(rhs_val)) => {
@@ -197,9 +200,9 @@ impl Expression {
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
                         self.location,
-                        "Cannot perform operation {} on floats", 
+                        "Cannot perform operation {} on floats",
                         op.to_str()
-                    ), 
+                    ),
                 }
             }
 
@@ -212,20 +215,14 @@ impl Expression {
                     Operator::Divide => {
                         // Handle division by zero and integer division
                         if *rhs_val == 0 {
-                            return return_rule_error!(
-                                self.location,
-                                "Cannot divide by zero"
-                            )
+                            return return_rule_error!(self.location, "Cannot divide by zero");
                         } else {
                             ExpressionKind::Int(lhs_val / rhs_val)
                         }
                     }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
-                            return_rule_error!(
-                                self.location,
-                                "Cannot modulus by zero"
-                            )
+                            return_rule_error!(self.location, "Cannot modulus by zero")
                         } else {
                             ExpressionKind::Int(lhs_val % rhs_val)
                         }
@@ -251,51 +248,44 @@ impl Expression {
                     Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
                     Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
 
-
                     _ => return_rule_error!(
                         self.location,
-                        "Cannot perform operation {} on integers", 
+                        "Cannot perform operation {} on integers",
                         op.to_str()
-                    ), 
+                    ),
                 }
             }
 
             // Boolean operations
-            (ExpressionKind::Bool(lhs_val), ExpressionKind::Bool(rhs_val)) => {
-                match op {
-                    Operator::And => ExpressionKind::Bool(*lhs_val && *rhs_val),
-                    Operator::Or => ExpressionKind::Bool(*lhs_val || *rhs_val),
-                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
-                    
-                    _ => return_rule_error!(
-                        self.location,
-                        "Cannot perform operation {} on booleans", 
-                        op.to_str()
-                    )
-                }
-            }
+            (ExpressionKind::Bool(lhs_val), ExpressionKind::Bool(rhs_val)) => match op {
+                Operator::And => ExpressionKind::Bool(*lhs_val && *rhs_val),
+                Operator::Or => ExpressionKind::Bool(*lhs_val || *rhs_val),
+                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
+
+                _ => return_rule_error!(
+                    self.location,
+                    "Cannot perform operation {} on booleans",
+                    op.to_str()
+                ),
+            },
 
             // String operations
-            (ExpressionKind::String(lhs_val), ExpressionKind::String(rhs_val)) => {
-                match op {
-                    Operator::Add => {
-                        ExpressionKind::String(format!("{}{}", lhs_val, rhs_val))
-                    }
-                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
-                    _ => return_rule_error!(
-                        self.location,
-                        "Cannot perform operation {} on strings", 
-                        op.to_str()
-                    )
-                }
-            }
+            (ExpressionKind::String(lhs_val), ExpressionKind::String(rhs_val)) => match op {
+                Operator::Add => ExpressionKind::String(format!("{}{}", lhs_val, rhs_val)),
+                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
+                _ => return_rule_error!(
+                    self.location,
+                    "Cannot perform operation {} on strings",
+                    op.to_str()
+                ),
+            },
 
             // Any other combination of types
-            _ => return Ok(None)
+            _ => return Ok(None),
         };
-        
+
         Ok(Some(Expression::new(kind, self.location)))
     }
 }
@@ -322,7 +312,7 @@ pub enum ExpressionKind {
         Vec<DataType>, // return args
     ),
 
-    Scene(SceneContent, Style, String), // Scene Body, Styles, ID
+    Template(TemplateContent, Style, String), // Template Body, Styles, ID
 
     Collection(Vec<Expression>),
 
@@ -364,7 +354,7 @@ impl ExpressionKind {
                 None => DataType::Inferred(false),
             },
             ExpressionKind::Struct(args) => DataType::Args(args.to_owned()),
-            ExpressionKind::Scene(..) => DataType::Inferred(false),
+            ExpressionKind::Template(..) => DataType::Inferred(false),
         }
     }
 
@@ -431,7 +421,7 @@ pub enum Operator {
 
 impl Operator {
     pub fn to_str(&self) -> &str {
-        match self { 
+        match self {
             Operator::Add => "+",
             Operator::Subtract => "-",
             Operator::Multiply => "*",

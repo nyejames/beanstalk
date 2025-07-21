@@ -1,6 +1,6 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::scene::{SceneContent, Style};
+use crate::compiler::parsers::template::{TemplateContent, Style};
 use crate::compiler::parsers::tokens::TextLocation;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -47,7 +47,7 @@ pub enum DataType {
 
     // Special Beanstalk Types
     // Scene types may have more static structure to them in the future
-    Scene(bool), // is_mutable
+    Template(bool), // is_mutable
 
     Function(Vec<Arg>, Vec<DataType>), // Arg constructor, Returned args
 
@@ -154,7 +154,7 @@ impl DataType {
                 length
             }
             DataType::Function(..) => 2,
-            DataType::Scene(_) => 5,
+            DataType::Template(_) => 5,
 
             DataType::Option(inner_type) => inner_type.length() + 1,
             DataType::None => 4,
@@ -176,7 +176,7 @@ impl DataType {
             DataType::Function(args, return_type) => {
                 DataType::Option(Box::new(DataType::Function(args, return_type)))
             }
-            DataType::Scene(mutable) => DataType::Option(Box::new(DataType::Scene(mutable))),
+            DataType::Template(mutable) => DataType::Option(Box::new(DataType::Template(mutable))),
             DataType::UnknownReference(name, mutable) => {
                 DataType::Option(Box::new(DataType::UnknownReference(name, mutable)))
             }
@@ -315,7 +315,9 @@ impl DataType {
 
                 format!("Block({} -> {})", arg_str, returns_string)
             }
-            DataType::Scene(mutable) => format!("{} Scene", if *mutable { "mutable" } else { "" }),
+            DataType::Template(mutable) => {
+                format!("{} Template", if *mutable { "mutable" } else { "" })
+            }
             DataType::UnknownReference(name, ..) => format!("{} Pointer", name),
             DataType::None => "None".to_owned(),
             DataType::True => "True".to_owned(),
@@ -340,8 +342,8 @@ impl DataType {
             DataType::String(_) | DataType::CoerceToString(_) => {
                 Expression::string(String::new(), location)
             }
-            DataType::Scene(_) => Expression::scene(
-                SceneContent::default(),
+            DataType::Template(_) => Expression::template(
+                TemplateContent::default(),
                 Style::default(),
                 String::default(),
                 location,

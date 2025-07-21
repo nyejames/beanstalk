@@ -198,7 +198,7 @@ fn type_is_in_language(type_keyword: &str, language: &str) -> bool {
                 | "Unit"
                 | "Bool"
                 | "String"
-                | "Scene"
+                | "Template"
                 | "Choice"
                 | "choice"
                 | "copy"

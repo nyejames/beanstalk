@@ -40,7 +40,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
 
     for ch in chars {
         // Special object replace character that signals to ignore parsing a section into markdown
-        // This is used to ignore nested scenes that have already been parsed
+        // This is used to ignore nested templates that have already been parsed
         // And may not be mark down. e.g. raw strings
         if ch == HIDDEN_SKIP_CHAR {
             skip_parsing = !skip_parsing;

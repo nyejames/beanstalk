@@ -7,8 +7,8 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler::parsers::scene::{SceneContent, SceneType, Style, StyleFormat};
 use crate::compiler::parsers::statements::structs::create_args;
+use crate::compiler::parsers::template::{Style, StyleFormat, TemplateContent, TemplateType};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::return_syntax_error;
@@ -16,26 +16,26 @@ use crate::settings::BS_VAR_PREFIX;
 use std::collections::HashMap;
 // const DEFAULT_SLOT_NAME: &str = "_slot";
 
-// Recursive function to parse scenes
-pub fn new_scene(
+// Recursive function to parse templates
+pub fn new_template(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
-    unlocked_scenes: &mut HashMap<String, ExpressionKind>,
-    scene_style: &mut Style,
-) -> Result<SceneType, CompileError> {
-    // These are variables or special keywords passed into the scene head
-    // let mut scene_head: SceneContent = SceneContent::default();
+    unlocked_templates: &mut HashMap<String, ExpressionKind>,
+    template_style: &mut Style,
+) -> Result<TemplateType, CompileError> {
+    // These are variables or special keywords passed into the template head
+    // let mut scene_template: TemplateContent = TemplateContent::default();
 
     // The content of the scene
     // There are 3 Vecs here as any slots from scenes in the scene head need to be inserted around the body
-    let mut scene_body: SceneContent = SceneContent::default();
-    let mut this_scene_body: Vec<Expression> = Vec::new();
+    let mut template_body: TemplateContent = TemplateContent::default();
+    let mut this_template_body: Vec<Expression> = Vec::new();
 
-    let mut scene_id: String = format!("{BS_VAR_PREFIX}sceneID_{}", token_stream.index);
+    let mut template_id: String = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
     token_stream.advance();
 
-    // SCENE HEAD PARSING
+    // TEMPLATE HEAD PARSING
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
 
@@ -48,15 +48,15 @@ pub fn new_scene(
                 break;
             }
 
-            TokenKind::SceneClose => {
+            TokenKind::TemplateClose => {
                 token_stream.go_back();
 
-                create_final_scene_body(&mut scene_body, this_scene_body);
+                create_final_template_body(&mut template_body, this_template_body);
 
-                return Ok(SceneType::Scene(Expression::scene(
-                    scene_body,
-                    scene_style.to_owned(),
-                    scene_id,
+                return Ok(TemplateType::Template(Expression::template(
+                    template_body,
+                    template_style.to_owned(),
+                    template_id,
                     token_stream.current_location(),
                 )));
             }
@@ -64,44 +64,45 @@ pub fn new_scene(
             // This is a declaration of the ID by using the export prefix followed by a variable name
             // This doesn't follow regular declaration rules.
             TokenKind::Id(name) => {
-                scene_id = format!("{BS_VAR_PREFIX}{}", name);
+                template_id = format!("{BS_VAR_PREFIX}{}", name);
             }
 
-            // For now, this will function as a special scene in the compiler
-            // That has a special ID based on the parent scene's ID
-            // So the compiler can insert things into the slot using the special ID automatically
-            TokenKind::Slot => return Ok(SceneType::Slot),
+            // TODO, this will function as a special template in the compiler
+            // It will have a usize in it that will determine the order of how elements from the template head are inserted into the body,
+            // Like traditional template strings.
+            // So the compiler can insert things into the slot
+            TokenKind::Slot => return Ok(TemplateType::Slot(0)),
 
             TokenKind::Markdown => {
-                scene_style.format = StyleFormat::Markdown;
+                template_style.format = StyleFormat::Markdown;
             }
 
-            // If this is a scene, we have to do some clever parsing here
+            // If this is a template, we have to do some clever parsing here
             TokenKind::Symbol(name, ..) => {
                 // TODO - sort all this out.
                 // Should unlocked styles just be passed in as normal declarations?
 
                 // Check if this is an unlocked scene
-                if let Some(ExpressionKind::Scene(body, style, ..)) =
-                    unlocked_scenes.to_owned().get(&name)
+                if let Some(ExpressionKind::Template(body, style, ..)) =
+                    unlocked_templates.to_owned().get(&name)
                 {
-                    scene_style.child_default = style.child_default.to_owned();
+                    template_style.child_default = style.child_default.to_owned();
 
                     if style.unlocks_override {
-                        unlocked_scenes.clear();
+                        unlocked_templates.clear();
                     }
 
                     // Insert this style's unlocked scenes into the unlocked scenes map
-                    if style.has_no_unlocked_scenes() {
-                        for (name, style) in style.unlocked_scenes.iter() {
+                    if style.has_no_unlocked_templates() {
+                        for (name, style) in style.unlocked_templates.iter() {
                             // Should this overwrite? Or skip if already unlocked?
-                            unlocked_scenes.insert(name.to_owned(), style.to_owned());
+                            unlocked_templates.insert(name.to_owned(), style.to_owned());
                         }
                     }
 
                     // Unpack this scene into this scene's body
-                    scene_body.before.extend(body.before.to_owned());
-                    scene_body.after.splice(0..0, body.after.to_owned());
+                    template_body.before.extend(body.before.to_owned());
+                    template_body.after.splice(0..0, body.after.to_owned());
 
                     continue;
                 }
@@ -110,24 +111,24 @@ pub fn new_scene(
                 // If this is a reference to a function or variable
                 if let Some(arg) = context.find_reference(&name) {
                     match &arg.value.kind {
-                        ExpressionKind::Scene(body, style, ..) => {
-                            scene_style.child_default = style.child_default.to_owned();
+                        ExpressionKind::Template(body, style, ..) => {
+                            template_style.child_default = style.child_default.to_owned();
 
                             if style.unlocks_override {
-                                unlocked_scenes.clear();
+                                unlocked_templates.clear();
                             }
 
                             // Insert this style's unlocked scenes into the unlocked scenes map
-                            if style.has_no_unlocked_scenes() {
-                                for (name, style) in style.unlocked_scenes.iter() {
+                            if style.has_no_unlocked_templates() {
+                                for (name, style) in style.unlocked_templates.iter() {
                                     // Should this overwrite? Or skip if already unlocked?
-                                    unlocked_scenes.insert(name.to_owned(), style.to_owned());
+                                    unlocked_templates.insert(name.to_owned(), style.to_owned());
                                 }
                             }
 
                             // Unpack this scene into this scene's body
-                            scene_body.before.extend(body.before.to_owned());
-                            scene_body.after.splice(0..0, body.after.to_owned());
+                            template_body.before.extend(body.before.to_owned());
+                            template_body.after.splice(0..0, body.after.to_owned());
 
                             continue;
                         }
@@ -142,13 +143,13 @@ pub fn new_scene(
                                 false,
                             )?;
 
-                            this_scene_body.push(expr);
+                            this_template_body.push(expr);
                         }
                     }
                 } else {
                     return_syntax_error!(
                         token_stream.current_location(),
-                        "Cannot declare new variables inside of a scene head. Variable '{}' is not declared.
+                        "Cannot declare new variables inside of a template head. Variable '{}' is not declared.
                         \n Here are all the variables in scope: {:#?}",
                         name,
                         context.declarations
@@ -164,7 +165,7 @@ pub fn new_scene(
             | TokenKind::RawStringLiteral(_) => {
                 token_stream.go_back();
 
-                this_scene_body.push(create_expression(
+                this_template_body.push(create_expression(
                     token_stream,
                     &context,
                     &mut DataType::CoerceToString(false),
@@ -177,7 +178,7 @@ pub fn new_scene(
                 // Currently working around commas not ever being needed in scene heads
                 // So may enforce it with full error in the future (especially if it causes havoc in the emitter stage)
                 red_ln!(
-                    "Warning: Should there be a comma in the scene head? (ignored by compiler)"
+                    "Warning: Should there be a comma in the template head? (ignored by compiler)"
                 );
             }
 
@@ -185,14 +186,14 @@ pub fn new_scene(
             TokenKind::Newline | TokenKind::Empty => {}
 
             TokenKind::CodeKeyword => {
-                scene_style.format = StyleFormat::Codeblock;
-                scene_style.child_default = None;
+                template_style.format = StyleFormat::Codeblock;
+                template_style.child_default = None;
             }
 
             TokenKind::OpenParenthesis => {
                 let structure = create_args(token_stream, Expression::none(), &[], &context)?;
 
-                this_scene_body.push(Expression::structure(
+                this_template_body.push(Expression::structure(
                     structure,
                     token_stream.current_location(),
                 ));
@@ -200,22 +201,22 @@ pub fn new_scene(
 
             TokenKind::Ignore => {
                 // Should also clear any styles or tags in the scene
-                *scene_style = Style::default();
+                *template_style = Style::default();
 
                 // Keep track of how many scene opens there are
                 // This is to make sure the scene close is at the correct place
-                let mut extra_scene_opens = 1;
+                let mut extra_template_opens = 1;
                 while token_stream.index < token_stream.length {
                     match token_stream.current_token_kind() {
-                        TokenKind::SceneClose => {
-                            extra_scene_opens -= 1;
-                            if extra_scene_opens == 0 {
+                        TokenKind::TemplateClose => {
+                            extra_template_opens -= 1;
+                            if extra_template_opens == 0 {
                                 token_stream.advance(); // Skip the closing scene close
                                 break;
                             }
                         }
-                        TokenKind::SceneOpen => {
-                            extra_scene_opens += 1;
+                        TokenKind::TemplateOpen => {
+                            extra_template_opens += 1;
                         }
                         TokenKind::EOF => {
                             break;
@@ -225,42 +226,43 @@ pub fn new_scene(
                     token_stream.advance();
                 }
 
-                return Ok(SceneType::Comment);
+                return Ok(TemplateType::Comment);
             }
 
             _ => {
                 return_syntax_error!(
                     token_stream.current_location(),
-                    "Invalid Token Used Inside scene head when creating scene node. Token: {:?}",
+                    "Invalid Token Used Inside template head when creating template node. Token: {:?}",
                     token
                 )
             }
         }
     }
 
-    // SCENE BODY PARSING
+    // TEMPLATE BODY PARSING
     while token_stream.index < token_stream.tokens.len() {
         match &token_stream.current_token_kind() {
             TokenKind::EOF => {
                 break;
             }
 
-            TokenKind::SceneClose => {
+            TokenKind::TemplateClose => {
                 break;
             }
 
-            TokenKind::SceneHead => {
-                let nested_scene = new_scene(token_stream, context, unlocked_scenes, scene_style)?;
+            TokenKind::TemplateHead => {
+                let nested_template =
+                    new_template(token_stream, context, unlocked_templates, template_style)?;
 
-                match nested_scene {
-                    SceneType::Scene(scene) => {
-                        this_scene_body.push(scene);
+                match nested_template {
+                    TemplateType::Template(template) => {
+                        this_template_body.push(template);
                     }
 
-                    SceneType::Slot => {
+                    TemplateType::Slot(..) => {
                         // Now we need to move everything from this scene so far into the before part
-                        scene_body.before.extend(this_scene_body.to_owned());
-                        this_scene_body.clear();
+                        template_body.before.extend(this_template_body.to_owned());
+                        this_template_body.clear();
 
                         // Everything else always gets moved to the scene after at the end
                     }
@@ -271,7 +273,7 @@ pub fn new_scene(
             }
 
             TokenKind::RawStringLiteral(content) | TokenKind::StringLiteral(content) => {
-                this_scene_body.push(Expression::string(
+                this_template_body.push(Expression::string(
                     content.to_string(),
                     token_stream.current_location(),
                 ));
@@ -285,7 +287,7 @@ pub fn new_scene(
             //     }
             // }
             TokenKind::Newline => {
-                this_scene_body.push(Expression::string(
+                this_template_body.push(Expression::string(
                     "\n".to_string(),
                     token_stream.current_location(),
                 ));
@@ -296,7 +298,7 @@ pub fn new_scene(
             _ => {
                 return_syntax_error!(
                     token_stream.current_location(),
-                    "Invalid Token Used Inside scene body when creating scene node. Token: {:?}",
+                    "Invalid Token Used Inside template body when creating template node. Token: {:?}",
                     token_stream.current_token_kind()
                 )
             }
@@ -306,16 +308,19 @@ pub fn new_scene(
     }
 
     // The body of this scene is now added to the final scene body
-    create_final_scene_body(&mut scene_body, this_scene_body);
+    create_final_template_body(&mut template_body, this_template_body);
 
-    Ok(SceneType::Scene(Expression::scene(
-        scene_body,
-        scene_style.to_owned(),
-        scene_id,
+    Ok(TemplateType::Template(Expression::template(
+        template_body,
+        template_style.to_owned(),
+        template_id,
         token_stream.current_location(),
     )))
 }
 
-fn create_final_scene_body(scene_body: &mut SceneContent, this_scene_body: Vec<Expression>) {
-    scene_body.after.splice(0..0, this_scene_body);
+fn create_final_template_body(
+    template_body: &mut TemplateContent,
+    this_template_body: Vec<Expression>,
+) {
+    template_body.after.splice(0..0, this_template_body);
 }

@@ -5,7 +5,7 @@ use crate::compiler::html5_codegen::web_parser::JS_INDENT;
 use crate::compiler::html5_codegen::web_parser::{Target, parse};
 use crate::compiler::parsers::ast_nodes::NodeKind;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
-use crate::compiler::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
+use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse_template};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_compiler_error;
 use crate::settings::BS_VAR_PREFIX;
@@ -172,12 +172,12 @@ pub fn expression_to_js(expr: &Expression, indentation: &str) -> Result<String, 
         }
 
         // Scenes are basically just template strings when used entirely in JS
-        ExpressionKind::Scene(scene_body, scene_style, scene_id) => {
-            let parsed_scene = parse_scene(
-                SceneIngredients {
-                    scene_body,
-                    scene_style,
-                    scene_id: scene_id.to_owned(),
+        ExpressionKind::Template(template_body, template_style, template_id) => {
+            let parsed_template = parse_template(
+                TemplateIngredients {
+                    template_body,
+                    template_style,
+                    template_id: template_id.to_owned(),
                     inherited_style: &None,
                     format_context: StyleFormat::JSString,
                 },
@@ -185,7 +185,7 @@ pub fn expression_to_js(expr: &Expression, indentation: &str) -> Result<String, 
                 &expr.location,
             )?;
 
-            js.push_str(&format!("`{parsed_scene}`"));
+            js.push_str(&format!("`{parsed_template}`"));
         }
 
         // None pretty much only exists at compile time

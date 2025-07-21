@@ -3,7 +3,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
-use crate::compiler::parsers::scene::{SceneContent, Style};
+use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
@@ -63,11 +63,11 @@ pub fn evaluate_expression(
 
             NodeKind::Operator(ref op) => {
                 match current_type {
-                    DataType::String(_) | DataType::Scene(_) => {
+                    DataType::String(_) | DataType::Template(_) => {
                         if op != &Operator::Add {
                             return_syntax_error!(
                                 node.location,
-                                "You can't use the '{:?}' operator with strings or scenes",
+                                "You can't use the '{:?}' operator with strings or templates",
                                 op
                             )
                         }
@@ -107,7 +107,7 @@ pub fn evaluate_expression(
     }
 
     match current_type {
-        DataType::Scene(_) | DataType::String(_) => concat_scene(&mut simplified_expression),
+        DataType::Template(_) | DataType::String(_) => concat_template(&mut simplified_expression),
 
         DataType::CoerceToString(_) => {
             let mut new_string = String::new();
@@ -171,8 +171,8 @@ fn pop_higher_precedence(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
-    let mut scene_body: SceneContent = SceneContent::default();
+fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
+    let mut template_body: TemplateContent = TemplateContent::default();
     let mut style = Style::default();
 
     // Should always be at least one node in the expression being evaluated
@@ -183,39 +183,39 @@ fn concat_scene(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, 
 
     for node in simplified_expression {
         match node.get_expr()?.kind {
-            ExpressionKind::Scene(body, ref mut scene_style, ..) => {
-                scene_body.before.extend(body.before);
-                scene_body.after.extend(body.after);
+            ExpressionKind::Template(body, ref mut template_style, ..) => {
+                template_body.before.extend(body.before);
+                template_body.after.extend(body.after);
 
                 if !style.unlocks_override {
-                    if scene_style.unlocks_override {
+                    if template_style.unlocks_override {
                         style.unlocks_override = true;
-                        style.unlocked_scenes = scene_style.unlocked_scenes.to_owned();
+                        style.unlocked_templates = template_style.unlocked_templates.to_owned();
                     } else {
                         style
-                            .unlocked_scenes
-                            .extend(scene_style.unlocked_scenes.to_owned());
+                            .unlocked_templates
+                            .extend(template_style.unlocked_templates.to_owned());
                     }
                 }
 
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence
-                style.format = scene_style.format.to_owned();
-                style.child_default = scene_style.child_default.to_owned();
-                style.compatibility = scene_style.compatibility.to_owned();
-                style.precedence = scene_style.precedence.to_owned();
+                style.format = template_style.format.to_owned();
+                style.child_default = template_style.child_default.to_owned();
+                style.compatibility = template_style.compatibility.to_owned();
+                style.precedence = template_style.precedence.to_owned();
             }
 
             _ => {
                 return_compiler_error!(
-                    "Non-scene value found in scene expression (you can only concatenate scenes with other scenes)"
+                    "Non-template value found in template expression (you can only concatenate templates with other templates)"
                 )
             }
         }
     }
 
-    Ok(Expression::scene(
-        scene_body,
+    Ok(Expression::template(
+        template_body,
         style,
         String::new(),
         location,

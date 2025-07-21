@@ -4,7 +4,7 @@ use crate::compiler::parsers::tokens::TextLocation;
 use colour::{blue_ln, green_ln, red_ln};
 
 use super::{
-    ast_nodes::NodeKind, create_scene_node::new_scene,
+    ast_nodes::NodeKind, create_template_node::new_template,
     expressions::parse_expression::create_expression,
 };
 use crate::compiler::compiler_errors::CompileError;
@@ -14,9 +14,9 @@ use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
-use crate::compiler::parsers::scene::{SceneType, Style};
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
+use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::compiler::parsers::variables::new_arg;
 use crate::compiler::traits::ContainsReferences;
@@ -47,7 +47,7 @@ pub enum ContextKind {
     Condition, // For loops and if statements
     Loop,
     IfBlock,
-    Scene,
+    Template,
     Config,
 }
 
@@ -87,10 +87,10 @@ impl ScopeContext {
 /// Usage:
 /// name (for the scope), args (declarations it can access)
 #[macro_export]
-macro_rules! new_scene_context {
+macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
-            kind: ContextKind::Scene,
+            kind: ContextKind::Template,
             scope: $context.scope.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
@@ -105,7 +105,7 @@ macro_rules! new_scene_context {
 macro_rules! new_config_context {
     ($name:expr, $args:expr) => {
         ScopeContext {
-            kind: ContextKind::Scene,
+            kind: ContextKind::Template,
             scope: PathBuf::from($name),
             declarations: $args,
             returns: vec![],
@@ -170,38 +170,38 @@ pub fn new_ast(
                 token_stream.advance();
             }
 
-            // Scene literals
-            TokenKind::SceneHead | TokenKind::ParentScene => {
+            // Template literals
+            TokenKind::TemplateHead | TokenKind::ParentTemplate => {
                 // Add the default core HTML styles as the initially unlocked styles
                 // let mut unlocked_styles = HashMap::from(get_html_styles());
 
                 if !matches!(context.kind, ContextKind::Module) {
                     return_rule_error!(
                         token_stream.current_location(),
-                        "Scene literals can only be used at the top level of a module. \n
+                        "Template literals can only be used at the top level of a module. \n
                         This is because they are handled differently by the compiler depending on the type of project",
                     )
                 }
 
-                let scene = new_scene(
+                let template = new_template(
                     token_stream,
                     &context,
                     &mut HashMap::new(),
                     &mut Style::default(),
                 )?;
 
-                match scene {
-                    SceneType::Scene(expr) => {
+                match template {
+                    TemplateType::Template(expr) => {
                         ast.push(AstNode {
                             kind: NodeKind::Expression(expr),
                             scope: context.scope.to_owned(),
                             location: token_stream.current_location(),
                         });
                     }
-                    SceneType::Slot => {
+                    TemplateType::Slot(..) => {
                         return_rule_error!(
                             token_stream.current_location(),
-                            "Slots can only be used inside child scenes. Slot scenes must have a parent scene.",
+                            "Slots can only be used inside child templates. Slot templates must have a parent template.",
                         )
                     }
                     _ => {}

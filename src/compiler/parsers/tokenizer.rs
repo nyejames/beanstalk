@@ -22,7 +22,7 @@ pub fn tokenize(source_code: &str) -> Result<TokenContext, CompileError> {
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code);
 
-    let scene_nesting_level: &mut i64 = &mut 0;
+    let template_nesting_level: &mut i64 = &mut 0;
 
     let mut token: Token = Token::new(
         TokenKind::ModuleStart(String::new()),
@@ -36,7 +36,7 @@ pub fn tokenize(source_code: &str) -> Result<TokenContext, CompileError> {
 
         tokens.push(token);
 
-        token = get_token_kind(&mut stream, scene_nesting_level)?;
+        token = get_token_kind(&mut stream, template_nesting_level)?;
     }
 
     tokens.push(token);
@@ -51,7 +51,7 @@ pub fn tokenize(source_code: &str) -> Result<TokenContext, CompileError> {
 
 pub fn get_token_kind(
     stream: &mut TokenStream,
-    scene_nesting_level: &mut i64,
+    template_nesting_level: &mut i64,
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
@@ -72,8 +72,8 @@ pub fn get_token_kind(
         }
     }
 
-    if stream.context == TokenizeMode::SceneBody && current_char != ']' && current_char != '[' {
-        return tokenize_scenebody(current_char, stream);
+    if stream.context == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
+        return tokenize_template_body(current_char, stream);
     }
 
     // Whitespace
@@ -101,19 +101,19 @@ pub fn get_token_kind(
     stream.update_start_position();
 
     if current_char == '[' {
-        *scene_nesting_level += 1;
+        *template_nesting_level += 1;
         match stream.context {
-            TokenizeMode::SceneHead => {
+            TokenizeMode::TemplateHead => {
                 return_syntax_error!(
                     stream.new_location(),
-                    "Cannot have nested scenes inside of a scene head, must be inside the scene body. \
-                    Use a colon to start the scene body.",
+                    "Cannot have nested templates inside of a template head, must be inside the template body. \
+                    Use a colon to start the template body.",
                 )
             }
 
             TokenizeMode::Normal => {
-                stream.context = TokenizeMode::SceneHead;
-                return_token!(TokenKind::ParentScene, stream);
+                stream.context = TokenizeMode::TemplateHead;
+                return_token!(TokenKind::ParentTemplate, stream);
             }
 
             // Going into the scene head
@@ -122,44 +122,44 @@ pub fn get_token_kind(
                 if stream.peek() == Some(&']') {
                     stream.next();
 
-                    let mut spaces_after_scene = 0;
+                    let mut spaces_after_template = 0;
 
                     while let Some(ch) = stream.peek() {
                         if !ch.is_whitespace() {
                             break;
                         }
 
-                        spaces_after_scene += 1;
+                        spaces_after_template += 1;
 
                         stream.next();
                     }
 
-                    return_token!(TokenKind::EmptyScene(spaces_after_scene), stream);
+                    return_token!(TokenKind::EmptyTemplate(spaces_after_template), stream);
                 }
 
-                stream.context = TokenizeMode::SceneHead;
+                stream.context = TokenizeMode::TemplateHead;
 
-                return_token!(TokenKind::SceneHead, stream);
+                return_token!(TokenKind::TemplateHead, stream);
             }
         };
     }
 
     if current_char == ']' {
-        *scene_nesting_level -= 1;
+        *template_nesting_level -= 1;
 
-        if *scene_nesting_level == 0 {
+        if *template_nesting_level == 0 {
             stream.context = TokenizeMode::Normal;
         } else {
-            stream.context = TokenizeMode::SceneBody;
+            stream.context = TokenizeMode::TemplateBody;
         }
 
-        return_token!(TokenKind::SceneClose, stream);
+        return_token!(TokenKind::TemplateClose, stream);
     }
 
     // Check if going into the scene body
     if current_char == ':' {
-        if stream.context == TokenizeMode::SceneHead {
-            stream.context = TokenizeMode::SceneBody;
+        if stream.context == TokenizeMode::TemplateHead {
+            stream.context = TokenizeMode::TemplateBody;
 
             return_token!(TokenKind::Colon, stream);
         }
@@ -389,7 +389,7 @@ pub fn get_token_kind(
     // Exporting variables out of the module or scope (public declaration)
     // When used in a scene head, it's an ID for that scene
     if current_char == '@' {
-        if stream.context == TokenizeMode::SceneHead {
+        if stream.context == TokenizeMode::TemplateHead {
             while let Some(&next_char) = stream.peek() {
                 if next_char.is_alphanumeric() || next_char == '_' {
                     token_value.push(stream.next().unwrap());
@@ -402,7 +402,7 @@ pub fn get_token_kind(
 
         return_syntax_error!(
             stream.new_location(),
-            "Cannot use @ outside of a scene head"
+            "Cannot use @ outside of a template head"
         )
     }
 
@@ -538,7 +538,10 @@ fn keyword_or_variable(
             "async" => return_token!(TokenKind::Async, stream),
 
             // Scene-related keywords
-            "Scene" => return_token!(TokenKind::DatatypeLiteral(DataType::Scene(false)), stream),
+            "Template" => return_token!(
+                TokenKind::DatatypeLiteral(DataType::Template(false)),
+                stream
+            ),
 
             _ => {}
         }
@@ -694,7 +697,10 @@ fn tokenize_string(stream: &mut TokenStream) -> Result<Token, CompileError> {
     return_token!(TokenKind::StringLiteral(token_value), stream);
 }
 
-fn tokenize_scenebody(current_char: char, stream: &mut TokenStream) -> Result<Token, CompileError> {
+fn tokenize_template_body(
+    current_char: char,
+    stream: &mut TokenStream,
+) -> Result<Token, CompileError> {
     let mut token_value = String::from(current_char);
 
     // Currently should be at the character that started the String

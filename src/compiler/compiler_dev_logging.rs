@@ -10,7 +10,7 @@ macro_rules! token_log {
     ($tokens:expr) => {
         for token in tokens {
             match token.kind {
-                TokenKind::SceneHead | TokenKind::SceneClose => {
+                TokenKind::TemplateHead | TokenKind::TemplateClose => {
                     e_blue_ln_bold!("{}", token.to_string());
                 }
 
@@ -93,8 +93,8 @@ pub fn print_ast_output(ast: &[AstNode]) {
     for node in ast {
         match &node.kind {
             NodeKind::Reference(value) => match value.data_type {
-                DataType::Scene(_) => {
-                    print_scene(&value.kind, 0);
+                DataType::Template(_) => {
+                    print_template(&value.kind, 0);
                 }
                 _ => {
                     cyan_ln!("{:?}", value);
@@ -121,19 +121,19 @@ pub fn print_ast_output(ast: &[AstNode]) {
         println!("\n");
     }
 
-    fn print_scene(scene: &ExpressionKind, scene_nesting_level: u32) {
+    fn print_template(scene: &ExpressionKind, template_nesting_level: u32) {
         // Indent the scene by how nested it is
         let mut indentation = String::new();
-        for _ in 0..scene_nesting_level {
+        for _ in 0..template_nesting_level {
             indentation.push('\t');
         }
 
-        if let ExpressionKind::Scene(nodes, style, ..) = scene {
+        if let ExpressionKind::Template(nodes, style, ..) = scene {
             blue_ln_bold!("\n{}Scene Styles: ", indentation);
 
             green_ln!("{}  {:?}", indentation, style.format);
             green_ln!("{}  {:?}", indentation, style.child_default);
-            green_ln!("{}  {:?}", indentation, style.unlocked_scenes);
+            green_ln!("{}  {:?}", indentation, style.unlocked_templates);
 
             blue_ln_bold!("{}Scene Body:", indentation);
 

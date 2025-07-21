@@ -32,7 +32,7 @@ pub enum NodeKind {
     // Named an import path for the module
     // Import(String, TokenPosition), // Path,
 
-    // Path to a module that will automatically import all styles and scenes
+    // Path to a module that will automatically import all styles and templates
     // into the scope of the current module. Doesn't automatically import variables or functions into the scope
     Use(PathBuf), // Path,
 
@@ -75,7 +75,7 @@ pub enum NodeKind {
     Reference(Expression),  // Token,
     Expression(Expression), // Token,
 
-    SceneTemplate,
+    TemplateFormatter,
     Slot,
     Empty, //
 

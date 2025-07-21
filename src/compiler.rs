@@ -20,7 +20,7 @@ pub mod parsers {
     pub mod ast_nodes;
     pub mod build_ast;
     pub mod collections;
-    mod create_scene_node;
+    mod create_template_node;
     pub mod markdown;
     pub mod expressions {
         pub mod constant_folding;
@@ -35,7 +35,7 @@ pub mod parsers {
         pub mod structs;
     }
     pub mod builtin_methods;
-    pub mod scene;
+    pub mod template;
 
     pub mod tokenizer;
     pub mod tokens;
@@ -112,7 +112,7 @@ impl<'a> Compiler<'a> {
 
         Ok(ast)
     }
-    
+
     // TODO
     pub fn resolve_dependencies(&self, ast_block: AstBlock) {}
 }

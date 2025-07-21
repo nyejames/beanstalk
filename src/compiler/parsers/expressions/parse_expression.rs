@@ -9,13 +9,13 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::collections::new_collection;
-use crate::compiler::parsers::create_scene_node::new_scene;
+use crate::compiler::parsers::create_template_node::new_template;
 use crate::compiler::parsers::expressions::expression::{Expression, Operator};
-use crate::compiler::parsers::scene::{SceneType, Style};
+use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::parsers::variables::create_reference;
 use crate::compiler::traits::ContainsReferences;
-use crate::{new_scene_context, return_syntax_error, return_type_error};
+use crate::{new_template_context, return_syntax_error, return_type_error};
 use std::collections::HashMap;
 
 // For multiple returns or function calls
@@ -170,7 +170,7 @@ pub fn create_expression(
             | TokenKind::StructDefinition
             | TokenKind::Comma
             | TokenKind::EOF
-            | TokenKind::SceneClose
+            | TokenKind::TemplateClose
             | TokenKind::Arrow
             | TokenKind::Colon
             | TokenKind::End => {
@@ -274,30 +274,30 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Reference(Expression::string(string.to_owned(), location)),
                     scope: context.scope.to_owned(),
-                    location: location,
+                    location,
                 });
             }
 
-            TokenKind::SceneHead | TokenKind::ParentScene => {
-                let scene_type = new_scene(
+            TokenKind::TemplateHead | TokenKind::ParentTemplate => {
+                let template_type = new_template(
                     token_stream,
-                    new_scene_context!(context),
+                    new_template_context!(context),
                     &mut HashMap::new(),
                     &mut Style::default(),
                 )?;
 
-                match scene_type {
-                    SceneType::Scene(scene) => return Ok(scene),
+                match template_type {
+                    TemplateType::Template(template) => return Ok(template),
 
                     // Ignore comments
-                    SceneType::Comment => {}
+                    TemplateType::Comment => {}
 
                     // Error for anything else for now
                     _ => {
                         return_type_error!(
                             token_stream.current_location(),
-                            "Unexpected scene type used in expression: {:?}",
-                            scene_type
+                            "Unexpected template type used in expression: {:?}",
+                            template_type
                         )
                     }
                 }

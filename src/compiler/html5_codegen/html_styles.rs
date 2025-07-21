@@ -36,7 +36,7 @@
 //
 // // TODO: rewrite this in beanstalk itself
 // // Styles will just be regular structs that export certain style fields
-// // Scenes inside those structs will have slots instead of this wrapper thing
+// // Templates inside those structs will have slots instead of this wrapper thing
 // pub fn get_html_styles() -> [(String, Style); 4] {
 //     // THE CORE STYLES
 //

@@ -7,8 +7,8 @@ use std::str::Chars;
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
     Normal,
-    SceneBody,
-    SceneHead,
+    TemplateBody,
+    TemplateHead,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,8 +277,8 @@ pub enum TokenKind {
     // Scope
     OpenParenthesis,  // (
     CloseParenthesis, // )
-    SceneOpen,        // [
-    SceneClose,       // Used to track of the spaces following the scene, not needed now?
+    TemplateOpen,     // [
+    TemplateClose,    // Used to track of the spaces following the scene, not needed now?
 
     As, // Type casting
 
@@ -339,11 +339,11 @@ pub enum TokenKind {
     // Memory Management
     Copy,
 
-    // Scenes
-    ParentScene,
-    EmptyScene(usize), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
+    // Templates
+    ParentTemplate,
+    EmptyTemplate(usize), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
     Slot,
-    SceneHead,
+    TemplateHead,
 
     Id(String), // ID for scenes
 

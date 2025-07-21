@@ -1,48 +1,48 @@
 [Navbar]
 
-[Header center: [title(1): BEANSTALK SCENES]]
+[Header center: [title(1): BEANSTALK TEMPLATES]]
 
 [Page:
 
-Beanstalk has unique, superpowered templating strings called scenes.
+Beanstalk has unique, superpowered templating strings.
 
-Scenes have two sections, the head and the body, separated with a colon. 
+Templates have two sections, the head and the body, separated with a colon. 
 
-Scenes are scoped using square brackets and can be passed styles to change their behavior, content and styling. 
+Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling. 
 
-The main purpose of scenes in BS is to generate HTML or complex strings.
+The main purpose of a template is to generate either text content, markdown, HTML or code.
 
-#### The head
+#### The head section
 Is used to:
-- Define properties of the scene
-- Convert literals and expressions to strings added into the scene
-- Wrap the scene itself in strings that conditionally depend on the scene's properties or parent scene's properties 
+- Define properties of the template
+- Convert literals and expressions to strings to be added into the template
+- Wrap the template itself in strings that conditionally depend on the template's properties or parent template's properties 
 
-#### The body
-is used to define the content of the scene. This is a string.
+#### The body section
+is used to define the content of the template. This is a string.
 
-Inside the body of a scene, you can nest more scenes using square brackets. 
+Inside the body of a template, you can nest more templates using square brackets. 
 
 ## Beanstalk Markdown
-Beanstalk uses it's own flavour of markdown that can be used inside scene bodies if the scene has the markdown option enabled. Instead of writing any raw HTML, you can use the Beanstalk scene syntax to write your text content inside of a scene body. 
+Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template has the markdown option enabled. Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
 Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
 [Code:
     [Page:
 
-    The open square bracket is used to start a new scene. 
-    The colon begins the scene body. 
-    This is defining the main scene, 
+    The open square bracket is used to start a new template. 
+    The colon begins the template body. 
+    This is defining the main template, 
     which by default will add a main tag to the HTML and wrap the content in a centered container.
 
-    PAGE is a top-level style that unlocks all the basic HTML styles for nested scenes.
+    PAGE is a top-level style that unlocks all the basic HTML styles for nested templates.
 
     # A Heading
     Some text that has a [link("example.com"): link] inside it.
 
-    A constant variable from the code inserted into the scene: [ constant ].
+    A constant variable from the code inserted into the template: [ constant ].
 
-    The body of a scene is mostly like a simple flavour of markdown, 
+    The body of a template is mostly like a simple flavour of markdown, 
     the main difference being square brackets [red: *cannot*] be used without an escape character or by using backticks to create a raw string.
 
     ]
@@ -53,16 +53,16 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
 [Code:
     [Section:
 
-    [head_of_element: content of element that renders as text (markdown / more templates) {string : "this is a code block inside of the scene body, that is scoped to the scene"} ]
+    [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
 
-    [img("images/meme.jpg"): meme (this is the alt description)]
+    [img("images/meme.jpg"): meme (this text in the template body is the alt description automatically)]
 
     # A Cool Section
-    Using the export symbol @ you can give the scene an ID in the form of a variable name. 
+    Using the export symbol @ you can give the template an ID in the form of a variable name. 
     The @ is needed to tell the compiler this is a declaration of the ID. 
-    ID's can be created for scenes at runtime but cannot be changed once a scene is created.
+    ID's can be created for templates at runtime but cannot be changed once a template is created.
 
-    [section @scene_id:
+    [section @template_id:
         [ variable ]
         [link("example.com/page"): here's a link!]
     ]
@@ -82,7 +82,7 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
 
     [rgb(230,20,150): this is a bunch of text with rgb color]
 
-    [ imported_scene ]
+    [ imported_template ]
 
     ]
 ]
@@ -90,10 +90,13 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
 ### Units and sizes
 By default, beanstalk uses rem for all units by default. This will continue to be the case until later in the project when more specific units will be supported. This will come with the language supporing more complex styling and layout.
 
+
+
+
 # HTML Standard library
 
 ## Scene Style Keywords
-More styles and scene configs will be added overtime. Here are some of the ideas so far:
+More styles and template configs will be added overtime. Here are some of the ideas so far:
 
 ### Style
 [table(2):
@@ -115,7 +118,7 @@ More styles and scene configs will be added overtime. Here are some of the ideas
     [: center] [: Centers the element horizontally. Pass in a bool of true to center vertically]
     [: table] [: A table element]
     [: size] [: The size of the text in the element]
-    [: nav] [: A navigation element. Basically a nav bar, will automatically add ul tags for child scenes]
+    [: nav] [: A navigation element. Basically a nav bar, will automatically add ul tags for child templates]
     [: order] [: The order of the element inside a container]
     [: gap] [: Creates a gap between elements]
 
@@ -167,11 +170,11 @@ These are directly from the HTMX library and will be the same keywords, but with
 ]
 
 ## Unique Scene Logic
-Variables and expressions are typecast into strings when put into a scene. This is the behaviour of all the numerical types and most of the string types. There are some exceptions to how other types are handled by scenes.
+Variables and expressions are typecast into strings when put into a template. This is the behaviour of all the numerical types and most of the string types. There are some exceptions to how other types are handled by templates.
 
 ### Booleans
-Booleans in a scenehead will conditonally hide or show itself based on the value of the boolean. 
-If the boolean is true, the scene and it's children will be shown, if false, it will be hidden.
+Booleans in a templatehead will conditonally hide or show itself based on the value of the boolean. 
+If the boolean is true, the template and it's children will be shown, if false, it will be hidden.
 
 [Code:
     logged_in = false
@@ -183,10 +186,10 @@ If the boolean is true, the scene and it's children will be shown, if false, it 
 ]
 
 ### Errors
-If an error is added to a scene, it will be displayed in the console, rather than injected into the scene. 
+If an error is added to a template, it will be displayed in the console, rather than injected into the template. 
 This usually means that the variable with the error has reverted to its default value, which will be shown.
 
-[red size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the scene rather than a zero value being shown.*]
+[red size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the template rather than a zero value being shown.*]
 
 
 [Footer]

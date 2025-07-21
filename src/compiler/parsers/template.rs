@@ -14,17 +14,17 @@ use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
 #[derive(Debug)]
-pub enum SceneType {
-    Scene(Expression),
-    Slot,
+pub enum TemplateType {
+    Template(Expression),
+    Slot(usize),
     Comment,
 }
 #[derive(Clone, Debug, PartialEq)]
-pub struct SceneContent {
+pub struct TemplateContent {
     pub before: Vec<Expression>,
     pub after: Vec<Expression>,
 }
-impl SceneContent {
+impl TemplateContent {
     pub fn default() -> Self {
         Self {
             before: Vec::new(),
@@ -42,7 +42,7 @@ impl SceneContent {
     }
 }
 
-// Scene Config Type
+// Template Config Type
 // This is passed into a scene head to configure how it should be parsed
 #[derive(Clone, Debug, PartialEq)]
 pub struct Style {
@@ -68,10 +68,10 @@ pub struct Style {
     // Or child wrappers that are higher precedence
     pub child_default: Option<Box<Style>>,
 
-    pub compatibility: SceneCompatibility,
+    pub compatibility: TemplateCompatibility,
 
     // Scenes that this style will unlock
-    pub unlocked_scenes: HashMap<String, ExpressionKind>,
+    pub unlocked_templates: HashMap<String, ExpressionKind>,
 
     // If this is true, no unlocked styles will be inherited from the parent
     pub unlocks_override: bool,
@@ -83,14 +83,14 @@ impl Style {
             format: StyleFormat::None,
             precedence: -1,
             child_default: None,
-            compatibility: SceneCompatibility::All,
-            unlocked_scenes: HashMap::new(),
+            compatibility: TemplateCompatibility::All,
+            unlocked_templates: HashMap::new(),
             unlocks_override: false,
         }
     }
 
-    pub fn has_no_unlocked_scenes(&self) -> bool {
-        self.unlocked_scenes.is_empty()
+    pub fn has_no_unlocked_templates(&self) -> bool {
+        self.unlocked_templates.is_empty()
     }
 }
 
@@ -110,34 +110,34 @@ pub enum StyleFormat {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum SceneCompatibility {
+pub enum TemplateCompatibility {
     None, // No other styles can be used with this style
     Incompatible(Vec<String>),
     Compatible(Vec<String>),
     All, // All other styles can be used with this style
 }
 
-pub struct SceneIngredients<'a> {
-    pub scene_body: &'a SceneContent,
-    pub scene_style: &'a Style,
+pub struct TemplateIngredients<'a> {
+    pub template_body: &'a TemplateContent,
+    pub template_style: &'a Style,
     pub inherited_style: &'a Option<Style>,
-    pub scene_id: String,
+    pub template_id: String,
     pub format_context: StyleFormat,
 }
 
-// Returns a regular string containing the parsed scene
-pub fn parse_scene(
-    scene_ingredients: SceneIngredients,
+// Returns a regular string containing the parsed template
+pub fn parse_template(
+    template_ingredients: TemplateIngredients,
     code: &mut String,
     position: &TextLocation,
 ) -> Result<String, CompileError> {
-    let SceneIngredients {
-        scene_body,
-        scene_style,
+    let TemplateIngredients {
+        template_body,
+        template_style,
         inherited_style,
-        scene_id,
+        template_id,
         format_context,
-    } = scene_ingredients;
+    } = template_ingredients;
 
     // Set everything apart from the wrappers for the new style
     let mut final_style = match inherited_style {
@@ -147,8 +147,8 @@ pub fn parse_scene(
 
     // Format. How will the content be parsed?
     // Each format has a different precedence, using the highest precedence
-    if scene_style.format > final_style.format {
-        final_style.format = scene_style.format.to_owned();
+    if template_style.format > final_style.format {
+        final_style.format = template_style.format.to_owned();
     }
 
     // Compatibility
@@ -159,7 +159,7 @@ pub fn parse_scene(
     //             final_style.compatibility = SceneCompatibility::None;
     //         }
     //     }
-    //     // TODO: check compatibility of scenes
+    //     // TODO: check compatibility of templates
     //     _ => {}
     // }
 
@@ -177,7 +177,7 @@ pub fn parse_scene(
     let mut content = String::new();
 
     // Scene content
-    for value in scene_body.flatten() {
+    for value in template_body.flatten() {
         match &value.kind {
             ExpressionKind::String(string) => {
                 content.push_str(string);
@@ -196,20 +196,20 @@ pub fn parse_scene(
                 content.push_str(&value.to_string());
             }
 
-            ExpressionKind::Scene(new_scene_nodes, new_scene_style, new_scene_id) => {
-                let new_scene = parse_scene(
-                    SceneIngredients {
-                        scene_body: new_scene_nodes,
-                        scene_style: new_scene_style,
+            ExpressionKind::Template(new_template_nodes, new_template_style, new_template_id) => {
+                let new_template = parse_template(
+                    TemplateIngredients {
+                        template_body: new_template_nodes,
+                        template_style: new_template_style,
                         inherited_style: &final_style.child_default.to_owned().map(|b| *b),
-                        scene_id: new_scene_id.to_owned(),
+                        template_id: new_template_id.to_owned(),
                         format_context: final_style.format.to_owned(),
                     },
                     code,
                     position,
                 )?;
 
-                content.push_str(&new_scene);
+                content.push_str(&new_template);
             }
 
             ExpressionKind::Reference(name) => {
@@ -243,10 +243,10 @@ pub fn parse_scene(
                 StyleFormat::Markdown => {
                     let new_parsed = parse(nodes, "", &Target::JS)?;
 
-                    content.push_str(&format!("<span class=\"{scene_id}\"></span>"));
+                    content.push_str(&format!("<span class=\"{template_id}\"></span>"));
 
-                    code.push_str(&format!("let {scene_id} = {}", new_parsed.code_module));
-                    code.push_str(&create_reactive_reference(&scene_id, &value.data_type));
+                    code.push_str(&format!("let {template_id} = {}", new_parsed.code_module));
+                    code.push_str(&create_reactive_reference(&template_id, &value.data_type));
                 }
 
                 StyleFormat::JSString => {
@@ -266,7 +266,7 @@ pub fn parse_scene(
             ExpressionKind::Function(..) => {
                 return_rule_error!(
                     position.to_owned(),
-                    "Functions are not supported in Scene Heads"
+                    "Functions are not supported in Template Heads"
                 )
             }
 
@@ -275,14 +275,14 @@ pub fn parse_scene(
             ExpressionKind::Struct(..) => {
                 return_rule_error!(
                     position.to_owned(),
-                    "You can't declare new variables inside of Scene Heads"
+                    "You can't declare new variables inside of Template Heads"
                 )
             }
 
             // Collections will be unpacked into a scene
             ExpressionKind::Collection(_) => {
                 return_compiler_error!(
-                    "Collections inside scene heads not yet implemented in the compiler."
+                    "Collections inside template heads not yet implemented in the compiler."
                 )
             }
         }

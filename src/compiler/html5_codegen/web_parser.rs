@@ -8,7 +8,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::html5_codegen::js_parser::combine_vec_to_js;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use crate::compiler::parsers::scene::{SceneIngredients, StyleFormat, parse_scene};
+use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse_template};
 use crate::compiler::parsers::tokens::VarVisibility;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
@@ -136,15 +136,15 @@ pub fn parse(
                         code_module.push_str(var_dec);
                     }
 
-                    DataType::Scene(..) => {
+                    DataType::Template(..) => {
                         match &expr.kind {
-                            ExpressionKind::Scene(scene_body, scene_styles, id) => {
-                                let scene_to_js_string = parse_scene(
-                                    SceneIngredients {
-                                        scene_body,
-                                        scene_style: scene_styles,
+                            ExpressionKind::Template(scene_body, scene_styles, id) => {
+                                let scene_to_js_string = parse_template(
+                                    TemplateIngredients {
+                                        template_body: scene_body,
+                                        template_style: scene_styles,
                                         inherited_style: &None,
-                                        scene_id: id.to_owned(),
+                                        template_id: id.to_owned(),
                                         format_context: StyleFormat::JSString,
                                     },
                                     &mut code_module,
