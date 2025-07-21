@@ -8,6 +8,9 @@ any function that can return an error must have its error handled.
 
 The bang symbol ! is used for handling and creating new Error types.
 
+There is a special Error type provided by the language, 
+but any type that uses a ! can use the same syntax to bubble up or handle errors.
+
 
 [code:
     CustomErr Error 
@@ -17,22 +20,18 @@ The bang symbol ! is used for handling and creating new Error types.
     zz
 
     -- This function can return a String or None
-    parent_func () -> String, Error?:
-        return func_call_that_can_return_an_error() !:
-            #print("Error: ", error)
-            return None
+    parent_func () -> String, Error!:
+        return func_call_that_can_return_an_error() !err:
+            print("Error: ", err)
+            return "", err
         zz
     zz
 ]
 
 ## Using the ? operator
-
 [code:
     getURL || -> String:
-        return getNetworkRequest() ?:
-            print("Network did not respond: Using default URL")
-            return "example.com"
-        zz
+        return getNetworkRequest() ? ""
     zz
 
     -- Returns a string or None
@@ -58,7 +57,7 @@ Effectively creating a runtime assertion.
 [code:
     -- stops the program if 1 is not equal to 1
     -- Runs the code in the block first
-    #assert(1 is not 1, "1 is not 1 uh oh")
+    assert(1 is not 1, "1 is not 1 uh oh")
     #panic
 ]
 

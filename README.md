@@ -47,24 +47,25 @@ The goal is to also be a more general lightweight Wasm based UI building languag
 HTML projects will use JS, CS and HTML to build websites and tie into the Wasm.
 
 **Design Goals**
-- Minimal syntax with a focus around text content / typesetting and styling
-- Simple, static type system with some dynamic casting for strings
+- Minimal syntax with a focus around text content / typesetting and styling or configs
+- Simple, static type system
 - Batteries included with powerful built-in standard library
 - Fast compile times to support hot reloading
-- Fast for prototyping and refactoring with default/optional values
 - No LLVM backend
+- Borrow checker with no unsafe and simplified move semantics / lifetimes
 
 The language aims to be great for building a website, making config files or as a lightweight embedded or UI language for apps and games.
 
 ### Compiled Output
 Beanstalk aims to just output Wasm and have its own backend for doing this, but JS is currently the primary output for web while the language is being created.
+
 More JS will gradually get replaced, but only in cases where stricter runtime types or greater performance is needed.
 
 The compiler aims to output as little bytecode/glue code as possible. No 100kb Wasm files to just print "hello world".
 
 Being compiled means folding constants, type checking and optimizing the output to be as small as possible is all done for you.
  
-The compiler itself is written in Rust, and uses as few dependencies/libraries as possible to keep it fast and reliable.
+The compiler itself is written in Rust, and uses as few dependencies/libraries as possible to keep it fast and reliable. Beanstalk also aims to have close ties to Rust and intends to be able to directly use Rust libraries in the future.
 
 ### Dependencies currently used in the compiler
 - [wat2wasm](https://github.com/WebAssembly/wabt) for compiling wat to Wasm

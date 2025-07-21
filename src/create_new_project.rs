@@ -19,7 +19,7 @@ pub fn create_project(
 
     // Copy project directory from /html_project_template folder to user specified path
     copy(
-        PathBuf::from("src/html_project_template"),
+        PathBuf::from("starting_project_templates/html_project_template"),
         &full_path,
         &options,
     )?;

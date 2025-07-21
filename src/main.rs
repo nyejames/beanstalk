@@ -1,7 +1,6 @@
-use colour::{
-    dark_red, dark_red_ln, e_dark_blue_ln, e_dark_magenta, e_dark_yellow_ln, e_magenta_ln,
-    e_red_ln, e_yellow, e_yellow_ln, green_ln_bold, grey_ln, red_ln,
-};
+use crate::compiler::compiler_errors::{print_errors, print_formatted_error};
+use crate::compiler::wasm_codegen::wat_to_wasm::compile_wat_file;
+use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
 use std::path::PathBuf;
 use std::time::Instant;
 use std::{
@@ -10,119 +9,25 @@ use std::{
     path::Path,
 };
 
-pub mod bs_types;
 mod build;
+mod compiler;
 mod create_new_project;
 pub mod dev_server;
 mod file_output;
-mod module_dependencies;
-mod release_optimizers;
 mod settings;
-mod test;
-mod tokenizer;
-mod tokens;
-
-mod parsers {
-    pub mod ast_nodes;
-    pub mod build_ast;
-    pub mod collections;
-    mod create_scene_node;
-    pub mod functions;
-    pub mod markdown;
-    mod expressions {
-        pub mod constant_folding;
-        pub mod eval_expression;
-        pub mod function_call_inline;
-        pub mod parse_expression;
-    }
-    pub mod builtin_methods;
-    pub mod codeblock;
-    pub mod loops;
-    pub mod scene;
-    pub mod structs;
-    #[allow(dead_code)]
-    pub mod util;
-    pub mod variables;
-}
-mod html_output {
-    pub mod code_block_highlighting;
-    pub mod dom_hooks;
-    pub mod generate_html;
-    pub mod html_styles;
-    pub mod js_parser;
-    pub mod web_parser;
-}
-mod wasm_output {
-    pub mod wat_to_wasm;
-}
-use crate::tokenizer::TokenPosition;
-
-pub use tokens::Token;
 
 enum Command {
     NewHTMLProject(PathBuf),
     Dev(PathBuf), // Runs local dev server
     Release(PathBuf),
-    Test,
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
 }
 
-#[derive(PartialEq)]
-#[derive(Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Flag {
-    ShowTokens,
     ShowAst,
     DisableWarnings,
     DisableTimers,
-}
-
-pub struct CompileError {
-    pub msg: String,
-
-    // If start pos is 0, there is no line to print
-    pub start_pos: TokenPosition,
-
-    // After the start pos
-    // This can be the entire rest of the line
-    // and will be set to U32::MAX in this case
-    // 0 if there is no line to print
-    pub end_pos: TokenPosition,
-
-    pub error_type: ErrorType,
-}
-
-impl CompileError {
-    fn to_error(self, file_path: PathBuf) -> Error {
-        Error {
-            msg: self.msg,
-            start_pos: self.start_pos,
-            end_pos: self.end_pos,
-            file_path,
-            error_type: self.error_type,
-        }
-    }
-}
-
-// Adds more information to the CompileError
-// So it knows the file path (possible specific part of the line soon)
-// And the type of error
-#[derive(PartialEq)]
-pub enum ErrorType {
-    Suggestion,
-    Caution,
-    Syntax,
-    Type,
-    Rule,
-    File,
-    Compiler,
-    DevServer,
-}
-pub struct Error {
-    msg: String,
-    start_pos: TokenPosition,
-    end_pos: TokenPosition,
-    file_path: PathBuf,
-    error_type: ErrorType,
 }
 
 fn main() {
@@ -167,7 +72,7 @@ fn main() {
                     println!("Creating new HTML project...");
                 }
                 Err(e) => {
-                    red_ln!("Error creating project: {:?}", e);
+                    e_red_ln!("Error creating project: {:?}", e);
                 }
             }
         }
@@ -184,19 +89,10 @@ fn main() {
                     green_ln_bold!("{:?}", duration);
                 }
                 Err(e) => {
-                    red_ln!("Error building project: {:?}", e.msg);
+                    e_red_ln!("Errors while building project: \n");
+                    print_errors(e);
                 }
             }
-        }
-
-        Command::Test => {
-            let test_path = PathBuf::from("test_output");
-            match test::test_build(&test_path, &flags) {
-                Ok(_) => {}
-                Err(e) => {
-                    print_formatted_error(e);
-                }
-            };
         }
 
         Command::Dev(ref path) => {
@@ -207,24 +103,28 @@ fn main() {
                     println!("Dev server shutting down ... ");
                 }
                 Err(e) => {
-                    print_formatted_error(e);
+                    e_red_ln!("Errors while building project: \n");
+                    print_errors(e);
                 }
             }
         }
 
         Command::Wat(path) => {
             println!("Compiling WAT to WebAssembly...");
-            match wasm_output::wat_to_wasm::compile_wat_file(&path) {
+            match compile_wat_file(&path) {
                 Ok(_) => {}
                 Err(e) => {
-                    print_formatted_error(e.to_error(path));
+                    print_formatted_error(e);
                 }
             }
         }
     }
 }
+
 fn get_command(args: &[String]) -> Result<Command, String> {
-    match args.first().map(String::as_str) {
+    let command = args.first().map(String::as_str);
+
+    match command {
         Some("new") => {
             // Check type of project
             match args.get(1).map(String::as_str) {
@@ -259,8 +159,6 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             }
         }
 
-        Some("test") => Ok(Command::Test),
-
         Some("dev") => match args.get(1) {
             Some(path) => {
                 if path.is_empty() {
@@ -283,17 +181,16 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             None => Ok(Command::Wat(PathBuf::from("test_output/test.wat"))),
         },
 
-        _ => Ok(Command::Test),
+        _ => Err("Invalid command: {} is not a command".to_string()),
     }
 }
 
 fn get_flags(args: &[String]) -> Vec<Flag> {
     let mut flags = Vec::new();
-    
+
     for arg in args {
         match arg.as_str() {
-            "--tokens"  => flags.push(Flag::ShowTokens),
-            "--ast"  => flags.push(Flag::ShowAst),
+            "--ast" => flags.push(Flag::ShowAst),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
 
@@ -334,125 +231,6 @@ fn prompt_user_for_input(msg: &str) -> Vec<String> {
     let args: Vec<String> = input.split_whitespace().map(String::from).collect();
 
     args
-}
-
-fn print_formatted_error(e: Error) {
-    // Walk back through the file path until it's the current directory
-    let relative_dir = match env::current_dir() {
-        Ok(dir) => e
-            .file_path
-            .strip_prefix(dir)
-            .unwrap_or(&e.file_path)
-            .to_string_lossy(),
-        Err(_) => e.file_path.to_string_lossy(),
-    };
-
-    let line_number = e.start_pos.line_number as usize;
-
-    // Read the file and get the actual line as a string from the code
-    let line = match fs::read_to_string(&e.file_path) {
-        Ok(file) => file
-            .lines()
-            .nth(line_number)
-            .unwrap_or_default()
-            .to_string(),
-        Err(_) => {
-            // red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ File path is invalid: {}", e.file_path.display());
-            "".to_string()
-        }
-    };
-
-    // red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
-
-    // e_dark_yellow!("Error: ");
-
-    match e.error_type {
-        // This probably won't be used for the compiler
-        ErrorType::Suggestion => {
-            print!("\n( ͡° ͜ʖ ͡°) ");
-            dark_red_ln!("{}", relative_dir);
-            println!(" ( ._. ) ");
-            e_dark_blue_ln!("Suggestion");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
-        }
-
-        ErrorType::Caution => {
-            print!("\n(ಠ_ಠ)☞  ⚠ ");
-            dark_red!("{}", relative_dir);
-            println!("⚠  ☜(■_■¬ ) ");
-
-            e_yellow_ln!("Caution");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
-        }
-
-        ErrorType::Syntax => {
-            print!("\n(╯°□°)╯  🔥🔥 ");
-            dark_red!("{}", relative_dir);
-            println!(" 🔥🔥  Σ(°△°;) ");
-
-            e_red_ln!("Syntax");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
-        }
-
-        ErrorType::Type => {
-            print!("\n( ͡° ͜ʖ ͡°) ");
-            dark_red_ln!("{}", relative_dir);
-            println!(" ( ._. ) ");
-
-            e_red_ln!("Type Error");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
-        }
-
-        ErrorType::Rule => {
-            print!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ");
-            dark_red!("{}", relative_dir);
-            println!(" 🔥🔥🔥  ╰(°□°╰) ");
-
-            e_red_ln!("Rule");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
-        }
-
-        ErrorType::File => {
-            e_yellow_ln!("🏚 Can't find/read file or directory");
-            e_red_ln!("  {}", e.msg);
-            return;
-        }
-
-        ErrorType::Compiler => {
-            print!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
-            dark_red!("{}", relative_dir);
-            println!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
-            e_yellow!("COMPILER BUG - ");
-            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
-
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
-        }
-
-        ErrorType::DevServer => {
-            print!("\n(ﾉ☉_⚆)ﾉ  🔥 ");
-            dark_red!("{}", relative_dir);
-            println!(" 🔥 ╰(° O °)╯ ");
-            e_yellow_ln!("Dev Server whoopsie");
-            e_red_ln!("  {}", e.msg);
-            return;
-        }
-    }
-
-    e_red_ln!("  {}", e.msg);
-
-    println!("\n{}", line);
-
-    // spaces before the relevant part of the line
-    print!("{}", " ".repeat(e.start_pos.char_column as usize / 2));
-
-    let length_of_underline = (e.end_pos.char_column - e.start_pos.char_column).max(1) as usize;
-    red_ln!("{}", "^".repeat(length_of_underline));
 }
 
 fn print_help(commands_only: bool) {

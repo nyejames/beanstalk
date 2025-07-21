@@ -1,6 +1,8 @@
+use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::ErrorType;
+use crate::compiler::parsers::tokens::TextLocation;
 use crate::settings::Config;
-use crate::tokenizer::TokenPosition;
-use crate::{Error, ErrorType, build, settings, Flag};
+use crate::{Flag, build, return_dev_server_error, settings};
 use colour::{blue_ln, dark_cyan_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -11,21 +13,14 @@ use std::{
     time::Instant,
 };
 
-pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Error> {
+pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileError>> {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
-        Err(e) => {
-            return Err(Error {
-                msg: format!(
-                    "TCP error: {e}. Is there an instance of this local host server already running on {url}?"
-                ),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path: PathBuf::new(),
-                error_type: ErrorType::DevServer,
-            });
-        }
+        Err(e) => return_dev_server_error!(
+            path.to_path_buf(),
+            "TCP error: {e}. Is there an instance of this local host server already running on {url}?"
+        ),
     };
 
     // Is checking to make sure the path is a directory
@@ -40,13 +35,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Error> {
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(
-            stream,
-            &path,
-            &mut modified,
-            &mut project_config,
-            flags,
-        )?;
+        handle_connection(stream, &path, &mut modified, &mut project_config, flags)?;
     }
 
     Ok(())
@@ -58,7 +47,7 @@ fn handle_connection(
     last_modified: &mut SystemTime,
     project_config: &mut Config,
     flags: &[Flag],
-) -> Result<(), Error> {
+) -> Result<(), Vec<CompileError>> {
     let buf_reader = BufReader::new(&mut stream);
 
     let dir_404 = &path
@@ -79,15 +68,7 @@ fn handle_connection(
                 let p = get_home_page_path(path, false, project_config)?;
                 contents = match fs::read(&p) {
                     Ok(content) => content,
-                    Err(e) => {
-                        return Err(Error {
-                            msg: format!("Error reading home page: {:?}", e),
-                            start_pos: TokenPosition::default(),
-                            end_pos: TokenPosition::default(),
-                            file_path: p,
-                            error_type: ErrorType::File,
-                        });
-                    }
+                    Err(e) => return_dev_server_error!(p, "Error reading home page: {:?}", e),
                 };
                 status_line = "HTTP/1.1 200 OK";
 
@@ -119,13 +100,13 @@ fn handle_connection(
                 // Get the metadata of the file to check if hot reloading is needed
                 // Check if globals have been modified
                 let global_file_modified = if metadata(global_file_path).is_ok() {
-                    has_been_modified(global_file_path, last_modified)
+                    has_been_modified(global_file_path, last_modified)?
                 } else {
                     false
                 };
 
                 // Check if the file has been modified
-                if has_been_modified(&parsed_url, last_modified) || global_file_modified {
+                if has_been_modified(&parsed_url, last_modified)? || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
                     build_project(path, false, flags)?;
                     status_line = "HTTP/1.1 205 Reset Content";
@@ -207,13 +188,7 @@ fn handle_connection(
 
     match stream.write_all(response) {
         Ok(_) => Ok(()),
-        Err(e) => Err(Error {
-            msg: format!("Error sending response: {:?}", e),
-            start_pos: TokenPosition::default(),
-            end_pos: TokenPosition::default(),
-            file_path: PathBuf::from(""),
-            error_type: ErrorType::DevServer,
-        }),
+        Err(e) => return_dev_server_error!(path, "Error writing response: {:?}", e),
     }
 }
 
@@ -221,7 +196,7 @@ fn build_project(
     build_path: &Path,
     release: bool,
     flags: &[Flag],
-) -> Result<Config, Error> {
+) -> Result<Config, Vec<CompileError>> {
     dark_cyan_ln!("Reading project config...");
     let start = Instant::now();
 
@@ -234,56 +209,44 @@ fn build_project(
     Ok(config)
 }
 
-fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> bool {
+fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, Vec<CompileError>> {
     // Check if it's a file or directory
     let path_metadata = match metadata(path) {
         Ok(m) => m,
-        Err(_) => {
-            red_ln!(
-                "Error reading directory (probably doesn't exist): {:?}",
-                path
-            );
-            return false;
-        }
+        Err(_) => return_dev_server_error!(path, "Error reading file metadata"),
     };
 
     if path_metadata.is_dir() {
         let entries = match fs::read_dir(path) {
             Ok(all) => all,
-            Err(_) => {
-                red_ln!("Error reading directory: {:?}", path);
-                return false;
-            }
+            Err(e) => return_dev_server_error!(path, "Error reading directory: {e}"),
         };
 
         for entry in entries {
             let entry = match entry {
                 Ok(e) => e,
-                Err(_) => {
-                    red_ln!("Error reading entry");
-                    return false;
-                }
+                Err(e) => return_dev_server_error!(path, "Error reading directory entry: {e}"),
             };
 
             let meta = match metadata(entry.path()) {
                 Ok(m) => m,
-                Err(_) => {
-                    red_ln!("Error reading file modified metadata");
-                    return false;
-                }
+                Err(e) => return_dev_server_error!(
+                    entry.path(),
+                    "Error reading file metadata in directory entry: {e}"
+                ),
             };
 
             let modified_time = match meta.modified() {
                 Ok(t) => t,
-                Err(_) => {
-                    red_ln!("Error reading file modified time in it's metadata");
-                    *modified
-                }
+                Err(e) => return_dev_server_error!(
+                    entry.path(),
+                    "Error reading file modified time in directory entry: {e}"
+                ),
             };
 
             if modified_time > *modified {
                 *modified = modified_time;
-                return true;
+                return Ok(true);
             }
         }
     }
@@ -293,24 +256,21 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> bool {
             Ok(t) => {
                 if t > *modified {
                     *modified = t;
-                    return true;
+                    return Ok(true);
                 }
             }
-            Err(_) => {
-                red_ln!("Error reading file modified time in it's metadata");
-                return false;
-            }
+            Err(e) => return_dev_server_error!(path, "Error reading file modified time: {e}"),
         }
     }
 
-    false
+    Ok(false)
 }
 
 fn get_home_page_path(
     path: &Path,
     source_folder: bool,
     project_config: &Config,
-) -> Result<PathBuf, Error> {
+) -> Result<PathBuf, Vec<CompileError>> {
     let root_src_path = if source_folder {
         PathBuf::from(&path).join(&project_config.src)
     } else {
@@ -319,15 +279,7 @@ fn get_home_page_path(
 
     let src_files = match fs::read_dir(&root_src_path) {
         Ok(m) => m,
-        Err(e) => {
-            return Err(Error {
-                msg: format!("Error reading root src directory metadata: {:?}", e),
-                start_pos: TokenPosition::default(),
-                end_pos: TokenPosition::default(),
-                file_path: root_src_path,
-                error_type: ErrorType::File,
-            });
-        }
+        Err(e) => return_dev_server_error!(root_src_path, "Error reading src directory: {:?}", e),
     };
 
     // Look for the first file that starts with '#page' in the src directory
@@ -360,47 +312,34 @@ fn get_home_page_path(
                     continue;
                 }
             }
+
             Err(e) => {
-                return Err(Error {
-                    msg: format!("Error reading src directory: {:?}", e),
-                    start_pos: TokenPosition::default(),
-                    end_pos: TokenPosition::default(),
-                    file_path: root_src_path,
-                    error_type: ErrorType::File,
-                });
+                return_dev_server_error!(root_src_path, "Error reading src directory: {:?}", e)
             }
         };
     }
 
     match first_page {
         Some(index_page_path) => Ok(index_page_path),
-        None => Err(Error {
-            msg: format!(
-                "No page found in {:?} directory: {:?}",
-                if source_folder {
-                    &project_config.src
-                } else {
-                    &project_config.dev_folder
-                },
-                first_page
-            ),
-            start_pos: TokenPosition::default(),
-            end_pos: TokenPosition::default(),
-            file_path: root_src_path,
-            error_type: ErrorType::File,
-        }),
+        None => return_dev_server_error!(
+            root_src_path,
+            "No page found in {:?} directory",
+            if source_folder {
+                &project_config.src
+            } else {
+                &project_config.dev_folder
+            }
+        ),
     }
 }
 
-fn get_current_dir() -> Result<PathBuf, Error> {
+fn get_current_dir() -> Result<PathBuf, Vec<CompileError>> {
     match std::env::current_dir() {
         Ok(dir) => Ok(dir),
-        Err(e) => Err(Error {
-            msg: format!("Error getting current directory: {:?}", e),
-            start_pos: TokenPosition::default(),
-            end_pos: TokenPosition::default(),
-            file_path: PathBuf::from(""),
-            error_type: ErrorType::DevServer,
-        }),
+        Err(e) => return_dev_server_error!(
+            PathBuf::from(""),
+            "Error getting current directory: {:?}",
+            e
+        ),
     }
 }

@@ -9,6 +9,7 @@ They can also be used for pattern matching, all with a similar syntax.
 
 [code:
     v = 1
+
     if v is not 1:
         print("nope")
     else
@@ -16,12 +17,13 @@ They can also be used for pattern matching, all with a similar syntax.
     zz
 
     -- Using if like a match expression
+    -- Parenthesis are used instead of colons for if expressions
     x = 5
-    msg = if x is 0: 
+    msg = if x is 0 (
         "nope"
-    else: 
+    ) else (
         "defintely nope"
-    zz
+    )
 
     print(msg) -- prints "defintely nope"
 ]
@@ -36,7 +38,7 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         print(thing)
     zz
 
-    for -20 to big_number #reversed:
+    for -20 to big_number:
         print("hello")
     zz
 
@@ -45,10 +47,13 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         print(n)
     zz
 
-    -- Getting the index rather than the value
-    -- If the value is unused the compiler can optimise this
     for item in collection:
-        print(item #index)
+        print(item.to_string())
+    zz
+
+    -- Getting the index
+    for item, index in collection:
+        print(index.to_string())
     zz
 
     -- Using a loop in a scene
@@ -71,14 +76,26 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     -- Must be exhaustive
     thing = 69
     if thing:
-        0: print("zero")
-        < 0: print("negative")
-        > 1: print("big number")
+        is 0: print("zero")
+        is < 0: print("negative")
+        is > 1: print("big number")
         else: print("only one")
     zz
 
+    -- Pattern matching assignment
+    -- Must be exhaustive
+    name = "Bob"
+    msg = if name (
+        is "Sam": 
+            "yo"
+        zz
+        is "Priya": "hey!"
+        is "Bob": "whats up"
+        else: "go away"
+    )
+
     for c in collection_of_choices:
-        if c is cool: 
+        if c is Thing::cool: 
             print(..)
         else: 
             print(..)

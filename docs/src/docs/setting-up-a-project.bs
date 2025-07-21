@@ -24,10 +24,6 @@ The compiler will read through any configuration settings first.
 - dev folder contains the dev output of the compiler.
 - release folder contains the release builds.
 
-⚠️ [red size(0.85):  The compiler is not yet a proper command line tool, it currently has to be compiled and ran directly before giving it a command.] ⚠️
-
-As development starts to be more stable, there will be an installable release of the compiler. This will run from the command line with the 'bean' command.
-
 # Routes
 Beanstalk web projects use a directory based router, with a few special naming rules. 
 
@@ -40,12 +36,6 @@ After the special file name, you can leave a space and name the file whatever yo
 - '#layout' automatically wraps all pages in the same directory in a parent layout. Use the 'slot' keyword in a scenehead to specify where the content should be placed. 
 - '#error' handles what the server does by default when an error occurs on the server, such as a 404. This will eventually extend to handle all different types of errors.
 
-## Server files (coming soon)
-Prefixing your BS files with a '+' symbol and keyword means it is a server file. Naming the file the same as a regular page, beans the server file will be called first when the page is requested.
-
-Otherwise the server file can contain regular server side BS code.
-
-[red size(0.85): BS cannot yet be used for server side code]
 
 # Compiling your BS files
 ### Build
@@ -67,11 +57,6 @@ If you specify a specific bs file, build will only compile that specific file an
 To create a development server with a watcher, run the command 'dev' in the root directory of your project. This is the main way to develop your HTML project.
 
 This will create a localhost server that will automatically reload the page when you make changes to your bs files. The command line will give you a link to open in your browser.
-
-# File Paths
-Any index.bs files will become the main page of the folder they are in, so your main page will be index.bs in the root directory.
-
-*** ⚠️ The intention is to have a file-system based router built in [link("https://kit.svelte.dev/docs/routing"): (similar to Svelte)] so there may be changed in file naming conventions and how the compiler handles those files in the future. ⚠️ ***
 
 ]
 

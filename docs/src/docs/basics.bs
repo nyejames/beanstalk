@@ -5,40 +5,37 @@
 
 Each Beanstalk file is a module.
 
-Each module is just a file that exports functions and fields marked as public.
+Each module is just a file that exports functions and fields.
 
 Projects are a collection of modules with a config file as an entry point.
+
+The config file will define how to split up projects into seperate wasm modules,
+but by default a project will turn into one big wasm module.
 
 # Quick Synax Overview
 The specifics are not fully decided on, but some of the key things are:
 - Using 'zz' keyword to close scopes (Colon opens scopes).
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for scenes.
 - Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
-- ~ tilde symbol to indicate mutability (mutability must be explicit)
-- @ symbol is used to mean 'public' or 'export'
+- ~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type.
 - Double dashes for single line comments (--)
+- @ symbol marks a function or field a the top level of a module as 'external', so it will be exported from the final wasm module.
 
 4 spaces are recommended for indentation. 
 
-# Compiletime vs Runtime naming
-Anything that should exist only at compile time must start with a capital letter. 
-Everything else starts with a lower case letter. 
-This is to help the compiler know exactly what you intend to be constant or inlined.
-
-So types use Upper_Snake_Case. But instances of types use regular snake_case (if they are not constants).
-
-camelCase is used for naming functions, 
-but if you want to tell the compiler that the function should be inlined (evaluated at compiletime),
-you can name it with PascalCase and the compiler will throw an error if the function can't be evaluated at compile time.
+- Types / Objects use Upper_Snake_Case.
+- Everything else uses regular_snake_case
 
 # Comments
 Comments use a double minus sign '--'.
+
+Documentation comments will eventually be created via special scenes that use the #docs directive.
 
 [Code: 
 
 -- normal comment
 
-[comment:
+[#docs:
     Multiline comment
 
     Woo
@@ -47,30 +44,41 @@ Comments use a double minus sign '--'.
 ]
 
 # Variables
-Equals means assign.
+Equals means assign. Tilde ~ means this is a mutable and can change.
 
-Similar to Python, there is no special keyword for creating a new variable, but you can specify a type annotation.
-
-The @ symbol before a name is used to export variables and functions outside of a module or object.
+Declarations with an explicit type are exported (public), 
+declarations with inferred types are private.
 
 ## Assignment
 
-### Variables (tilde ~ means this is a mutable and can change)
+### Variables
 [Code:
-    int_var ~Int = 0
-    float_var ~Float = 0.0
-    string_var ~String = "boo!"
-    bool_var ~Bool = true
-    collection_var ~{String} = {}
-    scene_var ~[] = []
+    int ~= 0
+    float ~= 0.0
+
+    string ~= "boo!"
+    char ~= '😊'
+    raw_string ~= `hi`
+
+    scene ~= []
+
+    bool ~= true
+
+    mutable_collection ~= {}
+    immutable_collection = {}
+    
+    object_definition = |
+        value Int,
+        another_value Float,
+    |
 ]
 
-Type annotations are needed for new variables.
+]
 
 ## Static Assignment
 [Code:
     -- 64 bit immutable float
-    number Float = 69.420
+    number = 420.69
 
     -- Becomes an immutable reference to the value
     -- For primatives this is actually just an immutable copy,
@@ -87,8 +95,6 @@ Type annotations are needed for new variables.
     -- Type error (another_mutable_number is a float type)
     another_mutable_number ~= "Not a number"
 ]
-
-Variables must be given a value or a type when they are declared.
 
 All copies of collections are explicit and must use the 'copy' keyword in place of a type.
 
@@ -107,32 +113,36 @@ All copies of collections are explicit and must use the 'copy' keyword in place 
 
     -- a_reference is still a reference to the original collection
     a_reference.push(5)
-    print(a_reference) -- {1, 2, 3, 4, 5, 5}
+    print(a_collection) -- {1, 2, 3, 4, 5, 5}
 
-    a_collection.pull(a_collection length - 1)
+    a_collection.pull(a_collection.length() - 1)
     print(a_collection) -- {23.0}
 ]
 
-If you are creating a non-collection variable and need it to be formatted over multiple lines, 
-you can use parentheses. The first newline must be after the '=' assignment operator.
+Expressions can span over multiple lines.
+
+But statements must start after a newline.
 
 [Code:
-    some_int = (
-        4 + 5 + 6 + 7 + 8 + 9 + 10
-    )
+    -- Valid
+    some_int =
+        4 + 5 + 6 + 7 + 
+        8 + 9 + 10
+
+    -- Also valid
+    some_int =
+        4 + 5 + 6 + 7
+        + 8 + 9 + 10
 ]
 
 # Imports
-The import keyword works like a function call, returning the imported value.
-
 [Code:
-    -- Importing a struct without renaming it from a library
-    import("math")
-    math.root(2, 8)
+    -- Importing everything inside an object
+    #import(/libs/math)
+    root(2, 8)
 
     -- Renaming the import
-    encryption = import("libs/encrypt")
-
+    encryption = #import("libs/encrypt")
 ]
 
 # Data Types
@@ -156,10 +166,7 @@ These are all different ways to create strings.
 
     [: string ] [: UTF-16 (For JS compatibility)] [: ""]
 
-    [: error] [: Contains a special type of debug string detailing the error] [: "ERROR"]
-
     [: scene ] [: The templating syntax of Beanstalk. See [link "./scenes": Scenes for more info!]] [: "`[]`" -  an empty scene]
-
 ]
 
 ## Collection Types

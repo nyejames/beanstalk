@@ -9,16 +9,9 @@ Here is a list of current bugs, development goals and planned features.
 A lot of tricky stuff is being built out first before more of the easy wins are finished.
 
 ## Ongoing task list
+- New export syntax, no more OOP style.
+
 - Built in array methods (bake directly into the compiler)
-
-- Scoping for variables that are part of state. 
-Are they passed automatically to functions inside of the classes? 
-Or should there be an implit argument that each class has (this. style thing)
-that all functions on that object have access to.
-
-- Newlines should only break expressions if 
-    1. the next token does not continue an expession in the case of not being an operator
-    2. the token before the newline expects the next part of the expression
 
 - Type checking exports and linking them all with proper types. Custom types first.
 
@@ -28,8 +21,6 @@ Figure out all infferred types, custom Types will be trickiest and most importan
 - enforce commas in scenes
 
 - Runtime stuff needs to be outputted fully
-
-
 
 - Scenes will parse blocks and look for style properties and insert sucessive scenes passed into it into a 'slot' scene if it has one.
 If multiple scenes with slots are added to a scene, they need to be parsed correctly so each successsive scene is passed into the slot of the previous scene.

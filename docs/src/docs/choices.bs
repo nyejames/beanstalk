@@ -4,14 +4,19 @@
 [Page:
 
 # Choices (enums)
-Choices are a way to define a set of possible values. They are similar to enums in Rust.
+Choices are a way to define a set of possible values. They are similar to enums in Rust (tagged unions).
 
-[code:
-    Thing = (
-        A Int |
-        B String |
-        C (String, Thing) |
-    )
+Choices use a double colon for their declaration.
+
+You access one of the choices using double colon also.
+
+[Code:
+    Choice ::
+        Option1 String,
+        Option2 String,
+    zz
+
+    option = Choice::Option2
 ]
 
 [Footer]

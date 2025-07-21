@@ -8,18 +8,19 @@
 # Current ideas about memory management
 The language will start out just using Javascript's GC, but will eventually move to something more Rust-like.
 
-The intention is for Beanstalk to *not* have a garbage collector or at least provide a hybrid approach. 
+The intention is for Beanstalk to *not* have a garbage collector.
 
 There will be need to be safety and avoidance of common bugs without a significant penalty to how optimized the output can be.
 
-The current plan is to have a system similar to Rust, but more forgiving where possible at the cost of some performance.
+The current plan is to have a system similar to Rust.
 
 ## The current idea
 - Start with a rust style single ownership system
 - Simplify the syntax
 - All copies are ALWAYS explicit, even for stack allocated data
 - The compiler decides whether it's passing a mutable reference or passing over ownership based on whether the variable is later used in the same scope.
-(this might even be simplified to just always being dropped at the end of the scope anyway depending on whether there is a performance benefit to passing ownership over)
+- No unsafe in the language
+- Anything that can't work like this will use reference counting.
 
 ]
 

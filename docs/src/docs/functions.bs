@@ -1,0 +1,54 @@
+[navbar]
+
+[header center: [title(1): FUNCTIONS]]
+[Page:
+
+Beanstalk programs are comprised of functions inside of modules.
+
+[code:
+
+    -- The simplest possible function
+    -- The name of the function first,
+    -- Followed by a object definition that defines what arguments are passed in
+    main ||:
+        -- Some code goes in here!
+    zz
+]
+
+## The function signature
+The arrow symbol is used to define the signature of a function. 
+If the function returns a value, it must use a type signature.
+
+[code:
+
+    get_doubled |value Int| -> ~Int:
+        return value *= 2
+    zz
+
+    multipleReturns |x Int| -> Int, Bool:
+        value = x + 1
+        return (value, value is > 0)
+    zz
+
+    -- Calling a function
+    value, is_positive = multipleReturns(5)
+
+    canError |x String| -> String, Error!:
+        return fetch(x)
+    zz
+
+    defaultIfError || -> String:
+        return canError("example.com") ! ""
+    zz
+
+    panics ||:
+        canError e!:
+            print("Error: ", e)
+            #panic 
+        zz
+    zz
+]
+
+]
+
+[Footer]

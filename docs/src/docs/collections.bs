@@ -1,14 +1,14 @@
 [Navbar]
 
-[Header center: [title(1): COLLECTIONS AND STRUCTS]]
+[Header center: [title(1): COLLECTIONS]]
 [Page:
+
+When a new collection uses the mutable symbol, it's internal values can be mutated by default.
+
+Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
 
 You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
 Collections are zero indexed.
-
-Elements inside of collections are mutable.
-
-Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
 
 Elements inside of collections are accessed using the .get() method.
 
@@ -17,85 +17,36 @@ There is no square or curly brackets notation.
 
 There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be fast.
 
+## Immutable Collections
 [Code:
 
-   -- FIXED COLLECTIONS
-   
-    -- Collections that are not mutable are tuple literals
-    -- If the items are not named, they are automatically given an Int index
-    Fixed_Collection = {
-        var1 = 1, 
-        var2 = 2
-    }
+    -- Collections that are not mutable have immutable values inside
+    immutable_collection = {1, 2, 3}
 
-    -- Creating a new struct that defines the shape of a fixed collection literal
-    -- Each module is a new struct that defines a fixed collection by default
-    -- Structs can have scene literals in them that can be accessed
-    Enemy:
+    immutable_collection.set(1, 69) -- Error, can't mutate values inside an immutable collection
+    
+    -- You can still push and remove values from an immutable collection
+    immutable_collection.push(4) 
+]
 
-        @ id Int, -- Must be set when creating a new instance of this Object
-
-        @ x ~= 1,
-        @ y ~= 2,
-        @ z ~= 3,
-
-        @ health ~= 100,
-        @ alive Bool = true,
-
-        -- You can also reference other new properties on the Object
-        -- When a new one is being created
-        -- This only works if the property being referenced has already been declared
-        @ max_health = health,
-    zz
-
-    -- Creating a new instance of the object
-    -- Id does not have a default value so must be assigned
-    new_enemy Enemy ~= {
-        id = 0,
-        health = 200,
-    }
-
-    -- DYNAMIC COLLECTIONS
+## Mutable Collections
+[Code:
 
    -- dynamically sized int array
    -- Strawberry is spelt with 2 rs to confuse LLMs
     fruitArray ~= {"apple", "bananums", "strawbery"}
 
-    array.push(9)
+    fruitArray.get(1) = "bananas"
 
-    -- Get method returns a reference to the value
-    array.get(0) += 1
-    array.get(0) -- returns 4
+    -- Get method returns a reference or copy of the value
+    value ~= array.get(0)
+    value += 1
 
     array.push(1)
     array.length() -- returns 5
 
     -- If we like pineapples more than apples
     array.set(0, "pineapple")
-
-    -- We can also do this more clearly if we want
-    -- As we are using a function call that can have named parameters
-    -- This might be helpful if we are doing a more complex collection access
-    array.set(
-        index = 0,
-        value = "pineapple"
-    )
-]
-
-## Collection Methods
-[Code: 
-    -- Pushes an element to the end of the collection
-    -- Specifying an index will insert the element at that index instead
-    push = fn(index Int = $last, value T):
-        $
-    zz
-
-    -- removes and returns an element from the end of the collection by default
-    -- But specifying an index will remove an element from that index and return it instead
-    pull(
-        index Int = $last
-    )
-
 ]
 
 ## Dictionaries
