@@ -124,7 +124,7 @@ pub fn build(
 
     // Compile each module to an AST
     let time = Instant::now();
-    let ast_blocks: Result<Vec<AstBlock>, CompileError> = modules_to_parse
+    let ast_blocks: Vec<Result<AstBlock, CompileError>> = modules_to_parse
         .par_iter()
         .map(|module| compiler.source_to_ast(&module.source_code, &module.source_path))
         .collect();
@@ -134,7 +134,26 @@ pub fn build(
         green_ln!("{:?}", time.elapsed());
     }
 
-    // Handle any compilation errors
+    // Handle any compilation errors and resolve dependencies
+    let mut errors = Vec::new();
+    let mut valid_blocks = Vec::with_capacity(ast_blocks.len());
+    let mut no_errors: bool = true; // Flag to skip compiling modules that were successful
+    for result in ast_blocks {
+        match result {
+            Ok(block) => {
+                // If there haven't been any errors yet,
+                // then start collecting exports
+                if no_errors {
+                    //
+                    valid_blocks.push(block);
+                }
+            }
+            Err(err) => {
+                no_errors = false;
+                errors.push(err)
+            }
+        }
+    }
 
     // TODO: RESOLVING MODULE DEPENDENCIES
     // let (mut tokenised_modules, project_exports) = resolve_module_dependencies(&modules_to_parse)?;

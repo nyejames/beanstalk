@@ -15,6 +15,7 @@ pub mod compiler_errors;
 pub mod datatypes;
 pub mod release_optimizers;
 pub mod traits;
+mod module_dependencies;
 
 pub mod parsers {
     pub mod ast_nodes;
@@ -57,13 +58,13 @@ pub mod wasm_codegen {
 }
 
 pub struct OutputModule {
-    pub imports: HashMap<String, Vec<String>>,
+    pub imports: Vec<PathBuf>,
     pub source_path: PathBuf,
     pub wasm: WasmModule,
 }
 
 impl OutputModule {
-    pub fn new(source_path: PathBuf, imports: HashMap<String, Vec<String>>) -> Self {
+    pub fn new(source_path: PathBuf, imports: Vec<PathBuf>) -> Self {
         OutputModule {
             imports,
             source_path,
@@ -102,6 +103,9 @@ impl<'a> Compiler<'a> {
 
         // AST
         // Scope is the same as the module source path
+
+        // The AST modules now need to be ordered based on their dependencies.
+        // TODO later on: circular dependencies
         let ast_context = ScopeContext::new(ContextKind::Module, module_path.to_owned());
         let ast = match new_ast(&mut tokenizer_output, ast_context) {
             Ok(block) => block,

@@ -18,6 +18,7 @@ pub const BS_VAR_PREFIX: &str = "bs_";
 // and is just a heuristic based on tests with rudimentary small snippets of code.
 // Should be recalculated at a later point.
 pub const SRC_TO_TOKEN_RATIO: usize = 5; // (Maybe) About 1/6 source code to tokens observed
+pub const IMPORTS_CAPACITY: usize = 6; // (No Idea atm)
 pub const TOKEN_TO_NODE_RATIO: usize = 10; // (Maybe) About 1/10 tokens to AstNode ratio
 pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols the smallest common Ast blocks will likely have
 

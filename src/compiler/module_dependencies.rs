@@ -1,8 +1,9 @@
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::tokens::TextLocation;
+use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use crate::return_syntax_error;
 
 // Helper struct to track module dependencies
 struct ModuleDependencies {
@@ -13,24 +14,17 @@ struct ModuleDependencies {
 }
 
 impl ModuleDependencies {
-    fn new(modules: &[TemplateModule]) -> Self {
+
+    // Creates a graph of which modules are requesting imports from other modules
+    fn new(tokenized_modules: &[TokenContext]) -> Self {
+
         // Build dependency graph
         let mut graph = HashMap::new();
-        for module in modules {
+        for module in tokenized_modules {
             let mut deps = HashSet::new();
-            let module_deps: Vec<_> = modules
-                .iter()
-                .filter(|m| {
-                    module
-                        .import_requests
-                        .iter()
-                        .any(|import| m.exports.contains_key(import))
-                })
-                .map(|m| m.source_path.clone())
-                .collect();
-            deps.extend(module_deps);
-            graph.insert(module.source_path.clone(), deps);
+            graph.insert(module.)
         }
+
 
         ModuleDependencies {
             graph,
@@ -54,6 +48,9 @@ impl ModuleDependencies {
     // Depth-first search for a single node
     fn visit_node(&mut self, node: &PathBuf) -> Result<(), Error> {
         if self.temp_mark.contains(node) {
+            return_syntax_error!(
+
+            )
             return Err(Error {
                 msg: "Circular dependency detected".to_string(),
                 start_pos: TextLocation::default(),

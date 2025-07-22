@@ -80,11 +80,23 @@ impl Token {
 
 pub struct TokenContext {
     pub tokens: Vec<Token>,
+    pub imports: Vec<PathBuf>,
+    pub src_path: PathBuf,
     pub index: usize,
     pub length: usize,
 }
 
 impl TokenContext {
+    pub fn new(src_path: PathBuf, tokens: Vec<Token>, imports: Vec<PathBuf>) -> TokenContext {
+        TokenContext {
+            length: tokens.len(),
+            src_path,
+            tokens,
+            index: 0,
+            imports
+        }
+    }
+
     pub fn current_token_kind(&self) -> &TokenKind {
         &self.tokens[self.index].kind
     }
@@ -214,7 +226,7 @@ pub enum TokenKind {
     EOF,                 // End of the file
 
     // Module Import/Export
-    Import(String),
+    Import, // Directed through different path so not needed after tokenizer.
 
     // HTML project compiler directives
     Print,

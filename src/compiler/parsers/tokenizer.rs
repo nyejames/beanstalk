@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use crate::compiler::compiler_errors::ErrorType;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
@@ -15,12 +16,14 @@ macro_rules! return_token {
     };
 }
 
-pub fn tokenize(source_code: &str) -> Result<TokenContext, CompileError> {
+pub fn tokenize(source_code: &str, src_path: PathBuf) -> Result<TokenContext, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
+    let imports_initial_capacity = settings::IMPORTS_CAPACITY;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code);
+    let mut imports = Vec::with_capacity(imports_initial_capacity);
 
     let template_nesting_level: &mut i64 = &mut 0;
 
@@ -35,23 +38,19 @@ pub fn tokenize(source_code: &str) -> Result<TokenContext, CompileError> {
         }
 
         tokens.push(token);
-
-        token = get_token_kind(&mut stream, template_nesting_level)?;
+        token = get_token_kind(&mut stream, template_nesting_level, &mut imports)?;
     }
 
     tokens.push(token);
 
     // First creation of TokenContext
-    Ok(TokenContext {
-        length: tokens.len(),
-        tokens,
-        index: 0,
-    })
+    Ok(TokenContext::new(src_path, tokens, imports))
 }
 
 pub fn get_token_kind(
     stream: &mut TokenStream,
     template_nesting_level: &mut i64,
+    imports: &mut Vec<PathBuf>
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
@@ -452,7 +451,7 @@ pub fn get_token_kind(
     if current_char.is_alphabetic() {
         token_value.push(current_char);
 
-        return keyword_or_variable(&mut token_value, stream);
+        return keyword_or_variable(&mut token_value, stream, imports);
     }
 
     return_syntax_error!(
@@ -468,7 +467,9 @@ const END_KEYWORD: &str = "zz";
 fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
+    imports: &mut Vec<PathBuf>,
 ) -> Result<Token, CompileError> {
+
     // Match variables or keywords
     loop {
         let is_not_eof = match stream.peek() {
@@ -515,7 +516,8 @@ fn keyword_or_variable(
 
             "import" => {
                 let import = tokenize_import(stream)?;
-                return_token!(TokenKind::Import(import), stream)
+                imports.push(import);
+                return_token!(TokenKind::Import, stream)
             }
 
             // Logical
@@ -723,7 +725,7 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringLiteral(token_value), stream);
 }
 
-fn tokenize_import(stream: &mut TokenStream) -> Result<String, CompileError> {
+fn tokenize_import(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
     // Skip starting whitespace
     while let Some(c) = stream.peek() {
         if c.is_whitespace() {
@@ -756,5 +758,5 @@ fn tokenize_import(stream: &mut TokenStream) -> Result<String, CompileError> {
         return_syntax_error!(stream.new_location(), "Import path cannot be empty")
     }
 
-    Ok(import_path)
+    Ok(PathBuf::from(import_path))
 }

@@ -28,7 +28,7 @@ use std::path::PathBuf;
 pub struct AstBlock {
     pub scope: PathBuf,
     pub ast: Vec<AstNode>, // Body
-    pub exports: Vec<Arg>, // Visible Variables
+    pub exports: Vec<Arg>, // Visible Top-level Variables
     pub imports: Vec<String>,
 }
 
