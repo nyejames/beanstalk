@@ -24,7 +24,8 @@ is used to define the content of the template. This is a string.
 Inside the body of a template, you can nest more templates using square brackets. 
 
 ## Beanstalk Markdown
-Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template has the markdown option enabled. Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
+Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template has the markdown option enabled. 
+Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
 Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
 [Code:

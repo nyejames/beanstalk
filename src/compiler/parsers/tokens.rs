@@ -1,7 +1,8 @@
 use crate::compiler::datatypes::DataType;
 use colour::red_ln;
+use std::collections::HashSet;
 use std::iter::Peekable;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]
@@ -78,22 +79,22 @@ impl Token {
     }
 }
 
-pub struct TokenContext {
+pub struct TokenContext<'a> {
     pub tokens: Vec<Token>,
-    pub imports: Vec<PathBuf>,
-    pub src_path: PathBuf,
+    pub imports: HashSet<PathBuf>,
+    pub src_path: &'a Path,
     pub index: usize,
     pub length: usize,
 }
 
-impl TokenContext {
-    pub fn new(src_path: PathBuf, tokens: Vec<Token>, imports: Vec<PathBuf>) -> TokenContext {
+impl TokenContext<'_> {
+    pub fn new(src_path: &Path, tokens: Vec<Token>, imports: HashSet<PathBuf>) -> TokenContext {
         TokenContext {
             length: tokens.len(),
             src_path,
             tokens,
             index: 0,
-            imports
+            imports,
         }
     }
 

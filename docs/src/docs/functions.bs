@@ -17,15 +17,16 @@ Beanstalk programs are comprised of functions inside of modules.
 
 ## The function signature
 The arrow symbol is used to define the signature of a function. 
-If the function returns a value, it must use a type signature.
+Functions can return multiple values. If the function returns values, 
+it must use a type signature or the name of one of the arguments if it's returning that reference back to the caller.
 
 [code:
 
-    get_doubled |value Int| -> ~Int:
+    get_doubled |value Int| -> Int:
         return value *= 2
     zz
 
-    multipleReturns |x Int| -> Int, Bool:
+    multipleReturns |x Int| -> x, Bool:
         value = x + 1
         return (value, value is > 0)
     zz

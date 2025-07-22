@@ -384,11 +384,6 @@ pub fn new_ast(
                 token_stream.advance();
             }
 
-            TokenKind::Import(path) => {
-                imports.push(path.to_owned());
-                token_stream.advance();
-            }
-
             TokenKind::Print => {
                 // Move past the print keyword
                 token_stream.advance();

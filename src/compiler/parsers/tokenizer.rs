@@ -1,7 +1,8 @@
-use std::path::PathBuf;
 use crate::compiler::compiler_errors::ErrorType;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
@@ -16,14 +17,17 @@ macro_rules! return_token {
     };
 }
 
-pub fn tokenize(source_code: &str, src_path: PathBuf) -> Result<TokenContext, CompileError> {
+pub fn tokenize<'a>(
+    source_code: &str,
+    src_path: &'a Path,
+) -> Result<TokenContext<'a>, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
     let imports_initial_capacity = settings::IMPORTS_CAPACITY;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code);
-    let mut imports = Vec::with_capacity(imports_initial_capacity);
+    let mut imports = HashSet::with_capacity(imports_initial_capacity);
 
     let template_nesting_level: &mut i64 = &mut 0;
 
@@ -50,7 +54,7 @@ pub fn tokenize(source_code: &str, src_path: PathBuf) -> Result<TokenContext, Co
 pub fn get_token_kind(
     stream: &mut TokenStream,
     template_nesting_level: &mut i64,
-    imports: &mut Vec<PathBuf>
+    imports: &mut HashSet<PathBuf>,
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
@@ -467,9 +471,8 @@ const END_KEYWORD: &str = "zz";
 fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
-    imports: &mut Vec<PathBuf>,
+    imports: &mut HashSet<PathBuf>,
 ) -> Result<Token, CompileError> {
-
     // Match variables or keywords
     loop {
         let is_not_eof = match stream.peek() {
@@ -515,8 +518,7 @@ fn keyword_or_variable(
             "copy" => return_token!(TokenKind::Copy, stream),
 
             "import" => {
-                let import = tokenize_import(stream)?;
-                imports.push(import);
+                imports.insert(tokenize_import(stream)?);
                 return_token!(TokenKind::Import, stream)
             }
 

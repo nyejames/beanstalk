@@ -13,9 +13,9 @@ pub mod basic_utility_functions;
 pub mod compiler_dev_logging;
 pub mod compiler_errors;
 pub mod datatypes;
+mod module_dependencies;
 pub mod release_optimizers;
 pub mod traits;
-mod module_dependencies;
 
 pub mod parsers {
     pub mod ast_nodes;
@@ -93,8 +93,17 @@ impl<'a> Compiler<'a> {
         source_code: &str,
         module_path: &Path,
     ) -> Result<AstBlock, CompileError> {
-        // TOKENIZER
-        let mut tokenizer_output = match tokenizer::tokenize(source_code) {
+        // -----------------------------
+        //          TOKENIZING
+        // -----------------------------
+        // At this stage,
+        // we are also collecting the list of imports for the module.
+        // This is so a dependency graph can start being built before the AST stage
+        // So modules are compiled to an AST in the correct order.
+        //
+        //
+
+        let mut tokenizer_output = match tokenizer::tokenize(source_code, module_path) {
             Ok(tokens) => tokens,
             Err(e) => return Err(e.with_file_path(PathBuf::from(module_path))),
         };

@@ -39,7 +39,7 @@ pub fn to_markdown(content: &str, default_tag: &str) -> String {
     let mut skip_parsing = false;
 
     for ch in chars {
-        // Special object replace character that signals to ignore parsing a section into markdown
+        // Special object replace character that signals to ignore parsing a section into Markdown
         // This is used to ignore nested templates that have already been parsed
         // And may not be mark down. e.g. raw strings
         if ch == HIDDEN_SKIP_CHAR {

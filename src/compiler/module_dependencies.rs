@@ -1,9 +1,11 @@
+use crate::compiler::CompileError;
+use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
+use crate::return_compiler_error;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use crate::return_syntax_error;
 
 // Helper struct to track module dependencies
 struct ModuleDependencies {
@@ -14,17 +16,13 @@ struct ModuleDependencies {
 }
 
 impl ModuleDependencies {
-
     // Creates a graph of which modules are requesting imports from other modules
     fn new(tokenized_modules: &[TokenContext]) -> Self {
-
         // Build dependency graph
-        let mut graph = HashMap::new();
+        let mut graph: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
         for module in tokenized_modules {
-            let mut deps = HashSet::new();
-            graph.insert(module.)
+            graph.insert(module.src_path.to_owned(), module.imports.to_owned());
         }
-
 
         ModuleDependencies {
             graph,
@@ -35,7 +33,7 @@ impl ModuleDependencies {
     }
 
     // Perform topological sort
-    fn sort(mut self) -> Result<Vec<PathBuf>, Error> {
+    fn sort(mut self) -> Result<Vec<PathBuf>, CompileError> {
         let nodes: Vec<_> = self.graph.keys().cloned().collect();
         for node in nodes {
             if !self.visited.contains(&node) {
@@ -46,18 +44,12 @@ impl ModuleDependencies {
     }
 
     // Depth-first search for a single node
-    fn visit_node(&mut self, node: &PathBuf) -> Result<(), Error> {
+    fn visit_node(&mut self, node: &PathBuf) -> Result<(), CompileError> {
         if self.temp_mark.contains(node) {
-            return_syntax_error!(
-
+            return_compiler_error!(
+                "Circular dependency detected inside: {}",
+                node.to_str().unwrap()
             )
-            return Err(Error {
-                msg: "Circular dependency detected".to_string(),
-                start_pos: TextLocation::default(),
-                end_pos: TextLocation::default(),
-                file_path: node.clone(),
-                error_type: ErrorType::Syntax,
-            });
         }
 
         if !self.visited.contains(node) {
@@ -80,7 +72,7 @@ impl ModuleDependencies {
 
 pub fn resolve_module_dependencies(
     modules: &[TemplateModule],
-) -> Result<(Vec<OutputModule>, Vec<Arg>), Error> {
+) -> Result<(Vec<OutputModule>, Vec<Arg>), CompileError> {
     let mut tokenised_modules: Vec<OutputModule> = Vec::new();
     let mut project_exports = Vec::new();
 

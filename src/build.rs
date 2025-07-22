@@ -74,7 +74,8 @@ pub fn build(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code) {
+            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path)
+            {
                 Ok(tokens) => tokens,
                 Err(e) => {
                     return Err(vec![e.with_file_path(config_path)]);
