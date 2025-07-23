@@ -1,11 +1,13 @@
+use std::collections::HashSet;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::wasm_codegen::wasm_emitter::WasmModule;
 use crate::settings::Config;
-use crate::{Flag, token_log};
-use std::collections::HashMap;
+use crate::Flag;
 use std::path::{Path, PathBuf};
+use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::tokens::TokenContext;
 
 #[allow(dead_code)]
 pub mod basic_utility_functions;
@@ -58,13 +60,13 @@ pub mod wasm_codegen {
 }
 
 pub struct OutputModule {
-    pub imports: Vec<PathBuf>,
+    pub imports: HashSet<PathBuf>,
     pub source_path: PathBuf,
     pub wasm: WasmModule,
 }
 
 impl OutputModule {
-    pub fn new(source_path: PathBuf, imports: Vec<PathBuf>) -> Self {
+    pub fn new(source_path: PathBuf, imports: HashSet<PathBuf>) -> Self {
         OutputModule {
             imports,
             source_path,
@@ -86,46 +88,42 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    // Can be parallelised for all files in a project,
-    // as there is no need linking or checking imports / imported types yet
-    pub fn source_to_ast(
+    /// -----------------------------
+    ///          TOKENIZING
+    /// -----------------------------
+    /// At this stage,
+    /// we are also collecting the list of imports for the module.
+    /// This is so a dependency graph can start being built before the AST stage
+    /// So modules are compiled to an AST in the correct order.
+    /// Can be parallelized for all files in a project,
+    /// as there is no need to check imports or types yet
+    pub fn source_to_tokens(
         &self,
         source_code: &str,
         module_path: &Path,
-    ) -> Result<AstBlock, CompileError> {
-        // -----------------------------
-        //          TOKENIZING
-        // -----------------------------
-        // At this stage,
-        // we are also collecting the list of imports for the module.
-        // This is so a dependency graph can start being built before the AST stage
-        // So modules are compiled to an AST in the correct order.
-        //
-        //
-
-        let mut tokenizer_output = match tokenizer::tokenize(source_code, module_path) {
-            Ok(tokens) => tokens,
-            Err(e) => return Err(e.with_file_path(PathBuf::from(module_path))),
-        };
-
-        token_log!(&tokenizer_output.tokens);
-
-        // AST
-        // Scope is the same as the module source path
-
-        // The AST modules now need to be ordered based on their dependencies.
-        // TODO later on: circular dependencies
-        let ast_context = ScopeContext::new(ContextKind::Module, module_path.to_owned());
-        let ast = match new_ast(&mut tokenizer_output, ast_context) {
-            Ok(block) => block,
-            Err(e) => {
-                return Err(e.with_file_path(PathBuf::from(module_path)));
-            }
-        };
-
-        Ok(ast)
+    ) -> Result<TokenContext, CompileError> {
+        match tokenizer::tokenize(source_code, module_path) {
+            Ok(tokens) => Ok(tokens),
+            Err(e) => Err(e.with_file_path(PathBuf::from(module_path))),
+        }
     }
 
-    // TODO
-    pub fn resolve_dependencies(&self, ast_block: AstBlock) {}
+    /// -----------------------------
+    ///         AST CREATION
+    /// -----------------------------
+    /// This assumes the modules are in the right order for compiling
+    /// Without any circular dependencies.
+    /// All imports for a module must already be in public_declarations.
+    /// So all the type-checking and folding can be performed correctly
+    pub fn tokens_to_ast(&self, module_tokens: &mut TokenContext, module_path: PathBuf, public_declarations: &[Arg]) -> Result<AstBlock, CompileError> {
+        let ast_context = ScopeContext::new(ContextKind::Module, module_path.to_owned(), public_declarations.to_owned());
+        match new_ast(module_tokens, ast_context) {
+
+            Ok(block) => Ok(block),
+
+            Err(e) => {
+                Err(e.with_file_path(PathBuf::from(module_path)))
+            }
+        }
+    }
 }

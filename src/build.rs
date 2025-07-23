@@ -2,9 +2,9 @@ use crate::compiler::Compiler;
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
-use crate::compiler::parsers::tokens::TextLocation;
+use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use crate::settings::{Config, get_config_from_ast};
-use crate::{Flag, return_file_errors, settings};
+use crate::{Flag, return_file_errors, settings, token_log};
 use colour::{dark_yellow_ln, green_ln, print_bold, print_ln_bold};
 use rayon::prelude::*;
 use std::fs;
@@ -123,32 +123,35 @@ pub fn build(
     dark_yellow_ln!("{:?}", project_config.src);
     let compiler = Compiler::new(&project_config, flags);
 
-    // Compile each module to an AST
+    // Compile each module to tokens and collect them all
     let time = Instant::now();
-    let ast_blocks: Vec<Result<AstBlock, CompileError>> = modules_to_parse
+    let project_tokens: Vec<Result<TokenContext, CompileError>> = modules_to_parse
         .par_iter()
-        .map(|module| compiler.source_to_ast(&module.source_code, &module.source_path))
+        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
 
-    if !flags.contains(&Flag::DisableTimers) {
-        print!("AST created in: ");
-        green_ln!("{:?}", time.elapsed());
-    }
-
-    // Handle any compilation errors and resolve dependencies
+    // Handle any compilation errors and sort modules into dependency order
+    // Once the compiler has created a dependency graph,
+    // each AST creation can also export it's public variables for type checking,
+    // and successive ast blocks can type check properly.
+    // Circular dependencies are disallowed
     let mut errors = Vec::new();
-    let mut valid_blocks = Vec::with_capacity(ast_blocks.len());
+    let mut valid_modules = Vec::with_capacity(project_tokens.len());
     let mut no_errors: bool = true; // Flag to skip compiling modules that were successful
-    for result in ast_blocks {
+
+    for result in project_tokens {
+        token_log!(&result.tokens);
+
         match result {
-            Ok(block) => {
+            Ok(module_tokens) => {
                 // If there haven't been any errors yet,
-                // then start collecting exports
+                // then parse their AST
                 if no_errors {
                     //
                     valid_blocks.push(block);
                 }
             }
+
             Err(err) => {
                 no_errors = false;
                 errors.push(err)
@@ -158,6 +161,11 @@ pub fn build(
 
     // TODO: RESOLVING MODULE DEPENDENCIES
     // let (mut tokenised_modules, project_exports) = resolve_module_dependencies(&modules_to_parse)?;
+
+    if !flags.contains(&Flag::DisableTimers) {
+        print!("AST created in: ");
+        green_ln!("{:?}", time.elapsed());
+    }
 
     Ok(project_config)
 }

@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 // Helper struct to track module dependencies
-struct ModuleDependencies {
+pub struct ModuleDependencies {
     graph: HashMap<PathBuf, HashSet<PathBuf>>, // module -> dependencies
     visited: HashSet<PathBuf>,
     temp_mark: HashSet<PathBuf>,
@@ -17,7 +17,7 @@ struct ModuleDependencies {
 
 impl ModuleDependencies {
     // Creates a graph of which modules are requesting imports from other modules
-    fn new(tokenized_modules: &[TokenContext]) -> Self {
+    pub(crate) fn new(tokenized_modules: &[Result<TokenContext, CompileError>]) -> Self {
         // Build dependency graph
         let mut graph: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
         for module in tokenized_modules {

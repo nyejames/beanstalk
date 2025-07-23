@@ -52,11 +52,11 @@ pub enum ContextKind {
 }
 
 impl ScopeContext {
-    pub fn new(kind: ContextKind, scope: PathBuf) -> ScopeContext {
+    pub fn new(kind: ContextKind, scope: PathBuf, declarations: Vec<Arg>) -> ScopeContext {
         ScopeContext {
             kind,
             scope,
-            declarations: Vec::new(),
+            declarations,
             returns: Vec::new(),
         }
     }
