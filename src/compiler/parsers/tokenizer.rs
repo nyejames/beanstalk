@@ -17,10 +17,10 @@ macro_rules! return_token {
     };
 }
 
-pub fn tokenize<'a>(
+pub fn tokenize(
     source_code: &str,
-    src_path: &'a Path,
-) -> Result<TokenContext<'a>, CompileError> {
+    src_path: &Path,
+) -> Result<TokenContext, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
     let imports_initial_capacity = settings::IMPORTS_CAPACITY;
@@ -48,7 +48,7 @@ pub fn tokenize<'a>(
     tokens.push(token);
 
     // First creation of TokenContext
-    Ok(TokenContext::new(src_path, tokens, imports))
+    Ok(TokenContext::new(src_path.to_owned(), tokens, imports))
 }
 
 pub fn get_token_kind(

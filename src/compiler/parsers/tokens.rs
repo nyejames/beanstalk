@@ -79,16 +79,16 @@ impl Token {
     }
 }
 
-pub struct TokenContext<'a> {
+pub struct TokenContext {
     pub tokens: Vec<Token>,
     pub imports: HashSet<PathBuf>,
-    pub src_path: &'a Path,
+    pub src_path: PathBuf,
     pub index: usize,
     pub length: usize,
 }
 
-impl TokenContext<'_> {
-    pub fn new(src_path: &Path, tokens: Vec<Token>, imports: HashSet<PathBuf>) -> TokenContext {
+impl TokenContext {
+    pub fn new(src_path: PathBuf, tokens: Vec<Token>, imports: HashSet<PathBuf>) -> TokenContext {
         TokenContext {
             length: tokens.len(),
             src_path,

@@ -15,7 +15,7 @@ pub mod basic_utility_functions;
 pub mod compiler_dev_logging;
 pub mod compiler_errors;
 pub mod datatypes;
-mod module_dependencies;
+pub(crate) mod module_dependencies;
 pub mod release_optimizers;
 pub mod traits;
 
@@ -115,14 +115,14 @@ impl<'a> Compiler<'a> {
     /// Without any circular dependencies.
     /// All imports for a module must already be in public_declarations.
     /// So all the type-checking and folding can be performed correctly
-    pub fn tokens_to_ast(&self, module_tokens: &mut TokenContext, module_path: PathBuf, public_declarations: &[Arg]) -> Result<AstBlock, CompileError> {
-        let ast_context = ScopeContext::new(ContextKind::Module, module_path.to_owned(), public_declarations.to_owned());
+    pub fn tokens_to_ast(&self, module_tokens: &mut TokenContext, public_declarations: &[Arg]) -> Result<AstBlock, CompileError> {
+        let ast_context = ScopeContext::new(ContextKind::Module, module_tokens.src_path.to_owned(), public_declarations.to_owned());
         match new_ast(module_tokens, ast_context) {
 
             Ok(block) => Ok(block),
 
             Err(e) => {
-                Err(e.with_file_path(PathBuf::from(module_path)))
+                Err(e.with_file_path(PathBuf::from(module_tokens.src_path.to_owned())))
             }
         }
     }

@@ -3,8 +3,9 @@ use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
+use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::settings::{Config, get_config_from_ast};
-use crate::{Flag, return_file_errors, settings, token_log};
+use crate::{Flag, return_file_errors, settings};
 use colour::{dark_yellow_ln, green_ln, print_bold, print_ln_bold};
 use rayon::prelude::*;
 use std::fs;
@@ -60,6 +61,8 @@ pub fn build(
         }
     };
 
+    // TODO: project global imports
+    // (config file imports that are available to the entire project without the need for importing explicitly)
     let mut global_imports: Vec<String> = Vec::new();
 
     match config {
@@ -74,8 +77,7 @@ pub fn build(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path)
-            {
+            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path) {
                 Ok(tokens) => tokens,
                 Err(e) => {
                     return Err(vec![e.with_file_path(config_path)]);
@@ -94,7 +96,7 @@ pub fn build(
             //     "html_meta",
             // ]);
 
-            let ast_context = ScopeContext::new(ContextKind::Config, config_path.to_owned());
+            let ast_context = ScopeContext::new(ContextKind::Config, config_path.to_owned(), Vec::new());
 
             let config_module = match new_ast(&mut tokenizer_output, ast_context) {
                 Ok(expr) => expr,
@@ -130,37 +132,30 @@ pub fn build(
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
 
-    // Handle any compilation errors and sort modules into dependency order
+    // Return any compilation errors and sort modules into dependency order
     // Once the compiler has created a dependency graph,
     // each AST creation can also export it's public variables for type checking,
     // and successive ast blocks can type check properly.
     // Circular dependencies are disallowed
-    let mut errors = Vec::new();
-    let mut valid_modules = Vec::with_capacity(project_tokens.len());
-    let mut no_errors: bool = true; // Flag to skip compiling modules that were successful
+    let mut sorted_modules = resolve_module_dependencies(project_tokens)?;
 
-    for result in project_tokens {
-        token_log!(&result.tokens);
+    // AST generation
+    let (project_asts, errors) = sorted_modules
+        .par_iter_mut()
+        .map(|module_tokens| compiler.tokens_to_ast(module_tokens, &[]))
+        // Split into vec of errors and vec of completed AST blocks
+        .partition(|result| result.is_ok());
 
-        match result {
-            Ok(module_tokens) => {
-                // If there haven't been any errors yet,
-                // then parse their AST
-                if no_errors {
-                    //
-                    valid_blocks.push(block);
-                }
-            }
-
-            Err(err) => {
-                no_errors = false;
-                errors.push(err)
-            }
-        }
+    // Return any errors that have been found so far
+    if !errors.is_empty() {
+        return Err(errors)
     }
 
-    // TODO: RESOLVING MODULE DEPENDENCIES
-    // let (mut tokenised_modules, project_exports) = resolve_module_dependencies(&modules_to_parse)?;
+    // Now we can combine the ASTs into one monolithic Wasm file.
+
+
+
+
 
     if !flags.contains(&Flag::DisableTimers) {
         print!("AST created in: ");

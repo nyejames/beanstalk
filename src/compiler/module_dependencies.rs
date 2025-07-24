@@ -1,69 +1,89 @@
 use crate::compiler::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
-use crate::return_compiler_error;
+use crate::return_rule_error;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // Helper struct to track module dependencies
-pub struct ModuleDependencies {
-    graph: HashMap<PathBuf, HashSet<PathBuf>>, // module -> dependencies
-    visited: HashSet<PathBuf>,
-    temp_mark: HashSet<PathBuf>,
-    sorted: Vec<PathBuf>,
+pub struct ModuleDependencies<'a> {
+    graph: HashMap<PathBuf, TokenContext>, // module src, module
+    visited: HashSet<&'a Path>,
+    temp_mark: HashSet<&'a Path>,
+    sorted: Vec<TokenContext>,
 }
 
-impl ModuleDependencies {
+impl ModuleDependencies<'_> {
     // Creates a graph of which modules are requesting imports from other modules
-    pub(crate) fn new(tokenized_modules: &[Result<TokenContext, CompileError>]) -> Self {
+    fn new(tokenized_modules: Vec<Result<TokenContext, CompileError>>) -> Result<Self, Vec<CompileError>> {
         // Build dependency graph
-        let mut graph: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
+        // And remove any errored modules
+        let number_of_modules = tokenized_modules.len();
+
+        let mut graph: HashMap<PathBuf, TokenContext> = HashMap::with_capacity(number_of_modules);
+        let mut errors: Vec<CompileError> = Vec::new();
         for module in tokenized_modules {
-            graph.insert(module.src_path.to_owned(), module.imports.to_owned());
-        }
-
-        ModuleDependencies {
-            graph,
-            visited: HashSet::new(),
-            temp_mark: HashSet::new(),
-            sorted: Vec::new(),
-        }
-    }
-
-    // Perform topological sort
-    fn sort(mut self) -> Result<Vec<PathBuf>, CompileError> {
-        let nodes: Vec<_> = self.graph.keys().cloned().collect();
-        for node in nodes {
-            if !self.visited.contains(&node) {
-                self.visit_node(&node)?;
+            match module {
+                Ok(module) => {
+                    graph.insert(module.src_path.to_owned(), module);
+                }
+                Err(e) => {
+                    errors.push(e)
+                }
             }
         }
+
+        Ok(ModuleDependencies {
+            graph,
+            visited: HashSet::with_capacity(number_of_modules),
+            temp_mark: HashSet::with_capacity(number_of_modules),
+            sorted: Vec::with_capacity(number_of_modules),
+        })
+    }
+
+    // Topological sort
+    fn sort(mut self) -> Result<Vec<TokenContext>, Vec<CompileError>> {
+        let mut errors = Vec::new();
+
+        for (path, module) in self.graph.iter_mut() {
+            if !self.visited.contains(&path) {
+                match self.visit_node(module.to_owned()) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        errors.push(e);
+                    }
+                }
+            }
+        }
+
         Ok(self.sorted)
     }
 
     // Depth-first search for a single node
-    fn visit_node(&mut self, node: &PathBuf) -> Result<(), CompileError> {
-        if self.temp_mark.contains(node) {
-            return_compiler_error!(
+    fn visit_node(&mut self, module: TokenContext) -> Result<(), CompileError> {
+        let node_path = &module.src_path;
+        if self.temp_mark.contains(&node_path) {
+            return_rule_error!(
+                TextLocation::default(),
+
+                // TODO: More detail for how to circumvent this
                 "Circular dependency detected inside: {}",
-                node.to_str().unwrap()
+                node_path.to_str().unwrap()
             )
         }
 
-        if !self.visited.contains(node) {
-            self.temp_mark.insert(node.clone());
+        if !self.visited.contains(node_path) {
+            self.temp_mark.insert(node_path);
 
-            if let Some(deps) = self.graph.get(node).cloned() {
+            if let Some(deps) = self.graph.get(&node_path) {
                 for dep in deps {
-                    self.visit_node(&dep)?;
+                    self.visit_node(dep)?;
                 }
             }
 
-            self.temp_mark.remove(node);
-            self.visited.insert(node.clone());
-            self.sorted.push(node.clone());
+            self.temp_mark.remove(&node_path);
+            self.visited.insert(&node_path);
+            self.sorted.push(module.to_owned());
         }
 
         Ok(())
@@ -71,47 +91,16 @@ impl ModuleDependencies {
 }
 
 pub fn resolve_module_dependencies(
-    modules: &[TemplateModule],
-) -> Result<(Vec<OutputModule>, Vec<Arg>), CompileError> {
-    let mut tokenised_modules: Vec<OutputModule> = Vec::new();
-    let mut project_exports = Vec::new();
+    modules: Vec<Result<TokenContext, CompileError>>,
+) -> Result<Vec<TokenContext>, Vec<CompileError>> {
 
     // First build dependency graph and get sorted order
-    let deps = ModuleDependencies::new(modules);
-    let sorted_paths = deps.sort()?;
+    let deps = match ModuleDependencies::new(modules) {
+        Ok(mods) => mods,
+        Err(errors) => return Err(errors),
+    };
 
-    // Process modules in dependency order
-    for path in sorted_paths {
-        let module = modules.iter().find(|m| m.source_path == path).unwrap();
-        let mut imports = HashMap::new();
+    let sorted_modules = deps.sort()?;
 
-        // Validate and collect imports
-        for import_path in &module.import_requests {
-            // Find the module that exports this import
-            for other_module in modules {
-                if let Some(tokens) = other_module.exports.get(import_path) {
-                    imports.insert(import_path.clone(), tokens.clone());
-                    break;
-                }
-            }
-        }
-
-        // Add module's exports to project_exports
-        for (export_name, ..) in &module.exports {
-            // TODO: Convert tokens to Arg with proper data type inference
-            project_exports.push(Arg {
-                name: export_name.clone(),
-                data_type: DataType::Inferred(false), // TODO: Infer proper type
-                value: ExpressionKind::None,
-            });
-        }
-
-        tokenised_modules.push(OutputModule::new(
-            module.output_path.to_owned(),
-            module.tokens.to_owned(),
-            module.source_path.to_owned(),
-        ));
-    }
-
-    Ok((tokenised_modules, project_exports))
+    Ok(sorted_modules)
 }
