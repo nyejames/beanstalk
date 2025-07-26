@@ -15,7 +15,7 @@ pub fn constant_fold(
     output_stack: Vec<AstNode>,
     current_type: DataType,
 ) -> Result<Expression, CompileError> {
-    let mut stack: Vec<AstNode> = Vec::new();
+    let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 
     for node in &output_stack {
         match &node.kind {

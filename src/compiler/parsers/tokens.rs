@@ -56,7 +56,7 @@ impl TextLocation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Token {
     pub kind: TokenKind,
     pub location: TextLocation,
@@ -79,6 +79,7 @@ impl Token {
     }
 }
 
+#[derive(Clone)]
 pub struct TokenContext {
     pub tokens: Vec<Token>,
     pub imports: HashSet<PathBuf>,

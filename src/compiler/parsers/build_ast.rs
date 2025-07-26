@@ -30,6 +30,7 @@ pub struct AstBlock {
     pub ast: Vec<AstNode>, // Body
     pub exports: Vec<Arg>, // Visible Top-level Variables
     pub imports: Vec<String>,
+    pub is_entry_point: bool,
 }
 
 #[derive(Clone)]
@@ -148,6 +149,7 @@ impl ScopeID {
 pub fn new_ast(
     token_stream: &mut TokenContext,
     mut context: ScopeContext,
+    is_entry_point: bool,
 ) -> Result<AstBlock, CompileError> {
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
@@ -363,7 +365,7 @@ pub fn new_ast(
                 // Probably move all this parsing to a new file in 'statements'
 
                 ast.push(AstNode {
-                    kind: NodeKind::If(condition, new_ast(token_stream, if_context.to_owned())?),
+                    kind: NodeKind::If(condition, new_ast(token_stream, if_context.to_owned(), false)?),
                     location: token_stream.current_location(),
                     scope: if_context.scope,
                 });
@@ -440,5 +442,6 @@ pub fn new_ast(
         ast,
         imports,
         exports,
+        is_entry_point
     })
 }

@@ -93,7 +93,7 @@ pub fn new_arg(
                 name: name.to_owned(),
                 value: Expression::function(
                     constructor_args,
-                    new_ast(token_stream, context)?,
+                    new_ast(token_stream, context, false)?,
                     return_types,
                     token_stream.current_location(),
                 ),
@@ -109,7 +109,7 @@ pub fn new_arg(
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function_without_signature(
-                    new_ast(token_stream, context)?,
+                    new_ast(token_stream, context, false)?,
                     token_stream.current_location(),
                 ),
             });

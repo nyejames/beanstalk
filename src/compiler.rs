@@ -1,13 +1,13 @@
-use std::collections::HashSet;
+use crate::Flag;
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
+use crate::compiler::parsers::tokens::TokenContext;
 use crate::compiler::wasm_codegen::wasm_emitter::WasmModule;
 use crate::settings::Config;
-use crate::Flag;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::tokens::TokenContext;
 
 #[allow(dead_code)]
 pub mod basic_utility_functions;
@@ -115,15 +115,22 @@ impl<'a> Compiler<'a> {
     /// Without any circular dependencies.
     /// All imports for a module must already be in public_declarations.
     /// So all the type-checking and folding can be performed correctly
-    pub fn tokens_to_ast(&self, module_tokens: &mut TokenContext, public_declarations: &[Arg]) -> Result<AstBlock, CompileError> {
-        let ast_context = ScopeContext::new(ContextKind::Module, module_tokens.src_path.to_owned(), public_declarations.to_owned());
-        match new_ast(module_tokens, ast_context) {
-
+    pub fn tokens_to_ast(
+        &self,
+        mut module_tokens: TokenContext,
+        public_declarations: &[Arg],
+    ) -> Result<AstBlock, CompileError> {
+        let ast_context = ScopeContext::new(
+            ContextKind::Module,
+            module_tokens.src_path.to_owned(),
+            public_declarations.to_owned(),
+        );
+        
+        let is_entry_point = self.project_config.entry_point == module_tokens.src_path;
+        
+        match new_ast(&mut module_tokens, ast_context, is_entry_point) {
             Ok(block) => Ok(block),
-
-            Err(e) => {
-                Err(e.with_file_path(PathBuf::from(module_tokens.src_path.to_owned())))
-            }
+            Err(e) => Err(e.with_file_path(PathBuf::from(module_tokens.src_path.to_owned()))),
         }
     }
 }

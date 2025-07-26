@@ -45,7 +45,10 @@ pub fn create_loop(
 
                         // create while loop
                         Ok(AstNode {
-                            kind: NodeKind::WhileLoop(condition, new_ast(token_stream, context)?),
+                            kind: NodeKind::WhileLoop(
+                                condition,
+                                new_ast(token_stream, context, false)?,
+                            ),
                             location: token_stream.current_location(),
                             scope,
                         })
@@ -117,7 +120,7 @@ pub fn create_loop(
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,
-                    new_ast(token_stream, context)?,
+                    new_ast(token_stream, context, false)?,
                 ),
                 location: token_stream.current_location(),
             })

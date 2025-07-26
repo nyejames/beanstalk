@@ -1,12 +1,13 @@
 use crate::compiler::Compiler;
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
+use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
-use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::settings::{Config, get_config_from_ast};
 use crate::{Flag, return_file_errors, settings};
 use colour::{dark_yellow_ln, green_ln, print_bold, print_ln_bold};
+use rayon::iter::Either;
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -77,7 +78,8 @@ pub fn build(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path) {
+            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path)
+            {
                 Ok(tokens) => tokens,
                 Err(e) => {
                     return Err(vec![e.with_file_path(config_path)]);
@@ -96,9 +98,10 @@ pub fn build(
             //     "html_meta",
             // ]);
 
-            let ast_context = ScopeContext::new(ContextKind::Config, config_path.to_owned(), Vec::new());
+            let ast_context =
+                ScopeContext::new(ContextKind::Config, config_path.to_owned(), Vec::new());
 
-            let config_module = match new_ast(&mut tokenizer_output, ast_context) {
+            let config_module = match new_ast(&mut tokenizer_output, ast_context, true) {
                 Ok(expr) => expr,
                 Err(e) => return Err(vec![e.with_file_path(config_path)]),
             };
@@ -137,25 +140,23 @@ pub fn build(
     // each AST creation can also export it's public variables for type checking,
     // and successive ast blocks can type check properly.
     // Circular dependencies are disallowed
-    let mut sorted_modules = resolve_module_dependencies(project_tokens)?;
+    let sorted_modules = resolve_module_dependencies(project_tokens)?;
 
     // AST generation
-    let (project_asts, errors) = sorted_modules
-        .par_iter_mut()
+    let (project_asts, errors): (Vec<AstBlock>, Vec<CompileError>) = sorted_modules
+        .into_par_iter()
         .map(|module_tokens| compiler.tokens_to_ast(module_tokens, &[]))
-        // Split into vec of errors and vec of completed AST blocks
-        .partition(|result| result.is_ok());
+        .partition_map(|result| match result {
+            Ok(ast) => Either::Left(ast),
+            Err(e) => Either::Right(e),
+        });
 
     // Return any errors that have been found so far
     if !errors.is_empty() {
-        return Err(errors)
+        return Err(errors);
     }
 
     // Now we can combine the ASTs into one monolithic Wasm file.
-
-
-
-
 
     if !flags.contains(&Flag::DisableTimers) {
         print!("AST created in: ");
