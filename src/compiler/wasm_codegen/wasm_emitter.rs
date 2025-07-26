@@ -1,5 +1,3 @@
-use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use leb128::write::unsigned;
 
 pub struct WasmModule {

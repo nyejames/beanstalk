@@ -39,7 +39,7 @@ pub fn new_template(
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
 
-        let inside_brackets = token == TokenKind::OpenParenthesis;
+        // let inside_brackets = token == TokenKind::OpenParenthesis;
 
         token_stream.advance();
 

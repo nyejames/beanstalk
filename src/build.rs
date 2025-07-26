@@ -1,12 +1,11 @@
-use crate::compiler::Compiler;
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use crate::settings::{Config, get_config_from_ast};
-use crate::{Flag, return_file_errors, settings};
-use colour::{dark_yellow_ln, green_ln, print_bold, print_ln_bold};
+use crate::{Compiler, Flag, return_file_errors, settings};
+use colour::{dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold};
 use rayon::iter::Either;
 use rayon::prelude::*;
 use std::fs;
@@ -18,7 +17,7 @@ pub struct InputModule {
     pub source_path: PathBuf,
 }
 
-pub fn build(
+pub fn build_project(
     entry_path: &Path,
     release_build: bool,
     flags: &[Flag],
@@ -54,6 +53,8 @@ pub fn build(
 
     // Full project with a config file
     } else {
+        dark_cyan_ln!("Reading project config...");
+
         let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
         let source_code = fs::read_to_string(&config_path);
         match source_code {
@@ -64,7 +65,7 @@ pub fn build(
 
     // TODO: project global imports
     // (config file imports that are available to the entire project without the need for importing explicitly)
-    let mut global_imports: Vec<String> = Vec::new();
+    let mut _global_imports: Vec<String> = Vec::new();
 
     match config {
         CompileType::SingleFile(code) => {
@@ -143,7 +144,7 @@ pub fn build(
     let sorted_modules = resolve_module_dependencies(project_tokens)?;
 
     // AST generation
-    let (project_asts, errors): (Vec<AstBlock>, Vec<CompileError>) = sorted_modules
+    let (_project_asts, errors): (Vec<AstBlock>, Vec<CompileError>) = sorted_modules
         .into_par_iter()
         .map(|module_tokens| compiler.tokens_to_ast(module_tokens, &[]))
         .partition_map(|result| match result {
@@ -156,12 +157,12 @@ pub fn build(
         return Err(errors);
     }
 
-    // Now we can combine the ASTs into one monolithic Wasm file.
-
     if !flags.contains(&Flag::DisableTimers) {
         print!("AST created in: ");
         green_ln!("{:?}", time.elapsed());
     }
+
+    // Now we can combine the ASTs into one monolithic Wasm file.
 
     Ok(project_config)
 }

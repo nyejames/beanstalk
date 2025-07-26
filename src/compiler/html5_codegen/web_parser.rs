@@ -9,7 +9,6 @@ use crate::compiler::html5_codegen::js_parser::combine_vec_to_js;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse_template};
-use crate::compiler::parsers::tokens::VarVisibility;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
     return_type_error, settings::BS_VAR_PREFIX,

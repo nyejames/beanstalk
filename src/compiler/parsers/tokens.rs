@@ -2,7 +2,7 @@ use crate::compiler::datatypes::DataType;
 use colour::red_ln;
 use std::collections::HashSet;
 use std::iter::Peekable;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]

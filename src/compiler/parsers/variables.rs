@@ -221,7 +221,7 @@ pub fn new_arg(
         _ => {
             return_syntax_error!(
                 token_stream.current_location(),
-                "Invalid operator: {:?} after variable: {}"
+                "Invalid operator: {:?} after variable: {}",
                 token_stream.tokens[token_stream.index],
                 name
             )

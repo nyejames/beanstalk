@@ -3,14 +3,13 @@ use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::settings::Config;
 use crate::{Flag, build, return_dev_server_error, settings};
-use colour::{blue_ln, dark_cyan_ln, green_ln_bold, print_bold, red_ln};
+use colour::{blue_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{
     fs::{self, metadata},
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
-    time::Instant,
 };
 
 pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileError>> {
@@ -26,7 +25,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileEr
     // Is checking to make sure the path is a directory
     let path = get_current_dir()?.join(path);
 
-    let mut project_config = build_project(&path, false, flags)?;
+    let mut project_config = build::build_project(&path, false, flags)?;
 
     let mut modified = SystemTime::UNIX_EPOCH;
 
@@ -108,7 +107,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified)? || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build_project(path, false, flags)?;
+                    build::build_project(path, false, flags)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";
@@ -190,23 +189,6 @@ fn handle_connection(
         Ok(_) => Ok(()),
         Err(e) => return_dev_server_error!(path, "Error writing response: {:?}", e),
     }
-}
-
-fn build_project(
-    build_path: &Path,
-    release: bool,
-    flags: &[Flag],
-) -> Result<Config, Vec<CompileError>> {
-    dark_cyan_ln!("Reading project config...");
-    let start = Instant::now();
-
-    let config = build::build(build_path, release, flags)?;
-
-    let duration = start.elapsed();
-    print!("\nConfig read in: ");
-    green_ln_bold!("{:?}", duration);
-
-    Ok(config)
 }
 
 fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, Vec<CompileError>> {

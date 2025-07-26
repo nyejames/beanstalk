@@ -1,4 +1,63 @@
-use crate::Flag;
+pub mod build;
+pub mod settings;
+
+pub mod cli;
+mod create_new_project;
+mod dev_server;
+mod file_output;
+
+mod compiler {
+    pub mod parsers {
+        pub mod ast_nodes;
+        pub mod build_ast;
+        pub mod collections;
+        mod create_template_node;
+        pub mod markdown;
+        pub mod expressions {
+            pub mod constant_folding;
+            pub mod eval_expression;
+            pub mod expression;
+            pub mod function_call_inline;
+            pub mod parse_expression;
+        }
+        pub mod statements {
+            pub mod functions;
+            pub mod loops;
+            pub mod structs;
+        }
+        pub mod builtin_methods;
+        pub mod template;
+
+        pub mod tokenizer;
+        pub mod tokens;
+        pub mod variables;
+    }
+    mod html5_codegen {
+        pub mod code_block_highlighting;
+        pub mod dom_hooks;
+        pub mod generate_html;
+        pub mod html_styles;
+        pub mod js_parser;
+        pub mod web_parser;
+    }
+
+    pub mod wasm_codegen {
+        pub mod wasm_emitter;
+        pub mod wasm_memory;
+        pub mod wat_to_wasm;
+    }
+
+    #[allow(dead_code)]
+    pub mod basic_utility_functions;
+
+    pub mod compiler_dev_logging;
+    pub mod compiler_errors;
+    pub mod datatypes;
+    pub mod module_dependencies;
+    pub mod release_optimizers;
+    pub mod traits;
+}
+
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
@@ -8,56 +67,6 @@ use crate::compiler::wasm_codegen::wasm_emitter::WasmModule;
 use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-
-#[allow(dead_code)]
-pub mod basic_utility_functions;
-
-pub mod compiler_dev_logging;
-pub mod compiler_errors;
-pub mod datatypes;
-pub(crate) mod module_dependencies;
-pub mod release_optimizers;
-pub mod traits;
-
-pub mod parsers {
-    pub mod ast_nodes;
-    pub mod build_ast;
-    pub mod collections;
-    mod create_template_node;
-    pub mod markdown;
-    pub mod expressions {
-        pub mod constant_folding;
-        pub mod eval_expression;
-        pub mod expression;
-        pub mod function_call_inline;
-        pub mod parse_expression;
-    }
-    pub mod statements {
-        pub mod functions;
-        pub mod loops;
-        pub mod structs;
-    }
-    pub mod builtin_methods;
-    pub mod template;
-
-    pub mod tokenizer;
-    pub mod tokens;
-    pub mod variables;
-}
-mod html5_codegen {
-    pub mod code_block_highlighting;
-    pub mod dom_hooks;
-    pub mod generate_html;
-    pub mod html_styles;
-    pub mod js_parser;
-    pub mod web_parser;
-}
-
-pub mod wasm_codegen {
-    pub mod wasm_emitter;
-    pub mod wasm_memory;
-    pub mod wat_to_wasm;
-}
 
 pub struct OutputModule {
     pub imports: HashSet<PathBuf>,
@@ -73,6 +82,13 @@ impl OutputModule {
             wasm: WasmModule::new(),
         }
     }
+}
+
+#[derive(PartialEq, Debug)]
+pub enum Flag {
+    ShowAst,
+    DisableWarnings,
+    DisableTimers,
 }
 
 pub struct Compiler<'a> {
@@ -125,9 +141,9 @@ impl<'a> Compiler<'a> {
             module_tokens.src_path.to_owned(),
             public_declarations.to_owned(),
         );
-        
+
         let is_entry_point = self.project_config.entry_point == module_tokens.src_path;
-        
+
         match new_ast(&mut module_tokens, ast_context, is_entry_point) {
             Ok(block) => Ok(block),
             Err(e) => Err(e.with_file_path(PathBuf::from(module_tokens.src_path.to_owned()))),

@@ -3,7 +3,7 @@ use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::template::{TemplateContent, Style};
+use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_rule_error;
 
@@ -159,7 +159,12 @@ impl Expression {
             location,
         }
     }
-    pub fn template(body: TemplateContent, styles: Style, id: String, location: TextLocation) -> Self {
+    pub fn template(
+        body: TemplateContent,
+        styles: Style,
+        id: String,
+        location: TextLocation,
+    ) -> Self {
         Self {
             data_type: DataType::Template(false),
             kind: ExpressionKind::Template(body, styles, id),
@@ -215,17 +220,17 @@ impl Expression {
                     Operator::Divide => {
                         // Handle division by zero and integer division
                         if *rhs_val == 0 {
-                            return return_rule_error!(self.location, "Cannot divide by zero");
-                        } else {
-                            ExpressionKind::Int(lhs_val / rhs_val)
+                            return return_rule_error!(self.location, "Cannot divide by zero")
                         }
+
+                        ExpressionKind::Int(lhs_val / rhs_val)
                     }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
                             return_rule_error!(self.location, "Cannot modulus by zero")
-                        } else {
-                            ExpressionKind::Int(lhs_val % rhs_val)
                         }
+
+                        ExpressionKind::Int(lhs_val % rhs_val)
                     }
                     Operator::Exponent => {
                         // For integer exponentiation, we need to be careful with negative exponents

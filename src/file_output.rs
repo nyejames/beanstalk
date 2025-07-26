@@ -1,8 +1,7 @@
-use crate::compiler::OutputModule;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::return_file_errors;
+use crate::{OutputModule, return_file_errors};
 use std::fs;
 use std::path::Path;
 use wasmparser::validate;

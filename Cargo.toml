@@ -9,6 +9,10 @@ name = "beanstalk"
 version = "0.0.1-alpha"
 edition = "2024"
 
+[[bin]]
+name = "bs"
+path = "src/main.rs"
+
 [dependencies]
 fs_extra = "1.3.0"
 colour = "2.1.0"
@@ -16,3 +20,6 @@ wat = "1.235.0"
 wasmparser = "0.235.0"
 rayon = "1.10.0"
 leb128 = "0.2.5"
+
+[dev-dependencies]
+wasmer = "6.1.0-rc.2"

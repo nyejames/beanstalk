@@ -2,7 +2,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
+use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::return_compiler_error;
 use std::path::PathBuf;

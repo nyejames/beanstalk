@@ -7,7 +7,7 @@ use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
-    return_syntax_error, return_type_error,
+    return_syntax_error,
 };
 
 // This function will turn a series of ast nodes into a Value enum.
