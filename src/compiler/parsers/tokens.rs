@@ -243,9 +243,7 @@ pub enum TokenKind {
     Component,
     Title,
     Date,
-    JS(String),   // JS codeblock
-    CSS(String),  // CSS codeblock
-    WASM(String), // WAT codeblock (for testing WASM)
+    WAT(String), // WAT codeblock (for testing WASM)
 
     // Scene Style properties
     Markdown,     // Makes the scene Markdown

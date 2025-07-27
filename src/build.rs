@@ -1,9 +1,10 @@
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::module_dependencies::resolve_module_dependencies;
+use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
-use crate::settings::{Config, get_config_from_ast};
+use crate::settings::{Config, EXPORTS_CAPACITY, get_config_from_ast};
 use crate::{Compiler, Flag, return_file_errors, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold};
 use rayon::iter::Either;
@@ -99,16 +100,15 @@ pub fn build_project(
             //     "html_meta",
             // ]);
 
-            let ast_context =
-                ScopeContext::new(ContextKind::Config, config_path.to_owned(), Vec::new());
+            let ast_context = ScopeContext::new(ContextKind::Config, config_path.to_owned(), &[]);
 
-            let config_module = match new_ast(&mut tokenizer_output, ast_context, true) {
-                Ok(expr) => expr,
+            let config_module_exports = match new_ast(&mut tokenizer_output, ast_context, true) {
+                Ok(module) => module.exports,
                 Err(e) => return Err(vec![e.with_file_path(config_path)]),
             };
 
             // If reading the config threw and error, get out of here.
-            if let Err(e) = get_config_from_ast(config_module, &mut project_config) {
+            if let Err(e) = get_config_from_ast(config_module_exports, &mut project_config) {
                 return Err(vec![e.with_file_path(config_path)]);
             }
 
@@ -127,7 +127,7 @@ pub fn build_project(
     // ----------------------------------
     print_bold!("\nCompiling: ");
     dark_yellow_ln!("{:?}", project_config.src);
-    let compiler = Compiler::new(&project_config, flags);
+    let compiler = Compiler::new(&project_config);
 
     // Compile each module to tokens and collect them all
     let time = Instant::now();
@@ -143,14 +143,25 @@ pub fn build_project(
     // Circular dependencies are disallowed
     let sorted_modules = resolve_module_dependencies(project_tokens)?;
 
-    // AST generation
-    let (_project_asts, errors): (Vec<AstBlock>, Vec<CompileError>) = sorted_modules
-        .into_par_iter()
-        .map(|module_tokens| compiler.tokens_to_ast(module_tokens, &[]))
-        .partition_map(|result| match result {
-            Ok(ast) => Either::Left(ast),
-            Err(e) => Either::Right(e),
-        });
+    // ----------------------------------
+    //          AST generation
+    // ----------------------------------
+
+    // Keep Track of new exported declarations (so modules importing them know their types)
+    let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
+    let mut errors: Vec<CompileError> = Vec::new();
+    let mut ast_blocks: Vec<AstBlock> = Vec::with_capacity(sorted_modules.len());
+    for module in sorted_modules {
+        match compiler.tokens_to_ast(module, &exported_declarations) {
+            Ok(parser_output) => {
+                exported_declarations.extend(parser_output.exports);
+                ast_blocks.push(parser_output.ast);
+            }
+            Err(e) => {
+                errors.push(e);
+            }
+        }
+    }
 
     // Return any errors that have been found so far
     if !errors.is_empty() {

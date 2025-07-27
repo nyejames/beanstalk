@@ -11,7 +11,7 @@ use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::compiler::parsers::variables::new_arg;
-use crate::return_syntax_error;
+use crate::{ast_log, return_syntax_error};
 
 // Arg names and types are required
 // Can have default values
@@ -333,6 +333,7 @@ pub fn create_function_call_arguments(
     context: &ScopeContext,
 ) -> Result<Vec<Expression>, CompileError> {
     // Starts at the first token after the function name
+    ast_log!("Creating function call arguments");
 
     // make sure there is an open parenthesis
     if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
@@ -350,7 +351,7 @@ pub fn create_function_call_arguments(
         if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
             return_syntax_error!(
                 token_stream.current_location(),
-                "Missing a closing parenthesis at the end of the function call: found a '{:?}' instead",
+                "This function does not accept any arguments, found '{:?}' instead",
                 token_stream.current_token_kind()
             )
         }
@@ -362,7 +363,9 @@ pub fn create_function_call_arguments(
             .map(|arg| arg.value.data_type.to_owned())
             .collect::<Vec<DataType>>();
 
-        create_multiple_expressions(token_stream, &context, false)
+        let call_context = context.new_child_expression(required_argument_types);
+
+        create_multiple_expressions(token_stream, &call_context, false)
     }
 }
 

@@ -1,7 +1,8 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::template::{TemplateContent, Style};
+use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
@@ -270,70 +271,6 @@ impl DataType {
         }
     }
 
-    pub fn to_string(&self) -> String {
-        match self {
-            DataType::Inferred(mutable) => {
-                format!("{} Inferred", if *mutable { "mutable" } else { "" })
-            }
-            DataType::CoerceToString(mutable) => {
-                format!("{} CoerceToString", if *mutable { "mutable" } else { "" })
-            }
-            DataType::Bool(mutable) => format!("{} Bool", if *mutable { "mutable" } else { "" }),
-            DataType::String(mutable) => {
-                format!("{} String", if *mutable { "mutable" } else { "" })
-            }
-            DataType::Float(mutable) => format!("{} Float", if *mutable { "mutable" } else { "" }),
-            DataType::Int(mutable) => format!("{} Int", if *mutable { "mutable" } else { "" }),
-            DataType::Decimal(mutable) => {
-                format!("{} Decimal", if *mutable { "mutable" } else { "" })
-            }
-            DataType::Collection(inner_type) => format!("{} Collection", inner_type.to_string()),
-            DataType::Args(args) => {
-                let mut arg_str = String::new();
-                for arg in args {
-                    arg_str.push_str(&format!(
-                        "{}: {}, ",
-                        arg.name,
-                        arg.value.data_type.to_string()
-                    ));
-                }
-                format!("{} Arguments({})", self.to_string(), arg_str)
-            }
-            DataType::Function(args, return_types) => {
-                let mut arg_str = String::new();
-                let mut returns_string = String::new();
-                for arg in args {
-                    arg_str.push_str(&format!(
-                        "{}: {}, ",
-                        arg.name,
-                        arg.value.data_type.to_string()
-                    ));
-                }
-                for return_type in return_types {
-                    returns_string.push_str(&format!("{}, ", return_type.to_string()));
-                }
-
-                format!("Block({} -> {})", arg_str, returns_string)
-            }
-            DataType::Template(mutable) => {
-                format!("{} Template", if *mutable { "mutable" } else { "" })
-            }
-            DataType::UnknownReference(name, ..) => format!("{} Pointer", name),
-            DataType::None => "None".to_owned(),
-            DataType::True => "True".to_owned(),
-            DataType::False => "False".to_owned(),
-            DataType::Range => "Range".to_owned(),
-            DataType::Option(inner_type) => format!("Option({})", inner_type.to_string()),
-            DataType::Choices(inner_types) => {
-                let mut inner_types_str = String::new();
-                for inner_type in inner_types {
-                    inner_types_str.push_str(&format!("{}, ", inner_type.to_string()));
-                }
-                format!("Choices({})", inner_types_str)
-            }
-        }
-    }
-
     pub fn get_zero_value(&self, location: TextLocation) -> Expression {
         match self {
             DataType::Float(_) => Expression::float(0.0, location),
@@ -349,6 +286,73 @@ impl DataType {
                 location,
             ),
             _ => Expression::none(),
+        }
+    }
+}
+
+impl Display for DataType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DataType::Inferred(mutable) => {
+                write!(f, "{} Inferred", if *mutable { "mutable" } else { "" })
+            }
+            DataType::CoerceToString(mutable) => {
+                write!(f, "{} CoerceToString", if *mutable { "mutable" } else { "" })
+            }
+            DataType::Bool(mutable) => write!(f, "{} Bool", if *mutable { "mutable" } else { "" }),
+            DataType::String(mutable) => {
+                write!(f, "{} String", if *mutable { "mutable" } else { "" })
+            }
+            DataType::Float(mutable) => write!(f, "{} Float", if *mutable { "mutable" } else { "" }),
+            DataType::Int(mutable) => write!(f, "{} Int", if *mutable { "mutable" } else { "" }),
+            DataType::Decimal(mutable) => {
+                write!(f, "{} Decimal", if *mutable { "mutable" } else { "" })
+            }
+            DataType::Collection(inner_type) => write!(f, "{inner_type} Collection"),
+            DataType::Args(args) => {
+                let mut arg_str = String::new();
+                for arg in args {
+                    arg_str.push_str(&format!(
+                        "{}: {}, ",
+                        arg.name,
+                        arg.value.data_type
+                    ));
+                }
+                write!(f, "{self:?} Arguments({arg_str})")
+            }
+            
+            DataType::Function(args, return_types) => {
+                let mut arg_str = String::new();
+                let mut returns_string = String::new();
+                for arg in args {
+                    arg_str.push_str(&format!(
+                        "{}: {}, ",
+                        arg.name,
+                        arg.value.data_type
+                    ));
+                }
+                for return_type in return_types {
+                    returns_string.push_str(&format!("{return_type}, "));
+                }
+
+                write!(f, "Function({arg_str} -> {returns_string})")
+            }
+            DataType::Template(mutable) => {
+                write!(f, "{} Template", if *mutable { "mutable" } else { "" })
+            }
+            DataType::UnknownReference(name, ..) => write!(f, "{name} Pointer"),
+            DataType::None => write!(f, "None"),
+            DataType::True => write!(f, "True"),
+            DataType::False => write!(f, "False"),
+            DataType::Range => write!(f, "Range"),
+            DataType::Option(inner_type) => write!(f, "Option({inner_type})"),
+            DataType::Choices(inner_types) => {
+                let mut inner_types_str = String::new();
+                for inner_type in inner_types {
+                    inner_types_str.push_str(&format!("{inner_type}"));
+                }
+                write!(f, "Choices({inner_types_str})")
+            }
         }
     }
 }

@@ -15,11 +15,10 @@ but by default a project will turn into one big wasm module.
 # Quick Synax Overview
 The specifics are not fully decided on, but some of the key things are:
 - Using 'zz' keyword to close scopes (Colon opens scopes).
-- No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for scenes.
+- No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for templates.
 - Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type.
 - Double dashes for single line comments (--)
-- @ symbol marks a function or field a the top level of a module as 'external', so it will be exported from the final wasm module.
 
 4 spaces are recommended for indentation. 
 
@@ -60,14 +59,14 @@ declarations with inferred types are private.
     char ~= '😊'
     raw_string ~= `hi`
 
-    scene ~= []
+    template ~= []
 
     bool ~= true
 
     mutable_collection ~= {}
     immutable_collection = {}
     
-    object_definition = |
+    struct_definition = |
         value Int,
         another_value Float,
     |

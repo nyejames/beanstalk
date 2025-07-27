@@ -8,9 +8,11 @@ use super::{
     expressions::parse_expression::create_expression,
 };
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
@@ -28,9 +30,21 @@ use std::path::PathBuf;
 pub struct AstBlock {
     pub scope: PathBuf,
     pub ast: Vec<AstNode>, // Body
-    pub exports: Vec<Arg>, // Visible Top-level Variables
-    pub imports: Vec<String>,
     pub is_entry_point: bool,
+}
+pub struct ParserOutput {
+    pub ast: AstBlock,
+    pub exports: Vec<Arg>,
+    pub warnings: Vec<CompilerWarning>,
+}
+impl ParserOutput {
+    fn new(ast: AstBlock, exports: Vec<Arg>, warnings: Vec<CompilerWarning>) -> ParserOutput {
+        ParserOutput {
+            ast,
+            exports,
+            warnings,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -53,11 +67,11 @@ pub enum ContextKind {
 }
 
 impl ScopeContext {
-    pub fn new(kind: ContextKind, scope: PathBuf, declarations: Vec<Arg>) -> ScopeContext {
+    pub fn new(kind: ContextKind, scope: PathBuf, declarations: &[Arg]) -> ScopeContext {
         ScopeContext {
             kind,
             scope,
-            declarations,
+            declarations: declarations.to_owned(),
             returns: Vec::new(),
         }
     }
@@ -74,7 +88,14 @@ impl ScopeContext {
         new_context.kind = ContextKind::Function;
         new_context.returns = returns.to_owned();
         new_context.scope.push(name);
+        new_context
+    }
 
+    pub fn new_child_expression(&self, returns: Vec<DataType>) -> ScopeContext {
+        let mut new_context = self.to_owned();
+        new_context.kind = ContextKind::Expression;
+        new_context.returns = returns;
+        new_context.scope.push("expression");
         new_context
     }
 
@@ -150,13 +171,17 @@ pub fn new_ast(
     token_stream: &mut TokenContext,
     mut context: ScopeContext,
     is_entry_point: bool,
-) -> Result<AstBlock, CompileError> {
+) -> Result<ParserOutput, CompileError> {
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
     let mut scope_id = ScopeID::new();
+
+    // TODO: All top level declarations are exports
     let mut exports = Vec::new();
-    let mut imports = Vec::new();
+
+    // TODO: Start adding warnings where possible
+    let mut warnings = Vec::new();
 
     // let start_pos = token_stream.current_location(); // Store start position for potential nodes
 
@@ -266,7 +291,7 @@ pub fn new_ast(
                             };
 
                             // Add the name to the scope
-                            scope.push(access.name.to_owned());
+                            scope.push(&access.name);
 
                             // Move past the name
                             token_stream.advance();
@@ -317,9 +342,6 @@ pub fn new_ast(
                         location: token_stream.current_location(),
                         scope: context.scope.to_owned(),
                     });
-
-                    // Move past the token that terminates this declaration (newline, comma, etc.)
-                    token_stream.advance();
                 }
             }
 
@@ -365,19 +387,13 @@ pub fn new_ast(
                 // Probably move all this parsing to a new file in 'statements'
 
                 ast.push(AstNode {
-                    kind: NodeKind::If(condition, new_ast(token_stream, if_context.to_owned(), false)?),
+                    kind: NodeKind::If(
+                        condition,
+                        new_ast(token_stream, if_context.to_owned(), false)?.ast,
+                    ),
                     location: token_stream.current_location(),
                     scope: if_context.scope,
                 });
-            }
-
-            TokenKind::JS(value) => {
-                ast.push(AstNode {
-                    kind: NodeKind::JS(value.clone()),
-                    location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
-                });
-                token_stream.advance();
             }
 
             // IGNORED TOKENS
@@ -395,7 +411,10 @@ pub fn new_ast(
                     "console.log",
                     &context.new_child_function(&scope_id.get_new(), &[]),
                     // Console.log does not return anything
-                    &[],
+                    &[Arg {
+                        name: String::new(),
+                        value: Expression::string(String::new(), token_stream.current_location()),
+                    }],
                     &[],
                 )?);
             }
@@ -437,11 +456,13 @@ pub fn new_ast(
         }
     }
 
-    Ok(AstBlock {
-        scope: context.scope,
-        ast,
-        imports,
+    Ok(ParserOutput::new(
+        AstBlock {
+            ast,
+            scope: context.scope,
+            is_entry_point,
+        },
         exports,
-        is_entry_point
-    })
+        warnings,
+    ))
 }

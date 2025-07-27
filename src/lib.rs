@@ -52,6 +52,7 @@ mod compiler {
 
     pub mod compiler_dev_logging;
     pub mod compiler_errors;
+    pub mod compiler_warnings;
     pub mod datatypes;
     pub mod module_dependencies;
     pub mod release_optimizers;
@@ -60,7 +61,9 @@ mod compiler {
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
+use crate::compiler::parsers::build_ast::{
+    AstBlock, ContextKind, ParserOutput, ScopeContext, new_ast,
+};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenContext;
 use crate::compiler::wasm_codegen::wasm_emitter::WasmModule;
@@ -93,15 +96,11 @@ pub enum Flag {
 
 pub struct Compiler<'a> {
     project_config: &'a Config,
-    flags: &'a [Flag],
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(project_config: &'a Config, flags: &'a [Flag]) -> Self {
-        Self {
-            project_config,
-            flags,
-        }
+    pub fn new(project_config: &'a Config) -> Self {
+        Self { project_config }
     }
 
     /// -----------------------------
@@ -135,18 +134,18 @@ impl<'a> Compiler<'a> {
         &self,
         mut module_tokens: TokenContext,
         public_declarations: &[Arg],
-    ) -> Result<AstBlock, CompileError> {
+    ) -> Result<ParserOutput, CompileError> {
         let ast_context = ScopeContext::new(
             ContextKind::Module,
             module_tokens.src_path.to_owned(),
-            public_declarations.to_owned(),
+            public_declarations,
         );
 
         let is_entry_point = self.project_config.entry_point == module_tokens.src_path;
 
         match new_ast(&mut module_tokens, ast_context, is_entry_point) {
             Ok(block) => Ok(block),
-            Err(e) => Err(e.with_file_path(PathBuf::from(module_tokens.src_path.to_owned()))),
+            Err(e) => Err(e.with_file_path(module_tokens.src_path.to_owned())),
         }
     }
 }

@@ -15,7 +15,7 @@ use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::parsers::variables::create_reference;
 use crate::compiler::traits::ContainsReferences;
-use crate::{new_template_context, return_syntax_error, return_type_error};
+use crate::{ast_log, new_template_context, return_syntax_error, return_type_error};
 use std::collections::HashMap;
 
 // For multiple returns or function calls
@@ -92,12 +92,16 @@ pub fn create_expression(
     let mut expression: Vec<AstNode> = Vec::new();
     // let mut number_union = get_any_number_datatype(false);
 
+    ast_log!("Parsing {} Expression", data_type.to_string());
+
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
     // DOES NOT MOVE TOKENS PAST THE CLOSING TOKEN
     let mut next_number_negative = false;
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
+        ast_log!("Parsing token (expression): {:?}", token);
+
         match token {
             TokenKind::CloseParenthesis => {
                 if consume_closing_parenthesis {
@@ -119,7 +123,7 @@ pub fn create_expression(
                 // Removed this at one point for a test caused a wonderful infinite loop
                 token_stream.advance();
 
-                let value = create_expression(token_stream, &context, data_type, true)?;
+                let value = create_expression(token_stream, context, data_type, true)?;
 
                 expression.push(AstNode {
                     kind: NodeKind::Reference(value),
@@ -174,6 +178,8 @@ pub fn create_expression(
             | TokenKind::Arrow
             | TokenKind::Colon
             | TokenKind::End => {
+                ast_log!("Breaking out of expression");
+
                 if consume_closing_parenthesis {
                     return_syntax_error!(
                         token_stream.current_location(),
@@ -188,6 +194,8 @@ pub fn create_expression(
             TokenKind::Newline => {
                 // Fine if inside parenthesis (not closed yet)
                 // Otherwise break out of the expression
+                ast_log!("Breaking out of expression with newline");
+
                 if consume_closing_parenthesis {
                     token_stream.skip_newlines();
                     continue;
@@ -226,7 +234,7 @@ pub fn create_expression(
             // Check if the name is a reference to another variable or function call
             TokenKind::Symbol(ref name, ..) => {
                 if let Some(arg) = context.find_reference(name) {
-                    expression.push(create_reference(token_stream, &arg, &context)?);
+                    expression.push(create_reference(token_stream, arg, context)?);
 
                     continue; // Will have moved onto the next token already
                 } else {
@@ -248,7 +256,7 @@ pub fn create_expression(
                 let location = token_stream.current_location();
                 expression.push(AstNode {
                     kind: NodeKind::Reference(Expression::float(float, location)),
-                    location: location,
+                    location,
                     scope: context.scope.to_owned(),
                 });
             }
@@ -265,7 +273,7 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Reference(Expression::int(int_value, location)),
                     scope: context.scope.to_owned(),
-                    location: location,
+                    location,
                 });
             }
 
@@ -307,7 +315,7 @@ pub fn create_expression(
                 let location = token_stream.current_location();
                 expression.push(AstNode {
                     kind: NodeKind::Expression(Expression::bool(value.to_owned(), location)),
-                    location: location,
+                    location,
                     scope: context.scope.to_owned(),
                 });
             }

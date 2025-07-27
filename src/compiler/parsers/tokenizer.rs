@@ -184,7 +184,7 @@ pub fn get_token_kind(
 
     // Compiler Directives
     if current_char == '#' {
-        return compiler_directive(&mut token_value, stream);
+        return compiler_directive(&mut token_value, stream, imports);
     }
 
     // Check for string literals
@@ -459,7 +459,7 @@ pub fn get_token_kind(
 
     if current_char.is_alphabetic() {
         token_value.push(current_char);
-        return keyword_or_variable(&mut token_value, stream, imports);
+        return keyword_or_variable(&mut token_value, stream);
     }
 
     return_syntax_error!(
@@ -469,13 +469,13 @@ pub fn get_token_kind(
     )
 }
 
-// Nested function because may need multiple searches for variables
 const END_KEYWORD: &str = "zz";
+const PRINT_KEYWORD: &str = "io";
+const LOG_KEYWORD: &str = "log";
 
 fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
-    imports: &mut HashSet<PathBuf>,
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
     loop {
@@ -510,16 +510,17 @@ fn keyword_or_variable(
             "as" => return_token!(TokenKind::As, stream),
             "copy" => return_token!(TokenKind::Copy, stream),
 
-            "import" => {
-                imports.insert(tokenize_import(stream)?);
-                return_token!(TokenKind::Import, stream)
-            }
+            // Built-In functions
+            LOG_KEYWORD => return_token!(TokenKind::Log, stream),
+            PRINT_KEYWORD => return_token!(TokenKind::Print, stream),
 
             // Logical
             "is" => return_token!(TokenKind::Is, stream),
             "not" => return_token!(TokenKind::Not, stream),
             "and" => return_token!(TokenKind::And, stream),
             "or" => return_token!(TokenKind::Or, stream),
+
+            "async" => return_token!(TokenKind::Async, stream),
 
             // Data Types
             "true" | "True" => return_token!(TokenKind::BoolLiteral(true), stream),
@@ -532,9 +533,6 @@ fn keyword_or_variable(
 
             "None" => return_token!(TokenKind::DatatypeLiteral(DataType::None), stream),
 
-            "async" => return_token!(TokenKind::Async, stream),
-
-            // Scene-related keywords
             "Template" => return_token!(
                 TokenKind::DatatypeLiteral(DataType::Template(false)),
                 stream
@@ -561,6 +559,7 @@ fn keyword_or_variable(
 fn compiler_directive(
     token_value: &mut String,
     stream: &mut TokenStream,
+    imports: &mut HashSet<PathBuf>,
 ) -> Result<Token, CompileError> {
     loop {
         if stream
@@ -572,11 +571,15 @@ fn compiler_directive(
         }
 
         match token_value.as_str() {
+            // Import Statement
+            "import" => {
+                imports.insert(tokenize_import(stream)?);
+                return_token!(TokenKind::Import, stream)
+            }
+
             // Built-in functions
-            "io" => return_token!(TokenKind::Print, stream),
             "assert" => return_token!(TokenKind::Assert, stream),
             "panic" => return_token!(TokenKind::Panic, stream),
-            "log" => return_token!(TokenKind::Log, stream),
 
             // Compiler settings
             "settings" => return_token!(TokenKind::Settings, stream),
@@ -584,9 +587,7 @@ fn compiler_directive(
             "date" => return_token!(TokenKind::Date, stream),
 
             // External language blocks
-            "JS" => return_token!(TokenKind::JS(string_block(stream)?), stream),
-            "WASM" => return_token!(TokenKind::WASM(string_block(stream)?), stream),
-            "CSS" => return_token!(TokenKind::CSS(string_block(stream)?), stream),
+            "WAT" => return_token!(TokenKind::WAT(string_block(stream)?), stream),
 
             // Scene Style properties
             "markdown" => return_token!(TokenKind::Markdown, stream),

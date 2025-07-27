@@ -18,6 +18,31 @@ impl CompileError {
 
         self
     }
+    pub fn new_rule_error(msg: String, location: TextLocation) -> Self {
+        CompileError {
+            msg,
+            location,
+            error_type: ErrorType::Rule,
+            file_path: PathBuf::new(),
+        }
+    }
+    pub fn new_type_error(msg: String, location: TextLocation) -> Self {
+        CompileError {
+            msg,
+            location,
+            error_type: ErrorType::Type,
+            file_path: PathBuf::new(),
+        }
+    }
+    pub fn new_syntax_error(msg: String, location: TextLocation) -> Self {
+        CompileError {
+            msg,
+            location,
+            error_type: ErrorType::Syntax,
+            file_path: PathBuf::new(),
+        }
+    }
+
     pub fn new_thread_panic(msg: String) -> Self {
         CompileError {
             msg,
