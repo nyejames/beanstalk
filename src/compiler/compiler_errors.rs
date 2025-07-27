@@ -276,9 +276,6 @@ pub fn print_formatted_error(e: CompileError) {
             eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
             e_yellow!("COMPILER BUG - ");
             e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
-
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
         }
 
         ErrorType::DevServer => {
@@ -293,7 +290,7 @@ pub fn print_formatted_error(e: CompileError) {
 
     e_red_ln!("  {}", e.msg);
 
-    println!("\n{}", line);
+    println!("\n{line}");
 
     // spaces before the relevant part of the line
     print!(

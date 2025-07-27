@@ -9,7 +9,7 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::{return_syntax_error, settings};
+use crate::{return_syntax_error, settings, token_log};
 
 macro_rules! return_token {
     ($kind:expr, $stream:expr $(,)?) => {
@@ -17,10 +17,7 @@ macro_rules! return_token {
     };
 }
 
-pub fn tokenize(
-    source_code: &str,
-    src_path: &Path,
-) -> Result<TokenContext, CompileError> {
+pub fn tokenize(source_code: &str, src_path: &Path) -> Result<TokenContext, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
     let imports_initial_capacity = settings::IMPORTS_CAPACITY;
@@ -37,6 +34,9 @@ pub fn tokenize(
     );
 
     loop {
+        #[cfg(feature = "show_tokens")]
+        token_log!(token);
+
         if token.kind == TokenKind::EOF {
             break;
         }
@@ -63,6 +63,9 @@ pub fn get_token_kind(
 
     let mut token_value: String = String::new();
 
+    #[cfg(feature = "show_char_stream")]
+    green_ln!("get_token_kind starting with: '{current_char}'");
+
     // Check for raw strings (backticks)
     // Also used in scenes for raw outputs
     if current_char == '`' {
@@ -83,7 +86,7 @@ pub fn get_token_kind(
 
     if current_char == '\n' {
         return_token!(TokenKind::Newline, stream);
-    } else if current_char == 'r' {
+    } else if current_char == '\r' {
         if stream.peek() == Some(&'\n') {
             stream.next();
             return_token!(TokenKind::Newline, stream);
@@ -262,11 +265,13 @@ pub fn get_token_kind(
                 while let Some(ch) = stream.peek() {
                     if ch == &'\n' {
                         stream.next();
-                        return_token!(TokenKind::Comment, stream);
+                        break;
                     }
 
                     stream.next();
                 }
+
+                return_token!(TokenKind::Comment, stream);
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -454,7 +459,6 @@ pub fn get_token_kind(
 
     if current_char.is_alphabetic() {
         token_value.push(current_char);
-
         return keyword_or_variable(&mut token_value, stream, imports);
     }
 
@@ -475,23 +479,12 @@ fn keyword_or_variable(
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
     loop {
-        let is_not_eof = match stream.peek() {
-            // If there is a char that is not None
-            // And is an underscore or alphabetic, add it to the token value
-            Some(char) => {
-                if char.is_alphanumeric() || *char == '_' {
-                    token_value.push(stream.next().unwrap());
-                    continue;
-                }
-
-                return_syntax_error!(
-                    stream.new_location(),
-                    "Unexpected end of file after : '{}'",
-                    token_value
-                )
-            }
-            None => false,
-        };
+        if let Some(char) = stream.peek()
+            && (char.is_alphanumeric() || *char == '_')
+        {
+            token_value.push(stream.next().unwrap());
+            continue;
+        }
 
         // Codeblock tokenizing - removed for now
         // if tokenize_mode == &TokenizeMode::SceneHead && token_value == "Code" {
@@ -551,14 +544,14 @@ fn keyword_or_variable(
         }
 
         // VARIABLE
-        if is_not_eof && is_valid_identifier(token_value) {
+        if is_valid_identifier(token_value) {
             // Check if this declaration has any modifiers in front of it
             return_token!(TokenKind::Symbol(token_value.to_string()), stream);
         } else {
             // Failing all of that, this is an invalid variable name
             return_syntax_error!(
                 stream.new_location(),
-                "Invalid variable name: '{}'",
+                "Invalid variable name or keyword: '{}'",
                 token_value
             )
         }

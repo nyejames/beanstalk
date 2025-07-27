@@ -6,8 +6,8 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
-    compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
-    return_syntax_error,
+    compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
+    return_compiler_error, return_syntax_error,
 };
 
 // This function will turn a series of ast nodes into a Value enum.
@@ -18,6 +18,8 @@ pub fn evaluate_expression(
     current_type: &mut DataType,
 ) -> Result<Expression, CompileError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
+
+    eval_log!("Evaluating expression: {:#?}", nodes);
 
     // SHUNTING YARD ALGORITHM
     let mut output_queue: Vec<AstNode> = Vec::new();
@@ -139,6 +141,8 @@ pub fn evaluate_expression(
             while let Some(operator) = operators_stack.pop() {
                 output_queue.push(operator);
             }
+
+            eval_log!("Attempting to Fold: {:#?}", output_queue);
 
             // Evaluate all constants in the maths expression
             constant_fold(output_queue, current_type.to_owned())

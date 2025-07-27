@@ -1,4 +1,5 @@
 [features]
+show_char_stream = []
 show_tokens = []
 verbose_ast_logging = []
 verbose_eval_logging = []

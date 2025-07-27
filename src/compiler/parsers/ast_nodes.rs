@@ -108,7 +108,9 @@ impl AstNode {
 
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::Reference(value, ..) | NodeKind::Declaration(_, value, ..) => {
+            NodeKind::Reference(value, ..) | 
+            NodeKind::Declaration(_, value, ..) | 
+            NodeKind::Expression(value, ..) => {
                 Ok(value.to_owned())
             }
             _ => return_compiler_error!(

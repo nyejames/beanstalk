@@ -12,7 +12,8 @@ use std::{
 
 enum Command {
     NewHTMLProject(PathBuf),
-    Dev(PathBuf), // Runs local dev server
+    Build(PathBuf), // Builds a file or project in development mode
+    Dev(PathBuf),   // Runs local dev server
     Release(PathBuf),
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
     Help,
@@ -71,22 +72,11 @@ pub fn start_cli() {
             }
         }
 
+        Command::Build(path) => {
+            build_project(&path, false, &flags);
+        }
         Command::Release(path) => {
-            let start = Instant::now();
-
-            // TODO - parse config file instead of using default config
-            match build::build_project(&path, true, &flags) {
-                Ok(_) => {
-                    let duration = start.elapsed();
-                    grey_ln!("------------------------------------");
-                    print!("\nProject built in: ");
-                    green_ln_bold!("{:?}", duration);
-                }
-                Err(e) => {
-                    e_red_ln!("Errors while building project: \n");
-                    print_errors(e);
-                }
-            }
+            build_project(&path, true, &flags);
         }
 
         Command::Dev(ref path) => {
@@ -119,6 +109,8 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     let command = args.first().map(String::as_str);
 
     match command {
+        Some("help") => Ok(Command::Help),
+
         Some("new") => {
             // Check type of project
             match args.get(1).map(String::as_str) {
@@ -140,16 +132,26 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             }
         }
 
+        Some("build") => {
+            let entry_path = env::current_dir()
+                .map_err(|e| format!("Error getting current directory: {:?}", e))?;
+
+            match args.get(1).map(String::as_str) {
+                Some(string) => Ok(Command::Build(entry_path.join(string))),
+                _ => {
+                    // Return the current working directory path
+                    Ok(Command::Build(entry_path))
+                }
+            }
+        }
+
         Some("release") => {
             let entry_path = env::current_dir()
                 .map_err(|e| format!("Error getting current directory: {:?}", e))?;
 
             match args.get(1).map(String::as_str) {
                 Some(string) => Ok(Command::Release(entry_path.join(string))),
-                _ => {
-                    // Return current working directory path
-                    Ok(Command::Release(entry_path))
-                }
+                _ => Ok(Command::Release(entry_path)),
             }
         }
 
@@ -176,6 +178,23 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         },
 
         _ => Err(format!("Invalid command: '{}'", command.unwrap())),
+    }
+}
+
+fn build_project(path: &Path, release_build: bool, flags: &Vec<Flag>) {
+    let start = Instant::now();
+
+    match build::build_project(path, release_build, flags) {
+        Ok(_) => {
+            let duration = start.elapsed();
+            grey_ln!("------------------------------------");
+            print!("\nProject built in: ");
+            green_ln_bold!("{:?}", duration);
+        }
+        Err(e) => {
+            e_red_ln!("Errors while building project: \n");
+            print_errors(e);
+        }
     }
 }
 

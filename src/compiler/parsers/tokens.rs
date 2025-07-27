@@ -151,6 +151,7 @@ impl TokenContext {
             // Can't advance past End of File
             &TokenKind::EOF => {
                 // Show a warning for compiler development purposes
+                #[cfg(feature = "show_tokens")]
                 red_ln!("Compiler tried to advance past EOF");
             }
 

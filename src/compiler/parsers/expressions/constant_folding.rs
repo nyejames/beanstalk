@@ -4,7 +4,7 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::return_syntax_error;
+use crate::{eval_log, return_syntax_error};
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln_bold, red_ln};
 
@@ -70,8 +70,10 @@ pub fn constant_fold(
         }
     }
 
+    eval_log!("Stack after folding: {:#?}", stack);
+
     if stack.len() == 1 {
-        return Ok(stack[0].get_expr()?);
+        return stack[0].get_expr();
     }
 
     if stack.is_empty() {

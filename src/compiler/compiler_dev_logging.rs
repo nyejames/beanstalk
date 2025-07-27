@@ -7,26 +7,8 @@ use colour::{blue_ln, blue_ln_bold, cyan_ln, green_bold, green_ln, green_ln_bold
 #[macro_export]
 #[cfg(feature = "show_tokens")]
 macro_rules! token_log {
-    ($tokens:expr) => {
-        for token in tokens {
-            match token.kind {
-                TokenKind::TemplateHead | TokenKind::TemplateClose => {
-                    e_blue_ln_bold!("{}", token.to_string());
-                }
-
-                TokenKind::Empty | TokenKind::Newline => {
-                    e_grey_ln!("{}", token.to_string());
-                }
-
-                // Ignore whitespace in test output
-                // Token::Whitespace => {}
-                _ => {
-                    e_println!("{}", token.to_string());
-                }
-            }
-        }
-
-        e_println!("\n");
+    ($token:expr) => {
+        eprintln!("{}", $token.to_string())
     };
 }
 
