@@ -14,6 +14,12 @@ pub struct WasmModule {
     data_section: Vec<u8>,
 }
 
+impl Default for WasmModule {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WasmModule {
     pub fn new() -> Self {
         Self {
@@ -38,7 +44,7 @@ impl WasmModule {
 
     pub fn finish(self) -> Vec<u8> {
         let mut out = Vec::with_capacity(
-            // estimate sum of all sections and some LEB overhead
+            // estimate the sum of all sections and some LEB overhead
             8 // Header
                 + self.type_section.len()
                 + self.import_section.len()

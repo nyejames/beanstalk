@@ -1,8 +1,0 @@
--- Generic Test file for messing around with things
-result = 1 + 1
-
-func |result Int|:
-    io(result + 1)
-zz
-
-func(result)

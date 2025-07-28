@@ -9,6 +9,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use crate::compiler_tests::run_all_test_cases;
 
 enum Command {
     NewHTMLProject(PathBuf),
@@ -17,6 +18,7 @@ enum Command {
     Release(PathBuf),
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
     Help,
+    CompilerTests,
 }
 
 pub fn start_cli() {
@@ -102,6 +104,10 @@ pub fn start_cli() {
                 }
             }
         }
+
+        Command::CompilerTests => {
+            run_all_test_cases();
+        }
     }
 }
 
@@ -176,6 +182,8 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             }
             None => Ok(Command::Wat(PathBuf::from("../../test_output/test.wat"))),
         },
+
+        Some("tests") => Ok(Command::CompilerTests),
 
         _ => Err(format!("Invalid command: '{}'", command.unwrap())),
     }

@@ -173,6 +173,9 @@ pub fn build_project(
         green_ln!("{:?}", time.elapsed());
     }
 
+    // ----------------------------------
+    //          Wasm generation
+    // ----------------------------------
     // Now we can combine the ASTs into one monolithic Wasm file.
 
     Ok(project_config)

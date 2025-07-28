@@ -229,7 +229,12 @@ pub enum TokenKind {
     EOF,                 // End of the file
 
     // Module Import/Export
-    Import, // Directed through different path so not needed after tokenizer.
+    Import, // Directed through a different path so not needed after tokenizer.
+
+    // For exporting functions or variables outside the final module.
+    // Top level declarations are public to the project automatically,
+    // So this has nothing to do with internal visibility.
+    Export,
 
     // HTML project compiler directives
     Print,

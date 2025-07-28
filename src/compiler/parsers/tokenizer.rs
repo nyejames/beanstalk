@@ -576,6 +576,10 @@ fn compiler_directive(
                 imports.insert(tokenize_import(stream)?);
                 return_token!(TokenKind::Import, stream)
             }
+            // For exporting functions or constants out of the final Wasm module
+            "export" => {
+                return_token!(TokenKind::Export, stream)
+            }
 
             // Built-in functions
             "assert" => return_token!(TokenKind::Assert, stream),

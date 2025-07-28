@@ -270,7 +270,7 @@ pub fn print_formatted_error(e: CompileError) {
         }
 
         ErrorType::Type => {
-            eprint!("\n( ͡° ͜ʖ ͡°) ");
+            eprint!("\n(ಠ_ಠ) ");
             e_dark_magenta!("{}", relative_dir);
             eprintln!(" ( ._. ) ");
 

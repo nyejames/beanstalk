@@ -21,6 +21,4 @@ wat = "1.235.0"
 wasmparser = "0.235.0"
 rayon = "1.10.0"
 leb128 = "0.2.5"
-
-[dev-dependencies]
 wasmer = "6.1.0-rc.2"
