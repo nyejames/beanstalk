@@ -7,7 +7,6 @@ use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use crate::settings::{Config, EXPORTS_CAPACITY, get_config_from_ast};
 use crate::{Compiler, Flag, return_file_errors, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold};
-use rayon::iter::Either;
 use rayon::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,11 +17,16 @@ pub struct InputModule {
     pub source_path: PathBuf,
 }
 
+pub struct Project {
+    pub config: Config,
+    pub wasm: Vec<u8>,
+}
+
 pub fn build_project(
     entry_path: &Path,
     release_build: bool,
     flags: &[Flag],
-) -> Result<Config, Vec<CompileError>> {
+) -> Result<Project, Vec<CompileError>> {
     // Create a new PathBuf from the entry_path
     let entry_dir = match std::env::current_dir() {
         Ok(dir) => dir.join(entry_path),
@@ -45,7 +49,7 @@ pub fn build_project(
     }
 
     // Single BS file
-    let config = if entry_dir.extension() == Some("bs".as_ref()) {
+    let project_config_type = if entry_dir.extension() == Some("bs".as_ref()) {
         let source_code = fs::read_to_string(&entry_dir);
         match source_code {
             Ok(content) => CompileType::SingleFile(content),
@@ -68,7 +72,7 @@ pub fn build_project(
     // (config file imports that are available to the entire project without the need for importing explicitly)
     let mut _global_imports: Vec<String> = Vec::new();
 
-    match config {
+    match project_config_type {
         CompileType::SingleFile(code) => {
             modules_to_parse.push(InputModule {
                 source_code: code,
@@ -168,21 +172,33 @@ pub fn build_project(
         return Err(errors);
     }
 
+    // Combine all the ASTs together.
+    // This will involve replacing the string symbols with their full path
+
     if !flags.contains(&Flag::DisableTimers) {
         print!("AST created in: ");
         green_ln!("{:?}", time.elapsed());
     }
 
+    // -----------------------------------
+    // IR generation and lifetime analysis
+    // -----------------------------------
+
+    // TODO
     // ----------------------------------
     //          Wasm generation
     // ----------------------------------
-    // Now we can combine the ASTs into one monolithic Wasm file.
 
-    Ok(project_config)
+    let wasm = Vec::new();
+
+    Ok(Project {
+        config: project_config,
+        wasm,
+    })
 }
 
 // Look for every subdirectory inside the dir and add all .bs files to the source_code_to_parse
-pub fn add_bs_files_to_parse(
+fn add_bs_files_to_parse(
     source_code_to_parse: &mut Vec<InputModule>,
     output_dir: &Path,
     project_root_dir: &Path,

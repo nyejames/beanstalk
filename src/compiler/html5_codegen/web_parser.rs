@@ -160,7 +160,7 @@ pub fn parse(
 
                             _ => {
                                 return_type_error!(
-                                    node.location,
+                                    node.location.to_owned(),
                                     "Scene declaration must be a scene",
                                 )
                             }
@@ -205,7 +205,7 @@ pub fn parse(
 
                             _ => {
                                 return_type_error!(
-                                    node.location,
+                                    node.location.to_owned(),
                                     "Function declaration must be a function",
                                 )
                             }

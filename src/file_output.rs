@@ -1,16 +1,16 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::{OutputModule, return_file_errors};
+use crate::{OutputModule, return_file_errors, return_file_error};
 use std::fs;
 use std::path::Path;
 use wasmparser::validate;
 
-pub fn write_wasm_module(module: OutputModule, file_path: &Path) -> Result<(), Vec<CompileError>> {
+pub fn write_wasm_module(module: OutputModule, file_path: &Path) -> Result<(), CompileError> {
     // If the output directory does not exist, create it
     let parent_dir = match file_path.parent() {
         Some(dir) => dir,
-        None => return_file_errors!(
+        None => return_file_error!(
             file_path,
             "Error getting parent directory of output file when writing: {:?}",
             file_path
@@ -21,7 +21,7 @@ pub fn write_wasm_module(module: OutputModule, file_path: &Path) -> Result<(), V
     if fs::metadata(parent_dir).is_err() {
         match fs::create_dir_all(parent_dir) {
             Ok(_) => {}
-            Err(e) => return_file_errors!(file_path, "Error creating directory: {:?}", e),
+            Err(e) => return_file_error!(file_path, "Error creating directory: {:?}", e),
         }
     }
 
@@ -36,16 +36,16 @@ pub fn write_wasm_module(module: OutputModule, file_path: &Path) -> Result<(), V
     //     Err(e) => return_file_error!(module.output_path, "Error writing JS file: {:?}", e),
     // };
 
-    let wasm = module.wasm.finish();
+    let wasm = module.wasm.finish()?;
 
     if let Err(e) = validate(&wasm) {
-        return_file_errors!(file_path, "Error validating WASM module: {:?}", e)
+        return_file_error!(file_path, "Error validating WASM module: {:?}", e)
     }
 
     // Write the wasm file to the same directory
     match fs::write(file_path.with_extension("wasm"), wasm) {
         Ok(_) => {}
-        Err(e) => return_file_errors!(file_path, "Error writing WASM file: {:?}", e),
+        Err(e) => return_file_error!(file_path, "Error writing WASM file: {:?}", e),
     }
 
     Ok(())

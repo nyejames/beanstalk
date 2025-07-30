@@ -14,7 +14,7 @@ You access one of the choices using double colon also.
     Choice ::
         Option1 String,
         Option2 String,
-    zz
+    ;
 
     option = Choice::Option2
 ]

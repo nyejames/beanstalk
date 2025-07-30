@@ -9,11 +9,13 @@ use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
     return_compiler_error, return_syntax_error,
 };
+use std::path::PathBuf;
 
 // This function will turn a series of ast nodes into a Value enum.
 // A Value enum can also be a runtime expression that contains a series of nodes.
 // It will fold constants (not working yet) down to a single Value if possible
 pub fn evaluate_expression(
+    scope: PathBuf,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
 ) -> Result<Expression, CompileError> {
@@ -27,7 +29,7 @@ pub fn evaluate_expression(
 
     // Should always be at least one node in the expression being evaluated
     let location = match nodes.first() {
-        Some(node) => node.location,
+        Some(node) => node.location.to_owned(),
         None => return_compiler_error!("No nodes found in expression. This should never happen."),
     };
 
@@ -145,7 +147,27 @@ pub fn evaluate_expression(
             eval_log!("Attempting to Fold: {:#?}", output_queue);
 
             // Evaluate all constants in the maths expression
-            constant_fold(output_queue, current_type.to_owned())
+            let stack = constant_fold(&output_queue)?;
+
+            eval_log!("Stack after folding: {:#?}", stack);
+
+            if stack.len() == 1 {
+                return stack[0].get_expr();
+            }
+
+            if stack.is_empty() {
+                return Ok(Expression::none());
+            }
+
+            // Safe because of the previous two if statements.
+            let first_node_start = stack[0].location.start_pos;
+            let last_node_end = stack[stack.len() - 1].location.end_pos;
+
+            Ok(Expression::runtime(
+                stack,
+                current_type.to_owned(),
+                TextLocation::new(scope, first_node_start, last_node_end),
+            ))
         }
     }
 }
@@ -180,8 +202,8 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
     let mut style = Style::default();
 
     // Should always be at least one node in the expression being evaluated
-    let location = match simplified_expression.first() {
-        Some(node) => node.location,
+    let location = match &simplified_expression.first() {
+        Some(node) => node.location.to_owned(),
         None => return_compiler_error!("No nodes found in expression. This should never happen."),
     };
 

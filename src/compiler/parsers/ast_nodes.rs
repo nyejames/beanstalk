@@ -88,28 +88,11 @@ pub enum NodeKind {
 }
 
 impl AstNode {
-    // pub fn get_type(&self) -> Result<DataType, CompileError> {
-    //     match &self.kind {
-    //         NodeKind::Reference(value) => Ok(value.data_type.to_owned()),
-    //         NodeKind::Empty => Ok(DataType::None),
-    //         NodeKind::Declaration(_, expr, ..) => Ok(expr.data_type.to_owned()),
-    // 
-    //         _ => {
-    //             return_compiler_error!(
-    //                 "Shouldn't be here. get_type should only be called on valid nodes. Datatype return not implemented for: {:?}",
-    //                 self.kind
-    //             );
-    //         }
-    //     }
-    // }
-
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::Reference(value, ..) | 
-            NodeKind::Declaration(_, value, ..) | 
-            NodeKind::Expression(value, ..) => {
-                Ok(value.to_owned())
-            }
+            NodeKind::Reference(value, ..)
+            | NodeKind::Declaration(_, value, ..)
+            | NodeKind::Expression(value, ..) => Ok(value.to_owned()),
             _ => return_compiler_error!(
                 "Compiler tried to get the expression of a node that cannot contain expressions: {:?}",
                 self.kind

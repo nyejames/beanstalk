@@ -11,19 +11,16 @@ use colour::{blue_ln, green_ln_bold, red_ln};
 // This will evaluate everything possible at compile time
 // returns either a literal or an evaluated runtime expression
 // Output stack must be in RPN order
-pub fn constant_fold(
-    output_stack: Vec<AstNode>,
-    current_type: DataType,
-) -> Result<Expression, CompileError> {
+pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileError> {
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 
-    for node in &output_stack {
+    for node in output_stack {
         match &node.kind {
             NodeKind::Operator(op) => {
                 // Make sure there are at least 2 nodes on the stack
                 if stack.len() < 2 {
                     return_syntax_error!(
-                        node.location,
+                        node.location.to_owned(),
                         "Not enough nodes on the stack for binary operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}",
                         output_stack,
                         stack
@@ -70,23 +67,5 @@ pub fn constant_fold(
         }
     }
 
-    eval_log!("Stack after folding: {:#?}", stack);
-
-    if stack.len() == 1 {
-        return stack[0].get_expr();
-    }
-
-    if stack.is_empty() {
-        return Ok(Expression::none());
-    }
-
-    // Safe because of the previous two if statements.
-    let first_node_start = stack[0].location.start_pos;
-    let last_node_end = stack[stack.len() - 1].location.end_pos;
-
-    Ok(Expression::runtime(
-        stack,
-        current_type,
-        TextLocation::new(first_node_start, last_node_end),
-    ))
+    Ok(stack)
 }

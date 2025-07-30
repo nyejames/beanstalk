@@ -45,6 +45,7 @@ mod compiler {
 
     pub mod wasm_codegen {
         pub mod wasm_emitter;
+
         pub mod wasm_memory;
         pub mod wat_to_wasm;
     }
@@ -149,5 +150,14 @@ impl<'a> Compiler<'a> {
             Ok(block) => Ok(block),
             Err(e) => Err(e.with_file_path(module_tokens.src_path.to_owned())),
         }
+    }
+
+    // -----------------------------
+    //         WASM GENERATION
+    // -----------------------------
+    pub fn ast_to_wasm(&self, ast: AstBlock) -> Result<Vec<u8>, CompileError> {
+        let module = WasmModule::new();
+
+        module.finish()
     }
 }

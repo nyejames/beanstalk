@@ -14,7 +14,7 @@ They can also be used for pattern matching, all with a similar syntax.
         print("nope")
     else
         print("yep")
-    zz
+    ;
 
     -- Using if like a match expression
     -- Parenthesis are used instead of colons for if expressions
@@ -36,25 +36,25 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 [code:
     for thing in things:
         print(thing)
-    zz
+    ;
 
     for -20 to big_number:
         print("hello")
-    zz
+    ;
 
     -- reverse loop
     for n in big_number to smaller_number:
         print(n)
-    zz
+    ;
 
     for item in collection:
         print(item.to_string())
-    zz
+    ;
 
     -- Getting the index
     for item, index in collection:
         print(index.to_string())
-    zz
+    ;
 
     -- Using a loop in a scene
     names = {"Priya", "Sam", "Chad"}
@@ -75,22 +75,23 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     -- Pattern matching
     -- Must be exhaustive
     thing = 69
-    if thing:
-        is 0: print("zero")
-        is < 0: print("negative")
-        is > 1: print("big number")
+    if thing is:
+        0: print("zero")
+        < 0: print("negative")
+        > 1: print("big number")
+        not 5: print("not 5")
         else: print("only one")
-    zz
+    ;
 
     -- Pattern matching assignment
     -- Must be exhaustive
     name = "Bob"
-    msg = if name (
-        is "Sam": 
+    msg = if name is (
+        "Sam": 
             "yo"
-        zz
-        is "Priya": "hey!"
-        is "Bob": "whats up"
+        ;
+        "Priya": "hey!"
+        "Bob": "whats up"
         else: "go away"
     )
 
@@ -99,8 +100,8 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
             print(..)
         else: 
             print(..)
-        zz
-    zz
+        ;
+    ;
 
 ]
 

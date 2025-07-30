@@ -131,7 +131,7 @@ pub fn new_arg(
 
                 // If end of statement, then it's a zero-value variable
                 TokenKind::Comma
-                | TokenKind::EOF
+                | TokenKind::Eof
                 | TokenKind::Newline
                 | TokenKind::StructDefinition => {
                     return Ok(Arg {
@@ -193,7 +193,7 @@ pub fn new_arg(
 
                 // If end of statement, then it's a zero-value variable
                 TokenKind::Comma
-                | TokenKind::EOF
+                | TokenKind::Eof
                 | TokenKind::Newline
                 | TokenKind::StructDefinition => {
                     return Ok(Arg {

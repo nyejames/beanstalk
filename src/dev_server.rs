@@ -25,7 +25,9 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileEr
     // Is checking to make sure the path is a directory
     let path = get_current_dir()?.join(path);
 
-    let mut project_config = build::build_project(&path, false, flags)?;
+    let project_config = build::build_project(&path, false, flags)?;
+    
+    // TODO: Now separately build all the runtime hooks / project structure
 
     let mut modified = SystemTime::UNIX_EPOCH;
 
@@ -34,7 +36,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileEr
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, &path, &mut modified, &mut project_config, flags)?;
+        handle_connection(stream, &path, &mut modified, &project_config.config, flags)?;
     }
 
     Ok(())
@@ -44,7 +46,7 @@ fn handle_connection(
     mut stream: TcpStream,
     path: &Path,
     last_modified: &mut SystemTime,
-    project_config: &mut Config,
+    project_config: &Config,
     flags: &[Flag],
 ) -> Result<(), Vec<CompileError>> {
     let buf_reader = BufReader::new(&mut stream);

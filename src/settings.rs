@@ -25,12 +25,12 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 
 #[allow(dead_code)]
 pub struct Config {
-    pub project: String,
+    pub name: String,
+    pub project_type: String,
     pub entry_point: PathBuf,
     pub src: PathBuf,
     pub dev_folder: PathBuf,
     pub release_folder: PathBuf,
-    pub name: String,
     pub version: String,
     pub author: String,
     pub license: String,
@@ -40,7 +40,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            project: String::from("html"),
+            project_type: String::from("html"),
             entry_point: PathBuf::from("src/main.bs"),
             src: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
@@ -110,7 +110,7 @@ pub fn get_config_from_ast(
     for arg in config_exports {
         match arg.name.as_str() {
             "project" => {
-                project_config.project = match &arg.value.kind {
+                project_config.project_type = match &arg.value.kind {
                     ExpressionKind::String(value) => value.to_owned(),
                     _ => {
                         return_type_error!(TextLocation::default(), "Project name must be a string")

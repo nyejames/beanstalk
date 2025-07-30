@@ -442,7 +442,7 @@ pub fn new_ast(
                 });
             }
 
-            TokenKind::End | TokenKind::EOF => {
+            TokenKind::End | TokenKind::Eof => {
                 break;
             }
 

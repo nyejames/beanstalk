@@ -1,8 +1,9 @@
 use crate::compiler::datatypes::DataType;
 use colour::red_ln;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::Peekable;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::Chars;
 
 #[derive(Debug, PartialEq)]
@@ -14,15 +15,28 @@ pub enum TokenizeMode {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum VarVisibility {
-    // Default
+    // Default for anything not at the top level of a file
     Private,
 
     // Can be seen by other beanstalk files,
     // but not out of the resulting Wasm module
+    // This is the default for any top level declarations in a file
     Public,
 
     // Exported out of the Wasm module
     Exported,
+}
+
+impl VarVisibility {
+    pub fn is_private(&self) -> bool {
+        matches!(self, VarVisibility::Private)
+    }
+    pub fn is_public(&self) -> bool {
+        matches!(self, VarVisibility::Public)
+    }
+    pub fn is_exported(&self) -> bool {
+        matches!(self, VarVisibility::Exported)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -31,27 +45,99 @@ pub struct CharPosition {
     pub char_column: i32,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct TextLocation {
+    pub scope: PathBuf,
     pub start_pos: CharPosition,
     pub end_pos: CharPosition,
 }
 
 impl TextLocation {
-    pub fn new(start: CharPosition, end: CharPosition) -> Self {
+    pub fn new(scope: PathBuf, start: CharPosition, end: CharPosition) -> Self {
         Self {
+            scope,
             start_pos: start,
             end_pos: end,
         }
     }
 
-    pub fn new_same_line(start: CharPosition, length: i32) -> Self {
+    pub fn new_same_line(&self, start: CharPosition, length: i32) -> Self {
         Self {
+            scope: self.scope.to_owned(),
             start_pos: start,
             end_pos: CharPosition {
                 line_number: start.line_number,
                 char_column: start.char_column + length,
             },
+        }
+    }
+}
+
+impl PartialOrd for TextLocation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        // Check if self's start position is before other's start position
+        let self_start_line = self.start_pos.line_number;
+        let other_start_line = other.start_pos.line_number;
+
+        if self_start_line < other_start_line {
+            // Self starts on an earlier line than other
+            let self_end_line = self.end_pos.line_number;
+
+            // If self ends before other starts, it's definitely less
+            if self_end_line < other_start_line {
+                Some(Ordering::Less)
+            } else {
+                // Self starts before but extends into or beyond other's range - considered equivalent
+                Some(Ordering::Equal)
+            }
+        } else if self_start_line > other_start_line {
+            // Self starts on a later line than other
+            let other_end_line = other.end_pos.line_number;
+
+            // If other ends before self starts, self is definitely greater
+            if other_end_line < self_start_line {
+                Some(Ordering::Greater)
+            } else {
+                // Other starts before but extends into or beyond self's range - considered equivalent
+                Some(Ordering::Equal)
+            }
+        } else {
+            // Same start line, compare columns
+            let self_start_col = self.start_pos.char_column;
+            let other_start_col = other.start_pos.char_column;
+
+            if self_start_col < other_start_col {
+                // Self starts before other on the same line
+                let self_end_line = self.end_pos.line_number;
+                let self_end_col = self.end_pos.char_column;
+
+                // If self ends before other starts on the same line
+                if self_end_line < other_start_line
+                    || (self_end_line == other_start_line && self_end_col < other_start_col)
+                {
+                    Some(Ordering::Less)
+                } else {
+                    // Self overlaps with other - considered equivalent
+                    Some(Ordering::Equal)
+                }
+            } else if self_start_col > other_start_col {
+                // Other starts before self on the same line
+                let other_end_line = other.end_pos.line_number;
+                let other_end_col = other.end_pos.char_column;
+
+                // If other ends before self starts on the same line
+                if other_end_line < self_start_line
+                    || (other_end_line == self_start_line && other_end_col < self_start_col)
+                {
+                    Some(Ordering::Greater)
+                } else {
+                    // Other overlaps with self - considered equivalent
+                    Some(Ordering::Equal)
+                }
+            } else {
+                // Exactly the same start position - considered equivalent
+                Some(Ordering::Equal)
+            }
         }
     }
 }
@@ -65,13 +151,6 @@ pub struct Token {
 impl Token {
     pub fn new(kind: TokenKind, location: TextLocation) -> Self {
         Self { kind, location }
-    }
-
-    pub fn new_same_line(kind: TokenKind, start: CharPosition, length: i32) -> Self {
-        Self {
-            kind,
-            location: TextLocation::new_same_line(start, length),
-        }
     }
 
     pub fn to_string(&self) -> String {
@@ -113,7 +192,7 @@ impl TokenContext {
     }
 
     pub fn current_location(&self) -> TextLocation {
-        self.tokens[self.index].location
+        self.tokens[self.index].location.clone()
     }
 
     pub fn advance(&mut self) {
@@ -149,7 +228,7 @@ impl TokenContext {
             }
 
             // Can't advance past End of File
-            &TokenKind::EOF => {
+            &TokenKind::Eof => {
                 // Show a warning for compiler development purposes
                 #[cfg(feature = "show_tokens")]
                 red_ln!("Compiler tried to advance past EOF");
@@ -173,6 +252,7 @@ impl TokenContext {
 }
 
 pub struct TokenStream<'a> {
+    pub file_path: &'a Path,
     pub chars: Peekable<Chars<'a>>,
     pub position: CharPosition,
     pub start_position: CharPosition,
@@ -180,8 +260,9 @@ pub struct TokenStream<'a> {
 }
 
 impl<'a> TokenStream<'a> {
-    pub fn new(source_code: &'a str) -> Self {
+    pub fn new(source_code: &'a str, file_path: &'a Path) -> Self {
         Self {
+            file_path,
             chars: source_code.chars().peekable(),
             position: CharPosition::default(),
             start_position: Default::default(),
@@ -214,7 +295,7 @@ impl<'a> TokenStream<'a> {
         let start_pos = self.start_position;
         self.update_start_position();
 
-        TextLocation::new(start_pos, self.position)
+        TextLocation::new(self.file_path.to_path_buf(), start_pos, self.position)
     }
 
     pub fn update_start_position(&mut self) {
@@ -226,7 +307,7 @@ impl<'a> TokenStream<'a> {
 pub enum TokenKind {
     // For Compiler
     ModuleStart(String), // Contains module name space
-    EOF,                 // End of the file
+    Eof,                 // End of the file
 
     // Module Import/Export
     Import, // Directed through a different path so not needed after tokenizer.
@@ -248,7 +329,7 @@ pub enum TokenKind {
     Component,
     Title,
     Date,
-    WAT(String), // WAT codeblock (for testing WASM)
+    Wat(String), // WAT codeblock (for testing WASM)
 
     // Scene Style properties
     Markdown,     // Makes the scene Markdown

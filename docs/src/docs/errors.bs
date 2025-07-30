@@ -17,27 +17,27 @@ but any type that uses a ! can use the same syntax to bubble up or handle errors
 
     func_call_that_can_return_an_error() !:
         -- Error handling code
-    zz
+    ;
 
     -- This function can return a String or None
     parent_func () -> String, Error!:
         return func_call_that_can_return_an_error() !err:
             print("Error: ", err)
             return "", err
-        zz
-    zz
+        ;
+    ;
 ]
 
 ## Using the ? operator
 [code:
     getURL || -> String:
         return getNetworkRequest() ? ""
-    zz
+    ;
 
     -- Returns a string or None
     getURL || -> String?:
         return getNetworkRequest()
-    zz
+    ;
 ]
 
 ## Asserts and Panics

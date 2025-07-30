@@ -11,6 +11,8 @@ use crate::compiler::parsers::tokens::{
 };
 use crate::{return_syntax_error, settings, token_log};
 
+const END_SCOPE_CHAR: char = ';';
+
 macro_rules! return_token {
     ($kind:expr, $stream:expr $(,)?) => {
         return Ok(Token::new($kind, $stream.new_location()))
@@ -23,7 +25,7 @@ pub fn tokenize(source_code: &str, src_path: &Path) -> Result<TokenContext, Comp
     let imports_initial_capacity = settings::IMPORTS_CAPACITY;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
-    let mut stream = TokenStream::new(source_code);
+    let mut stream = TokenStream::new(source_code, src_path);
     let mut imports = HashSet::with_capacity(imports_initial_capacity);
 
     let template_nesting_level: &mut i64 = &mut 0;
@@ -37,7 +39,7 @@ pub fn tokenize(source_code: &str, src_path: &Path) -> Result<TokenContext, Comp
         #[cfg(feature = "show_tokens")]
         token_log!(token);
 
-        if token.kind == TokenKind::EOF {
+        if token.kind == TokenKind::Eof {
             break;
         }
 
@@ -58,7 +60,7 @@ pub fn get_token_kind(
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
-        None => return_token!(TokenKind::EOF, stream),
+        None => return_token!(TokenKind::Eof, stream),
     };
 
     let mut token_value: String = String::new();
@@ -99,7 +101,7 @@ pub fn get_token_kind(
     while current_char.is_whitespace() {
         current_char = match stream.next() {
             Some(ch) => ch,
-            None => return_token!(TokenKind::EOF, stream),
+            None => return_token!(TokenKind::Eof, stream),
         };
     }
 
@@ -182,9 +184,8 @@ pub fn get_token_kind(
         return_token!(TokenKind::Colon, stream);
     }
 
-    // Compiler Directives
-    if current_char == '#' {
-        return compiler_directive(&mut token_value, stream, imports);
+    if current_char == END_SCOPE_CHAR {
+        return_token!(TokenKind::End, stream);
     }
 
     // Check for string literals
@@ -394,8 +395,12 @@ pub fn get_token_kind(
         return_token!(TokenKind::Mutable, stream);
     }
 
-    // Exporting variables out of the module or scope (public declaration)
-    // When used in a scene head, it's an ID for that scene
+    // Compiler Directives
+    if current_char == '#' {
+        return compiler_directive(&mut token_value, stream, imports);
+    }
+
+    // For ID's or labels? Or maybe paths too?
     if current_char == '@' {
         if stream.context == TokenizeMode::TemplateHead {
             while let Some(&next_char) = stream.peek() {
@@ -469,7 +474,6 @@ pub fn get_token_kind(
     )
 }
 
-const END_KEYWORD: &str = "zz";
 const PRINT_KEYWORD: &str = "io";
 const LOG_KEYWORD: &str = "log";
 
@@ -498,7 +502,7 @@ fn keyword_or_variable(
         // Otherwise break out and check it is a valid variable name
         match token_value.as_str() {
             // Control Flow
-            END_KEYWORD => return_token!(TokenKind::End, stream),
+            // END_KEYWORD => return_token!(TokenKind::End, stream),
             "if" => return_token!(TokenKind::If, stream),
             "return" => return_token!(TokenKind::Return, stream),
 
@@ -591,7 +595,7 @@ fn compiler_directive(
             "date" => return_token!(TokenKind::Date, stream),
 
             // External language blocks
-            "WAT" => return_token!(TokenKind::WAT(string_block(stream)?), stream),
+            "WAT" => return_token!(TokenKind::Wat(string_block(stream)?), stream),
 
             // Scene Style properties
             "markdown" => return_token!(TokenKind::Markdown, stream),
@@ -658,21 +662,18 @@ fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
                     return_syntax_error!(
                         stream.new_location(),
                         "Expected '{}' keyword to end the block",
-                        END_KEYWORD
+                        END_SCOPE_CHAR
                     )
                 }
                 break;
             }
         };
 
-        // Push everything to the JS code block until the first 'end' keyword
-        // must have newline before and whitespace after the 'end' keyword
-        if string_value.ends_with(END_KEYWORD) {
+        // Push everything to the JS code block until the first 'end' token
+        // must have a newline before and whitespace after the 'end' token
+        if string_value.ends_with(END_SCOPE_CHAR) {
             closing_end_keyword = true;
-            string_value = string_value
-                .split_at(string_value.len() - END_KEYWORD.len())
-                .0
-                .to_string();
+            string_value = string_value.split_at(string_value.len() - 1).0.to_string();
         }
     }
 

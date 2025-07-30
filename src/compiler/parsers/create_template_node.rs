@@ -218,7 +218,7 @@ pub fn new_template(
                         TokenKind::TemplateOpen => {
                             extra_template_opens += 1;
                         }
-                        TokenKind::EOF => {
+                        TokenKind::Eof => {
                             break;
                         }
                         _ => {}
@@ -242,7 +242,7 @@ pub fn new_template(
     // TEMPLATE BODY PARSING
     while token_stream.index < token_stream.tokens.len() {
         match &token_stream.current_token_kind() {
-            TokenKind::EOF => {
+            TokenKind::Eof => {
                 break;
             }
 

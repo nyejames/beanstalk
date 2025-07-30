@@ -14,7 +14,7 @@ but by default a project will turn into one big wasm module.
 
 # Quick Synax Overview
 The specifics are not fully decided on, but some of the key things are:
-- Using 'zz' keyword to close scopes (Colon opens scopes).
+- Colon opens a scope, semicolon closes it.
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for templates.
 - Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type.

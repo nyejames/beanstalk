@@ -125,6 +125,20 @@ macro_rules! return_file_errors {
         }])
     };
 }
+/// Returns a new CompileError
+///
+/// Usage: `bail!(Path, "message", message format args)`;
+#[macro_export]
+macro_rules! return_file_error {
+    ($path:expr, $($msg:tt)+) => {
+        return Err(CompileError {
+            msg: format!($($msg)+),
+            location: TextLocation::default(),
+            error_type: ErrorType::File,
+            file_path: $path.to_owned(),
+        })
+    };
+}
 
 /// Returns a new CompileError.
 ///

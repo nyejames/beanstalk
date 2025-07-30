@@ -173,7 +173,7 @@ pub fn create_expression(
             TokenKind::CloseCurly
             | TokenKind::StructDefinition
             | TokenKind::Comma
-            | TokenKind::EOF
+            | TokenKind::Eof
             | TokenKind::TemplateClose
             | TokenKind::Arrow
             | TokenKind::Colon
@@ -255,7 +255,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::float(float, location)),
+                    kind: NodeKind::Reference(Expression::float(float, location.to_owned())),
                     location,
                     scope: context.scope.to_owned(),
                 });
@@ -271,7 +271,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::int(int_value, location)),
+                    kind: NodeKind::Reference(Expression::int(int_value, location.to_owned())),
                     scope: context.scope.to_owned(),
                     location,
                 });
@@ -280,7 +280,10 @@ pub fn create_expression(
             TokenKind::StringLiteral(ref string) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::string(string.to_owned(), location)),
+                    kind: NodeKind::Reference(Expression::string(
+                        string.to_owned(),
+                        location.to_owned(),
+                    )),
                     scope: context.scope.to_owned(),
                     location,
                 });
@@ -314,7 +317,10 @@ pub fn create_expression(
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(Expression::bool(value.to_owned(), location)),
+                    kind: NodeKind::Expression(Expression::bool(
+                        value.to_owned(),
+                        location.to_owned(),
+                    )),
                     location,
                     scope: context.scope.to_owned(),
                 });
@@ -330,7 +336,11 @@ pub fn create_expression(
             TokenKind::In => {
                 // Breaks out of the current expression and changes the type to Range
                 token_stream.advance();
-                return evaluate_expression(expression, &mut DataType::Range);
+                return evaluate_expression(
+                    context.scope.to_owned(),
+                    expression,
+                    &mut DataType::Range,
+                );
             }
 
             // BINARY OPERATORS
@@ -457,7 +467,7 @@ pub fn create_expression(
         token_stream.advance();
     }
 
-    evaluate_expression(expression, data_type)
+    evaluate_expression(context.scope.to_owned(), expression, data_type)
 }
 
 // This is used to unpack all the 'self' values of a block into multiple arguments
