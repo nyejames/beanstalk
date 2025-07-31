@@ -26,6 +26,9 @@ it must use a type signature or the name of one of the arguments if it's returni
         return value *= 2
     ;
 
+    -- This function returns a reference to the x value passed in
+    -- The only names you can use in the return type are the names of arguments that are passsed in.
+    -- This is to help infer lifetimes
     multipleReturns |x Int| -> x, Bool:
         value = x + 1
         return (value, value is > 0)

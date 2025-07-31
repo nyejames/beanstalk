@@ -36,6 +36,7 @@ pub fn build_project(
     // Read content from a test file
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
+    let time = Instant::now();
 
     let mut modules_to_parse: Vec<InputModule> = Vec::new();
     let mut project_config = Config::default();
@@ -123,6 +124,11 @@ pub fn build_project(
             };
 
             add_bs_files_to_parse(&mut modules_to_parse, &output_dir, &src_dir)?;
+
+            if !flags.contains(&Flag::DisableTimers) {
+                print!("Files Read In: ");
+                green_ln!("{:?}", time.elapsed());
+            }
         }
     }
 
@@ -172,16 +178,14 @@ pub fn build_project(
         return Err(errors);
     }
 
-    // Combine all the ASTs together.
-    // This will involve replacing the string symbols with their full path
-
     if !flags.contains(&Flag::DisableTimers) {
         print!("AST created in: ");
         green_ln!("{:?}", time.elapsed());
     }
-
+    
+    // TODO
     // -----------------------------------
-    // IR generation and lifetime analysis
+    //         Lifetime analysis
     // -----------------------------------
 
     // TODO
