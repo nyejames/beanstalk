@@ -474,7 +474,7 @@ pub fn get_token_kind(
     )
 }
 
-const PRINT_KEYWORD: &str = "io";
+pub const PRINT_KEYWORD: &str = "print";
 const LOG_KEYWORD: &str = "log";
 
 fn keyword_or_variable(

@@ -41,7 +41,8 @@ pub fn create_reference(
                 token_stream.current_location(),
             )),
             location: token_stream.current_location(),
-            scope: context.scope.to_owned(),
+            scope: context.scope_name.to_owned(),
+            lifetime: context.scope_lifetime_id,
         }),
     }
 }

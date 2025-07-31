@@ -152,12 +152,11 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    // -----------------------------
-    //         WASM GENERATION
-    // -----------------------------
-    pub fn ast_to_wasm(&self, ast: AstBlock) -> Result<Vec<u8>, CompileError> {
-        let module = WasmModule::new();
-
-        module.finish()
+    // -----------------------
+    //        BACKEND
+    //      (Cranelift)
+    // -----------------------
+    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<Vec<u8>, CompileError> {
+       Ok(Vec::new())
     }
 }

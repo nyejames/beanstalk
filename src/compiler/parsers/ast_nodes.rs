@@ -18,6 +18,7 @@ pub struct AstNode {
     pub kind: NodeKind,
     pub location: TextLocation,
     pub scope: PathBuf,
+    pub lifetime: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -41,10 +41,11 @@ pub fn create_loop(
                         }
 
                         token_stream.advance();
-                        let scope = context.scope.clone();
+                        let scope = context.scope_name.clone();
 
                         // create while loop
                         Ok(AstNode {
+                            lifetime: context.scope_lifetime_id,
                             kind: NodeKind::WhileLoop(
                                 condition,
                                 new_ast(token_stream, context, false)?.ast,
@@ -116,7 +117,8 @@ pub fn create_loop(
             context.declarations.push(loop_arg.to_owned());
 
             Ok(AstNode {
-                scope: context.scope.to_owned(),
+                scope: context.scope_name.to_owned(),
+                lifetime: context.scope_lifetime_id,
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,

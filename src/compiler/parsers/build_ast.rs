@@ -25,6 +25,7 @@ use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, settings};
 use std::collections::HashMap;
 use std::path::PathBuf;
+use crate::compiler::parsers::tokenizer::PRINT_KEYWORD;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstBlock {
@@ -50,9 +51,10 @@ impl ParserOutput {
 #[derive(Clone)]
 pub struct ScopeContext {
     pub kind: ContextKind,
-    pub scope: PathBuf,
+    pub scope_name: PathBuf,
     pub declarations: Vec<Arg>,
     pub returns: Vec<DataType>,
+    pub scope_lifetime_id: u32,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -70,16 +72,20 @@ impl ScopeContext {
     pub fn new(kind: ContextKind, scope: PathBuf, declarations: &[Arg]) -> ScopeContext {
         ScopeContext {
             kind,
-            scope,
+            scope_name: scope,
             declarations: declarations.to_owned(),
             returns: Vec::new(),
+            scope_lifetime_id: 0, // This is only called for new ASTs, so this is the first parent
         }
     }
 
-    pub fn new_child(&self, kind: ContextKind, name: &str) -> ScopeContext {
+    pub fn new_child_control_flow(&self, kind: ContextKind) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = kind;
-        new_context.scope.push(name);
+
+        // For now, add the lifetime ID to the scope.
+        new_context.scope_name.push(&self.scope_lifetime_id.to_string());
+        new_context.scope_lifetime_id += 1;
         new_context
     }
 
@@ -87,7 +93,8 @@ impl ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.returns = returns.to_owned();
-        new_context.scope.push(name);
+        new_context.scope_name.push(name);
+        new_context.scope_lifetime_id += 1;
         new_context
     }
 
@@ -95,7 +102,8 @@ impl ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
-        new_context.scope.push("expression");
+        new_context.scope_name.push("expression");
+        new_context.scope_lifetime_id += 1;
         new_context
     }
 
@@ -113,7 +121,8 @@ macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
             kind: ContextKind::Template,
-            scope: $context.scope.to_owned(),
+            scope_lifetime_id: $context.scope_lifetime_id,
+            scope_name: $context.scope_name.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
         }
@@ -128,7 +137,7 @@ macro_rules! new_config_context {
     ($name:expr, $args:expr) => {
         ScopeContext {
             kind: ContextKind::Template,
-            scope: PathBuf::from($name),
+            scope_name: PathBuf::from($name),
             declarations: $args,
             returns: vec![],
         }
@@ -143,27 +152,11 @@ macro_rules! new_condition_context {
     ($name:expr, $args:expr) => {
         ScopeContext {
             kind: ContextKind::Condition,
-            scope: PathBuf::from($name),
+            scope_name: PathBuf::from($name),
             declarations: $args,
             returns: vec![], //Empty because conditions are always booleans
         }
     };
-}
-
-// Just for tracking if/loop scopes so every scope has a unique name,
-// This will be important for tracking lifetimes later
-struct ScopeID {
-    id: i32,
-}
-impl ScopeID {
-    fn new() -> ScopeID {
-        ScopeID { id: 0 }
-    }
-    fn get_new(&mut self) -> String {
-        let s = self.id.to_string();
-        self.id += 1;
-        s
-    }
 }
 
 // This is a new scope
@@ -174,8 +167,6 @@ pub fn new_ast(
 ) -> Result<ParserOutput, CompileError> {
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
-
-    let mut scope_id = ScopeID::new();
 
     // TODO: All top level declarations are exports
     let mut exports = Vec::new();
@@ -221,8 +212,9 @@ pub fn new_ast(
                     TemplateType::Template(expr) => {
                         ast.push(AstNode {
                             kind: NodeKind::Expression(expr),
-                            scope: context.scope.to_owned(),
+                            scope: context.scope_name.to_owned(),
                             location: token_stream.current_location(),
+                            lifetime: context.scope_lifetime_id
                         });
                     }
                     TemplateType::Slot(..) => {
@@ -243,12 +235,12 @@ pub fn new_ast(
             // New Function or Variable declaration
             TokenKind::Symbol(ref name) => {
                 if let Some(arg) = context.find_reference(name) {
-                    // Then the associated mutation afterwards.
+                    // Then the associated mutation afterward.
                     // Move past the name
                     token_stream.advance();
 
                     // Name of variable, with any accesses added to the path
-                    let mut scope = context.scope.to_owned();
+                    let mut scope = context.scope_name.to_owned();
 
                     // We will need to keep pushing nodes if there are accesses after method calls
                     while token_stream.current_token_kind() == &TokenKind::Dot {
@@ -318,8 +310,9 @@ pub fn new_ast(
 
                     ast.push(AstNode {
                         kind: NodeKind::Reference(arg.value.to_owned()),
-                        scope: context.scope.to_owned(),
+                        scope: context.scope_name.to_owned(),
                         location: token_stream.current_location(),
+                        lifetime: context.scope_lifetime_id,
                     });
 
                 // NEW VARIABLE DECLARATION
@@ -340,7 +333,8 @@ pub fn new_ast(
                             visibility.to_owned(),
                         ),
                         location: token_stream.current_location(),
-                        scope: context.scope.to_owned(),
+                        scope: context.scope_name.to_owned(),
+                        lifetime: context.scope_lifetime_id,
                     });
                 }
             }
@@ -351,18 +345,16 @@ pub fn new_ast(
 
                 ast.push(create_loop(
                     token_stream,
-                    context.new_child(ContextKind::Loop, &scope_id.get_new()),
+                    context.new_child_control_flow(ContextKind::Loop),
                 )?);
             }
 
             TokenKind::If => {
                 token_stream.advance();
 
-                let scope = scope_id.get_new();
-
                 let condition = create_expression(
                     token_stream,
-                    &context.new_child(ContextKind::Condition, &scope),
+                    &context.new_child_control_flow(ContextKind::Condition),
                     &mut DataType::Bool(false),
                     false,
                 )?;
@@ -371,7 +363,6 @@ pub fn new_ast(
                 // If this condition isn't runtime,
                 // The statement can be removed completely;
                 // I THINK, NOT SURE HOW 'ELSE' AND ALL THAT WORK YET
-
                 if token_stream.current_token_kind() != &TokenKind::Colon {
                     return_rule_error!(
                         token_stream.current_location(),
@@ -381,18 +372,18 @@ pub fn new_ast(
                 }
 
                 token_stream.advance(); // Consume ':'
-                let if_context = context.new_child(ContextKind::IfBlock, &scope);
+                let if_context = context.new_child_control_flow(ContextKind::IfBlock);
 
                 // TODO - now check for if else and else etc
                 // Probably move all this parsing to a new file in 'statements'
-
                 ast.push(AstNode {
                     kind: NodeKind::If(
                         condition,
                         new_ast(token_stream, if_context.to_owned(), false)?.ast,
                     ),
                     location: token_stream.current_location(),
-                    scope: if_context.scope,
+                    scope: if_context.scope_name,
+                    lifetime: context.scope_lifetime_id,
                 });
             }
 
@@ -408,8 +399,8 @@ pub fn new_ast(
 
                 ast.push(parse_function_call(
                     token_stream,
-                    "console.log",
-                    &context.new_child_function(&scope_id.get_new(), &[]),
+                    PRINT_KEYWORD,
+                    &context.new_child_function(PRINT_KEYWORD, &[]),
                     // Console.log does not return anything
                     &[Arg {
                         name: String::new(),
@@ -438,7 +429,8 @@ pub fn new_ast(
                 ast.push(AstNode {
                     kind: NodeKind::Return(return_values),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
+                    lifetime: context.scope_lifetime_id,
                 });
             }
 
@@ -459,7 +451,7 @@ pub fn new_ast(
     Ok(ParserOutput::new(
         AstBlock {
             ast,
-            scope: context.scope,
+            scope: context.scope_name,
             is_entry_point,
         },
         exports,

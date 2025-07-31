@@ -128,7 +128,8 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Reference(value),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
+                    lifetime: context.scope_lifetime_id,
                 });
             }
 
@@ -137,25 +138,27 @@ pub fn create_expression(
                 match &data_type {
                     DataType::Collection(inner_type) => {
                         expression.push(AstNode {
+                            lifetime: context.scope_lifetime_id,
                             kind: NodeKind::Reference(new_collection(
                                 token_stream,
                                 inner_type,
                                 context,
                             )?),
                             location: token_stream.current_location(),
-                            scope: context.scope.to_owned(),
+                            scope: context.scope_name.to_owned(),
                         });
                     }
 
                     DataType::Inferred(mutable) => {
                         expression.push(AstNode {
+                            lifetime: context.scope_lifetime_id,
                             kind: NodeKind::Reference(new_collection(
                                 token_stream,
                                 &DataType::Inferred(mutable.to_owned()),
                                 context,
                             )?),
                             location: token_stream.current_location(),
-                            scope: context.scope.to_owned(),
+                            scope: context.scope_name.to_owned(),
                         });
                     }
 
@@ -255,9 +258,10 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Reference(Expression::float(float, location.to_owned())),
                     location,
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
@@ -271,8 +275,9 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Reference(Expression::int(int_value, location.to_owned())),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                     location,
                 });
             }
@@ -280,11 +285,12 @@ pub fn create_expression(
             TokenKind::StringLiteral(ref string) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Reference(Expression::string(
                         string.to_owned(),
                         location.to_owned(),
                     )),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                     location,
                 });
             }
@@ -317,12 +323,13 @@ pub fn create_expression(
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Expression(Expression::bool(
                         value.to_owned(),
                         location.to_owned(),
                     )),
                     location,
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
@@ -337,7 +344,7 @@ pub fn create_expression(
                 // Breaks out of the current expression and changes the type to Range
                 token_stream.advance();
                 return evaluate_expression(
-                    context.scope.to_owned(),
+                    context.scope_name.to_owned(),
                     expression,
                     &mut DataType::Range,
                 );
@@ -346,47 +353,53 @@ pub fn create_expression(
             // BINARY OPERATORS
             TokenKind::Add => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::Add),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
             TokenKind::Subtract => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::Subtract),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
             TokenKind::Multiply => expression.push(AstNode {
+                lifetime: context.scope_lifetime_id,
                 kind: NodeKind::Operator(Operator::Multiply),
                 location: token_stream.current_location(),
-                scope: context.scope.to_owned(),
+                scope: context.scope_name.to_owned(),
             }),
 
             TokenKind::Divide => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::Divide),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
             TokenKind::Exponent => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::Exponent),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
             TokenKind::Modulus => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::Modulus),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
@@ -396,59 +409,67 @@ pub fn create_expression(
                 if let Some(TokenKind::Not) = token_stream.peek_next_token() {
                     token_stream.advance();
                     expression.push(AstNode {
+                        lifetime: context.scope_lifetime_id,
                         kind: NodeKind::Operator(Operator::NotEqual),
                         location: token_stream.current_location(),
-                        scope: context.scope.to_owned(),
+                        scope: context.scope_name.to_owned(),
                     });
                 } else {
                     expression.push(AstNode {
+                        lifetime: context.scope_lifetime_id,
                         kind: NodeKind::Operator(Operator::Equality),
                         location: token_stream.current_location(),
-                        scope: context.scope.to_owned(),
+                        scope: context.scope_name.to_owned(),
                     })
                 }
             }
 
             TokenKind::LessThan => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::LessThan),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
             TokenKind::LessThanOrEqual => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::LessThanOrEqual),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
             TokenKind::GreaterThan => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::GreaterThan),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
             TokenKind::GreaterThanOrEqual => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::GreaterThanOrEqual),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
             TokenKind::And => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::And),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
             TokenKind::Or => {
                 expression.push(AstNode {
+                    lifetime: context.scope_lifetime_id,
                     kind: NodeKind::Operator(Operator::Or),
                     location: token_stream.current_location(),
-                    scope: context.scope.to_owned(),
+                    scope: context.scope_name.to_owned(),
                 });
             }
 
@@ -467,7 +488,7 @@ pub fn create_expression(
         token_stream.advance();
     }
 
-    evaluate_expression(context.scope.to_owned(), expression, data_type)
+    evaluate_expression(context.scope_name.to_owned(), expression, data_type)
 }
 
 // This is used to unpack all the 'self' values of a block into multiple arguments
