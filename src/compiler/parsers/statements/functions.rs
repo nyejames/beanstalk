@@ -9,8 +9,8 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
-use crate::compiler::parsers::variables::new_arg;
 use crate::{ast_log, return_syntax_error};
 
 // Arg names and types are required
@@ -324,7 +324,7 @@ pub fn parse_function_call(
         ),
         location: token_stream.current_location(),
         scope: context.scope_name.to_owned(),
-        lifetime: context.scope_lifetime_id,
+        lifetime: context.owned_lifetimes,
     })
 }
 

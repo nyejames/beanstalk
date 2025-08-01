@@ -3,10 +3,7 @@ use crate::compiler::parsers::tokens::TextLocation;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
-use super::{
-    ast_nodes::NodeKind, create_template_node::new_template,
-    expressions::parse_expression::create_expression,
-};
+use super::{ast_nodes::NodeKind, expressions::parse_expression::create_expression};
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::DataType;
@@ -16,16 +13,17 @@ use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
+use crate::compiler::parsers::statements::create_template_node::new_template;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
+use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::template::{Style, TemplateType};
+use crate::compiler::parsers::tokenizer::PRINT_KEYWORD;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
-use crate::compiler::parsers::variables::new_arg;
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, settings};
 use std::collections::HashMap;
 use std::path::PathBuf;
-use crate::compiler::parsers::tokenizer::PRINT_KEYWORD;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct AstBlock {
@@ -54,7 +52,7 @@ pub struct ScopeContext {
     pub scope_name: PathBuf,
     pub declarations: Vec<Arg>,
     pub returns: Vec<DataType>,
-    pub scope_lifetime_id: u32,
+    pub owned_lifetimes: u32,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -75,7 +73,7 @@ impl ScopeContext {
             scope_name: scope,
             declarations: declarations.to_owned(),
             returns: Vec::new(),
-            scope_lifetime_id: 0, // This is only called for new ASTs, so this is the first parent
+            owned_lifetimes: 0, // This is only called for new ASTs, so this is the first parent
         }
     }
 
@@ -84,8 +82,10 @@ impl ScopeContext {
         new_context.kind = kind;
 
         // For now, add the lifetime ID to the scope.
-        new_context.scope_name.push(&self.scope_lifetime_id.to_string());
-        new_context.scope_lifetime_id += 1;
+        new_context
+            .scope_name
+            .push(&self.owned_lifetimes.to_string());
+        new_context.owned_lifetimes += 1;
         new_context
     }
 
@@ -94,7 +94,7 @@ impl ScopeContext {
         new_context.kind = ContextKind::Function;
         new_context.returns = returns.to_owned();
         new_context.scope_name.push(name);
-        new_context.scope_lifetime_id += 1;
+        new_context.owned_lifetimes += 1;
         new_context
     }
 
@@ -103,7 +103,7 @@ impl ScopeContext {
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
         new_context.scope_name.push("expression");
-        new_context.scope_lifetime_id += 1;
+        new_context.owned_lifetimes += 1;
         new_context
     }
 
@@ -121,7 +121,7 @@ macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
             kind: ContextKind::Template,
-            scope_lifetime_id: $context.scope_lifetime_id,
+            owned_lifetimes: $context.owned_lifetimes,
             scope_name: $context.scope_name.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
@@ -214,7 +214,7 @@ pub fn new_ast(
                             kind: NodeKind::Expression(expr),
                             scope: context.scope_name.to_owned(),
                             location: token_stream.current_location(),
-                            lifetime: context.scope_lifetime_id
+                            lifetime: context.owned_lifetimes,
                         });
                     }
                     TemplateType::Slot(..) => {
@@ -312,7 +312,7 @@ pub fn new_ast(
                         kind: NodeKind::Reference(arg.value.to_owned()),
                         scope: context.scope_name.to_owned(),
                         location: token_stream.current_location(),
-                        lifetime: context.scope_lifetime_id,
+                        lifetime: context.owned_lifetimes,
                     });
 
                 // NEW VARIABLE DECLARATION
@@ -334,7 +334,7 @@ pub fn new_ast(
                         ),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
-                        lifetime: context.scope_lifetime_id,
+                        lifetime: context.owned_lifetimes,
                     });
                 }
             }
@@ -383,7 +383,7 @@ pub fn new_ast(
                     ),
                     location: token_stream.current_location(),
                     scope: if_context.scope_name,
-                    lifetime: context.scope_lifetime_id,
+                    lifetime: context.owned_lifetimes,
                 });
             }
 
@@ -430,7 +430,7 @@ pub fn new_ast(
                     kind: NodeKind::Return(return_values),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
-                    lifetime: context.scope_lifetime_id,
+                    lifetime: context.owned_lifetimes,
                 });
             }
 

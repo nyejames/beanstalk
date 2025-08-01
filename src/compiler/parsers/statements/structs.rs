@@ -8,9 +8,9 @@ use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
+use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::VarVisibility;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
-use crate::compiler::parsers::variables::new_arg;
 use crate::return_syntax_error;
 
 pub fn create_args(

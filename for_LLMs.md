@@ -1,9 +1,9 @@
-We are building a compiler. The language is called Beanstalk. It has a simple type system and minimal syntax that doesn't try to have zero cost abstractions for everything. It will use Cranelift as the backend for Codegen. Some of the features below are not yet implemented in the compiler. Here is a basic syntax overview:
-# Quick Synax Overview
+We are building a compiler. The language is called Beanstalk. It has a simple type system and minimal syntax that doesn't try to have zero cost abstractions for everything. It will use Cranelift as the backend for Codegen. Some features below are not yet implemented in the compiler. Here is a basic syntax overview:
+# Quick Syntax Overview
 The specifics are not fully decided on, but some of the key things are:
 - Colon opens a scope, semicolon closes it.
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for string templates.
-- Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
+- Equality and other logical operators only use keywords (you can't use == or ! for logical expressions, for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type.
 - Double dashes for single line comments (--)
 - 4 spaces are recommended for indentation. 
@@ -76,7 +76,7 @@ if thing is:
     else: print("only one")
 ;
 # Templates
-Beanstalk has unique, superpowered templating strings. Templates have two sections, the head and the body, separated with a colon. Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and the way the string is parsed (e.g ran through a markdown parser). The main purpose of a template is to generate either text content, markdown, HTML or code.
+Beanstalk has unique, superpowered templating strings. Templates have two sections, the head and the body, separated with a colon. Templates are scoped using square brackets and can be passed special types called Styles to change their behaviour, content and the way the string is parsed (e.g. ran through a Markdown parser). The main purpose of a template is to generate either text content, Markdown, HTML or code.
 ## The head section
 Is used to:
 - Define properties of the template
@@ -85,12 +85,12 @@ Is used to:
 #### The body section
 is used to define the content of the template. This is a string. Inside the body of a template, you can nest more templates using square brackets. 
 ## Beanstalk Markdown
-Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template has the markdown option enabled. Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
+Beanstalk uses its own flavour of Markdown that can be used inside template bodies if the template has the Markdown option enabled. Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside a template body. Beanstalk Markdown supports the familiar heading, bold and italic syntax from most Markdown parsers.
 ## Beanstalk Template example
-This is using the built in #markdown library that will become part of the compiler. This imports functions such as rgb() into the template so any child scenes can see and use those functions. Templates capture any variables in their surrounding scope, so can be passed into scene heads.
+This is using the built-in #markdown library that will become part of the compiler. This imports functions such as rgb() into the template so any child scenes can see and use those functions. Templates capture any variables in their surrounding scope, so can be passed into scene heads.
 
 [Section #markdown:
-    [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
+    [head_of_element: content of an element that renders as text (markdown / metadata / alt tag / code ..etc)]
 
     [img("images/meme.jpg"): meme (this text in the template body is the alt description automatically)]
 
@@ -123,4 +123,4 @@ This is using the built in #markdown library that will become part of the compil
 
 ]
 # Memory Management
-Beanstalk uses a borrow checker but will not have any explicit lifetime annotations. There is no GC or manual memory management. It will assume the shortest lifetime when it can't be inferred. References can be returned from functions if they are a named return. Only named parameters that were passed in can be passed back out as references. Functions are pass by reference, and using the ~ symbol will mean it's passed by mnutable reference (the compiler will determine whether to move instead). There is no distinction in the syntax between a mutable reference and a move. The compiler will statically analyse when it can move a variable rather than just give over a mutable reference by checking for it's last use. Beanstalk may implement ARC for edge cases or situations where lifetimes can't be figured out at all, or to eliviate some strictness in certain places.
+Beanstalk uses a borrow checker but will not have any explicit lifetime annotations. There is no GC or manual memory management. It will assume the shortest lifetime when it can't be inferred. References can be returned from functions if they are a named return. Only named parameters passed in can be passed back out as references. Functions are pass by reference, and using the ~ symbol will mean it's passed by mutable reference (the compiler will determine whether to move instead). There is no distinction in the syntax between a mutable reference and a move. The compiler will statically analyse when it can move a variable rather than just give over a mutable reference by checking for its last use. Beanstalk may implement ARC for edge cases or situations where lifetimes can't be figured out at all, or to alleviate some strictness in certain places.

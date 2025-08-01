@@ -13,7 +13,6 @@ mod compiler {
         pub mod ast_nodes;
         pub mod build_ast;
         pub mod collections;
-        mod create_template_node;
         pub mod markdown;
         pub mod expressions {
             pub mod constant_folding;
@@ -23,16 +22,17 @@ mod compiler {
             pub mod parse_expression;
         }
         pub mod statements {
+            pub mod create_template_node;
             pub mod functions;
             pub mod loops;
             pub mod structs;
+            pub mod variables;
         }
         pub mod builtin_methods;
         pub mod template;
 
         pub mod tokenizer;
         pub mod tokens;
-        pub mod variables;
     }
     mod html5_codegen {
         pub mod code_block_highlighting;
@@ -43,10 +43,9 @@ mod compiler {
         pub mod web_parser;
     }
 
-    pub mod wasm_codegen {
+    pub mod codegen {
         pub mod wasm_emitter;
 
-        pub mod wasm_memory;
         pub mod wat_to_wasm;
     }
 
@@ -64,12 +63,9 @@ mod compiler {
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::{
-    AstBlock, ContextKind, ParserOutput, ScopeContext, new_ast,
-};
+use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenContext;
-use crate::compiler::wasm_codegen::wasm_emitter::WasmModule;
 use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -77,7 +73,6 @@ use std::path::{Path, PathBuf};
 pub struct OutputModule {
     pub imports: HashSet<PathBuf>,
     pub source_path: PathBuf,
-    pub wasm: WasmModule,
 }
 
 impl OutputModule {
@@ -85,7 +80,6 @@ impl OutputModule {
         OutputModule {
             imports,
             source_path,
-            wasm: WasmModule::new(),
         }
     }
 }
@@ -156,7 +150,4 @@ impl<'a> Compiler<'a> {
     //        BACKEND
     //      (Cranelift)
     // -----------------------
-    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<Vec<u8>, CompileError> {
-       Ok(Vec::new())
-    }
 }

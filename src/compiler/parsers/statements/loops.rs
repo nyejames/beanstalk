@@ -45,7 +45,7 @@ pub fn create_loop(
 
                         // create while loop
                         Ok(AstNode {
-                            lifetime: context.scope_lifetime_id,
+                            lifetime: context.owned_lifetimes,
                             kind: NodeKind::WhileLoop(
                                 condition,
                                 new_ast(token_stream, context, false)?.ast,
@@ -107,18 +107,17 @@ pub fn create_loop(
 
             let loop_arg = Arg {
                 name: name.to_owned(),
-                value: Expression {
-                    data_type: iterated_item.data_type.get_iterable_type(),
-                    kind: ExpressionKind::Reference(name),
-                    location: token_stream.current_location(),
-                },
+                value: Expression::new(
+                    iterated_item.kind.to_owned(),
+                    token_stream.current_location(),
+                ),
             };
 
             context.declarations.push(loop_arg.to_owned());
 
             Ok(AstNode {
                 scope: context.scope_name.to_owned(),
-                lifetime: context.scope_lifetime_id,
+                lifetime: context.owned_lifetimes,
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,

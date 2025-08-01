@@ -1,7 +1,7 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::{OutputModule, return_file_errors, return_file_error};
+use crate::{OutputModule, return_file_error};
 use std::fs;
 use std::path::Path;
 use wasmparser::validate;
@@ -36,17 +36,17 @@ pub fn write_wasm_module(module: OutputModule, file_path: &Path) -> Result<(), C
     //     Err(e) => return_file_error!(module.output_path, "Error writing JS file: {:?}", e),
     // };
 
-    let wasm = module.wasm.finish()?;
+    // let wasm = module.wasm.finish()?;
 
-    if let Err(e) = validate(&wasm) {
-        return_file_error!(file_path, "Error validating WASM module: {:?}", e)
-    }
-
-    // Write the wasm file to the same directory
-    match fs::write(file_path.with_extension("wasm"), wasm) {
-        Ok(_) => {}
-        Err(e) => return_file_error!(file_path, "Error writing WASM file: {:?}", e),
-    }
+    // if let Err(e) = validate(&wasm) {
+    //     return_file_error!(file_path, "Error validating WASM module: {:?}", e)
+    // }
+    // 
+    // // Write the wasm file to the same directory
+    // match fs::write(file_path.with_extension("wasm"), wasm) {
+    //     Ok(_) => {}
+    //     Err(e) => return_file_error!(file_path, "Error writing WASM file: {:?}", e),
+    // }
 
     Ok(())
 }

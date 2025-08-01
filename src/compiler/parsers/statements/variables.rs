@@ -1,7 +1,3 @@
-use super::{
-    ast_nodes::{Arg, NodeKind},
-    expressions::parse_expression::create_expression,
-};
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
@@ -13,6 +9,10 @@ use crate::compiler::parsers::statements::functions::{
 };
 use crate::compiler::parsers::tokens::VarVisibility;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::{
+    ast_nodes::{Arg, NodeKind},
+    expressions::parse_expression::create_expression,
+};
 use crate::return_syntax_error;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
@@ -42,7 +42,7 @@ pub fn create_reference(
             )),
             location: token_stream.current_location(),
             scope: context.scope_name.to_owned(),
-            lifetime: context.scope_lifetime_id,
+            lifetime: context.owned_lifetimes,
         }),
     }
 }

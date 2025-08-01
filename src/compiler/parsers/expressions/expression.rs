@@ -39,7 +39,6 @@ impl Expression {
                 all_items
             }
             ExpressionKind::Function(..) => String::new(),
-            ExpressionKind::Reference(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
             ExpressionKind::None => String::new(),
         }
@@ -57,13 +56,6 @@ impl Expression {
             data_type: DataType::None,
             kind: ExpressionKind::None,
             location: TextLocation::default(),
-        }
-    }
-    pub fn reference(name: String, location: TextLocation) -> Self {
-        Self {
-            data_type: DataType::Inferred(false),
-            kind: ExpressionKind::Reference(name),
-            location,
         }
     }
     pub fn runtime(expressions: Vec<AstNode>, data_type: DataType, location: TextLocation) -> Self {
@@ -298,11 +290,6 @@ impl Expression {
 pub enum ExpressionKind {
     None,
 
-    // For variables, function calls and structs / collection access
-    // Name, DataType, Specific argument accessed
-    // Arg accessed might be useful for built-in methods on any type
-    Reference(String),
-
     Runtime(Vec<AstNode>),
 
     Int(i32),
@@ -349,7 +336,6 @@ impl ExpressionKind {
             ExpressionKind::Float(_) => DataType::Float(false),
             ExpressionKind::String(_) => DataType::String(false),
             ExpressionKind::Bool(_) => DataType::Bool(false),
-            ExpressionKind::Reference(_) => DataType::Inferred(false),
             ExpressionKind::Runtime(_) => DataType::Inferred(false),
             ExpressionKind::Function(args, _, returns) => {
                 DataType::Function(args.to_owned(), returns.to_owned())

@@ -5,20 +5,42 @@ use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum OwnershipRule {
+    MutableOwned,
+    MutableReference,
+    ImmutableOwned,
+    ImmutableReference,
+}
+
+impl OwnershipRule {
+    pub fn is_mutable(&self) -> bool {
+        match &self { 
+            OwnershipRule::MutableOwned => true,
+            OwnershipRule::MutableReference => true,
+            _ => false,
+        }
+    }
+    pub fn as_string(&self) -> String {
+        match &self { 
+            OwnershipRule::MutableOwned => String::from("mutable"),
+            OwnershipRule::MutableReference => String::from("mutable reference"),
+            OwnershipRule::ImmutableOwned => String::from("immutable"),
+            OwnershipRule::ImmutableReference => String::from("immutable reference"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum DataType {
     // Mutability is part of the type
     // This helps with compile time constant folding
 
-    // Custom types (references to user types) must store their name to be type-checked later and replaced with the correct shape.
-    // We use this at the AST stage for imports or references when we can't figure out the type yet
-    UnknownReference(String, bool),
-
     // Type is inferred, This only exists before the type checking stage
     // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile
-    Inferred(bool),
+    Inferred(OwnershipRule),
 
-    Bool(bool),
-    Range, // Iterable
+    Bool(OwnershipRule),
+    Range, // Iterable that must always be owned.
 
     // Immutable Data Types
     // In practice, these types should not be deliberately used much at all
@@ -27,28 +49,29 @@ pub enum DataType {
     False,
 
     // Strings
-    String(bool), // UTF-8 (will probably just be utf 16 because js for now).
+    String(OwnershipRule), // UTF-8 (will probably just be utf 16 because js for now).
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
     // All types will finally be coerced to strings after everything is evaluated.
-    CoerceToString(bool),
+    CoerceToString(OwnershipRule),
 
     // Numbers
-    Float(bool),
-    Int(bool),
-    Decimal(bool),
+    Float(OwnershipRule),
+    Int(OwnershipRule),
+    Decimal(OwnershipRule),
 
     // Collections.
     // A collection of single types, dynamically sized
-    Collection(Box<DataType>),
+    Collection(Box<DataType>, OwnershipRule),
 
     // Structs
-    Args(Vec<Arg>),
+    Args(Vec<Arg>),                  // Type
+    Struct(Vec<Arg>, OwnershipRule), // Struct instance
 
     // Special Beanstalk Types
     // Scene types may have more static structure to them in the future
-    Template(bool), // is_mutable
+    Template(OwnershipRule), // is_mutable
 
     Function(Vec<Arg>, Vec<DataType>), // Arg constructor, Returned args
 
@@ -84,17 +107,13 @@ impl DataType {
             DataType::Range => {
                 return matches!(
                     accepted_type,
-                    DataType::Collection(_)
+                    DataType::Collection(..)
                         | DataType::Args(_)
                         | DataType::Float(_)
                         | DataType::Int(_)
                         | DataType::Decimal(_)
                         | DataType::String(_)
                 );
-            }
-
-            DataType::UnknownReference(..) => {
-                return true;
             }
 
             _ => {}
@@ -129,39 +148,6 @@ impl DataType {
         }
     }
 
-    pub fn length(&self) -> u32 {
-        match self {
-            DataType::UnknownReference(name, mutable) => {
-                name.len() as u32 + if *mutable { 1 } else { 0 }
-            }
-            DataType::Inferred(_) => 0,
-            DataType::CoerceToString(_) => 0,
-            DataType::Bool(_) => 4,
-            DataType::Range => 0,
-            DataType::True => 4,
-            DataType::False => 5,
-            DataType::String(_) => 6,
-            DataType::Float(_) => 5,
-            DataType::Int(_) => 3,
-            DataType::Decimal(_) => 6,
-            DataType::Collection(inner_type) => inner_type.length(),
-
-            DataType::Args(_) => 1,
-            DataType::Choices(inner_types) => {
-                let mut length = 0;
-                for arg in inner_types {
-                    length += arg.length();
-                }
-                length
-            }
-            DataType::Function(..) => 2,
-            DataType::Template(_) => 5,
-
-            DataType::Option(inner_type) => inner_type.length() + 1,
-            DataType::None => 4,
-        }
-    }
-
     // Special Types that might change (basically the same as rust with more syntax sugar)
     pub fn to_option(self) -> DataType {
         match self {
@@ -170,17 +156,15 @@ impl DataType {
             DataType::Int(mutable) => DataType::Option(Box::new(DataType::Int(mutable))),
             DataType::Decimal(mutable) => DataType::Option(Box::new(DataType::Decimal(mutable))),
             DataType::String(mutable) => DataType::Option(Box::new(DataType::String(mutable))),
-            DataType::Collection(inner_type) => {
-                DataType::Option(Box::new(DataType::Collection(inner_type)))
+            DataType::Collection(inner_type, ownership) => {
+                DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
             }
             DataType::Args(args) => DataType::Option(Box::new(DataType::Args(args))),
+            DataType::Struct(args, ownership) => DataType::Option(Box::new(DataType::Struct(args, ownership))),
             DataType::Function(args, return_type) => {
                 DataType::Option(Box::new(DataType::Function(args, return_type)))
             }
             DataType::Template(mutable) => DataType::Option(Box::new(DataType::Template(mutable))),
-            DataType::UnknownReference(name, mutable) => {
-                DataType::Option(Box::new(DataType::UnknownReference(name, mutable)))
-            }
             DataType::Inferred(mutable) => DataType::Option(Box::new(DataType::Inferred(mutable))),
             DataType::CoerceToString(mutable) => {
                 DataType::Option(Box::new(DataType::CoerceToString(mutable)))
@@ -200,16 +184,16 @@ impl DataType {
 
     pub fn is_mutable(&self) -> bool {
         match self {
-            DataType::Inferred(mutable) => *mutable,
-            DataType::CoerceToString(mutable) => *mutable,
-            DataType::Bool(mutable) => *mutable,
+            DataType::Inferred(ownership) => ownership.is_mutable(),
+            DataType::CoerceToString(ownership) => ownership.is_mutable(),
+            DataType::Bool(ownership) => ownership.is_mutable(),
             DataType::True => false,
             DataType::False => false,
-            DataType::String(mutable) => *mutable,
-            DataType::Float(mutable) => *mutable,
-            DataType::Int(mutable) => *mutable,
-            DataType::Decimal(mutable) => *mutable,
-            DataType::Collection(inner_type) => inner_type.is_mutable(),
+            DataType::String(ownership) => ownership.is_mutable(),
+            DataType::Float(ownership) => ownership.is_mutable(),
+            DataType::Int(ownership) => ownership.is_mutable(),
+            DataType::Decimal(ownership) => ownership.is_mutable(),
+            DataType::Collection(_ , ownership) => ownership.is_mutable(),
             DataType::Args(args) => {
                 for arg in args {
                     if arg.value.data_type.is_mutable() {
@@ -225,13 +209,12 @@ impl DataType {
     pub fn is_iterable(&self) -> bool {
         match self {
             DataType::Range => true,
-            DataType::Collection(_) => true,
+            DataType::Collection(..) => true,
             DataType::Args(_) => true,
             DataType::String(_) => true,
             DataType::Float(_) => true,
             DataType::Int(_) => true,
             DataType::Decimal(_) => true,
-            DataType::UnknownReference(..) => false,
             DataType::Inferred(_) => true, // Will need to be type checked later
             _ => false,
         }
@@ -239,7 +222,7 @@ impl DataType {
 
     pub fn get_iterable_type(&self) -> DataType {
         match self {
-            DataType::Collection(inner_type) => *inner_type.to_owned(),
+            DataType::Collection(inner_type, ..) => *inner_type.to_owned(),
             _ => self.to_owned(),
         }
     }
@@ -253,7 +236,7 @@ impl DataType {
             DataType::Float(_) => DataType::Float(true),
             DataType::Int(_) => DataType::Int(true),
             DataType::Decimal(_) => DataType::Decimal(true),
-            DataType::Collection(inner_type) => {
+            DataType::Collection(inner_type, ownership) => {
                 DataType::Collection(Box::new(inner_type.to_mutable()))
             }
             DataType::Args(args) => {
@@ -294,42 +277,47 @@ impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             DataType::Inferred(mutable) => {
-                write!(f, "{} Inferred", if *mutable { "mutable" } else { "" })
+                write!(f, "Inferred {} ", mutable.as_string())
             }
             DataType::CoerceToString(mutable) => {
-                write!(f, "{} CoerceToString", if *mutable { "mutable" } else { "" })
+                write!(
+                    f,
+                    "CoerceToString {} ",
+                    mutable.as_string()
+                )
             }
-            DataType::Bool(mutable) => write!(f, "{} Bool", if *mutable { "mutable" } else { "" }),
+            DataType::Bool(mutable) => write!(f, "Bool {} ",mutable.as_string()),
             DataType::String(mutable) => {
-                write!(f, "{} String", if *mutable { "mutable" } else { "" })
+                write!(f, "String {} ",mutable.as_string())
             }
-            DataType::Float(mutable) => write!(f, "{} Float", if *mutable { "mutable" } else { "" }),
-            DataType::Int(mutable) => write!(f, "{} Int", if *mutable { "mutable" } else { "" }),
+            DataType::Float(mutable) => {
+                write!(f, "Float {} ",mutable.as_string())
+            }
+            DataType::Int(mutable) => write!(f, "{} Int",mutable.as_string()),
             DataType::Decimal(mutable) => {
-                write!(f, "{} Decimal", if *mutable { "mutable" } else { "" })
+                write!(f, "Decimal {} ",mutable.as_string())
             }
-            DataType::Collection(inner_type) => write!(f, "{inner_type} Collection"),
+            DataType::Collection(inner_type, mutable) => write!(f, "{inner_type} {} Collection", mutable.as_string()),
             DataType::Args(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    arg_str.push_str(&format!(
-                        "{}: {}, ",
-                        arg.name,
-                        arg.value.data_type
-                    ));
+                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
-            
+            DataType::Struct(args, ownership) => {
+                let mut arg_str = String::new();
+                for arg in args {
+                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
+                }
+                write!(f, "{self:?} Arguments({arg_str})")
+            }
+
             DataType::Function(args, return_types) => {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
                 for arg in args {
-                    arg_str.push_str(&format!(
-                        "{}: {}, ",
-                        arg.name,
-                        arg.value.data_type
-                    ));
+                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
                 }
                 for return_type in return_types {
                     returns_string.push_str(&format!("{return_type}, "));
@@ -338,9 +326,8 @@ impl Display for DataType {
                 write!(f, "Function({arg_str} -> {returns_string})")
             }
             DataType::Template(mutable) => {
-                write!(f, "{} Template", if *mutable { "mutable" } else { "" })
+                write!(f, "Template {} ", mutable.as_string())
             }
-            DataType::UnknownReference(name, ..) => write!(f, "{name} Pointer"),
             DataType::None => write!(f, "None"),
             DataType::True => write!(f, "True"),
             DataType::False => write!(f, "False"),
@@ -355,14 +342,6 @@ impl Display for DataType {
             }
         }
     }
-}
-
-pub fn get_any_number_datatype(mutable: bool) -> DataType {
-    DataType::Choices(vec![
-        DataType::Float(mutable),
-        DataType::Int(mutable),
-        DataType::Decimal(mutable),
-    ])
 }
 
 // pub fn get_rgba_args() -> DataType {
