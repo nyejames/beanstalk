@@ -10,6 +10,12 @@ use crate::compiler::traits::ContainsReferences;
 use crate::return_syntax_error;
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
+// TODO: Loop invariance analysis.
+// I reckon this is possible to do at this stage through keeping a list of invariants.
+// Pushing to a list of possible invariant calculations that could be moved to a header.
+// This would require tracking whether a mutable var inside the loop that is used in an expression changes during any possible loop branch.
+// If it does, then it can be left alone, otherwise it can be marked as invariant.
+// Anything marked as invariant when parsing the AST to a lower IR can be hoisted up to the loop header.
 pub fn create_loop(
     token_stream: &mut TokenContext,
 
