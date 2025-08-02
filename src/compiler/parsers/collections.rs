@@ -67,5 +67,6 @@ pub fn new_collection(
     Ok(Expression::collection(
         items,
         token_stream.current_location(),
+        context.lifetime
     ))
 }

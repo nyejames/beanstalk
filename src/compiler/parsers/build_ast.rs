@@ -121,7 +121,7 @@ macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
             kind: ContextKind::Template,
-            lifetime: $context.owned_lifetimes,
+            lifetime: $context.lifetime,
             scope_name: $context.scope_name.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
@@ -208,15 +208,15 @@ pub fn new_ast(
                     &mut Style::default(),
                 )?;
 
-                match template {
-                    TemplateType::Template(expr) => {
+                match template.kind {
+                    TemplateType::StringTemplate => {
                         ast.push(AstNode {
-                            kind: NodeKind::Expression(expr),
+                            kind: NodeKind::Expression(Expression::template(template, context.lifetime)),
                             scope: context.scope_name.to_owned(),
                             location: token_stream.current_location(),
                         });
                     }
-                    TemplateType::Slot(..) => {
+                    TemplateType::Slot => {
                         return_rule_error!(
                             token_stream.current_location(),
                             "Slots can only be used inside child templates. Slot templates must have a parent template.",

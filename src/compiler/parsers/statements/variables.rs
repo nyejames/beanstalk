@@ -68,7 +68,7 @@ pub fn new_arg(
         _ => Ownership::ImmutableOwned,
     };
 
-    let mut data_type = DataType::Inferred(ownership);
+    let mut data_type = DataType::Inferred(ownership.to_owned());
 
     match token_stream.current_token_kind() {
         TokenKind::Assign => {
@@ -140,7 +140,7 @@ pub fn new_arg(
                 | TokenKind::StructDefinition => {
                     return Ok(Arg {
                         name: name.to_owned(),
-                        value: data_type.get_zero_value(token_stream.current_location()),
+                        value: data_type.get_zero_value(token_stream.current_location(), context.lifetime),
                     });
                 }
 
@@ -171,9 +171,12 @@ pub fn new_arg(
             data_type = match token_stream.current_token_kind().to_owned() {
                 TokenKind::DatatypeLiteral(data_type) => {
                     token_stream.advance();
+
+                    // Inner Type datatype
+                    // TODO: Will collections eventually have interior vs exterior mutability?
                     DataType::Collection(Box::new(data_type), ownership)
                 }
-                _ => DataType::Collection(Box::new(DataType::Inferred(ownership))),
+                _ => DataType::Collection(Box::new(DataType::Inferred(Ownership::MutableOwned)), ownership),
             };
 
             // Make sure there is a closing curly brace
@@ -202,7 +205,7 @@ pub fn new_arg(
                 | TokenKind::StructDefinition => {
                     return Ok(Arg {
                         name: name.to_owned(),
-                        value: data_type.get_zero_value(token_stream.current_location()),
+                        value: data_type.get_zero_value(token_stream.current_location(), context.lifetime),
                     });
                 }
 

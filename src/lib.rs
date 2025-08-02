@@ -39,8 +39,6 @@ mod compiler {
         pub mod dom_hooks;
         pub mod generate_html;
         pub mod html_styles;
-        pub mod js_parser;
-        pub mod web_parser;
     }
 
     pub mod codegen {

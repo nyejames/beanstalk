@@ -3,20 +3,19 @@ use crate::compiler::compiler_errors::ErrorType;
 use colour::{blue_ln, green_ln, red_ln};
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
-use crate::compiler::html5_codegen::js_parser::create_reactive_reference;
-use crate::compiler::html5_codegen::web_parser::{Target, parse};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::markdown::to_markdown;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
+use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
+use crate::compiler::parsers::tokens::TokenizeMode::TemplateBody;
 
 #[derive(Debug)]
 pub enum TemplateType {
-    Template(Expression),
-    Slot(usize),
+    StringTemplate,
+    Slot,
     Comment,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -25,6 +24,10 @@ pub struct TemplateContent {
     pub after: Vec<Expression>,
 }
 impl TemplateContent {
+    pub fn new(content: Vec<Expression>) -> TemplateContent{
+        TemplateContent { before: Vec::new(), after: content }
+    }
+
     pub fn default() -> Self {
         Self {
             before: Vec::new(),
@@ -39,6 +42,10 @@ impl TemplateContent {
         flattened.extend(&self.after);
 
         flattened
+    }
+    pub fn concat(&mut self, other: TemplateContent) {
+        self.before.extend(other.before);
+        self.after.extend(other.after);
     }
 }
 
@@ -212,55 +219,16 @@ pub fn parse_template(
                 content.push_str(&new_template);
             }
 
-            ExpressionKind::Reference(name) => {
-                // Create a span in the HTML with a class that JS can reference
-                // TO DO: Should be reactive in future so this can change at runtime
-
-                match format_context {
-                    StyleFormat::Markdown => {
-                        content.push_str(&format!("<span class=\"{BS_VAR_PREFIX}{name}\"></span>"));
-                        code.push_str(&create_reactive_reference(name, &value.data_type));
-                    }
-
-                    StyleFormat::JSString => {
-                        content.push_str(&format!("${{{BS_VAR_PREFIX}{name}}}"));
-                    }
-
-                    _ => {
-                        content.push_str(&format!("{BS_VAR_PREFIX}{name}"));
-                    }
-                }
-            }
-
             ExpressionKind::None => {
                 // Ignore this
                 // Currently 'ignored' or hidden scenes result in a None value being added to a scene,
                 // So it's not an error
-                // Hopefully the compiler will always catch unintended use of None in scenes
+                // Hopefully the compiler will always catch unintended use of None in scenes.
+                // May emit a warning in future if this is possible from user error.
             }
 
-            ExpressionKind::Runtime(nodes) => match format_context {
-                StyleFormat::Markdown => {
-                    let new_parsed = parse(nodes, "", &Target::JS)?;
-
-                    content.push_str(&format!("<span class=\"{template_id}\"></span>"));
-
-                    code.push_str(&format!("let {template_id} = {}", new_parsed.code_module));
-                    code.push_str(&create_reactive_reference(&template_id, &value.data_type));
-                }
-
-                StyleFormat::JSString => {
-                    let new_parsed = parse(nodes, "", &Target::JS)?;
-                    content.push_str(&format!("`${{{}}}`", new_parsed.content_output));
-                    code.push_str(&new_parsed.code_module);
-                }
-
-                _ => {
-                    let new_parsed = parse(nodes, "", &Target::Raw)?;
-
-                    content.push_str(&new_parsed.content_output.to_string());
-                    code.push_str(&new_parsed.code_module);
-                }
+            ExpressionKind::Runtime(nodes) => {
+                // TODO
             },
 
             ExpressionKind::Function(..) => {

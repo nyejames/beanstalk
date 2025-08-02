@@ -3,7 +3,7 @@ use crate::compiler::compiler_errors::ErrorType;
 use colour::grey_ln;
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -87,7 +87,7 @@ pub fn create_args(
                 next_item = false;
 
                 let mut data_type = if required_args.is_empty() {
-                    DataType::Inferred(false)
+                    DataType::Inferred(Ownership::default())
                 } else if required_args.len() < items.len() {
                     return_syntax_error!(
                         token_stream.current_location(),

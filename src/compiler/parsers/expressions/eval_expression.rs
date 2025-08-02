@@ -10,6 +10,7 @@ use crate::{
     return_compiler_error, return_syntax_error,
 };
 use std::path::PathBuf;
+use crate::compiler::parsers::statements::create_template_node::Template;
 
 // This function will turn a series of ast nodes into a Value enum.
 // A Value enum can also be a runtime expression that contains a series of nodes.
@@ -28,16 +29,13 @@ pub fn evaluate_expression(
     let mut operators_stack: Vec<AstNode> = Vec::new();
 
     // Should always be at least one node in the expression being evaluated
-    let location = match nodes.first() {
-        Some(node) => node.location.to_owned(),
-        None => return_compiler_error!("No nodes found in expression. This should never happen."),
-    };
+    let (location, lifetime) = extract_location_and_lifetime(&simplified_expression)?;
 
     'outer: for node in nodes {
         match node.kind {
             NodeKind::Reference(ref expr, ..) => {
                 if let DataType::Inferred(..) = current_type {
-                    *current_type = expr.data_type.to_mutable();
+                    *current_type = expr.data_type.to_compiler_owned();
                 }
 
                 if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
@@ -50,7 +48,7 @@ pub fn evaluate_expression(
 
             NodeKind::Expression(ref expr, ..) => {
                 if let DataType::Inferred(..) = current_type {
-                    *current_type = expr.data_type.to_mutable();
+                    *current_type = expr.data_type.to_compiler_owned();
                 }
 
                 if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
@@ -120,22 +118,15 @@ pub fn evaluate_expression(
                 new_string += &node.get_expr()?.as_string();
             }
 
-            Ok(Expression::string(new_string, location))
+            Ok(Expression::string(new_string, location, lifetime))
         }
 
-        // At this stage, inferred should only be possible if only variables of unknown types
-        // have been used in the expression.
-        // So we need to mark this expression to be evaluated later on in the compiler once we know those types.
-        // This can happen due to imports.
-        DataType::Inferred(_) => {
-            // If there were any explicit numerical types, then this will be passed to math_constant_fold.
-            // This is just to skip calling that function if no numerical constants were found.
-            Ok(Expression::runtime(
-                simplified_expression,
-                current_type.to_owned(),
-                location,
-            ))
+        DataType::Inferred(..) => {
+            return_compiler_error!(
+                "Inferred data type made it into eval_expression! Everything should be type checked by now"
+            )
         }
+
 
         _ => {
             // MATHS EXPRESSIONS
@@ -167,6 +158,7 @@ pub fn evaluate_expression(
                 stack,
                 current_type.to_owned(),
                 TextLocation::new(scope, first_node_start, last_node_end),
+                lifetime,
             ))
         }
     }
@@ -201,11 +193,7 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
     let mut template_body: TemplateContent = TemplateContent::default();
     let mut style = Style::default();
 
-    // Should always be at least one node in the expression being evaluated
-    let location = match &simplified_expression.first() {
-        Some(node) => node.location.to_owned(),
-        None => return_compiler_error!("No nodes found in expression. This should never happen."),
-    };
+    let (location, lifetime) = extract_location_and_lifetime(&simplified_expression)?;
 
     for node in simplified_expression {
         match node.get_expr()?.kind {
@@ -241,11 +229,23 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
     }
 
     Ok(Expression::template(
-        template_body,
-        style,
-        String::new(),
-        location,
+        Template::string_template(
+            template_body,
+            style,
+            String::new(),
+            location,
+        ),
+        lifetime
     ))
+}
+
+fn extract_location_and_lifetime(nodes: &[AstNode]) -> Result<(TextLocation, u32), CompileError> {
+    // TODO: Just in case the first node is an operator or something
+    // This should PROBABLY iterate through until it hits the first expression node
+    match nodes.first() {
+        Some(node) => Ok((node.location.to_owned(), node.get_expr()?.owner_id)),
+        None => return_compiler_error!("No nodes found in expression. This should never happen."),
+    }
 }
 
 // TODO - needs to check what can be concatenated at compile time

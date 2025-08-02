@@ -272,7 +272,7 @@ pub fn create_expression(
                 let location = token_stream.current_location();
                 expression.push(AstNode {
 
-                    kind: NodeKind::Reference(Expression::int(int_value, location.to_owned())),
+                    kind: NodeKind::Reference(Expression::int(int_value, location.to_owned(), context.lifetime)),
                     scope: context.scope_name.to_owned(),
                     location,
                 });
@@ -285,6 +285,7 @@ pub fn create_expression(
                     kind: NodeKind::Reference(Expression::string(
                         string.to_owned(),
                         location.to_owned(),
+                        context.lifetime,
                     )),
                     scope: context.scope_name.to_owned(),
                     location,
@@ -292,15 +293,15 @@ pub fn create_expression(
             }
 
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
-                let template_type = new_template(
+                let template = new_template(
                     token_stream,
                     new_template_context!(context),
                     &mut HashMap::new(),
                     &mut Style::default(),
                 )?;
 
-                match template_type {
-                    TemplateType::Template(template) => return Ok(template),
+                match template.kind {
+                    TemplateType::StringTemplate => return Ok(Expression::template(template, context.lifetime)),
 
                     // Ignore comments
                     TemplateType::Comment => {}
@@ -310,7 +311,7 @@ pub fn create_expression(
                         return_type_error!(
                             token_stream.current_location(),
                             "Unexpected template type used in expression: {:?}",
-                            template_type
+                            template
                         )
                     }
                 }
@@ -323,6 +324,7 @@ pub fn create_expression(
                     kind: NodeKind::Expression(Expression::bool(
                         value.to_owned(),
                         location.to_owned(),
+                        context.lifetime
                     )),
                     location,
                     scope: context.scope_name.to_owned(),

@@ -3,18 +3,65 @@ use crate::compiler::compiler_errors::ErrorType;
 use colour::{blue_ln, green_ln, red_ln};
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::statements::structs::create_args;
 use crate::compiler::parsers::template::{Style, StyleFormat, TemplateContent, TemplateType};
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::return_syntax_error;
 use crate::settings::BS_VAR_PREFIX;
 use std::collections::HashMap;
-// const DEFAULT_SLOT_NAME: &str = "_slot";
+
+#[derive(Debug)]
+pub struct Template {
+    pub content: TemplateContent,
+    pub kind: TemplateType,
+    pub style: Style,
+    pub id: String,
+    pub location: TextLocation,
+}
+
+impl Template {
+    pub fn default() -> Template {
+        Template {
+            content: TemplateContent::default(),
+            kind: TemplateType::Comment,
+            style: Style::default(),
+            id: String::new(),
+            location: TextLocation::default(),
+        }
+    }
+    pub fn string_template(content: TemplateContent, style: Style, id: String, location: TextLocation) -> Template {
+        Template {
+            content,
+            kind: TemplateType::StringTemplate,
+            style,
+            id,
+            location,
+        }
+    }
+    pub fn slot(id: String, location: TextLocation) -> Template {
+        Template {
+            content: TemplateContent::default(),
+            kind: TemplateType::Slot,
+            style: Style::default(),
+            location,
+            id,
+        }
+    }
+    pub fn comment(location: TextLocation) -> Template {
+        Template {
+            content: TemplateContent::default(),
+            kind: TemplateType::Comment,
+            style: Style::default(),
+            id: String::new(),
+            location,
+        }
+    }
+}
 
 // Recursive function to parse templates
 pub fn new_template(
@@ -22,14 +69,14 @@ pub fn new_template(
     context: &ScopeContext,
     unlocked_templates: &mut HashMap<String, ExpressionKind>,
     template_style: &mut Style,
-) -> Result<TemplateType, CompileError> {
+) -> Result<Template, CompileError> {
     // These are variables or special keywords passed into the template head
     // let mut scene_template: TemplateContent = TemplateContent::default();
 
     // The content of the scene
     // There are 3 Vecs here as any slots from scenes in the scene head need to be inserted around the body
-    let mut template_body: TemplateContent = TemplateContent::default();
-    let mut this_template_body: Vec<Expression> = Vec::new();
+    let mut template_content: TemplateContent = TemplateContent::default();
+    let mut this_template_content: TemplateContent = TemplateContent::default();
 
     let mut template_id: String = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
@@ -50,15 +97,13 @@ pub fn new_template(
 
             TokenKind::TemplateClose => {
                 token_stream.go_back();
-
-                create_final_template_body(&mut template_body, this_template_body);
-
-                return Ok(TemplateType::Template(Expression::template(
-                    template_body,
+                template_content.flatten().extend(this_template_content.flatten());
+                return Ok(Template::string_template(
+                    template_content,
                     template_style.to_owned(),
                     template_id,
                     token_stream.current_location(),
-                )));
+                ));
             }
 
             // This is a declaration of the ID by using the export prefix followed by a variable name
@@ -71,14 +116,14 @@ pub fn new_template(
             // It will have a usize in it that will determine the order of how elements from the template head are inserted into the body,
             // Like traditional template strings.
             // So the compiler can insert things into the slot
-            TokenKind::Slot => return Ok(TemplateType::Slot(0)),
+            TokenKind::Slot => return Ok(Template::slot(template_id, token_stream.current_location())),
 
             TokenKind::Markdown => {
                 template_style.format = StyleFormat::Markdown;
             }
 
             // If this is a template, we have to do some clever parsing here
-            TokenKind::Symbol(name, ..) => {
+            TokenKind::Symbol(name) => {
                 // TODO - sort all this out.
                 // Should unlocked styles just be passed in as normal declarations?
 
@@ -101,8 +146,8 @@ pub fn new_template(
                     }
 
                     // Unpack this scene into this scene's body
-                    template_body.before.extend(body.before.to_owned());
-                    template_body.after.splice(0..0, body.after.to_owned());
+                    template_content.before.extend(body.before.to_owned());
+                    template_content.after.splice(0..0, body.after.to_owned());
 
                     continue;
                 }
@@ -127,8 +172,7 @@ pub fn new_template(
                             }
 
                             // Unpack this scene into this scene's body
-                            template_body.before.extend(body.before.to_owned());
-                            template_body.after.splice(0..0, body.after.to_owned());
+                            template_content.concat(body.to_owned());
 
                             continue;
                         }
@@ -139,11 +183,11 @@ pub fn new_template(
                             let expr = create_expression(
                                 token_stream,
                                 &context,
-                                &mut DataType::CoerceToString(false),
+                                &mut DataType::CoerceToString(Ownership::default()),
                                 false,
                             )?;
 
-                            this_template_body.push(expr);
+                            this_template_content.after.push(expr);
                         }
                     }
                 } else {
@@ -165,10 +209,10 @@ pub fn new_template(
             | TokenKind::RawStringLiteral(_) => {
                 token_stream.go_back();
 
-                this_template_body.push(create_expression(
+                this_template_content.after.push(create_expression(
                     token_stream,
                     &context,
-                    &mut DataType::CoerceToString(false),
+                    &mut DataType::CoerceToString(Ownership::default()),
                     false,
                 )?);
             }
@@ -193,9 +237,10 @@ pub fn new_template(
             TokenKind::OpenParenthesis => {
                 let structure = create_args(token_stream, Expression::none(), &[], &context)?;
 
-                this_template_body.push(Expression::structure(
+                this_template_content.after.push(Expression::structure(
                     structure,
                     token_stream.current_location(),
+                    context.lifetime
                 ));
             }
 
@@ -226,7 +271,7 @@ pub fn new_template(
                     token_stream.advance();
                 }
 
-                return Ok(TemplateType::Comment);
+                return Ok(Template::comment(token_stream.current_location()));
             }
 
             _ => {
@@ -254,15 +299,20 @@ pub fn new_template(
                 let nested_template =
                     new_template(token_stream, context, unlocked_templates, template_style)?;
 
-                match nested_template {
-                    TemplateType::Template(template) => {
-                        this_template_body.push(template);
+                match nested_template.kind {
+                    TemplateType::StringTemplate => {
+                        this_template_content.concat(nested_template.content);
                     }
 
-                    TemplateType::Slot(..) => {
+                    TemplateType::Slot => {
+                        // TODO: wtf was this? redo slots, this is maybe the default unlabeled behaviour
+                        // But labels need to place content into the template based on their argument order
+                        // Arguments that are inserted into scenes later on can then use this slot behaviour for clever placement
+                        // Should also support spread [..] for spreading all argument into that slot place
+
                         // Now we need to move everything from this scene so far into the before part
-                        template_body.before.extend(this_template_body.to_owned());
-                        this_template_body.clear();
+                        //template_content.before.extend(this_template_content.to_owned());
+                        // this_template_content.clear();
 
                         // Everything else always gets moved to the scene after at the end
                     }
@@ -273,9 +323,10 @@ pub fn new_template(
             }
 
             TokenKind::RawStringLiteral(content) | TokenKind::StringLiteral(content) => {
-                this_template_body.push(Expression::string(
+                this_template_content.after.push(Expression::string(
                     content.to_string(),
                     token_stream.current_location(),
+                    context.lifetime
                 ));
             }
 
@@ -287,9 +338,10 @@ pub fn new_template(
             //     }
             // }
             TokenKind::Newline => {
-                this_template_body.push(Expression::string(
+                this_template_content.after.push(Expression::string(
                     "\n".to_string(),
                     token_stream.current_location(),
+                    context.lifetime
                 ));
             }
 
@@ -307,20 +359,11 @@ pub fn new_template(
         token_stream.advance();
     }
 
-    // The body of this scene is now added to the final scene body
-    create_final_template_body(&mut template_body, this_template_body);
-
-    Ok(TemplateType::Template(Expression::template(
-        template_body,
+    template_content.concat(this_template_content);
+    Ok(Template::string_template(
+        template_content,
         template_style.to_owned(),
         template_id,
         token_stream.current_location(),
-    )))
-}
-
-fn create_final_template_body(
-    template_body: &mut TemplateContent,
-    this_template_body: Vec<Expression>,
-) {
-    template_body.after.splice(0..0, this_template_body);
+    ))
 }

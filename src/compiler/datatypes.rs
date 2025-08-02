@@ -3,6 +3,7 @@ use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
+use crate::compiler::parsers::statements::create_template_node::Template;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {
@@ -230,17 +231,17 @@ impl DataType {
         }
     }
 
-    pub fn to_mutable(&self) -> DataType {
+    pub fn to_compiler_owned(&self) -> DataType {
         match self {
-            DataType::Inferred(_) => DataType::Inferred(true),
-            DataType::CoerceToString(_) => DataType::CoerceToString(true),
-            DataType::Bool(_) => DataType::Bool(true),
-            DataType::String(_) => DataType::String(true),
-            DataType::Float(_) => DataType::Float(true),
-            DataType::Int(_) => DataType::Int(true),
-            DataType::Decimal(_) => DataType::Decimal(true),
-            DataType::Collection(inner_type, ownership) => {
-                DataType::Collection(Box::new(inner_type.to_mutable()))
+            DataType::Inferred(_) => DataType::Inferred(Ownership::MutableOwned),
+            DataType::CoerceToString(_) => DataType::CoerceToString(Ownership::MutableOwned),
+            DataType::Bool(_) => DataType::Bool(Ownership::MutableOwned),
+            DataType::String(_) => DataType::String(Ownership::MutableOwned),
+            DataType::Float(_) => DataType::Float(Ownership::MutableOwned),
+            DataType::Int(_) => DataType::Int(Ownership::MutableOwned),
+            DataType::Decimal(_) => DataType::Decimal(Ownership::MutableOwned),
+            DataType::Collection(inner_type, ..) => {
+                DataType::Collection(Box::new(inner_type.to_compiler_owned()), Ownership::MutableOwned)
             }
             DataType::Args(args) => {
                 let mut new_args = Vec::new();
@@ -257,19 +258,17 @@ impl DataType {
         }
     }
 
-    pub fn get_zero_value(&self, location: TextLocation) -> Expression {
+    pub fn get_zero_value(&self, location: TextLocation, lifetime: u32) -> Expression {
         match self {
-            DataType::Float(_) => Expression::float(0.0, location),
-            DataType::Int(_) => Expression::int(0, location),
-            DataType::Bool(_) => Expression::bool(false, location),
+            DataType::Float(_) => Expression::float(0.0, location, lifetime),
+            DataType::Int(_) => Expression::int(0, location, lifetime),
+            DataType::Bool(_) => Expression::bool(false, location, lifetime),
             DataType::String(_) | DataType::CoerceToString(_) => {
-                Expression::string(String::new(), location)
+                Expression::string(String::new(), location, lifetime)
             }
             DataType::Template(_) => Expression::template(
-                TemplateContent::default(),
-                Style::default(),
-                String::default(),
-                location,
+                Template::default(),
+                lifetime
             ),
             _ => Expression::none(),
         }

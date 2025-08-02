@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::{ScopeContext, new_ast};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
@@ -51,7 +51,6 @@ pub fn create_loop(
 
                         // create while loop
                         Ok(AstNode {
-                            owner_id: context.lifetime,
                             kind: NodeKind::WhileLoop(
                                 condition,
                                 new_ast(token_stream, context, false)?.ast,
@@ -88,7 +87,9 @@ pub fn create_loop(
             }
 
             token_stream.advance();
-            let mut iterable_type = DataType::Inferred(false);
+
+            // TODO: need to check for mutable reference syntax
+            let mut iterable_type = DataType::Inferred(Ownership::ImmutableReference);
             let iterated_item =
                 create_expression(token_stream, &context, &mut iterable_type, false)?;
 
@@ -116,6 +117,8 @@ pub fn create_loop(
                 value: Expression::new(
                     iterated_item.kind.to_owned(),
                     token_stream.current_location(),
+                    iterated_item.data_type.to_owned(),
+                    context.lifetime,
                 ),
             };
 
@@ -123,7 +126,6 @@ pub fn create_loop(
 
             Ok(AstNode {
                 scope: context.scope_name.to_owned(),
-                owner_id: context.lifetime,
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,

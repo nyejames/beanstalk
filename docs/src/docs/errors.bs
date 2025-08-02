@@ -13,19 +13,20 @@ but any type that uses a ! can use the same syntax to bubble up or handle errors
 
 
 [code:
-    CustomErr Error 
-
     func_call_that_can_return_an_error() !:
         -- Error handling code
     ;
 
-    -- This function can return a String or None
+    -- This function can return a String or an optional error
     parent_func () -> String, Error!:
         return func_call_that_can_return_an_error() !err:
             print("Error: ", err)
             return "", err
         ;
     ;
+
+    -- Handling an error With a default value 
+    string_returned = parent_func() !("default value")
 ]
 
 ## Using the ? operator

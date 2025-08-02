@@ -3,6 +3,7 @@ use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::AstBlock;
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_rule_error;
@@ -169,17 +170,14 @@ impl Expression {
         }
     }
     pub fn template(
-        body: TemplateContent,
-        styles: Style,
-        id: String,
-        location: TextLocation,
-        owner_id: u32
+        template: Template,
+        lifetime: u32,
     ) -> Self {
         Self {
             data_type: DataType::Template(Ownership::default()),
-            kind: ExpressionKind::Template(body, styles, id),
-            location,
-            owner_id
+            kind: ExpressionKind::Template(template.content, template.style, template.id),
+            location: template.location,
+            owner_id: lifetime
         }
     }
 
