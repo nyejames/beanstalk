@@ -44,9 +44,12 @@ mod compiler {
     }
 
     pub mod codegen {
-        pub mod wasm_emitter;
-
+        pub mod ir_emitter;
+        pub mod release_optimizers;
         pub mod wat_to_wasm;
+        
+        #[cfg(test)]
+        pub mod codegen_tests;
     }
 
     #[allow(dead_code)]
@@ -57,7 +60,6 @@ mod compiler {
     pub mod compiler_warnings;
     pub mod datatypes;
     pub mod module_dependencies;
-    pub mod release_optimizers;
     pub mod traits;
 }
 
