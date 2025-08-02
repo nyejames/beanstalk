@@ -45,7 +45,7 @@ pub fn create_loop(
 
                         // create while loop
                         Ok(AstNode {
-                            lifetime: context.owned_lifetimes,
+                            owner_id: context.lifetime,
                             kind: NodeKind::WhileLoop(
                                 condition,
                                 new_ast(token_stream, context, false)?.ast,
@@ -117,7 +117,7 @@ pub fn create_loop(
 
             Ok(AstNode {
                 scope: context.scope_name.to_owned(),
-                lifetime: context.owned_lifetimes,
+                owner_id: context.lifetime,
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,

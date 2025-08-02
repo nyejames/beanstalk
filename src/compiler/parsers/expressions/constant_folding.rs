@@ -46,7 +46,7 @@ pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileEr
                 if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op)? {
                     // Successfully evaluated - push a result onto the stack
                     let new_literal = AstNode {
-                        lifetime: node.lifetime,
+                        owner_id: node.owner_id,
                         kind: NodeKind::Expression(result.to_owned()),
                         location: result.location,
                         scope: node.scope.clone(),

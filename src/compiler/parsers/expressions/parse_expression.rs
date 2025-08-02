@@ -129,16 +129,14 @@ pub fn create_expression(
                     kind: NodeKind::Reference(value),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
-                    lifetime: context.owned_lifetimes,
                 });
             }
 
             // COLLECTION
             TokenKind::OpenCurly => {
                 match &data_type {
-                    DataType::Collection(inner_type) => {
+                    DataType::Collection(inner_type, _) => {
                         expression.push(AstNode {
-                            lifetime: context.owned_lifetimes,
                             kind: NodeKind::Reference(new_collection(
                                 token_stream,
                                 inner_type,
@@ -151,7 +149,6 @@ pub fn create_expression(
 
                     DataType::Inferred(mutable) => {
                         expression.push(AstNode {
-                            lifetime: context.owned_lifetimes,
                             kind: NodeKind::Reference(new_collection(
                                 token_stream,
                                 &DataType::Inferred(mutable.to_owned()),
@@ -258,8 +255,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
-                    kind: NodeKind::Reference(Expression::float(float, location.to_owned())),
+                    kind: NodeKind::Reference(Expression::float(float, location.to_owned(), context.lifetime)),
                     location,
                     scope: context.scope_name.to_owned(),
                 });
@@ -275,7 +271,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Reference(Expression::int(int_value, location.to_owned())),
                     scope: context.scope_name.to_owned(),
                     location,
@@ -285,7 +281,7 @@ pub fn create_expression(
             TokenKind::StringLiteral(ref string) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Reference(Expression::string(
                         string.to_owned(),
                         location.to_owned(),
@@ -323,7 +319,7 @@ pub fn create_expression(
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Expression(Expression::bool(
                         value.to_owned(),
                         location.to_owned(),
@@ -353,7 +349,7 @@ pub fn create_expression(
             // BINARY OPERATORS
             TokenKind::Add => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::Add),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -362,7 +358,7 @@ pub fn create_expression(
 
             TokenKind::Subtract => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::Subtract),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -370,7 +366,6 @@ pub fn create_expression(
             }
 
             TokenKind::Multiply => expression.push(AstNode {
-                lifetime: context.owned_lifetimes,
                 kind: NodeKind::Operator(Operator::Multiply),
                 location: token_stream.current_location(),
                 scope: context.scope_name.to_owned(),
@@ -378,7 +373,7 @@ pub fn create_expression(
 
             TokenKind::Divide => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::Divide),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -387,7 +382,7 @@ pub fn create_expression(
 
             TokenKind::Exponent => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::Exponent),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -396,7 +391,7 @@ pub fn create_expression(
 
             TokenKind::Modulus => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::Modulus),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -409,14 +404,14 @@ pub fn create_expression(
                 if let Some(TokenKind::Not) = token_stream.peek_next_token() {
                     token_stream.advance();
                     expression.push(AstNode {
-                        lifetime: context.owned_lifetimes,
+
                         kind: NodeKind::Operator(Operator::NotEqual),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
                     });
                 } else {
                     expression.push(AstNode {
-                        lifetime: context.owned_lifetimes,
+
                         kind: NodeKind::Operator(Operator::Equality),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
@@ -426,7 +421,7 @@ pub fn create_expression(
 
             TokenKind::LessThan => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::LessThan),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -434,7 +429,7 @@ pub fn create_expression(
             }
             TokenKind::LessThanOrEqual => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::LessThanOrEqual),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -442,7 +437,7 @@ pub fn create_expression(
             }
             TokenKind::GreaterThan => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::GreaterThan),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -450,7 +445,7 @@ pub fn create_expression(
             }
             TokenKind::GreaterThanOrEqual => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
+
                     kind: NodeKind::Operator(Operator::GreaterThanOrEqual),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -458,7 +453,6 @@ pub fn create_expression(
             }
             TokenKind::And => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
                     kind: NodeKind::Operator(Operator::And),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -466,7 +460,6 @@ pub fn create_expression(
             }
             TokenKind::Or => {
                 expression.push(AstNode {
-                    lifetime: context.owned_lifetimes,
                     kind: NodeKind::Operator(Operator::Or),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),

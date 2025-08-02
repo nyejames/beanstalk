@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };
@@ -530,15 +530,15 @@ fn keyword_or_variable(
             "true" | "True" => return_token!(TokenKind::BoolLiteral(true), stream),
             "false" | "False" => return_token!(TokenKind::BoolLiteral(false), stream),
 
-            "Float" => return_token!(TokenKind::DatatypeLiteral(DataType::Float(false)), stream),
-            "Int" => return_token!(TokenKind::DatatypeLiteral(DataType::Int(false)), stream),
-            "String" => return_token!(TokenKind::DatatypeLiteral(DataType::String(false)), stream),
-            "Bool" => return_token!(TokenKind::DatatypeLiteral(DataType::Bool(false)), stream),
+            "Float" => return_token!(TokenKind::DatatypeLiteral(DataType::Float(Ownership::default())), stream),
+            "Int" => return_token!(TokenKind::DatatypeLiteral(DataType::Int(Ownership::default())), stream),
+            "String" => return_token!(TokenKind::DatatypeLiteral(DataType::String(Ownership::default())), stream),
+            "Bool" => return_token!(TokenKind::DatatypeLiteral(DataType::Bool(Ownership::default())), stream),
 
             "None" => return_token!(TokenKind::DatatypeLiteral(DataType::None), stream),
 
             "Template" => return_token!(
-                TokenKind::DatatypeLiteral(DataType::Template(false)),
+                TokenKind::DatatypeLiteral(DataType::Template(Ownership::default())),
                 stream
             ),
 

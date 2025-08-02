@@ -6,7 +6,7 @@ use colour::{blue_ln, green_ln, red_ln};
 use super::{ast_nodes::NodeKind, expressions::parse_expression::create_expression};
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -52,7 +52,7 @@ pub struct ScopeContext {
     pub scope_name: PathBuf,
     pub declarations: Vec<Arg>,
     pub returns: Vec<DataType>,
-    pub owned_lifetimes: u32,
+    pub lifetime: u32,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -73,7 +73,7 @@ impl ScopeContext {
             scope_name: scope,
             declarations: declarations.to_owned(),
             returns: Vec::new(),
-            owned_lifetimes: 0, // This is only called for new ASTs, so this is the first parent
+            lifetime: 0, // This is only called for new ASTs, so this is the first parent
         }
     }
 
@@ -84,8 +84,8 @@ impl ScopeContext {
         // For now, add the lifetime ID to the scope.
         new_context
             .scope_name
-            .push(&self.owned_lifetimes.to_string());
-        new_context.owned_lifetimes += 1;
+            .push(&self.lifetime.to_string());
+        new_context.lifetime += 1;
         new_context
     }
 
@@ -94,7 +94,7 @@ impl ScopeContext {
         new_context.kind = ContextKind::Function;
         new_context.returns = returns.to_owned();
         new_context.scope_name.push(name);
-        new_context.owned_lifetimes += 1;
+        new_context.lifetime += 1;
         new_context
     }
 
@@ -103,7 +103,7 @@ impl ScopeContext {
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
         new_context.scope_name.push("expression");
-        new_context.owned_lifetimes += 1;
+        new_context.lifetime += 1;
         new_context
     }
 
@@ -121,7 +121,7 @@ macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
             kind: ContextKind::Template,
-            owned_lifetimes: $context.owned_lifetimes,
+            lifetime: $context.owned_lifetimes,
             scope_name: $context.scope_name.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
@@ -214,7 +214,6 @@ pub fn new_ast(
                             kind: NodeKind::Expression(expr),
                             scope: context.scope_name.to_owned(),
                             location: token_stream.current_location(),
-                            lifetime: context.owned_lifetimes,
                         });
                     }
                     TemplateType::Slot(..) => {
@@ -312,7 +311,6 @@ pub fn new_ast(
                         kind: NodeKind::Reference(arg.value.to_owned()),
                         scope: context.scope_name.to_owned(),
                         location: token_stream.current_location(),
-                        lifetime: context.owned_lifetimes,
                     });
 
                 // NEW VARIABLE DECLARATION
@@ -334,7 +332,6 @@ pub fn new_ast(
                         ),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
-                        lifetime: context.owned_lifetimes,
                     });
                 }
             }
@@ -355,7 +352,7 @@ pub fn new_ast(
                 let condition = create_expression(
                     token_stream,
                     &context.new_child_control_flow(ContextKind::Condition),
-                    &mut DataType::Bool(false),
+                    &mut DataType::Bool(Ownership::default()),
                     false,
                 )?;
 
@@ -383,7 +380,6 @@ pub fn new_ast(
                     ),
                     location: token_stream.current_location(),
                     scope: if_context.scope_name,
-                    lifetime: context.owned_lifetimes,
                 });
             }
 
@@ -404,7 +400,7 @@ pub fn new_ast(
                     // Console.log does not return anything
                     &[Arg {
                         name: String::new(),
-                        value: Expression::string(String::new(), token_stream.current_location()),
+                        value: Expression::string(String::new(), token_stream.current_location(), context.lifetime),
                     }],
                     &[],
                 )?);
@@ -430,7 +426,6 @@ pub fn new_ast(
                     kind: NodeKind::Return(return_values),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
-                    lifetime: context.owned_lifetimes,
                 });
             }
 

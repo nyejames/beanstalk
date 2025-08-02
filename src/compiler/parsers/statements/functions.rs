@@ -12,6 +12,7 @@ use crate::compiler::parsers::expressions::parse_expression::create_multiple_exp
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::{ast_log, return_syntax_error};
+use crate::compiler::traits::ContainsReferences;
 
 // Arg names and types are required
 // Can have default values
@@ -80,10 +81,23 @@ pub fn create_function_signature(
                     )
                 }
 
-                return_types.push(DataType::UnknownReference(
-                    name.to_owned(),
-                    mutable.to_owned(),
-                ));
+                // Search through declarations for any data types
+                // Also search through the function parameters,
+                // as the function can return references to those parameters.
+                if let Some(possible_type) = context.find_reference(name) {
+                    // Make sure this is actually a type (Args)
+                    if matches!(possible_type.value.data_type, DataType::Args(..)) {
+                        return_types.push(possible_type.value.data_type.to_owned());
+                    }
+
+                } else if let Some(possible_type) = args.find_reference(name) {
+                    // TODO:
+                    // Function return signature may need to be completely refactors to
+                    // A Vec<Arg> or a unique struct. This is so it can return references to specific parameters
+                    // And also accommodate the syntax sugar for returning Errors and Options
+                    return_types.push(possible_type.value.data_type.to_owned());
+                }
+
                 token_stream.advance();
             }
 
@@ -324,7 +338,6 @@ pub fn parse_function_call(
         ),
         location: token_stream.current_location(),
         scope: context.scope_name.to_owned(),
-        lifetime: context.owned_lifetimes,
     })
 }
 

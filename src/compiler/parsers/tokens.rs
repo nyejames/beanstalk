@@ -308,7 +308,6 @@ pub enum TokenKind {
     // For Compiler
     ModuleStart(String), // Contains module name space
     Eof,                 // End of the file
-    Free(u32),           // Drop all allocations with this lifetime ID
 
     // Module Import/Export
     Import, // Directed through a different path so not needed after tokenizer.

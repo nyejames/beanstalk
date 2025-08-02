@@ -5,27 +5,30 @@ use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum OwnershipRule {
+pub enum Ownership {
     MutableOwned,
     MutableReference,
     ImmutableOwned,
     ImmutableReference,
 }
 
-impl OwnershipRule {
+impl Ownership {
+    pub fn default() -> Ownership {
+        Ownership::ImmutableOwned
+    }
     pub fn is_mutable(&self) -> bool {
         match &self { 
-            OwnershipRule::MutableOwned => true,
-            OwnershipRule::MutableReference => true,
+            Ownership::MutableOwned => true,
+            Ownership::MutableReference => true,
             _ => false,
         }
     }
     pub fn as_string(&self) -> String {
         match &self { 
-            OwnershipRule::MutableOwned => String::from("mutable"),
-            OwnershipRule::MutableReference => String::from("mutable reference"),
-            OwnershipRule::ImmutableOwned => String::from("immutable"),
-            OwnershipRule::ImmutableReference => String::from("immutable reference"),
+            Ownership::MutableOwned => String::from("mutable"),
+            Ownership::MutableReference => String::from("mutable reference"),
+            Ownership::ImmutableOwned => String::from("immutable"),
+            Ownership::ImmutableReference => String::from("immutable reference"),
         }
     }
 }
@@ -37,9 +40,9 @@ pub enum DataType {
 
     // Type is inferred, This only exists before the type checking stage
     // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile
-    Inferred(OwnershipRule),
+    Inferred(Ownership),
 
-    Bool(OwnershipRule),
+    Bool(Ownership),
     Range, // Iterable that must always be owned.
 
     // Immutable Data Types
@@ -49,29 +52,29 @@ pub enum DataType {
     False,
 
     // Strings
-    String(OwnershipRule), // UTF-8 (will probably just be utf 16 because js for now).
+    String(Ownership), // UTF-8 (will probably just be utf 16 because js for now).
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
     // All types will finally be coerced to strings after everything is evaluated.
-    CoerceToString(OwnershipRule),
+    CoerceToString(Ownership),
 
     // Numbers
-    Float(OwnershipRule),
-    Int(OwnershipRule),
-    Decimal(OwnershipRule),
+    Float(Ownership),
+    Int(Ownership),
+    Decimal(Ownership),
 
     // Collections.
     // A collection of single types, dynamically sized
-    Collection(Box<DataType>, OwnershipRule),
+    Collection(Box<DataType>, Ownership),
 
     // Structs
     Args(Vec<Arg>),                  // Type
-    Struct(Vec<Arg>, OwnershipRule), // Struct instance
+    Struct(Vec<Arg>, Ownership), // Struct instance
 
     // Special Beanstalk Types
     // Scene types may have more static structure to them in the future
-    Template(OwnershipRule), // is_mutable
+    Template(Ownership), // is_mutable
 
     Function(Vec<Arg>, Vec<DataType>), // Arg constructor, Returned args
 

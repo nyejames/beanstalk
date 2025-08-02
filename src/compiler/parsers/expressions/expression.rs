@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::template::{Style, TemplateContent};
@@ -13,6 +13,7 @@ use crate::return_rule_error;
 pub struct Expression {
     pub kind: ExpressionKind,
     pub data_type: DataType,
+    pub owner_id: u32,
     pub location: TextLocation,
 }
 
@@ -44,11 +45,12 @@ impl Expression {
         }
     }
 
-    pub fn new(kind: ExpressionKind, location: TextLocation) -> Self {
+    pub fn new(kind: ExpressionKind, location: TextLocation, data_type: DataType, owner_id: u32) -> Self {
         Self {
-            data_type: kind.get_type(),
+            data_type,
             kind,
             location,
+            owner_id
         }
     }
     pub fn none() -> Self {
@@ -56,46 +58,53 @@ impl Expression {
             data_type: DataType::None,
             kind: ExpressionKind::None,
             location: TextLocation::default(),
+            owner_id: 0 // TBH don't know how this should behave yet
         }
     }
-    pub fn runtime(expressions: Vec<AstNode>, data_type: DataType, location: TextLocation) -> Self {
+    pub fn runtime(expressions: Vec<AstNode>, data_type: DataType, location: TextLocation, owner_id: u32) -> Self {
         Self {
             data_type,
             kind: ExpressionKind::Runtime(expressions),
             location,
+            owner_id
         }
     }
-    pub fn int(value: i32, location: TextLocation) -> Self {
+    pub fn int(value: i32, location: TextLocation, owner_id: u32) -> Self {
         Self {
-            data_type: DataType::Int(false),
+            data_type: DataType::Int(Ownership::default()),
             kind: ExpressionKind::Int(value),
             location,
+            owner_id
         }
     }
-    pub fn float(value: f64, location: TextLocation) -> Self {
+    pub fn float(value: f64, location: TextLocation, owner_id: u32) -> Self {
         Self {
-            data_type: DataType::Float(false),
+            data_type: DataType::Float(Ownership::default()),
             kind: ExpressionKind::Float(value),
             location,
+            owner_id
         }
     }
-    pub fn string(value: String, location: TextLocation) -> Self {
+    pub fn string(value: String, location: TextLocation, owner_id: u32) -> Self {
         Self {
-            data_type: DataType::String(false),
+            data_type: DataType::String(Ownership::default()),
             kind: ExpressionKind::String(value),
             location,
+            owner_id
         }
     }
-    pub fn bool(value: bool, location: TextLocation) -> Self {
+    pub fn bool(value: bool, location: TextLocation, owner_id: u32) -> Self {
         Self {
-            data_type: DataType::Bool(false),
+            data_type: DataType::Bool(Ownership::default()),
             kind: ExpressionKind::Bool(value),
             location,
+            owner_id
         }
     }
 
     // Creating Functions
     pub fn function(
+        owner_id: u32,
         args: Vec<Arg>,
         body: AstBlock,
         return_types: Vec<DataType>,
@@ -105,50 +114,58 @@ impl Expression {
             data_type: DataType::Function(args.to_owned(), return_types.to_owned()),
             kind: ExpressionKind::Function(args.to_owned(), body.ast, vec![]),
             location,
+            owner_id
         }
     }
-    pub fn function_without_signature(body: AstBlock, location: TextLocation) -> Self {
+    pub fn function_without_signature(owner_id: u32, body: AstBlock, location: TextLocation) -> Self {
         Self {
-            data_type: DataType::Inferred(false),
+            data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Function(vec![], body.ast, vec![]),
             location,
+            owner_id,
         }
     }
     pub fn function_without_return(
         args: Vec<Arg>,
         body: Vec<AstNode>,
         location: TextLocation,
+        owner_id: u32
     ) -> Self {
         Self {
-            data_type: DataType::Inferred(false),
+            data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Function(args, body, vec![]),
             location,
+            owner_id,
         }
     }
     pub fn function_without_args(
         body: Vec<AstNode>,
         return_types: Vec<DataType>,
         location: TextLocation,
+        owner_id: u32
     ) -> Self {
         Self {
-            data_type: DataType::Inferred(false),
+            data_type: DataType::Inferred(Ownership::ImmutableReference),
             kind: ExpressionKind::Function(vec![], body, return_types),
             location,
+            owner_id,
         }
     }
 
-    pub fn collection(items: Vec<Expression>, location: TextLocation) -> Self {
+    pub fn collection(items: Vec<Expression>, location: TextLocation, owner_id: u32) -> Self {
         Self {
-            data_type: DataType::Inferred(false),
+            data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Collection(items),
             location,
+            owner_id
         }
     }
-    pub fn structure(args: Vec<Arg>, location: TextLocation) -> Self {
+    pub fn structure(args: Vec<Arg>, location: TextLocation, owner_id: u32) -> Self {
         Self {
-            data_type: DataType::Inferred(false),
+            data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Struct(args),
             location,
+            owner_id
         }
     }
     pub fn template(
@@ -156,11 +173,13 @@ impl Expression {
         styles: Style,
         id: String,
         location: TextLocation,
+        owner_id: u32
     ) -> Self {
         Self {
-            data_type: DataType::Template(false),
+            data_type: DataType::Template(Ownership::default()),
             kind: ExpressionKind::Template(body, styles, id),
             location,
+            owner_id
         }
     }
 
@@ -283,7 +302,7 @@ impl Expression {
             _ => return Ok(None),
         };
 
-        Ok(Some(Expression::new(kind, self.location.to_owned())))
+        Ok(Some(Expression::new(kind, self.location.to_owned(), self.data_type.to_owned(), self.owner_id)))
     }
 }
 #[derive(Debug, Clone, PartialEq)]
@@ -328,54 +347,6 @@ impl ExpressionKind {
                 | ExpressionKind::String(_)
         )
     }
-
-    pub fn get_type(&self) -> DataType {
-        match self {
-            ExpressionKind::None => DataType::None,
-            ExpressionKind::Int(_) => DataType::Int(false),
-            ExpressionKind::Float(_) => DataType::Float(false),
-            ExpressionKind::String(_) => DataType::String(false),
-            ExpressionKind::Bool(_) => DataType::Bool(false),
-            ExpressionKind::Runtime(_) => DataType::Inferred(false),
-            ExpressionKind::Function(args, _, returns) => {
-                DataType::Function(args.to_owned(), returns.to_owned())
-            }
-            ExpressionKind::Collection(inner_nodes) => match inner_nodes.first() {
-                Some(inner_node) => inner_node.data_type.to_owned(),
-                None => DataType::Inferred(false),
-            },
-            ExpressionKind::Struct(args) => DataType::Args(args.to_owned()),
-            ExpressionKind::Template(..) => DataType::Inferred(false),
-        }
-    }
-
-    // pub fn is_pure(&self) -> bool {
-    //     match self {
-    //         ExpressionKind::Runtime(..)
-    //         | ExpressionKind::Reference(..)
-    //         | ExpressionKind::Function(..) => false,
-    //         ExpressionKind::Collection(values) => {
-    //             for value in values {
-    //                 if !value.is_pure() {
-    //                     return false;
-    //                 }
-    //             }
-    //             true
-    //         }
-    //         ExpressionKind::Object(args) => {
-    //             for arg in args {
-    //                 if !arg.value.kind.is_pure() {
-    //                     return false;
-    //                 }
-    //             }
-    //             true
-    //         }
-    //
-    //         // Not sure about how to handle this yet
-    //         ExpressionKind::Scene(..) => false,
-    //         _ => true,
-    //     }
-    // }
 
     pub fn is_iterable(&self) -> bool {
         match self {

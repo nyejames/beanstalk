@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::build_ast::{ScopeContext, new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -36,13 +36,14 @@ pub fn create_reference(
         ),
 
         _ => Ok(AstNode {
-            kind: NodeKind::Reference(Expression::reference(
-                arg.name.to_owned(),
-                token_stream.current_location(),
-            )),
+            // TODO: Can we actually know if this is a move or a mutable reference here?
+            // Maybe it's possible to do some spooky action at a distance in the variable declarations.
+            // We could just always say it's a move, then if we encounter another reference, edit the previous instance of the reference.
+            // While doing this we would have to check if there was already a mutable reference (and throw an error if so)
+            // If its immutable or being copied that's fine, but need to get the reference syntax working here.
+            kind: NodeKind::Reference(arg.value.to_owned()),
             location: token_stream.current_location(),
             scope: context.scope_name.to_owned(),
-            lifetime: context.owned_lifetimes,
         }),
     }
 }
@@ -59,15 +60,15 @@ pub fn new_arg(
     // Move past the name
     token_stream.advance();
 
-    let mutable = match token_stream.current_token_kind() {
+    let ownership = match token_stream.current_token_kind() {
         TokenKind::Mutable => {
             token_stream.advance();
-            true
+            Ownership::MutableOwned
         }
-        _ => false,
+        _ => Ownership::ImmutableOwned,
     };
 
-    let mut data_type = DataType::Inferred(mutable);
+    let mut data_type = DataType::Inferred(ownership);
 
     match token_stream.current_token_kind() {
         TokenKind::Assign => {
@@ -93,8 +94,9 @@ pub fn new_arg(
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function(
+                    context.lifetime,
                     constructor_args,
-                    new_ast(token_stream, context, false)?.ast,
+                    new_ast(token_stream, context.to_owned(), false)?.ast,
                     return_types,
                     token_stream.current_location(),
                 ),
@@ -110,6 +112,7 @@ pub fn new_arg(
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function_without_signature(
+                    context.lifetime,
                     new_ast(token_stream, context, false)?.ast,
                     token_stream.current_location(),
                 ),
@@ -168,9 +171,9 @@ pub fn new_arg(
             data_type = match token_stream.current_token_kind().to_owned() {
                 TokenKind::DatatypeLiteral(data_type) => {
                     token_stream.advance();
-                    DataType::Collection(Box::new(data_type))
+                    DataType::Collection(Box::new(data_type), ownership)
                 }
-                _ => DataType::Collection(Box::new(DataType::Inferred(mutable))),
+                _ => DataType::Collection(Box::new(DataType::Inferred(ownership))),
             };
 
             // Make sure there is a closing curly brace

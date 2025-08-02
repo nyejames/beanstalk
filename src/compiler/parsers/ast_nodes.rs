@@ -18,7 +18,6 @@ pub struct AstNode {
     pub kind: NodeKind,
     pub location: TextLocation,
     pub scope: PathBuf,
-    pub lifetime: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,8 +72,8 @@ pub enum NodeKind {
     // Wasm(String, TokenPosition), // Code,
 
     // Literals
-    Reference(Expression),  // Token,
-    Expression(Expression), // Token,
+    Reference(Expression),
+    Expression(Expression),
 
     TemplateFormatter,
     Slot,
