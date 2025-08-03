@@ -54,7 +54,8 @@ mod compiler {
     pub mod traits;
 
     pub mod codegen {
-        pub mod wasm_codegen;
+        pub mod build_wasm;
+        pub mod wasm_encoding;
         pub mod release_optimizers;
         pub mod wat_to_wasm;
 
@@ -64,13 +65,14 @@ mod compiler {
 }
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast};
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast, AstBlock};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenContext;
 use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use crate::compiler::codegen::build_wasm::new_wasm_module;
 
 pub struct OutputModule {
     pub imports: HashSet<PathBuf>,
@@ -150,6 +152,9 @@ impl<'a> Compiler<'a> {
 
     // -----------------------
     //        BACKEND
-    //      (Cranelift)
+    //    (Wasm Generation)
     // -----------------------
+    pub fn ast_to_wasm(ast: Vec<AstNode>) -> Result<Vec<u8>, CompileError> {
+        new_wasm_module(ast)
+    }
 }

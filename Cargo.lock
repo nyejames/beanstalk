@@ -73,6 +73,7 @@ dependencies = [
  "fs_extra",
  "leb128",
  "rayon",
+ "wasm-encoder",
  "wasmer",
  "wasmparser 0.236.0",
  "wat",

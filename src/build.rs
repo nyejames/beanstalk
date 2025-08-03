@@ -93,18 +93,6 @@ pub fn build_project(
                 }
             };
 
-            // let config_args = Vec::from([
-            //     "project",
-            //     "src",
-            //     "dev_folder",
-            //     "release_folder",
-            //     "name",
-            //     "version",
-            //     "author",
-            //     "license",
-            //     "html_meta",
-            // ]);
-
             let ast_context = ScopeContext::new(ContextKind::Config, config_path.to_owned(), &[]);
 
             let config_module_exports = match new_ast(&mut tokenizer_output, ast_context, true) {
@@ -156,7 +144,6 @@ pub fn build_project(
     // ----------------------------------
     //          AST generation
     // ----------------------------------
-
     // Keep Track of new exported declarations (so modules importing them know their types)
     let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
     let mut errors: Vec<CompileError> = Vec::new();
@@ -185,8 +172,9 @@ pub fn build_project(
     
     // TODO
     // -----------------------------------
-    //         Lifetime analysis
+    //       Link together the ASTs
     // -----------------------------------
+    
 
     // TODO
     // ----------------------------------

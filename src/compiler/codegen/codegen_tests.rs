@@ -1,4 +1,4 @@
-use crate::compiler::codegen::wasm_codegen::WasmModule;
+use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::tokens::TextLocation;
 
