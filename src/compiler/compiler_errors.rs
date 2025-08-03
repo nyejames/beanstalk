@@ -5,6 +5,7 @@ use colour::{
 use std::path::PathBuf;
 use std::{env, fs};
 
+#[derive(Debug)]
 pub struct CompileError {
     pub msg: String,
     pub location: TextLocation,
@@ -56,7 +57,7 @@ impl CompileError {
 // Adds more information to the CompileError
 // So it knows the file path (possible specific part of the line soon)
 // And the type of error
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum ErrorType {
     Syntax,
     Type,

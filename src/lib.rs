@@ -41,11 +41,7 @@ mod compiler {
         pub mod html_styles;
     }
 
-    pub mod codegen {
-        pub mod wasm_codegen;
-        pub mod release_optimizers;
-        pub mod wat_to_wasm;
-    }
+
 
     #[allow(dead_code)]
     pub mod basic_utility_functions;
@@ -56,6 +52,15 @@ mod compiler {
     pub mod datatypes;
     pub mod module_dependencies;
     pub mod traits;
+
+    pub mod codegen {
+        pub mod wasm_codegen;
+        pub mod release_optimizers;
+        pub mod wat_to_wasm;
+
+        #[cfg(test)]
+        pub mod codegen_tests;
+    }
 }
 
 use crate::compiler::compiler_errors::CompileError;
