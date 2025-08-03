@@ -42,12 +42,9 @@ mod compiler {
     }
 
     pub mod codegen {
-        pub mod ir_emitter;
+        pub mod wasm_codegen;
         pub mod release_optimizers;
         pub mod wat_to_wasm;
-        
-        #[cfg(test)]
-        pub mod codegen_tests;
     }
 
     #[allow(dead_code)]
