@@ -3,7 +3,7 @@
 [Header center: [title(1): COLLECTIONS]]
 [Page:
 
-When a new collection uses the mutable symbol, it's internal values can be mutated by default.
+When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
 Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
 

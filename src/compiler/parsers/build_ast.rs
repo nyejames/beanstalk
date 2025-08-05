@@ -1,5 +1,6 @@
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
+use crate::tokenizer::END_SCOPE_CHAR;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
@@ -13,6 +14,7 @@ use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
+use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::create_template_node::new_template;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
@@ -21,7 +23,7 @@ use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokenizer::PRINT_KEYWORD;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, return_compiler_error, return_rule_error, settings};
+use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -56,12 +58,12 @@ pub struct ScopeContext {
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
-    Module,
+    Module, // Global scope
     Expression,
     Function,
     Condition, // For loops and if statements
     Loop,
-    IfBlock,
+    Branch,
     Template,
     Config,
 }
@@ -82,9 +84,7 @@ impl ScopeContext {
         new_context.kind = kind;
 
         // For now, add the lifetime ID to the scope.
-        new_context
-            .scope_name
-            .push(&self.lifetime.to_string());
+        new_context.scope_name.push(&self.lifetime.to_string());
         new_context.lifetime += 1;
         new_context
     }
@@ -211,7 +211,10 @@ pub fn new_ast(
                 match template.kind {
                     TemplateType::StringTemplate => {
                         ast.push(AstNode {
-                            kind: NodeKind::Expression(Expression::template(template, context.lifetime)),
+                            kind: NodeKind::Expression(Expression::template(
+                                template,
+                                context.lifetime,
+                            )),
                             scope: context.scope_name.to_owned(),
                             location: token_stream.current_location(),
                         });
@@ -349,38 +352,15 @@ pub fn new_ast(
             TokenKind::If => {
                 token_stream.advance();
 
-                let condition = create_expression(
+                ast.push(create_branch(
                     token_stream,
-                    &context.new_child_control_flow(ContextKind::Condition),
-                    &mut DataType::Bool(Ownership::default()),
-                    false,
-                )?;
-
-                // TODO - fold evaluated if statements
-                // If this condition isn't runtime,
-                // The statement can be removed completely;
-                // I THINK, NOT SURE HOW 'ELSE' AND ALL THAT WORK YET
-                if token_stream.current_token_kind() != &TokenKind::Colon {
-                    return_rule_error!(
-                        token_stream.current_location(),
-                        "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
-                        token_stream.current_token_kind()
-                    )
-                }
-
-                token_stream.advance(); // Consume ':'
-                let if_context = context.new_child_control_flow(ContextKind::IfBlock);
-
-                // TODO - now check for if else and else etc
-                // Probably move all this parsing to a new file in 'statements'
-                ast.push(AstNode {
-                    kind: NodeKind::If(
-                        condition,
-                        new_ast(token_stream, if_context.to_owned(), false)?.ast,
-                    ),
-                    location: token_stream.current_location(),
-                    scope: if_context.scope_name,
-                });
+                    &mut context.new_child_control_flow(ContextKind::Branch),
+                )?);
+            }
+            TokenKind::Else => {
+                // This will break out if statements, but must be inside the if_statement context
+                // Preserves the else token for the branching parser to know there is an else case rather than just an end to the scope
+                // TODO: how do we handle this for match blocks?
             }
 
             // IGNORED TOKENS
@@ -400,7 +380,11 @@ pub fn new_ast(
                     // Console.log does not return anything
                     &[Arg {
                         name: String::new(),
-                        value: Expression::string(String::new(), token_stream.current_location(), context.lifetime),
+                        value: Expression::string(
+                            String::new(),
+                            token_stream.current_location(),
+                            context.lifetime,
+                        ),
                     }],
                     &[],
                 )?);
@@ -429,7 +413,38 @@ pub fn new_ast(
                 });
             }
 
-            TokenKind::End | TokenKind::Eof => {
+            TokenKind::End => {
+                // Check that this is a valid scope for an explicit 'end' to be used
+                // Module scope should not have an 'end' anywhere
+                match context.kind {
+                    ContextKind::Expression => {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Unexpected scope close with '{END_SCOPE_CHAR}'. Expressions are not terminated like this.\
+                            Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug."
+                        );
+                    }
+                    ContextKind::Module => {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Unexpected scope close with '{END_SCOPE_CHAR}'. You have probably used too many '{END_SCOPE_CHAR}'\
+                            as this scope close is in the global scope."
+                        )
+                    }
+                    ContextKind::Template => {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Unexpected use of '{END_SCOPE_CHAR}' inside a template. Templates are not closed with '{END_SCOPE_CHAR}'.\
+                            If you are seeing this error, this might be a compiler bug instead."
+                        )
+                    }
+                    _ => {
+                        break;
+                    }
+                }
+            }
+
+            TokenKind::Eof => {
                 break;
             }
 

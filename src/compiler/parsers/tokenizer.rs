@@ -11,7 +11,7 @@ use crate::compiler::parsers::tokens::{
 };
 use crate::{return_syntax_error, settings, token_log};
 
-const END_SCOPE_CHAR: char = ';';
+pub const END_SCOPE_CHAR: char = ';';
 
 macro_rules! return_token {
     ($kind:expr, $stream:expr $(,)?) => {
@@ -530,10 +530,22 @@ fn keyword_or_variable(
             "true" | "True" => return_token!(TokenKind::BoolLiteral(true), stream),
             "false" | "False" => return_token!(TokenKind::BoolLiteral(false), stream),
 
-            "Float" => return_token!(TokenKind::DatatypeLiteral(DataType::Float(Ownership::default())), stream),
-            "Int" => return_token!(TokenKind::DatatypeLiteral(DataType::Int(Ownership::default())), stream),
-            "String" => return_token!(TokenKind::DatatypeLiteral(DataType::String(Ownership::default())), stream),
-            "Bool" => return_token!(TokenKind::DatatypeLiteral(DataType::Bool(Ownership::default())), stream),
+            "Float" => return_token!(
+                TokenKind::DatatypeLiteral(DataType::Float(Ownership::default())),
+                stream
+            ),
+            "Int" => return_token!(
+                TokenKind::DatatypeLiteral(DataType::Int(Ownership::default())),
+                stream
+            ),
+            "String" => return_token!(
+                TokenKind::DatatypeLiteral(DataType::String(Ownership::default())),
+                stream
+            ),
+            "Bool" => return_token!(
+                TokenKind::DatatypeLiteral(DataType::Bool(Ownership::default())),
+                stream
+            ),
 
             "None" => return_token!(TokenKind::DatatypeLiteral(DataType::None), stream),
 
