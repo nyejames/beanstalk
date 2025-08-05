@@ -7,7 +7,7 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::return_syntax_error;
+use crate::{ast_log, return_syntax_error};
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 // TODO: Loop invariance analysis.
@@ -18,17 +18,17 @@ use crate::return_syntax_error;
 // Anything marked as invariant when parsing the AST to a lower IR can be hoisted up to the loop header.
 pub fn create_loop(
     token_stream: &mut TokenContext,
-
-    // Should already be passed in as a loop context
     mut context: ScopeContext,
 ) -> Result<AstNode, CompileError> {
+    ast_log!("Creating a Loop");
+
     // First check if the loop has a declaration or just an expression
     // If the first item is NOT a reference, then it is the item for the loop
     match token_stream.current_token_kind().to_owned() {
         TokenKind::Symbol(name, ..) => {
             // -----------------------------
             //          WHILE LOOP
-            //     (existing variable found)
+            //  (existing variable found)
             // -----------------------------
 
             if let Some(arg) = context.find_reference(&name) {

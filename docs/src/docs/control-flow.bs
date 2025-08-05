@@ -83,15 +83,13 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         else: print("only one")
     ;
 
-    -- Pattern matching assignment
-    -- Must be exhaustive
+    -- Pattern matching as an expression
     name = "Bob"
     msg = if name is (
         "Sam": 
             "yo"
         ;
         "Priya": "hey!"
-        "Bob": "whats up"
         else: "go away"
     )
 

@@ -38,9 +38,14 @@ pub enum NodeKind {
 
     // Control Flow
     Access,
-    Return(Vec<Expression>),  // Return value,
-    If(Expression, AstBlock), // Condition, If true
-    Else(AstBlock),           // Body,
+    Return(Vec<Expression>),                    // Return value,
+    If(Expression, AstBlock, Option<AstBlock>), // Condition, If true, Else
+
+    Match(
+        Expression,                  // Subject (condition)
+        Vec<(Expression, AstBlock)>, // Arms
+        Option<AstBlock>,            // for the wildcard/else case
+    ),
 
     ForLoop(Box<Arg>, Expression, AstBlock), // Item, Collection, Body,
     WhileLoop(Expression, AstBlock),         // Condition, Body,
@@ -69,7 +74,6 @@ pub enum NodeKind {
     // Other language code blocks
     JS(String),  // Code,
     Css(String), // Code,
-    // Wasm(String, TokenPosition), // Code,
 
     // Literals
     Reference(Expression),

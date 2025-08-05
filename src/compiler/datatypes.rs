@@ -70,7 +70,7 @@ pub enum DataType {
     Collection(Box<DataType>, Ownership),
 
     // Structs
-    Args(Vec<Arg>),                  // Type
+    Args(Vec<Arg>), // Type
     Struct(Vec<Arg>, Ownership), // Struct instance
 
     // Special Beanstalk Types

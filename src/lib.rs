@@ -22,6 +22,7 @@ mod compiler {
             pub mod parse_expression;
         }
         pub mod statements {
+            pub mod branching;
             pub mod create_template_node;
             pub mod functions;
             pub mod loops;
@@ -42,10 +43,8 @@ mod compiler {
     }
 
 
-
     #[allow(dead_code)]
     pub mod basic_utility_functions;
-
     pub mod compiler_dev_logging;
     pub mod compiler_errors;
     pub mod compiler_warnings;

@@ -8,8 +8,11 @@ use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_rule_error;
 
-// The possible values of any type.
-// Return 'Runtime' if the value is not known at compile time
+// Expressions represent anything that will turn into a value
+// Their kind will represent what their value is.
+// Runtime expressions (couldn't be folded) are represented as 'runtime' kinds.
+// These runtime expressions are small ASTs that must be represented at runtime.
+// Expression kinds are like a subset of the core datatypes, because some data types don't return values or represent more complex structures.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression {
     pub kind: ExpressionKind,
@@ -46,12 +49,17 @@ impl Expression {
         }
     }
 
-    pub fn new(kind: ExpressionKind, location: TextLocation, data_type: DataType, owner_id: u32) -> Self {
+    pub fn new(
+        kind: ExpressionKind,
+        location: TextLocation,
+        data_type: DataType,
+        owner_id: u32,
+    ) -> Self {
         Self {
             data_type,
             kind,
             location,
-            owner_id
+            owner_id,
         }
     }
     pub fn none() -> Self {
@@ -59,15 +67,20 @@ impl Expression {
             data_type: DataType::None,
             kind: ExpressionKind::None,
             location: TextLocation::default(),
-            owner_id: 0 // TBH don't know how this should behave yet
+            owner_id: 0, // TBH don't know how this should behave yet
         }
     }
-    pub fn runtime(expressions: Vec<AstNode>, data_type: DataType, location: TextLocation, owner_id: u32) -> Self {
+    pub fn runtime(
+        expressions: Vec<AstNode>,
+        data_type: DataType,
+        location: TextLocation,
+        owner_id: u32,
+    ) -> Self {
         Self {
             data_type,
             kind: ExpressionKind::Runtime(expressions),
             location,
-            owner_id
+            owner_id,
         }
     }
     pub fn int(value: i32, location: TextLocation, owner_id: u32) -> Self {
@@ -75,7 +88,7 @@ impl Expression {
             data_type: DataType::Int(Ownership::default()),
             kind: ExpressionKind::Int(value),
             location,
-            owner_id
+            owner_id,
         }
     }
     pub fn float(value: f64, location: TextLocation, owner_id: u32) -> Self {
@@ -83,7 +96,7 @@ impl Expression {
             data_type: DataType::Float(Ownership::default()),
             kind: ExpressionKind::Float(value),
             location,
-            owner_id
+            owner_id,
         }
     }
     pub fn string(value: String, location: TextLocation, owner_id: u32) -> Self {
@@ -91,7 +104,7 @@ impl Expression {
             data_type: DataType::String(Ownership::default()),
             kind: ExpressionKind::String(value),
             location,
-            owner_id
+            owner_id,
         }
     }
     pub fn bool(value: bool, location: TextLocation, owner_id: u32) -> Self {
@@ -99,7 +112,7 @@ impl Expression {
             data_type: DataType::Bool(Ownership::default()),
             kind: ExpressionKind::Bool(value),
             location,
-            owner_id
+            owner_id,
         }
     }
 
@@ -115,10 +128,14 @@ impl Expression {
             data_type: DataType::Function(args.to_owned(), return_types.to_owned()),
             kind: ExpressionKind::Function(args.to_owned(), body.ast, vec![]),
             location,
-            owner_id
+            owner_id,
         }
     }
-    pub fn function_without_signature(owner_id: u32, body: AstBlock, location: TextLocation) -> Self {
+    pub fn function_without_signature(
+        owner_id: u32,
+        body: AstBlock,
+        location: TextLocation,
+    ) -> Self {
         Self {
             data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Function(vec![], body.ast, vec![]),
@@ -130,7 +147,7 @@ impl Expression {
         args: Vec<Arg>,
         body: Vec<AstNode>,
         location: TextLocation,
-        owner_id: u32
+        owner_id: u32,
     ) -> Self {
         Self {
             data_type: DataType::Inferred(Ownership::default()),
@@ -143,7 +160,7 @@ impl Expression {
         body: Vec<AstNode>,
         return_types: Vec<DataType>,
         location: TextLocation,
-        owner_id: u32
+        owner_id: u32,
     ) -> Self {
         Self {
             data_type: DataType::Inferred(Ownership::ImmutableReference),
@@ -158,7 +175,7 @@ impl Expression {
             data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Collection(items),
             location,
-            owner_id
+            owner_id,
         }
     }
     pub fn structure(args: Vec<Arg>, location: TextLocation, owner_id: u32) -> Self {
@@ -166,18 +183,15 @@ impl Expression {
             data_type: DataType::Inferred(Ownership::default()),
             kind: ExpressionKind::Struct(args),
             location,
-            owner_id
+            owner_id,
         }
     }
-    pub fn template(
-        template: Template,
-        lifetime: u32,
-    ) -> Self {
+    pub fn template(template: Template, lifetime: u32) -> Self {
         Self {
             data_type: DataType::Template(Ownership::default()),
             kind: ExpressionKind::Template(template.content, template.style, template.id),
             location: template.location,
-            owner_id: lifetime
+            owner_id: lifetime,
         }
     }
 
@@ -300,7 +314,12 @@ impl Expression {
             _ => return Ok(None),
         };
 
-        Ok(Some(Expression::new(kind, self.location.to_owned(), self.data_type.to_owned(), self.owner_id)))
+        Ok(Some(Expression::new(
+            kind,
+            self.location.to_owned(),
+            self.data_type.to_owned(),
+            self.owner_id,
+        )))
     }
 }
 #[derive(Debug, Clone, PartialEq)]
