@@ -3,7 +3,7 @@
   <h1>Beanstalk 🌱</h1>
 
   <p>
-    <strong>A lightweight, purpose built, programming language and toolchain that compiles to Web Assembly.</strong>
+    <strong>A lightweight, purpose built, programming language for building WebAssembly apps.</strong>
   </p>
 
   *The only BS in programming should be in the filename*
@@ -14,7 +14,6 @@
   <br>
 
   <p>⚠️ This is currently a work in progress compiler and proof of concept. It's not recommended you try and actually use it</p>
-  <p>⚠️ The design and direction of the language is still subject to change</p>
   <p> (There isn't even a semantic version yet!)</p>
 
 [//]: # (  <h1>)
@@ -38,27 +37,22 @@
 <br>
 
 # Overview / Goals
-Beanstalk is a statically typed language that compiles to Wasm and aims to generate glue code for that Wasm.
+Beanstalk is a new, statically typed language that compiles to Wasm and aims to provide all the glue code, runtimes and scaffolding for your Wasm project.
 
-The whole language is built around an extremely clean template syntax.
+Beanstalk is built around an extremely clean template syntax.
 
-The goal is to also be a more general lightweight Wasm-focused language. 
-The language aims to be great for building a website, making config files or as a lightweight embedded or UI language for apps and games.
+The goal is to also be lightweight, purpose built Wasm language. This means each project will be specifically tailored to producing all the files you need to deploy on your target platform (Web / Native / embedding / as a library).
+
+Beanstalk aims to be great for building websites, making config files or as a lightweight embedded language for apps and games.
 
 **Design Goals**
 - Minimal syntax with very powerful string templates for generating text content / typesetting and styling or configs
 - Simple, static type system
 - Comes batteries-included with as much tooling as possible integrated directly in the compiler
-- Fast compile times to support hot reloading
-- No LLVM backend, no preferred Wasm runtime targets
-- Borrow checker with no 'unsafe' and much simpler move semantics / lifetimes than Rust
+- Fast development compile times to support easy hot-reloading and fast iteration
+- Bundled with existing Wasm runtimes or HTML boilerplate for quickly building for a specific platform without having to scaffold everything yourself
+- Secure and fast. Uses a borrow checker with no 'unsafe' but with simpler move semantics and lifetimes than Rust.
 
-### Compiled Output
-The compiler aims to optimise specifically for Wasm, and create small and efficient modules. No 100kb Wasm files to just print "hello world".
-
-Being compiled means folding constants, type checking and optimising is all done for you.
-But the priority is to compile fast and small modules rather than highly optimised ones.
-
-The compiler itself is written in Rust, and uses as few dependencies as possible to keep it fast and reliable.
+The compiler itself is written in Rust, and uses as few dependencies as possible to keep the frontend fast and reliable.
 
 <br>
