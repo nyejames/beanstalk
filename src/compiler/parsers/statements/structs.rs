@@ -67,7 +67,7 @@ pub fn create_args(
                     )
                 }
 
-                let item_arg = new_arg(token_stream, name, context, &mut VarVisibility::Private)?;
+                let item_arg = new_arg(token_stream, name, context)?;
 
                 items.push(item_arg.to_owned());
                 item_args.push(item_arg);

@@ -4,10 +4,10 @@ use crate::tokenizer::END_SCOPE_CHAR;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
-use super::{ast_nodes::NodeKind, expressions::parse_expression::create_expression};
+use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -15,16 +15,13 @@ use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
 use crate::compiler::parsers::statements::branching::create_branch;
-use crate::compiler::parsers::statements::create_template_node::new_template;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokenizer::PRINT_KEYWORD;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -54,7 +51,6 @@ pub struct ScopeContext {
     pub scope_name: PathBuf,
     pub declarations: Vec<Arg>,
     pub returns: Vec<DataType>,
-    pub lifetime: u32,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -75,7 +71,6 @@ impl ScopeContext {
             scope_name: scope,
             declarations: declarations.to_owned(),
             returns: Vec::new(),
-            lifetime: 0, // This is only called for new ASTs, so this is the first parent
         }
     }
 
@@ -84,8 +79,6 @@ impl ScopeContext {
         new_context.kind = kind;
 
         // For now, add the lifetime ID to the scope.
-        new_context.scope_name.push(&self.lifetime.to_string());
-        new_context.lifetime += 1;
         new_context
     }
 
@@ -94,7 +87,6 @@ impl ScopeContext {
         new_context.kind = ContextKind::Function;
         new_context.returns = returns.to_owned();
         new_context.scope_name.push(name);
-        new_context.lifetime += 1;
         new_context
     }
 
@@ -103,7 +95,6 @@ impl ScopeContext {
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
         new_context.scope_name.push("expression");
-        new_context.lifetime += 1;
         new_context
     }
 
@@ -121,7 +112,6 @@ macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
             kind: ContextKind::Template,
-            lifetime: $context.lifetime,
             scope_name: $context.scope_name.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
@@ -189,46 +179,45 @@ pub fn new_ast(
             }
 
             // Template literals
-            TokenKind::TemplateHead | TokenKind::ParentTemplate => {
-                // Add the default core HTML styles as the initially unlocked styles
-                // let mut unlocked_styles = HashMap::from(get_html_styles());
-
-                if !matches!(context.kind, ContextKind::Module) {
-                    return_rule_error!(
-                        token_stream.current_location(),
-                        "Template literals can only be used at the top level of a module. \n
-                        This is because they are handled differently by the compiler depending on the type of project",
-                    )
-                }
-
-                let template = new_template(
-                    token_stream,
-                    &context,
-                    &mut HashMap::new(),
-                    &mut Style::default(),
-                )?;
-
-                match template.kind {
-                    TemplateType::StringTemplate => {
-                        ast.push(AstNode {
-                            kind: NodeKind::Expression(Expression::template(
-                                template,
-                                context.lifetime,
-                            )),
-                            scope: context.scope_name.to_owned(),
-                            location: token_stream.current_location(),
-                        });
-                    }
-                    TemplateType::Slot => {
-                        return_rule_error!(
-                            token_stream.current_location(),
-                            "Slots can only be used inside child templates. Slot templates must have a parent template.",
-                        )
-                    }
-                    _ => {}
-                }
-            }
-
+            // TokenKind::TemplateHead | TokenKind::ParentTemplate => {
+            //     // Add the default core HTML styles as the initially unlocked styles
+            //     // let mut unlocked_styles = HashMap::from(get_html_styles());
+            //
+            //     if !matches!(context.kind, ContextKind::Module) {
+            //         return_rule_error!(
+            //             token_stream.current_location(),
+            //             "Template literals can only be used at the top level of a module. \n
+            //             This is because they are handled differently by the compiler depending on the type of project",
+            //         )
+            //     }
+            //
+            //     let template = new_template(
+            //         token_stream,
+            //         &context,
+            //         &mut HashMap::new(),
+            //         &mut Style::default(),
+            //     )?;
+            //
+            //     match template.kind {
+            //         TemplateType::StringTemplate => {
+            //             ast.push(AstNode {
+            //                 kind: NodeKind::Expression(Expression::template(
+            //                     template,
+            //                     context.id,
+            //                 )),
+            //                 scope: context.scope_name.to_owned(),
+            //                 location: token_stream.current_location(),
+            //             });
+            //         }
+            //         TemplateType::Slot => {
+            //             return_rule_error!(
+            //                 token_stream.current_location(),
+            //                 "Slots can only be used inside child templates. Slot templates must have a parent template.",
+            //             )
+            //         }
+            //         _ => {}
+            //     }
+            // }
             TokenKind::ModuleStart(..) => {
                 // Module start token is only used for naming; skip it.
                 token_stream.advance();
@@ -319,7 +308,7 @@ pub fn new_ast(
                 // NEW VARIABLE DECLARATION
                 } else {
                     let mut visibility = VarVisibility::Private;
-                    let arg = new_arg(token_stream, name, &context, &mut visibility)?;
+                    let arg = new_arg(token_stream, name, &context)?;
 
                     if visibility == VarVisibility::Public {
                         exports.push(arg.to_owned());
@@ -377,14 +366,10 @@ pub fn new_ast(
                     token_stream,
                     PRINT_KEYWORD,
                     &context.new_child_function(PRINT_KEYWORD, &[]),
-                    // Console.log does not return anything
+                    // Print does not return anything
                     &[Arg {
                         name: String::new(),
-                        value: Expression::string(
-                            String::new(),
-                            token_stream.current_location(),
-                            context.lifetime,
-                        ),
+                        value: Expression::string(String::new(), token_stream.current_location()),
                     }],
                     &[],
                 )?);

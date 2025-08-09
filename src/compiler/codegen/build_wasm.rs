@@ -1,4 +1,3 @@
-use wasm_encoder::*;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::codegen::wasm_encoding::WasmModule;

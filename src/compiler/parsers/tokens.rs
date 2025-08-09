@@ -1,4 +1,4 @@
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use colour::red_ln;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -201,7 +201,7 @@ impl TokenContext {
             // without breaking a statement or expression
             &TokenKind::Colon
             | &TokenKind::OpenParenthesis
-            | &TokenKind::StructDefinition
+            | &TokenKind::StructBracket
             | &TokenKind::Comma
             | &TokenKind::End
             | &TokenKind::Assign
@@ -352,7 +352,7 @@ pub enum TokenKind {
     StringLiteral(String),
     PathLiteral(PathBuf),
     FloatLiteral(f64),
-    IntLiteral(i32),
+    IntLiteral(i64),
     CharLiteral(char),
     RawStringLiteral(String),
     BoolLiteral(bool),
@@ -361,7 +361,7 @@ pub enum TokenKind {
     OpenCurly,  // {
     CloseCurly, // }
 
-    StructDefinition, // |
+    StructBracket, // |
 
     // Structure of Syntax
     Newline,
@@ -384,7 +384,14 @@ pub enum TokenKind {
     // Type Declarations
     Mutable,
     Choice, // ::
-    DatatypeLiteral(DataType),
+
+    // Datatypes
+    DatatypeInt,
+    DatatypeFloat,
+    DatatypeBool,
+    DatatypeString,
+    DatatypeTemplate,
+    DatatypeNone,
 
     Async,
 
@@ -458,6 +465,17 @@ impl TokenKind {
             TokenKind::StringLiteral(string) => string.clone(),
             TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
+        }
+    }
+
+    pub fn to_datatype(&self, ownership: Ownership) -> Option<DataType> {
+        match self {
+            TokenKind::DatatypeInt => Some(DataType::Int(ownership)),
+            TokenKind::DatatypeFloat => Some(DataType::Float(ownership)),
+            TokenKind::DatatypeBool => Some(DataType::Bool(ownership)),
+            TokenKind::DatatypeString => Some(DataType::String(ownership)),
+            TokenKind::DatatypeTemplate => Some(DataType::Template(ownership)),
+            _ => None,
         }
     }
 }

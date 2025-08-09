@@ -36,6 +36,9 @@ pub enum NodeKind {
     // into the scope of the current module. Doesn't automatically import variables or functions into the scope
     Use(PathBuf), // Path,
 
+    // Memory management (inserted by the compiler)
+    Free(PathBuf),
+
     // Control Flow
     Access,
     Return(Vec<Expression>),                    // Return value,

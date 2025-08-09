@@ -1,35 +1,36 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
-use crate::compiler::parsers::statements::create_template_node::Template;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {
-    MutableOwned,
-    MutableReference,
-    ImmutableOwned,
-    ImmutableReference,
+    // Bool = is last use?
+    MutableOwned(bool),
+    MutableReference(bool),
+    ImmutableOwned(bool),
+    ImmutableReference(bool),
 }
 
 impl Ownership {
     pub fn default() -> Ownership {
-        Ownership::ImmutableOwned
+        Ownership::ImmutableOwned(false)
     }
     pub fn is_mutable(&self) -> bool {
-        match &self { 
-            Ownership::MutableOwned => true,
-            Ownership::MutableReference => true,
+        match &self {
+            Ownership::MutableOwned(..) => true,
+            Ownership::MutableReference(..) => true,
             _ => false,
         }
     }
     pub fn as_string(&self) -> String {
-        match &self { 
-            Ownership::MutableOwned => String::from("mutable"),
-            Ownership::MutableReference => String::from("mutable reference"),
-            Ownership::ImmutableOwned => String::from("immutable"),
-            Ownership::ImmutableReference => String::from("immutable reference"),
+        match &self {
+            Ownership::MutableOwned(..) => String::from("mutable"),
+            Ownership::MutableReference(..) => String::from("mutable reference"),
+            Ownership::ImmutableOwned(..) => String::from("immutable"),
+            Ownership::ImmutableReference(..) => String::from("immutable reference"),
         }
     }
 }
@@ -70,7 +71,7 @@ pub enum DataType {
     Collection(Box<DataType>, Ownership),
 
     // Structs
-    Args(Vec<Arg>), // Type
+    Args(Vec<Arg>),              // Type
     Struct(Vec<Arg>, Ownership), // Struct instance
 
     // Special Beanstalk Types
@@ -164,7 +165,9 @@ impl DataType {
                 DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
             }
             DataType::Args(args) => DataType::Option(Box::new(DataType::Args(args))),
-            DataType::Struct(args, ownership) => DataType::Option(Box::new(DataType::Struct(args, ownership))),
+            DataType::Struct(args, ownership) => {
+                DataType::Option(Box::new(DataType::Struct(args, ownership)))
+            }
             DataType::Function(args, return_type) => {
                 DataType::Option(Box::new(DataType::Function(args, return_type)))
             }
@@ -197,7 +200,7 @@ impl DataType {
             DataType::Float(ownership) => ownership.is_mutable(),
             DataType::Int(ownership) => ownership.is_mutable(),
             DataType::Decimal(ownership) => ownership.is_mutable(),
-            DataType::Collection(_ , ownership) => ownership.is_mutable(),
+            DataType::Collection(_, ownership) => ownership.is_mutable(),
             DataType::Args(args) => {
                 for arg in args {
                     if arg.value.data_type.is_mutable() {
@@ -233,16 +236,17 @@ impl DataType {
 
     pub fn to_compiler_owned(&self) -> DataType {
         match self {
-            DataType::Inferred(_) => DataType::Inferred(Ownership::MutableOwned),
-            DataType::CoerceToString(_) => DataType::CoerceToString(Ownership::MutableOwned),
-            DataType::Bool(_) => DataType::Bool(Ownership::MutableOwned),
-            DataType::String(_) => DataType::String(Ownership::MutableOwned),
-            DataType::Float(_) => DataType::Float(Ownership::MutableOwned),
-            DataType::Int(_) => DataType::Int(Ownership::MutableOwned),
-            DataType::Decimal(_) => DataType::Decimal(Ownership::MutableOwned),
-            DataType::Collection(inner_type, ..) => {
-                DataType::Collection(Box::new(inner_type.to_compiler_owned()), Ownership::MutableOwned)
-            }
+            DataType::Inferred(_) => DataType::Inferred(Ownership::MutableOwned(false)),
+            DataType::CoerceToString(_) => DataType::CoerceToString(Ownership::MutableOwned(false)),
+            DataType::Bool(_) => DataType::Bool(Ownership::MutableOwned(false)),
+            DataType::String(_) => DataType::String(Ownership::MutableOwned(false)),
+            DataType::Float(_) => DataType::Float(Ownership::MutableOwned(false)),
+            DataType::Int(_) => DataType::Int(Ownership::MutableOwned(false)),
+            DataType::Decimal(_) => DataType::Decimal(Ownership::MutableOwned(false)),
+            DataType::Collection(inner_type, ..) => DataType::Collection(
+                Box::new(inner_type.to_compiler_owned()),
+                Ownership::MutableOwned(false),
+            ),
             DataType::Args(args) => {
                 let mut new_args = Vec::new();
                 for arg in args {
@@ -258,18 +262,15 @@ impl DataType {
         }
     }
 
-    pub fn get_zero_value(&self, location: TextLocation, lifetime: u32) -> Expression {
+    pub fn get_zero_value(&self, location: TextLocation) -> Expression {
         match self {
-            DataType::Float(_) => Expression::float(0.0, location, lifetime),
-            DataType::Int(_) => Expression::int(0, location, lifetime),
-            DataType::Bool(_) => Expression::bool(false, location, lifetime),
+            DataType::Float(_) => Expression::float(0.0, location),
+            DataType::Int(_) => Expression::int(0, location),
+            DataType::Bool(_) => Expression::bool(false, location),
             DataType::String(_) | DataType::CoerceToString(_) => {
-                Expression::string(String::new(), location, lifetime)
+                Expression::string(String::new(), location)
             }
-            DataType::Template(_) => Expression::template(
-                Template::default(),
-                lifetime
-            ),
+            DataType::Template(_) => Expression::template(Template::default()),
             _ => Expression::none(),
         }
     }
@@ -282,24 +283,22 @@ impl Display for DataType {
                 write!(f, "Inferred {} ", mutable.as_string())
             }
             DataType::CoerceToString(mutable) => {
-                write!(
-                    f,
-                    "CoerceToString {} ",
-                    mutable.as_string()
-                )
+                write!(f, "CoerceToString {} ", mutable.as_string())
             }
-            DataType::Bool(mutable) => write!(f, "Bool {} ",mutable.as_string()),
+            DataType::Bool(mutable) => write!(f, "Bool {} ", mutable.as_string()),
             DataType::String(mutable) => {
-                write!(f, "String {} ",mutable.as_string())
+                write!(f, "String {} ", mutable.as_string())
             }
             DataType::Float(mutable) => {
-                write!(f, "Float {} ",mutable.as_string())
+                write!(f, "Float {} ", mutable.as_string())
             }
-            DataType::Int(mutable) => write!(f, "{} Int",mutable.as_string()),
+            DataType::Int(mutable) => write!(f, "{} Int", mutable.as_string()),
             DataType::Decimal(mutable) => {
-                write!(f, "Decimal {} ",mutable.as_string())
+                write!(f, "Decimal {} ", mutable.as_string())
             }
-            DataType::Collection(inner_type, mutable) => write!(f, "{inner_type} {} Collection", mutable.as_string()),
+            DataType::Collection(inner_type, mutable) => {
+                write!(f, "{inner_type} {} Collection", mutable.as_string())
+            }
             DataType::Args(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
@@ -307,7 +306,7 @@ impl Display for DataType {
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
-            DataType::Struct(args, ownership) => {
+            DataType::Struct(args, ..) => {
                 let mut arg_str = String::new();
                 for arg in args {
                     arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));

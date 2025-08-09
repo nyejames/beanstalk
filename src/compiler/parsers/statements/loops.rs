@@ -89,7 +89,7 @@ pub fn create_loop(
             token_stream.advance();
 
             // TODO: need to check for mutable reference syntax
-            let mut iterable_type = DataType::Inferred(Ownership::ImmutableReference);
+            let mut iterable_type = DataType::Inferred(Ownership::ImmutableReference(false));
             let iterated_item =
                 create_expression(token_stream, &context, &mut iterable_type, false)?;
 
@@ -112,13 +112,13 @@ pub fn create_loop(
 
             token_stream.advance();
 
+            // The thing being iterated over
             let loop_arg = Arg {
                 name: name.to_owned(),
                 value: Expression::new(
                     iterated_item.kind.to_owned(),
                     token_stream.current_location(),
                     iterated_item.data_type.to_owned(),
-                    context.lifetime,
                 ),
             };
 

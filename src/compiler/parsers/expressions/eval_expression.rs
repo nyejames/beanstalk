@@ -1,8 +1,10 @@
-use super::constant_folding::constant_fold;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
+use crate::compiler::ir::ir_nodes::IRNode;
+use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
@@ -10,7 +12,6 @@ use crate::{
     return_compiler_error, return_syntax_error,
 };
 use std::path::PathBuf;
-use crate::compiler::parsers::statements::create_template_node::Template;
 
 // This function will turn a series of ast nodes into a Value enum.
 // A Value enum can also be a runtime expression that contains a series of nodes.
@@ -29,7 +30,7 @@ pub fn evaluate_expression(
     let mut operators_stack: Vec<AstNode> = Vec::new();
 
     // Should always be at least one node in the expression being evaluated
-    let (location, lifetime) = extract_location_and_lifetime(&simplified_expression)?;
+    let location = extract_location(&simplified_expression)?;
 
     'outer: for node in nodes {
         match node.kind {
@@ -118,7 +119,7 @@ pub fn evaluate_expression(
                 new_string += &node.get_expr()?.as_string();
             }
 
-            Ok(Expression::string(new_string, location, lifetime))
+            Ok(Expression::string(new_string, location))
         }
 
         DataType::Inferred(..) => {
@@ -126,7 +127,6 @@ pub fn evaluate_expression(
                 "Inferred data type made it into eval_expression! Everything should be type checked by now"
             )
         }
-
 
         _ => {
             // MATHS EXPRESSIONS
@@ -154,11 +154,15 @@ pub fn evaluate_expression(
             let first_node_start = stack[0].location.start_pos;
             let last_node_end = stack[stack.len() - 1].location.end_pos;
 
+            let mut ir_nodes: Vec<IRNode> = Vec::with_capacity(stack.len());
+            for node in stack {
+                ir_nodes.extend(node.to_ir()?);
+            }
+
             Ok(Expression::runtime(
-                stack,
+                ir_nodes,
                 current_type.to_owned(),
                 TextLocation::new(scope, first_node_start, last_node_end),
-                lifetime,
             ))
         }
     }
@@ -193,7 +197,7 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
     let mut template_body: TemplateContent = TemplateContent::default();
     let mut style = Style::default();
 
-    let (location, lifetime) = extract_location_and_lifetime(&simplified_expression)?;
+    let location = extract_location(&simplified_expression)?;
 
     for node in simplified_expression {
         match node.get_expr()?.kind {
@@ -228,22 +232,19 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
         }
     }
 
-    Ok(Expression::template(
-        Template::string_template(
-            template_body,
-            style,
-            String::new(),
-            location,
-        ),
-        lifetime
-    ))
+    Ok(Expression::template(Template::string_template(
+        template_body,
+        style,
+        String::new(),
+        location,
+    )))
 }
 
-fn extract_location_and_lifetime(nodes: &[AstNode]) -> Result<(TextLocation, u32), CompileError> {
+fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompileError> {
     // TODO: Just in case the first node is an operator or something
     // This should PROBABLY iterate through until it hits the first expression node
     match nodes.first() {
-        Some(node) => Ok((node.location.to_owned(), node.get_expr()?.owner_id)),
+        Some(node) => Ok(node.location.to_owned()),
         None => return_compiler_error!("No nodes found in expression. This should never happen."),
     }
 }

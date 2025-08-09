@@ -55,7 +55,6 @@ pub fn new_arg(
     token_stream: &mut TokenContext,
     name: &str,
     context: &ScopeContext,
-    visibility: &mut VarVisibility,
 ) -> Result<Arg, CompileError> {
     // Move past the name
     token_stream.advance();
@@ -63,29 +62,22 @@ pub fn new_arg(
     let ownership = match token_stream.current_token_kind() {
         TokenKind::Mutable => {
             token_stream.advance();
-            Ownership::MutableOwned
+            Ownership::MutableOwned(false)
         }
-        _ => Ownership::ImmutableOwned,
+        _ => Ownership::ImmutableOwned(false),
     };
 
-    let mut data_type = DataType::Inferred(ownership.to_owned());
+    let mut data_type: DataType;
 
     match token_stream.current_token_kind() {
+
+        // Go straight to assignment
         TokenKind::Assign => {
-            token_stream.advance();
+            data_type = DataType::Inferred(ownership);
         }
 
-        //
-        TokenKind::AddAssign => {}
-
-        TokenKind::SubtractAssign => {}
-
-        TokenKind::MultiplyAssign => {}
-
-        TokenKind::DivideAssign => {}
-
         // New Function
-        TokenKind::StructDefinition => {
+        TokenKind::StructBracket => {
             let (constructor_args, return_types) =
                 create_function_signature(token_stream, &mut true, &context)?;
 
@@ -94,7 +86,6 @@ pub fn new_arg(
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function(
-                    context.lifetime,
                     constructor_args,
                     new_ast(token_stream, context.to_owned(), false)?.ast,
                     return_types,
@@ -112,7 +103,6 @@ pub fn new_arg(
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function_without_signature(
-                    context.lifetime,
                     new_ast(token_stream, context, false)?.ast,
                     token_stream.current_location(),
                 ),
@@ -120,108 +110,43 @@ pub fn new_arg(
         }
 
         // Has a type declaration
-        TokenKind::DatatypeLiteral(type_keyword) => {
-            data_type = type_keyword.to_owned();
-
-            // Variables with explicit type declarations are public
-            *visibility = VarVisibility::Public;
-
-            token_stream.advance();
-
-            match token_stream.current_token_kind() {
-                TokenKind::Assign => {
-                    token_stream.advance();
-                }
-
-                // If end of statement, then it's a zero-value variable
-                TokenKind::Comma
-                | TokenKind::Eof
-                | TokenKind::Newline
-                | TokenKind::StructDefinition => {
-                    return Ok(Arg {
-                        name: name.to_owned(),
-                        value: data_type.get_zero_value(token_stream.current_location(), context.lifetime),
-                    });
-                }
-
-                _ => {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Variable of type: {:?} does not exist in this scope",
-                        data_type
-                    )
-                }
-            }
-        }
+        TokenKind::DatatypeInt => data_type = DataType::Int(ownership),
+        TokenKind::DatatypeFloat => data_type = DataType::Float(ownership),
+        TokenKind::DatatypeBool => data_type = DataType::Bool(ownership),
+        TokenKind::DatatypeString => data_type = DataType::String(ownership),
+        TokenKind::DatatypeTemplate => data_type = DataType::Template(ownership),
 
         // Collection Type Declaration
         TokenKind::OpenCurly => {
             token_stream.advance();
 
             // Check if the datatype inside the curly braces is mutable
-            let mutable = match token_stream.current_token_kind() {
+            let inner_ownership = match token_stream.current_token_kind() {
                 TokenKind::Mutable => {
                     token_stream.advance();
-                    true
+                    Ownership::MutableOwned(false)
                 }
-                _ => false,
+                _ => Ownership::ImmutableOwned(false) ,
             };
 
             // Check if there is a type inside the curly braces
-            data_type = match token_stream.current_token_kind().to_owned() {
-                TokenKind::DatatypeLiteral(data_type) => {
-                    token_stream.advance();
-
-                    // Inner Type datatype
-                    // TODO: Will collections eventually have interior vs exterior mutability?
-                    DataType::Collection(Box::new(data_type), ownership)
-                }
-                _ => DataType::Collection(Box::new(DataType::Inferred(Ownership::MutableOwned)), ownership),
+            data_type = match token_stream.current_token_kind().to_datatype(inner_ownership) {
+                Some(data_type) => DataType::Collection(Box::new(data_type), ownership),
+                _ => DataType::Collection(Box::new(DataType::Inferred(ownership)), Ownership::MutableOwned(false)),
             };
 
             // Make sure there is a closing curly brace
-            match token_stream.current_token_kind() {
-                TokenKind::CloseCurly => {
-                    token_stream.advance();
-                }
-                _ => {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Missing closing curly brace for collection type declaration"
-                    )
-                }
-            }
-
-            // Should have an assignment operator now
-            match token_stream.current_token_kind() {
-                TokenKind::Assign => {
-                    token_stream.advance();
-                }
-
-                // If end of statement, then it's a zero-value variable
-                TokenKind::Comma
-                | TokenKind::Eof
-                | TokenKind::Newline
-                | TokenKind::StructDefinition => {
-                    return Ok(Arg {
-                        name: name.to_owned(),
-                        value: data_type.get_zero_value(token_stream.current_location(), context.lifetime),
-                    });
-                }
-
-                _ => {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Variable of type: {:?} does not exist in this scope",
-                        data_type
-                    )
-                }
+            if token_stream.current_token_kind() != &TokenKind::CloseCurly {
+                return_syntax_error!(
+                    token_stream.current_location(),
+                    "Missing closing curly brace for collection type declaration"
+                )
             }
         }
 
         TokenKind::Newline => {
+            data_type = DataType::Inferred(ownership);
             // Ignore
-            token_stream.advance();
         }
 
         // Anything else is a syntax error
@@ -234,6 +159,33 @@ pub fn new_arg(
             )
         }
     };
+
+    // Check for assignment operator next
+    token_stream.advance();
+
+    match token_stream.current_token_kind() {
+        TokenKind::Assign => {
+            token_stream.advance();
+        }
+
+        // If end of statement, then it's a zero-value variable
+        TokenKind::Comma
+        | TokenKind::Eof
+        | TokenKind::Newline => {
+            return Ok(Arg {
+                name: name.to_owned(),
+                value: data_type.get_zero_value(token_stream.current_location()),
+            });
+        }
+
+        _ => {
+            return_syntax_error!(
+                token_stream.current_location(),
+                "Variable of type: {:?} does not exist in this scope",
+                data_type
+            )
+        }
+    }
 
     // The current token should be whatever is after the assignment operator
 

@@ -34,7 +34,12 @@ impl Template {
             location: TextLocation::default(),
         }
     }
-    pub fn string_template(content: TemplateContent, style: Style, id: String, location: TextLocation) -> Template {
+    pub fn string_template(
+        content: TemplateContent,
+        style: Style,
+        id: String,
+        location: TextLocation,
+    ) -> Template {
         Template {
             content,
             kind: TemplateType::StringTemplate,
@@ -97,7 +102,9 @@ pub fn new_template(
 
             TokenKind::TemplateClose => {
                 token_stream.go_back();
-                template_content.flatten().extend(this_template_content.flatten());
+                template_content
+                    .flatten()
+                    .extend(this_template_content.flatten());
                 return Ok(Template::string_template(
                     template_content,
                     template_style.to_owned(),
@@ -116,7 +123,9 @@ pub fn new_template(
             // It will have a usize in it that will determine the order of how elements from the template head are inserted into the body,
             // Like traditional template strings.
             // So the compiler can insert things into the slot
-            TokenKind::Slot => return Ok(Template::slot(template_id, token_stream.current_location())),
+            TokenKind::Slot => {
+                return Ok(Template::slot(template_id, token_stream.current_location()));
+            }
 
             TokenKind::Markdown => {
                 template_style.format = StyleFormat::Markdown;
@@ -240,7 +249,6 @@ pub fn new_template(
                 this_template_content.after.push(Expression::structure(
                     structure,
                     token_stream.current_location(),
-                    context.lifetime
                 ));
             }
 
@@ -326,7 +334,6 @@ pub fn new_template(
                 this_template_content.after.push(Expression::string(
                     content.to_string(),
                     token_stream.current_location(),
-                    context.lifetime
                 ));
             }
 
@@ -341,7 +348,6 @@ pub fn new_template(
                 this_template_content.after.push(Expression::string(
                     "\n".to_string(),
                     token_stream.current_location(),
-                    context.lifetime
                 ));
             }
 

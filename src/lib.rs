@@ -15,7 +15,6 @@ mod compiler {
         pub mod collections;
         pub mod markdown;
         pub mod expressions {
-            pub mod constant_folding;
             pub mod eval_expression;
             pub mod expression;
             pub mod function_call_inline;
@@ -34,6 +33,13 @@ mod compiler {
 
         pub mod tokenizer;
         pub mod tokens;
+    }
+    pub mod optimizers {
+        pub mod constant_folding;
+    }
+    pub mod ir {
+        pub mod ir_nodes;
+        pub mod build_ir;
     }
     mod html5_codegen {
         pub mod code_block_highlighting;
@@ -54,12 +60,8 @@ mod compiler {
 
     pub mod codegen {
         pub mod build_wasm;
-        pub mod wasm_encoding;
-        pub mod release_optimizers;
         pub mod wat_to_wasm;
-
-        #[cfg(test)]
-        pub mod codegen_tests;
+        pub mod wasm_encoding;
     }
 }
 

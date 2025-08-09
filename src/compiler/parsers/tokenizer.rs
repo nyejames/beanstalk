@@ -243,7 +243,7 @@ pub fn get_token_kind(
 
     // Structs
     if current_char == '|' {
-        return_token!(TokenKind::StructDefinition, stream);
+        return_token!(TokenKind::StructBracket, stream);
     }
 
     // Currently not using bangs
@@ -452,7 +452,7 @@ pub fn get_token_kind(
 
         if dot_count == 0 {
             return_token!(
-                TokenKind::IntLiteral(token_value.parse::<i32>().unwrap()),
+                TokenKind::IntLiteral(token_value.parse::<i64>().unwrap()),
                 stream
             );
         }
@@ -530,29 +530,14 @@ fn keyword_or_variable(
             "true" | "True" => return_token!(TokenKind::BoolLiteral(true), stream),
             "false" | "False" => return_token!(TokenKind::BoolLiteral(false), stream),
 
-            "Float" => return_token!(
-                TokenKind::DatatypeLiteral(DataType::Float(Ownership::default())),
-                stream
-            ),
-            "Int" => return_token!(
-                TokenKind::DatatypeLiteral(DataType::Int(Ownership::default())),
-                stream
-            ),
-            "String" => return_token!(
-                TokenKind::DatatypeLiteral(DataType::String(Ownership::default())),
-                stream
-            ),
-            "Bool" => return_token!(
-                TokenKind::DatatypeLiteral(DataType::Bool(Ownership::default())),
-                stream
-            ),
+            "Float" => return_token!(TokenKind::DatatypeFloat, stream),
+            "Int" => return_token!(TokenKind::DatatypeInt, stream),
+            "String" => return_token!(TokenKind::DatatypeString, stream),
+            "Bool" => return_token!(TokenKind::DatatypeBool, stream),
 
-            "None" => return_token!(TokenKind::DatatypeLiteral(DataType::None), stream),
+            "None" => return_token!(TokenKind::DatatypeNone, stream),
 
-            "Template" => return_token!(
-                TokenKind::DatatypeLiteral(DataType::Template(Ownership::default())),
-                stream
-            ),
+            "Template" => return_token!(TokenKind::DatatypeTemplate, stream),
 
             _ => {}
         }

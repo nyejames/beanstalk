@@ -4,7 +4,7 @@ use colour::{blue_ln, green_ln, red_ln};
 
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -24,9 +24,7 @@ pub fn create_function_signature(
     let args = create_arg_constructor(token_stream, context, pure)?;
 
     match token_stream.current_token_kind() {
-        TokenKind::Arrow => {
-            token_stream.advance();
-        }
+        TokenKind::Arrow => {}
 
         // Function does not return anything
         TokenKind::Colon => {
@@ -43,11 +41,13 @@ pub fn create_function_signature(
     }
 
     // Parse return types
-    let mut return_types = Vec::new();
+    let mut return_types: Vec<DataType> = Vec::new();
     let mut next_in_list: bool = true;
     let mut mutable: bool = false;
 
     while token_stream.index < token_stream.length {
+        token_stream.advance();
+
         match token_stream.current_token_kind() {
             TokenKind::Mutable => {
                 if !next_in_list {
@@ -57,20 +57,63 @@ pub fn create_function_signature(
                     )
                 }
 
-                token_stream.advance();
                 mutable = true;
             }
 
-            TokenKind::DatatypeLiteral(data_type) => {
+            TokenKind::DatatypeInt => {
                 if !next_in_list {
                     return_syntax_error!(
                         token_stream.current_location(),
                         "Should have a comma to separate return types",
                     )
                 }
-
-                return_types.push(data_type.to_owned());
-                token_stream.advance();
+                return_types.push(DataType::Int(
+                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
+                ));
+            }
+            TokenKind::DatatypeFloat => {
+                if !next_in_list {
+                    return_syntax_error!(
+                        token_stream.current_location(),
+                        "Should have a comma to separate return types",
+                    )
+                }
+                return_types.push(DataType::Float(
+                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
+                ));
+            }
+            TokenKind::DatatypeBool => {
+                if !next_in_list {
+                    return_syntax_error!(
+                        token_stream.current_location(),
+                        "Should have a comma to separate return types",
+                    )
+                }
+                return_types.push(DataType::Bool(
+                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
+                ));
+            }
+            TokenKind::DatatypeString => {
+                if !next_in_list {
+                    return_syntax_error!(
+                        token_stream.current_location(),
+                        "Should have a comma to separate return types",
+                    )
+                }
+                return_types.push(DataType::String(
+                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
+                ));
+            }
+            TokenKind::DatatypeTemplate => {
+                if !next_in_list {
+                    return_syntax_error!(
+                        token_stream.current_location(),
+                        "Should have a comma to separate return types",
+                    )
+                }
+                return_types.push(DataType::Template(
+                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
+                ));
             }
 
             TokenKind::Symbol(name) => {
@@ -98,7 +141,6 @@ pub fn create_function_signature(
                     return_types.push(possible_type.value.data_type.to_owned());
                 }
 
-                token_stream.advance();
             }
 
             TokenKind::Colon => {
@@ -114,7 +156,6 @@ pub fn create_function_signature(
                     )
                 }
 
-                token_stream.advance();
                 next_in_list = true;
             }
 
@@ -391,7 +432,7 @@ fn create_arg_constructor(
     let mut args = Vec::<Arg>::new();
     let mut next_in_list: bool = true;
 
-    if token_stream.current_token_kind() != &TokenKind::StructDefinition {
+    if token_stream.current_token_kind() != &TokenKind::StructBracket {
         return_syntax_error!(
             token_stream.current_location(),
             "Expected a | after the function name",
@@ -402,7 +443,7 @@ fn create_arg_constructor(
 
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {
-            TokenKind::StructDefinition => {
+            TokenKind::StructBracket => {
                 token_stream.advance();
                 return Ok(args);
             }
@@ -420,7 +461,6 @@ fn create_arg_constructor(
                     token_stream,
                     &arg_name,
                     &context,
-                    &mut VarVisibility::Private,
                 )?;
 
                 if argument.value.data_type.is_mutable() {

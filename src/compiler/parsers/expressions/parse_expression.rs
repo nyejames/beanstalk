@@ -171,7 +171,7 @@ pub fn create_expression(
             }
 
             TokenKind::CloseCurly
-            | TokenKind::StructDefinition
+            | TokenKind::StructBracket
             | TokenKind::Comma
             | TokenKind::Eof
             | TokenKind::TemplateClose
@@ -255,7 +255,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::float(float, location.to_owned(), context.lifetime)),
+                    kind: NodeKind::Reference(Expression::float(float, location.to_owned())),
                     location,
                     scope: context.scope_name.to_owned(),
                 });
@@ -271,8 +271,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-
-                    kind: NodeKind::Reference(Expression::int(int_value, location.to_owned(), context.lifetime)),
+                    kind: NodeKind::Reference(Expression::int(int_value, location.to_owned())),
                     scope: context.scope_name.to_owned(),
                     location,
                 });
@@ -281,11 +280,9 @@ pub fn create_expression(
             TokenKind::StringLiteral(ref string) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-
                     kind: NodeKind::Reference(Expression::string(
                         string.to_owned(),
                         location.to_owned(),
-                        context.lifetime,
                     )),
                     scope: context.scope_name.to_owned(),
                     location,
@@ -301,7 +298,9 @@ pub fn create_expression(
                 )?;
 
                 match template.kind {
-                    TemplateType::StringTemplate => return Ok(Expression::template(template, context.lifetime)),
+                    TemplateType::StringTemplate => {
+                        return Ok(Expression::template(template));
+                    }
 
                     // Ignore comments
                     TemplateType::Comment => {}
@@ -320,11 +319,9 @@ pub fn create_expression(
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-
                     kind: NodeKind::Expression(Expression::bool(
                         value.to_owned(),
                         location.to_owned(),
-                        context.lifetime
                     )),
                     location,
                     scope: context.scope_name.to_owned(),
@@ -351,7 +348,6 @@ pub fn create_expression(
             // BINARY OPERATORS
             TokenKind::Add => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::Add),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -360,7 +356,6 @@ pub fn create_expression(
 
             TokenKind::Subtract => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::Subtract),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -375,7 +370,6 @@ pub fn create_expression(
 
             TokenKind::Divide => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::Divide),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -384,7 +378,6 @@ pub fn create_expression(
 
             TokenKind::Exponent => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::Exponent),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -393,7 +386,6 @@ pub fn create_expression(
 
             TokenKind::Modulus => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::Modulus),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -406,14 +398,12 @@ pub fn create_expression(
                 if let Some(TokenKind::Not) = token_stream.peek_next_token() {
                     token_stream.advance();
                     expression.push(AstNode {
-
                         kind: NodeKind::Operator(Operator::NotEqual),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
                     });
                 } else {
                     expression.push(AstNode {
-
                         kind: NodeKind::Operator(Operator::Equality),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
@@ -423,7 +413,6 @@ pub fn create_expression(
 
             TokenKind::LessThan => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::LessThan),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -431,7 +420,6 @@ pub fn create_expression(
             }
             TokenKind::LessThanOrEqual => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::LessThanOrEqual),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -439,7 +427,6 @@ pub fn create_expression(
             }
             TokenKind::GreaterThan => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::GreaterThan),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
@@ -447,7 +434,6 @@ pub fn create_expression(
             }
             TokenKind::GreaterThanOrEqual => {
                 expression.push(AstNode {
-
                     kind: NodeKind::Operator(Operator::GreaterThanOrEqual),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
