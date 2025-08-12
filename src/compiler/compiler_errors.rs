@@ -305,7 +305,7 @@ pub fn print_formatted_error(e: CompileError) {
         }
 
         ErrorType::File => {
-            e_yellow_ln!("🏚 Can't find/read file or directory");
+            e_yellow_ln!("🏚 Can't find/read file or directory: {:?}", e.file_path);
             e_red_ln!("  {}", e.msg);
             return;
         }

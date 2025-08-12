@@ -30,23 +30,10 @@ pub fn evaluate_expression(
     let mut operators_stack: Vec<AstNode> = Vec::new();
 
     // Should always be at least one node in the expression being evaluated
-    let location = extract_location(&simplified_expression)?;
+    let location = extract_location(&nodes)?;
 
     'outer: for node in nodes {
         match node.kind {
-            NodeKind::Reference(ref expr, ..) => {
-                if let DataType::Inferred(..) = current_type {
-                    *current_type = expr.data_type.to_compiler_owned();
-                }
-
-                if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
-                    simplified_expression.push(node.to_owned());
-                    continue 'outer;
-                }
-
-                output_queue.push(node.to_owned());
-            }
-
             NodeKind::Expression(ref expr, ..) => {
                 if let DataType::Inferred(..) = current_type {
                     *current_type = expr.data_type.to_compiler_owned();
@@ -106,7 +93,7 @@ pub fn evaluate_expression(
 
     // If nothing to evaluate at compile time, just one value, return that value
     if simplified_expression.len() == 1 {
-        return Ok(simplified_expression[0].get_expr()?);
+        return simplified_expression[0].get_expr();
     }
 
     match current_type {

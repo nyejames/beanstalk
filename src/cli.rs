@@ -189,7 +189,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     }
 }
 
-fn build_project(path: &Path, release_build: bool, flags: &Vec<Flag>) {
+fn build_project(path: &Path, release_build: bool, flags: &[Flag]) {
     let start = Instant::now();
 
     match build::build_project(path, release_build, flags) {

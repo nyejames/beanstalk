@@ -7,7 +7,6 @@ use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::{
     create_function_signature, parse_function_call,
 };
-use crate::compiler::parsers::tokens::VarVisibility;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
@@ -41,7 +40,7 @@ pub fn create_reference(
             // We could just always say it's a move, then if we encounter another reference, edit the previous instance of the reference.
             // While doing this we would have to check if there was already a mutable reference (and throw an error if so)
             // If its immutable or being copied that's fine, but need to get the reference syntax working here.
-            kind: NodeKind::Reference(arg.value.to_owned()),
+            kind: NodeKind::Expression(arg.value.to_owned()),
             location: token_stream.current_location(),
             scope: context.scope_name.to_owned(),
         }),
@@ -70,16 +69,19 @@ pub fn new_arg(
     let mut data_type: DataType;
 
     match token_stream.current_token_kind() {
-
-        // Go straight to assignment
+        // Go straight to the assignment
         TokenKind::Assign => {
+            // Cringe Code
+            // This whole function can be reworked to avoid this go_back() later.
+            // For now, it's easy to read and parse this way while working on the specifics of the syntax
+            token_stream.go_back();
             data_type = DataType::Inferred(ownership);
         }
 
         // New Function
         TokenKind::StructBracket => {
             let (constructor_args, return_types) =
-                create_function_signature(token_stream, &mut true, &context)?;
+                create_function_signature(token_stream, &mut true, context)?;
 
             let context = context.new_child_function(name, &return_types);
 
@@ -126,13 +128,19 @@ pub fn new_arg(
                     token_stream.advance();
                     Ownership::MutableOwned(false)
                 }
-                _ => Ownership::ImmutableOwned(false) ,
+                _ => Ownership::ImmutableOwned(false),
             };
 
             // Check if there is a type inside the curly braces
-            data_type = match token_stream.current_token_kind().to_datatype(inner_ownership) {
+            data_type = match token_stream
+                .current_token_kind()
+                .to_datatype(inner_ownership)
+            {
                 Some(data_type) => DataType::Collection(Box::new(data_type), ownership),
-                _ => DataType::Collection(Box::new(DataType::Inferred(ownership)), Ownership::MutableOwned(false)),
+                _ => DataType::Collection(
+                    Box::new(DataType::Inferred(ownership)),
+                    Ownership::MutableOwned(false),
+                ),
             };
 
             // Make sure there is a closing curly brace
@@ -160,7 +168,7 @@ pub fn new_arg(
         }
     };
 
-    // Check for assignment operator next
+    // Check for the assignment operator next
     token_stream.advance();
 
     match token_stream.current_token_kind() {
@@ -169,9 +177,7 @@ pub fn new_arg(
         }
 
         // If end of statement, then it's a zero-value variable
-        TokenKind::Comma
-        | TokenKind::Eof
-        | TokenKind::Newline => {
+        TokenKind::Comma | TokenKind::Eof | TokenKind::Newline => {
             return Ok(Arg {
                 name: name.to_owned(),
                 value: data_type.get_zero_value(token_stream.current_location()),
@@ -181,8 +187,8 @@ pub fn new_arg(
         _ => {
             return_syntax_error!(
                 token_stream.current_location(),
-                "Variable of type: {:?} does not exist in this scope",
-                data_type
+                "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
+                token_stream.current_token_kind()
             )
         }
     }

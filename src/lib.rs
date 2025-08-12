@@ -105,15 +105,15 @@ impl<'a> Compiler<'a> {
         Self { project_config }
     }
 
-    // -----------------------------
-    //          TOKENIZER
-    // -----------------------------
-    // At this stage,
-    // we are also collecting the list of imports for the module.
-    // This is so a dependency graph can start being built before the AST stage
-    // So modules are compiled to an AST in the correct order.
-    // Can be parallelized for all files in a project,
-    // as there is no need to check imports or types yet
+    /// -----------------------------
+    ///          TOKENIZER
+    /// -----------------------------
+    /// At this stage,
+    /// we are also collecting the list of imports for the module.
+    /// This is so a dependency graph can start being built before the AST stage
+    /// So modules are compiled to an AST in the correct order.
+    /// Can be parallelised for all files in a project,
+    /// as there is no need to check imports or types yet
     pub fn source_to_tokens(
         &self,
         source_code: &str,
@@ -125,13 +125,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    // -----------------------------
-    //         AST CREATION
-    // -----------------------------
-    // This assumes the modules are in the right order for compiling
-    // Without any circular dependencies.
-    // All imports for a module must already be in public_declarations.
-    // So all the type-checking and folding can be performed correctly
+    /// -----------------------------
+    ///         AST CREATION
+    /// -----------------------------
+    /// This assumes the modules are in the right order for compiling
+    /// Without any circular dependencies.
+    /// All imports for a module must already be in public_declarations.
+    /// So all the type-checking and folding can be performed correctly
     pub fn tokens_to_ast(
         &self,
         mut module_tokens: TokenContext,
@@ -151,10 +151,10 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    // -----------------------
-    //        BACKEND
-    //    (Wasm Generation)
-    // -----------------------
+    /// -----------------------
+    ///        BACKEND
+    ///    (Wasm Generation)
+    /// -----------------------
     pub fn ast_to_wasm(ast: Vec<AstNode>) -> Result<Vec<u8>, CompileError> {
         new_wasm_module(ast)
     }

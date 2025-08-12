@@ -300,7 +300,7 @@ pub fn new_ast(
                     }
 
                     ast.push(AstNode {
-                        kind: NodeKind::Reference(arg.value.to_owned()),
+                        kind: NodeKind::Expression(arg.value.to_owned()),
                         scope: context.scope_name.to_owned(),
                         location: token_stream.current_location(),
                     });

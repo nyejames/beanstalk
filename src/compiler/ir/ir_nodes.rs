@@ -3,7 +3,7 @@ use wasm_encoder::ExportKind;
 
 pub struct IR {
     functions: Vec<Function>,
-    globals: HashSet<u32>,
+    globals: HashSet<u32>,            // Static Memory (non constants)
     exports: HashMap<String, Export>, // The id of the global
     global_id: u32,                   // The next global id to use
     local_id: u32,                    // The next local id to use
@@ -50,16 +50,34 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq)]
 
 pub enum IRNode {
-    // Only 64-bit types for now
+    // Declarations
+    // i32 used for pointers to make it easy to use in Wasm
 
-    // Variables
-    LocalVar(u32), // local.get -- Might need to be an id for a string lookup if throwing borrow checker errors from here
-    GlobalVar(u32), // global.get
+    // id, value, global?
+    SetInt(i32, i64, bool), // local.set or global.set (value)
+    SetFloat(i32, f64, bool),
+    SetBool(i32, i32, bool),
+
+    // Immutable String
+    // Pointer, String
+    SetSlice(i32, Vec<u8>),
+
+    // String
+    // Pointer, Capacity, String
+    SetString(i32, i32, Vec<u8>), // memory.grow (capacity) memory.set (pointer) ()
+
+    // Only 64-bit types for now
+    // Simple Variable References
+    GetLocal(i32), // local.get -- Might need to be an id for a string lookup if throwing borrow checker errors from here
+    GetGlobal(i32), // global.get
 
     // Constants
     IntConst(i64),   // i64.const
     FloatConst(f64), // f64.const
     BoolConst(i32),  // i32.const
+
+    // Function Calls
+    Call(i32),
 
     // Numeric Instructions
 

@@ -28,9 +28,10 @@ impl Expression {
 impl AstNode {
     pub fn to_ir(&self) -> Result<Vec<IRNode>, CompileError> {
         match &self.kind {
-            NodeKind::Reference(value, ..)
-            | NodeKind::Declaration(_, value, ..)
-            | NodeKind::Expression(value, ..) => Ok(value.expr_to_ir()),
+            // TODO: Need to correctly lower these to IR representations
+            NodeKind::Declaration(_, value, ..) | NodeKind::Expression(value, ..) => {
+                Ok(value.expr_to_ir())
+            }
             _ => {
                 return_compiler_error!("Compiler can't turn this node into IR yet: {:?}", self.kind)
             }

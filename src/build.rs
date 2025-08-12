@@ -5,7 +5,7 @@ use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, n
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use crate::settings::{Config, EXPORTS_CAPACITY, get_config_from_ast};
-use crate::{Compiler, Flag, return_file_errors, settings};
+use crate::{Compiler, Flag, return_file_errors, settings, timer_log};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold};
 use rayon::prelude::*;
 use std::fs;
@@ -28,6 +28,8 @@ pub fn build_project(
     flags: &[Flag],
 ) -> Result<Project, Vec<CompileError>> {
     // Create a new PathBuf from the entry_path
+    let time = Instant::now();
+    
     let entry_dir = match std::env::current_dir() {
         Ok(dir) => dir.join(entry_path),
         Err(e) => return_file_errors!(entry_path, "Error getting current directory: {:?}", e),
@@ -36,7 +38,6 @@ pub fn build_project(
     // Read content from a test file
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
-    let time = Instant::now();
 
     let mut modules_to_parse: Vec<InputModule> = Vec::new();
     let mut project_config = Config::default();
@@ -79,6 +80,11 @@ pub fn build_project(
                 source_code: code,
                 source_path: entry_path.to_owned(),
             });
+
+            if !flags.contains(&Flag::DisableTimers) {
+                print!("File Read In: ");
+                green_ln!("{:?}", time.elapsed());
+            }
         }
 
         CompileType::MultiFile(config_source_code) => {
@@ -125,26 +131,30 @@ pub fn build_project(
     // ----------------------------------
     print_bold!("\nCompiling: ");
     dark_yellow_ln!("{:?}", project_config.src);
+    let time = Instant::now();
     let compiler = Compiler::new(&project_config);
 
     // Compile each module to tokens and collect them all
-    let time = Instant::now();
     let project_tokens: Vec<Result<TokenContext, CompileError>> = modules_to_parse
         .par_iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
+    timer_log!(time, "Tokenized in: ");
 
     // Return any compilation errors and sort modules into dependency order
     // Once the compiler has created a dependency graph,
     // each AST creation can also export it's public variables for type checking,
     // and successive ast blocks can type check properly.
     // Circular dependencies are disallowed
+    let time = Instant::now();
     let sorted_modules = resolve_module_dependencies(project_tokens)?;
+    timer_log!(time, "Dependency graph created in: ");
 
     // ----------------------------------
     //          AST generation
     // ----------------------------------
     // Keep Track of new exported declarations (so modules importing them know their types)
+    let time = Instant::now();
     let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
     let mut errors: Vec<CompileError> = Vec::new();
     let mut ast_blocks: Vec<AstBlock> = Vec::with_capacity(sorted_modules.len());
@@ -169,12 +179,11 @@ pub fn build_project(
         print!("AST created in: ");
         green_ln!("{:?}", time.elapsed());
     }
-    
+
     // TODO
     // -----------------------------------
     //       Link together the ASTs
     // -----------------------------------
-    
 
     // TODO
     // ----------------------------------
@@ -202,7 +211,7 @@ fn add_bs_files_to_parse(
         Ok(dir) => dir,
         Err(e) => return_file_errors!(
             project_root_dir,
-            "Error reading directory when adding new bs files to parse: {:?}",
+            "Can't find any files to parse inside this directory. Might be empty? \nError: {:?}",
             e
         ),
     };

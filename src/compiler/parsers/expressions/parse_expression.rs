@@ -126,7 +126,7 @@ pub fn create_expression(
                 let value = create_expression(token_stream, context, data_type, true)?;
 
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(value),
+                    kind: NodeKind::Expression(value),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
                 });
@@ -137,7 +137,7 @@ pub fn create_expression(
                 match &data_type {
                     DataType::Collection(inner_type, _) => {
                         expression.push(AstNode {
-                            kind: NodeKind::Reference(new_collection(
+                            kind: NodeKind::Expression(new_collection(
                                 token_stream,
                                 inner_type,
                                 context,
@@ -149,7 +149,7 @@ pub fn create_expression(
 
                     DataType::Inferred(mutable) => {
                         expression.push(AstNode {
-                            kind: NodeKind::Reference(new_collection(
+                            kind: NodeKind::Expression(new_collection(
                                 token_stream,
                                 &DataType::Inferred(mutable.to_owned()),
                                 context,
@@ -255,7 +255,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::float(float, location.to_owned())),
+                    kind: NodeKind::Expression(Expression::float(float, location.to_owned())),
                     location,
                     scope: context.scope_name.to_owned(),
                 });
@@ -271,7 +271,7 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::int(int_value, location.to_owned())),
+                    kind: NodeKind::Expression(Expression::int(int_value, location.to_owned())),
                     scope: context.scope_name.to_owned(),
                     location,
                 });
@@ -280,7 +280,7 @@ pub fn create_expression(
             TokenKind::StringLiteral(ref string) => {
                 let location = token_stream.current_location();
                 expression.push(AstNode {
-                    kind: NodeKind::Reference(Expression::string(
+                    kind: NodeKind::Expression(Expression::string(
                         string.to_owned(),
                         location.to_owned(),
                     )),

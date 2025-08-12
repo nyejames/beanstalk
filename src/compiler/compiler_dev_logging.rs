@@ -20,6 +20,24 @@ macro_rules! token_log {
     };
 }
 
+// Extra timer logging
+#[macro_export]
+#[cfg(feature = "detailed_timers")]
+macro_rules! timer_log {
+    ($time:expr, $msg:expr) => {
+        print!("{}", $msg);
+        green_ln!("{:?}", $time.elapsed());
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "detailed_timers"))]
+macro_rules! ast_log {
+    ($($arg:tt)*) => {
+        // Nothing
+    };
+}
+
 // AST LOGGING MACROS
 #[macro_export]
 #[cfg(feature = "verbose_ast_logging")]
@@ -74,14 +92,6 @@ macro_rules! codegen_log {
 pub fn print_ast_output(ast: &[AstNode]) {
     for node in ast {
         match &node.kind {
-            NodeKind::Reference(value) => match value.data_type {
-                DataType::Template(_) => {
-                    print_template(&value.kind, 0);
-                }
-                _ => {
-                    cyan_ln!("{:?}", value);
-                }
-            },
             NodeKind::Comment(..) => {
                 // grey_ln!("{:?}", node);
             }

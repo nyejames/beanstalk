@@ -67,6 +67,9 @@ pub enum NodeKind {
     // Variable names should be the full namespace (module path + variable name)
     Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility, Type,
 
+    // An actual value
+    Expression(Expression),
+
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
     Print(Expression), // Value,
@@ -77,10 +80,6 @@ pub enum NodeKind {
     // Other language code blocks
     JS(String),  // Code,
     Css(String), // Code,
-
-    // Literals
-    Reference(Expression),
-    Expression(Expression),
 
     TemplateFormatter,
     Slot,
@@ -97,9 +96,9 @@ pub enum NodeKind {
 impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::Reference(value, ..)
-            | NodeKind::Declaration(_, value, ..)
-            | NodeKind::Expression(value, ..) => Ok(value.to_owned()),
+            NodeKind::Declaration(_, value, ..) | NodeKind::Expression(value, ..) => {
+                Ok(value.to_owned())
+            }
             _ => return_compiler_error!(
                 "Compiler tried to get the expression of a node that cannot contain expressions: {:?}",
                 self.kind
