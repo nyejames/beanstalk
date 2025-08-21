@@ -272,7 +272,12 @@ pub fn get_token_kind(
                     stream.next();
                 }
 
-                return_token!(TokenKind::Comment, stream);
+                // Do not add any token to the stream, call this function again
+                return get_token_kind(
+                    stream,
+                    template_nesting_level,
+                    imports
+                )
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {

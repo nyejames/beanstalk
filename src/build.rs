@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::module_dependencies::resolve_module_dependencies;
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
@@ -184,6 +184,23 @@ pub fn build_project(
     // -----------------------------------
     //       Link together the ASTs
     // -----------------------------------
+    // TODO: Split up how asts are bundled together into modules
+    // based on how the config is set up
+    let mut module: Vec<AstNode> = Vec::new();
+    for block in ast_blocks {
+        module.extend(block.ast);
+    }
+
+    // TODO
+    // ----------------------------------
+    //          MIR generation
+    // ----------------------------------
+    compiler.ast_to_ir(AstBlock {
+        ast: module,
+        is_entry_point: true,
+        scope: project_config.entry_point.to_owned(),
+    });
+    
 
     // TODO
     // ----------------------------------

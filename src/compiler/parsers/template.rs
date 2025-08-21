@@ -231,6 +231,12 @@ pub fn parse_template(
                 // TODO
             },
 
+            ExpressionKind::Reference(name) => {
+                // TODO: Variable references in templates - if reference can't be folded at compile time,
+                // evaluation and string coercion must happen at runtime
+                content.push_str(&format!("${}", name));
+            },
+
             ExpressionKind::Function(..) => {
                 return_rule_error!(
                     position.to_owned(),

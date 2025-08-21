@@ -11,6 +11,7 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
@@ -173,10 +174,6 @@ pub fn new_ast(
         ast_log!("Parsing Token: {:?}", current_token);
 
         match current_token {
-            TokenKind::Comment => {
-                // Comments are ignored during AST creation.
-                token_stream.advance();
-            }
 
             // Template literals
             // TokenKind::TemplateHead | TokenKind::ParentTemplate => {
@@ -227,6 +224,8 @@ pub fn new_ast(
             TokenKind::Symbol(ref name) => {
                 if let Some(arg) = context.find_reference(name) {
                     // Then the associated mutation afterward.
+                    // Or error if trying to mutate an immutable reference
+
                     // Move past the name
                     token_stream.advance();
 
@@ -299,11 +298,60 @@ pub fn new_ast(
                         }
                     }
 
-                    ast.push(AstNode {
-                        kind: NodeKind::Expression(arg.value.to_owned()),
-                        scope: context.scope_name.to_owned(),
-                        location: token_stream.current_location(),
-                    });
+                    // Check what comes after the variable reference
+                    match token_stream.current_token_kind() {
+                        // Assignment operators - handle mutation
+                        TokenKind::Assign | 
+                        TokenKind::AddAssign | 
+                        TokenKind::SubtractAssign | 
+                        TokenKind::MultiplyAssign | 
+                        TokenKind::DivideAssign | 
+                        TokenKind::ExponentAssign | 
+                        TokenKind::RootAssign => {
+                            ast.push(handle_mutation(token_stream, name, &arg, &context)?);
+                        }
+                        
+                        // Type declarations after variable reference - error (shadowing not supported)
+                        TokenKind::DatatypeInt | 
+                        TokenKind::DatatypeFloat | 
+                        TokenKind::DatatypeBool | 
+                        TokenKind::DatatypeString | 
+                        TokenKind::DatatypeTemplate => {
+                            return_rule_error!(
+                                token_stream.current_location(),
+                                "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
+                                name
+                            );
+                        }
+                        
+                        // Mutable token after variable reference - check if it's ~= (mutable reassignment)
+                        TokenKind::Mutable => {
+                            // Look ahead to see if this is ~= (mutable reassignment)
+                            if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
+                                // This is ~= syntax for mutable reassignment
+                                // Move past the ~ token
+                                token_stream.advance();
+                                // Now we're at the = token, handle as mutation
+                                ast.push(handle_mutation(token_stream, name, &arg, &context)?);
+                            } else {
+                                return_rule_error!(
+                                    token_stream.current_location(),
+                                    "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
+                                    name
+                                );
+                            }
+                        }
+                        
+                        // At top level, a bare variable reference without assignment is a syntax error
+                        _ => {
+                            return_syntax_error!(
+                                token_stream.current_location(),
+                                "Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation",
+                                token_stream.current_token_kind(),
+                                name
+                            );
+                        }
+                    }
 
                 // NEW VARIABLE DECLARATION
                 } else {

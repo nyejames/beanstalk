@@ -50,7 +50,7 @@ pub fn run_all_test_cases() {
         };
         
         if path.extension().and_then(|s| s.to_str()) == Some("bs") {
-            let source = fs::read_to_string(&path).unwrap();
+            let _source = fs::read_to_string(&path).unwrap();
 
             // TODO: Get some wasm back from the compiler
             let wasm: Vec<u8> = Vec::new();

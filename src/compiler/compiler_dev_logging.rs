@@ -32,7 +32,7 @@ macro_rules! timer_log {
 
 #[macro_export]
 #[cfg(not(feature = "detailed_timers"))]
-macro_rules! ast_log {
+macro_rules! timer_log {
     ($($arg:tt)*) => {
         // Nothing
     };

@@ -10,3 +10,14 @@ DEV_NOTES.md
 .idea
 src/.tmp.driveupload/1597086
 .cursor/rules/beanstalk-syntax.mdc
+.kiro/steering/Beanstalk Language Design Guide.md
+.kiro/specs/ir-generation/tasks.md
+.kiro/specs/ir-generation/requirements.md
+.kiro/specs/ir-generation/design.md
+.kiro/settings/mcp.json
+.kiro/steering/Style Guide.md
+.kiro/steering/Beanstalk Compiler Architecture Guide.md
+.kiro/specs/mir-refactor/design.md
+.kiro/specs/mir-refactor/requirements.md
+.kiro/specs/mir-refactor/tasks.md
+.kiro/steering/Beanstalk MIR Implementation Guide.md

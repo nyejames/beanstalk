@@ -66,6 +66,9 @@ pub enum NodeKind {
 
     // Variable names should be the full namespace (module path + variable name)
     Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility, Type,
+    
+    // Mutation of existing mutable variables
+    Mutation(String, Expression), // Variable name, New value
 
     // An actual value
     Expression(Expression),
@@ -96,7 +99,7 @@ pub enum NodeKind {
 impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::Declaration(_, value, ..) | NodeKind::Expression(value, ..) => {
+            NodeKind::Declaration(_, value, ..) | NodeKind::Expression(value, ..) | NodeKind::Mutation(_, value) => {
                 Ok(value.to_owned())
             }
             _ => return_compiler_error!(
@@ -142,5 +145,10 @@ impl AstNode {
 
     pub fn is_left_associative(&self) -> bool {
         !matches!(self.kind, NodeKind::Operator(Operator::Exponent, ..))
+    }
+
+    pub fn to_mir(&self) -> Result<Vec<crate::compiler::mir::mir_nodes::Statement>, CompileError> {
+        // This method is deprecated - use ast_to_mir instead
+        return_compiler_error!("to_mir method is deprecated - use ast_to_mir function instead")
     }
 }

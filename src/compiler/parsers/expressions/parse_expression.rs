@@ -5,11 +5,11 @@ use colour::{blue_ln, green_ln, red_ln};
 
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::collections::new_collection;
-use crate::compiler::parsers::expressions::expression::{Expression, Operator};
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::create_template_node::new_template;
 use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::template::{Style, TemplateType};
@@ -254,8 +254,22 @@ pub fn create_expression(
                 }
 
                 let location = token_stream.current_location();
+                
+                // Use the expected data type's ownership if it's a Float type, otherwise use default
+                let ownership = match data_type {
+                    DataType::Float(ownership) => ownership.clone(),
+                    DataType::Inferred(ownership) => ownership.clone(),
+                    _ => Ownership::ImmutableOwned(false),
+                };
+                
+                let float_expr = Expression::new(
+                    ExpressionKind::Float(float),
+                    location.to_owned(),
+                    DataType::Float(ownership),
+                );
+                
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(Expression::float(float, location.to_owned())),
+                    kind: NodeKind::Expression(float_expr),
                     location,
                     scope: context.scope_name.to_owned(),
                 });
@@ -270,8 +284,22 @@ pub fn create_expression(
                 };
 
                 let location = token_stream.current_location();
+                
+                // Use the expected data type's ownership if it's an Int type, otherwise use default
+                let ownership = match data_type {
+                    DataType::Int(ownership) => ownership.clone(),
+                    DataType::Inferred(ownership) => ownership.clone(),
+                    _ => Ownership::ImmutableOwned(false), // Use explicit immutable instead of default
+                };
+                
+                let int_expr = Expression::new(
+                    ExpressionKind::Int(int_value),
+                    location.to_owned(),
+                    DataType::Int(ownership),
+                );
+                
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(Expression::int(int_value, location.to_owned())),
+                    kind: NodeKind::Expression(int_expr),
                     scope: context.scope_name.to_owned(),
                     location,
                 });
@@ -279,11 +307,22 @@ pub fn create_expression(
 
             TokenKind::StringLiteral(ref string) => {
                 let location = token_stream.current_location();
+                
+                // Use the expected data type's ownership if it's a String type, otherwise use default
+                let ownership = match data_type {
+                    DataType::String(ownership) => ownership.clone(),
+                    DataType::Inferred(ownership) => ownership.clone(),
+                    _ => Ownership::ImmutableOwned(false),
+                };
+                
+                let string_expr = Expression::new(
+                    ExpressionKind::String(string.to_owned()),
+                    location.to_owned(),
+                    DataType::String(ownership),
+                );
+                
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(Expression::string(
-                        string.to_owned(),
-                        location.to_owned(),
-                    )),
+                    kind: NodeKind::Expression(string_expr),
                     scope: context.scope_name.to_owned(),
                     location,
                 });
@@ -318,11 +357,22 @@ pub fn create_expression(
 
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
+                
+                // Use the expected data type's ownership if it's a Bool type, otherwise use default
+                let ownership = match data_type {
+                    DataType::Bool(ownership) => ownership.clone(),
+                    DataType::Inferred(ownership) => ownership.clone(),
+                    _ => Ownership::ImmutableOwned(false),
+                };
+                
+                let bool_expr = Expression::new(
+                    ExpressionKind::Bool(value.to_owned()),
+                    location.to_owned(),
+                    DataType::Bool(ownership),
+                );
+                
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(Expression::bool(
-                        value.to_owned(),
-                        location.to_owned(),
-                    )),
+                    kind: NodeKind::Expression(bool_expr),
                     location,
                     scope: context.scope_name.to_owned(),
                 });

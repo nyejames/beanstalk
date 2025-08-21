@@ -17,6 +17,7 @@ mod compiler {
         pub mod expressions {
             pub mod eval_expression;
             pub mod expression;
+            pub mod mutation;
             pub mod function_call_inline;
             pub mod parse_expression;
         }
@@ -37,10 +38,13 @@ mod compiler {
     pub mod optimizers {
         pub mod constant_folding;
     }
-    pub mod ir {
-        pub mod ir_nodes;
-        pub mod build_ir;
+
+    pub mod mir {
+        pub mod build_mir;
+        pub mod mir_nodes;
+        pub mod place;
     }
+
     mod html5_codegen {
         pub mod code_block_highlighting;
         pub mod dom_hooks;
@@ -55,6 +59,7 @@ mod compiler {
     pub mod compiler_errors;
     pub mod compiler_warnings;
     pub mod datatypes;
+    pub mod lifetime_analysis;
     pub mod module_dependencies;
     pub mod traits;
 
@@ -66,6 +71,7 @@ mod compiler {
 }
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::mir::build_mir::{ast_to_mir, MIR};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast, AstBlock};
 use crate::compiler::parsers::tokenizer;
@@ -151,11 +157,20 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// -----------------------------
+    ///         MIR CREATION
+    /// -----------------------------
+    /// Lower to an IR for lifetime analysis and block level optimisations
+    /// This IR maps well to WASM
+    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, CompileError> {
+        ast_to_mir(ast)
+    }
+
     /// -----------------------
     ///        BACKEND
     ///    (Wasm Generation)
     /// -----------------------
-    pub fn ast_to_wasm(ast: Vec<AstNode>) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(ast)
+    pub fn ir_to_wasm(mir: MIR) -> Result<Vec<u8>, CompileError> {
+        new_wasm_module(mir)
     }
 }

@@ -1,13 +1,9 @@
-use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::ir::ir_nodes::IRNode;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::return_rule_error;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.
@@ -28,6 +24,7 @@ impl Expression {
             ExpressionKind::Int(int) => int.to_string(),
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
+            ExpressionKind::Reference(name) => name.to_string(),
             ExpressionKind::Template(..) => String::new(),
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
@@ -63,7 +60,7 @@ impl Expression {
             location: TextLocation::default(),
         }
     }
-    pub fn runtime(expressions: Vec<IRNode>, data_type: DataType, location: TextLocation) -> Self {
+    pub fn runtime(expressions: Vec<AstNode>, data_type: DataType, location: TextLocation) -> Self {
         Self {
             data_type,
             kind: ExpressionKind::Runtime(expressions),
@@ -95,6 +92,14 @@ impl Expression {
         Self {
             data_type: DataType::Bool(Ownership::default()),
             kind: ExpressionKind::Bool(value),
+            location,
+        }
+    }
+
+    pub fn reference(name: String, data_type: DataType, location: TextLocation) -> Self {
+        Self {
+            data_type,
+            kind: ExpressionKind::Reference(name),
             location,
         }
     }
@@ -167,17 +172,25 @@ impl Expression {
     pub fn is_none(&self) -> bool {
         matches!(self.kind, ExpressionKind::None)
     }
+
+    pub fn expr_to_mir(&self) -> Vec<crate::compiler::mir::mir_nodes::Statement> {
+        // This method is deprecated - use transform_expression_to_mir instead
+        vec![]
+    }
 }
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionKind {
     None,
 
-    Runtime(Vec<IRNode>),
+    Runtime(Vec<AstNode>),
 
     Int(i64),
     Float(f64),
     String(String),
     Bool(bool),
+
+    // Reference to a variable by name
+    Reference(String),
 
     // Because functions can all be values
     Function(

@@ -172,7 +172,7 @@ pub fn new_arg(
     token_stream.advance();
 
     match token_stream.current_token_kind() {
-        TokenKind::Assign => {
+        TokenKind::Assign  => {
             token_stream.advance();
         }
 

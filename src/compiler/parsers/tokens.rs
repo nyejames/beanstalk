@@ -340,9 +340,6 @@ pub enum TokenKind {
     // Standard Library (eventually - to be moved there)
     Math,
 
-    // Comments
-    Comment,
-
     // Variables / Functions
     Arrow,
 

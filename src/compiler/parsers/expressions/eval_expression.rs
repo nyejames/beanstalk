@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::ir::ir_nodes::IRNode;
+use crate::compiler::mir::mir_nodes::Statement;
 use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
@@ -141,13 +141,8 @@ pub fn evaluate_expression(
             let first_node_start = stack[0].location.start_pos;
             let last_node_end = stack[stack.len() - 1].location.end_pos;
 
-            let mut ir_nodes: Vec<IRNode> = Vec::with_capacity(stack.len());
-            for node in stack {
-                ir_nodes.extend(node.to_ir()?);
-            }
-
             Ok(Expression::runtime(
-                ir_nodes,
+                stack,
                 current_type.to_owned(),
                 TextLocation::new(scope, first_node_start, last_node_end),
             ))
