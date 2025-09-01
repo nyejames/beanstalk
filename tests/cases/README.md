@@ -5,26 +5,26 @@ This directory contains test cases for the Beanstalk compiler, organized into su
 ## Directory Structure
 
 ### `success/` - Tests that should compile successfully
-- `basic_declarations.bs` - Basic variable declarations (mutable and immutable)
-- `proper_mutations.bs` - Correct mutation syntax using `=` operator
-- `basic_arithmetic.bs` - Arithmetic operations and expressions
-- `correct_mutation_test.bs` - Proper mutable variable usage patterns
-- `declarations_only.bs` - Variable declarations without mutations
-- `basic_features.bs` - Comprehensive language feature tests
-- `simple_arithmetic.bs` - Simple arithmetic with proper mutation syntax
-- `basic_math.bs` - Mathematical operations and function exports
-- `if_statements.bs` - Conditional statement tests
+- `basic_declarations.bst` - Basic variable declarations (mutable and immutable)
+- `proper_mutations.bst` - Correct mutation syntax using `=` operator
+- `basic_arithmetic.bst` - Arithmetic operations and expressions
+- `correct_mutation_test.bst` - Proper mutable variable usage patterns
+- `declarations_only.bst` - Variable declarations without mutations
+- `basic_features.bst` - Comprehensive language feature tests
+- `simple_arithmetic.bst` - Simple arithmetic with proper mutation syntax
+- `basic_math.bst` - Mathematical operations and function exports
+- `if_statements.bst` - Conditional statement tests
 
 ### `failure/` - Tests that should trigger compiler errors
-- `invalid_reassignment_shadowing.bs` - Using `~=` for reassignment (should be error)
-- `undefined_variable_mutation.bs` - Attempting to mutate undefined variables
-- `immutable_mutation_attempt.bs` - Trying to mutate immutable variables
-- `variable_redeclaration.bs` - Variable redeclaration/shadowing attempts
-- `borrow_checker_use_after_move.bs` - Use after move violations
-- `borrow_checker_multiple_mutable_borrows.bs` - Multiple mutable borrow conflicts
-- `borrow_checker_mutable_immutable_conflict.bs` - Mutable/immutable borrow conflicts
+- `invalid_reassignment_shadowing.bst` - Using `~=` for reassignment (should be error)
+- `undefined_variable_mutation.bst` - Attempting to mutate undefined variables
+- `immutable_mutation_attempt.bst` - Trying to mutate immutable variables
+- `variable_redeclaration.bst` - Variable redeclaration/shadowing attempts
+- `borrow_checker_use_after_move.bst` - Use after move violations
+- `borrow_checker_multiple_mutable_borrows.bst` - Multiple mutable borrow conflicts
+- `borrow_checker_mutable_immutable_conflict.bst` - Mutable/immutable borrow conflicts
 
-### `test.bs` - Development scratch file
+### `test.bst` - Development scratch file
 This file is used for development and debugging. It should contain valid Beanstalk code that compiles successfully.
 
 ## Language Rules Tested
@@ -45,17 +45,17 @@ This file is used for development and debugging. It should contain valid Beansta
 
 ```bash
 # Test a specific success case
-cargo run -- build tests/cases/success/basic_declarations.bs
+cargo run -- build tests/cases/success/basic_declarations.bst
 
 # Test a specific failure case (should show error)
-cargo run -- build tests/cases/failure/invalid_reassignment_shadowing.bs
+cargo run -- build tests/cases/failure/invalid_reassignment_shadowing.bst
 
 # Test all cases in a directory
 cargo run -- build tests/cases/success
 cargo run -- build tests/cases/failure
 
 # Development testing
-cargo run --features "verbose_ast_logging,verbose_eval_logging,verbose_codegen_logging,detailed_timers" -- build tests/cases/test.bs
+cargo run --features "verbose_ast_logging,verbose_eval_logging,verbose_codegen_logging,detailed_timers" -- build tests/cases/test.bst
 ```
 
 ## Expected Behavior

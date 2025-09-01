@@ -14,13 +14,13 @@ Running the command 'new html' followed by your directory path will create a new
 
 The entry point for a Beanstalk project is configured when creating a new Beanstalk project. 
 
-This file is called **config.bs** and is placed in the root folder of your project by default, this is the entry point for the compiler. 
+This file is called **config.bst** and is placed in the root folder of your project by default, this is the entry point for the compiler. 
 
-*All Beanstalk files use the .bs file extension.*
+*All Beanstalk files use the .bst file extension.*
 
 The compiler will read through any configuration settings first.
 
-- src folder contains your bs files and determines the file structure of your pages. 
+- src folder contains your bst files and determines the file structure of your pages. 
 - dev folder contains the dev output of the compiler.
 - release folder contains the release builds.
 
@@ -41,7 +41,7 @@ After the special file name, you can leave a space and name the file whatever yo
 ### Build
 The simpliest way to get the compiler to output some HTML is to use the *build* command.
 
-While in the root directory of your project, where the config.bs file is, run the command **build** to compile your whole project.
+While in the root directory of your project, where the config.bst file is, run the command **build** to compile your whole project.
 
 [Code:
     $ build ./path_to_project
@@ -50,7 +50,7 @@ While in the root directory of your project, where the config.bs file is, run th
 If you specify a specific bs file, build will only compile that specific file and will output it into the same directory.
 
 [Code:
-    $ build ./path_to_project/src/index.bs
+    $ build ./path_to_project/src/index.bst
 ]
 
 ### Dev

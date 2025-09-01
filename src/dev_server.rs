@@ -2,6 +2,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::settings::Config;
+use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::{Flag, build, return_dev_server_error, settings};
 use colour::{blue_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
@@ -25,7 +26,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileEr
     // Is checking to make sure the path is a directory
     let path = get_current_dir()?.join(path);
 
-    let project_config = build::build_project(&path, false, flags)?;
+    let project_config = build::build_project_files(&path, false, flags)?;
     
     // TODO: Now separately build all the runtime hooks / project structure
 
@@ -87,7 +88,7 @@ fn handle_connection(
                             PathBuf::from(path)
                                 .join(&project_config.src)
                                 .join(page_path)
-                                .with_extension("bs")
+                                .with_extension(BEANSTALK_FILE_EXTENSION)
                         }
                     }
                     None => get_home_page_path(path, true, project_config)?,
@@ -96,7 +97,7 @@ fn handle_connection(
                 let global_file_path = &PathBuf::from(&path)
                     .join(&project_config.src)
                     .join(settings::GLOBAL_PAGE_KEYWORD)
-                    .with_extension("bs");
+                    .with_extension(BEANSTALK_FILE_EXTENSION);
 
                 // Get the metadata of the file to check if hot reloading is needed
                 // Check if globals have been modified
@@ -109,7 +110,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified)? || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build::build_project(path, false, flags)?;
+                    build::build_project_files(path, false, flags)?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";

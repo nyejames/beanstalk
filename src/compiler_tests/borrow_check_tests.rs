@@ -585,7 +585,7 @@ mod borrow_error_tests {
         use crate::compiler::parsers::tokens::CharPosition;
         
         let location = TextLocation::new(
-            PathBuf::from("test.bs"),
+            PathBuf::from(format!("test.{}", crate::settings::BEANSTALK_FILE_EXTENSION)),
             CharPosition { line_number: 1, char_column: 1 },
             CharPosition { line_number: 1, char_column: 10 }
         );
@@ -621,7 +621,7 @@ mod borrow_error_tests {
         use crate::compiler::parsers::tokens::CharPosition;
         
         let location = TextLocation::new(
-            PathBuf::from("test.bs"),
+            PathBuf::from(format!("test.{}", crate::settings::BEANSTALK_FILE_EXTENSION)),
             CharPosition { line_number: 2, char_column: 5 },
             CharPosition { line_number: 2, char_column: 15 }
         );

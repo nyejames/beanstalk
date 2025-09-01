@@ -4,6 +4,8 @@ use std::path::Path;
 use colour::{e_red_ln, e_red_ln_bold, green_ln_bold, print_ln_bold};
 use wasmer::{Instance, Module, Store, Value, imports};
 
+use crate::settings::BEANSTALK_FILE_EXTENSION;
+
 // Import MIR types for new compilation pipeline (placeholder for future implementation)
 // use crate::compiler::mir::{MIR, MirFunction, ProgramPoint, Events, Loan, BorrowError};
 
@@ -52,7 +54,7 @@ pub fn run_all_test_cases() {
             },
         };
         
-        if path.extension().and_then(|s| s.to_str()) == Some("bs") {
+        if path.extension().and_then(|s| s.to_str()) == Some(BEANSTALK_FILE_EXTENSION) {
             let _source = fs::read_to_string(&path).unwrap();
 
             // TODO: Update to use new MIR compilation pipeline

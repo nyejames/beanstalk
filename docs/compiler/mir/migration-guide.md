@@ -392,7 +392,7 @@ fn test_borrow_checking() {
 □ Update place analysis tests
 
 // 2. Update integration tests
-□ Migrate .bs test files (no changes needed)
+□ Migrate .bst test files (no changes needed)
 □ Update test harness for new API
 □ Validate error message formats
 □ Check performance benchmarks

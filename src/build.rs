@@ -5,7 +5,7 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
-use crate::settings::{Config, EXPORTS_CAPACITY, get_config_from_ast};
+use crate::settings::{get_config_from_ast, Config, BEANSTALK_FILE_EXTENSION, EXPORTS_CAPACITY};
 use crate::{Compiler, Flag, return_file_errors, settings, timer_log};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold};
 use rayon::prelude::*;
@@ -18,12 +18,17 @@ pub struct InputModule {
     pub source_path: PathBuf,
 }
 
-pub struct Project {
-    pub config: Config,
-    pub wasm: Vec<u8>,
+pub enum OutputFile {
+    Wasm(Vec<u8>),
+    Html(String),
 }
 
-pub fn build_project(
+pub struct Project {
+    pub config: Config,
+    pub output_files: Vec<OutputFile>,
+}
+
+pub fn build_project_files(
     entry_path: &Path,
     release_build: bool,
     flags: &[Flag],
@@ -40,24 +45,30 @@ pub fn build_project(
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
 
-    let mut modules_to_parse: Vec<InputModule> = Vec::new();
+    let mut beanstalk_modules_to_parse: Vec<InputModule> = Vec::with_capacity(1);
+    // TODO: Parse mt files (Markthrough - Beanstalk's special markdown format)
+    let mut markthrough_modules_to_parse: Vec<InputModule> = Vec::new();
+
     let mut project_config = Config::default();
 
-    // check to see if there is a config.bs file in this directory
+    // check to see if there is a config.bst file in this directory
     // if there is, read it and set the config settings
     // and check where the project entry points are
     enum CompileType {
-        SingleFile(String), // Source Code
+        SingleBeanstalkFile(String), // Source Code
         MultiFile(String),  // Config Source Code
+        SingleMarkthroughFile(String), // Source Code
     }
 
-    // Single BS file
-    let project_config_type = if entry_dir.extension() == Some("bs".as_ref()) {
+    // Single BST file
+    let project_config_type = if entry_dir.extension() == Some(BEANSTALK_FILE_EXTENSION.as_ref()) {
         let source_code = fs::read_to_string(&entry_dir);
         match source_code {
-            Ok(content) => CompileType::SingleFile(content),
+            Ok(content) => CompileType::SingleBeanstalkFile(content),
             Err(e) => return_file_errors!(entry_dir, "Error reading file: {:?}", e),
         }
+
+    // TODO: Single mt file
 
     // Full project with a config file
     } else {
@@ -76,8 +87,8 @@ pub fn build_project(
     let mut _global_imports: Vec<String> = Vec::new();
 
     match project_config_type {
-        CompileType::SingleFile(code) => {
-            modules_to_parse.push(InputModule {
+        CompileType::SingleBeanstalkFile(code) => {
+            beanstalk_modules_to_parse.push(InputModule {
                 source_code: code,
                 source_path: entry_path.to_owned(),
             });
@@ -86,6 +97,13 @@ pub fn build_project(
                 print!("File Read In: ");
                 green_ln!("{:?}", time.elapsed());
             }
+        }
+
+        CompileType::SingleMarkthroughFile(code) => {
+            markthrough_modules_to_parse.push(InputModule {
+                source_code: code,
+                source_path: entry_path.to_owned(),
+            });
         }
 
         CompileType::MultiFile(config_source_code) => {
@@ -118,7 +136,7 @@ pub fn build_project(
                 false => entry_dir.join(&project_config.dev_folder),
             };
 
-            add_bs_files_to_parse(&mut modules_to_parse, &output_dir, &src_dir)?;
+            add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &output_dir, &src_dir)?;
 
             if !flags.contains(&Flag::DisableTimers) {
                 print!("Files Read In: ");
@@ -135,8 +153,11 @@ pub fn build_project(
     let _time = Instant::now();
     let compiler = Compiler::new(&project_config);
 
+    // ----------------------------------
+    //         Token generation
+    // ----------------------------------
     // Compile each module to tokens and collect them all
-    let project_tokens: Vec<Result<TokenContext, CompileError>> = modules_to_parse
+    let project_tokens: Vec<Result<TokenContext, CompileError>> = beanstalk_modules_to_parse
         .par_iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
@@ -207,9 +228,8 @@ pub fn build_project(
             }
             mir
         }
-        Err(e) => return Err(vec![e]),
+        Err(e) => return Err(e),
     };
-    
 
     // ----------------------------------
     //          Wasm generation
@@ -222,15 +242,15 @@ pub fn build_project(
     // ----------------------------------
     //          Build Structure
     // ----------------------------------
-
+    // TODO: Add other output files
     Ok(Project {
         config: project_config,
-        wasm,
+        output_files: vec![OutputFile::Wasm(wasm)],
     })
 }
 
-// Look for every subdirectory inside the dir and add all .bs files to the source_code_to_parse
-fn add_bs_files_to_parse(
+// Look for every subdirectory inside the dir and add all .bst files to the source_code_to_parse
+fn add_bst_files_to_parse(
     source_code_to_parse: &mut Vec<InputModule>,
     output_dir: &Path,
     project_root_dir: &Path,
@@ -252,13 +272,13 @@ fn add_bs_files_to_parse(
             Ok(f) => {
                 let file_path = f.path();
 
-                // If it's a .bs file, add it to the list of files to compile
-                if file_path.extension() == Some("bs".as_ref()) {
+                // If it's a .bst file, add it to the list of files to compile
+                if file_path.extension() == Some(BEANSTALK_FILE_EXTENSION.as_ref()) {
                     let code = match fs::read_to_string(&file_path) {
                         Ok(content) => content,
                         Err(e) => return_file_errors!(
                             file_path,
-                            "Error reading file when adding new bs files to parse: {:?}",
+                            "Error reading file when adding new bst files to parse: {:?}",
                             e
                         ),
                     };
@@ -302,8 +322,8 @@ fn add_bs_files_to_parse(
                     // Add the new directory folder to the output directory
                     let new_output_dir = output_dir.join(file_path.file_stem().unwrap());
 
-                    // Recursively call add_bs_files_to_parse on the new directory
-                    add_bs_files_to_parse(source_code_to_parse, &new_output_dir, &file_path)?;
+                    // Recursively call add_bst_files_to_parse on the new directory
+                    add_bst_files_to_parse(source_code_to_parse, &new_output_dir, &file_path)?;
 
                     // HANDLE USING JS / HTML / CSS MIXED INTO THE PROJECT
                 }
@@ -325,7 +345,7 @@ fn add_bs_files_to_parse(
             Err(e) => {
                 return_file_errors!(
                     project_root_dir,
-                    "Error reading file when adding new bs files to parse: {:?}",
+                    "Error reading file when adding new bst files to parse: {:?}",
                     e
                 )
             }

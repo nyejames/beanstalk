@@ -14,6 +14,13 @@ use std::{
 enum Command {
     NewHTMLProject(PathBuf),
     Build(PathBuf), // Builds a file or project in development mode
+
+    // Runs a project in development mode and runs the specified (external) function. 
+    // Currently Just supports one file.
+    // TODO: Get the first entry point from the config.
+    // Should error if the function is not external.
+    Run(PathBuf),
+
     Dev(PathBuf),   // Runs local dev server
     Release(PathBuf),
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
@@ -77,6 +84,12 @@ pub fn start_cli() {
         Command::Build(path) => {
             build_project(&path, false, &flags);
         }
+
+        Command::Run(path) => {
+            // 
+            let files = build_project(&path, false, &flags);
+        }
+
         Command::Release(path) => {
             build_project(&path, true, &flags);
         }
@@ -192,7 +205,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
 fn build_project(path: &Path, release_build: bool, flags: &[Flag]) {
     let start = Instant::now();
 
-    match build::build_project(path, release_build, flags) {
+    match build::build_project_files(path, release_build, flags) {
         Ok(_) => {
             let duration = start.elapsed();
             grey_ln!("------------------------------------");

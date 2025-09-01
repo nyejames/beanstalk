@@ -12,7 +12,7 @@ version = "0.0.1-alpha"
 edition = "2024"
 
 [[bin]]
-name = "bs"
+name = "bst"
 path = "src/main.rs"
 
 [dependencies]

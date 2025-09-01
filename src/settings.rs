@@ -6,11 +6,12 @@ use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_type_error;
 use std::path::PathBuf;
 
+pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";
 pub const GLOBAL_PAGE_KEYWORD: &str = "#global";
 pub const INDEX_PAGE_NAME: &str = "index.html";
-pub const CONFIG_FILE_NAME: &str = "#config.bs";
-pub const BS_VAR_PREFIX: &str = "bs_";
+pub const CONFIG_FILE_NAME: &str = "#config.bst";
+pub const BS_VAR_PREFIX: &str = "bst_";
 
 // This is a guess about how much should be initially allocated for the token and node vecs.
 // This should be a rough guess to help avoid too many allocations
@@ -40,7 +41,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             project_type: String::from("html"),
-            entry_point: PathBuf::from("src/main.bs"),
+            entry_point: PathBuf::from("src/main").with_extension(BEANSTALK_FILE_EXTENSION),
             src: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),

@@ -167,21 +167,9 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
-    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, CompileError> {
+    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
         // Use the new borrow checking pipeline
-        match crate::compiler::mir::build_mir::borrow_check_pipeline(ast) {
-            Ok(mir) => Ok(mir),
-            Err(errors) => {
-                // Return the first error for backward compatibility
-                // In a full implementation, we might want to aggregate errors
-                Err(errors.into_iter().next().unwrap_or_else(|| CompileError {
-                    msg: "Unknown borrow checking error".to_string(),
-                    location: crate::compiler::parsers::tokens::TextLocation::default(),
-                    error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-                    file_path: std::path::PathBuf::new(),
-                }))
-            }
-        }
+        crate::compiler::mir::build_mir::borrow_check_pipeline(ast)
     }
 
     /// -----------------------

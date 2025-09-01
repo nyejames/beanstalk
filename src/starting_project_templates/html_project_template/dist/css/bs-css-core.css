@@ -131,18 +131,18 @@ body {
 
 /* Common Styles */
 
-.bs-center {
+.bst-center {
   text-align: center;
 }
 
 /* Nav Style */
-.bs-nav-0 {
+.bst-nav-0 {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
 }
-.bs-nav-1 {
+.bst-nav-1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -153,7 +153,7 @@ body {
 }
 
 /* Title Style */
-.bs-title-0 {
+.bst-title-0 {
   font-size: 3.5rem;
   font-weight: bold;
   letter-spacing: 0.4rem;
@@ -161,7 +161,7 @@ body {
   margin: 1.5rem 0 1.4rem 0;
   line-height: 3.7rem;
 }
-.bs-title-1 {
+.bst-title-1 {
   font-size: 3rem;
   font-weight: bold;
   letter-spacing: 0.3rem;
@@ -169,7 +169,7 @@ body {
   margin: 1.3rem 0 1.2rem 0;
   line-height: 3.5rem;
 }
-.bs-title-2 {
+.bst-title-2 {
   font-size: 2.5rem;
   font-weight: bold;
   letter-spacing: 0.3rem;
@@ -182,28 +182,28 @@ body {
 .codeblock {
   color: light-dark(#222222, #ddd);
 }
-.bs-code-comment {
+.bst-code-comment {
   color:light-dark(var(--comment-light), var(--comment-dark))
 }
-.bs-code-keyword {
+.bst-code-keyword {
   color:light-dark( var(--keyword-light), var(--keyword-dark))
 }
-.bs-code-string {
+.bst-code-string {
   color:light-dark( var(--string-light), var(--string-dark))
 }
-.bs-code-number {
+.bst-code-number {
   color:light-dark( var(--number-light), var(--number-dark))
 }
-.bs-code-operator {
+.bst-code-operator {
   color:light-dark( var(--operator-light), var(--operator-dark))
 }
-.bs-code-struct {
+.bst-code-struct {
   color:light-dark( var(--struct-light), var(--struct-dark))
 }
-.bs-code-type {
+.bst-code-type {
   color:light-dark( var(--type-light), var(--type-dark))
 }
-.bs-code-parenthesis {
+.bst-code-parenthesis {
   color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
 }
 

@@ -209,11 +209,11 @@ Events {
 **Error Generated:**
 ```
 Cannot borrow `data.field` because `data` is already borrowed
-  --> example.bs:6:13
+  --> example.bst:6:13
 6  | field_ref = data.field
    |             ^^^^^^^^^^ borrow occurs here
 note: previous borrow of `data` occurs here
-  --> example.bs:5:13  
+  --> example.bst:5:13  
 5  | whole_ref = data
    |             ^^^^
 ```
@@ -479,11 +479,11 @@ Events {
 **Error Generated:**
 ```
 Cannot move out of `data` because it is borrowed
-  --> example.bs:3:14
+  --> example.bst:3:14
 3  | moved_data = data
    |              ^^^^ move occurs here
 note: borrow of `data[0]` starts here
-  --> example.bs:2:13
+  --> example.bst:2:13
 2  | reference = data[0]
    |             ^^^^^^^
 help: consider cloning the data instead of moving
@@ -538,11 +538,11 @@ Events {
 **Error Generated:**
 ```
 Use of moved value `value`
-  --> example.bs:3:10
+  --> example.bst:3:10
 3  | result = value
    |          ^^^^^ value used here after move
 note: move occurs here
-  --> example.bs:2:15
+  --> example.bst:2:15
 2  | moved_value = value
    |               ^^^^^ value moved here
 help: consider using a reference if you don't need to own the value
@@ -591,11 +591,11 @@ Events {
 **Error Generated:**
 ```
 Cannot borrow `data` as mutable because it is also borrowed as immutable
-  --> example.bs:3:15
+  --> example.bst:3:15
 3  | mutable_ref ~= data
    |                ^^^^ mutable borrow occurs here
 note: immutable borrow occurs here
-  --> example.bs:2:17
+  --> example.bst:2:17
 2  | immutable_ref = data
    |                 ^^^^
 ```

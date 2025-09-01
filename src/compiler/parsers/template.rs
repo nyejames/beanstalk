@@ -1,4 +1,5 @@
 use crate::compiler::compiler_errors::ErrorType;
+use crate::settings::BEANSTALK_FILE_EXTENSION;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
@@ -277,7 +278,7 @@ pub fn parse_template(
         // Add a special object replace character to signal to the parent that this tag should not be parsed into Markdown
         final_string.push_str(&format!(
             "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
-            highlight_html_code_block(&content, "bs")
+            highlight_html_code_block(&content, BEANSTALK_FILE_EXTENSION)
         ));
 
     // No need to do any additional parsing to the content

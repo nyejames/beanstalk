@@ -218,11 +218,11 @@ The diagnostic system provides actionable error messages that explain both the b
 
 ```
 Cannot move `x` because it is borrowed
-  --> file.bs:42:5
+  --> file.bst:42:5
 42 |   move x
    |   ^^^^^^ move occurs here
 note: borrow of `x.field1` starts here
-  --> file.bs:37:9
+  --> file.bst:37:9
 37 |   a = x.field1
    |       ^^^^^^^^
 help: consider using a reference instead of moving
