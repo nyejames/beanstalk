@@ -1,4 +1,4 @@
--- Test file for debugging mutable assignment operator parsing
+-- Test file for development and debugging (should succeed)
 
 -- Simple mutable variable declaration
 test_var ~= 42
@@ -14,5 +14,5 @@ value ~= 3.14
 -- Immutable assignment for comparison
 constant_value = 100
 
--- Reassignment of mutable variable
-test_var ~= 84
+-- PROPER mutation of mutable variable (using = not ~=)
+test_var = 84

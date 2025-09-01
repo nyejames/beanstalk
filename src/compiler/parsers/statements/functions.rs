@@ -10,7 +10,7 @@ use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
+use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::{ast_log, return_syntax_error};
 use crate::compiler::traits::ContainsReferences;
 

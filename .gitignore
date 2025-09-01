@@ -21,3 +21,6 @@ src/.tmp.driveupload/1597086
 .kiro/specs/mir-refactor/requirements.md
 .kiro/specs/mir-refactor/tasks.md
 .kiro/steering/Beanstalk MIR Implementation Guide.md
+.kiro/specs/wasm-backend/design.md
+.kiro/specs/wasm-backend/requirements.md
+.kiro/specs/wasm-backend/tasks.md

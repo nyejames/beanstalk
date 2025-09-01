@@ -6,6 +6,35 @@ use std::collections::HashMap;
 ///
 /// This MIR is designed specifically for efficient WASM generation with
 /// simple dataflow-based borrow checking using program points and events.
+///
+/// ## Design Principles
+///
+/// ### Simplicity Over Sophistication
+/// - Simple events instead of complex Polonius facts
+/// - One program point per statement for clear tracking
+/// - Standard dataflow algorithms instead of constraint solving
+/// - WASM-first design avoiding unnecessary generality
+///
+/// ### Performance Focus
+/// - Efficient bitsets for loan tracking
+/// - Worklist algorithm optimized for WASM control flow
+/// - Fast compilation prioritized over analysis sophistication
+/// - Memory-efficient data structures
+///
+/// ### Maintainability
+/// - Clear program point model for easy debugging
+/// - Standard algorithms that are well-understood
+/// - Simple data structures that are easy to extend
+/// - Comprehensive test coverage for reliability
+///
+/// ## Core Data Structures
+///
+/// - `ProgramPoint`: Sequential identifiers for each MIR statement
+/// - `Events`: Simple event records per program point for dataflow analysis
+/// - `Loan`: Simplified borrow tracking with origin points
+/// - `Place`: WASM-optimized memory location abstractions (unchanged)
+///
+/// See `docs/dataflow-analysis-guide.md` for detailed algorithm documentation.
 #[derive(Debug)]
 pub struct MIR {
     /// Functions in the module
@@ -129,6 +158,10 @@ pub struct MirFunction {
     pub program_point_to_block: HashMap<ProgramPoint, u32>,
     /// Mapping from program point to statement index within block
     pub program_point_to_statement: HashMap<ProgramPoint, usize>,
+    /// Events per program point for dataflow analysis
+    pub events: HashMap<ProgramPoint, Events>,
+    /// All loans in this function for borrow checking
+    pub loans: Vec<Loan>,
 }
 
 impl MirFunction {
@@ -148,6 +181,8 @@ impl MirFunction {
             program_points: Vec::new(),
             program_point_to_block: HashMap::new(),
             program_point_to_statement: HashMap::new(),
+            events: HashMap::new(),
+            loans: Vec::new(),
         }
     }
 
@@ -195,6 +230,36 @@ impl MirFunction {
     pub fn get_program_point_predecessors(&self, _point: &ProgramPoint) -> Vec<ProgramPoint> {
         // This will be implemented when CFG construction is added in later tasks
         vec![]
+    }
+
+    /// Store events for a program point
+    pub fn store_events(&mut self, program_point: ProgramPoint, events: Events) {
+        self.events.insert(program_point, events);
+    }
+
+    /// Get events for a program point
+    pub fn get_events(&self, program_point: &ProgramPoint) -> Option<&Events> {
+        self.events.get(program_point)
+    }
+
+    /// Get all events for this function
+    pub fn get_all_events(&self) -> &HashMap<ProgramPoint, Events> {
+        &self.events
+    }
+
+    /// Add a loan to this function
+    pub fn add_loan(&mut self, loan: Loan) {
+        self.loans.push(loan);
+    }
+
+    /// Get all loans in this function
+    pub fn get_loans(&self) -> &[Loan] {
+        &self.loans
+    }
+
+    /// Get mutable reference to loans
+    pub fn get_loans_mut(&mut self) -> &mut Vec<Loan> {
+        &mut self.loans
     }
 }
 
@@ -597,6 +662,23 @@ pub enum BorrowKind {
 ///
 /// Program points provide a unique identifier for each MIR statement to enable
 /// precise dataflow analysis. Each statement gets exactly one program point.
+///
+/// ## Design Rationale
+///
+/// The program point model enables precise dataflow equations:
+/// - `LiveOut[s] = ⋃ LiveIn[succ(s)]` (backward liveness)
+/// - `LiveInLoans[s] = Gen[s] ∪ (LiveOutLoans[s] - Kill[s])` (forward loan tracking)
+///
+/// Sequential allocation ensures deterministic ordering for worklist algorithms
+/// and provides O(1) successor/predecessor relationships in linear control flow.
+///
+/// ## Usage Example
+///
+/// ```rust
+/// let pp1 = ProgramPoint::new(0);  // First statement
+/// let pp2 = pp1.next();            // Second statement  
+/// assert!(pp1.precedes(&pp2));     // Sequential ordering
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ProgramPoint(pub u32);
 
@@ -654,30 +736,14 @@ impl ProgramPointGenerator {
         point
     }
 
-    /// Get all allocated program points in order
+    /// Get all allocated program points
     pub fn get_all_points(&self) -> &[ProgramPoint] {
         &self.allocated_points
     }
 
-    /// Get the total number of allocated program points
+    /// Get the count of allocated program points
     pub fn count(&self) -> usize {
         self.allocated_points.len()
-    }
-
-    /// Reset the generator (for testing)
-    pub fn reset(&mut self) {
-        self.next_id = 0;
-        self.allocated_points.clear();
-    }
-
-    /// Create an iterator over program points for dataflow analysis
-    pub fn iter_points(&self) -> impl Iterator<Item = &ProgramPoint> {
-        self.allocated_points.iter()
-    }
-
-    /// Get program points in execution order for worklist algorithm
-    pub fn execution_order(&self) -> Vec<ProgramPoint> {
-        self.allocated_points.clone()
     }
 }
 
@@ -688,6 +754,38 @@ impl Default for ProgramPointGenerator {
 }
 
 /// Simple events for dataflow analysis (one per statement)
+///
+/// Events replace complex Polonius facts with straightforward borrow tracking.
+/// Each program point has associated events that describe what happens at that
+/// statement in terms of borrows, uses, moves, and assignments.
+///
+/// ## Event Types
+///
+/// - `start_loans`: New borrows beginning at this program point
+/// - `uses`: Places being read (non-consuming access)
+/// - `moves`: Places being moved (consuming access)  
+/// - `reassigns`: Places being written/assigned
+/// - `candidate_last_uses`: Potential last uses from AST analysis
+///
+/// ## Dataflow Integration
+///
+/// Events are converted to gen/kill sets for dataflow analysis:
+/// - **Gen sets**: `start_loans` become generated loans
+/// - **Kill sets**: `moves` and `reassigns` kill loans of aliasing places
+/// - **Use/Def sets**: `uses`/`reassigns` for liveness analysis
+///
+/// ## Example
+///
+/// ```rust
+/// // For statement: a = &x
+/// Events {
+///     start_loans: vec![LoanId(0)],           // New borrow
+///     uses: vec![Place::Local(x)],            // Read x for borrowing
+///     reassigns: vec![Place::Local(a)],       // Assign to a
+///     moves: vec![],                          // No moves
+///     candidate_last_uses: vec![],            // No last uses
+/// }
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct Events {
     /// Loans starting at this program point
@@ -725,6 +823,34 @@ impl std::fmt::Display for LoanId {
 }
 
 /// Simple loan structure for tracking borrows
+///
+/// Loans represent active borrows in the simplified borrow checking system.
+/// Each loan tracks what is borrowed, how it's borrowed, and where the borrow originated.
+///
+/// ## Loan Lifecycle
+///
+/// 1. **Creation**: Loan created when `Rvalue::Ref` generates `start_loans` event
+/// 2. **Tracking**: Loan tracked through dataflow analysis using efficient bitsets
+/// 3. **Termination**: Loan ends when owner is moved/reassigned or goes out of scope
+///
+/// ## Conflict Detection
+///
+/// Loans are checked for conflicts using aliasing analysis:
+/// - **Shared + Shared**: No conflict (multiple readers allowed)
+/// - **Shared + Mutable**: Conflict (reader/writer conflict)
+/// - **Mutable + Any**: Conflict (exclusive access required)
+///
+/// ## Example
+///
+/// ```rust
+/// // For code: let a = &x;
+/// Loan {
+///     id: LoanId(0),
+///     owner: Place::Local { index: 0, wasm_type: I32 }, // x
+///     kind: BorrowKind::Shared,
+///     origin_stmt: ProgramPoint(1), // Where borrow occurs
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub struct Loan {
     /// Unique loan identifier
@@ -766,11 +892,6 @@ pub enum BorrowErrorType {
         place: Place,
         move_point: ProgramPoint,
     },
-    /// Use of dropped value
-    UseAfterDrop {
-        place: Place,
-        drop_point: ProgramPoint,
-    },
     /// Borrow live across owner move/drop
     BorrowAcrossOwnerInvalidation {
         borrowed_place: Place,
@@ -785,8 +906,6 @@ pub enum BorrowErrorType {
 pub enum InvalidationType {
     /// Owner was moved
     Move,
-    /// Owner was dropped
-    Drop,
 }
 
 

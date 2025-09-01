@@ -41,6 +41,11 @@ mod compiler {
 
     pub mod mir {
         pub mod build_mir;
+        pub mod check;
+        pub mod dataflow;
+        pub mod diagnose;
+        pub mod extract;
+        pub mod liveness;
         pub mod mir_nodes;
         pub mod place;
     }
@@ -71,8 +76,8 @@ mod compiler {
 }
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::mir::build_mir::{ast_to_mir, MIR};
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::mir::build_mir::MIR;
+use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast, AstBlock};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenContext;
@@ -161,9 +166,22 @@ impl<'a> Compiler<'a> {
     ///         MIR CREATION
     /// -----------------------------
     /// Lower to an IR for lifetime analysis and block level optimisations
-    /// This IR maps well to WASM
+    /// This IR maps well to WASM with integrated borrow checking
     pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, CompileError> {
-        ast_to_mir(ast)
+        // Use the new borrow checking pipeline
+        match crate::compiler::mir::build_mir::borrow_check_pipeline(ast) {
+            Ok(mir) => Ok(mir),
+            Err(errors) => {
+                // Return the first error for backward compatibility
+                // In a full implementation, we might want to aggregate errors
+                Err(errors.into_iter().next().unwrap_or_else(|| CompileError {
+                    msg: "Unknown borrow checking error".to_string(),
+                    location: crate::compiler::parsers::tokens::TextLocation::default(),
+                    error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
+                    file_path: std::path::PathBuf::new(),
+                }))
+            }
+        }
     }
 
     /// -----------------------

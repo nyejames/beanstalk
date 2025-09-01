@@ -136,7 +136,7 @@ impl LifetimeAnalyzer {
     }
 
     /// Integrate with MIR lifetime analysis
-    pub fn sync_with_ir_lifetime_analysis(&self, ir: &mut MIR) {
+    pub fn sync_with_ir_lifetime_analysis(&self, _ir: &mut MIR) {
         // Collect all variables that have been tracked (either defined or used)
         let mut all_variables = std::collections::HashSet::new();
         
@@ -153,14 +153,14 @@ impl LifetimeAnalyzer {
         // Process each variable
         for &variable_id in &all_variables {
             // Find definition block (if any)
-            let definition_block = self.get_variable_definition_block(variable_id).unwrap_or(0);
+            let _definition_block = self.get_variable_definition_block(variable_id).unwrap_or(0);
             
             // Track variable usage pattern in MIR
             // TODO: Implement ownership tracking in simplified MIR
             // TODO: Implement variable usage tracking in simplified MIR
             
             // Record all usage blocks
-            for (&block_id, usage) in &self.block_variable_usage {
+            for (&_block_id, usage) in &self.block_variable_usage {
                 if usage.contains(&variable_id) {
                     // TODO: Implement variable usage recording in simplified MIR
                 }
@@ -169,7 +169,7 @@ impl LifetimeAnalyzer {
     }
 
     /// Create lifetime annotations for variables with complex usage patterns
-    pub fn create_lifetime_annotations(&self, ir: &mut MIR) -> HashMap<u32, u32> {
+    pub fn create_lifetime_annotations(&self, _ir: &mut MIR) -> HashMap<u32, u32> {
         let mut variable_to_lifetime = HashMap::new();
         
         for &variable_id in self.block_variable_definitions.keys() {
@@ -177,7 +177,7 @@ impl LifetimeAnalyzer {
             
             // Create a lifetime if variable is used across multiple blocks
             if lifetime.usage_blocks.len() > 1 {
-                let lifetime_name = format!("var_{}_lifetime", variable_id);
+                let _lifetime_name = format!("var_{}_lifetime", variable_id);
                 let lifetime_id = 0; // TODO: Implement lifetime creation in simplified MIR
                 
                 // Associate lifetime with all usage blocks
@@ -321,12 +321,12 @@ pub fn finalize_lifetime_analysis(ir: &mut MIR, analyzer: &LifetimeAnalyzer) -> 
 }
 
 /// Analyze which variables need automatic reference counting
-pub fn analyze_reference_counting_needs(mir: &mut MIR) {
+pub fn analyze_reference_counting_needs(_mir: &mut MIR) {
     // TODO: Implement reference counting analysis in simplified MIR
 }
 
 /// Detect opportunities for move semantics
-pub fn detect_move_semantics(mir: &mut MIR) {
+pub fn detect_move_semantics(_mir: &mut MIR) {
     // TODO: Implement move semantics detection in simplified MIR
 }
 
@@ -340,27 +340,27 @@ pub fn finalize_block_with_lifetime_analysis(
     
     // Add variable definitions to the block
     if let Some(definitions) = analyzer.block_variable_definitions.get(&block_id) {
-        for &var_id in definitions {
+        for &_var_id in definitions {
             // TODO: Implement variable definition tracking in MirBlock
         }
     }
     
     // Add variable usage to the block
     if let Some(usage) = analyzer.block_variable_usage.get(&block_id) {
-        for &var_id in usage {
+        for &_var_id in usage {
             // TODO: Implement variable use tracking in MirBlock
         }
     }
     
     // Analyze variables used after this block
     let used_after = analyzer.analyze_variables_used_after(block_id, all_blocks);
-    for var_id in used_after {
+    for _var_id in used_after {
         // TODO: Implement variable use after tracking in MirBlock
     }
 }
 
 /// Create a new block with proper ID allocation and parent tracking
-pub fn create_block_with_parent(mir: &mut MIR, parent_block_id: Option<u32>) -> MirBlock {
+pub fn create_block_with_parent(_mir: &mut MIR, _parent_block_id: Option<u32>) -> MirBlock {
     let block_id = 0; // TODO: Implement proper block ID allocation in MIR
     MirBlock::new(block_id)
 }
@@ -482,7 +482,7 @@ impl BlockBuilder {
             finalize_block_with_lifetime_analysis(&mut block, analyzer, &all_block_ids);
             
             // Add to appropriate function or global scope
-            let mir = unsafe { &mut *self.mir };
+            let _mir = unsafe { &mut *self.mir };
             // TODO: This will be replaced by the simplified MIR system
             // The new MIR handles function and block management directly
         }

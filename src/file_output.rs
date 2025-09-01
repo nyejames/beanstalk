@@ -4,9 +4,8 @@ use crate::compiler::parsers::tokens::TextLocation;
 use crate::{OutputModule, return_file_error};
 use std::fs;
 use std::path::Path;
-use wasmparser::validate;
 
-pub fn write_wasm_module(module: OutputModule, file_path: &Path) -> Result<(), CompileError> {
+pub fn write_wasm_module(_module: OutputModule, file_path: &Path) -> Result<(), CompileError> {
     // If the output directory does not exist, create it
     let parent_dir = match file_path.parent() {
         Some(dir) => dir,

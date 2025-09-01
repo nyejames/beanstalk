@@ -1,7 +1,6 @@
-use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use colour::{blue_ln, blue_ln_bold, cyan_ln, green_bold, green_ln, green_ln_bold};
+use colour::{blue_ln, blue_ln_bold, green_bold, green_ln, green_ln_bold};
 
 // TOKEN LOGGING MACROS
 #[macro_export]

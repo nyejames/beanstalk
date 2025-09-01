@@ -4,6 +4,9 @@ use std::path::Path;
 use colour::{e_red_ln, e_red_ln_bold, green_ln_bold, print_ln_bold};
 use wasmer::{Instance, Module, Store, Value, imports};
 
+// Import MIR types for new compilation pipeline (placeholder for future implementation)
+// use crate::compiler::mir::{MIR, MirFunction, ProgramPoint, Events, Loan, BorrowError};
+
 #[derive(Clone)]
 struct Tests {
     name: String,
@@ -52,8 +55,16 @@ pub fn run_all_test_cases() {
         if path.extension().and_then(|s| s.to_str()) == Some("bs") {
             let _source = fs::read_to_string(&path).unwrap();
 
-            // TODO: Get some wasm back from the compiler
+            // TODO: Update to use new MIR compilation pipeline
+            // This will be implemented once the full MIR pipeline is complete
             let wasm: Vec<u8> = Vec::new();
+            
+            // Placeholder for MIR compilation pipeline:
+            // 1. Parse source to AST
+            // 2. Lower AST to MIR with program points
+            // 3. Run liveness analysis
+            // 4. Run borrow checking with dataflow
+            // 5. Generate WASM from validated MIR
 
             tests_ran += 1;
 

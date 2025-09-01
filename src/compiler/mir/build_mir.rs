@@ -1,6 +1,7 @@
 // Re-export all MIR components from sibling modules
 pub use crate::compiler::mir::place::*;
 pub use crate::compiler::mir::mir_nodes::*;
+pub use crate::compiler::mir::liveness::*;
 
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::datatypes::DataType;
@@ -11,6 +12,12 @@ use crate::compiler::parsers::template::TemplateContent;
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
+
+// Import borrow checking modules
+use crate::compiler::mir::extract::extract_gen_kill_sets;
+use crate::compiler::mir::dataflow::run_loan_liveness_dataflow;
+use crate::compiler::mir::check::run_conflict_detection;
+use crate::compiler::mir::diagnose::{diagnose_borrow_errors, diagnostics_to_compile_errors};
 
 /// Context for AST-to-MIR transformation with WASM-aware place management
 #[derive(Debug)]
@@ -359,8 +366,60 @@ impl UseCounter {
     }
 }
 
-/// Transform AST to WASM-optimized MIR
-pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
+/// Borrow check pipeline entry point function
+/// 
+/// This function orchestrates the complete MIR generation and borrow checking pipeline:
+/// 1. AST-to-MIR lowering with event generation
+/// 2. Control flow graph construction
+/// 3. Backward liveness analysis for last-use refinement
+/// 4. Forward loan-liveness dataflow analysis
+/// 5. Conflict detection and error reporting
+/// 6. WASM constraint validation
+pub fn borrow_check_pipeline(ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
+    // Step 1: Lower AST to MIR with event generation
+    let mir = match ast_to_mir_with_events(ast) {
+        Ok(mir) => mir,
+        Err(e) => return Err(vec![e]),
+    };
+
+    // Step 2: Run borrow checking on each function
+    let mut all_errors = Vec::new();
+    
+    for function in &mir.functions {
+        match run_borrow_checking_on_function(function) {
+            Ok(_) => {
+                // Borrow checking passed for this function
+            }
+            Err(errors) => {
+                all_errors.extend(errors);
+            }
+        }
+    }
+
+    // Step 3: If there are borrow checking errors, return them
+    if !all_errors.is_empty() {
+        return Err(all_errors);
+    }
+
+    // Step 4: Validate WASM constraints
+    if let Err(e) = mir.validate_wasm_constraints() {
+        let compile_error = CompileError {
+            msg: e,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
+            file_path: std::path::PathBuf::new(),
+        };
+        return Err(vec![compile_error]);
+    }
+
+    Ok(mir)
+}
+
+/// Transform AST to WASM-optimized MIR with event generation
+/// 
+/// This is the core MIR lowering function that generates events during construction
+/// for use by the borrow checker dataflow analysis.
+pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
     let mut mir = MIR::new();
     let mut context = MirTransformContext::new();
 
@@ -385,10 +444,7 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
         context.enter_function(main_function_id);
     }
 
-    // Create control flow graph builder (simplified for now)
-    // This will be implemented in later tasks
-    
-    // Transform all AST nodes to MIR
+    // Transform all AST nodes to MIR with event generation
     let _main_block_id = 0; // Placeholder block ID
     let mut current_block = MirBlock::new(_main_block_id); // Placeholder block
 
@@ -434,23 +490,107 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
         context.exit_function();
     }
 
+    // Transfer events from context to MIR functions
+    transfer_events_to_mir(&mut mir, &context)?;
+
     // Build control flow graph between program points
     mir.build_control_flow_graph();
 
-    // Borrow checking will be implemented in later tasks
-    // For now, just return the MIR without borrow checking
-
-    // Validate WASM constraints
-    mir.validate_wasm_constraints().map_err(|e| {
-        CompileError {
-            msg: e,
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-        }
-    })?;
+    // Run backward liveness analysis to refine last uses
+    run_liveness_analysis_on_mir(&mut mir)?;
 
     Ok(mir)
+}
+
+/// Run borrow checking on a single function
+/// 
+/// This function orchestrates the borrow checking dataflow analysis:
+/// 1. Extract gen/kill sets from function events
+/// 2. Run forward loan-liveness dataflow
+/// 3. Detect conflicts using live loan sets
+/// 4. Generate user-friendly diagnostics
+fn run_borrow_checking_on_function(function: &MirFunction) -> Result<(), Vec<CompileError>> {
+    // Step 1: Extract borrow facts and build gen/kill sets
+    let extractor = match extract_gen_kill_sets(function) {
+        Ok(extractor) => extractor,
+        Err(e) => {
+            let compile_error = CompileError {
+                msg: format!("Failed to extract borrow facts: {}", e),
+                location: TextLocation::default(),
+                error_type: ErrorType::Compiler,
+                file_path: std::path::PathBuf::new(),
+            };
+            return Err(vec![compile_error]);
+        }
+    };
+
+    // Step 2: Run forward loan-liveness dataflow analysis
+    let dataflow = match run_loan_liveness_dataflow(function, &extractor) {
+        Ok(dataflow) => dataflow,
+        Err(e) => {
+            let compile_error = CompileError {
+                msg: format!("Failed to run loan liveness dataflow: {}", e),
+                location: TextLocation::default(),
+                error_type: ErrorType::Compiler,
+                file_path: std::path::PathBuf::new(),
+            };
+            return Err(vec![compile_error]);
+        }
+    };
+
+    // Step 3: Run conflict detection
+    let conflict_results = match run_conflict_detection(function, dataflow, extractor) {
+        Ok(results) => results,
+        Err(e) => {
+            let compile_error = CompileError {
+                msg: format!("Failed to run conflict detection: {}", e),
+                location: TextLocation::default(),
+                error_type: ErrorType::Compiler,
+                file_path: std::path::PathBuf::new(),
+            };
+            return Err(vec![compile_error]);
+        }
+    };
+
+    // Step 4: If there are errors, convert them to compile errors
+    if !conflict_results.errors.is_empty() {
+        let diagnostic_results = match diagnose_borrow_errors(function, &conflict_results.errors, function.get_loans()) {
+            Ok(results) => results,
+            Err(e) => return Err(vec![e]),
+        };
+        
+        let diagnostics = crate::compiler::mir::diagnose::BorrowDiagnostics::new(function.name.clone());
+        let compile_errors = diagnostics_to_compile_errors(&diagnostics, &diagnostic_results);
+        return Err(compile_errors);
+    }
+
+    // Step 5: Handle warnings (for now, we'll just log them but not fail compilation)
+    if !conflict_results.warnings.is_empty() {
+        // In a full implementation, we might want to emit warnings to the user
+        // For now, we'll just continue compilation
+    }
+
+    Ok(())
+}
+
+/// Legacy function for backward compatibility
+/// 
+/// This function maintains the existing ast_to_mir interface but now uses
+/// the new borrow checking pipeline internally.
+pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
+    match borrow_check_pipeline(ast) {
+        Ok(mir) => Ok(mir),
+        Err(errors) => {
+            // Return the first error for backward compatibility
+            // In a full implementation, we might want to aggregate errors
+            Err(errors.into_iter().next().unwrap_or_else(|| CompileError {
+                msg: "Unknown borrow checking error".to_string(),
+                location: crate::compiler::parsers::tokens::TextLocation::default(),
+                error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
+                file_path: std::path::PathBuf::new(),
+            }))
+        }
+    }
 }
 
 /// Transform a single AST node to MIR statements and generate program points/events
@@ -461,6 +601,9 @@ fn transform_ast_node_to_mir(
     match &node.kind {
         NodeKind::Declaration(name, expression, visibility) => {
             transform_declaration_to_mir(name, expression, visibility, context)
+        }
+        NodeKind::Mutation(name, expression) => {
+            transform_mutation_to_mir(name, expression, &node.location, context)
         }
         NodeKind::Expression(expression) => {
             // Regular expression - evaluate and potentially assign
@@ -771,6 +914,52 @@ fn transform_declaration_to_mir(
     context.register_variable(name.to_string(), variable_place.clone());
 
     // Create assignment statement
+    let assign_statement = Statement::Assign {
+        place: variable_place,
+        rvalue: match expr_place {
+            Some(place) => Rvalue::Use(Operand::Copy(place)),
+            None => {
+                // Expression didn't produce a place (e.g., constant)
+                // Convert expression to rvalue
+                expression_to_rvalue(expression)?
+            }
+        },
+    };
+
+    statements.push(assign_statement);
+    Ok(statements)
+}
+
+/// Transform variable mutation to MIR
+fn transform_mutation_to_mir(
+    name: &str,
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut MirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    let mut statements = Vec::new();
+
+    // Look up the existing variable place
+    let variable_place = match context.lookup_variable(name) {
+        Some(place) => place.clone(),
+        None => {
+            return_rule_error!(
+                location.clone(),
+                "Cannot mutate undefined variable '{}'. Variable must be declared before mutation.",
+                name
+            )
+        }
+    };
+
+    // Transform the new value expression
+    let (expr_statements, expr_place) = transform_expression_to_mir(expression, context)?;
+    statements.extend(expr_statements);
+
+    // Type checking: ensure compatibility between existing variable and new value
+    // Note: For now we'll rely on the type system to have already validated this during AST construction
+    // More sophisticated type checking could be added here if needed
+
+    // Create assignment statement for the mutation
     let assign_statement = Statement::Assign {
         place: variable_place,
         rvalue: match expr_place {
@@ -1169,8 +1358,6 @@ fn convert_ast_operator_to_mir_binop(op: &crate::compiler::parsers::expressions:
 
 /// Convert AST unary operator to MIR UnOp
 fn convert_ast_operator_to_mir_unop(op: &crate::compiler::parsers::expressions::expression::Operator) -> Result<UnOp, CompileError> {
-    use crate::compiler::parsers::expressions::expression::Operator;
-    
     match op {
         // Note: AST operators might not have direct unary equivalents
         // This is a simplified mapping for now
@@ -1210,7 +1397,45 @@ fn count_ast_uses(ast: &AstBlock, context: &mut MirTransformContext) -> Result<(
     Ok(())
 }
 
+/// Transfer events and loans from transformation context to MIR functions
+fn transfer_events_to_mir(mir: &mut MIR, context: &MirTransformContext) -> Result<(), CompileError> {
+    // Transfer events from context to each function
+    for function in &mut mir.functions {
+        // Collect program points first to avoid borrowing issues
+        let program_points: Vec<ProgramPoint> = function.get_program_points_in_order().clone();
+        for program_point in program_points {
+            if let Some(events) = context.get_events(&program_point) {
+                function.store_events(program_point, events.clone());
+            }
+        }
+        
+        // Transfer all loans from context to this function
+        // Note: In the current implementation, all loans are stored globally in the context
+        // In a more sophisticated implementation, we might want to associate loans with specific functions
+        for loan in context.get_loans() {
+            function.add_loan(loan.clone());
+        }
+    }
+    Ok(())
+}
 
+/// Run liveness analysis on MIR and refine Copy operations to Move operations
+fn run_liveness_analysis_on_mir(mir: &mut MIR) -> Result<(), CompileError> {
+    // Run backward liveness analysis
+    let _analysis = run_liveness_analysis(mir).map_err(|e| {
+        CompileError {
+            msg: format!("Liveness analysis failed: {}", e),
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
+            file_path: std::path::PathBuf::new(),
+        }
+    })?;
+    
+    // The liveness analysis automatically refines Copy->Move operations
+    // during its analysis, so no additional work is needed here
+    
+    Ok(())
+}
 
 #[cfg(test)]
 mod tests {

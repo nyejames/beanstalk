@@ -335,10 +335,10 @@ pub fn print_formatted_error(e: CompileError) {
     // spaces before the relevant part of the line
     print!(
         "{}",
-        " ".repeat(e.location.start_pos.char_column as usize / 2)
+        " ".repeat((e.location.start_pos.char_column - 1).max(0) as usize)
     );
 
     let length_of_underline =
-        (e.location.end_pos.char_column - e.location.start_pos.char_column).max(1) as usize;
+        (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
     red_ln!("{}", "^".repeat(length_of_underline));
 }

@@ -3,7 +3,7 @@ use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::{ScopeContext, new_ast};
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;

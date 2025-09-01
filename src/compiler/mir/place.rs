@@ -645,22 +645,9 @@ pub struct MemoryRegion {
     pub start: u32,
     /// Size in bytes
     pub size: u32,
-    /// Purpose/type of this region
-    pub purpose: RegionPurpose,
 }
 
-/// Purpose of a memory region
-#[derive(Debug, Clone, PartialEq)]
-pub enum RegionPurpose {
-    /// Static data (strings, constants)
-    StaticData,
-    /// Heap allocation
-    HeapAllocation { alloc_id: u32 },
-    /// Stack frame
-    StackFrame { function_id: u32 },
-    /// Temporary storage
-    Temporary,
-}
+
 
 /// Heap allocation tracking
 #[derive(Debug, Clone)]
@@ -713,7 +700,7 @@ impl PlaceManager {
     
     /// Allocate memory in linear memory
     pub fn allocate_memory(&mut self, size: u32, alignment: u32) -> Place {
-        let offset = self.memory_layout.allocate(size, alignment, RegionPurpose::Temporary);
+        let offset = self.memory_layout.allocate(size, alignment);
         let type_size = if size <= 4 { TypeSize::Word } else { TypeSize::DoubleWord };
         
         Place::memory(offset, type_size)
@@ -726,8 +713,7 @@ impl PlaceManager {
         
         let offset = self.memory_layout.allocate(
             size, 
-            8, // 8-byte alignment for complex types
-            RegionPurpose::HeapAllocation { alloc_id }
+            8 // 8-byte alignment for complex types
         );
         
         let allocation = HeapAllocation {
@@ -779,14 +765,13 @@ impl MemoryLayout {
     }
     
     /// Allocate a region in linear memory
-    pub fn allocate(&mut self, size: u32, alignment: u32, purpose: RegionPurpose) -> u32 {
+    pub fn allocate(&mut self, size: u32, alignment: u32) -> u32 {
         // Align the offset
         let aligned_offset = align_up(self.next_offset, alignment);
         
         let region = MemoryRegion {
             start: aligned_offset,
             size,
-            purpose,
         };
         
         self.regions.push(region);
@@ -875,8 +860,8 @@ mod tests {
     fn test_memory_layout() {
         let mut layout = MemoryLayout::new();
         
-        let offset1 = layout.allocate(16, 8, RegionPurpose::StaticData);
-        let offset2 = layout.allocate(32, 4, RegionPurpose::Temporary);
+        let offset1 = layout.allocate(16, 8);
+        let offset2 = layout.allocate(32, 4);
         
         assert_eq!(offset1, 0);
         assert_eq!(offset2, 16);

@@ -3,7 +3,7 @@ use crate::compiler::parsers::ast_nodes::Arg;
 
 // TODO
 pub fn get_builtin_methods(data_type: &DataType) -> Vec<Arg> {
-    let mut methods: Vec<Arg> = Vec::new();
+    let _methods: Vec<Arg> = Vec::new();
 
     match data_type {
         _ => Vec::new(),

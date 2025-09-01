@@ -5,11 +5,10 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::{return_syntax_error, settings, token_log};
+use crate::{return_syntax_error, settings};
 
 pub const END_SCOPE_CHAR: char = ';';
 

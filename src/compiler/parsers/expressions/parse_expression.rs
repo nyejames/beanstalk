@@ -15,7 +15,7 @@ use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, new_template_context, return_syntax_error, return_type_error};
+use crate::{ast_log, new_template_context, return_rule_error, return_syntax_error, return_type_error};
 use std::collections::HashMap;
 
 // For multiple returns or function calls
@@ -112,7 +112,10 @@ pub fn create_expression(
                 }
 
                 if expression.is_empty() {
-                    return Ok(Expression::none());
+                    return_syntax_error!(
+                        token_stream.current_location(),
+                        "Empty expression found. Expected a value, variable, or expression."
+                    );
                 }
 
                 break;
@@ -238,9 +241,9 @@ pub fn create_expression(
 
                     continue; // Will have moved onto the next token already
                 } else {
-                    return_syntax_error!(
+                    return_rule_error!(
                         token_stream.current_location(),
-                        "Variable '{}' does not exist in this scope.",
+                        "Undefined variable '{}'. Variable must be declared before use.",
                         name,
                     )
                 }

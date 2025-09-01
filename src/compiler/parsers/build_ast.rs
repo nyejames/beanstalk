@@ -163,7 +163,7 @@ pub fn new_ast(
     let mut exports = Vec::new();
 
     // TODO: Start adding warnings where possible
-    let mut warnings = Vec::new();
+    let warnings = Vec::new();
 
     // let start_pos = token_stream.current_location(); // Store start position for potential nodes
 
@@ -324,15 +324,15 @@ pub fn new_ast(
                             );
                         }
                         
-                        // Mutable token after variable reference - check if it's ~= (mutable reassignment)
+                        // Mutable token after variable reference - this is invalid (shadowing attempt)
                         TokenKind::Mutable => {
-                            // Look ahead to see if this is ~= (mutable reassignment)
+                            // Look ahead to see if this is ~= (invalid reassignment attempt)
                             if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
-                                // This is ~= syntax for mutable reassignment
-                                // Move past the ~ token
-                                token_stream.advance();
-                                // Now we're at the = token, handle as mutation
-                                ast.push(handle_mutation(token_stream, name, &arg, &context)?);
+                                return_rule_error!(
+                                    token_stream.current_location(),
+                                    "Cannot use '~=' for reassignment of variable '{}'. Use '~=' only for initial mutable variable declarations. To mutate this variable, use '=' instead",
+                                    name
+                                );
                             } else {
                                 return_rule_error!(
                                     token_stream.current_location(),
@@ -355,7 +355,7 @@ pub fn new_ast(
 
                 // NEW VARIABLE DECLARATION
                 } else {
-                    let mut visibility = VarVisibility::Private;
+                    let visibility = VarVisibility::Private;
                     let arg = new_arg(token_stream, name, &context)?;
 
                     if visibility == VarVisibility::Public {

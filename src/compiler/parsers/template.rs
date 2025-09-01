@@ -6,11 +6,9 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::markdown::to_markdown;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::settings::BS_VAR_PREFIX;
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
-use crate::compiler::parsers::tokens::TokenizeMode::TemplateBody;
 
 #[derive(Debug)]
 pub enum TemplateType {
@@ -142,7 +140,7 @@ pub fn parse_template(
         template_body,
         template_style,
         inherited_style,
-        template_id,
+        template_id: _,
         format_context,
     } = template_ingredients;
 
@@ -227,7 +225,7 @@ pub fn parse_template(
                 // May emit a warning in future if this is possible from user error.
             }
 
-            ExpressionKind::Runtime(nodes) => {
+            ExpressionKind::Runtime(_nodes) => {
                 // TODO
             },
 

@@ -1,3 +1,4 @@
+use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
@@ -131,7 +132,7 @@ pub fn build_project(
     // ----------------------------------
     print_bold!("\nCompiling: ");
     dark_yellow_ln!("{:?}", project_config.src);
-    let time = Instant::now();
+    let _time = Instant::now();
     let compiler = Compiler::new(&project_config);
 
     // Compile each module to tokens and collect them all
@@ -146,7 +147,7 @@ pub fn build_project(
     // each AST creation can also export it's public variables for type checking,
     // and successive ast blocks can type check properly.
     // Circular dependencies are disallowed
-    let time = Instant::now();
+    let _time = Instant::now();
     let sorted_modules = resolve_module_dependencies(project_tokens)?;
     timer_log!(time, "Dependency graph created in: ");
 
@@ -191,23 +192,36 @@ pub fn build_project(
         module.extend(block.ast);
     }
 
-    // TODO
     // ----------------------------------
     //          MIR generation
     // ----------------------------------
-    compiler.ast_to_ir(AstBlock {
+    let mir = match compiler.ast_to_ir(AstBlock {
         ast: module,
         is_entry_point: true,
         scope: project_config.entry_point.to_owned(),
-    });
+    }) {
+        Ok(mir) => {
+            if !flags.contains(&Flag::DisableTimers) {
+                print!("MIR generated in: ");
+                green_ln!("{:?}", time.elapsed());
+            }
+            mir
+        }
+        Err(e) => return Err(vec![e]),
+    };
     
 
-    // TODO
     // ----------------------------------
     //          Wasm generation
     // ----------------------------------
+    let wasm = match new_wasm_module(mir) {
+        Ok(w) => w,
+        Err(e) => return Err(vec![e])
+    };
 
-    let wasm = Vec::new();
+    // ----------------------------------
+    //          Build Structure
+    // ----------------------------------
 
     Ok(Project {
         config: project_config,
@@ -256,7 +270,7 @@ fn add_bs_files_to_parse(
 
                     let mut global = false;
 
-                    let file_name = match file_path.file_stem().unwrap().to_str() {
+                    let _file_name = match file_path.file_stem().unwrap().to_str() {
                         Some(stem_str) => {
                             if stem_str.contains(settings::GLOBAL_PAGE_KEYWORD) {
                                 global = true;

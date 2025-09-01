@@ -1,6 +1,5 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::mir::mir_nodes::Statement;
 use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
@@ -134,7 +133,10 @@ pub fn evaluate_expression(
             }
 
             if stack.is_empty() {
-                return Ok(Expression::none());
+                return_syntax_error!(
+                    TextLocation::default(),
+                    "Invalid expression: no valid operands found during evaluation."
+                );
             }
 
             // Safe because of the previous two if statements.

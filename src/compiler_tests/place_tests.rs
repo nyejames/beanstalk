@@ -2,7 +2,7 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::mir::place::{
     Place, PlaceManager, WasmType, TypeSize, FieldSize, FieldOffset,
     MemoryBase, ByteOffset, ProjectionElem, StackOpType,
-    ArithmeticOp, MemoryLayout, RegionPurpose
+    ArithmeticOp, MemoryLayout
 };
 
 #[cfg(test)]
@@ -415,8 +415,8 @@ mod memory_layout_tests {
     fn test_memory_allocation() {
         let mut layout = MemoryLayout::new();
         
-        let offset1 = layout.allocate(16, 4, RegionPurpose::StaticData);
-        let offset2 = layout.allocate(24, 8, RegionPurpose::Temporary);
+        let offset1 = layout.allocate(16, 4);
+        let offset2 = layout.allocate(24, 8);
         
         assert_eq!(offset1, 0);
         assert_eq!(offset2, 16); // No padding needed
@@ -435,45 +435,16 @@ mod memory_layout_tests {
         let mut layout = MemoryLayout::new();
         
         // Allocate 1 byte with 1-byte alignment
-        let offset1 = layout.allocate(1, 1, RegionPurpose::StaticData);
+        let offset1 = layout.allocate(1, 1);
         // Allocate 8 bytes with 8-byte alignment (should be aligned)
-        let offset2 = layout.allocate(8, 8, RegionPurpose::Temporary);
+        let offset2 = layout.allocate(8, 8);
         
         assert_eq!(offset1, 0);
         assert_eq!(offset2, 8); // Aligned to 8-byte boundary
         assert_eq!(layout.total_size(), 16);
     }
 
-    #[test]
-    fn test_region_purposes() {
-        let mut layout = MemoryLayout::new();
-        
-        layout.allocate(16, 4, RegionPurpose::StaticData);
-        layout.allocate(32, 8, RegionPurpose::HeapAllocation { alloc_id: 1 });
-        layout.allocate(64, 4, RegionPurpose::StackFrame { function_id: 0 });
-        
-        let regions = layout.get_regions();
-        assert_eq!(regions.len(), 3);
-        
-        match &regions[0].purpose {
-            RegionPurpose::StaticData => {},
-            _ => panic!("Expected StaticData purpose"),
-        }
-        
-        match &regions[1].purpose {
-            RegionPurpose::HeapAllocation { alloc_id } => {
-                assert_eq!(*alloc_id, 1);
-            }
-            _ => panic!("Expected HeapAllocation purpose"),
-        }
-        
-        match &regions[2].purpose {
-            RegionPurpose::StackFrame { function_id } => {
-                assert_eq!(*function_id, 0);
-            }
-            _ => panic!("Expected StackFrame purpose"),
-        }
-    }
+
 }
 
 #[cfg(test)]
@@ -622,32 +593,5 @@ mod integration_tests {
         assert!(projected.load_instruction_count() <= 5); // Slightly more for projections
     }
 
-    #[test]
-    fn test_polonius_fact_generation_readiness() {
-        let mut manager = PlaceManager::new();
-        
-        // Create places that would be involved in borrowing
-        let owner = manager.allocate_local(&DataType::String(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        let borrower = manager.allocate_local(&DataType::String(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        
-        // Verify places have the information needed for Polonius facts
-        assert!(owner.is_wasm_local());
-        assert!(borrower.is_wasm_local());
-        
-        // Places should be distinguishable for fact generation
-        assert_ne!(owner, borrower);
-        
-        // Memory places should also be trackable
-        let heap_place = manager.allocate_heap(&DataType::String(crate::compiler::datatypes::Ownership::ImmutableOwned(false)), 64);
-        assert!(heap_place.requires_memory_access());
-        
-        // Projections should maintain traceability
-        let field_place = heap_place.project_field(0, 8, FieldSize::WasmType(WasmType::I32));
-        match field_place {
-            Place::Projection { base, .. } => {
-                assert!(base.requires_memory_access());
-            }
-            _ => panic!("Expected projection"),
-        }
-    }
+
 }
