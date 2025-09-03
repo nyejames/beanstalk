@@ -29,6 +29,10 @@ pub struct WasmModule {
     local_count: u32,
     string_constants: Vec<String>,
     string_constant_map: std::collections::HashMap<String, u32>,
+
+    // Heap management (for simple bump-pointer allocator)
+    heap_ptr_global_index: Option<u32>,
+    initial_heap_offset: u32,
 }
 
 impl Default for WasmModule {
@@ -59,6 +63,8 @@ impl WasmModule {
             local_count: 0,
             string_constants: Vec::new(),
             string_constant_map: std::collections::HashMap::new(),
+            heap_ptr_global_index: None,
+            initial_heap_offset: 0,
         }
     }
 
@@ -82,7 +88,8 @@ impl WasmModule {
         if !mir.type_info.interface_info.interfaces.is_empty() {
             module.initialize_interface_support_from_mir(mir)?;
         }
-        
+        // Record initial heap offset (start of dynamic allocations)
+        module.initial_heap_offset = mir.type_info.memory_info.static_data_size;
         Ok(module)
     }
 
@@ -100,6 +107,14 @@ impl WasmModule {
         };
         
         self.memory_section.memory(memory_type);
+
+        // Create a global heap pointer for dynamic allocations (bump-pointer)
+        // Initialized to static_data_size so dynamic allocations follow static data.
+        let heap_ptr_global_type = GlobalType { val_type: ValType::I32, mutable: true, shared: false };
+        let init_expr = ConstExpr::i32_const(memory_info.static_data_size as i32);
+        self.global_section.global(heap_ptr_global_type, &init_expr);
+        self.heap_ptr_global_index = Some(self.global_count);
+        self.global_count += 1;
         
         Ok(())
     }
@@ -942,32 +957,104 @@ impl WasmModule {
                 return_compiler_error!("InterfaceCall statement lowering requires interface_info context - use lower_interface_call method directly");
             }
             
-            Statement::Alloc { .. } => {
-                return_compiler_error!("Alloc statement lowering not yet implemented - will be added in task 13");
-            }
+            Statement::Alloc { place, size, align } => self.lower_alloc(place, size, *align, function, local_map),
             
-            Statement::Dealloc { .. } => {
-                return_compiler_error!("Dealloc statement lowering not yet implemented - will be added in task 13");
-            }
+            Statement::Dealloc { place } => self.lower_dealloc(place, function, local_map),
             
-            Statement::Store { .. } => {
-                return_compiler_error!("Store statement lowering not yet implemented - will be added in task 13");
-            }
+            Statement::Store { place, value, alignment, offset } => self.lower_store(place, value, *alignment, *offset, function, local_map),
             
-            Statement::MemoryOp { .. } => {
-                return_compiler_error!("MemoryOp statement lowering not yet implemented - will be added in task 13");
+            Statement::MemoryOp { op, operand, result } => self.lower_memory_op(op, operand.as_ref(), result.as_ref(), function, local_map),
+        }
+    }
+
+    /// Lower dynamic allocation using a bump-pointer heap (very simple allocator)
+    fn lower_alloc(&self, place: &Place, size: &Operand, align: u32, function: &mut Function, local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
+        let heap_ptr_idx = self.heap_ptr_global_index.ok_or_else(|| CompileError::new_thread_panic("Heap pointer global not initialized".to_string()))?;
+
+        // Load current heap_ptr
+        function.instruction(&Instruction::GlobalGet(heap_ptr_idx));
+        // Save as result pointer (to be stored into destination place)
+        // We'll duplicate it using local.tee pattern: spill to a temp local
+        // For now, directly store later; keep a copy by re-loading after increment
+
+        // Align heap_ptr upward: heap_ptr = (heap_ptr + (align-1)) & !(align-1)
+        function.instruction(&Instruction::I32Const((align.saturating_sub(1)) as i32));
+        function.instruction(&Instruction::I32Add);
+        let mask = !((align.max(1)) - 1);
+        function.instruction(&Instruction::I32Const(mask as i32));
+        function.instruction(&Instruction::I32And);
+        // Compute new heap_ptr = aligned_heap_ptr + size
+        self.lower_operand(size, function, local_map)?; // push size
+        function.instruction(&Instruction::I32Add);
+        // Store new heap_ptr
+        function.instruction(&Instruction::GlobalSet(heap_ptr_idx));
+
+        // Recompute pointer to store into destination: heap_ptr - size
+        function.instruction(&Instruction::GlobalGet(heap_ptr_idx));
+        self.lower_operand(size, function, local_map)?;
+        function.instruction(&Instruction::I32Sub);
+        self.resolve_place_store(place, function, local_map)?;
+        Ok(())
+    }
+
+    /// Lower deallocation (no-op for bump-pointer allocator)
+    fn lower_dealloc(&self, _place: &Place, _function: &mut Function, _local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
+        Ok(())
+    }
+
+    /// Lower a direct store to memory or local/global
+    fn lower_store(&self, place: &Place, value: &Operand, _alignment: u32, _offset: u32, function: &mut Function, local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
+        // Load value first
+        self.lower_operand(value, function, local_map)?;
+        // Then store into place
+        self.resolve_place_store(place, function, local_map)?;
+        Ok(())
+    }
+
+    /// Lower WASM-specific memory ops: Size/Grow/Fill/Copy
+    fn lower_memory_op(&self, op: &crate::compiler::mir::mir_nodes::MemoryOpKind, operand: Option<&Operand>, result: Option<&Place>, function: &mut Function, local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
+        use crate::compiler::mir::mir_nodes::MemoryOpKind;
+        match op {
+            MemoryOpKind::Size => {
+                function.instruction(&Instruction::MemorySize(0));
+                if let Some(dst) = result { self.resolve_place_store(dst, function, local_map)?; } else { function.instruction(&Instruction::Drop); }
+            }
+            MemoryOpKind::Grow => {
+                if let Some(pages) = operand { self.lower_operand(pages, function, local_map)?; } else { function.instruction(&Instruction::I32Const(0)); }
+                function.instruction(&Instruction::MemoryGrow(0));
+                if let Some(dst) = result { self.resolve_place_store(dst, function, local_map)?; } else { function.instruction(&Instruction::Drop); }
+            }
+            MemoryOpKind::Fill => {
+                // Not yet wired: requires memory.fill instruction (bulk-memory)
+                return_compiler_error!("MemoryOp::Fill not yet implemented");
+            }
+            MemoryOpKind::Copy => {
+                // Not yet wired: requires memory.copy instruction (bulk-memory)
+                return_compiler_error!("MemoryOp::Copy not yet implemented");
             }
         }
+        Ok(())
     }
 
     /// Lower Statement::Assign: evaluate rvalue → store to place (≤3 WASM instructions)
     fn lower_assign_statement(&self, place: &Place, rvalue: &Rvalue, function: &mut Function, local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
-        // Step 1: Evaluate rvalue and push result onto WASM stack
+        // Lifetime-optimized assign:
+        // - If rvalue is a simple Use(Copy/Move) from the same place, skip store (no-op)
+        // - Otherwise, evaluate rvalue then store
+        if let Rvalue::Use(op) = rvalue {
+            if let Operand::Copy(src) | Operand::Move(src) = op {
+                if src == place {
+                    // Self-assign; nothing to do
+                    return Ok(());
+                }
+            }
+        }
+
+        // Evaluate rvalue and push result
         self.lower_rvalue(rvalue, function, local_map)?;
-        
-        // Step 2: Store the stack value to the target place
+
+        // Store to destination
         self.resolve_place_store(place, function, local_map)?;
-        
         Ok(())
     }
 
@@ -1214,18 +1301,40 @@ impl WasmModule {
 
     /// Lower Statement::Drop: proper cleanup code generation
     fn lower_drop_statement(&self, place: &Place, function: &mut Function, local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
-        // For now, Drop is mostly a no-op in WASM since we don't have complex destructors
-        // In the future, this will integrate with lifetime analysis to generate cleanup code
-        // For reference counting, this would decrement ref counts
-        // For linear memory management, this might mark memory as available
-        
-        // Load the place to ensure it's accessible (validates the place)
-        self.resolve_place_load(place, function, local_map)?;
-        
-        // Drop the loaded value (remove from stack)
-        function.instruction(&Instruction::Drop);
-        
-        Ok(())
+        // Lifetime-optimized Drop:
+        // - For locals/globals of WASM value types: no work besides stack cleanup if any
+        // - For heap/linear-memory backed places: perform minimal ARC decrement stub
+        // - Avoid unnecessary loads if there is nothing to release
+
+        match place {
+            Place::Local { .. } | Place::Global { .. } => Ok(()),
+            Place::Memory { base, .. } => {
+                self.emit_arc_decrement_for_base(base, function, local_map)?;
+                Ok(())
+            }
+            Place::Projection { base, .. } => {
+                // Try to resolve ultimate memory base
+                if let Some(mem_base) = base.memory_base() {
+                    self.emit_arc_decrement_for_base(mem_base, function, local_map)?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Emit a minimal ARC decrement stub for heap-backed memory.
+    /// This assumes a conventional layout where the first 4 bytes at the object
+    /// address hold a reference count (u32). If the count reaches zero, we do
+    /// nothing else here; full deallocation is handled in task 13.
+    fn emit_arc_decrement_for_base(&self, base: &crate::compiler::mir::place::MemoryBase, _function: &mut Function, _local_map: &HashMap<Place, u32>) -> Result<(), CompileError> {
+        use crate::compiler::mir::place::MemoryBase;
+        match base {
+            MemoryBase::Heap { .. } => {
+                // Placeholder: ARC decrement to be fully implemented with concrete addresses in task 13
+                Ok(())
+            }
+            _ => Ok(())
+        }
     }
 
     // ===== RVALUE LOWERING METHODS =====
@@ -1266,8 +1375,8 @@ impl WasmModule {
                 return_compiler_error!("Deref rvalue lowering not yet implemented - will be added in later tasks");
             }
             
-            Rvalue::Load { .. } => {
-                return_compiler_error!("Load rvalue lowering not yet implemented - will be added in task 13");
+            Rvalue::Load { place, .. } => {
+                self.resolve_place_load(place, function, local_map)
             }
             
             Rvalue::MemorySize => {

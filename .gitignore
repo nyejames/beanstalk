@@ -11,4 +11,5 @@ test_output/
 /.VSCodeCounter
 .idea
 .cursor/
+.cursorignore
 .kiro/
