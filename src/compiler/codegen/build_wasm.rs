@@ -1,6 +1,4 @@
 use crate::compiler::mir::build_mir::MIR;
-use crate::compiler::parsers::tokens::TextLocation;
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::compiler_errors::CompileError;
 

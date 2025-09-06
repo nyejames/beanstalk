@@ -32,7 +32,7 @@ macro_rules! timer_log {
 #[macro_export]
 #[cfg(not(feature = "detailed_timers"))]
 macro_rules! timer_log {
-    ($($arg:tt)*) => {
+    ($time:expr, $msg:expr) => {
         // Nothing
     };
 }
@@ -71,6 +71,23 @@ macro_rules! eval_log {
     };
 }
 
+// IR LOGGING MACROS
+#[macro_export]
+#[cfg(feature = "verbose_ir_logging")]
+macro_rules! ir_log {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "verbose_ir_logging"))]
+macro_rules! ir_log {
+    ($($arg:tt)*) => {
+        // Nothing
+    };
+}
+
 // CODEGEN LOGGING MACROS
 #[macro_export]
 #[cfg(feature = "verbose_codegen_logging")]
@@ -91,9 +108,6 @@ macro_rules! codegen_log {
 pub fn print_ast_output(ast: &[AstNode]) {
     for node in ast {
         match &node.kind {
-            NodeKind::Comment(..) => {
-                // grey_ln!("{:?}", node);
-            }
             NodeKind::Declaration(name, expr, ..) => {
                 blue_ln!("Variable: {:?}", name);
                 green_ln_bold!("Expr: {:#?}", expr);

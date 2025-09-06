@@ -694,12 +694,27 @@ impl WasmModule {
         let param_count = mir_function.parameters.len() as u32;
         
         // Count locals by type (excluding parameters)
+        // Parameters are automatically available as locals 0..n-1 in WASM
         let mut type_counts: HashMap<ValType, u32> = HashMap::new();
         
+        // Count all local variables that need to be declared
         for (_, local_place) in &mir_function.locals {
             if let Some(&local_index) = local_map.get(local_place) {
                 if local_index >= param_count {
                     let val_type = self.wasm_type_to_val_type(&local_place.wasm_type());
+                    *type_counts.entry(val_type).or_insert(0) += 1;
+                }
+            }
+        }
+        
+        // Also count any places in the local_map that aren't parameters or in mir_function.locals
+        // This handles cases where the MIR creates local places that aren't explicitly in the locals map
+        for (place, &local_index) in local_map {
+            if local_index >= param_count {
+                // Check if this place is already counted in mir_function.locals
+                let already_counted = mir_function.locals.values().any(|local_place| local_place == place);
+                if !already_counted {
+                    let val_type = self.wasm_type_to_val_type(&place.wasm_type());
                     *type_counts.entry(val_type).or_insert(0) += 1;
                 }
             }

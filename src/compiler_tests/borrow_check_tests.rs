@@ -11,54 +11,133 @@ use crate::compiler::mir::check::run_conflict_detection;
 use crate::compiler::datatypes::{DataType, Ownership};
 
 #[cfg(test)]
-mod program_point_tests {
+mod borrow_checking_behavior_tests {
     use super::*;
 
+    /// Test that valid borrowing patterns are accepted
     #[test]
-    fn test_program_point_creation() {
-        let point1 = ProgramPoint::new(0);
-        let point2 = ProgramPoint::new(1);
+    fn test_valid_shared_borrows() {
+        let mut function = create_simple_function_with_borrows();
         
-        assert_eq!(point1.id(), 0);
-        assert_eq!(point2.id(), 1);
-        assert!(point1.precedes(&point2));
-        assert!(!point2.precedes(&point1));
+        // Add two shared borrows of different variables - should be valid
+        let loan1 = Loan {
+            id: LoanId::new(0),
+            owner: Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))),
+            kind: BorrowKind::Shared,
+            origin_stmt: ProgramPoint::new(0),
+        };
+        let loan2 = Loan {
+            id: LoanId::new(1),
+            owner: Place::local(1, &DataType::Int(Ownership::ImmutableOwned(false))),
+            kind: BorrowKind::Shared,
+            origin_stmt: ProgramPoint::new(1),
+        };
+        
+        function.add_loan(loan1);
+        function.add_loan(loan2);
+        
+        let result = run_full_borrow_check(&function);
+        assert!(result.is_ok(), "Valid shared borrows should pass borrow checking");
+        
+        let conflicts = result.unwrap();
+        assert!(conflicts.errors.is_empty(), "No conflicts should be detected for valid shared borrows");
     }
 
+    /// Test that conflicting borrows are detected
     #[test]
-    fn test_program_point_generator() {
-        let mut generator = ProgramPointGenerator::new();
+    fn test_conflicting_mutable_borrows() {
+        let mut function = create_simple_function_with_borrows();
         
-        let point1 = generator.allocate_next();
-        let point2 = generator.allocate_next();
-        let point3 = generator.allocate_next();
+        // Add two mutable borrows of the same variable - should conflict
+        let place = Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)));
+        let loan1 = Loan {
+            id: LoanId::new(0),
+            owner: place.clone(),
+            kind: BorrowKind::Mut,
+            origin_stmt: ProgramPoint::new(0),
+        };
+        let loan2 = Loan {
+            id: LoanId::new(1),
+            owner: place.clone(),
+            kind: BorrowKind::Mut,
+            origin_stmt: ProgramPoint::new(1),
+        };
         
-        assert_eq!(point1.id(), 0);
-        assert_eq!(point2.id(), 1);
-        assert_eq!(point3.id(), 2);
+        function.add_loan(loan1);
+        function.add_loan(loan2);
         
-        let all_points = generator.get_all_points();
-        assert_eq!(all_points.len(), 3);
-        assert_eq!(all_points[0], point1);
-        assert_eq!(all_points[1], point2);
-        assert_eq!(all_points[2], point3);
+        let result = run_full_borrow_check(&function);
+        assert!(result.is_ok(), "Borrow checker should run successfully");
+        
+        let conflicts = result.unwrap();
+        assert!(!conflicts.errors.is_empty(), "Conflicting mutable borrows should be detected");
+        
+        // Verify we got the right type of error
+        let has_conflict_error = conflicts.errors.iter().any(|error| {
+            matches!(error.error_type, BorrowErrorType::ConflictingBorrows { .. })
+        });
+        assert!(has_conflict_error, "Should detect conflicting borrows error");
     }
 
+    /// Test that shared and mutable borrows conflict
     #[test]
-    fn test_program_point_ordering() {
-        let mut points = vec![
-            ProgramPoint::new(5),
-            ProgramPoint::new(1),
-            ProgramPoint::new(3),
-            ProgramPoint::new(0),
-        ];
+    fn test_shared_mutable_conflict() {
+        let mut function = create_simple_function_with_borrows();
         
-        points.sort();
+        // Add shared and mutable borrow of the same variable - should conflict
+        let place = Place::local(0, &DataType::String(Ownership::ImmutableOwned(false)));
+        let shared_loan = Loan {
+            id: LoanId::new(0),
+            owner: place.clone(),
+            kind: BorrowKind::Shared,
+            origin_stmt: ProgramPoint::new(0),
+        };
+        let mut_loan = Loan {
+            id: LoanId::new(1),
+            owner: place.clone(),
+            kind: BorrowKind::Mut,
+            origin_stmt: ProgramPoint::new(1),
+        };
         
-        assert_eq!(points[0].id(), 0);
-        assert_eq!(points[1].id(), 1);
-        assert_eq!(points[2].id(), 3);
-        assert_eq!(points[3].id(), 5);
+        function.add_loan(shared_loan);
+        function.add_loan(mut_loan);
+        
+        let result = run_full_borrow_check(&function);
+        assert!(result.is_ok(), "Borrow checker should run successfully");
+        
+        let conflicts = result.unwrap();
+        assert!(!conflicts.errors.is_empty(), "Shared/mutable conflict should be detected");
+    }
+
+    /// Helper function to create a simple function for testing
+    fn create_simple_function_with_borrows() -> MirFunction {
+        let mut function = MirFunction::new(0, "test_function".to_string(), vec![], vec![]);
+        
+        // Add a simple block with some program points
+        let mut block = MirBlock::new(0);
+        let mut point_gen = ProgramPointGenerator::new();
+        
+        for i in 0..5 {
+            let point = point_gen.allocate_next();
+            function.add_program_point(point, 0, i);
+            
+            // Add some basic events
+            let mut events = Events::default();
+            if i > 0 {
+                events.uses.push(Place::local((i - 1) as u32, &DataType::Int(Ownership::ImmutableOwned(false))));
+            }
+            function.store_events(point, events);
+        }
+        
+        function.add_block(block);
+        function
+    }
+
+    /// Helper function to run full borrow checking pipeline
+    fn run_full_borrow_check(function: &MirFunction) -> Result<crate::compiler::mir::check::ConflictResults, String> {
+        let extractor = extract_gen_kill_sets(function)?;
+        let dataflow = run_loan_liveness_dataflow(function, &extractor)?;
+        run_conflict_detection(function, dataflow, extractor)
     }
 }
 

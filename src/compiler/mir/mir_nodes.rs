@@ -187,17 +187,28 @@ impl MirFunction {
     }
 
     /// Add a program point to this function
-    pub fn add_program_point(&mut self, point: ProgramPoint, block_id: u32, statement_index: usize) {
+    pub fn add_program_point(
+        &mut self,
+        point: ProgramPoint,
+        block_id: u32,
+        statement_index: usize,
+    ) {
         self.program_points.push(point);
         self.program_point_to_block.insert(point, block_id);
         if statement_index != usize::MAX {
-            self.program_point_to_statement.insert(point, statement_index);
+            self.program_point_to_statement
+                .insert(point, statement_index);
         }
     }
 
     /// Add a block to this function
     pub fn add_block(&mut self, block: MirBlock) {
         self.blocks.push(block);
+    }
+
+    /// Add a local variable to this function
+    pub fn add_local(&mut self, name: String, place: Place) {
+        self.locals.insert(name, place);
     }
 
     /// Get the block ID for a given program point
@@ -328,7 +339,11 @@ impl MirBlock {
     }
 
     /// Set terminator with program point
-    pub fn set_terminator_with_program_point(&mut self, terminator: Terminator, point: ProgramPoint) {
+    pub fn set_terminator_with_program_point(
+        &mut self,
+        terminator: Terminator,
+        point: ProgramPoint,
+    ) {
         self.terminator = terminator;
         self.terminator_program_point = Some(point);
     }
@@ -359,15 +374,15 @@ impl MirBlock {
 
     /// Check if this block contains a given program point
     pub fn contains_program_point(&self, point: &ProgramPoint) -> bool {
-        self.statement_program_points.contains(point) || 
-        self.terminator_program_point == Some(*point)
+        self.statement_program_points.contains(point)
+            || self.terminator_program_point == Some(*point)
     }
 }
 
 /// MIR statement that maps efficiently to WASM instructions
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
-    /// Assign an rvalue to a place
+    /// Assign the rvalue to a place
     Assign { place: Place, rvalue: Rvalue },
 
     /// Function call with WASM calling convention
@@ -863,8 +878,6 @@ pub struct Loan {
     pub origin_stmt: ProgramPoint,
 }
 
-
-
 /// Borrow checking error
 #[derive(Debug, Clone)]
 pub struct BorrowError {
@@ -907,8 +920,6 @@ pub enum InvalidationType {
     /// Owner was moved
     Move,
 }
-
-
 
 /// WASM control flow structure information
 #[derive(Debug, Clone, PartialEq)]

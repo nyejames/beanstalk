@@ -9,10 +9,11 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler::parsers::statements::structs::create_args;
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
-use crate::{ast_log, return_syntax_error};
 use crate::compiler::traits::ContainsReferences;
+use crate::{ast_log, return_syntax_error};
 
 // Arg names and types are required
 // Can have default values
@@ -67,9 +68,11 @@ pub fn create_function_signature(
                         "Should have a comma to separate return types",
                     )
                 }
-                return_types.push(DataType::Int(
-                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
-                ));
+                return_types.push(DataType::Int(if mutable {
+                    Ownership::MutableOwned(false)
+                } else {
+                    Ownership::ImmutableOwned(false)
+                }));
             }
             TokenKind::DatatypeFloat => {
                 if !next_in_list {
@@ -78,9 +81,11 @@ pub fn create_function_signature(
                         "Should have a comma to separate return types",
                     )
                 }
-                return_types.push(DataType::Float(
-                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
-                ));
+                return_types.push(DataType::Float(if mutable {
+                    Ownership::MutableOwned(false)
+                } else {
+                    Ownership::ImmutableOwned(false)
+                }));
             }
             TokenKind::DatatypeBool => {
                 if !next_in_list {
@@ -89,9 +94,11 @@ pub fn create_function_signature(
                         "Should have a comma to separate return types",
                     )
                 }
-                return_types.push(DataType::Bool(
-                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
-                ));
+                return_types.push(DataType::Bool(if mutable {
+                    Ownership::MutableOwned(false)
+                } else {
+                    Ownership::ImmutableOwned(false)
+                }));
             }
             TokenKind::DatatypeString => {
                 if !next_in_list {
@@ -100,9 +107,11 @@ pub fn create_function_signature(
                         "Should have a comma to separate return types",
                     )
                 }
-                return_types.push(DataType::String(
-                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
-                ));
+                return_types.push(DataType::String(if mutable {
+                    Ownership::MutableOwned(false)
+                } else {
+                    Ownership::ImmutableOwned(false)
+                }));
             }
             TokenKind::DatatypeTemplate => {
                 if !next_in_list {
@@ -111,9 +120,11 @@ pub fn create_function_signature(
                         "Should have a comma to separate return types",
                     )
                 }
-                return_types.push(DataType::Template(
-                    if mutable {Ownership::MutableOwned(false)} else {Ownership::ImmutableOwned(false)}
-                ));
+                return_types.push(DataType::Template(if mutable {
+                    Ownership::MutableOwned(false)
+                } else {
+                    Ownership::ImmutableOwned(false)
+                }));
             }
 
             TokenKind::Symbol(name) => {
@@ -132,7 +143,6 @@ pub fn create_function_signature(
                     if matches!(possible_type.value.data_type, DataType::Args(..)) {
                         return_types.push(possible_type.value.data_type.to_owned());
                     }
-
                 } else if let Some(possible_type) = args.find_reference(name) {
                     // TODO:
                     // Function return signature may need to be completely refactors to
@@ -140,7 +150,6 @@ pub fn create_function_signature(
                     // And also accommodate the syntax sugar for returning Errors and Options
                     return_types.push(possible_type.value.data_type.to_owned());
                 }
-
             }
 
             TokenKind::Colon => {
@@ -338,7 +347,7 @@ pub fn parse_function_call(
     // Assumes starting at the first token after the name of the function call
 
     // Create expressions until hitting a closed parenthesis
-    let expressions = create_function_call_arguments(token_stream, required_arguments, context)?;
+    let args = create_function_call_arguments(token_stream, required_arguments, context)?;
 
     // Make sure there is a closing parenthesis
     if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
@@ -373,7 +382,7 @@ pub fn parse_function_call(
     Ok(AstNode {
         kind: NodeKind::FunctionCall(
             name.to_owned(),
-            expressions,
+            args,
             returned_types.to_owned(),
             token_stream.current_location(),
         ),
@@ -418,7 +427,7 @@ pub fn create_function_call_arguments(
             .map(|arg| arg.value.data_type.to_owned())
             .collect::<Vec<DataType>>();
 
-        let call_context = context.new_child_expression(required_argument_types);
+        let call_context = context.new_child_expression(required_argument_types.to_owned());
 
         create_multiple_expressions(token_stream, &call_context, false)
     }
@@ -457,11 +466,7 @@ fn create_arg_constructor(
                 }
 
                 // Create a new variable
-                let argument = new_arg(
-                    token_stream,
-                    &arg_name,
-                    &context,
-                )?;
+                let argument = new_arg(token_stream, &arg_name, &context)?;
 
                 if argument.value.data_type.is_mutable() {
                     *pure = false;

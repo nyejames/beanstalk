@@ -244,7 +244,7 @@ pub fn new_template(
             }
 
             TokenKind::OpenParenthesis => {
-                let structure = create_args(token_stream, Expression::none(), &[], &context)?;
+                let structure = create_args(token_stream, None, &[], &context)?;
 
                 this_template_content.after.push(Expression::structure(
                     structure,

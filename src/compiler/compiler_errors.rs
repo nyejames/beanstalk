@@ -52,6 +52,24 @@ impl CompileError {
             file_path: PathBuf::new(),
         }
     }
+
+    pub fn compiler_error(msg: &str) -> Self {
+        CompileError {
+            msg: msg.to_string(),
+            location: TextLocation::default(),
+            error_type: ErrorType::Compiler,
+            file_path: PathBuf::new(),
+        }
+    }
+
+    pub fn file_error(path: &std::path::Path, msg: &str) -> Self {
+        CompileError {
+            msg: msg.to_string(),
+            location: TextLocation::default(),
+            error_type: ErrorType::File,
+            file_path: path.to_path_buf(),
+        }
+    }
 }
 
 // Adds more information to the CompileError
@@ -63,6 +81,7 @@ pub enum ErrorType {
     Type,
     Rule,
     File,
+    Config,
     Compiler,
     DevServer,
 }
@@ -76,7 +95,7 @@ macro_rules! return_syntax_error {
         return Err(CompileError {
             msg: format!($($msg)+),
             location: $location,
-            error_type: ErrorType::Syntax,
+            error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
             file_path: std::path::PathBuf::new(),
         })
     };
@@ -91,7 +110,7 @@ macro_rules! return_type_error {
         return Err(CompileError {
             msg: format!($($msg)+),
             location: $location,
-            error_type: ErrorType::Type,
+            error_type: crate::compiler::compiler_errors::ErrorType::Type,
             file_path: std::path::PathBuf::new(),
         })
     };
@@ -106,7 +125,7 @@ macro_rules! return_rule_error {
         return Err(CompileError {
             msg: format!($($msg)+),
             location: $location,
-            error_type: ErrorType::Rule,
+            error_type: crate::compiler::compiler_errors::ErrorType::Rule,
             file_path: std::path::PathBuf::new(),
         })
     };
@@ -120,8 +139,8 @@ macro_rules! return_file_errors {
     ($path:expr, $($msg:tt)+) => {
         return Err(vec![CompileError {
             msg: format!($($msg)+),
-            location: TextLocation::default(),
-            error_type: ErrorType::File,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::File,
             file_path: $path.to_owned(),
         }])
     };
@@ -134,9 +153,24 @@ macro_rules! return_file_error {
     ($path:expr, $($msg:tt)+) => {
         return Err(CompileError {
             msg: format!($($msg)+),
-            location: TextLocation::default(),
-            error_type: ErrorType::File,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::File,
             file_path: $path.to_owned(),
+        })
+    };
+}
+
+/// Returns a new CompileError
+///
+/// Usage: `bail!(Path, "message", message format args)`;
+#[macro_export]
+macro_rules! return_config_error {
+    ($location:expr, $($msg:tt)+) => {
+        return Err(CompileError {
+            msg: format!($($msg)+),
+            location: $location,
+            error_type: crate::compiler::compiler_errors::ErrorType::Config,
+            file_path: std::path::PathBuf::new(),
         })
     };
 }
@@ -149,8 +183,8 @@ macro_rules! return_compiler_error {
     ($($msg:tt)+) => {
         return Err(CompileError {
             msg: format!($($msg)+),
-            location: TextLocation::default(),
-            error_type: ErrorType::Compiler,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
         })
     };
@@ -165,8 +199,8 @@ macro_rules! return_dev_server_error {
     ($path:expr, $($msg:tt)+) => {
         return Err(vec![CompileError {
             msg: format!($($msg)+),
-            location: TextLocation::default(),
-            error_type: ErrorType::DevServer,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::DevServer,
             file_path: $path.to_owned(),
         }])
     };
@@ -199,8 +233,8 @@ macro_rules! return_thread_err {
     ($process:expr) => {
         return Err(CompileError {
             msg: format!("Thread panicked during {}", $process),
-            location: TextLocation::default(),
-            error_type: ErrorType::Compiler,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
         })
     };
@@ -211,8 +245,8 @@ macro_rules! return_wat_err {
     ($err:expr) => {
         return Err(CompileError {
             msg: format!("Error while parsing WAT: {}", $err),
-            location: TextLocation::default(),
-            error_type: ErrorType::Syntax,
+            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
             file_path: std::path::PathBuf::new(),
         })
     };
@@ -316,6 +350,16 @@ pub fn print_formatted_error(e: CompileError) {
             eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
             e_yellow!("COMPILER BUG - ");
             e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+        }
+
+        ErrorType::Config => {
+            eprint!("\n (-_-)  🔥🔥🔥🔥 ");
+            e_dark_magenta!("{}", relative_dir);
+            eprintln!(" 🔥🔥🔥🔥  <(^~^)/ ");
+            e_yellow!("CONFIG FILE ISSUE- ");
+            e_dark_yellow_ln!(
+                "Malformed config file, something doesn't make sense inside the project config)"
+            );
         }
 
         ErrorType::DevServer => {

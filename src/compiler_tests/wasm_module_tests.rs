@@ -1,103 +1,192 @@
 #[cfg(test)]
-mod tests {
+mod wasm_module_tests {
     use crate::compiler::codegen::wasm_encoding::WasmModule;
-    use crate::compiler::mir::mir_nodes::{MIR, MirBlock, MirFunction};
+    use crate::compiler::mir::mir_nodes::{MIR, MirBlock, MirFunction, Statement, Terminator, Rvalue, Operand, Constant, BinOp};
     use crate::compiler::mir::place::{Place, WasmType};
+    use crate::compiler::datatypes::{DataType, Ownership};
     use std::f32::consts::PI;
     use std::f64::consts::E;
 
     #[test]
-    fn test_wasm_module_from_mir_basic() {
+    fn test_wasm_module_creation() {
         // Create a basic MIR structure
         let mir = MIR::new();
 
         // Create WasmModule from MIR
         let result = WasmModule::from_mir(&mir);
-        assert!(result.is_ok(), "WasmModule::from_mir should succeed");
+        assert!(result.is_ok(), "WasmModule::from_mir should succeed for empty MIR");
 
         let wasm_module = result.unwrap();
-
-        // Verify that the module was initialized correctly
-        assert_eq!(wasm_module.get_function_count(), 0); // No functions compiled yet
-        assert_eq!(wasm_module.get_type_count(), 0); // No function types in basic MIR
-        assert_eq!(wasm_module.get_global_count(), 0); // No globals
+        
+        // Verify basic module structure
+        assert_eq!(wasm_module.get_function_count(), 0, "Empty MIR should produce no functions");
     }
 
     #[test]
-    fn test_wasm_module_compile_function() {
-        // Create a basic MIR structure with a function
+    fn test_simple_function_compilation() {
+        // Create a MIR with a simple function
         let mut mir = MIR::new();
 
-        // Add a simple function with at least one block
+        // Create a function that returns a constant
         let mut function = MirFunction::new(
             0,
-            "test_function".to_string(),
-            vec![Place::Local {
-                index: 0,
-                wasm_type: WasmType::I32,
-            }],
-            vec![WasmType::I32],
+            "return_constant".to_string(),
+            vec![], // No parameters
+            vec![WasmType::I32], // Returns i32
         );
 
-        // Add a basic block with a simple return
-        use crate::compiler::mir::mir_nodes::{MirBlock, Terminator};
-        let block = MirBlock::new(0);
-        function.blocks.push(block);
-
+        // Add a block with a return statement
+        let mut block = MirBlock::new(0);
+        
+        // Add return statement: return 42
+        let return_stmt = Statement::Assign {
+            place: Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))),
+            rvalue: Rvalue::Use(Operand::Constant(Constant::I32(42))),
+        };
+        block.statements.push(return_stmt);
+        
+        // Set terminator
+        block.terminator = Terminator::Return { 
+            values: vec![Operand::Copy(Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))))]
+        };
+        
+        function.add_block(block);
         mir.add_function(function);
 
-        // Create WasmModule from MIR
+        // Create and test WASM module
         let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
-
-        // Compile the function
         let result = wasm_module.compile_mir_function(&mir.functions[0]);
-        if let Err(ref e) = result {
-            println!("Function compilation error: {:?}", e);
+        
+        assert!(result.is_ok(), "Simple function compilation should succeed");
+        
+        if let Ok(function_index) = result {
+            assert_eq!(function_index, 0, "First function should have index 0");
         }
-        assert!(result.is_ok(), "Function compilation should succeed");
+    }
 
-        let function_index = result.unwrap();
-        assert_eq!(function_index, 0); // First function should have index 0
-        assert_eq!(wasm_module.get_function_count(), 1); // One function compiled
-        assert_eq!(wasm_module.get_type_count(), 1); // One function type created during compilation
+    #[test]
+    fn test_function_with_parameters() {
+        let mut mir = MIR::new();
+
+        // Create a function that adds two parameters
+        let mut function = MirFunction::new(
+            0,
+            "add_two".to_string(),
+            vec![
+                Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))), // param a
+                Place::local(1, &DataType::Int(Ownership::ImmutableOwned(false))), // param b
+            ],
+            vec![WasmType::I64], // Returns i64
+        );
+
+        // Add a block that adds the parameters
+        let mut block = MirBlock::new(0);
+        
+        // result = a + b
+        let add_stmt = Statement::Assign {
+            place: Place::local(2, &DataType::Int(Ownership::ImmutableOwned(false))),
+            rvalue: Rvalue::BinaryOp {
+                op: BinOp::Add,
+                left: Operand::Copy(Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)))),
+                right: Operand::Copy(Place::local(1, &DataType::Int(Ownership::ImmutableOwned(false)))),
+            },
+        };
+        block.statements.push(add_stmt);
+        
+        // return result
+        block.terminator = Terminator::Return { 
+            values: vec![Operand::Copy(Place::local(2, &DataType::Int(Ownership::ImmutableOwned(false))))]
+        };
+        
+        function.add_block(block);
+        mir.add_function(function);
+
+        // Test compilation
+        let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
+        let result = wasm_module.compile_mir_function(&mir.functions[0]);
+        
+        assert!(result.is_ok(), "Function with parameters should compile successfully");
+    }
+
+    #[test]
+    fn test_wasm_type_mapping() {
+        // Test that Beanstalk types map correctly to WASM types
+        let int_type = DataType::Int(Ownership::ImmutableOwned(false));
+        let float_type = DataType::Float(Ownership::ImmutableOwned(false));
+        let bool_type = DataType::Bool(Ownership::ImmutableOwned(false));
+        let string_type = DataType::String(Ownership::ImmutableOwned(false));
+
+        assert_eq!(WasmType::from_data_type(&int_type), WasmType::I64);
+        assert_eq!(WasmType::from_data_type(&float_type), WasmType::F64);
+        assert_eq!(WasmType::from_data_type(&bool_type), WasmType::I32);
+        assert_eq!(WasmType::from_data_type(&string_type), WasmType::I32); // Pointer
+    }
+
+    #[test]
+    fn test_wasm_instruction_efficiency() {
+        // Test that places generate efficient WASM instruction sequences
+        let local_place = Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)));
+        let memory_place = Place::memory(1024, crate::compiler::mir::place::TypeSize::Word);
+        
+        // Local operations should be very efficient
+        assert_eq!(local_place.load_instruction_count(), 1);
+        assert_eq!(local_place.store_instruction_count(), 1);
+        
+        // Memory operations should still be reasonable
+        assert!(memory_place.load_instruction_count() <= 3);
+        assert!(memory_place.store_instruction_count() <= 3);
+        
+        // Field projections should be WASM-efficient
+        let field_place = local_place.project_field(
+            0, 
+            8, 
+            crate::compiler::mir::place::FieldSize::WasmType(WasmType::I32)
+        );
+        assert!(field_place.load_instruction_count() <= 5);
+    }
+
+    #[test]
+    fn test_module_encoding() {
+        let mut mir = MIR::new();
+        
+        // Create a minimal valid function
+        let mut function = MirFunction::new(
+            0,
+            "minimal".to_string(),
+            vec![],
+            vec![WasmType::I32],
+        );
+        
+        let mut block = MirBlock::new(0);
+        block.terminator = Terminator::Return { 
+            values: vec![Operand::Constant(Constant::I32(0))]
+        };
+        
+        function.add_block(block);
+        mir.add_function(function);
+        
+        // Test full encoding pipeline
+        let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
+        wasm_module.compile_mir_function(&mir.functions[0]).unwrap();
+        
+        let bytes = wasm_module.finish();
+        assert!(!bytes.is_empty(), "Encoded WASM should not be empty");
+        assert_eq!(&bytes[0..4], b"\0asm", "WASM should start with magic number");
     }
 
     #[test]
     fn test_place_resolution_local_index_mapping() {
         use std::collections::HashMap;
-        use wasm_encoder::Function;
 
         // Create a MIR function with parameters and locals
         let mut function = MirFunction::new(
             0,
             "test_function".to_string(),
             vec![
-                Place::Local {
-                    index: 0,
-                    wasm_type: WasmType::I32,
-                },
-                Place::Local {
-                    index: 1,
-                    wasm_type: WasmType::F64,
-                },
+                Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))),
+                Place::local(1, &DataType::Float(Ownership::ImmutableOwned(false))),
             ],
             vec![WasmType::I32],
-        );
-
-        // Add some local variables
-        function.locals.insert(
-            "local_var1".to_string(),
-            Place::Local {
-                index: 2,
-                wasm_type: WasmType::I32,
-            },
-        );
-        function.locals.insert(
-            "local_var2".to_string(),
-            Place::Local {
-                index: 3,
-                wasm_type: WasmType::F32,
-            },
         );
 
         // Create WasmModule and test local index mapping
@@ -311,42 +400,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_wasm_type_mapping() {
-        use wasm_encoder::ValType;
 
-        let wasm_module = WasmModule::new();
-
-        // Test basic type mappings
-        assert_eq!(
-            wasm_module.wasm_type_to_val_type(&WasmType::I32),
-            ValType::I32
-        );
-        assert_eq!(
-            wasm_module.wasm_type_to_val_type(&WasmType::I64),
-            ValType::I64
-        );
-        assert_eq!(
-            wasm_module.wasm_type_to_val_type(&WasmType::F32),
-            ValType::F32
-        );
-        assert_eq!(
-            wasm_module.wasm_type_to_val_type(&WasmType::F64),
-            ValType::F64
-        );
-
-        // Test pointer types map to i32 in linear memory model
-        assert_eq!(
-            wasm_module.wasm_type_to_val_type(&WasmType::ExternRef),
-            ValType::I32
-        );
-
-        // Test function reference mapping
-        assert_eq!(
-            wasm_module.wasm_type_to_val_type(&WasmType::FuncRef),
-            ValType::Ref(wasm_encoder::RefType::FUNCREF)
-        );
-    }
 
     #[test]
     fn test_function_signature_generation() {

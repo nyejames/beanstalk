@@ -1,5 +1,3 @@
-use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::tokenizer::END_SCOPE_CHAR;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
@@ -33,14 +31,27 @@ pub struct AstBlock {
 }
 pub struct ParserOutput {
     pub ast: AstBlock,
-    pub exports: Vec<Arg>,
+
+    // Top level declarations in the module,
+    // that can be seen by other Beanstalk files
+    pub public: Vec<Arg>,
+
+    // Exported out of the final compiled wasm module
+    // Must use explicit 'export' syntax Token::Export
+    pub external_exports: Vec<Arg>,
     pub warnings: Vec<CompilerWarning>,
 }
 impl ParserOutput {
-    fn new(ast: AstBlock, exports: Vec<Arg>, warnings: Vec<CompilerWarning>) -> ParserOutput {
+    fn new(
+        ast: AstBlock,
+        public: Vec<Arg>,
+        exports: Vec<Arg>,
+        warnings: Vec<CompilerWarning>,
+    ) -> ParserOutput {
         ParserOutput {
             ast,
-            exports,
+            public,
+            external_exports: exports,
             warnings,
         }
     }
@@ -62,7 +73,6 @@ pub enum ContextKind {
     Loop,
     Branch,
     Template,
-    Config,
 }
 
 impl ScopeContext {
@@ -160,7 +170,10 @@ pub fn new_ast(
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
     // TODO: All top level declarations are exports
-    let mut exports = Vec::new();
+    let mut public = Vec::new();
+
+    // TODO: All explicitly exported variables will be exported out of the final wasm module
+    let mut external_exports = Vec::new();
 
     // TODO: Start adding warnings where possible
     let warnings = Vec::new();
@@ -174,7 +187,6 @@ pub fn new_ast(
         ast_log!("Parsing Token: {:?}", current_token);
 
         match current_token {
-
             // Template literals
             // TokenKind::TemplateHead | TokenKind::ParentTemplate => {
             //     // Add the default core HTML styles as the initially unlocked styles
@@ -301,29 +313,29 @@ pub fn new_ast(
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
                         // Assignment operators - handle mutation
-                        TokenKind::Assign | 
-                        TokenKind::AddAssign | 
-                        TokenKind::SubtractAssign | 
-                        TokenKind::MultiplyAssign | 
-                        TokenKind::DivideAssign | 
-                        TokenKind::ExponentAssign | 
-                        TokenKind::RootAssign => {
+                        TokenKind::Assign
+                        | TokenKind::AddAssign
+                        | TokenKind::SubtractAssign
+                        | TokenKind::MultiplyAssign
+                        | TokenKind::DivideAssign
+                        | TokenKind::ExponentAssign
+                        | TokenKind::RootAssign => {
                             ast.push(handle_mutation(token_stream, name, &arg, &context)?);
                         }
-                        
+
                         // Type declarations after variable reference - error (shadowing not supported)
-                        TokenKind::DatatypeInt | 
-                        TokenKind::DatatypeFloat | 
-                        TokenKind::DatatypeBool | 
-                        TokenKind::DatatypeString | 
-                        TokenKind::DatatypeTemplate => {
+                        TokenKind::DatatypeInt
+                        | TokenKind::DatatypeFloat
+                        | TokenKind::DatatypeBool
+                        | TokenKind::DatatypeString
+                        | TokenKind::DatatypeTemplate => {
                             return_rule_error!(
                                 token_stream.current_location(),
                                 "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
                                 name
                             );
                         }
-                        
+
                         // Mutable token after variable reference - this is invalid (shadowing attempt)
                         TokenKind::Mutable => {
                             // Look ahead to see if this is ~= (invalid reassignment attempt)
@@ -341,7 +353,7 @@ pub fn new_ast(
                                 );
                             }
                         }
-                        
+
                         // At top level, a bare variable reference without assignment is a syntax error
                         _ => {
                             return_syntax_error!(
@@ -355,21 +367,25 @@ pub fn new_ast(
 
                 // NEW VARIABLE DECLARATION
                 } else {
-                    let visibility = VarVisibility::Private;
                     let arg = new_arg(token_stream, name, &context)?;
 
-                    if visibility == VarVisibility::Public {
-                        exports.push(arg.to_owned());
+                    let visibility = match token_stream.previous_token() {
+                        TokenKind::Export => {
+                            external_exports.push(arg.to_owned());
+                            VarVisibility::Exported
+                        }
+                        _ => VarVisibility::Private,
+                    };
+
+                    // If this at the top of the module, this is public
+                    if context.kind == ContextKind::Module {
+                        public.push(arg.to_owned());
                     }
 
                     context.add_var(arg.to_owned());
 
                     ast.push(AstNode {
-                        kind: NodeKind::Declaration(
-                            name.to_owned(),
-                            arg.value.to_owned(),
-                            visibility.to_owned(),
-                        ),
+                        kind: NodeKind::Declaration(name.to_owned(), arg.value, visibility),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
                     });
@@ -477,6 +493,12 @@ pub fn new_ast(
                 }
             }
 
+            TokenKind::Export => {
+                // TODO: elaborate all the error cases where the next token is not a symbol
+                // And tell the user you can only export newly declared functions or variables
+                token_stream.advance();
+            }
+
             TokenKind::Eof => {
                 break;
             }
@@ -497,7 +519,8 @@ pub fn new_ast(
             scope: context.scope_name,
             is_entry_point,
         },
-        exports,
+        public,
+        external_exports,
         warnings,
     ))
 }

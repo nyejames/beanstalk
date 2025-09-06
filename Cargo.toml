@@ -4,6 +4,7 @@ show_char_stream = []
 show_tokens = []
 verbose_ast_logging = []
 verbose_eval_logging = []
+verbose_ir_logging = []
 verbose_codegen_logging = []
 
 [package]
@@ -19,8 +20,9 @@ path = "src/main.rs"
 fs_extra = "1.3.0"
 colour = "2.1.0"
 wat = "1.235.0"
-wasmparser = "0.236.0"
+wasmparser = "0.238.1"
 rayon = "1.10.0"
-wasmer = "6.1.0-rc.2"
-wasm-encoder = "0.236.0"
+wasmer = "6.0.1"
+wasm-encoder = "0.238.1"
 wasmer-wasi = "3.1.1"
+wasmer-types = "6.0.1"

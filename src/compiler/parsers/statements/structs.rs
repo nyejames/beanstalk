@@ -14,7 +14,7 @@ use crate::return_syntax_error;
 
 pub fn create_args(
     token_stream: &mut TokenContext,
-    initial_value: Expression,
+    initial_value: Option<Expression>,
     required_args: &[Arg],
     context: &ScopeContext,
 ) -> Result<Vec<Arg>, CompileError> {
@@ -28,7 +28,7 @@ pub fn create_args(
 
             // TODO: Should items be able to be declared as mutable here?
             // check for mutable token before?
-            value: initial_value,
+            value: initial_value.unwrap(),
         }]
     };
 

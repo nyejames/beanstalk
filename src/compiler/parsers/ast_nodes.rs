@@ -62,11 +62,9 @@ pub enum NodeKind {
         // bool, // Function is pure
     ),
 
-    Comment(String),
-
     // Variable names should be the full namespace (module path + variable name)
-    Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility, Type,
-    
+    Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
+
     // Mutation of existing mutable variables
     Mutation(String, Expression), // Variable name, New value
 
@@ -99,9 +97,9 @@ pub enum NodeKind {
 impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::Declaration(_, value, ..) | NodeKind::Expression(value, ..) | NodeKind::Mutation(_, value) => {
-                Ok(value.to_owned())
-            }
+            NodeKind::Declaration(_, value, ..)
+            | NodeKind::Expression(value, ..)
+            | NodeKind::Mutation(_, value) => Ok(value.to_owned()),
             _ => return_compiler_error!(
                 "Compiler tried to get the expression of a node that cannot contain expressions: {:?}",
                 self.kind
