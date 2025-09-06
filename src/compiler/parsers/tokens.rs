@@ -17,11 +17,6 @@ pub enum VarVisibility {
     // Default for anything not at the top level of a file
     Private,
 
-    // Can be seen by other beanstalk files,
-    // but not out of the resulting Wasm module
-    // This is the default for any top level declarations in a file
-    Public,
-
     // Exported out of the Wasm module
     Exported,
 }
@@ -29,9 +24,6 @@ pub enum VarVisibility {
 impl VarVisibility {
     pub fn is_private(&self) -> bool {
         matches!(self, VarVisibility::Private)
-    }
-    pub fn is_public(&self) -> bool {
-        matches!(self, VarVisibility::Public)
     }
     pub fn is_exported(&self) -> bool {
         matches!(self, VarVisibility::Exported)

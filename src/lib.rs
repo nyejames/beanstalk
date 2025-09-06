@@ -8,6 +8,18 @@ mod file_output;
 
 pub mod compiler_tests;
 
+// New runtime and build system modules
+pub mod runtime;
+pub mod build_system {
+    pub mod build_system;
+    pub mod core_build;
+    pub mod embedded_project;
+    pub mod native_project;
+    pub mod html_project;
+    pub mod jit;
+    pub mod repl;
+}
+
 mod compiler {
     pub mod parsers {
         pub mod ast_nodes;
@@ -40,6 +52,7 @@ mod compiler {
     }
 
     pub mod mir {
+        pub mod mir;
         pub mod build_mir;
         pub mod check;
         pub mod dataflow;
@@ -85,6 +98,9 @@ use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use crate::compiler::codegen::build_wasm::new_wasm_module;
+
+// Re-export types for the build system
+pub use build::*;
 
 pub struct OutputModule {
     pub imports: HashSet<PathBuf>,
@@ -169,7 +185,7 @@ impl<'a> Compiler<'a> {
     /// This IR maps well to WASM with integrated borrow checking
     pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
         // Use the new borrow checking pipeline
-        crate::compiler::mir::build_mir::borrow_check_pipeline(ast)
+        crate::compiler::mir::mir::borrow_check_pipeline(ast)
     }
 
     /// -----------------------

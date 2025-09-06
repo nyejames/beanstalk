@@ -65,7 +65,7 @@ pub enum NodeKind {
     Comment(String),
 
     // Variable names should be the full namespace (module path + variable name)
-    Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility, Type,
+    Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
     
     // Mutation of existing mutable variables
     Mutation(String, Expression), // Variable name, New value

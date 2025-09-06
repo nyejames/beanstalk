@@ -200,6 +200,11 @@ impl MirFunction {
         self.blocks.push(block);
     }
 
+    /// Add a local variable to this function
+    pub fn add_local(&mut self, name: String, place: Place) {
+        self.locals.insert(name, place);
+    }
+
     /// Get the block ID for a given program point
     pub fn get_block_for_program_point(&self, point: &ProgramPoint) -> Option<u32> {
         self.program_point_to_block.get(point).copied()

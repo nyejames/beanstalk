@@ -55,7 +55,7 @@ cargo run -- build tests/cases/success
 cargo run -- build tests/cases/failure
 
 # Development testing
-cargo run --features "verbose_ast_logging,verbose_eval_logging,verbose_codegen_logging,detailed_timers" -- build tests/cases/test.bst
+cargo run --features "verbose_ast_logging,verbose_eval_logging,verbose_ir_logging,verbose_codegen_logging,detailed_timers" -- build tests/cases/test.bst
 ```
 
 ## Expected Behavior

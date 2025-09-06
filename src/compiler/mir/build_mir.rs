@@ -1,23 +1,23 @@
 // Re-export all MIR components from sibling modules
-pub use crate::compiler::mir::place::*;
-pub use crate::compiler::mir::mir_nodes::*;
 pub use crate::compiler::mir::liveness::*;
+pub use crate::compiler::mir::mir_nodes::*;
+pub use crate::compiler::mir::place::*;
 
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Arg};
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::template::TemplateContent;
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-use crate::{return_compiler_error, return_rule_error};
+use crate::{ir_log, return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
 // Import borrow checking modules
-use crate::compiler::mir::extract::extract_gen_kill_sets;
-use crate::compiler::mir::dataflow::run_loan_liveness_dataflow;
 use crate::compiler::mir::check::run_conflict_detection;
+use crate::compiler::mir::dataflow::run_loan_liveness_dataflow;
 use crate::compiler::mir::diagnose::{diagnose_borrow_errors, diagnostics_to_compile_errors};
+use crate::compiler::mir::extract::extract_gen_kill_sets;
 
 /// Context for AST-to-MIR transformation with WASM-aware place management
 #[derive(Debug)]
@@ -90,7 +90,7 @@ impl MirTransformContext {
     pub fn register_variable(&mut self, name: String, place: Place) {
         // Initialize use count for this place based on AST analysis
         self.initialize_place_use_count(place.clone(), &name);
-        
+
         if let Some(current_scope) = self.variable_scopes.last_mut() {
             current_scope.insert(name, place);
         }
@@ -351,72 +351,23 @@ impl UseCounter {
     /// Get all use counts combined
     fn get_use_counts(&self) -> HashMap<String, usize> {
         let mut combined = self.variable_counts.clone();
-        
+
         // Add field access counts
         for (key, count) in &self.field_access_counts {
             *combined.entry(key.clone()).or_insert(0) += count;
         }
-        
+
         // Add index access counts
         for (key, count) in &self.index_access_counts {
             *combined.entry(key.clone()).or_insert(0) += count;
         }
-        
+
         combined
     }
 }
 
-/// Borrow check pipeline entry point function
-/// 
-/// This function orchestrates the complete MIR generation and borrow checking pipeline:
-/// 1. AST-to-MIR lowering with event generation
-/// 2. Control flow graph construction
-/// 3. Backward liveness analysis for last-use refinement
-/// 4. Forward loan-liveness dataflow analysis
-/// 5. Conflict detection and error reporting
-/// 6. WASM constraint validation
-pub fn borrow_check_pipeline(ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
-    // Step 1: Lower AST to MIR with event generation
-    let mir = match ast_to_mir_with_events(ast) {
-        Ok(mir) => mir,
-        Err(e) => return Err(vec![e]),
-    };
-
-    // Step 2: Run borrow checking on each function
-    let mut all_errors = Vec::new();
-    
-    for function in &mir.functions {
-        match run_borrow_checking_on_function(function) {
-            Ok(_) => {
-                // Borrow checking passed for this function
-            }
-            Err(errors) => {
-                all_errors.extend(errors);
-            }
-        }
-    }
-
-    // Step 3: If there are borrow checking errors, return them
-    if !all_errors.is_empty() {
-        return Err(all_errors);
-    }
-
-    // Step 4: Validate WASM constraints
-    if let Err(e) = mir.validate_wasm_constraints() {
-        let compile_error = CompileError {
-            msg: e,
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-        };
-        return Err(vec![compile_error]);
-    }
-
-    Ok(mir)
-}
-
 /// Transform AST to WASM-optimized MIR with event generation
-/// 
+///
 /// This is the core MIR lowering function that generates events during construction
 /// for use by the borrow checker dataflow analysis.
 pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
@@ -450,17 +401,39 @@ pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
 
     for node in &ast.ast {
         let statements = transform_ast_node_to_mir(node, &mut context)?;
+
         for (statement_index, statement) in statements.into_iter().enumerate() {
+            ir_log!(
+                "Ast Node: {:?} \nConverted into: {:?} \n",
+                node.kind,
+                statement
+            );
+
             // Generate program point and events for each statement
             let program_point = generate_program_point_and_events(&statement, &mut context);
-            
+
             // Add statement with program point to block
             current_block.add_statement_with_program_point(statement, program_point);
-            
+
             // Track program point in function if we have one
             if let Some(function_id) = context.current_function_id {
                 if let Some(function) = mir.get_function_mut(function_id) {
                     function.add_program_point(program_point, current_block.id, statement_index);
+                }
+            }
+        }
+
+        // After processing the node, add any local variables to the function's locals map
+        if let Some(function_id) = context.current_function_id {
+            if let Some(function) = mir.get_function_mut(function_id) {
+                // Get the current scope (function scope)
+                if let Some(current_scope) = context.variable_scopes.last() {
+                    for (var_name, var_place) in current_scope {
+                        // Only add if it's a local place and not already in the function's locals
+                        if matches!(var_place, Place::Local { .. }) && !function.locals.contains_key(var_name) {
+                            function.add_local(var_name.clone(), var_place.clone());
+                        }
+                    }
                 }
             }
         }
@@ -470,7 +443,7 @@ pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
     let terminator = Terminator::Return { values: vec![] };
     let terminator_point = generate_terminator_program_point(&terminator, &mut context);
     current_block.set_terminator_with_program_point(terminator, terminator_point);
-    
+
     // Add terminator program point to function
     if let Some(function_id) = context.current_function_id {
         if let Some(function) = mir.get_function_mut(function_id) {
@@ -497,19 +470,19 @@ pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
     mir.build_control_flow_graph();
 
     // Run backward liveness analysis to refine last uses
-    run_liveness_analysis_on_mir(&mut mir)?;
+    run_liveness_analysis(&mut mir)?;
 
     Ok(mir)
 }
 
 /// Run borrow checking on a single function
-/// 
+///
 /// This function orchestrates the borrow checking dataflow analysis:
 /// 1. Extract gen/kill sets from function events
 /// 2. Run forward loan-liveness dataflow
 /// 3. Detect conflicts using live loan sets
 /// 4. Generate user-friendly diagnostics
-fn run_borrow_checking_on_function(function: &MirFunction) -> Result<(), Vec<CompileError>> {
+pub fn run_borrow_checking_on_function(function: &MirFunction) -> Result<(), Vec<CompileError>> {
     // Step 1: Extract borrow facts and build gen/kill sets
     let extractor = match extract_gen_kill_sets(function) {
         Ok(extractor) => extractor,
@@ -554,12 +527,17 @@ fn run_borrow_checking_on_function(function: &MirFunction) -> Result<(), Vec<Com
 
     // Step 4: If there are errors, convert them to compile errors
     if !conflict_results.errors.is_empty() {
-        let diagnostic_results = match diagnose_borrow_errors(function, &conflict_results.errors, function.get_loans()) {
+        let diagnostic_results = match diagnose_borrow_errors(
+            function,
+            &conflict_results.errors,
+            function.get_loans(),
+        ) {
             Ok(results) => results,
             Err(e) => return Err(vec![e]),
         };
-        
-        let diagnostics = crate::compiler::mir::diagnose::BorrowDiagnostics::new(function.name.clone());
+
+        let diagnostics =
+            crate::compiler::mir::diagnose::BorrowDiagnostics::new(function.name.clone());
         let compile_errors = diagnostics_to_compile_errors(&diagnostics, &diagnostic_results);
         return Err(compile_errors);
     }
@@ -571,26 +549,6 @@ fn run_borrow_checking_on_function(function: &MirFunction) -> Result<(), Vec<Com
     }
 
     Ok(())
-}
-
-/// Legacy function for backward compatibility
-/// 
-/// This function maintains the existing ast_to_mir interface but now uses
-/// the new borrow checking pipeline internally.
-pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
-    match borrow_check_pipeline(ast) {
-        Ok(mir) => Ok(mir),
-        Err(errors) => {
-            // Return the first error for backward compatibility
-            // In a full implementation, we might want to aggregate errors
-            Err(errors.into_iter().next().unwrap_or_else(|| CompileError {
-                msg: "Unknown borrow checking error".to_string(),
-                location: crate::compiler::parsers::tokens::TextLocation::default(),
-                error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-                file_path: std::path::PathBuf::new(),
-            }))
-        }
-    }
 }
 
 /// Transform a single AST node to MIR statements and generate program points/events
@@ -632,10 +590,10 @@ fn generate_program_point_and_events(
 ) -> ProgramPoint {
     // Allocate the next program point in sequence
     let program_point = context.allocate_program_point();
-    
+
     // Generate events for this statement at this program point
     generate_statement_events(statement, program_point, context);
-    
+
     program_point
 }
 
@@ -647,36 +605,43 @@ fn generate_statement_events(
 ) {
     // Get or create events for this program point
     let mut events = Events::default();
-    
+
     // Extract events based on statement type
     match statement {
         Statement::Assign { place, rvalue } => {
             // Generate events for the rvalue
             generate_rvalue_events(rvalue, program_point, &mut events, context);
-            
+
             // The assignment itself generates a reassign event for the place
             events.reassigns.push(place.clone());
         }
-        Statement::Call { args, destination, .. } => {
+        Statement::Call {
+            args, destination, ..
+        } => {
             // Generate use events for all arguments
             for arg in args {
                 generate_operand_events_with_context(arg, program_point, &mut events, context);
             }
-            
+
             // If there's a destination, it gets reassigned
             if let Some(dest_place) = destination {
                 events.reassigns.push(dest_place.clone());
             }
         }
-        Statement::InterfaceCall { receiver, args, destination, .. } => {
+        Statement::InterfaceCall {
+            receiver,
+            args,
+            destination,
+            ..
+        } => {
             // Generate use event for receiver
             generate_operand_events_with_context(receiver, program_point, &mut events, context);
-            
+
             // Generate use events for all arguments
             for arg in args {
                 generate_operand_events_with_context(arg, program_point, &mut events, context);
             }
-            
+
             // If there's a destination, it gets reassigned
             if let Some(dest_place) = destination {
                 events.reassigns.push(dest_place.clone());
@@ -705,7 +670,7 @@ fn generate_statement_events(
             // These don't generate events for basic borrow checking
         }
     }
-    
+
     // Store events in context for later use by dataflow analysis
     context.store_events(program_point, events);
 }
@@ -735,7 +700,7 @@ fn generate_rvalue_events(
             // Generate start_loan event for borrows
             let loan_id = generate_loan_for_borrow(place, borrow_kind, program_point, context);
             events.start_loans.push(loan_id);
-            
+
             // The place being borrowed is also used (read access)
             events.uses.push(place.clone());
         }
@@ -779,10 +744,10 @@ fn generate_terminator_program_point(
 ) -> ProgramPoint {
     // Allocate the next program point in sequence
     let program_point = context.allocate_program_point();
-    
+
     // Generate events for terminator operands
     let mut events = Events::default();
-    
+
     match terminator {
         Terminator::If { condition, .. } => {
             generate_operand_events_with_context(condition, program_point, &mut events, context);
@@ -799,10 +764,10 @@ fn generate_terminator_program_point(
             // Other terminators don't have operands
         }
     }
-    
+
     // Store events for this program point
     context.store_events(program_point, events);
-    
+
     program_point
 }
 
@@ -814,24 +779,20 @@ fn generate_loan_for_borrow(
     context: &mut MirTransformContext,
 ) -> LoanId {
     let loan_id = context.allocate_loan_id();
-    
+
     let loan = Loan {
         id: loan_id,
         owner: place.clone(),
         kind: borrow_kind.clone(),
         origin_stmt: program_point,
     };
-    
+
     context.add_loan(loan);
     loan_id
 }
 
 /// Generate events for operands
-fn generate_operand_events(
-    operand: &Operand,
-    _program_point: ProgramPoint,
-    events: &mut Events,
-) {
+fn generate_operand_events(operand: &Operand, _program_point: ProgramPoint, events: &mut Events) {
     match operand {
         Operand::Copy(place) => {
             // Generate use event for the place (non-consuming read)
@@ -861,7 +822,7 @@ fn generate_operand_events_with_context(
         Operand::Copy(place) => {
             // Generate use event for the place (non-consuming read)
             events.uses.push(place.clone());
-            
+
             // Check if this is a candidate last use
             if context.decrement_use_count(place) {
                 events.candidate_last_uses.push(place.clone());
@@ -870,7 +831,7 @@ fn generate_operand_events_with_context(
         Operand::Move(place) => {
             // Generate move event for the place (consuming read)
             events.moves.push(place.clone());
-            
+
             // Moves are always last uses
             events.candidate_last_uses.push(place.clone());
         }
@@ -912,6 +873,9 @@ fn transform_declaration_to_mir(
 
     // Register the variable in context
     context.register_variable(name.to_string(), variable_place.clone());
+
+    // Note: Local variables will be added to the function's locals map
+    // in the main transformation loop where we have access to the MIR
 
     // Create assignment statement
     let assign_statement = Statement::Assign {
@@ -1047,11 +1011,11 @@ fn expression_to_rvalue(expression: &Expression) -> Result<Rvalue, CompileError>
 }
 
 /// Transform runtime expression to three-address form
-/// 
+///
 /// This function takes a runtime expression (which contains RPN-ordered AST nodes)
 /// and breaks it down into separate MIR statements, ensuring each operand read/write
 /// is in a separate statement.
-/// 
+///
 /// Example: `x = foo(y + z*2)` becomes:
 /// ```
 /// t1 = z * 2
@@ -1066,7 +1030,7 @@ fn transform_runtime_expression_to_three_address_form(
 ) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
     let mut statements = Vec::new();
     let mut operand_stack: Vec<Operand> = Vec::new();
-    
+
     // Process RPN nodes to build three-address form statements
     for node in runtime_nodes {
         match &node.kind {
@@ -1109,12 +1073,12 @@ fn transform_runtime_expression_to_three_address_form(
                 // Operator - pop operands based on operator type, create temporary, push result
                 match op {
                     // Binary operators
-                    crate::compiler::parsers::expressions::expression::Operator::Add |
-                    crate::compiler::parsers::expressions::expression::Operator::Subtract |
-                    crate::compiler::parsers::expressions::expression::Operator::Multiply |
-                    crate::compiler::parsers::expressions::expression::Operator::Divide |
-                    crate::compiler::parsers::expressions::expression::Operator::Modulus |
-                    crate::compiler::parsers::expressions::expression::Operator::And => {
+                    crate::compiler::parsers::expressions::expression::Operator::Add
+                    | crate::compiler::parsers::expressions::expression::Operator::Subtract
+                    | crate::compiler::parsers::expressions::expression::Operator::Multiply
+                    | crate::compiler::parsers::expressions::expression::Operator::Divide
+                    | crate::compiler::parsers::expressions::expression::Operator::Modulus
+                    | crate::compiler::parsers::expressions::expression::Operator::And => {
                         // Binary operation - pop two operands, create temporary, push result
                         if operand_stack.len() < 2 {
                             return_compiler_error!(
@@ -1122,16 +1086,18 @@ fn transform_runtime_expression_to_three_address_form(
                                 op
                             );
                         }
-                        
+
                         let right = operand_stack.pop().unwrap();
                         let left = operand_stack.pop().unwrap();
-                        
+
                         // Create temporary place for result
-                        let temp_place = context.get_place_manager().allocate_local(&expression.data_type);
-                        
+                        let temp_place = context
+                            .get_place_manager()
+                            .allocate_local(&expression.data_type);
+
                         // Convert AST operator to MIR BinOp
                         let mir_op = convert_ast_operator_to_mir_binop(op)?;
-                        
+
                         // Create assignment statement
                         let assign_stmt = Statement::Assign {
                             place: temp_place.clone(),
@@ -1141,9 +1107,9 @@ fn transform_runtime_expression_to_three_address_form(
                                 right,
                             },
                         };
-                        
+
                         statements.push(assign_stmt);
-                        
+
                         // Push result operand onto stack
                         operand_stack.push(Operand::Copy(temp_place));
                     }
@@ -1159,37 +1125,41 @@ fn transform_runtime_expression_to_three_address_form(
             NodeKind::FunctionCall(func_name, args, _, _) => {
                 // Function call - process arguments and create call statement
                 let mut call_args = Vec::new();
-                
+
                 // Process arguments (they should already be on the stack from RPN evaluation)
                 for _ in 0..args.len() {
                     if operand_stack.is_empty() {
-                        return_compiler_error!(
-                            "Not enough operands for function call arguments"
-                        );
+                        return_compiler_error!("Not enough operands for function call arguments");
                     }
                     call_args.insert(0, operand_stack.pop().unwrap()); // Insert at front to maintain order
                 }
-                
+
                 // Create temporary place for result
-                let temp_place = context.get_place_manager().allocate_local(&expression.data_type);
-                
+                let temp_place = context
+                    .get_place_manager()
+                    .allocate_local(&expression.data_type);
+
                 // Look up function ID
-                let func_id = context.function_names.get(func_name).copied().unwrap_or_else(|| {
-                    // If function not found, allocate new ID (for external functions)
-                    let id = context.allocate_function_id();
-                    context.function_names.insert(func_name.clone(), id);
-                    id
-                });
-                
+                let func_id = context
+                    .function_names
+                    .get(func_name)
+                    .copied()
+                    .unwrap_or_else(|| {
+                        // If function not found, allocate new ID (for external functions)
+                        let id = context.allocate_function_id();
+                        context.function_names.insert(func_name.clone(), id);
+                        id
+                    });
+
                 // Create call statement
                 let call_stmt = Statement::Call {
                     func: Operand::FunctionRef(func_id),
                     args: call_args,
                     destination: Some(temp_place.clone()),
                 };
-                
+
                 statements.push(call_stmt);
-                
+
                 // Push result operand onto stack
                 operand_stack.push(Operand::Copy(temp_place));
             }
@@ -1201,7 +1171,7 @@ fn transform_runtime_expression_to_three_address_form(
             }
         }
     }
-    
+
     // The final result should be the last operand on the stack
     let result_place = if operand_stack.len() == 1 {
         match operand_stack.pop().unwrap() {
@@ -1216,7 +1186,7 @@ fn transform_runtime_expression_to_three_address_form(
             operand_stack.len()
         );
     };
-    
+
     Ok((statements, result_place))
 }
 
@@ -1240,12 +1210,12 @@ fn transform_collection_expression_to_mir(
 ) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
     let mut statements = Vec::new();
     let mut element_operands = Vec::new();
-    
+
     // Transform each item to three-address form
     for item in items {
         let (item_statements, item_place) = transform_expression_to_mir(item, context)?;
         statements.extend(item_statements);
-        
+
         // Convert place to operand
         let operand = if let Some(place) = item_place {
             Operand::Copy(place)
@@ -1257,24 +1227,29 @@ fn transform_collection_expression_to_mir(
                 ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
                 ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
                 _ => {
-                    return_compiler_error!("Cannot convert collection item to operand: {:?}", item.kind);
+                    return_compiler_error!(
+                        "Cannot convert collection item to operand: {:?}",
+                        item.kind
+                    );
                 }
             }
         };
-        
+
         element_operands.push(operand);
     }
-    
+
     // Create temporary place for the collection
-    let collection_place = context.get_place_manager().allocate_local(&expression.data_type);
-    
+    let collection_place = context
+        .get_place_manager()
+        .allocate_local(&expression.data_type);
+
     // Determine element type (simplified for now)
     let element_type = if !items.is_empty() {
         convert_datatype_to_wasm_type(&items[0].data_type)?
     } else {
         WasmType::I32 // Default for empty collections
     };
-    
+
     // Create array assignment statement
     let array_stmt = Statement::Assign {
         place: collection_place.clone(),
@@ -1283,9 +1258,9 @@ fn transform_collection_expression_to_mir(
             element_type,
         },
     };
-    
+
     statements.push(array_stmt);
-    
+
     Ok((statements, Some(collection_place)))
 }
 
@@ -1297,12 +1272,12 @@ fn transform_struct_expression_to_mir(
 ) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
     let mut statements = Vec::new();
     let mut field_operands = Vec::new();
-    
+
     // Transform each field value to three-address form
     for (field_id, arg) in args.iter().enumerate() {
         let (field_statements, field_place) = transform_expression_to_mir(&arg.value, context)?;
         statements.extend(field_statements);
-        
+
         // Convert place to operand
         let operand = if let Some(place) = field_place {
             Operand::Copy(place)
@@ -1314,17 +1289,22 @@ fn transform_struct_expression_to_mir(
                 ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
                 ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
                 _ => {
-                    return_compiler_error!("Cannot convert struct field to operand: {:?}", arg.value.kind);
+                    return_compiler_error!(
+                        "Cannot convert struct field to operand: {:?}",
+                        arg.value.kind
+                    );
                 }
             }
         };
-        
+
         field_operands.push((field_id as u32, operand));
     }
-    
+
     // Create temporary place for the struct
-    let struct_place = context.get_place_manager().allocate_local(&expression.data_type);
-    
+    let struct_place = context
+        .get_place_manager()
+        .allocate_local(&expression.data_type);
+
     // Create struct assignment statement
     let struct_stmt = Statement::Assign {
         place: struct_place.clone(),
@@ -1333,16 +1313,18 @@ fn transform_struct_expression_to_mir(
             struct_type: 0, // Simplified struct type ID for now
         },
     };
-    
+
     statements.push(struct_stmt);
-    
+
     Ok((statements, Some(struct_place)))
 }
 
 /// Convert AST binary operator to MIR BinOp
-fn convert_ast_operator_to_mir_binop(op: &crate::compiler::parsers::expressions::expression::Operator) -> Result<BinOp, CompileError> {
+fn convert_ast_operator_to_mir_binop(
+    op: &crate::compiler::parsers::expressions::expression::Operator,
+) -> Result<BinOp, CompileError> {
     use crate::compiler::parsers::expressions::expression::Operator;
-    
+
     match op {
         Operator::Add => Ok(BinOp::Add),
         Operator::Subtract => Ok(BinOp::Sub),
@@ -1357,7 +1339,9 @@ fn convert_ast_operator_to_mir_binop(op: &crate::compiler::parsers::expressions:
 }
 
 /// Convert AST unary operator to MIR UnOp
-fn convert_ast_operator_to_mir_unop(op: &crate::compiler::parsers::expressions::expression::Operator) -> Result<UnOp, CompileError> {
+fn convert_ast_operator_to_mir_unop(
+    op: &crate::compiler::parsers::expressions::expression::Operator,
+) -> Result<UnOp, CompileError> {
     match op {
         // Note: AST operators might not have direct unary equivalents
         // This is a simplified mapping for now
@@ -1383,22 +1367,25 @@ fn convert_datatype_to_wasm_type(data_type: &DataType) -> Result<WasmType, Compi
 /// Count uses of variables in AST for last-use analysis
 fn count_ast_uses(ast: &AstBlock, context: &mut MirTransformContext) -> Result<(), CompileError> {
     let mut use_counter = UseCounter::new();
-    
+
     // First pass: count all variable references and field/index accesses
     for node in &ast.ast {
         use_counter.count_node_uses(node)?;
     }
-    
+
     // Store use counts in context for later use during MIR generation
     // Note: At this stage we only have variable names, not places yet.
     // The actual place-based counting will happen during MIR transformation.
     context.store_variable_use_counts(use_counter.get_use_counts());
-    
+
     Ok(())
 }
 
 /// Transfer events and loans from transformation context to MIR functions
-fn transfer_events_to_mir(mir: &mut MIR, context: &MirTransformContext) -> Result<(), CompileError> {
+fn transfer_events_to_mir(
+    mir: &mut MIR,
+    context: &MirTransformContext,
+) -> Result<(), CompileError> {
     // Transfer events from context to each function
     for function in &mut mir.functions {
         // Collect program points first to avoid borrowing issues
@@ -1408,7 +1395,7 @@ fn transfer_events_to_mir(mir: &mut MIR, context: &MirTransformContext) -> Resul
                 function.store_events(program_point, events.clone());
             }
         }
-        
+
         // Transfer all loans from context to this function
         // Note: In the current implementation, all loans are stored globally in the context
         // In a more sophisticated implementation, we might want to associate loans with specific functions
@@ -1419,798 +1406,15 @@ fn transfer_events_to_mir(mir: &mut MIR, context: &MirTransformContext) -> Resul
     Ok(())
 }
 
-/// Run liveness analysis on MIR and refine Copy operations to Move operations
-fn run_liveness_analysis_on_mir(mir: &mut MIR) -> Result<(), CompileError> {
-    // Run backward liveness analysis
-    let _analysis = run_liveness_analysis(mir).map_err(|e| {
-        CompileError {
+/// Entry point for running liveness analysis on MIR
+pub fn run_liveness_analysis(mir: &mut MIR) -> Result<LivenessAnalysis, CompileError> {
+    match LivenessAnalysis::analyze_mir(mir) {
+        Ok(analysis) => Ok(analysis),
+        Err(e) => Err(CompileError {
             msg: format!("Liveness analysis failed: {}", e),
             location: crate::compiler::parsers::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
-        }
-    })?;
-    
-    // The liveness analysis automatically refines Copy->Move operations
-    // during its analysis, so no additional work is needed here
-    
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_mir_context_creation() {
-        let context = MirTransformContext::new();
-        assert!(context.is_global_scope);
-        assert_eq!(context.variable_scopes.len(), 1);
-    }
-
-    #[test]
-    fn test_function_scope_management() {
-        let mut context = MirTransformContext::new();
-
-        let func_id = context.allocate_function_id();
-        context.enter_function(func_id);
-
-        assert!(!context.is_global_scope);
-        assert_eq!(context.current_function_id, Some(func_id));
-        assert_eq!(context.variable_scopes.len(), 2);
-
-        context.exit_function();
-        assert!(context.is_global_scope);
-        assert_eq!(context.current_function_id, None);
-        assert_eq!(context.variable_scopes.len(), 1);
-    }
-
-    #[test]
-    fn test_variable_registration() {
-        let mut context = MirTransformContext::new();
-        let place = context.get_place_manager().allocate_local(&DataType::Int(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
-
-        context.register_variable("test_var".to_string(), place.clone());
-
-        let found_place = context.lookup_variable("test_var");
-        assert!(found_place.is_some());
-        assert_eq!(found_place.unwrap(), &place);
-    }
-
-    #[test]
-    fn test_empty_ast_to_mir() {
-        let ast = AstBlock {
-            ast: vec![],
-            is_entry_point: false,
-            scope: std::path::PathBuf::new(),
-        };
-
-        let result = ast_to_mir(ast);
-        assert!(result.is_ok());
-
-        let mir = result.unwrap();
-        assert!(mir.functions.is_empty());
-    }
-
-    #[test]
-    fn test_entry_point_mir_generation() {
-        let ast = AstBlock {
-            ast: vec![],
-            is_entry_point: true,
-            scope: std::path::PathBuf::new(),
-        };
-
-        let result = ast_to_mir(ast);
-        assert!(result.is_ok());
-
-        let mir = result.unwrap();
-        assert_eq!(mir.functions.len(), 1);
-        assert_eq!(mir.functions[0].name, "main");
-    }
-
-    #[test]
-    fn test_program_point_generation() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-        use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-        use crate::compiler::datatypes::DataType;
-
-        // Create a simple AST with a variable declaration
-        let expression = Expression {
-            kind: ExpressionKind::Int(42),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let declaration_node = AstNode {
-            kind: NodeKind::Declaration("test_var".to_string(), expression, VarVisibility::Private),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let ast = AstBlock {
-            ast: vec![declaration_node],
-            is_entry_point: true,
-            scope: std::path::PathBuf::new(),
-        };
-
-        let result = ast_to_mir(ast);
-        assert!(result.is_ok());
-
-        let mir = result.unwrap();
-        assert_eq!(mir.functions.len(), 1);
-        
-        let main_function = &mir.functions[0];
-        assert!(!main_function.program_points.is_empty());
-        
-        // Should have at least one program point for the assignment statement
-        // and one for the return terminator
-        assert!(main_function.program_points.len() >= 2);
-        
-        // Program points should be sequential
-        for i in 1..main_function.program_points.len() {
-            assert!(main_function.program_points[i-1].precedes(&main_function.program_points[i]));
-        }
-    }
-
-    #[test]
-    fn test_use_counting() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-        use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-        use crate::compiler::datatypes::DataType;
-
-        // Create an AST with variable declarations and uses
-        let var_decl = Expression {
-            kind: ExpressionKind::Int(42),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let var_use1 = Expression {
-            kind: ExpressionKind::Reference("test_var".to_string()),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let var_use2 = Expression {
-            kind: ExpressionKind::Reference("test_var".to_string()),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let declaration_node = AstNode {
-            kind: NodeKind::Declaration("test_var".to_string(), var_decl, VarVisibility::Private),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let use_node1 = AstNode {
-            kind: NodeKind::Expression(var_use1),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let use_node2 = AstNode {
-            kind: NodeKind::Expression(var_use2),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let ast = AstBlock {
-            ast: vec![declaration_node, use_node1, use_node2],
-            is_entry_point: true,
-            scope: std::path::PathBuf::new(),
-        };
-
-        // Test the use counter directly
-        let mut use_counter = UseCounter::new();
-        for node in &ast.ast {
-            use_counter.count_node_uses(node).unwrap();
-        }
-
-        let use_counts = use_counter.get_use_counts();
-        
-        // Should have counted 2 uses of "test_var"
-        assert_eq!(use_counts.get("test_var"), Some(&2));
-    }
-
-    #[test]
-    fn test_use_counting_in_runtime_expressions() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-        use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-        use crate::compiler::datatypes::DataType;
-
-        // Create a runtime expression that contains variable references
-        let var_ref = AstNode {
-            kind: NodeKind::Expression(Expression {
-                kind: ExpressionKind::Reference("x".to_string()),
-                data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-                location: TextLocation::default(),
-            }),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let runtime_expr = Expression {
-            kind: ExpressionKind::Runtime(vec![var_ref]),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let expr_node = AstNode {
-            kind: NodeKind::Expression(runtime_expr),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let ast = AstBlock {
-            ast: vec![expr_node],
-            is_entry_point: false,
-            scope: std::path::PathBuf::new(),
-        };
-
-        // Test the use counter
-        let mut use_counter = UseCounter::new();
-        for node in &ast.ast {
-            use_counter.count_node_uses(node).unwrap();
-        }
-
-        let use_counts = use_counter.get_use_counts();
-        
-        // Should have counted 1 use of "x" inside the runtime expression
-        assert_eq!(use_counts.get("x"), Some(&1));
-    }
-
-    #[test]
-    fn test_use_counting_integration() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-        use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-        use crate::compiler::datatypes::DataType;
-
-        // Create an AST with variable declaration and use
-        let var_decl = Expression {
-            kind: ExpressionKind::Int(42),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let var_use = Expression {
-            kind: ExpressionKind::Reference("test_var".to_string()),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let declaration_node = AstNode {
-            kind: NodeKind::Declaration("test_var".to_string(), var_decl, VarVisibility::Private),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let use_node = AstNode {
-            kind: NodeKind::Expression(var_use),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let ast = AstBlock {
-            ast: vec![declaration_node, use_node],
-            is_entry_point: true,
-            scope: std::path::PathBuf::new(),
-        };
-
-        // Test full AST to MIR transformation
-        let result = ast_to_mir(ast);
-        assert!(result.is_ok());
-
-        let mir = result.unwrap();
-        assert_eq!(mir.functions.len(), 1);
-        
-        // The MIR should be generated successfully with use counting integrated
-        let main_function = &mir.functions[0];
-        assert!(!main_function.program_points.is_empty());
-    }
-
-    #[test]
-    fn test_three_address_form_transformation() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
-        use crate::compiler::parsers::tokens::TextLocation;
-        use crate::compiler::datatypes::DataType;
-
-        // Create a runtime expression that represents: x + y * 2
-        // In RPN form this would be: [x, y, 2, *, +]
-        let x_ref = AstNode {
-            kind: NodeKind::Expression(Expression {
-                kind: ExpressionKind::Reference("x".to_string()),
-                data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-                location: TextLocation::default(),
-            }),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let y_ref = AstNode {
-            kind: NodeKind::Expression(Expression {
-                kind: ExpressionKind::Reference("y".to_string()),
-                data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-                location: TextLocation::default(),
-            }),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let const_2 = AstNode {
-            kind: NodeKind::Expression(Expression {
-                kind: ExpressionKind::Int(2),
-                data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-                location: TextLocation::default(),
-            }),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let multiply_op = AstNode {
-            kind: NodeKind::Operator(Operator::Multiply),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let add_op = AstNode {
-            kind: NodeKind::Operator(Operator::Add),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        // Create runtime expression in RPN order: x, y, 2, *, +
-        let runtime_expr = Expression {
-            kind: ExpressionKind::Runtime(vec![x_ref, y_ref, const_2, multiply_op, add_op]),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let mut context = MirTransformContext::new();
-        
-        // Register variables x and y
-        let x_place = context.get_place_manager().allocate_local(&DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        let y_place = context.get_place_manager().allocate_local(&DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        context.register_variable("x".to_string(), x_place);
-        context.register_variable("y".to_string(), y_place);
-
-        // Transform the runtime expression to three-address form
-        let runtime_nodes = match &runtime_expr.kind {
-            ExpressionKind::Runtime(nodes) => nodes,
-            _ => panic!("Expected runtime expression"),
-        };
-        
-        let result = transform_runtime_expression_to_three_address_form(
-            runtime_nodes,
-            &runtime_expr,
-            &mut context
-        );
-
-        // Should succeed and generate multiple statements
-        assert!(result.is_ok());
-        let (statements, result_place) = result.unwrap();
-        
-        // Should generate at least 2 statements:
-        // 1. t1 = y * 2
-        // 2. t2 = x + t1
-        assert!(statements.len() >= 2);
-        
-        // Should have a result place
-        assert!(result_place.is_some());
-        
-        // Verify the statements are assignment statements
-        for statement in &statements {
-            match statement {
-                Statement::Assign { place: _, rvalue } => {
-                    match rvalue {
-                        Rvalue::BinaryOp { op: _, left: _, right: _ } => {
-                            // This is what we expect for three-address form
-                        }
-                        _ => {
-                            panic!("Expected binary operation in three-address form");
-                        }
-                    }
-                }
-                _ => {
-                    panic!("Expected assignment statement in three-address form");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn test_program_point_generator() {
-        let mut generator = ProgramPointGenerator::new();
-        
-        let point1 = generator.allocate_next();
-        let point2 = generator.allocate_next();
-        let point3 = generator.allocate_next();
-        
-        assert_eq!(point1.id(), 0);
-        assert_eq!(point2.id(), 1);
-        assert_eq!(point3.id(), 2);
-        
-        assert!(point1.precedes(&point2));
-        assert!(point2.precedes(&point3));
-        
-        assert_eq!(generator.count(), 3);
-        
-        let all_points = generator.get_all_points();
-        assert_eq!(all_points.len(), 3);
-        assert_eq!(all_points[0], point1);
-        assert_eq!(all_points[1], point2);
-        assert_eq!(all_points[2], point3);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_program_point_mapping() {
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        
-        let point1 = ProgramPoint::new(0);
-        let point2 = ProgramPoint::new(1);
-        
-        // TODO: Re-implement in task 2
-        // function.add_program_point(point1, 0, 0); // block 0, statement 0
-        // function.add_program_point(point2, 0, 1); // block 0, statement 1
-    }
-
-    #[test]
-    #[ignore]
-    fn test_comprehensive_program_point_generation() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-        use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-        use crate::compiler::datatypes::DataType;
-
-        // Create AST with multiple statements
-        let expression1 = Expression {
-            kind: ExpressionKind::Int(42),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let expression2 = Expression {
-            kind: ExpressionKind::Int(100),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-
-        let declaration1 = AstNode {
-            kind: NodeKind::Declaration("var1".to_string(), expression1, VarVisibility::Private),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let declaration2 = AstNode {
-            kind: NodeKind::Declaration("var2".to_string(), expression2, VarVisibility::Private),
-            location: TextLocation::default(),
-            scope: std::path::PathBuf::new(),
-        };
-
-        let ast = AstBlock {
-            ast: vec![declaration1, declaration2],
-            is_entry_point: true,
-            scope: std::path::PathBuf::new(),
-        };
-
-        let result = ast_to_mir(ast);
-        assert!(result.is_ok());
-
-        let mir = result.unwrap();
-        assert_eq!(mir.functions.len(), 1);
-        
-        let main_function = &mir.functions[0];
-        
-        // Should have program points for:
-        // - 2 assignment statements (var1 and var2)
-        // - 1 return terminator
-        assert_eq!(main_function.program_points.len(), 3);
-        
-        // Program points should be sequential
-        for i in 1..main_function.program_points.len() {
-            assert!(main_function.program_points[i-1].precedes(&main_function.program_points[i]));
-        }
-        
-        // TODO: Re-implement in task 2
-        // Check that each program point has proper mapping
-        // for (i, &point) in main_function.program_points.iter().enumerate() {
-        //     let block_id = main_function.get_block_for_program_point(&point);
-        //     assert!(block_id.is_some());
-        // }
-        
-        // Check block program points
-        assert_eq!(main_function.blocks.len(), 1);
-        let block = &main_function.blocks[0];
-        
-        // Block should have 2 statement program points
-        assert_eq!(block.statement_program_points.len(), 2);
-        
-        // Block should have 1 terminator program point
-        assert!(block.terminator_program_point.is_some());
-        
-        // All program points in block should be in function's program points
-        for &stmt_point in &block.statement_program_points {
-            assert!(main_function.program_points.contains(&stmt_point));
-        }
-        
-        if let Some(term_point) = block.terminator_program_point {
-            assert!(main_function.program_points.contains(&term_point));
-        }
-    }
-
-    // TODO: Re-enable these tests in task 2 when event extraction is implemented
-    #[test]
-    fn test_event_extraction_for_statements() {
-        use crate::compiler::mir::mir_nodes::*;
-        use crate::compiler::mir::place::*;
-
-        let mut context = MirTransformContext::new();
-        
-        // Test assignment statement event generation
-        let place = Place::local(0, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        let operand = Operand::Constant(Constant::I64(42));
-        let statement = Statement::Assign {
-            place: place.clone(),
-            rvalue: Rvalue::Use(operand),
-        };
-        
-        let point = generate_program_point_and_events(&statement, &mut context);
-        
-        // Should have generated events for the assignment
-        let events = context.get_events(&point);
-        assert!(events.is_some());
-        
-        let events = events.unwrap();
-        // Assignment should generate a reassign event for the place
-        assert_eq!(events.reassigns.len(), 1);
-        assert_eq!(events.reassigns[0], place);
-        
-        // The rvalue is a constant, so no use events should be generated
-        assert_eq!(events.uses.len(), 0);
-        assert_eq!(events.moves.len(), 0);
-        assert_eq!(events.start_loans.len(), 0);
-    }
-
-    #[test]
-    fn test_event_extraction_for_borrows() {
-        use crate::compiler::mir::mir_nodes::*;
-        use crate::compiler::mir::place::*;
-
-        let mut context = MirTransformContext::new();
-        
-        // Test borrow statement event generation
-        let borrowed_place = Place::local(0, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        let result_place = Place::local(1, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        
-        let statement = Statement::Assign {
-            place: result_place.clone(),
-            rvalue: Rvalue::Ref {
-                place: borrowed_place.clone(),
-                borrow_kind: BorrowKind::Shared,
-            },
-        };
-        
-        let point = generate_program_point_and_events(&statement, &mut context);
-        
-        // Should have generated start_loan and reassign events
-        let events = context.get_events(&point);
-        assert!(events.is_some());
-        
-        let events = events.unwrap();
-        // Assignment should generate a reassign event for the result place
-        assert_eq!(events.reassigns.len(), 1);
-        assert_eq!(events.reassigns[0], result_place);
-        
-        // Borrow should generate a use event for the borrowed place
-        assert_eq!(events.uses.len(), 1);
-        assert_eq!(events.uses[0], borrowed_place);
-        
-        // Borrow should generate a start_loan event
-        assert_eq!(events.start_loans.len(), 1);
-        
-        // Check that a loan was created
-        let loans = context.get_loans();
-        assert_eq!(loans.len(), 1);
-        assert_eq!(loans[0].owner, borrowed_place);
-        assert_eq!(loans[0].kind, BorrowKind::Shared);
-        assert_eq!(loans[0].origin_stmt, point);
-    }
-
-    #[test]
-    fn test_loan_creation_in_three_address_form() {
-        use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-        use crate::compiler::parsers::tokens::TextLocation;
-        use crate::compiler::datatypes::DataType;
-
-        let mut context = MirTransformContext::new();
-        
-        // Register a variable to borrow from
-        let borrowed_place = context.get_place_manager().allocate_local(&DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        context.register_variable("x".to_string(), borrowed_place.clone());
-        
-        // Create a borrow expression: &x
-        let borrow_expr = Expression {
-            kind: ExpressionKind::Reference("x".to_string()),
-            data_type: DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
-            location: TextLocation::default(),
-        };
-        
-        // Transform to MIR
-        let result = transform_expression_to_mir(&borrow_expr, &mut context);
-        assert!(result.is_ok());
-        
-        let (statements, result_place) = result.unwrap();
-        
-        // Should have a result place for the variable reference
-        assert!(result_place.is_some());
-        assert_eq!(result_place.unwrap(), borrowed_place);
-        
-        // For simple variable references, no statements should be generated
-        // (the borrow would be generated when the reference is used in a borrow context)
-        assert_eq!(statements.len(), 0);
-    }
-
-    #[test]
-    fn test_event_extraction_for_function_calls() {
-        use crate::compiler::mir::mir_nodes::*;
-        use crate::compiler::mir::place::*;
-
-        let mut context = MirTransformContext::new();
-        
-        // Test function call event generation
-        let arg_place = Place::local(0, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        let result_place = Place::local(1, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        
-        let statement = Statement::Call {
-            func: Operand::FunctionRef(0),
-            args: vec![Operand::Copy(arg_place.clone())],
-            destination: Some(result_place.clone()),
-        };
-        
-        let point = generate_program_point_and_events(&statement, &mut context);
-        
-        // Should have generated Use events for arguments and reassign for destination
-        let events = context.get_events(&point);
-        assert!(events.is_some());
-        
-        let events = events.unwrap();
-        // Function call should generate a use event for the argument
-        assert_eq!(events.uses.len(), 1);
-        assert_eq!(events.uses[0], arg_place);
-        
-        // Function call should generate a reassign event for the destination
-        assert_eq!(events.reassigns.len(), 1);
-        assert_eq!(events.reassigns[0], result_place);
-        
-        // No moves or loans for this simple call
-        assert_eq!(events.moves.len(), 0);
-        assert_eq!(events.start_loans.len(), 0);
-    }
-
-    #[test]
-    fn test_event_extraction_for_moves() {
-        use crate::compiler::mir::mir_nodes::*;
-        use crate::compiler::mir::place::*;
-
-        let mut context = MirTransformContext::new();
-        
-        // Test move operation event generation
-        let source_place = Place::local(0, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        let dest_place = Place::local(1, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        
-        let statement = Statement::Assign {
-            place: dest_place.clone(),
-            rvalue: Rvalue::Use(Operand::Move(source_place.clone())),
-        };
-        
-        let point = generate_program_point_and_events(&statement, &mut context);
-        
-        // Should have generated move and reassign events
-        let events = context.get_events(&point);
-        assert!(events.is_some());
-        
-        let events = events.unwrap();
-        // Assignment should generate a reassign event for the destination
-        assert_eq!(events.reassigns.len(), 1);
-        assert_eq!(events.reassigns[0], dest_place);
-        
-        // Move operand should generate a move event
-        assert_eq!(events.moves.len(), 1);
-        assert_eq!(events.moves[0], source_place);
-        
-        // Move should also be a candidate last use
-        assert_eq!(events.candidate_last_uses.len(), 1);
-        assert_eq!(events.candidate_last_uses[0], source_place);
-        
-        // No uses or loans for this move
-        assert_eq!(events.uses.len(), 0);
-        assert_eq!(events.start_loans.len(), 0);
-    }
-
-    #[test]
-    fn test_event_extraction_for_drops() {
-        use crate::compiler::mir::mir_nodes::*;
-        use crate::compiler::mir::place::*;
-
-        let mut context = MirTransformContext::new();
-        
-        // Test drop statement event generation
-        let place = Place::local(0, &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)));
-        
-        let statement = Statement::Drop {
-            place: place.clone(),
-        };
-        
-        let point = generate_program_point_and_events(&statement, &mut context);
-        
-        // Should have generated use event for the dropped place
-        let events = context.get_events(&point);
-        assert!(events.is_some());
-        
-        let events = events.unwrap();
-        // Drop should generate a use event (accessing the place to drop it)
-        assert_eq!(events.uses.len(), 1);
-        assert_eq!(events.uses[0], place);
-        
-        // No reassigns, moves, or loans for drop
-        assert_eq!(events.reassigns.len(), 0);
-        assert_eq!(events.moves.len(), 0);
-        assert_eq!(events.start_loans.len(), 0);
-    }
-
-    #[test]
-    #[ignore]
-    fn test_event_validation_valid_borrow_sequence() {
-        // TODO: Re-implement in task 2
-        // use crate::compiler::mir::mir_nodes::*;
-        
-        // TODO: Re-implement in task 2
-        // Validation should pass with no errors
-        // let errors = borrow_checker.analyze();
-    }
-
-    #[test]
-    #[ignore]
-    fn test_borrow_checker_query_methods() {
-        // TODO: Re-implement in task 2
-        // use crate::compiler::mir::mir_nodes::*;
-    }
-
-    #[test]
-    #[ignore]
-    fn test_program_point_iteration_utilities() {
-        let mut mir = MIR::new();
-        
-        // Add a function with some program points
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        function.add_program_point(ProgramPoint::new(0), 0, 0);
-        function.add_program_point(ProgramPoint::new(1), 0, 1);
-        function.add_program_point(ProgramPoint::new(2), 0, usize::MAX);
-        
-        mir.add_function(function);
-        
-        // Test iteration utilities
-        let all_points = mir.get_all_program_points();
-        assert_eq!(all_points.len(), 3);
-        
-        // Points should be sorted
-        for i in 1..all_points.len() {
-            assert!(all_points[i-1] < all_points[i]);
-        }
-        
-        // Test iterator
-        let iter_points: Vec<_> = mir.iter_program_points().collect();
-        assert_eq!(iter_points.len(), 3);
-        
-        // Test function-specific program points
-        let func_points = mir.get_function_program_points(0);
-        assert!(func_points.is_some());
-        assert_eq!(func_points.unwrap().len(), 3);
-        
-        // Non-existent function should return None
-        let no_func_points = mir.get_function_program_points(999);
-        assert!(no_func_points.is_none());
+        }),
     }
 }

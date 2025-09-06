@@ -1,3 +1,4 @@
+use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
 use crate::compiler::compiler_errors::{print_errors, print_formatted_error};
 use crate::compiler_tests::run_all_test_cases;
@@ -15,13 +16,9 @@ enum Command {
     NewHTMLProject(PathBuf),
     Build(PathBuf), // Builds a file or project in development mode
 
-    // Runs a project in development mode and runs the specified (external) function. 
-    // Currently Just supports one file.
-    // TODO: Get the first entry point from the config.
-    // Should error if the function is not external.
-    Run(PathBuf),
+    Run(PathBuf), // Jit the project/file
 
-    Dev(PathBuf),   // Runs local dev server
+    Dev(PathBuf), // Runs local dev server
     Release(PathBuf),
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
     Help,
@@ -32,10 +29,8 @@ pub fn start_cli() {
     let compiler_args: Vec<String> = env::args().collect();
 
     if compiler_args.len() < 2 {
-        // TODO: This should start a little wasmer runtime
-        // For running small snippets of Beanstalk code
-        // Should have very fast uptime and won't need to be well optimised output.
-        print_help(false);
+        // Start REPL session for running small snippets of Beanstalk code
+        repl::start_repl_session();
         return;
     }
 
@@ -86,8 +81,7 @@ pub fn start_cli() {
         }
 
         Command::Run(path) => {
-            // 
-            let files = build_project(&path, false, &flags);
+            jit_project(&path, &flags);
         }
 
         Command::Release(path) => {
@@ -164,6 +158,16 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             }
         }
 
+        Some("run") => {
+            let entry_path = env::current_dir()
+                .map_err(|e| format!("Error getting current directory: {:?}", e))?;
+
+            match args.get(1).map(String::as_str) {
+                Some(string) => Ok(Command::Run(entry_path.join(string))),
+                _ => Ok(Command::Run(entry_path)),
+            }
+        }
+
         Some("release") => {
             let entry_path = env::current_dir()
                 .map_err(|e| format!("Error getting current directory: {:?}", e))?;
@@ -206,14 +210,37 @@ fn build_project(path: &Path, release_build: bool, flags: &[Flag]) {
     let start = Instant::now();
 
     match build::build_project_files(path, release_build, flags) {
-        Ok(_) => {
+        Ok(project) => {
             let duration = start.elapsed();
+
+            // Show build results
+            println!("Build completed successfully");
+            println!("Generated {} output file(s)", project.output_files.len());
+
             grey_ln!("------------------------------------");
             print!("\nProject built in: ");
             green_ln_bold!("{:?}", duration);
         }
         Err(e) => {
             e_red_ln!("Errors while building project: \n");
+            print_errors(e);
+        }
+    }
+}
+
+fn jit_project(path: &Path, flags: &[Flag]) {
+    use crate::build_system::build_system::BuildTarget;
+    let start = Instant::now();
+
+    match build::build_project_files_with_target(&path, false, &flags, Some(BuildTarget::Jit)) {
+        Ok(_project) => {
+            let duration = start.elapsed();
+            grey_ln!("------------------------------------");
+            print!("\nJIT run in: ");
+            green_ln_bold!("{:?}", duration);
+        }
+        Err(e) => {
+            e_red_ln!("Errors while running project: \n");
             print_errors(e);
         }
     }

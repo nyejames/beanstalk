@@ -3,8 +3,10 @@ use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::return_type_error;
+use crate::runtime::RuntimeConfig;
+use crate::{return_config_error, return_type_error};
 use std::path::PathBuf;
+use wasmer_types::target::Target;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";
@@ -23,10 +25,24 @@ pub const EXPORTS_CAPACITY: usize = 6; // (No Idea atm)
 pub const TOKEN_TO_NODE_RATIO: usize = 10; // (Maybe) About 1/10 tokens to AstNode ratio
 pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols the smallest common Ast blocks will likely have
 
+#[derive(Clone)]
+pub enum ProjectType {
+    HTML,
+    Native(Target),
+    Embedded,
+    Jit, // Don't create output files, just run the code
+}
+
+impl Default for ProjectType {
+    fn default() -> Self {
+        ProjectType::HTML
+    }
+}
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct Config {
     pub name: String,
-    pub project_type: String,
+    pub project_type: ProjectType,
     pub entry_point: PathBuf,
     pub src: PathBuf,
     pub dev_folder: PathBuf,
@@ -35,12 +51,15 @@ pub struct Config {
     pub author: String,
     pub license: String,
     pub html_meta: HTMLMeta,
+
+    // New runtime and build system configuration
+    pub runtime: RuntimeConfig,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            project_type: String::from("html"),
+            project_type: ProjectType::default(),
             entry_point: PathBuf::from("src/main").with_extension(BEANSTALK_FILE_EXTENSION),
             src: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
@@ -50,11 +69,15 @@ impl Default for Config {
             author: String::new(),
             license: String::from("MIT"),
             html_meta: HTMLMeta::default(),
+
+            // New configuration defaults
+            runtime: RuntimeConfig::for_development(),
         }
     }
 }
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct HTMLMeta {
     pub site_title: String,
     pub page_description: String,
@@ -111,9 +134,39 @@ pub fn get_config_from_ast(
         match arg.name.as_str() {
             "project" => {
                 project_config.project_type = match &arg.value.kind {
-                    ExpressionKind::String(value) => value.to_owned(),
+                    ExpressionKind::String(value) => match value.as_str() {
+                        "" => ProjectType::default(),
+                        _ => return_type_error!(
+                            TextLocation::default(),
+                            "Project type must be a string"
+                        ),
+                    },
                     _ => {
-                        return_type_error!(TextLocation::default(), "Project name must be a string")
+                        return_type_error!(TextLocation::default(), "Project type must be a string")
+                    }
+                };
+            }
+
+            "runtime_backend" => {
+                project_config.runtime = match &arg.value.kind {
+                    ExpressionKind::String(value) => match value.as_str() {
+                        "web" => RuntimeConfig::for_html_release(),
+                        "" => {
+                            // Default backend for the project type
+                            RuntimeConfig::for_native_release()
+                        }
+                        _ => {
+                            return_config_error!(
+                                TextLocation::default(),
+                                "Runtime backend must be a string"
+                            )
+                        }
+                    },
+                    _ => {
+                        return_type_error!(
+                            TextLocation::default(),
+                            "Runtime backend must be a string"
+                        )
                     }
                 };
             }

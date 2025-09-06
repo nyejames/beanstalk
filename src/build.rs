@@ -1,14 +1,10 @@
-use crate::compiler::codegen::build_wasm::new_wasm_module;
+use crate::build_system::build_system::{create_project_builder, determine_build_target, BuildTarget};
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
-use crate::compiler::module_dependencies::resolve_module_dependencies;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
+use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
-use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
-use crate::settings::{get_config_from_ast, Config, BEANSTALK_FILE_EXTENSION, EXPORTS_CAPACITY};
-use crate::{Compiler, Flag, return_file_errors, settings, timer_log};
-use colour::{dark_cyan_ln, dark_yellow_ln, green_ln, print_bold, print_ln_bold};
-use rayon::prelude::*;
+use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
+use crate::{Flag, return_file_errors, settings};
+use colour::{dark_cyan_ln, dark_yellow_ln, print_bold, print_ln_bold, red_ln};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -33,45 +29,45 @@ pub fn build_project_files(
     release_build: bool,
     flags: &[Flag],
 ) -> Result<Project, Vec<CompileError>> {
-    // Create a new PathBuf from the entry_path
+    build_project_files_with_target(entry_path, release_build, flags, None)
+}
+
+pub fn build_project_files_with_target(
+    entry_path: &Path,
+    release_build: bool,
+    flags: &[Flag],
+    target_override: Option<BuildTarget>,
+) -> Result<Project, Vec<CompileError>> {
     let time = Instant::now();
-    
+
     let entry_dir = match std::env::current_dir() {
         Ok(dir) => dir.join(entry_path),
         Err(e) => return_file_errors!(entry_path, "Error getting current directory: {:?}", e),
     };
 
-    // Read content from a test file
     print_ln_bold!("Project Directory: ");
     dark_yellow_ln!("{:?}", &entry_dir);
 
     let mut beanstalk_modules_to_parse: Vec<InputModule> = Vec::with_capacity(1);
-    // TODO: Parse mt files (Markthrough - Beanstalk's special markdown format)
-    let mut markthrough_modules_to_parse: Vec<InputModule> = Vec::new();
-
     let mut project_config = Config::default();
 
-    // check to see if there is a config.bst file in this directory
-    // if there is, read it and set the config settings
-    // and check where the project entry points are
+    // Determine if this is a single file or project directory
     enum CompileType {
         SingleBeanstalkFile(String), // Source Code
-        MultiFile(String),  // Config Source Code
-        SingleMarkthroughFile(String), // Source Code
+        MultiFile(String),           // Config Source Code
+        #[allow(dead_code)]
+        SingleMarkthroughFile(String), // Source Code - for future use
     }
 
-    // Single BST file
     let project_config_type = if entry_dir.extension() == Some(BEANSTALK_FILE_EXTENSION.as_ref()) {
+        // Single BST file
         let source_code = fs::read_to_string(&entry_dir);
         match source_code {
             Ok(content) => CompileType::SingleBeanstalkFile(content),
             Err(e) => return_file_errors!(entry_dir, "Error reading file: {:?}", e),
         }
-
-    // TODO: Single mt file
-
-    // Full project with a config file
     } else {
+        // Full project with a config file
         dark_cyan_ln!("Reading project config...");
 
         let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
@@ -82,28 +78,20 @@ pub fn build_project_files(
         }
     };
 
-    // TODO: project global imports
-    // (config file imports that are available to the entire project without the need for importing explicitly)
-    let mut _global_imports: Vec<String> = Vec::new();
-
+    // Parse configuration and collect modules
     match project_config_type {
         CompileType::SingleBeanstalkFile(code) => {
             beanstalk_modules_to_parse.push(InputModule {
                 source_code: code,
                 source_path: entry_path.to_owned(),
             });
-
-            if !flags.contains(&Flag::DisableTimers) {
-                print!("File Read In: ");
-                green_ln!("{:?}", time.elapsed());
-            }
         }
 
-        CompileType::SingleMarkthroughFile(code) => {
-            markthrough_modules_to_parse.push(InputModule {
-                source_code: code,
-                source_path: entry_path.to_owned(),
-            });
+        CompileType::SingleMarkthroughFile(_code) => {
+            // TODO: Handle Markthrough files in the future
+            return Err(vec![CompileError::compiler_error(
+                "Markthrough files not yet supported",
+            )]);
         }
 
         CompileType::MultiFile(config_source_code) => {
@@ -113,146 +101,56 @@ pub fn build_project_files(
             let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path)
             {
                 Ok(tokens) => tokens,
-                Err(e) => {
-                    return Err(vec![e.with_file_path(config_path)]);
-                }
-            };
-
-            let ast_context = ScopeContext::new(ContextKind::Config, config_path.to_owned(), &[]);
-
-            let config_module_exports = match new_ast(&mut tokenizer_output, ast_context, true) {
-                Ok(module) => module.exports,
                 Err(e) => return Err(vec![e.with_file_path(config_path)]),
             };
 
-            // If reading the config threw and error, get out of here.
-            if let Err(e) = get_config_from_ast(config_module_exports, &mut project_config) {
+            let ast_context = ScopeContext::new(ContextKind::Module, config_path.to_owned(), &[]);
+
+            let config_public_vars = match new_ast(&mut tokenizer_output, ast_context, true) {
+                Ok(module) => module.public,
+                Err(e) => return Err(vec![e.with_file_path(config_path)]),
+            };
+
+            // Parse configuration from AST
+            if let Err(e) = get_config_from_ast(config_public_vars, &mut project_config) {
                 return Err(vec![e.with_file_path(config_path)]);
             }
 
             let src_dir = entry_dir.join(&project_config.src);
-            let output_dir = match release_build {
+            let _output_dir = match release_build {
                 true => entry_dir.join(&project_config.release_folder),
                 false => entry_dir.join(&project_config.dev_folder),
             };
 
-            add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &output_dir, &src_dir)?;
-
-            if !flags.contains(&Flag::DisableTimers) {
-                print!("Files Read In: ");
-                green_ln!("{:?}", time.elapsed());
-            }
+            add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &src_dir)?;
         }
     }
 
     // ----------------------------------
-    // BUILD REST OF PROJECT AFTER CONFIG
+    // DETERMINE BUILD TARGET AND BUILDER
     // ----------------------------------
-    print_bold!("\nCompiling: ");
-    dark_yellow_ln!("{:?}", project_config.src);
-    let _time = Instant::now();
-    let compiler = Compiler::new(&project_config);
+    // If no override, read it from the config
+    let build_target = target_override.unwrap_or_else(|| determine_build_target(&project_config, entry_path));
+    
+    let project_builder = create_project_builder(build_target);
+
+    print_bold!("\nCompiling with target: ");
+    dark_yellow_ln!("{:?}", project_builder.target_type());
 
     // ----------------------------------
-    //         Token generation
+    // BUILD PROJECT USING APPROPRIATE BUILDER
     // ----------------------------------
-    // Compile each module to tokens and collect them all
-    let project_tokens: Vec<Result<TokenContext, CompileError>> = beanstalk_modules_to_parse
-        .par_iter()
-        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
-        .collect();
-    timer_log!(time, "Tokenized in: ");
-
-    // Return any compilation errors and sort modules into dependency order
-    // Once the compiler has created a dependency graph,
-    // each AST creation can also export it's public variables for type checking,
-    // and successive ast blocks can type check properly.
-    // Circular dependencies are disallowed
-    let _time = Instant::now();
-    let sorted_modules = resolve_module_dependencies(project_tokens)?;
-    timer_log!(time, "Dependency graph created in: ");
-
-    // ----------------------------------
-    //          AST generation
-    // ----------------------------------
-    // Keep Track of new exported declarations (so modules importing them know their types)
-    let time = Instant::now();
-    let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
-    let mut errors: Vec<CompileError> = Vec::new();
-    let mut ast_blocks: Vec<AstBlock> = Vec::with_capacity(sorted_modules.len());
-    for module in sorted_modules {
-        match compiler.tokens_to_ast(module, &exported_declarations) {
-            Ok(parser_output) => {
-                exported_declarations.extend(parser_output.exports);
-                ast_blocks.push(parser_output.ast);
-            }
-            Err(e) => {
-                errors.push(e);
-            }
-        }
-    }
-
-    // Return any errors that have been found so far
-    if !errors.is_empty() {
-        return Err(errors);
-    }
-
-    if !flags.contains(&Flag::DisableTimers) {
-        print!("AST created in: ");
-        green_ln!("{:?}", time.elapsed());
-    }
-
-    // TODO
-    // -----------------------------------
-    //       Link together the ASTs
-    // -----------------------------------
-    // TODO: Split up how asts are bundled together into modules
-    // based on how the config is set up
-    let mut module: Vec<AstNode> = Vec::new();
-    for block in ast_blocks {
-        module.extend(block.ast);
-    }
-
-    // ----------------------------------
-    //          MIR generation
-    // ----------------------------------
-    let mir = match compiler.ast_to_ir(AstBlock {
-        ast: module,
-        is_entry_point: true,
-        scope: project_config.entry_point.to_owned(),
-    }) {
-        Ok(mir) => {
-            if !flags.contains(&Flag::DisableTimers) {
-                print!("MIR generated in: ");
-                green_ln!("{:?}", time.elapsed());
-            }
-            mir
-        }
-        Err(e) => return Err(e),
-    };
-
-    // ----------------------------------
-    //          Wasm generation
-    // ----------------------------------
-    let wasm = match new_wasm_module(mir) {
-        Ok(w) => w,
-        Err(e) => return Err(vec![e])
-    };
-
-    // ----------------------------------
-    //          Build Structure
-    // ----------------------------------
-    // TODO: Add other output files
-    Ok(Project {
-        config: project_config,
-        output_files: vec![OutputFile::Wasm(wasm)],
-    })
+    project_builder.build_project(
+        beanstalk_modules_to_parse,
+        &project_config,
+        release_build,
+        flags,
+    )
 }
 
 // Look for every subdirectory inside the dir and add all .bst files to the source_code_to_parse
 fn add_bst_files_to_parse(
     source_code_to_parse: &mut Vec<InputModule>,
-    output_dir: &Path,
     project_root_dir: &Path,
 ) -> Result<(), Vec<CompileError>> {
     // Can't just use the src_dir from config, because this might be recursively called for new subdirectories
@@ -319,11 +217,8 @@ fn add_bst_files_to_parse(
 
                 // If directory, recursively call add_bs_files_to_parse
                 } else if file_path.is_dir() {
-                    // Add the new directory folder to the output directory
-                    let new_output_dir = output_dir.join(file_path.file_stem().unwrap());
-
                     // Recursively call add_bst_files_to_parse on the new directory
-                    add_bst_files_to_parse(source_code_to_parse, &new_output_dir, &file_path)?;
+                    add_bst_files_to_parse(source_code_to_parse, &file_path)?;
 
                     // HANDLE USING JS / HTML / CSS MIXED INTO THE PROJECT
                 }
