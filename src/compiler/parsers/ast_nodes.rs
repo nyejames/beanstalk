@@ -1,5 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, Operator};
@@ -74,9 +73,6 @@ pub enum NodeKind {
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
     Print(Expression), // Value,
-
-    // Not even sure if this is needed
-    JSStringReference(String), // Variable name,
 
     // Other language code blocks
     JS(String),  // Code,

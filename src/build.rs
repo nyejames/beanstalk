@@ -1,10 +1,12 @@
-use crate::build_system::build_system::{create_project_builder, determine_build_target, BuildTarget};
-use crate::compiler::compiler_errors::{CompileError, ErrorType};
+use crate::build_system::build_system::{
+    BuildTarget, create_project_builder, determine_build_target,
+};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
 use crate::{Flag, return_file_errors, settings};
-use colour::{dark_cyan_ln, dark_yellow_ln, print_bold, print_ln_bold, red_ln};
+use colour::{dark_cyan_ln, dark_yellow_ln, print_bold, print_ln_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -130,8 +132,9 @@ pub fn build_project_files_with_target(
     // DETERMINE BUILD TARGET AND BUILDER
     // ----------------------------------
     // If no override, read it from the config
-    let build_target = target_override.unwrap_or_else(|| determine_build_target(&project_config, entry_path));
-    
+    let build_target =
+        target_override.unwrap_or_else(|| determine_build_target(&project_config, entry_path));
+
     let project_builder = create_project_builder(build_target);
 
     print_bold!("\nCompiling with target: ");

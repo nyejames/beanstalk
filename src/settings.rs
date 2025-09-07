@@ -1,5 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::tokens::TextLocation;

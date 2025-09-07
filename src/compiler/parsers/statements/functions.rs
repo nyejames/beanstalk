@@ -1,4 +1,3 @@
-use crate::compiler::compiler_errors::ErrorType;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
@@ -9,7 +8,6 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
-use crate::compiler::parsers::statements::structs::create_args;
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
@@ -113,7 +111,7 @@ pub fn create_function_signature(
                     Ownership::ImmutableOwned(false)
                 }));
             }
-            TokenKind::DatatypeTemplate => {
+            TokenKind::DatatypeStyle => {
                 if !next_in_list {
                     return_syntax_error!(
                         token_stream.current_location(),

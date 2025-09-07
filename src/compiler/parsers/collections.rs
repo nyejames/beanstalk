@@ -1,5 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;

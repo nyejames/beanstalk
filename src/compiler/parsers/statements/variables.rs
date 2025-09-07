@@ -1,5 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::build_ast::{ScopeContext, new_ast};
@@ -116,7 +115,7 @@ pub fn new_arg(
         TokenKind::DatatypeFloat => data_type = DataType::Float(ownership),
         TokenKind::DatatypeBool => data_type = DataType::Bool(ownership),
         TokenKind::DatatypeString => data_type = DataType::String(ownership),
-        TokenKind::DatatypeTemplate => data_type = DataType::Template(ownership),
+        TokenKind::DatatypeStyle => data_type = DataType::Template(ownership),
 
         // Collection Type Declaration
         TokenKind::OpenCurly => {
@@ -172,7 +171,7 @@ pub fn new_arg(
     token_stream.advance();
 
     match token_stream.current_token_kind() {
-        TokenKind::Assign  => {
+        TokenKind::Assign => {
             token_stream.advance();
         }
 

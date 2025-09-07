@@ -9,7 +9,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
 use crate::{timer_log, Flag, InputModule, Project};
-use colour::{green_ln, grey_ln};
+use colour::green_ln;
 
 pub struct JitProjectBuilder {
     target: BuildTarget,

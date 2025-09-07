@@ -61,6 +61,7 @@ mod compiler {
         pub mod liveness;
         pub mod mir_nodes;
         pub mod place;
+        pub mod counter;
     }
 
     mod html5_codegen {
@@ -185,7 +186,7 @@ impl<'a> Compiler<'a> {
     /// This IR maps well to WASM with integrated borrow checking
     pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
         // Use the new borrow checking pipeline
-        crate::compiler::mir::mir::borrow_check_pipeline(ast)
+        compiler::mir::mir::borrow_check_pipeline(ast)
     }
 
     /// -----------------------

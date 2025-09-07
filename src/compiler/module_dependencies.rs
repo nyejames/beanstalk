@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::{CompileError, ErrorType};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use crate::return_rule_error;
 use std::collections::{HashMap, HashSet};

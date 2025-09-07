@@ -301,39 +301,33 @@ pub enum TokenKind {
     Eof,                 // End of the file
 
     // Module Import/Export
-    Import, // Directed through a different path so not needed after tokenizer.
+    /// For Wasm files or host environment - importing from a different module or the host
+    Import,
 
-    // For exporting functions or variables outside the final module.
-    // Top level declarations are public to the project automatically,
-    // So this has nothing to do with internal visibility.
+    /// For other Beanstalk files - indicates using public items from another file
+    Use,
+
+    /// For exporting functions or variables outside the final module.
+    /// Top level declarations are public to the project automatically,
+    /// So this has nothing to do with internal visibility.
     Export,
 
-    // HTML project compiler directives
-    Print,
-    Log,
+    // Special compiler directives
+    /// The only way to manually force a panic in the compiler in release mode
     Panic,
+
+    /// Only compiled into debug/dev mode
     Assert,
 
-    Comptime,
-    Settings,
-    Page,
-    Component,
-    Title,
-    Date,
     Wat(String), // WAT codeblock (for testing WASM)
 
     // Scene Style properties
-    Markdown,     // Makes the scene Markdown
-    ChildDefault, // This scene will become a template default for all child scenes of the parent
-    Ignore,       // for commenting out an entire scene
-    CodeKeyword,
+    Ignore, // for commenting the out an entire scene
 
-    // Standard Library (eventually - to be moved there)
-    Math,
-
-    // Variables / Functions
+    // Function Signatures
     Arrow,
 
+    /// Variable name
     Symbol(String),
 
     // Literals
@@ -371,22 +365,28 @@ pub enum TokenKind {
 
     // Type Declarations
     Mutable,
-    Choice, // ::
+    Choice,
 
     // Datatypes
+    DatatypeNone,
     DatatypeInt,
     DatatypeFloat,
     DatatypeBool,
     DatatypeString,
-    DatatypeTemplate,
-    DatatypeNone,
+    /// For templates, the style of the template, not the template itself
+    /// This is built into the compiler for optimisation and isn't a primitive
+    DatatypeStyle,
 
+    /// Not yet implemented,
+    /// Design of async and concurrency is still being considered
     Async,
 
+    /// For Errors
     Bang,
+    /// For Options
     QuestionMark,
 
-    //Mathematical Operators
+    // Mathematical Operators
     Negative,
 
     Exponent,
@@ -420,6 +420,7 @@ pub enum TokenKind {
     Or,
 
     // Control Flow
+    /// If statements and match statements
     If,
     Else,
     ElseIf,
@@ -429,6 +430,10 @@ pub enum TokenKind {
     Continue,
     Return,
     Defer,
+
+    // Pattern matching
+    Wildcard, // _
+    Range,    // ..
 
     // Memory Management
     Copy,
@@ -442,7 +447,6 @@ pub enum TokenKind {
     Id(String), // ID for scenes
 
     Empty,
-    // Pre(String), // Content inside raw elements. Might change to not be a format tag in the future
 }
 
 impl TokenKind {
@@ -462,7 +466,7 @@ impl TokenKind {
             TokenKind::DatatypeFloat => Some(DataType::Float(ownership)),
             TokenKind::DatatypeBool => Some(DataType::Bool(ownership)),
             TokenKind::DatatypeString => Some(DataType::String(ownership)),
-            TokenKind::DatatypeTemplate => Some(DataType::Template(ownership)),
+            TokenKind::DatatypeStyle => Some(DataType::Template(ownership)),
             _ => None,
         }
     }

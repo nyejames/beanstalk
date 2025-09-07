@@ -5,7 +5,6 @@
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::{CraneliftOptLevel, RuntimeConfig};
-use std::hash::Hasher;
 use wasmer::sys::{Cranelift, CraneliftOptLevel as WasmerCraneliftOptLevel};
 use wasmer::{Instance, Module, Store};
 

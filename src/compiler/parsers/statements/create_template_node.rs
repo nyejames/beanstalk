@@ -1,4 +1,3 @@
-use crate::compiler::compiler_errors::ErrorType;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
@@ -8,7 +7,7 @@ use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::statements::structs::create_args;
-use crate::compiler::parsers::template::{Style, StyleFormat, TemplateContent, TemplateType};
+use crate::compiler::parsers::template::{Style, TemplateContent, TemplateType};
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::return_syntax_error;
@@ -127,10 +126,6 @@ pub fn new_template(
                 return Ok(Template::slot(template_id, token_stream.current_location()));
             }
 
-            TokenKind::Markdown => {
-                template_style.format = StyleFormat::Markdown;
-            }
-
             // If this is a template, we have to do some clever parsing here
             TokenKind::Symbol(name) => {
                 // TODO - sort all this out.
@@ -237,11 +232,6 @@ pub fn new_template(
 
             // Newlines / empty things in the scene head are ignored
             TokenKind::Newline | TokenKind::Empty => {}
-
-            TokenKind::CodeKeyword => {
-                template_style.format = StyleFormat::Codeblock;
-                template_style.child_default = None;
-            }
 
             TokenKind::OpenParenthesis => {
                 let structure = create_args(token_stream, None, &[], &context)?;

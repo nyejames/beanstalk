@@ -1,8 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::parsers::tokens::TextLocation;
-use crate::settings::Config;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
+use crate::settings::Config;
 use crate::{Flag, build, return_dev_server_error, settings};
 use colour::{blue_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
@@ -27,7 +25,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileEr
     let path = get_current_dir()?.join(path);
 
     let project_config = build::build_project_files(&path, false, flags)?;
-    
+
     // TODO: Now separately build all the runtime hooks / project structure
 
     let mut modified = SystemTime::UNIX_EPOCH;

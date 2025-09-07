@@ -1,11 +1,11 @@
-use crate::compiler::compiler_errors::{CompileError, ErrorType};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::mir::mir_nodes::{
-    BorrowError, BorrowErrorType, InvalidationType, MirFunction, ProgramPoint, 
-    Loan, LoanId, BorrowKind
+    BorrowError, BorrowErrorType, BorrowKind, InvalidationType, Loan, LoanId, MirFunction,
+    ProgramPoint,
 };
 use crate::compiler::mir::place::Place;
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::{return_rule_error, return_compiler_error};
+use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
 /// Comprehensive error diagnostics for MIR borrow checking
@@ -189,28 +189,31 @@ impl BorrowDiagnostics {
     }
 
     /// Generate comprehensive diagnostic for a borrow error
-    pub fn diagnose_borrow_error(&self, error: &BorrowError) -> Result<DiagnosticResult, CompileError> {
+    pub fn diagnose_borrow_error(
+        &self,
+        error: &BorrowError,
+    ) -> Result<DiagnosticResult, CompileError> {
         match &error.error_type {
-            BorrowErrorType::ConflictingBorrows { existing_borrow, new_borrow, place } => {
-                self.diagnose_conflicting_borrows(error, existing_borrow, new_borrow, place)
-            }
+            BorrowErrorType::ConflictingBorrows {
+                existing_borrow,
+                new_borrow,
+                place,
+            } => self.diagnose_conflicting_borrows(error, existing_borrow, new_borrow, place),
             BorrowErrorType::UseAfterMove { place, move_point } => {
                 self.diagnose_use_after_move(error, place, *move_point)
             }
-            BorrowErrorType::BorrowAcrossOwnerInvalidation { 
-                borrowed_place, 
-                owner_place, 
-                invalidation_point, 
-                invalidation_type 
-            } => {
-                self.diagnose_borrow_across_invalidation(
-                    error, 
-                    borrowed_place, 
-                    owner_place, 
-                    *invalidation_point, 
-                    invalidation_type
-                )
-            }
+            BorrowErrorType::BorrowAcrossOwnerInvalidation {
+                borrowed_place,
+                owner_place,
+                invalidation_point,
+                invalidation_type,
+            } => self.diagnose_borrow_across_invalidation(
+                error,
+                borrowed_place,
+                owner_place,
+                *invalidation_point,
+                invalidation_type,
+            ),
         }
     }
 
@@ -251,10 +254,7 @@ impl BorrowDiagnostics {
                 )
             }
             _ => {
-                format!(
-                    "Conflicting borrows of `{}` detected",
-                    place_name
-                )
+                format!("Conflicting borrows of `{}` detected", place_name)
             }
         };
 
@@ -294,7 +294,7 @@ impl BorrowDiagnostics {
                     code_example: Some(format!("-- Use the existing borrow of `{}`", place_name)),
                     confidence: SuggestionConfidence::Medium,
                 });
-                
+
                 suggestions.push(DiagnosticSuggestion {
                     description: "Or ensure the immutable borrow is no longer needed before creating the mutable borrow".to_string(),
                     code_example: Some("-- Make sure all uses of the immutable borrow happen before the mutable borrow".to_string()),
@@ -310,7 +310,8 @@ impl BorrowDiagnostics {
             }
             _ => {
                 suggestions.push(DiagnosticSuggestion {
-                    description: "Ensure borrows don't overlap in time by restructuring the code".to_string(),
+                    description: "Ensure borrows don't overlap in time by restructuring the code"
+                        .to_string(),
                     code_example: None,
                     confidence: SuggestionConfidence::Medium,
                 });
@@ -415,7 +416,9 @@ impl BorrowDiagnostics {
                 note_type: DiagnosticNoteType::Origin,
             },
             DiagnosticNote {
-                message: "Dropped values cannot be used because their memory has been freed for safety".to_string(),
+                message:
+                    "Dropped values cannot be used because their memory has been freed for safety"
+                        .to_string(),
                 location: None,
                 note_type: DiagnosticNoteType::Explanation,
             },
@@ -428,7 +431,9 @@ impl BorrowDiagnostics {
                 confidence: SuggestionConfidence::High,
             },
             DiagnosticSuggestion {
-                description: "Consider extending the lifetime of the value by restructuring your code".to_string(),
+                description:
+                    "Consider extending the lifetime of the value by restructuring your code"
+                        .to_string(),
                 code_example: None,
                 confidence: SuggestionConfidence::Medium,
             },
@@ -460,7 +465,7 @@ impl BorrowDiagnostics {
         let (action, explanation) = match invalidation_type {
             InvalidationType::Move => (
                 "moved",
-                "When the owner is moved, all borrows of it become invalid"
+                "When the owner is moved, all borrows of it become invalid",
             ),
         };
 
@@ -486,7 +491,10 @@ impl BorrowDiagnostics {
             InvalidationType::Move => vec![
                 DiagnosticSuggestion {
                     description: "Use the borrow before moving the owner".to_string(),
-                    code_example: Some(format!("-- Use `{}` before moving `{}`", borrowed_name, owner_name)),
+                    code_example: Some(format!(
+                        "-- Use `{}` before moving `{}`",
+                        borrowed_name, owner_name
+                    )),
                     confidence: SuggestionConfidence::High,
                 },
                 DiagnosticSuggestion {
@@ -510,12 +518,12 @@ impl BorrowDiagnostics {
     pub fn to_compile_error(&self, diagnostic: &DiagnosticResult) -> CompileError {
         // Build the full error message with notes and suggestions
         let mut full_message = diagnostic.message.clone();
-        
+
         // Add notes
         for note in &diagnostic.notes {
             full_message.push_str(&format!("\n  note: {}", note.message));
         }
-        
+
         // Add suggestions
         if !diagnostic.suggestions.is_empty() {
             full_message.push_str("\n  help:");
@@ -526,7 +534,7 @@ impl BorrowDiagnostics {
                 }
             }
         }
-        
+
         // Add WASM context if available
         if let Some(wasm_context) = &diagnostic.wasm_context {
             full_message.push_str(&format!("\n  WASM context: {}", wasm_context));
@@ -552,14 +560,17 @@ impl BorrowDiagnostics {
     // Helper methods
 
     /// Get source location for a program point
-    fn get_location_for_program_point(&self, point: &ProgramPoint) -> Result<TextLocation, CompileError> {
+    fn get_location_for_program_point(
+        &self,
+        point: &ProgramPoint,
+    ) -> Result<TextLocation, CompileError> {
         self.program_point_locations
             .get(point)
             .cloned()
             .ok_or_else(|| {
                 CompileError::new_rule_error(
                     format!("No source location found for program point {}", point),
-                    TextLocation::default()
+                    TextLocation::default(),
                 )
             })
     }
@@ -664,7 +675,7 @@ impl BorrowDiagnostics {
     /// Format the complete diagnostic message
     fn format_diagnostic_message(&self, diagnostic: &DiagnosticResult) -> String {
         let mut message = diagnostic.message.clone();
-        
+
         // Add notes
         for note in &diagnostic.notes {
             match note.note_type {
@@ -682,30 +693,33 @@ impl BorrowDiagnostics {
                 }
             }
         }
-        
+
         // Add suggestions
         if !diagnostic.suggestions.is_empty() {
             message.push_str("\n  = help:");
             for (i, suggestion) in diagnostic.suggestions.iter().enumerate() {
                 let confidence_marker = match suggestion.confidence {
                     SuggestionConfidence::High => "💡",
-                    SuggestionConfidence::Medium => "💭", 
+                    SuggestionConfidence::Medium => "💭",
                     SuggestionConfidence::Low => "🤔",
                 };
-                
-                message.push_str(&format!("\n    {} {}", confidence_marker, suggestion.description));
-                
+
+                message.push_str(&format!(
+                    "\n    {} {}",
+                    confidence_marker, suggestion.description
+                ));
+
                 if let Some(code) = &suggestion.code_example {
                     message.push_str(&format!("\n      Example: {}", code));
                 }
-                
+
                 // Add separator between suggestions
                 if i < diagnostic.suggestions.len() - 1 {
                     message.push_str("\n");
                 }
             }
         }
-        
+
         message
     }
 }
@@ -714,7 +728,7 @@ impl BorrowDiagnostics {
 fn borrow_kind_description(kind: &BorrowKind) -> &'static str {
     match kind {
         BorrowKind::Shared => "immutable",
-        BorrowKind::Mut => "mutable", 
+        BorrowKind::Mut => "mutable",
         BorrowKind::Unique => "unique",
     }
 }
@@ -726,7 +740,7 @@ pub fn diagnose_borrow_errors(
     loans: &[Loan],
 ) -> Result<Vec<DiagnosticResult>, CompileError> {
     let mut diagnostics = BorrowDiagnostics::new(function.name.clone());
-    
+
     // Add loan origin information
     for loan in loans {
         // In a real implementation, we'd get the actual source location from the loan
@@ -738,7 +752,7 @@ pub fn diagnose_borrow_errors(
         );
         diagnostics.add_loan_origin(loan, location, description);
     }
-    
+
     // Generate diagnostics for each error
     let mut results = Vec::new();
     for error in errors {
@@ -757,7 +771,7 @@ pub fn diagnose_borrow_errors(
             }
         }
     }
-    
+
     Ok(results)
 }
 
@@ -807,10 +821,13 @@ mod tests {
         let mut diagnostics = BorrowDiagnostics::new("test".to_string());
         let point = ProgramPoint::new(0);
         let location = TextLocation::default();
-        
+
         diagnostics.add_program_point_location(point, location.clone());
-        
-        assert_eq!(diagnostics.program_point_locations.get(&point), Some(&location));
+
+        assert_eq!(
+            diagnostics.program_point_locations.get(&point),
+            Some(&location)
+        );
     }
 
     #[test]
@@ -819,9 +836,9 @@ mod tests {
         let loan = create_test_loan();
         let location = TextLocation::default();
         let description = "test borrow".to_string();
-        
+
         diagnostics.add_loan_origin(&loan, location.clone(), description.clone());
-        
+
         let origin = diagnostics.loan_origins.get(&loan.id).unwrap();
         assert_eq!(origin.location, location);
         assert_eq!(origin.description, description);
@@ -831,11 +848,17 @@ mod tests {
     #[test]
     fn test_format_place_name() {
         let diagnostics = BorrowDiagnostics::new("test".to_string());
-        
-        let local = Place::Local { index: 5, wasm_type: WasmType::I32 };
+
+        let local = Place::Local {
+            index: 5,
+            wasm_type: WasmType::I32,
+        };
         assert_eq!(diagnostics.format_place_name(&local), "local variable #5");
-        
-        let global = Place::Global { index: 3, wasm_type: WasmType::F64 };
+
+        let global = Place::Global {
+            index: 3,
+            wasm_type: WasmType::F64,
+        };
         assert_eq!(diagnostics.format_place_name(&global), "global variable #3");
     }
 
@@ -849,8 +872,11 @@ mod tests {
     #[test]
     fn test_wasm_context_generation() {
         let diagnostics = BorrowDiagnostics::new("test".to_string());
-        let place = Place::Local { index: 2, wasm_type: WasmType::F32 };
-        
+        let place = Place::Local {
+            index: 2,
+            wasm_type: WasmType::F32,
+        };
+
         let context = diagnostics.generate_wasm_context_for_place(&place);
         assert!(context.contains("WASM local 2"));
         assert!(context.contains("F32"));
@@ -865,7 +891,7 @@ mod tests {
             suggestions: vec![],
             wasm_context: None,
         };
-        
+
         assert_eq!(result.message, "Test error");
         assert!(result.notes.is_empty());
         assert!(result.suggestions.is_empty());
@@ -878,7 +904,7 @@ mod tests {
             location: Some(TextLocation::default()),
             note_type: DiagnosticNoteType::Origin,
         };
-        
+
         assert_eq!(note.message, "Test note");
         assert_eq!(note.note_type, DiagnosticNoteType::Origin);
         assert!(note.location.is_some());
@@ -891,7 +917,7 @@ mod tests {
             code_example: Some("example code".to_string()),
             confidence: SuggestionConfidence::High,
         };
-        
+
         assert_eq!(suggestion.description, "Try this fix");
         assert_eq!(suggestion.confidence, SuggestionConfidence::High);
         assert!(suggestion.code_example.is_some());
@@ -903,7 +929,7 @@ mod tests {
         let point = ProgramPoint::new(0);
         let location = TextLocation::default();
         diagnostics.add_program_point_location(point, location);
-        
+
         let place = create_test_place();
         let error = BorrowError {
             point,
@@ -915,10 +941,10 @@ mod tests {
             message: "Test conflict".to_string(),
             location: TextLocation::default(),
         };
-        
+
         let result = diagnostics.diagnose_borrow_error(&error);
         assert!(result.is_ok());
-        
+
         let diagnostic = result.unwrap();
         assert!(diagnostic.message.contains("Cannot borrow"));
         assert!(diagnostic.message.contains("mutable"));
@@ -931,10 +957,10 @@ mod tests {
         let point = ProgramPoint::new(1);
         let move_point = ProgramPoint::new(0);
         let location = TextLocation::default();
-        
+
         diagnostics.add_program_point_location(point, location.clone());
         diagnostics.add_program_point_location(move_point, location);
-        
+
         let place = create_test_place();
         let error = BorrowError {
             point,
@@ -945,10 +971,10 @@ mod tests {
             message: "Test use after move".to_string(),
             location: TextLocation::default(),
         };
-        
+
         let result = diagnostics.diagnose_borrow_error(&error);
         assert!(result.is_ok());
-        
+
         let diagnostic = result.unwrap();
         assert!(diagnostic.message.contains("Use of moved value"));
         assert!(!diagnostic.suggestions.is_empty());
@@ -959,10 +985,10 @@ mod tests {
         let function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
         let errors = vec![];
         let loans = vec![];
-        
+
         let result = diagnose_borrow_errors(&function, &errors, &loans);
         assert!(result.is_ok());
-        
+
         let diagnostics = result.unwrap();
         assert!(diagnostics.is_empty()); // No errors to diagnose
     }

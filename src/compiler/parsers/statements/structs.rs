@@ -1,4 +1,3 @@
-use crate::compiler::compiler_errors::ErrorType;
 #[allow(unused_imports)]
 use colour::grey_ln;
 

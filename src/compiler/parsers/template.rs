@@ -1,15 +1,14 @@
-use crate::compiler::compiler_errors::ErrorType;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::markdown::to_markdown;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
-use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
 
 #[derive(Debug)]
 pub enum TemplateType {
@@ -23,8 +22,11 @@ pub struct TemplateContent {
     pub after: Vec<Expression>,
 }
 impl TemplateContent {
-    pub fn new(content: Vec<Expression>) -> TemplateContent{
-        TemplateContent { before: Vec::new(), after: content }
+    pub fn new(content: Vec<Expression>) -> TemplateContent {
+        TemplateContent {
+            before: Vec::new(),
+            after: content,
+        }
     }
 
     pub fn default() -> Self {
@@ -228,13 +230,13 @@ pub fn parse_template(
 
             ExpressionKind::Runtime(_nodes) => {
                 // TODO
-            },
+            }
 
             ExpressionKind::Reference(name) => {
                 // TODO: Variable references in templates - if reference can't be folded at compile time,
                 // evaluation and string coercion must happen at runtime
                 content.push_str(&format!("${}", name));
-            },
+            }
 
             ExpressionKind::Function(..) => {
                 return_rule_error!(

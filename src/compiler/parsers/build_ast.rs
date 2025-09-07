@@ -8,7 +8,6 @@ use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
-use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
@@ -17,7 +16,6 @@ use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokenizer::PRINT_KEYWORD;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
@@ -328,7 +326,7 @@ pub fn new_ast(
                         | TokenKind::DatatypeFloat
                         | TokenKind::DatatypeBool
                         | TokenKind::DatatypeString
-                        | TokenKind::DatatypeTemplate => {
+                        | TokenKind::DatatypeStyle => {
                             return_rule_error!(
                                 token_stream.current_location(),
                                 "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
@@ -420,23 +418,6 @@ pub fn new_ast(
             TokenKind::Newline | TokenKind::Empty => {
                 // Skip standalone newlines / empty tokens
                 token_stream.advance();
-            }
-
-            TokenKind::Print => {
-                // Move past the print keyword
-                token_stream.advance();
-
-                ast.push(parse_function_call(
-                    token_stream,
-                    PRINT_KEYWORD,
-                    &context.new_child_function(PRINT_KEYWORD, &[]),
-                    // Print does not return anything
-                    &[Arg {
-                        name: String::new(),
-                        value: Expression::string(String::new(), token_stream.current_location()),
-                    }],
-                    &[],
-                )?);
             }
 
             TokenKind::Return => {

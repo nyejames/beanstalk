@@ -1,6 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_wat_err;
 use std::fs;
 use std::path::{Path, PathBuf};

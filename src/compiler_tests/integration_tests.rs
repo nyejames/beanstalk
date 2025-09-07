@@ -6,11 +6,6 @@ use wasmer::{Instance, Module, Store, Value, imports};
 
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 // Simplified integration tests - full pipeline testing will be added later
-use crate::compiler::mir::liveness::run_liveness_analysis;
-use crate::compiler::mir::extract::extract_gen_kill_sets;
-use crate::compiler::mir::dataflow::run_loan_liveness_dataflow;
-use crate::compiler::mir::check::run_conflict_detection;
-use crate::compiler::codegen::wasm_encoding::WasmModule;
 
 #[derive(Clone)]
 struct TestCase {

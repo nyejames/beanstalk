@@ -1,6 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::{OutputModule, return_file_error};
 use std::fs;
 use std::path::Path;
@@ -40,7 +38,7 @@ pub fn write_wasm_module(_module: OutputModule, file_path: &Path) -> Result<(), 
     // if let Err(e) = validate(&wasm) {
     //     return_file_error!(file_path, "Error validating WASM module: {:?}", e)
     // }
-    // 
+    //
     // // Write the wasm file to the same directory
     // match fs::write(file_path.with_extension("wasm"), wasm) {
     //     Ok(_) => {}

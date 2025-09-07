@@ -104,6 +104,9 @@ pub fn compile_modules(
     // ----------------------------------
     //      Dependency resolution
     // ----------------------------------
+    // TODO: Imports are known at this stage,
+    // so should be creating the vec of required imports here.
+    // Imports from host environment or from other modules should be separated and treated differently.
     let time = Instant::now();
     let sorted_modules = resolve_module_dependencies(project_tokens)?;
     timer_log!(time, "Dependency graph created in: ");
@@ -176,9 +179,9 @@ pub fn compile_modules(
         green_ln!("{:?}", time.elapsed());
     }
 
-    // ----------------------------------
-    //    Extract required imports
-    // ----------------------------------
+    // -----------------------------------
+    //      Extract required imports
+    // -----------------------------------
     let required_imports = extract_required_imports(&exported_declarations);
     let exported_functions = extract_exported_functions(&exported_declarations);
 

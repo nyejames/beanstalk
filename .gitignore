@@ -14,3 +14,4 @@ test_output/
 .cursorignore
 .kiro/
 /.github/instructions
+/.clinerules

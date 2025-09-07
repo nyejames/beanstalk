@@ -60,4 +60,6 @@ pub use integration_tests::run_all_test_cases;
 
 // Re-export essential test functions
 #[cfg(test)]
-pub use test_runner::{run_essential_tests, run_performance_benchmarks, validate_wasm_optimizations};
+pub use test_runner::{
+    run_essential_tests, run_performance_benchmarks, validate_wasm_optimizations,
+};

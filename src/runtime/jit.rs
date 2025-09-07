@@ -5,8 +5,7 @@
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::{IoBackend, RuntimeConfig};
-use std::sync::Arc;
-use wasmer::{Function, FunctionType, Instance, Module, Store, Type, Value, imports};
+use wasmer::{Function, Instance, Module, Store, imports};
 
 /// Execute WASM bytecode directly using JIT compilation
 pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(), CompileError> {

@@ -1,10 +1,13 @@
-use crate::compiler::{compiler_errors::CompileError, mir::build_mir::{ast_to_mir_with_events, run_borrow_checking_on_function, MIR}, parsers::build_ast::AstBlock};
+use crate::compiler::{
+    compiler_errors::CompileError,
+    mir::build_mir::{MIR, ast_to_mir_with_events, run_borrow_checking_on_function},
+    parsers::build_ast::AstBlock,
+};
 
 /// WASM-optimized Mid-level Intermediate Representation (MIR) with simplified borrow checking
 ///
 /// This module contains the MIR implementation designed specifically for efficient WASM
 /// generation with simple dataflow-based borrow checking using program points and events.
-
 
 /// Borrow check pipeline entry point function
 ///

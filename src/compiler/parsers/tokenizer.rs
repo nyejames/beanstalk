@@ -1,4 +1,3 @@
-use crate::compiler::compiler_errors::ErrorType;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 use std::collections::HashSet;
@@ -171,14 +170,14 @@ pub fn get_token_kind(
             return_token!(TokenKind::Colon, stream);
         }
 
-        // ::
-        if let Some(&next_char) = stream.peek() {
-            if next_char == ':' {
-                stream.next();
-
-                return_token!(TokenKind::Choice, stream);
-            }
-        }
+        // :: (not currently using)
+        // if let Some(&next_char) = stream.peek() {
+        //     if next_char == ':' {
+        //         stream.next();
+        //
+        //         return_token!(TokenKind::Choice, stream);
+        //     }
+        // }
 
         return_token!(TokenKind::Colon, stream);
     }
@@ -195,10 +194,10 @@ pub fn get_token_kind(
     // Check for character literals
     if current_char == '\'' {
         if let Some(c) = stream.next() {
-            if let Some(&char_after_next) = stream.peek() {
-                if char_after_next == '\'' {
-                    return_token!(TokenKind::CharLiteral(c), stream);
-                }
+            if let Some(&char_after_next) = stream.peek()
+                && char_after_next == '\''
+            {
+                return_token!(TokenKind::CharLiteral(c), stream);
             }
         };
 
@@ -272,11 +271,7 @@ pub fn get_token_kind(
                 }
 
                 // Do not add any token to the stream, call this function again
-                return get_token_kind(
-                    stream,
-                    template_nesting_level,
-                    imports
-                )
+                return get_token_kind(stream, template_nesting_level, imports);
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -423,6 +418,11 @@ pub fn get_token_kind(
         )
     }
 
+    // Wildcard for pattern matching
+    if current_char == '_' {
+        return_token!(TokenKind::Wildcard, stream);
+    }
+
     // Numbers
     if current_char.is_numeric() {
         token_value.push(current_char);
@@ -435,6 +435,7 @@ pub fn get_token_kind(
             }
 
             if next_char == '.' {
+                // TODO: Range ..
                 dot_count += 1;
                 // Stop if too many dots
                 if dot_count > 1 {
@@ -478,9 +479,6 @@ pub fn get_token_kind(
     )
 }
 
-pub const PRINT_KEYWORD: &str = "print";
-const LOG_KEYWORD: &str = "log";
-
 fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
@@ -518,10 +516,6 @@ fn keyword_or_variable(
             "as" => return_token!(TokenKind::As, stream),
             "copy" => return_token!(TokenKind::Copy, stream),
 
-            // Built-In functions
-            LOG_KEYWORD => return_token!(TokenKind::Log, stream),
-            PRINT_KEYWORD => return_token!(TokenKind::Print, stream),
-
             // Logical
             "is" => return_token!(TokenKind::Is, stream),
             "not" => return_token!(TokenKind::Not, stream),
@@ -541,7 +535,7 @@ fn keyword_or_variable(
 
             "None" => return_token!(TokenKind::DatatypeNone, stream),
 
-            "Template" => return_token!(TokenKind::DatatypeTemplate, stream),
+            "Template" => return_token!(TokenKind::DatatypeStyle, stream),
 
             _ => {}
         }
@@ -590,17 +584,10 @@ fn compiler_directive(
             "assert" => return_token!(TokenKind::Assert, stream),
             "panic" => return_token!(TokenKind::Panic, stream),
 
-            // Compiler settings
-            "settings" => return_token!(TokenKind::Settings, stream),
-            "title" => return_token!(TokenKind::Title, stream),
-            "date" => return_token!(TokenKind::Date, stream),
-
             // External language blocks
             "WAT" => return_token!(TokenKind::Wat(string_block(stream)?), stream),
 
-            // Scene Style properties
-            "markdown" => return_token!(TokenKind::Markdown, stream),
-            "child_default" => return_token!(TokenKind::ChildDefault, stream),
+            // Special template tokens
             "slot" => return_token!(TokenKind::Slot, stream),
 
             _ => {
