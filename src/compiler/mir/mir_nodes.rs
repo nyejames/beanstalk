@@ -393,6 +393,7 @@ pub enum Statement {
     },
 
     /// Interface method call (vtable dispatch)
+    /// Interfaces will be dynamically dispatched at runtime
     InterfaceCall {
         interface_id: u32,
         method_id: u32,

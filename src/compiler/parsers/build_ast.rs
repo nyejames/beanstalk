@@ -167,10 +167,7 @@ pub fn new_ast(
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
-    // TODO: All top level declarations are exports
     let mut public = Vec::new();
-
-    // TODO: All explicitly exported variables will be exported out of the final wasm module
     let mut external_exports = Vec::new();
 
     // TODO: Start adding warnings where possible

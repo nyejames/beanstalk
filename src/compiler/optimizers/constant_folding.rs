@@ -97,7 +97,7 @@ impl Expression {
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
                         self.location.to_owned(),
-                        "Cannot perform operation {} on floats",
+                        "Can't perform operation {} on floats",
                         op.to_str()
                     ),
                 }
@@ -112,14 +112,14 @@ impl Expression {
                     Operator::Divide => {
                         // Handle division by zero and integer division
                         if *rhs_val == 0 {
-                            return_rule_error!(self.location.to_owned(), "Cannot divide by zero")
+                            return_rule_error!(self.location.to_owned(), "Can't divide by zero")
                         }
 
                         ExpressionKind::Int(lhs_val / rhs_val)
                     }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
-                            return_rule_error!(self.location.to_owned(), "Cannot modulus by zero")
+                            return_rule_error!(self.location.to_owned(), "Can't modulus by zero")
                         }
 
                         ExpressionKind::Int(lhs_val % rhs_val)
@@ -145,9 +145,14 @@ impl Expression {
                     Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
                     Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
 
+                    Operator::Range => ExpressionKind::Range(
+                        Box::new(Expression::int(lhs_val.clone(), self.location.to_owned())),
+                        Box::new(Expression::int(rhs_val.clone(), self.location.to_owned())),
+                    ),
+
                     _ => return_rule_error!(
                         self.location.to_owned(),
-                        "Cannot perform operation {} on integers",
+                        "Can't perform operation {} on integers",
                         op.to_str()
                     ),
                 }
@@ -162,7 +167,7 @@ impl Expression {
 
                 _ => return_rule_error!(
                     self.location.to_owned(),
-                    "Cannot perform operation {} on booleans",
+                    "Can't perform operation {} on booleans",
                     op.to_str()
                 ),
             },
@@ -174,7 +179,7 @@ impl Expression {
                 Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                 _ => return_rule_error!(
                     self.location.to_owned(),
-                    "Cannot perform operation {} on strings",
+                    "Can't perform operation {} on strings",
                     op.to_str()
                 ),
             },

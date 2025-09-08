@@ -106,6 +106,9 @@ impl AstNode {
     pub fn get_precedence(&self) -> u32 {
         match &self.kind {
             NodeKind::Operator(op) => match op {
+                // Special Operators with the highest precedence
+                Operator::Range => 6,
+
                 // Highest precedence: exponentiation
                 Operator::Exponent => 5,
                 Operator::Root => 5,

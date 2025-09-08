@@ -51,12 +51,12 @@ impl TemplateContent {
 }
 
 // Template Config Type
-// This is passed into a scene head to configure how it should be parsed
+// This is passed into a template head to configure how it should be parsed
 #[derive(Clone, Debug, PartialEq)]
 pub struct Style {
     // pub slot: Wrapper,
 
-    // A callback functions for how the string content of the scene should be parsed
+    // A callback functions for how the string content of the template should be parsed
     // If at all
     pub format: StyleFormat,
 
@@ -78,7 +78,7 @@ pub struct Style {
 
     pub compatibility: TemplateCompatibility,
 
-    // Scenes that this style will unlock
+    // templates that this style will unlock
     pub unlocked_templates: HashMap<String, ExpressionKind>,
 
     // If this is true, no unlocked styles will be inherited from the parent
@@ -102,7 +102,7 @@ impl Style {
     }
 }
 
-// A trait for how the content of a scene should be parsed
+// A trait for how the content of a template should be parsed
 // This is used for Markdown, codeblocks, comments
 // THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
@@ -162,9 +162,9 @@ pub fn parse_template(
     // Compatibility
     // More restrictive compatibility takes precedence over less restrictive ones
     // match style.compatibility {
-    //     SceneCompatibility::None => {
-    //         if final_style.compatibility != SceneCompatibility::None {
-    //             final_style.compatibility = SceneCompatibility::None;
+    //     TemplateCompatibility::None => {
+    //         if final_style.compatibility != TemplateCompatibility::None {
+    //             final_style.compatibility = TemplateCompatibility::None;
     //         }
     //     }
     //     // TODO: check compatibility of templates
@@ -173,7 +173,7 @@ pub fn parse_template(
 
     // Inlining rule
     // TODO: what the hell is this?
-    // Something to do with how surrounding scenes are parsed with this one.
+    // Something to do with how surrounding templates are parsed with this one.
     // final_style.neighbour_rule = style.neighbour_rule.to_owned();
 
     // Now we start combining everything into one string
@@ -184,7 +184,7 @@ pub fn parse_template(
     // so Markdown will parse any added literals correctly
     let mut content = String::new();
 
-    // Scene content
+    // template content
     for value in template_body.flatten() {
         match &value.kind {
             ExpressionKind::String(string) => {
@@ -222,9 +222,9 @@ pub fn parse_template(
 
             ExpressionKind::None => {
                 // Ignore this
-                // Currently 'ignored' or hidden scenes result in a None value being added to a scene,
+                // Currently 'ignored' or hidden templates result in a None value being added to a template,
                 // So it's not an error
-                // Hopefully the compiler will always catch unintended use of None in scenes.
+                // Hopefully the compiler will always catch unintended use of None in templates.
                 // May emit a warning in future if this is possible from user error.
             }
 
@@ -245,8 +245,8 @@ pub fn parse_template(
                 )
             }
 
-            // At this point, if this structure was a style, those fields and inner scene would have been parsed in scene_node.rs
-            // So we can just unpack any other public fields into the scene as strings
+            // At this point, if this structure was a style, those fields and inner template would have been parsed
+            // So we can just unpack any other public fields into the template as strings
             ExpressionKind::Struct(..) => {
                 return_rule_error!(
                     position.to_owned(),
@@ -254,16 +254,20 @@ pub fn parse_template(
                 )
             }
 
-            // Collections will be unpacked into a scene
+            // Collections will be unpacked into a template
             ExpressionKind::Collection(_) => {
                 return_compiler_error!(
                     "Collections inside template heads not yet implemented in the compiler."
                 )
             }
+
+            ExpressionKind::Range(..) => {
+                // TODO: chuck all values into the template
+            }
         }
     }
 
-    // If this is a Markdown scene, and the parent isn't one,
+    // If this is a Markdown template, and the parent isn't one,
     // parse the content into Markdown
     // If the parent is parsing the Markdown already,
     // skip this as it should be done at the highest level possible

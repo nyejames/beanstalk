@@ -227,6 +227,14 @@ pub fn get_token_kind(
     }
 
     if current_char == '.' {
+        // Check if range operator
+        if let Some(&peeked_char) = stream.peek() {
+            if peeked_char == '.' {
+                stream.next();
+                return_token!(TokenKind::Range, stream);
+            }
+        }
+
         return_token!(TokenKind::Dot, stream);
     }
 
@@ -435,16 +443,20 @@ pub fn get_token_kind(
             }
 
             if next_char == '.' {
-                // TODO: Range ..
+                // TODO: need to handle range operator without backtracking through token stream
+                // Or consuming too many dots.
+
                 dot_count += 1;
-                // Stop if too many dots
+                // Stop if too many dots in number
                 if dot_count > 1 {
                     return_syntax_error!(
                         stream.new_location(),
                         "Can't have more than one decimal point in a number"
                     )
                 }
-                token_value.push(stream.next().unwrap());
+
+                let dot = stream.next().unwrap();
+                token_value.push(dot);
                 continue;
             }
 

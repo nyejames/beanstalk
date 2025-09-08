@@ -9,7 +9,7 @@ use crate::compiler::parsers::tokens::TextLocation;
 // Their kind will represent what their value is.
 // Runtime expressions (couldn't be folded) are represented as 'runtime' kinds.
 // These runtime expressions are small ASTs that must be represented at runtime.
-// Expression kinds are like a subset of the core datatypes, because some data types don't return values or represent more complex structures.
+// Expression kinds are like a subset of the core datatypes because some data types don't return values or represent more complex structures.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Expression {
     pub kind: ExpressionKind,
@@ -42,6 +42,7 @@ impl Expression {
             }
             ExpressionKind::Function(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
+            ExpressionKind::Range(lower, upper) => format!("{} to {}", lower.as_string(), upper.as_string()),
             ExpressionKind::None => String::new(),
         }
     }
@@ -169,6 +170,14 @@ impl Expression {
         }
     }
 
+    pub fn range(lower: Expression, upper: Expression, location: TextLocation) -> Self {
+        Self {
+            data_type: DataType::Inferred(Ownership::default()),
+            kind: ExpressionKind::Range(Box::new(lower), Box::new(upper)),
+            location,
+        }
+    }
+
     pub fn is_none(&self) -> bool {
         matches!(self.kind, ExpressionKind::None)
     }
@@ -204,6 +213,12 @@ pub enum ExpressionKind {
     Collection(Vec<Expression>),
 
     Struct(Vec<Arg>),
+
+    // This is a special case for the range operator
+    // This implementation will probably change in the future to be a more general operator
+    // Upper and lower bounds are inclusive
+    // Instead of making this a function; it has its own special case to make constant folding easier
+    Range(Box<Expression>, Box<Expression>),
 }
 
 impl ExpressionKind {
@@ -255,6 +270,9 @@ pub enum Operator {
     LessThanOrEqual,
     Equality,
     NotEqual,
+
+    // Special
+    Range,
 }
 
 impl Operator {
@@ -275,6 +293,7 @@ impl Operator {
             Operator::LessThanOrEqual => "<=",
             Operator::Equality => "is",
             Operator::NotEqual => "is not",
+            Operator::Range => "..",
         }
     }
 }
