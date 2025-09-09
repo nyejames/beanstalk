@@ -5,16 +5,9 @@
 
 use std::collections::HashMap;
 use std::env;
-use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::compiler::compiler_errors::CompileError;
-use crate::settings::Config;
-use crate::{Flag, InputModule, OutputFile, Project};
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::expressions::expression::Expression;
+use std::path::{Path};
 use crate::compiler::parsers::statements::create_template_node::new_template;
 use crate::compiler::parsers::template::Style;
 use crate::compiler::parsers::tokens::TokenizeMode;
@@ -89,6 +82,10 @@ fn compile_beanstalk_to_string(
         &mut Style::default(),
     )?;
 
+    // TODO: put all this into an AST block, then lower it to wasm and run it
+    // There is currently no codegen for templates.
+    // They need to be lowered to a function that returns a string.
+    // Temporary gross function that should work for constants but doesn't atm
     let template_string = template.parse_into_string(
         None,
         &tokenizer_output.current_location(),

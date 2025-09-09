@@ -76,6 +76,7 @@ impl Template {
     }
 
     // Returns a regular string containing the parsed template
+    // SOME TEMPORARY NONSENSE THAT WILL PROBABLY BE REMOVED
     pub fn parse_into_string(
         &mut self,
         inherited_style: Option<Style>,
