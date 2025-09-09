@@ -75,7 +75,8 @@ pub enum DataType {
     Struct(Vec<Arg>, Ownership), // Struct instance
 
     // Special Beanstalk Types
-    // Scene types may have more static structure to them in the future
+    // Template types may have more static structure to them in the future
+    // They are basically functions that accept a style and return a string
     Template(Ownership), // is_mutable
 
     Function(Vec<Arg>, Vec<DataType>), // Arg constructor, Returned args

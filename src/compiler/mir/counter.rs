@@ -121,9 +121,9 @@ impl UseCounter {
                     self.count_expression_uses(&arg.value)?;
                 }
             }
-            ExpressionKind::Template(content, _, _) => {
+            ExpressionKind::Template(template) => {
                 // Count uses in template content
-                self.count_template_uses(content)?;
+                self.count_template_uses(&template.content)?;
             }
             _ => {
                 // Other expression types (literals) don't contain variable references

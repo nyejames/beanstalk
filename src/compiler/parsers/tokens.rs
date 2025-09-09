@@ -251,13 +251,13 @@ pub struct TokenStream<'a> {
 }
 
 impl<'a> TokenStream<'a> {
-    pub fn new(source_code: &'a str, file_path: &'a Path) -> Self {
+    pub fn new(source_code: &'a str, file_path: &'a Path, mode: TokenizeMode) -> Self {
         Self {
             file_path,
             chars: source_code.chars().peekable(),
             position: CharPosition::default(),
             start_position: Default::default(),
-            context: TokenizeMode::Normal,
+            context: mode,
         }
     }
 

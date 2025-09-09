@@ -10,6 +10,7 @@ use colour::{dark_cyan_ln, dark_yellow_ln, print_bold, print_ln_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use crate::compiler::parsers::tokens::TokenizeMode;
 
 pub struct InputModule {
     pub source_code: String,
@@ -100,7 +101,7 @@ pub fn build_project_files_with_target(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path)
+            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path, TokenizeMode::Normal)
             {
                 Ok(tokens) => tokens,
                 Err(e) => return Err(vec![e.with_file_path(config_path)]),

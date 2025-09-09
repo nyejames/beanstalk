@@ -35,7 +35,6 @@ pub enum BuildTarget {
         /// Custom IO interface configuration
         io_config: Option<String>,
     },
-    Repl,
 }
 
 /// Unified build interface for all project types
@@ -65,7 +64,6 @@ pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
             Box::new(embedded_project::EmbeddedProjectBuilder::new(target))
         }
         BuildTarget::Jit => Box::new(jit::JitProjectBuilder::new(target)),
-        BuildTarget::Repl => Box::new(repl::ReplProjectBuilder::new()),
     }
 }
 
@@ -91,6 +89,9 @@ pub fn determine_build_target(config: &Config, entry_path: &Path) -> BuildTarget
                 io_config: None,
             },
             ProjectType::Jit => BuildTarget::Jit,
+
+            // Currently not using JIT, just parsing a string template
+            ProjectType::Repl => BuildTarget::Jit,
         }
     }
 }

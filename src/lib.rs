@@ -94,8 +94,8 @@ use crate::compiler::mir::build_mir::MIR;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast, AstBlock};
 use crate::compiler::parsers::tokenizer;
-use crate::compiler::parsers::tokens::TokenContext;
-use crate::settings::Config;
+use crate::compiler::parsers::tokens::{TokenContext, TokenizeMode};
+use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use crate::compiler::codegen::build_wasm::new_wasm_module;
@@ -147,7 +147,12 @@ impl<'a> Compiler<'a> {
         source_code: &str,
         module_path: &Path,
     ) -> Result<TokenContext, CompileError> {
-        match tokenizer::tokenize(source_code, module_path) {
+        let tokenizer_mode = match self.project_config.project_type {
+            ProjectType::Repl => TokenizeMode::TemplateHead,
+            _ => TokenizeMode::Normal
+        };
+
+        match tokenizer::tokenize(source_code, module_path, tokenizer_mode) {
             Ok(tokens) => Ok(tokens),
             Err(e) => Err(e.with_file_path(PathBuf::from(module_path))),
         }

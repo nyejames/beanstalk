@@ -82,7 +82,8 @@ pub struct MovedOutDataflow {
 pub enum ConflictSeverity {
     /// Critical error that prevents compilation
     Error,
-    /// Warning that should be addressed but doesn't prevent compilation
+    /// Warning that should be addressed but doesn't prevent compilation.
+    /// This will be for things like unused variables
     Warning,
 }
 

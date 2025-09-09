@@ -165,8 +165,8 @@ impl Expression {
     pub fn template(template: Template) -> Self {
         Self {
             data_type: DataType::Template(Ownership::default()),
-            kind: ExpressionKind::Template(template.content, template.style, template.id),
-            location: template.location,
+            location: template.location.to_owned(),
+            kind: ExpressionKind::Template(template),
         }
     }
 
@@ -208,7 +208,7 @@ pub enum ExpressionKind {
         Vec<DataType>, // return args
     ),
 
-    Template(TemplateContent, Style, String), // Template Body, Styles, ID
+    Template(Template), // Template Body, Styles, ID
 
     Collection(Vec<Expression>),
 

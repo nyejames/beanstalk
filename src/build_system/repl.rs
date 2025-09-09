@@ -1,146 +1,60 @@
-// For running snippets of Beanstalk directly from a REPL to quickly get back some results,
-// The last statement or expression in the snippet is returned as the result for each line entered
-// For now: we can just compile the Wasm and run it with Wasmer and return whatever is at the top of the stack
-
+// For running Beanstalk string templates in the REPL,
+// but starts in the template head, rather than body (like .mt files).
+// This will ALWAYS return a UTF-8 string
 // NOT REALLY WORKING YET - JUST SOME SCAFFOLDING
 
+use std::collections::HashMap;
+use std::env;
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::compiler::compiler_errors::CompileError;
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project};
 use std::io::{self, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
-
-/// Project builder for REPL sessions
-pub struct ReplProjectBuilder {
-    target: BuildTarget,
-}
-
-impl ReplProjectBuilder {
-    pub fn new() -> Self {
-        Self {
-            target: BuildTarget::Repl,
-        }
-    }
-}
-
-impl ProjectBuilder for ReplProjectBuilder {
-    fn build_project(
-        &self,
-        modules: Vec<InputModule>,
-        _config: &Config,
-        _release_build: bool,
-        _flags: &[Flag],
-    ) -> Result<Project, Vec<CompileError>> {
-        // For REPL, we expect a single module with Beanstalk code
-        if modules.len() != 1 {
-            return Err(vec![CompileError::compiler_error(
-                "REPL mode expects exactly one module",
-            )]);
-        }
-
-        let module = &modules[0];
-        let start_time = Instant::now();
-
-        // Compile the Beanstalk code to WASM
-        let wasm_bytes = compile_beanstalk_to_wasm(&module.source_code, &module.source_path)
-            .map_err(|e| vec![e])?;
-
-        let duration = start_time.elapsed();
-        println!("Compiled in {:?}", duration);
-
-        // Create a minimal project with the WASM output
-        let project = Project {
-            config: Config::default(),
-            output_files: vec![OutputFile::Wasm(wasm_bytes)],
-        };
-
-        Ok(project)
-    }
-
-    fn target_type(&self) -> &BuildTarget {
-        &self.target
-    }
-
-    fn validate_config(&self, _config: &Config) -> Result<(), CompileError> {
-        // REPL mode doesn't need complex validation
-        Ok(())
-    }
-}
-
-/// Compile Beanstalk source code to WASM bytes
-fn compile_beanstalk_to_wasm(
-    source_code: &str,
-    source_path: &PathBuf,
-) -> Result<Vec<u8>, CompileError> {
-    use crate::compiler::codegen::build_wasm::new_wasm_module;
-    use crate::compiler::mir::mir::borrow_check_pipeline;
-    use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
-    use crate::compiler::parsers::tokenizer;
-
-    // Tokenize the source code
-    let mut tokenizer_output = tokenizer::tokenize(source_code, source_path)?;
-
-    // Build AST
-    let ast_context = ScopeContext::new(ContextKind::Module, source_path.clone(), &[]);
-    let parser_output = new_ast(&mut tokenizer_output, ast_context, false)?;
-    let ast_module = parser_output.ast;
-
-    // Build MIR with borrow checking
-    let mir_module = borrow_check_pipeline(ast_module).map_err(|errors| {
-        // Convert Vec<CompileError> to single CompileError for now
-        errors
-            .into_iter()
-            .next()
-            .unwrap_or_else(|| CompileError::compiler_error("Unknown MIR compilation error"))
-    })?;
-
-    // Generate WASM
-    let wasm_bytes = new_wasm_module(mir_module)?;
-
-    Ok(wasm_bytes)
-}
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
+use crate::compiler::parsers::build_ast::AstBlock;
+use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::statements::create_template_node::new_template;
+use crate::compiler::parsers::template::Style;
+use crate::compiler::parsers::tokens::TokenizeMode;
 
 /// Start the REPL session
 pub fn start_repl_session() {
     use crate::compiler::compiler_errors::print_formatted_error;
-    use crate::runtime::{BeanstalkRuntime, RuntimeConfig};
     use colour::{green_ln_bold, grey_ln, red_ln};
 
-    green_ln_bold!("Beanstalk REPL");
-    grey_ln!("Enter Beanstalk code snippets. Type 'exit' to quit.");
-    grey_ln!("The last expression will be evaluated and its result displayed.");
+    green_ln_bold!("Beanstalk string template REPL");
+    grey_ln!("Enter Beanstalk template snippets. Type 'exit' to quit.");
+    grey_ln!("This starts inside the template head.");
     println!();
 
-    let runtime_config = RuntimeConfig::for_development();
-    let runtime = BeanstalkRuntime::new(runtime_config);
-    let builder = ReplProjectBuilder::new();
+    // Just to avoid extra allocations, memory will not be much of a constraint in the repl (I think)
+    const EXPECTED_INPUT_LENGTH: usize = 30;
+    let mut code = String::with_capacity(EXPECTED_INPUT_LENGTH);
 
     loop {
-        print!("[ ");
+        print!(">>> ");
         io::stdout().flush().unwrap();
 
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
+        let current_dir = env::current_dir().unwrap();
+
+        let mut new_code = String::new();
+        match io::stdin().read_line(&mut new_code) {
             Ok(_) => {
-                let input = input.trim();
 
-                if input.is_empty() {
-                    continue;
-                }
-
-                if input == "exit" {
+                if new_code.trim() == "exit" {
                     println!("Closing REPL session.");
                     break;
                 }
 
+                let next_code = format!("{code}{new_code}");
+
                 // Compile and execute the input
-                match execute_beanstalk_snippet(&builder, &runtime, input) {
+                match compile_beanstalk_to_string(&next_code, &current_dir) {
                     Ok(result) => {
-                        if let Some(value) = result {
-                            println!("{}", value);
-                        }
+                        println!("{result}");
+                        code.push_str(&new_code);
                     }
                     Err(e) => {
                         print_formatted_error(e);
@@ -155,121 +69,30 @@ pub fn start_repl_session() {
     }
 }
 
-/// Execute a Beanstalk code snippet and return the result
-fn execute_beanstalk_snippet(
-    builder: &ReplProjectBuilder,
-    _runtime: &crate::runtime::BeanstalkRuntime,
+/// Compile Beanstalk source code to a string
+fn compile_beanstalk_to_string(
     source_code: &str,
-) -> Result<Option<String>, CompileError> {
-    use crate::build::InputModule;
-    use std::path::PathBuf;
+    source_path: &Path,
+) -> Result<String, CompileError> {
+    use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext};
+    use crate::compiler::parsers::tokenizer;
 
-    // Create a temporary module for the snippet
-    let module = InputModule {
-        source_code: source_code.to_string(),
-        source_path: PathBuf::from("repl_input.bst"),
-    };
+    // Tokenize the source code
+    let mut tokenizer_output = tokenizer::tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
+    let ast_context = ScopeContext::new(ContextKind::Template, source_path.to_path_buf(), &[]);
 
-    // Build the project to get WASM
-    let project = builder
-        .build_project(
-            vec![module],
-            &crate::settings::Config::default(),
-            false,
-            &[],
-        )
-        .map_err(|errors| {
-            // Convert Vec<CompileError> to single CompileError for now
-            errors
-                .into_iter()
-                .next()
-                .unwrap_or_else(|| CompileError::compiler_error("Unknown build error"))
-        })?;
+    // Build Template
+    let mut template = new_template(
+        &mut tokenizer_output,
+        &ast_context,
+        &mut HashMap::new(),
+        &mut Style::default(),
+    )?;
 
-    // Extract WASM bytes
-    let wasm_bytes = match project.output_files.first() {
-        Some(crate::build::OutputFile::Wasm(bytes)) => bytes,
-        _ => return Err(CompileError::compiler_error("No WASM output generated")),
-    };
+    let template_string = template.parse_into_string(
+        None,
+        &tokenizer_output.current_location(),
+    )?;
 
-    // Execute the WASM and capture the result
-    let result = execute_wasm_and_get_result(_runtime, wasm_bytes)?;
-
-    Ok(result)
-}
-
-/// Execute WASM and extract the top stack value as a result
-fn execute_wasm_and_get_result(
-    _runtime: &crate::runtime::BeanstalkRuntime,
-    wasm_bytes: &[u8],
-) -> Result<Option<String>, CompileError> {
-    use wasmer::{Function, Instance, Module, Store, Value, imports};
-
-    // Create Wasmer store
-    let mut store = Store::default();
-
-    // Compile WASM module
-    let module = Module::new(&store, wasm_bytes).map_err(|e| {
-        CompileError::compiler_error(&format!("Failed to compile WASM module: {}", e))
-    })?;
-
-    // Set up minimal imports for REPL execution
-    let import_object = imports! {
-        "beanstalk_io" => {
-            "print" => Function::new_typed(&mut store, |msg_ptr: i32, msg_len: i32| {
-                // For now, just capture the print calls
-                println!("Print: ptr={}, len={}", msg_ptr, msg_len);
-            }),
-        }
-    };
-
-    // Instantiate the module
-    let instance = Instance::new(&mut store, &module, &import_object).map_err(|e| {
-        CompileError::compiler_error(&format!("Failed to instantiate WASM module: {}", e))
-    })?;
-
-    // Look for main function or entry point
-    if let Ok(main_func) = instance.exports.get_function("main") {
-        // Execute main function
-        let result = main_func.call(&mut store, &[]);
-
-        match result {
-            Ok(values) => {
-                if !values.is_empty() {
-                    // Convert the first return value to a string representation
-                    let result_str = match &values[0] {
-                        Value::I32(v) => v.to_string(),
-                        Value::I64(v) => v.to_string(),
-                        Value::F32(v) => v.to_string(),
-                        Value::F64(v) => v.to_string(),
-                        _ => "unknown".to_string(),
-                    };
-                    Ok(Some(result_str))
-                } else {
-                    Ok(None)
-                }
-            }
-            Err(e) => Err(CompileError::compiler_error(&format!(
-                "Runtime error: {}",
-                e
-            ))),
-        }
-    } else {
-        // Look for _start function (WASI entry point)
-        if let Ok(start_func) = instance.exports.get_function("_start") {
-            let result = start_func.call(&mut store, &[]);
-
-            match result {
-                Ok(_) => Ok(None), // _start doesn't return values
-                Err(e) => Err(CompileError::compiler_error(&format!(
-                    "Runtime error: {}",
-                    e
-                ))),
-            }
-        } else {
-            Err(CompileError::compiler_error(
-                "No entry point found in WASM module (expected 'main' or '_start')",
-            ))
-        }
-    }
+    Ok(template_string)
 }

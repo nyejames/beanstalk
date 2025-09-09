@@ -30,6 +30,7 @@ pub enum ProjectType {
     Native(Target),
     Embedded,
     Jit, // Don't create output files, just run the code
+    Repl, // Start in a string template head
 }
 
 impl Default for ProjectType {

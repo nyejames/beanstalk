@@ -133,17 +133,17 @@ pub fn print_ast_output(ast: &[AstNode]) {
             indentation.push('\t');
         }
 
-        if let ExpressionKind::Template(nodes, style, ..) = scene {
+        if let ExpressionKind::Template(template) = scene {
             blue_ln_bold!("\n{}Scene Styles: ", indentation);
 
-            green_ln!("{}  {:?}", indentation, style.format);
-            green_ln!("{}  {:?}", indentation, style.child_default);
-            green_ln!("{}  {:?}", indentation, style.unlocked_templates);
+            green_ln!("{}  {:?}", indentation, template.style.format);
+            green_ln!("{}  {:?}", indentation, template.style.child_default);
+            green_ln!("{}  {:?}", indentation, template.style.unlocked_templates);
 
             blue_ln_bold!("{}Scene Body:", indentation);
 
-            for scene_node in nodes.flatten() {
-                println!("{}  {:?}", indentation, scene_node);
+            for scene_node in template.content.flatten() {
+                println!("{}  {:?}", indentation, scene_node.kind);
             }
         }
     }

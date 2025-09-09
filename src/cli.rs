@@ -21,6 +21,7 @@ enum Command {
     Dev(PathBuf), // Runs local dev server
     Release(PathBuf),
     Wat(PathBuf), // Compiles a WAT file to WebAssembly
+
     Help,
     CompilerTests,
 }

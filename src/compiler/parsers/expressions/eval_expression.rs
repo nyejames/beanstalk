@@ -178,33 +178,35 @@ fn pop_higher_precedence(
 // Everything else should be left for runtime
 fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
     let mut template_body: TemplateContent = TemplateContent::default();
+    let mut template_head: Vec<AstNode> = Vec::new();
     let mut style = Style::default();
 
     let location = extract_location(&simplified_expression)?;
 
     for node in simplified_expression {
         match node.get_expr()?.kind {
-            ExpressionKind::Template(body, ref mut template_style, ..) => {
-                template_body.before.extend(body.before);
-                template_body.after.extend(body.after);
+            ExpressionKind::Template(template) => {
+                template_head.extend(template.head);
+                template_body.before.extend(template.content.before);
+                template_body.after.extend(template.content.after);
 
                 if !style.unlocks_override {
-                    if template_style.unlocks_override {
+                    if template.style.unlocks_override {
                         style.unlocks_override = true;
-                        style.unlocked_templates = template_style.unlocked_templates.to_owned();
+                        style.unlocked_templates = template.style.unlocked_templates.to_owned();
                     } else {
                         style
                             .unlocked_templates
-                            .extend(template_style.unlocked_templates.to_owned());
+                            .extend(template.style.unlocked_templates.to_owned());
                     }
                 }
 
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence
-                style.format = template_style.format.to_owned();
-                style.child_default = template_style.child_default.to_owned();
-                style.compatibility = template_style.compatibility.to_owned();
-                style.precedence = template_style.precedence.to_owned();
+                style.format = template.style.format.to_owned();
+                style.child_default = template.style.child_default.to_owned();
+                style.compatibility = template.style.compatibility.to_owned();
+                style.precedence = template.style.precedence.to_owned();
             }
 
             _ => {
@@ -216,6 +218,7 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
     }
 
     Ok(Expression::template(Template::string_template(
+        template_head,
         template_body,
         style,
         String::new(),
