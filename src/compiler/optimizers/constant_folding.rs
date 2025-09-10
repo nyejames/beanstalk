@@ -77,22 +77,22 @@ impl Expression {
     ) -> Result<Option<Expression>, CompileError> {
         let kind: ExpressionKind = match (&self.kind, &rhs.kind) {
             // Float operations
-            (ExpressionKind::Float(lhs_val), ExpressionKind::Float(rhs_val)) => {
+            (ExpressionKind::ConstFloat(lhs_val), ExpressionKind::ConstFloat(rhs_val)) => {
                 match op {
-                    Operator::Add => ExpressionKind::Float(lhs_val + rhs_val),
-                    Operator::Subtract => ExpressionKind::Float(lhs_val - rhs_val),
-                    Operator::Multiply => ExpressionKind::Float(lhs_val * rhs_val),
-                    Operator::Divide => ExpressionKind::Float(lhs_val / rhs_val),
-                    Operator::Modulus => ExpressionKind::Float(lhs_val % rhs_val),
-                    Operator::Exponent => ExpressionKind::Float(lhs_val.powf(*rhs_val)),
+                    Operator::Add => ExpressionKind::ConstFloat(lhs_val + rhs_val),
+                    Operator::Subtract => ExpressionKind::ConstFloat(lhs_val - rhs_val),
+                    Operator::Multiply => ExpressionKind::ConstFloat(lhs_val * rhs_val),
+                    Operator::Divide => ExpressionKind::ConstFloat(lhs_val / rhs_val),
+                    Operator::Modulus => ExpressionKind::ConstFloat(lhs_val % rhs_val),
+                    Operator::Exponent => ExpressionKind::ConstFloat(lhs_val.powf(*rhs_val)),
 
                     // Logical operations with float operands
-                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
-                    Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
-                    Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
-                    Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
-                    Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
+                    Operator::Equality => ExpressionKind::ConstBool(lhs_val == rhs_val),
+                    Operator::NotEqual => ExpressionKind::ConstBool(lhs_val != rhs_val),
+                    Operator::GreaterThan => ExpressionKind::ConstBool(lhs_val > rhs_val),
+                    Operator::GreaterThanOrEqual => ExpressionKind::ConstBool(lhs_val >= rhs_val),
+                    Operator::LessThan => ExpressionKind::ConstBool(lhs_val < rhs_val),
+                    Operator::LessThanOrEqual => ExpressionKind::ConstBool(lhs_val <= rhs_val),
 
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
@@ -104,25 +104,25 @@ impl Expression {
             }
 
             // Integer operations
-            (ExpressionKind::Int(lhs_val), ExpressionKind::Int(rhs_val)) => {
+            (ExpressionKind::ConstInt(lhs_val), ExpressionKind::ConstInt(rhs_val)) => {
                 match op {
-                    Operator::Add => ExpressionKind::Int(lhs_val + rhs_val),
-                    Operator::Subtract => ExpressionKind::Int(lhs_val - rhs_val),
-                    Operator::Multiply => ExpressionKind::Int(lhs_val * rhs_val),
+                    Operator::Add => ExpressionKind::ConstInt(lhs_val + rhs_val),
+                    Operator::Subtract => ExpressionKind::ConstInt(lhs_val - rhs_val),
+                    Operator::Multiply => ExpressionKind::ConstInt(lhs_val * rhs_val),
                     Operator::Divide => {
                         // Handle division by zero and integer division
                         if *rhs_val == 0 {
                             return_rule_error!(self.location.to_owned(), "Can't divide by zero")
                         }
 
-                        ExpressionKind::Int(lhs_val / rhs_val)
+                        ExpressionKind::ConstInt(lhs_val / rhs_val)
                     }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
                             return_rule_error!(self.location.to_owned(), "Can't modulus by zero")
                         }
 
-                        ExpressionKind::Int(lhs_val % rhs_val)
+                        ExpressionKind::ConstInt(lhs_val % rhs_val)
                     }
                     Operator::Exponent => {
                         // For integer exponentiation, we need to be careful with negative exponents
@@ -130,20 +130,20 @@ impl Expression {
                             // Convert to float for negative exponents
                             let lhs_float = *lhs_val as f64;
                             let rhs_float = *rhs_val as f64;
-                            ExpressionKind::Float(lhs_float.powf(rhs_float))
+                            ExpressionKind::ConstFloat(lhs_float.powf(rhs_float))
                         } else {
                             // Use integer exponentiation for positive exponents
-                            ExpressionKind::Int(lhs_val.pow(*rhs_val as u32))
+                            ExpressionKind::ConstInt(lhs_val.pow(*rhs_val as u32))
                         }
                     }
 
                     // Logical operations with integer operands
-                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
-                    Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
-                    Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
-                    Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
-                    Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
+                    Operator::Equality => ExpressionKind::ConstBool(lhs_val == rhs_val),
+                    Operator::NotEqual => ExpressionKind::ConstBool(lhs_val != rhs_val),
+                    Operator::GreaterThan => ExpressionKind::ConstBool(lhs_val > rhs_val),
+                    Operator::GreaterThanOrEqual => ExpressionKind::ConstBool(lhs_val >= rhs_val),
+                    Operator::LessThan => ExpressionKind::ConstBool(lhs_val < rhs_val),
+                    Operator::LessThanOrEqual => ExpressionKind::ConstBool(lhs_val <= rhs_val),
 
                     Operator::Range => ExpressionKind::Range(
                         Box::new(Expression::int(lhs_val.clone(), self.location.to_owned())),
@@ -159,11 +159,11 @@ impl Expression {
             }
 
             // Boolean operations
-            (ExpressionKind::Bool(lhs_val), ExpressionKind::Bool(rhs_val)) => match op {
-                Operator::And => ExpressionKind::Bool(*lhs_val && *rhs_val),
-                Operator::Or => ExpressionKind::Bool(*lhs_val || *rhs_val),
-                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
+            (ExpressionKind::ConstBool(lhs_val), ExpressionKind::ConstBool(rhs_val)) => match op {
+                Operator::And => ExpressionKind::ConstBool(*lhs_val && *rhs_val),
+                Operator::Or => ExpressionKind::ConstBool(*lhs_val || *rhs_val),
+                Operator::Equality => ExpressionKind::ConstBool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::ConstBool(lhs_val != rhs_val),
 
                 _ => return_rule_error!(
                     self.location.to_owned(),
@@ -173,10 +173,10 @@ impl Expression {
             },
 
             // String operations
-            (ExpressionKind::String(lhs_val), ExpressionKind::String(rhs_val)) => match op {
-                Operator::Add => ExpressionKind::String(format!("{}{}", lhs_val, rhs_val)),
-                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
+            (ExpressionKind::ConstString(lhs_val), ExpressionKind::ConstString(rhs_val)) => match op {
+                Operator::Add => ExpressionKind::ConstString(format!("{}{}", lhs_val, rhs_val)),
+                Operator::Equality => ExpressionKind::ConstBool(lhs_val == rhs_val),
+                Operator::NotEqual => ExpressionKind::ConstBool(lhs_val != rhs_val),
                 _ => return_rule_error!(
                     self.location.to_owned(),
                     "Can't perform operation {} on strings",

@@ -1,13 +1,6 @@
-use crate::settings::BEANSTALK_FILE_EXTENSION;
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
-
-use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler::parsers::markdown::to_markdown;
-use crate::compiler::parsers::tokens::TextLocation;
-use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -79,6 +72,8 @@ pub struct Style {
     pub compatibility: TemplateCompatibility,
 
     // templates that this style will unlock
+    // Basically a bunch of template declarations that are captured by this template
+    // TODO: Styles and template unlocks as different things? Do full templates with styles being inherited suffice if they are empty?
     pub unlocked_templates: HashMap<String, ExpressionKind>,
 
     // If this is true, no unlocked styles will be inherited from the parent
@@ -123,4 +118,11 @@ pub enum TemplateCompatibility {
     Incompatible(Vec<String>),
     Compatible(Vec<String>),
     All, // All other styles can be used with this style
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum TemplateControlFlow {
+    None,
+    If,
+    Loop,
 }

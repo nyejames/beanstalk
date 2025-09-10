@@ -358,8 +358,6 @@ pub enum TokenKind {
     // Scope
     OpenParenthesis,  // (
     CloseParenthesis, // )
-    TemplateOpen,     // [
-    TemplateClose,    // Used to track of the spaces following the scene, not needed now?
 
     As, // Type casting
 
@@ -374,7 +372,7 @@ pub enum TokenKind {
     DatatypeBool,
     DatatypeString,
     /// For templates, the style of the template, not the template itself
-    /// This is built into the compiler for optimisation and isn't a primitive
+    /// This is built into the compiler for optimization and isn't a primitive
     DatatypeStyle,
 
     /// Not yet implemented,
@@ -442,6 +440,7 @@ pub enum TokenKind {
     ParentTemplate,
     EmptyTemplate(usize), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
     Slot,
+    TemplateClose,
     TemplateHead,
 
     Id(String), // ID for scenes

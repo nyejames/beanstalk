@@ -266,7 +266,7 @@ pub fn create_expression(
                 };
 
                 let float_expr = Expression::new(
-                    ExpressionKind::Float(float),
+                    ExpressionKind::ConstFloat(float),
                     location.to_owned(),
                     DataType::Float(ownership),
                 );
@@ -296,7 +296,7 @@ pub fn create_expression(
                 };
 
                 let int_expr = Expression::new(
-                    ExpressionKind::Int(int_value),
+                    ExpressionKind::ConstInt(int_value),
                     location.to_owned(),
                     DataType::Int(ownership),
                 );
@@ -319,7 +319,7 @@ pub fn create_expression(
                 };
 
                 let string_expr = Expression::new(
-                    ExpressionKind::String(string.to_owned()),
+                    ExpressionKind::ConstString(string.to_owned()),
                     location.to_owned(),
                     DataType::String(ownership),
                 );
@@ -369,7 +369,7 @@ pub fn create_expression(
                 };
 
                 let bool_expr = Expression::new(
-                    ExpressionKind::Bool(value.to_owned()),
+                    ExpressionKind::ConstBool(value.to_owned()),
                     location.to_owned(),
                     DataType::Bool(ownership),
                 );

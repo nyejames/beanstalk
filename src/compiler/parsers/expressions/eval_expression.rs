@@ -1,9 +1,9 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::template::{Style, TemplateContent};
+use crate::compiler::parsers::template::{Style, TemplateContent, TemplateControlFlow};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
@@ -11,9 +11,6 @@ use crate::{
 };
 use std::path::PathBuf;
 
-// This function will turn a series of ast nodes into a Value enum.
-// A Value enum can also be a runtime expression that contains a series of nodes.
-// It will fold constants (not working yet) down to a single Value if possible
 pub fn evaluate_expression(
     scope: PathBuf,
     nodes: Vec<AstNode>,
@@ -52,14 +49,11 @@ pub fn evaluate_expression(
             NodeKind::Operator(ref op) => {
                 match current_type {
                     DataType::String(_) | DataType::Template(_) => {
-                        if op != &Operator::Add {
-                            return_syntax_error!(
-                                node.location,
-                                "You can't use the '{:?}' operator with strings or templates",
-                                op
-                            )
-                        }
-                        continue 'outer;
+                        return_syntax_error!(
+                            node.location,
+                            "You can't use the '{:?}' operator with strings or templates",
+                            op
+                        )
                     }
 
                     DataType::CoerceToString(_) => {
@@ -99,6 +93,8 @@ pub fn evaluate_expression(
 
         DataType::CoerceToString(_) => {
             let mut new_string = String::new();
+
+            // red_ln!("Treating this as simplified exp: {:#?}", simplified_expression);
 
             for node in simplified_expression {
                 new_string += &node.get_expr()?.as_string();
@@ -178,15 +174,13 @@ fn pop_higher_precedence(
 // Everything else should be left for runtime
 fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
     let mut template_body: TemplateContent = TemplateContent::default();
-    let mut template_head: Vec<AstNode> = Vec::new();
     let mut style = Style::default();
 
-    let location = extract_location(&simplified_expression)?;
+    let location = extract_location(simplified_expression)?;
 
     for node in simplified_expression {
         match node.get_expr()?.kind {
             ExpressionKind::Template(template) => {
-                template_head.extend(template.head);
                 template_body.before.extend(template.content.before);
                 template_body.after.extend(template.content.after);
 
@@ -218,10 +212,10 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
     }
 
     Ok(Expression::template(Template::string_template(
-        template_head,
         template_body,
         style,
         String::new(),
+        TemplateControlFlow::None,
         location,
     )))
 }

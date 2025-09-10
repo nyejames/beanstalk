@@ -6,11 +6,10 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::statements::structs::create_args;
-use crate::compiler::parsers::template::{Style, StyleFormat, TemplateContent, TemplateType};
+use crate::compiler::parsers::template::{Style, StyleFormat, TemplateContent, TemplateControlFlow, TemplateType};
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::{return_compiler_error, return_rule_error, return_syntax_error};
+use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, BS_VAR_PREFIX};
 use std::collections::HashMap;
 use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
@@ -19,10 +18,10 @@ use crate::compiler::parsers::markdown::to_markdown;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Template {
-    pub head: Vec<AstNode>,
     pub content: TemplateContent,
     pub kind: TemplateType,
     pub style: Style,
+    pub control_flow: TemplateControlFlow,
     pub id: String,
     pub location: TextLocation,
 }
@@ -30,46 +29,46 @@ pub struct Template {
 impl Template {
     pub fn default() -> Template {
         Template {
-            head: Vec::new(),
             content: TemplateContent::default(),
             kind: TemplateType::Comment,
             style: Style::default(),
+            control_flow: TemplateControlFlow::None,
             id: String::new(),
             location: TextLocation::default(),
         }
     }
     pub fn string_template(
-        head: Vec<AstNode>,
         content: TemplateContent,
         style: Style,
         id: String,
+        control_flow: TemplateControlFlow,
         location: TextLocation,
     ) -> Template {
         Template {
-            head,
             content,
             kind: TemplateType::StringTemplate,
             style,
+            control_flow,
             id,
             location,
         }
     }
     pub fn slot(id: String, location: TextLocation) -> Template {
         Template {
-            head: Vec::new(),
             content: TemplateContent::default(),
             kind: TemplateType::Slot,
             style: Style::default(),
+            control_flow: TemplateControlFlow::None,
             location,
             id,
         }
     }
     pub fn comment(location: TextLocation) -> Template {
         Template {
-            head: Vec::new(),
             content: TemplateContent::default(),
             kind: TemplateType::Comment,
             style: Style::default(),
+            control_flow: TemplateControlFlow::None,
             id: String::new(),
             location,
         }
@@ -123,20 +122,20 @@ impl Template {
         // template content
         for value in self.content.flatten() {
             match &value.kind {
-                ExpressionKind::String(string) => {
+                ExpressionKind::ConstString(string) => {
                     content.push_str(string);
                 }
 
-                ExpressionKind::Float(float) => {
+                ExpressionKind::ConstFloat(float) => {
                     content.push_str(&float.to_string());
                 }
 
-                ExpressionKind::Int(int) => {
+                ExpressionKind::ConstInt(int) => {
                     content.push_str(&int.to_string());
                 }
 
                 // Add the string representation of the bool
-                ExpressionKind::Bool(value) => {
+                ExpressionKind::ConstBool(value) => {
                     content.push_str(&value.to_string());
                 }
 
@@ -230,25 +229,33 @@ impl Template {
 pub fn new_template(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
-    unlocked_templates: &mut HashMap<String, ExpressionKind>,
+    unlocked_templates: &HashMap<String, ExpressionKind>,
     template_style: &mut Style,
 ) -> Result<Template, CompileError> {
     // These are variables or special keywords passed into the template head
     // let mut scene_template: TemplateContent = TemplateContent::default();
 
+    // Templates that call any functions or have children that call functions
+    // Can't be folded at compile time (EVENTUALLY CAN FOLD THE CONST FUNCTIONS TOO).
+    // This is because the template might be changing at runtime.
+    // If the entire template can be folded, it just becomes a string after the AST stage.
+    let mut foldable = true;
+
     // The content of the scene
     let mut template_content: TemplateContent = TemplateContent::default();
     let mut this_template_content: TemplateContent = TemplateContent::default();
 
-    token_stream.advance();
+    // We can't modify what the parent template has unlocked.
+    let mut this_template_unlocks = unlocked_templates.to_owned();
 
-    let (template_head, template_id) = parse_template_head(
+    let (control_flow, template_id) = parse_template_head(
         token_stream,
         context,
         &mut this_template_content,
-        unlocked_templates,
+        &mut this_template_unlocks,
         template_style,
         &mut template_content,
+        &mut foldable,
     )?;
 
     // TODO, this will function as a special template in the compiler
@@ -300,6 +307,8 @@ pub fn new_template(
             }
 
             TokenKind::TemplateClose => {
+                // Need to skip the closer
+                token_stream.advance();
                 break;
             }
 
@@ -367,10 +376,10 @@ pub fn new_template(
 
     template_content.concat(this_template_content);
     Ok(Template::string_template(
-        template_head,
         template_content,
         template_style.to_owned(),
         template_id,
+        control_flow,
         token_stream.current_location(),
     ))
 }
@@ -378,6 +387,13 @@ pub fn new_template(
 // ---------------------
 // TEMPLATE HEAD PARSING
 // ---------------------
+// This can:
+// - Change the style of the template
+// - Append more content to the template
+// - Specify the control flow of the template (is it looped or conditional)
+// - Change the ID of the template
+// - Add to the list of inherited expressions
+// - Make the scene unfoldable
 pub fn parse_template_head(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
@@ -385,20 +401,41 @@ pub fn parse_template_head(
     unlocked_templates: &mut HashMap<String, ExpressionKind>,
     template_style: &mut Style,
     template_content: &mut TemplateContent,
-) -> Result<(Vec<AstNode>, String), CompileError> {
+    foldable: &mut bool,
+) -> Result<(TemplateControlFlow, String), CompileError> {
 
-    let mut template_head: Vec<AstNode> = Vec::new();
+    // TODO: Add control flow parsing
+    let mut control_flow = TemplateControlFlow::None;
     let mut template_id: String = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
+    // Each expression must be separated with a comma
+    let mut comma_separator = true;
+
     while token_stream.index < token_stream.length {
+        token_stream.advance();
         let token = token_stream.current_token_kind().to_owned();
 
-        token_stream.advance();
+        ast_log!("Parsing template head token: {:?}", token);
 
         // We are doing something similar to new_ast()
         // But with the specific scene head syntax,
         // so expressions are allowed and should be folded where possible.
         // Loops and if statements can end the scene head.
+
+        // Make sure there is a comma before the next token
+        if !comma_separator {
+            if token != TokenKind::Comma {
+                return_syntax_error!(
+                    token_stream.current_location(),
+                    "Expected a comma before the next token in the template head. Token: {:?}",
+                    token
+                )
+            }
+
+            comma_separator = true;
+            continue;
+        };
+
         match token {
             TokenKind::Colon => {
                 break;
@@ -409,45 +446,60 @@ pub fn parse_template_head(
             // of not having to explicitly close the template head from a repl session.
             // This MIGHT lead to some overly forgiving behavior (not warning about an unclosed template head)
             TokenKind::TemplateClose | TokenKind::Eof => {
+                // Will need to pick this up again at the body parsing stage
                 token_stream.go_back();
 
-                return Ok((template_head, template_id));
+                return Ok((control_flow, template_id));
             }
 
             // This is a declaration of the ID by using the export prefix followed by a variable name
             // This doesn't follow regular declaration rules.
             TokenKind::Id(name) => {
-                template_id = format!("{BS_VAR_PREFIX}{}", name);
+                template_id = format!("{BS_VAR_PREFIX}{name}");
             }
 
             // If this is a template, we have to do some clever parsing here
             TokenKind::Symbol(name) => {
-                // TODO - sort all this out.
+                // TODO - sort out the final design for inherited styles / templates
                 // Should unlocked styles just be passed in as normal declarations?
 
-                // Check if this is an unlocked scene
-                if let Some(ExpressionKind::Template(template)) =
-                    unlocked_templates.to_owned().get(&name)
-                {
-                    template_style.child_default = template.style.child_default.to_owned();
+                // Check if this is an unlocked scene (inherited from an ancestor)
+                // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
+                match unlocked_templates.to_owned().get(&name) {
+                    Some(ExpressionKind::Template(template)) => {
 
-                    if template.style.unlocks_override {
-                        unlocked_templates.clear();
-                    }
+                        // This can't be folded anymore as a non-constant is being referenced
+                        *foldable = false;
 
-                    // Insert this style's unlocked scenes into the unlocked scenes map
-                    if template.style.has_no_unlocked_templates() {
+                        template_style.child_default = template.style.child_default.to_owned();
+
+                        if template.style.unlocks_override {
+                            unlocked_templates.clear();
+                        }
+
+                        // Insert this style's unlocked scenes into the unlocked scenes map
                         for (name, style) in template.style.unlocked_templates.iter() {
                             // Should this overwrite? Or skip if already unlocked?
                             unlocked_templates.insert(name.to_owned(), style.to_owned());
                         }
+
+                        // Unpack this scene into this scene's body
+                        template_content.before.extend(template.content.before.to_owned());
+                        template_content.after.splice(0..0, template.content.after.to_owned());
+
+                        continue;
                     }
 
-                    // Unpack this scene into this scene's body
-                    template_content.before.extend(template.content.before.to_owned());
-                    template_content.after.splice(0..0, template.content.after.to_owned());
-
-                    continue;
+                    // Constant inherited
+                    Some(ExpressionKind::ConstString(string)) => {
+                        this_template_content.after.push(create_expression(
+                            token_stream,
+                            context,
+                            &mut DataType::String(Ownership::default()),
+                            false,
+                        )?);
+                    }
+                    _=> {}
                 }
 
                 // Otherwise, check if it's a regular scene or variable reference
@@ -457,6 +509,10 @@ pub fn parse_template_head(
 
                         // Reference to another string template
                         ExpressionKind::Template(template) => {
+
+                            *foldable = false;
+
+                            // Override the current child_default if there is a new one coming in
                             template_style.child_default = template.style.child_default.to_owned();
 
                             if template.style.unlocks_override {
@@ -464,32 +520,37 @@ pub fn parse_template_head(
                             }
 
                             // Insert this style's unlocked scenes into the unlocked scenes map
-                            if template.style.has_no_unlocked_templates() {
-                                for (name, style) in template.style.unlocked_templates.iter() {
-                                    // Should this overwrite? Or skip if already unlocked?
-                                    unlocked_templates.insert(name.to_owned(), style.to_owned());
-                                }
+                            for (name, style) in template.style.unlocked_templates.iter() {
+                                // Should this overwrite? Or skip if already unlocked?
+                                // Which is less efficient?
+                                unlocked_templates.insert(name.to_owned(), style.to_owned());
                             }
 
                             // Unpack this scene into this scene's body
                             template_content.concat(template.content.to_owned());
-
-                            continue;
                         }
 
+                        // Otherwise this is a reference to some other variable
+                        // String, Number, Bool, etc. References
                         _ => {
-                            token_stream.go_back();
-
                             let expr = create_expression(
                                 token_stream,
-                                &context,
+                                context,
                                 &mut DataType::CoerceToString(Ownership::default()),
                                 false,
                             )?;
 
+                            // Any non-constant expression can't be folded
+                            if !expr.kind.is_foldable() {
+                                *foldable = false;
+                            }
+
                             this_template_content.after.push(expr);
                         }
                     }
+
+                    continue;
+
                 } else {
                     return_syntax_error!(
                         token_stream.current_location(),
@@ -501,43 +562,52 @@ pub fn parse_template_head(
                 };
             }
 
-            // Constants to Parse
+            // Possible Constants to Parse
             // Can chuck these directly into the content
             TokenKind::FloatLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::IntLiteral(_)
             | TokenKind::StringLiteral(_)
             | TokenKind::RawStringLiteral(_) => {
-                token_stream.go_back();
-
-                this_template_content.after.push(create_expression(
+                let expr = create_expression(
                     token_stream,
-                    &context,
-                    &mut DataType::CoerceToString(Ownership::default()),
+                    context,
+                    &mut DataType::Inferred(Ownership::default()),
                     false,
-                )?);
+                )?;
+
+                if !expr.kind.is_foldable() {
+                    *foldable = false;
+                }
+
+                this_template_content.after.push(expr);
+            }
+
+            TokenKind::OpenParenthesis => {
+                let expr = create_expression(
+                    token_stream,
+                    context,
+                    &mut DataType::CoerceToString(Ownership::default()),
+                    true,
+                )?;
+
+                if !expr.kind.is_foldable() {
+                    *foldable = false;
+                }
+
+                this_template_content.after.push(expr);
             }
 
             TokenKind::Comma => {
-                // TODO - decide if this should be enforced as a syntax error or allowed
-                // Currently working around commas not ever being needed in scene heads
-                // So may enforce it with full error in the future (especially if it causes havoc in the emitter stage)
-                red_ln!(
-                    "Warning: Should there be a comma in the template head? (ignored by compiler)"
-                );
+                // Multiple commas in succession
+                return_syntax_error!(
+                    token_stream.current_location(),
+                    "Multiple commas used back to back in the template head. You must have a valid expression between each comma"
+                )
             }
 
             // Newlines / empty things in the scene head are ignored
             TokenKind::Newline | TokenKind::Empty => {}
-
-            TokenKind::OpenParenthesis => {
-                let structure = create_args(token_stream, None, &[], &context)?;
-
-                this_template_content.after.push(Expression::structure(
-                    structure,
-                    token_stream.current_location(),
-                ));
-            }
 
             _ => {
                 return_syntax_error!(
@@ -549,5 +619,5 @@ pub fn parse_template_head(
         }
     }
 
-    Ok((template_head, template_id))
+    Ok((control_flow, template_id))
 }
