@@ -33,7 +33,7 @@ impl ProjectBuilder for NativeProjectBuilder {
             return Err(vec![e]);
         }
 
-        // Use core build pipeline
+        // Use the core build pipeline
         let compilation_result = core_build::compile_modules(modules, config, flags)?;
 
         // For native projects, we produce a single WASM file

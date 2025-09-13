@@ -6,20 +6,20 @@ use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::return_compiler_error;
 use std::path::PathBuf;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct Arg {
     pub name: String,      // Optional Name of the argument (empty string if unnamed)
     pub value: Expression, // Optional Value of the argument - 'None' if no value
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct AstNode {
     pub kind: NodeKind,
     pub location: TextLocation,
     pub scope: PathBuf,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum NodeKind {
     // Warning Message
     // This could be stuff like unused variables, possible race conditions, etc

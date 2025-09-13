@@ -15,13 +15,14 @@ use crate::compiler::parsers::template::{Style, TemplateType};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
-    ast_log, new_template_context, return_rule_error, return_syntax_error, return_type_error,
+    ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
+    return_type_error,
 };
 use std::collections::HashMap;
 
 // For multiple returns or function calls
 // MUST know all the types
-pub fn create_multiple_expressions(
+pub fn create_multiple_expressions<'a>(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
     consume_closing_parenthesis: bool,
@@ -30,23 +31,16 @@ pub fn create_multiple_expressions(
     let mut type_index = 0;
 
     while token_stream.index < token_stream.length && type_index < context.returns.len() {
-        let mut expression_type = context.returns[type_index].to_owned();
+        let expected_type = context.returns[type_index].to_owned();
+        let mut expression_type = expected_type;
 
+        // This should type check here
         let expression = create_expression(
             token_stream,
-            &context,
+            context,
             &mut expression_type,
             consume_closing_parenthesis,
         )?;
-
-        if expression_type != context.returns[type_index] {
-            return_type_error!(
-                token_stream.current_location(),
-                "Expected type: {:?}, but got type: {:?}",
-                context.returns[type_index],
-                expression.data_type
-            )
-        }
 
         expressions.push(expression);
         type_index += 1;
@@ -84,7 +78,7 @@ pub fn create_multiple_expressions(
 // If the datatype is a collection,
 // the expression must only contain references to collections
 // or collection literals.
-pub fn create_expression(
+pub fn create_expression<'a>(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
     data_type: &mut DataType,
@@ -191,6 +185,8 @@ pub fn create_expression(
                         token
                     )
                 }
+
+                token_stream.go_back();
 
                 break;
             }
@@ -332,28 +328,33 @@ pub fn create_expression(
             }
 
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
-                let template = new_template(
+                let mut template = new_template(
                     token_stream,
                     new_template_context!(context),
-                    &mut HashMap::new(),
+                    &HashMap::new(),
                     &mut Style::default(),
                 )?;
 
                 match template.kind {
-                    TemplateType::StringTemplate => {
+                    TemplateType::FunctionTemplate => {
                         return Ok(Expression::template(template));
+                    }
+
+                    TemplateType::FoldedString => {
+                        return Ok(Expression::string(
+                            template.fold(&None)?,
+                            token_stream.current_location(),
+                        ));
                     }
 
                     // Ignore comments
                     TemplateType::Comment => {}
 
                     // Error for anything else for now
-                    _ => {
-                        return_type_error!(
-                            token_stream.current_location(),
-                            "Unexpected template type used in expression: {:?}",
-                            template
-                        )
+                    TemplateType::Slot => {
+                        return_compiler_error!(
+                            "Slots are not supported in templates at the moment. They might be removed completely in the future."
+                        );
                     }
                 }
             }
@@ -507,13 +508,11 @@ pub fn create_expression(
                 });
             }
 
-            TokenKind::Range => {
-                expression.push(AstNode {
-                    kind: NodeKind::Operator(Operator::Range),
-                    location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
-                })
-            }
+            TokenKind::Range => expression.push(AstNode {
+                kind: NodeKind::Operator(Operator::Range),
+                location: token_stream.current_location(),
+                scope: context.scope_name.to_owned(),
+            }),
 
             // For mutating references
             TokenKind::AddAssign => {}

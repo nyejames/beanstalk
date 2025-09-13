@@ -6,17 +6,18 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::template::{Style, StyleFormat, TemplateContent, TemplateControlFlow, TemplateType};
+use crate::compiler::parsers::template::{
+    Style, TemplateContent, TemplateControlFlow, TemplateType,
+};
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
-use crate::settings::{BEANSTALK_FILE_EXTENSION, BS_VAR_PREFIX};
+use crate::settings::BS_VAR_PREFIX;
+use crate::{ast_log, return_compiler_error, return_syntax_error};
 use std::collections::HashMap;
-use crate::compiler::html5_codegen::code_block_highlighting::highlight_html_code_block;
-use crate::compiler::parsers::ast_nodes::AstNode;
-use crate::compiler::parsers::markdown::to_markdown;
 
-#[derive(Debug, Clone, PartialEq)]
+pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
+
+#[derive(Clone, Debug)]
 pub struct Template {
     pub content: TemplateContent,
     pub kind: TemplateType,
@@ -37,7 +38,7 @@ impl Template {
             location: TextLocation::default(),
         }
     }
-    pub fn string_template(
+    pub fn function_template(
         content: TemplateContent,
         style: Style,
         id: String,
@@ -46,13 +47,30 @@ impl Template {
     ) -> Template {
         Template {
             content,
-            kind: TemplateType::StringTemplate,
+            kind: TemplateType::FunctionTemplate,
             style,
             control_flow,
             id,
             location,
         }
     }
+    pub fn folded_string(
+        content: TemplateContent,
+        style: Style,
+        id: String,
+        control_flow: TemplateControlFlow,
+        location: TextLocation,
+    ) -> Template {
+        Template {
+            content,
+            kind: TemplateType::FoldedString,
+            style,
+            control_flow,
+            id,
+            location,
+        }
+    }
+
     pub fn slot(id: String, location: TextLocation) -> Template {
         Template {
             content: TemplateContent::default(),
@@ -74,25 +92,27 @@ impl Template {
         }
     }
 
-    // Returns a regular string containing the parsed template
-    // SOME TEMPORARY NONSENSE THAT WILL PROBABLY BE REMOVED
-    pub fn parse_into_string(
-        &mut self,
-        inherited_style: Option<Style>,
-        position: &TextLocation,
-    ) -> Result<String, CompileError> {
+    pub fn fold(&mut self, inherited_style: &Option<Style>) -> Result<String, CompileError> {
+        // Now we start combining everything into one string
+        let mut final_string = String::with_capacity(3);
 
-        // Set everything apart from the wrappers for the new style
-        let mut final_style = match inherited_style {
-            Some(style) => style.to_owned(),
-            None => Style::default(),
+        // Format. How will the content be parsed at compile time?
+        if let Some(style) = inherited_style {
+            // Each format has a different precedence, using the highest precedence.
+            // But children with a lower precedence than the parent should reset their format to None.
+            // This is because the parent will already parse that formatting over all its children.
+            if style.formatter_precedence > self.style.formatter_precedence {
+                self.style.compile_time_parser = None;
+
+            // If the child has a higher precedence format that the parent,
+            // Then it inserts special characters around it that indicate to the parent that any formatting should be skipped here.
+            // And this template will run its own format parsing.
+            // This is only inserted when there is a parent style that will parse the content
+            // because the formatters will remove this character when parsing.
+            } else {
+                final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+            }
         };
-
-        // Format. How will the content be parsed?
-        // Each format has a different precedence, using the highest precedence
-        if self.style.format > final_style.format {
-            final_style.format = self.style.format.to_owned();
-        }
 
         // Compatibility
         // More restrictive compatibility takes precedence over less restrictive ones
@@ -111,119 +131,73 @@ impl Template {
         // Something to do with how surrounding templates are parsed with this one.
         // final_style.neighbour_rule = style.neighbour_rule.to_owned();
 
-        // Now we start combining everything into one string
-        let mut final_string = String::new();
-
         // Everything inserted into the body
         // This needs to be done now
         // so Markdown will parse any added literals correctly
-        let mut content = String::new();
 
         // template content
         for value in self.content.flatten() {
             match &value.kind {
                 ExpressionKind::ConstString(string) => {
-                    content.push_str(string);
+                    final_string.push_str(string);
                 }
 
                 ExpressionKind::ConstFloat(float) => {
-                    content.push_str(&float.to_string());
+                    final_string.push_str(&float.to_string());
                 }
 
                 ExpressionKind::ConstInt(int) => {
-                    content.push_str(&int.to_string());
+                    final_string.push_str(&int.to_string());
                 }
 
                 // Add the string representation of the bool
                 ExpressionKind::ConstBool(value) => {
-                    content.push_str(&value.to_string());
+                    final_string.push_str(&value.to_string());
                 }
 
-                ExpressionKind::Template(template) => {
-                    let new_template = template.to_owned().parse_into_string(
-                        final_style.child_default.to_owned().map(|b| *b),
-                        position,
-                    )?;
-
-                    content.push_str(&new_template);
-                }
-
-                ExpressionKind::None => {
-                    // Ignore this
-                    // Currently 'ignored' or hidden templates result in a None value being added to a template,
-                    // So it's not an error
-                    // Hopefully the compiler will always catch unintended use of None in templates.
-                    // May emit a warning in future if this is possible from user error.
-                }
-
-                ExpressionKind::Runtime(_nodes) => {
-                    // TODO
-                }
-
-                ExpressionKind::Reference(name) => {
-                    // TODO: Variable references in templates - if reference can't be folded at compile time,
-                    // evaluation and string coercion must happen at runtime
-                    content.push_str(&format!("${}", name));
-                }
-
-                ExpressionKind::Function(..) => {
-                    return_rule_error!(
-                    position.to_owned(),
-                    "Functions are not supported in Template Heads"
-                )
-                }
-
-                // At this point, if this structure was a style, those fields and inner template would have been parsed
-                // So we can just unpack any other public fields into the template as strings
-                ExpressionKind::Struct(..) => {
-                    return_rule_error!(
-                    position.to_owned(),
-                    "You can't declare new variables inside of Template Heads"
-                )
-                }
-
-                // Collections will be unpacked into a template
-                ExpressionKind::Collection(_) => {
+                // Anything else can't be folded and should not get to this stage.
+                // This is a compiler error
+                _ => {
                     return_compiler_error!(
-                    "Collections inside template heads not yet implemented in the compiler."
-                )
-                }
-
-                ExpressionKind::Range(..) => {
-                    // TODO: chuck all values into the template
+                        "Invalid Expression Used Inside template when trying to fold into a string.\
+                         The compiler should not be trying to fold this template."
+                    )
                 }
             }
         }
 
-        // If this is a Markdown template, and the parent isn't one,
-        // parse the content into Markdown
-        // If the parent is parsing the Markdown already,
-        // skip this as it should be done at the highest level possible
-        if final_style.format == StyleFormat::Markdown && self.style.format != StyleFormat::Markdown {
-            let default_tag = "p";
+        // The style will be 'None' if the parent has the same style format
+        // But if this child has a different format with a higher precedence,
+        // then it will insert a special character that will be removed by the parent.
+        // This character indicates to the parent that it should skip formatting this content.
 
-            final_string.push_str(&to_markdown(&content, default_tag));
+        // Otherwise, we parse the content if there is a compile time formatter
+        if let Some(formatter) = &self.style.compile_time_parser {
+            formatter.format(&mut final_string);
 
-        // If the parent is outputting Markdown and the style is now a Codeblock
-        // Codeblocks can't have children, so there's no need to check that like above
-        } else if final_style.format == StyleFormat::Codeblock
-            && self.style.format == StyleFormat::Markdown
-        {
-            // Add a special object replace character to signal to the parent that this tag should not be parsed into Markdown
-            final_string.push_str(&format!(
-                "\u{FFFC}<pre><code>{}</code></pre>\u{FFFC}",
-                highlight_html_code_block(&content, BEANSTALK_FILE_EXTENSION)
-            ));
-
-        // No need to do any additional parsing to the content
-        // Might already be parsed by the parent, or just raw
-        } else {
-            final_string.push_str(&content);
+            if inherited_style.is_some() {
+                final_string.push(TEMPLATE_SPECIAL_IGNORE_CHAR);
+            }
         }
 
         Ok(final_string)
     }
 }
+
+// TOOD: move these old formatters to the new trait style ones
+
+// StyleFormat::Markdown => {
+// let default_tag = "p";
+// final_string.push_str(&to_markdown(&content, default_tag));
+//
+// StyleFormat::Codeblock => {
+// final_string.push_str(&highlight_html_code_block(
+// &content,
+// BEANSTALK_FILE_EXTENSION,
+// ));
+//
+
+// }
 
 // Recursive function to parse templates
 pub fn new_template(
@@ -270,7 +244,7 @@ pub fn new_template(
     // TokenKind::Ignore => {
     //     // Should also clear any styles or tags in the scene
     //     *template_style = Style::default();
-//
+    //
     //     // Keep track of how many scene opens there are
     //     // This is to make sure the scene close is at the correct place
     //     let mut extra_template_opens = 1;
@@ -293,7 +267,7 @@ pub fn new_template(
     //         }
     //         token_stream.advance();
     //     }
-//
+    //
     //     return Ok(Template::comment(token_stream.current_location()));
     // }
 
@@ -317,7 +291,7 @@ pub fn new_template(
                     new_template(token_stream, context, unlocked_templates, template_style)?;
 
                 match nested_template.kind {
-                    TemplateType::StringTemplate => {
+                    TemplateType::FunctionTemplate => {
                         this_template_content.concat(nested_template.content);
                     }
 
@@ -375,7 +349,18 @@ pub fn new_template(
     }
 
     template_content.concat(this_template_content);
-    Ok(Template::string_template(
+
+    if foldable {
+        return Ok(Template::folded_string(
+            template_content,
+            template_style.to_owned(),
+            template_id,
+            control_flow,
+            token_stream.current_location(),
+        ));
+    };
+
+    Ok(Template::function_template(
         template_content,
         template_style.to_owned(),
         template_id,
@@ -403,7 +388,6 @@ pub fn parse_template_head(
     template_content: &mut TemplateContent,
     foldable: &mut bool,
 ) -> Result<(TemplateControlFlow, String), CompileError> {
-
     // TODO: Add control flow parsing
     let mut control_flow = TemplateControlFlow::None;
     let mut template_id: String = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
@@ -422,6 +406,19 @@ pub fn parse_template_head(
         // so expressions are allowed and should be folded where possible.
         // Loops and if statements can end the scene head.
 
+        // Returning without a scene body
+        // EOF is in here for template repl atm and for the convenience
+        // of not having to explicitly close the template head from a repl session.
+        // This MIGHT lead to some overly forgiving behavior (not warning about an unclosed template head)
+        if token == TokenKind::TemplateClose || token == TokenKind::Eof {
+            return Ok((control_flow, template_id));
+        }
+
+        if token == TokenKind::Colon {
+            token_stream.advance();
+            return Ok((control_flow, template_id));
+        }
+
         // Make sure there is a comma before the next token
         if !comma_separator {
             if token != TokenKind::Comma {
@@ -437,21 +434,6 @@ pub fn parse_template_head(
         };
 
         match token {
-            TokenKind::Colon => {
-                break;
-            }
-
-            // Returning without a scene body
-            // EOF is in here for template repl atm and for the convenience
-            // of not having to explicitly close the template head from a repl session.
-            // This MIGHT lead to some overly forgiving behavior (not warning about an unclosed template head)
-            TokenKind::TemplateClose | TokenKind::Eof => {
-                // Will need to pick this up again at the body parsing stage
-                token_stream.go_back();
-
-                return Ok((control_flow, template_id));
-            }
-
             // This is a declaration of the ID by using the export prefix followed by a variable name
             // This doesn't follow regular declaration rules.
             TokenKind::Id(name) => {
@@ -467,7 +449,6 @@ pub fn parse_template_head(
                 // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
                 match unlocked_templates.to_owned().get(&name) {
                     Some(ExpressionKind::Template(template)) => {
-
                         // This can't be folded anymore as a non-constant is being referenced
                         *foldable = false;
 
@@ -484,8 +465,12 @@ pub fn parse_template_head(
                         }
 
                         // Unpack this scene into this scene's body
-                        template_content.before.extend(template.content.before.to_owned());
-                        template_content.after.splice(0..0, template.content.after.to_owned());
+                        template_content
+                            .before
+                            .extend(template.content.before.to_owned());
+                        template_content
+                            .after
+                            .splice(0..0, template.content.after.to_owned());
 
                         continue;
                     }
@@ -499,17 +484,15 @@ pub fn parse_template_head(
                             false,
                         )?);
                     }
-                    _=> {}
+                    _ => {}
                 }
 
                 // Otherwise, check if it's a regular scene or variable reference
                 // If this is a reference to a function or variable
                 if let Some(arg) = context.find_reference(&name) {
                     match &arg.value.kind {
-
                         // Reference to another string template
                         ExpressionKind::Template(template) => {
-
                             *foldable = false;
 
                             // Override the current child_default if there is a new one coming in
@@ -550,7 +533,6 @@ pub fn parse_template_head(
                     }
 
                     continue;
-
                 } else {
                     return_syntax_error!(
                         token_stream.current_location(),

@@ -2,7 +2,6 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::template::{Style, TemplateContent};
 use crate::compiler::parsers::tokens::TextLocation;
 
 // Expressions represent anything that will turn into a value
@@ -10,7 +9,7 @@ use crate::compiler::parsers::tokens::TextLocation;
 // Runtime expressions (couldn't be folded) are represented as 'runtime' kinds.
 // These runtime expressions are small ASTs that must be represented at runtime.
 // Expression kinds are like a subset of the core datatypes because some data types don't return values or represent more complex structures.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Expression {
     pub kind: ExpressionKind,
     pub data_type: DataType,
@@ -42,7 +41,9 @@ impl Expression {
             }
             ExpressionKind::Function(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
-            ExpressionKind::Range(lower, upper) => format!("{} to {}", lower.as_string(), upper.as_string()),
+            ExpressionKind::Range(lower, upper) => {
+                format!("{} to {}", lower.as_string(), upper.as_string())
+            }
             ExpressionKind::None => String::new(),
         }
     }
@@ -187,7 +188,7 @@ impl Expression {
         vec![]
     }
 }
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum ExpressionKind {
     None,
 

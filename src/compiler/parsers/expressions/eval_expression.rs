@@ -197,10 +197,10 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
 
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence
-                style.format = template.style.format.to_owned();
+                style.compile_time_parser = template.style.compile_time_parser.to_owned();
                 style.child_default = template.style.child_default.to_owned();
                 style.compatibility = template.style.compatibility.to_owned();
-                style.precedence = template.style.precedence.to_owned();
+                style.override_precedence = template.style.override_precedence.to_owned();
             }
 
             _ => {
@@ -211,7 +211,7 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
         }
     }
 
-    Ok(Expression::template(Template::string_template(
+    Ok(Expression::template(Template::function_template(
         template_body,
         style,
         String::new(),

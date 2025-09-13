@@ -3,14 +3,14 @@
 // This will ALWAYS return a UTF-8 string
 // NOT REALLY WORKING YET - JUST SOME SCAFFOLDING
 
-use std::collections::HashMap;
-use std::env;
 use crate::compiler::compiler_errors::CompileError;
-use std::io::{self, Write};
-use std::path::{Path};
 use crate::compiler::parsers::statements::create_template_node::new_template;
 use crate::compiler::parsers::template::Style;
 use crate::compiler::parsers::tokens::TokenizeMode;
+use std::collections::HashMap;
+use std::env;
+use std::io::{self, Write};
+use std::path::Path;
 
 /// Start the REPL session
 pub fn start_repl_session() {
@@ -18,7 +18,10 @@ pub fn start_repl_session() {
     use colour::{green_ln_bold, grey_ln, red_ln};
 
     green_ln_bold!("Beanstalk string template REPL");
-    grey_ln!("Enter Beanstalk template snippets. Type 'exit' to quit.");
+    grey_ln!("Enter Beanstalk template snippets.");
+    grey_ln!(
+        "Type 'exit' to quit. and 'clear' to restart the REPL or type 'show' to see the current code."
+    );
     grey_ln!("This starts inside the template head.");
     println!();
 
@@ -35,10 +38,18 @@ pub fn start_repl_session() {
         let mut new_code = String::new();
         match io::stdin().read_line(&mut new_code) {
             Ok(_) => {
-
                 if new_code.trim() == "exit" {
                     println!("Closing REPL session.");
-                    break;
+                }
+
+                if new_code.trim() == "clear" {
+                    code.clear();
+                    continue;
+                }
+
+                if new_code.trim() == "show" {
+                    println!("{code}");
+                    continue;
                 }
 
                 let next_code = format!("{code}{new_code}");
@@ -71,14 +82,15 @@ fn compile_beanstalk_to_string(
     use crate::compiler::parsers::tokenizer;
 
     // Tokenize the source code
-    let mut tokenizer_output = tokenizer::tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
+    let mut tokenizer_output =
+        tokenizer::tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
     let ast_context = ScopeContext::new(ContextKind::Template, source_path.to_path_buf(), &[]);
 
     // Build Template
     let mut template = new_template(
         &mut tokenizer_output,
         &ast_context,
-        &mut HashMap::new(),
+        &HashMap::new(),
         &mut Style::default(),
     )?;
 
@@ -86,10 +98,11 @@ fn compile_beanstalk_to_string(
     // There is currently no codegen for templates.
     // They need to be lowered to a function that returns a string.
     // Temporary gross function that should work for constants but doesn't atm
-    let template_string = template.parse_into_string(
-        None,
-        &tokenizer_output.current_location(),
-    )?;
+
+    // For now, this will be able to return a string if it can be folded at compile time
+    // If not, it will throw an error.
+    // Since the repl is purely inside the string template, new variables or functions can't be used anyway.
+    let template_string = template.fold(&None)?;
 
     Ok(template_string)
 }

@@ -58,7 +58,7 @@ pub trait ProjectBuilder {
 /// Create the appropriate project builder based on configuration
 pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
     match target {
-        BuildTarget::HtmlProject { .. } => Box::new(html_project::HtmlProjectBuilder::new(target)),
+        BuildTarget::HtmlProject => Box::new(html_project::HtmlProjectBuilder::new(target)),
         BuildTarget::Native { .. } => Box::new(native_project::NativeProjectBuilder::new(target)),
         BuildTarget::Embedded { .. } => {
             Box::new(embedded_project::EmbeddedProjectBuilder::new(target))

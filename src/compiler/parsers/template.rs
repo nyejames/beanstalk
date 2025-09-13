@@ -1,20 +1,21 @@
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
-    StringTemplate,
+    FunctionTemplate,
+    FoldedString,
     Slot,
     Comment,
 }
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct TemplateContent {
     pub before: Vec<Expression>,
     pub after: Vec<Expression>,
 }
-impl TemplateContent {
+impl<'a> TemplateContent {
     pub fn new(content: Vec<Expression>) -> TemplateContent {
         TemplateContent {
             before: Vec::new(),
@@ -43,26 +44,38 @@ impl TemplateContent {
     }
 }
 
+pub trait TemplateFormatter {
+    fn format(&self, content: &mut String);
+}
+
+impl std::fmt::Debug for dyn TemplateFormatter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "TemplateFormatter")
+    }
+}
+impl Clone for Box<dyn TemplateFormatter> {
+    fn clone(&self) -> Self {
+        self.to_owned()
+    }
+}
+
 // Template Config Type
 // This is passed into a template head to configure how it should be parsed
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Style {
-    // pub slot: Wrapper,
+    // The name of the style,
+    // For helping other styles check compatibility with this style
+    pub id: &'static str,
 
-    // A callback functions for how the string content of the template should be parsed
-    // If at all
-    pub format: StyleFormat,
+    // A callback function for how the string content of the template should be parsed
+    // If at all.
+    // It has a precedence that determines whether it takes priority over any inherited styles.
+    // A high precedence combined with 'None' will prevent the parent from parsing the content with a formatter.
+    pub compile_time_parser: Option<Box<dyn TemplateFormatter>>,
+    pub formatter_precedence: i32,
 
-    // Overrides other styles
-    pub precedence: i32,
-
-    // // Rules for adding this string to the wrapper
-    // pub groups: &'static [u32],
-    // pub incompatible_groups: &'static [u32],
-    // pub required_groups: &'static [u32],
-
-    // If compatible, should this overwrite everything else in the vec.
-    // pub overwrite: bool,
+    // Overrides any inherited styles that have a lower precedence
+    pub override_precedence: i32,
 
     // Passes a default style for any children to start with
     // Wrappers can be overridden with parent overrides
@@ -83,8 +96,10 @@ pub struct Style {
 impl Style {
     pub fn default() -> Style {
         Style {
-            format: StyleFormat::None,
-            precedence: -1,
+            id: "",
+            compile_time_parser: None,
+            formatter_precedence: -1,
+            override_precedence: -1,
             child_default: None,
             compatibility: TemplateCompatibility::All,
             unlocked_templates: HashMap::new(),
@@ -102,14 +117,13 @@ impl Style {
 // THESE ARE ORDERED BY PRECEDENCE (LOWEST TO HIGHEST)
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum StyleFormat {
-    None = 0,
-    Markdown = 1,
-    Metadata = 2,
+    Markdown = 0,
+    WasmString = 1,
+    None = 2, // This is an explicit override of the parent style
     Codeblock = 3,
-    Comment = 4,
+    Metadata = 4,
     Raw = 5,
-    JSString = 6,
-    WasmString = 7,
+    Comment = 6,
 }
 
 #[derive(Clone, Debug, PartialEq)]

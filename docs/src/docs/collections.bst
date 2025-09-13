@@ -7,20 +7,21 @@ When a new collection uses the mutable symbol, its internal values can be mutate
 
 Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
 
-You can also give values keys to access them, turning the collection into a dictionary or list. By default they just have a numerical index.
-Collections are zero indexed.
+Collections are ordered groups of values that are zero indexed (start from 0). 
+
+For unordered groups of values with optional keys, use a Hash Map (see below).
 
 Elements inside of collections are accessed using the .get() method.
 
 array.get(0) is the equivalent of array[0] in most C like languages. 
 There is no square or curly brackets notation.
 
-There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be fast.
+There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be direct accesses in many cases.
 
 ## Immutable Collections
 [Code:
 
-    -- Collections that are not mutable have immutable values inside
+    -- Collections assigned without the mutable symbol have immutable values inside
     immutable_collection = {1, 2, 3}
 
     immutable_collection.set(1, 69) -- Error, can't mutate values inside an immutable collection
@@ -53,13 +54,48 @@ There may not actually be a function call under the hood when using collection m
 Set keys for items in your dynamic collection to turn it into a key/value list.
 
 [Code:
-    dictionary ~= {
+
+    -- Hash Map
+    dictionary ~= |
         "key1" = 1,
         "key2" = 2,
         "key3" = 3,
-    }
+    |
 
     dictionary.get("key1") -- returns 1
+
+    -- Hash Set
+    set ~= | "value1", "value2", "value3" |
+
+    -- Any basic type can be used as a key or value in a hash map or set
+    set = | 1, 2, 3, "four", "five", 6.0 |
 ]
+
+## Types
+You can define the shape of named collections of data by using types.
+
+This is done by immediately following a type name with a colon and then defining the fields.
+
+[Code:
+    -- Define a new type
+    Person:
+        name String,
+        age Int,
+    ;
+
+    -- Create a new instance of the type
+    person ~= Person("Alice", 30)
+
+    -- Access fields using dot notation
+    print(person.name) -- "Alice"
+    print(person.age)  -- 30
+
+    -- Mutate fields if the instance is mutable
+    person ~= Person("Bob", 25)
+    print(person.name) -- "Bob"
+    print(person.age)  -- 25
+]
+
+
 
 [Footer]

@@ -1,7 +1,7 @@
-use crate::compiler::mir::build_mir::MIR;
 use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::compiler_errors::CompileError;
-
+use crate::compiler::mir::build_mir::MIR;
+use crate::compiler::mir::mir_nodes::ExportKind;
 use crate::return_compiler_error;
 
 // Assumes that the MIR being passed in is an entire complete module.
@@ -13,15 +13,11 @@ pub fn new_wasm_module(mir: MIR) -> Result<Vec<u8>, CompileError> {
     // Process all functions in the MIR
     for mir_function in &mir.functions {
         let function_index = module.compile_mir_function(mir_function)?;
-        
+
         // Export the function if it's marked for export
-        if let Some(export) = mir.exports.get(&mir_function.name) {
-            match export.kind {
-                crate::compiler::mir::mir_nodes::ExportKind::Function => {
-                    module.add_function_export(&export.name, function_index);
-                }
-                _ => {} // Other export kinds handled elsewhere
-            }
+        if let Some(export) = mir.exports.get(&mir_function.name) 
+            && export.kind == ExportKind::Function {
+                module.add_function_export(&export.name, function_index);
         }
     }
 
@@ -42,8 +38,6 @@ pub fn new_wasm_module(mir: MIR) -> Result<Vec<u8>, CompileError> {
     let compiled_wasm = module.finish();
     match wasmparser::validate(&compiled_wasm) {
         Ok(_) => Ok(compiled_wasm),
-        Err(e) => return_compiler_error!(
-            "Failed to validate final wasm output: {e}"
-        ),
+        Err(e) => return_compiler_error!("Failed to validate final wasm output: {e}"),
     }
 }

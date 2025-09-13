@@ -389,7 +389,7 @@ pub fn parse_function_call(
     })
 }
 
-pub fn create_function_call_arguments(
+pub fn create_function_call_arguments<'a>(
     token_stream: &mut TokenContext,
     required_arguments: &[Arg],
     context: &ScopeContext,
@@ -464,7 +464,7 @@ fn create_arg_constructor(
                 }
 
                 // Create a new variable
-                let argument = new_arg(token_stream, &arg_name, &context)?;
+                let argument = new_arg(token_stream, &arg_name, context)?;
 
                 if argument.value.data_type.is_mutable() {
                     *pure = false;

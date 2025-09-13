@@ -21,7 +21,7 @@ use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
 use std::path::PathBuf;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct AstBlock {
     pub scope: PathBuf,
     pub ast: Vec<AstNode>, // Body

@@ -136,9 +136,9 @@ pub fn print_ast_output(ast: &[AstNode]) {
         if let ExpressionKind::Template(template) = scene {
             blue_ln_bold!("\n{}Scene Styles: ", indentation);
 
-            green_ln!("{}  {:?}", indentation, template.style.format);
-            green_ln!("{}  {:?}", indentation, template.style.child_default);
-            green_ln!("{}  {:?}", indentation, template.style.unlocked_templates);
+            // green_ln!("{}  {}", indentation, template.style.compile_time_parser);
+            // green_ln!("{}  {}", indentation, template.style.child_default);
+            // green_ln!("{}  {}", indentation, template.style.unlocked_templates);
 
             blue_ln_bold!("{}Scene Body:", indentation);
 

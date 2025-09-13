@@ -35,7 +35,7 @@ impl Ownership {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum DataType {
     // Mutability is part of the type
     // This helps with compile time constant folding
@@ -122,6 +122,8 @@ impl DataType {
                 );
             }
 
+            accepted_type => return true,
+
             _ => {}
         }
 
@@ -150,7 +152,7 @@ impl DataType {
                 )
             }
 
-            _ => self == accepted_type,
+            _ => false,
         }
     }
 
