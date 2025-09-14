@@ -298,20 +298,20 @@ impl Template {
         // template content
         for value in self.content.flatten() {
             match &value.kind {
-                ExpressionKind::ConstString(string) => {
+                ExpressionKind::String(string) => {
                     final_string.push_str(string);
                 }
 
-                ExpressionKind::ConstFloat(float) => {
+                ExpressionKind::Float(float) => {
                     final_string.push_str(&float.to_string());
                 }
 
-                ExpressionKind::ConstInt(int) => {
+                ExpressionKind::Int(int) => {
                     final_string.push_str(&int.to_string());
                 }
 
                 // Add the string representation of the bool
-                ExpressionKind::ConstBool(value) => {
+                ExpressionKind::Bool(value) => {
                     final_string.push_str(&value.to_string());
                 }
 
@@ -443,14 +443,13 @@ pub fn parse_template_head(
                     }
 
                     // Constant inherited
-                    Some(ExpressionKind::ConstString(string)) => {
-                        template.content.before.push(create_expression(
-                            token_stream,
-                            context,
-                            &mut DataType::String(Ownership::default()),
-                            false,
-                        )?);
+                    Some(ExpressionKind::String(string)) => {
+                        template.content.before.push(Expression::string(
+                            string.to_owned(),
+                            token_stream.current_location(),
+                        ));
                     }
+
                     _ => {}
                 }
 

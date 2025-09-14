@@ -808,11 +808,11 @@ fn transform_expression_to_mir(
     context: &mut MirTransformContext,
 ) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
     match &expression.kind {
-        ExpressionKind::ConstInt(_) | ExpressionKind::ConstFloat(_) | ExpressionKind::ConstBool(_) => {
+        ExpressionKind::Int(_) | ExpressionKind::Float(_) | ExpressionKind::Bool(_) => {
             // Constants don't need places, they're embedded in operands
             Ok((vec![], None))
         }
-        ExpressionKind::ConstString(value) => {
+        ExpressionKind::String(value) => {
             // Strings need memory allocation in linear memory
             let string_place = context.get_place_manager().allocate_heap(
                 &expression.data_type,
@@ -860,10 +860,10 @@ fn transform_expression_to_mir(
 /// Convert expression to rvalue
 fn expression_to_rvalue(expression: &Expression) -> Result<Rvalue, CompileError> {
     match &expression.kind {
-        ExpressionKind::ConstInt(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
-        ExpressionKind::ConstFloat(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
-        ExpressionKind::ConstBool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
-        ExpressionKind::ConstString(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
+        ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
+        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
+        ExpressionKind::Bool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
+        ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
             value.clone(),
         )))),
         _ => {
@@ -911,16 +911,16 @@ fn transform_runtime_expression_to_three_address_form(
                             );
                         }
                     }
-                    ExpressionKind::ConstInt(value) => {
+                    ExpressionKind::Int(value) => {
                         operand_stack.push(Operand::Constant(Constant::I64(*value)));
                     }
-                    ExpressionKind::ConstFloat(value) => {
+                    ExpressionKind::Float(value) => {
                         operand_stack.push(Operand::Constant(Constant::F64(*value)));
                     }
-                    ExpressionKind::ConstBool(value) => {
+                    ExpressionKind::Bool(value) => {
                         operand_stack.push(Operand::Constant(Constant::Bool(*value)));
                     }
-                    ExpressionKind::ConstString(value) => {
+                    ExpressionKind::String(value) => {
                         operand_stack.push(Operand::Constant(Constant::String(value.clone())));
                     }
                     _ => {
@@ -1073,10 +1073,10 @@ fn transform_function_call_to_mir(
         } else {
             // Convert constant expression to operand
             match &arg.kind {
-                ExpressionKind::ConstInt(value) => Operand::Constant(Constant::I64(*value)),
-                ExpressionKind::ConstFloat(value) => Operand::Constant(Constant::F64(*value)),
-                ExpressionKind::ConstBool(value) => Operand::Constant(Constant::Bool(*value)),
-                ExpressionKind::ConstString(value) => Operand::Constant(Constant::String(value.clone())),
+                ExpressionKind::Int(value) => Operand::Constant(Constant::I64(*value)),
+                ExpressionKind::Float(value) => Operand::Constant(Constant::F64(*value)),
+                ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
+                ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
                 _ => {
                     return_compiler_error!(
                         "Cannot convert function argument to operand: {:?}",
@@ -1155,10 +1155,10 @@ fn transform_collection_expression_to_mir(
         } else {
             // Convert constant expression to operand
             match &item.kind {
-                ExpressionKind::ConstInt(value) => Operand::Constant(Constant::I64(*value)),
-                ExpressionKind::ConstFloat(value) => Operand::Constant(Constant::F64(*value)),
-                ExpressionKind::ConstBool(value) => Operand::Constant(Constant::Bool(*value)),
-                ExpressionKind::ConstString(value) => Operand::Constant(Constant::String(value.clone())),
+                ExpressionKind::Int(value) => Operand::Constant(Constant::I64(*value)),
+                ExpressionKind::Float(value) => Operand::Constant(Constant::F64(*value)),
+                ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
+                ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
                 _ => {
                     return_compiler_error!(
                         "Cannot convert collection item to operand: {:?}",
@@ -1217,10 +1217,10 @@ fn transform_struct_expression_to_mir(
         } else {
             // Convert constant expression to operand
             match &arg.value.kind {
-                ExpressionKind::ConstInt(value) => Operand::Constant(Constant::I64(*value)),
-                ExpressionKind::ConstFloat(value) => Operand::Constant(Constant::F64(*value)),
-                ExpressionKind::ConstBool(value) => Operand::Constant(Constant::Bool(*value)),
-                ExpressionKind::ConstString(value) => Operand::Constant(Constant::String(value.clone())),
+                ExpressionKind::Int(value) => Operand::Constant(Constant::I64(*value)),
+                ExpressionKind::Float(value) => Operand::Constant(Constant::F64(*value)),
+                ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
+                ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
                 _ => {
                     return_compiler_error!(
                         "Cannot convert struct field to operand: {:?}",

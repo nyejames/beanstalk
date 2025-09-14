@@ -19,10 +19,10 @@ pub struct Expression {
 impl Expression {
     pub fn as_string(&self) -> String {
         match &self.kind {
-            ExpressionKind::ConstString(string) => string.to_owned(),
-            ExpressionKind::ConstInt(int) => int.to_string(),
-            ExpressionKind::ConstFloat(float) => float.to_string(),
-            ExpressionKind::ConstBool(bool) => bool.to_string(),
+            ExpressionKind::String(string) => string.to_owned(),
+            ExpressionKind::Int(int) => int.to_string(),
+            ExpressionKind::Float(float) => float.to_string(),
+            ExpressionKind::Bool(bool) => bool.to_string(),
             ExpressionKind::Reference(name) => name.to_string(),
             ExpressionKind::Template(..) => String::new(),
             ExpressionKind::Collection(items, ..) => {
@@ -72,28 +72,28 @@ impl Expression {
     pub fn int(value: i64, location: TextLocation) -> Self {
         Self {
             data_type: DataType::Int(Ownership::default()),
-            kind: ExpressionKind::ConstInt(value),
+            kind: ExpressionKind::Int(value),
             location,
         }
     }
     pub fn float(value: f64, location: TextLocation) -> Self {
         Self {
             data_type: DataType::Float(Ownership::default()),
-            kind: ExpressionKind::ConstFloat(value),
+            kind: ExpressionKind::Float(value),
             location,
         }
     }
     pub fn string(value: String, location: TextLocation) -> Self {
         Self {
             data_type: DataType::String(Ownership::default()),
-            kind: ExpressionKind::ConstString(value),
+            kind: ExpressionKind::String(value),
             location,
         }
     }
     pub fn bool(value: bool, location: TextLocation) -> Self {
         Self {
             data_type: DataType::Bool(Ownership::default()),
-            kind: ExpressionKind::ConstBool(value),
+            kind: ExpressionKind::Bool(value),
             location,
         }
     }
@@ -167,7 +167,7 @@ impl Expression {
         Self {
             data_type: DataType::Template(Ownership::default()),
             location: template.location.to_owned(),
-            kind: ExpressionKind::Template(template),
+            kind: ExpressionKind::Template(Box::new(template)),
         }
     }
 
@@ -194,10 +194,10 @@ pub enum ExpressionKind {
 
     Runtime(Vec<AstNode>),
 
-    ConstInt(i64),
-    ConstFloat(f64),
-    ConstString(String),
-    ConstBool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Bool(bool),
 
     // Reference to a variable by name
     Reference(String),
@@ -209,7 +209,7 @@ pub enum ExpressionKind {
         Vec<DataType>, // return args
     ),
 
-    Template(Template), // Template Body, Styles, ID
+    Template(Box<Template>), // Template Body, Styles, ID
 
     Collection(Vec<Expression>),
 
@@ -233,19 +233,19 @@ impl ExpressionKind {
     pub fn is_foldable(&self) -> bool {
         matches!(
             self,
-            ExpressionKind::ConstInt(_)
-                | ExpressionKind::ConstFloat(_)
-                | ExpressionKind::ConstBool(_)
-                | ExpressionKind::ConstString(_)
+            ExpressionKind::Int(_)
+                | ExpressionKind::Float(_)
+                | ExpressionKind::Bool(_)
+                | ExpressionKind::String(_)
         )
     }
 
     pub fn is_iterable(&self) -> bool {
         match self {
             ExpressionKind::Collection(..) => true,
-            ExpressionKind::ConstInt(_) => true,
-            ExpressionKind::ConstFloat(_) => true,
-            ExpressionKind::ConstString(_) => true,
+            ExpressionKind::Int(_) => true,
+            ExpressionKind::Float(_) => true,
+            ExpressionKind::String(_) => true,
             _ => false,
         }
     }
