@@ -438,7 +438,7 @@ pub enum TokenKind {
 
     // Templates
     ParentTemplate,
-    EmptyTemplate(usize), // Used for templating values in scene heads in the body of scenes, value is number of spaces after the scene template
+    EmptyTemplate(usize), // MIGHT REMOVE THIS
     Slot,
     TemplateClose,
     TemplateHead,

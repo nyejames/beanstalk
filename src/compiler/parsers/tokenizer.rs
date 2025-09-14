@@ -17,16 +17,25 @@ macro_rules! return_token {
     };
 }
 
-pub fn tokenize(source_code: &str, src_path: &Path, mode: TokenizeMode) -> Result<TokenContext, CompileError> {
+pub fn tokenize(
+    source_code: &str,
+    src_path: &Path,
+    mode: TokenizeMode,
+) -> Result<TokenContext, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
     let imports_initial_capacity = settings::IMPORTS_CAPACITY;
 
+    let mut template_nesting_level: i64 = if mode == TokenizeMode::Normal {
+        0
+    } else {
+        // This is so .mt files or the repl can't break out of the template head/body when starting there
+        i64::MAX / 2
+    };
+
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode);
     let mut imports = HashSet::with_capacity(imports_initial_capacity);
-
-    let template_nesting_level: &mut i64 = &mut 0;
 
     let mut token: Token = Token::new(
         TokenKind::ModuleStart(String::new()),
@@ -42,7 +51,7 @@ pub fn tokenize(source_code: &str, src_path: &Path, mode: TokenizeMode) -> Resul
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, template_nesting_level, &mut imports)?;
+        token = get_token_kind(&mut stream, &mut template_nesting_level, &mut imports)?;
     }
 
     tokens.push(token);
@@ -118,13 +127,13 @@ pub fn get_token_kind(
             }
 
             TokenizeMode::Normal => {
+                // Going into the template head
                 stream.context = TokenizeMode::TemplateHead;
                 return_token!(TokenKind::ParentTemplate, stream);
             }
 
-            // Going into the scene head
             _ => {
-                // [] is an empty scene
+                // This is a slot
                 if stream.peek() == Some(&']') {
                     stream.next();
 
@@ -143,8 +152,8 @@ pub fn get_token_kind(
                     return_token!(TokenKind::EmptyTemplate(spaces_after_template), stream);
                 }
 
+                // Starting a new template head from inside a template body
                 stream.context = TokenizeMode::TemplateHead;
-
                 return_token!(TokenKind::TemplateHead, stream);
             }
         };
@@ -162,7 +171,7 @@ pub fn get_token_kind(
         return_token!(TokenKind::TemplateClose, stream);
     }
 
-    // Check if going into the scene body
+    // Check if going into the template body
     if current_char == ':' {
         if stream.context == TokenizeMode::TemplateHead {
             stream.context = TokenizeMode::TemplateBody;

@@ -1,8 +1,8 @@
-[Navbar]
+[navbar]
 
-[Header center: [title(1): BEANSTALK TEMPLATES]]
+[header center: [title(1): BEANSTALK TEMPLATES]]
 
-[Page:
+[page:
 
 Beanstalk has unique, superpowered templating strings.
 
@@ -10,13 +10,27 @@ Templates have two sections, the head and the body, separated with a colon.
 
 Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling. 
 
-The main purpose of a template is to generate either text content, markdown, HTML or code.
+The main purpose of a template is to generate either text content, markdown, HTML, code or just formatted strings.
+
+They will also turn into regular strings at compile time if they identify that they can be folded and won't change at runtime.
+
+In the future, templates **might** be extended to generate more than just strings, 
+and become a small macro system (not sure if this is the right direction for the language yet).
 
 #### The head section
 Is used to:
-- Define properties of the template
-- Convert literals and expressions to strings to be added into the template
-- Wrap the template itself in strings that conditionally depend on the template's properties or parent template's properties 
+- Convert literals and expressions dynamically to strings to be added into the template
+- Wrap the template itself in strings that conditionally depend on the template's properties or parent template's properties
+
+The head section is dynamic and coerses all primatives directly into strings.
+However, more complex types (structs and other templates) can interact with templates in a more complex way *TODO*.
+
+When you pass a template into another template via the head, it's content can be injected either before or after the body depending on whether the template has a slot.
+
+Slots can be used to inform how a template merges into another template.
+
+If you pass a Style into a template (a built in Interface), the template will change its behavior and styling based on the Style passed in.
+When interfaces are implemented in the language, you will be able to implement your own Styles, by creating types that implement the Style interface. 
 
 #### The body section
 is used to define the content of the template. This is a string.
@@ -28,8 +42,8 @@ Beanstalk uses it's own flavour of markdown that can be used inside template bod
 Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
 Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
-[Code:
-    [Page:
+[code:
+    [page:
 
     The open square bracket is used to start a new template. 
     The colon begins the template body. 
@@ -51,8 +65,8 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
 
 ## Scene exmaple
 
-[Code:
-    [Section:
+[code:
+    [section:
 
     [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
 
@@ -193,4 +207,4 @@ This usually means that the variable with the error has reverted to its default 
 [red size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the template rather than a zero value being shown.*]
 
 
-[Footer]
+[footer]

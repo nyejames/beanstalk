@@ -5,8 +5,8 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
-    FunctionTemplate,
-    FoldedString,
+    StringFunction,
+    CompileTimeString,
     Slot,
     Comment,
 }
@@ -27,6 +27,13 @@ impl<'a> TemplateContent {
         Self {
             before: Vec::new(),
             after: Vec::new(),
+        }
+    }
+    pub fn add(&mut self, content: Expression, after_slot: bool) {
+        if after_slot {
+            self.after.push(content);
+        } else {
+            self.before.push(content);
         }
     }
     pub fn flatten(&self) -> Vec<&Expression> {
@@ -59,6 +66,15 @@ impl Clone for Box<dyn TemplateFormatter> {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Formatter {
+    pub id: &'static str,
+
+    // This formatter will be skipped if there is already a formatter for the template
+    pub skip_if_already_formatted: bool,
+    pub formatter: Box<dyn TemplateFormatter>,
+}
+
 // Template Config Type
 // This is passed into a template head to configure how it should be parsed
 #[derive(Clone, Debug)]
@@ -68,10 +84,8 @@ pub struct Style {
     pub id: &'static str,
 
     // A callback function for how the string content of the template should be parsed
-    // If at all.
-    // It has a precedence that determines whether it takes priority over any inherited styles.
-    // A high precedence combined with 'None' will prevent the parent from parsing the content with a formatter.
-    pub compile_time_parser: Option<Box<dyn TemplateFormatter>>,
+    // If at all. COMPILE TIME ONLY PARSING.
+    pub formatter: Option<Formatter>,
     pub formatter_precedence: i32,
 
     // Overrides any inherited styles that have a lower precedence
@@ -97,7 +111,7 @@ impl Style {
     pub fn default() -> Style {
         Style {
             id: "",
-            compile_time_parser: None,
+            formatter: None,
             formatter_precedence: -1,
             override_precedence: -1,
             child_default: None,

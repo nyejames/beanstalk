@@ -2,7 +2,7 @@
 //
 // Provides a generic IO interface that can be mapped to different backends:
 // - WASI for standard I/O
-// - Custom hooks for embedded scenarios  
+// - Custom hooks for embedded scenarios
 // - JS bindings for web targets
 use crate::compiler::compiler_errors::CompileError;
 
@@ -11,13 +11,13 @@ use crate::compiler::compiler_errors::CompileError;
 pub trait IoInterface {
     /// Print a string to the output
     fn print(&self, message: &str) -> Result<(), CompileError>;
-    
+
     /// Read input from the user/environment
     fn read_input(&self) -> Result<String, CompileError>;
-    
+
     /// Write to a file (if supported by backend)
     fn write_file(&self, path: &str, content: &str) -> Result<(), CompileError>;
-    
+
     /// Read from a file (if supported by backend)
     fn read_file(&self, path: &str) -> Result<String, CompileError>;
 }
@@ -59,14 +59,4 @@ pub enum IoType {
     F64,
     String,
     Bytes,
-}
-
-impl Default for IoConfig {
-    fn default() -> Self {
-        Self {
-            backend_config: String::new(),
-            verbose: false,
-            custom_mappings: vec![],
-        }
-    }
 }

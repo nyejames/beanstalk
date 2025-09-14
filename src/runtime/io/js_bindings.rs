@@ -75,16 +75,16 @@ impl JsBindingsGenerator {
 
         // Add DOM manipulation functions if requested
         if self.include_dom_functions {
-            js_code.push_str(&self.generate_dom_manipulation_functions());
+            js_code.push_str(self.generate_dom_manipulation_functions());
         }
 
         // Add development features if requested
         if self.include_dev_features {
-            js_code.push_str(&self.generate_dev_features());
+            js_code.push_str(self.generate_dev_features());
         }
 
         // Add initialization code
-        js_code.push_str(&self.generate_initialization_code());
+        js_code.push_str(self.generate_initialization_code());
 
         js_code
     }

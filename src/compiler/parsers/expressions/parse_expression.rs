@@ -9,20 +9,19 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::collections::new_collection;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
-use crate::compiler::parsers::statements::create_template_node::new_template;
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::variables::create_reference;
-use crate::compiler::parsers::template::{Style, TemplateType};
+use crate::compiler::parsers::template::TemplateType;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
     return_type_error,
 };
-use std::collections::HashMap;
 
 // For multiple returns or function calls
 // MUST know all the types
-pub fn create_multiple_expressions<'a>(
+pub fn create_multiple_expressions(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
     consume_closing_parenthesis: bool,
@@ -78,7 +77,7 @@ pub fn create_multiple_expressions<'a>(
 // If the datatype is a collection,
 // the expression must only contain references to collections
 // or collection literals.
-pub fn create_expression<'a>(
+pub fn create_expression(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
     data_type: &mut DataType,
@@ -328,19 +327,15 @@ pub fn create_expression<'a>(
             }
 
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
-                let mut template = new_template(
-                    token_stream,
-                    new_template_context!(context),
-                    &HashMap::new(),
-                    &mut Style::default(),
-                )?;
+                let mut template =
+                    Template::new(token_stream, new_template_context!(context), None)?;
 
                 match template.kind {
-                    TemplateType::FunctionTemplate => {
+                    TemplateType::StringFunction => {
                         return Ok(Expression::template(template));
                     }
 
-                    TemplateType::FoldedString => {
+                    TemplateType::CompileTimeString => {
                         return Ok(Expression::string(
                             template.fold(&None)?,
                             token_stream.current_location(),

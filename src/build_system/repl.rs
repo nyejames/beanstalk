@@ -1,13 +1,13 @@
 // For running Beanstalk string templates in the REPL,
-// but starts in the template head, rather than body (like .mt files).
+// Starts in the template head rather than body (unlike .mt files which will start in the body).
 // This will ALWAYS return a UTF-8 string
-// NOT REALLY WORKING YET - JUST SOME SCAFFOLDING
+
+// ONLY DOES COMPILE TIME TEMPLATE ATM.
+// Function templates are not yet supported
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::parsers::statements::create_template_node::new_template;
-use crate::compiler::parsers::template::Style;
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::tokens::TokenizeMode;
-use std::collections::HashMap;
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
@@ -87,12 +87,7 @@ fn compile_beanstalk_to_string(
     let ast_context = ScopeContext::new(ContextKind::Template, source_path.to_path_buf(), &[]);
 
     // Build Template
-    let mut template = new_template(
-        &mut tokenizer_output,
-        &ast_context,
-        &HashMap::new(),
-        &mut Style::default(),
-    )?;
+    let mut template = Template::new(&mut tokenizer_output, &ast_context, None)?;
 
     // TODO: put all this into an AST block, then lower it to wasm and run it
     // There is currently no codegen for templates.

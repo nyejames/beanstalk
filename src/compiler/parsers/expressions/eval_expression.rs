@@ -173,34 +173,41 @@ fn pop_higher_precedence(
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
 fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
-    let mut template_body: TemplateContent = TemplateContent::default();
-    let mut style = Style::default();
-
+    let mut template: Template = Template::create_default(None);
     let location = extract_location(simplified_expression)?;
 
     for node in simplified_expression {
         match node.get_expr()?.kind {
-            ExpressionKind::Template(template) => {
-                template_body.before.extend(template.content.before);
-                template_body.after.extend(template.content.after);
+            ExpressionKind::Template(template_to_concat) => {
+                template
+                    .content
+                    .before
+                    .extend(template_to_concat.content.before);
+                template
+                    .content
+                    .after
+                    .extend(template_to_concat.content.after);
 
-                if !style.unlocks_override {
-                    if template.style.unlocks_override {
-                        style.unlocks_override = true;
-                        style.unlocked_templates = template.style.unlocked_templates.to_owned();
+                if !template.style.unlocks_override {
+                    if template_to_concat.style.unlocks_override {
+                        template.style.unlocks_override = true;
+                        template.style.unlocked_templates =
+                            template_to_concat.style.unlocked_templates.to_owned();
                     } else {
-                        style
+                        template
+                            .style
                             .unlocked_templates
-                            .extend(template.style.unlocked_templates.to_owned());
+                            .extend(template_to_concat.style.unlocked_templates.to_owned());
                     }
                 }
 
                 // TODO - scene style precedence
                 // Some styles will override others based on their precedence
-                style.compile_time_parser = template.style.compile_time_parser.to_owned();
-                style.child_default = template.style.child_default.to_owned();
-                style.compatibility = template.style.compatibility.to_owned();
-                style.override_precedence = template.style.override_precedence.to_owned();
+                template.style.formatter = template_to_concat.style.formatter.to_owned();
+                template.style.child_default = template_to_concat.style.child_default.to_owned();
+                template.style.compatibility = template_to_concat.style.compatibility.to_owned();
+                template.style.override_precedence =
+                    template_to_concat.style.override_precedence.to_owned();
             }
 
             _ => {
@@ -211,13 +218,7 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
         }
     }
 
-    Ok(Expression::template(Template::function_template(
-        template_body,
-        style,
-        String::new(),
-        TemplateControlFlow::None,
-        location,
-    )))
+    Ok(Expression::template(template))
 }
 
 fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompileError> {

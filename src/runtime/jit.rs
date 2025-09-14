@@ -56,7 +56,7 @@ pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(
     }
 }
 
-/// Create import object based on the configured IO backend
+/// Create an import object based on the configured IO backend
 pub fn create_import_object(
     store: &mut Store,
     io_backend: &IoBackend,

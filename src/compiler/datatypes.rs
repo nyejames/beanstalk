@@ -273,7 +273,7 @@ impl DataType {
             DataType::String(_) | DataType::CoerceToString(_) => {
                 Expression::string(String::new(), location)
             }
-            DataType::Template(_) => Expression::template(Template::default()),
+            DataType::Template(_) => Expression::template(Template::create_default(None)),
             _ => Expression::none(),
         }
     }
