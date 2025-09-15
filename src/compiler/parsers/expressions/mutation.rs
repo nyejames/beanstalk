@@ -1,54 +1,59 @@
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
-use crate::compiler::datatypes::{DataType, Ownership};
 use crate::{return_rule_error, return_syntax_error};
 
 /// Handle mutation of existing mutable variables
 /// Called when we encounter a variable reference followed by an assignment operator
 pub fn handle_mutation(
     token_stream: &mut TokenContext,
-    variable_name: &str,
     variable_arg: &Arg,
     context: &ScopeContext,
 ) -> Result<AstNode, CompileError> {
     let location = token_stream.current_location();
-    
+
     // Check if the variable is mutable
     let is_mutable = match &variable_arg.value.data_type {
-        DataType::Int(ownership) | 
-        DataType::Float(ownership) | 
-        DataType::Bool(ownership) | 
-        DataType::String(ownership) | 
-        DataType::Template(ownership) |
-        DataType::Collection(_, ownership) => {
-            matches!(ownership, Ownership::MutableOwned(_) | Ownership::MutableReference(_))
+        DataType::Int(ownership)
+        | DataType::Float(ownership)
+        | DataType::Bool(ownership)
+        | DataType::String(ownership)
+        | DataType::Template(ownership)
+        | DataType::Collection(_, ownership) => {
+            matches!(
+                ownership,
+                Ownership::MutableOwned(_) | Ownership::MutableReference(_)
+            )
         }
         DataType::Function(_, _) => {
             return_rule_error!(
                 location,
                 "Cannot mutate function '{}'. Functions are immutable once declared",
-                variable_name
+                variable_arg.name
             );
         }
         DataType::Args(_) => {
             return_rule_error!(
                 location,
                 "Cannot mutate struct '{}'. Struct mutation is not yet supported",
-                variable_name
+                variable_arg.name
             );
         }
         DataType::Inferred(ownership) => {
-            matches!(ownership, Ownership::MutableOwned(_) | Ownership::MutableReference(_))
+            matches!(
+                ownership,
+                Ownership::MutableOwned(_) | Ownership::MutableReference(_)
+            )
         }
         DataType::None => {
             return_rule_error!(
                 location,
                 "Cannot mutate variable '{}' with None type",
-                variable_name
+                variable_arg.name
             );
         }
         _ => {
@@ -61,8 +66,8 @@ pub fn handle_mutation(
     if !is_mutable {
         return_rule_error!(
             location,
-            "Cannot mutate immutable variable '{}'. Use '~=' to declare a mutable variable, or declare it as mutable with '~' prefix",
-            variable_name
+            "Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable",
+            variable_arg.name
         );
     }
 
@@ -71,26 +76,24 @@ pub fn handle_mutation(
         TokenKind::Assign => {
             // Simple mutation: variable = new_value
             token_stream.advance();
-            
+
             let mut expected_type = variable_arg.value.data_type.clone();
             let new_value = create_expression(token_stream, context, &mut expected_type, false)?;
-            
+
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_name.to_owned(), new_value),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), new_value),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
         }
-        
 
-        
         TokenKind::AddAssign => {
             // Compound assignment: variable += value
             token_stream.advance();
-            
+
             let mut expected_type = variable_arg.value.data_type.clone();
             let add_value = create_expression(token_stream, context, &mut expected_type, false)?;
-            
+
             // Create an addition expression in RPN order: variable, add_value, +
             let variable_ref = AstNode {
                 kind: NodeKind::Expression(variable_arg.value.clone()),
@@ -103,31 +106,34 @@ pub fn handle_mutation(
                 scope: context.scope_name.to_owned(),
             };
             let add_op = AstNode {
-                kind: NodeKind::Operator(crate::compiler::parsers::expressions::expression::Operator::Add),
+                kind: NodeKind::Operator(
+                    crate::compiler::parsers::expressions::expression::Operator::Add,
+                ),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             };
-            
+
             let addition_expr = Expression::runtime(
                 vec![variable_ref, add_value_node, add_op],
                 expected_type,
                 location.clone(),
             );
-            
+
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_name.to_owned(), addition_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), addition_expr),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
         }
-        
+
         TokenKind::SubtractAssign => {
             // Compound assignment: variable -= value
             token_stream.advance();
-            
+
             let mut expected_type = variable_arg.value.data_type.clone();
-            let subtract_value = create_expression(token_stream, context, &mut expected_type, false)?;
-            
+            let subtract_value =
+                create_expression(token_stream, context, &mut expected_type, false)?;
+
             // Create a subtraction expression in RPN order: variable, subtract_value, -
             let variable_ref = AstNode {
                 kind: NodeKind::Expression(variable_arg.value.clone()),
@@ -140,31 +146,34 @@ pub fn handle_mutation(
                 scope: context.scope_name.to_owned(),
             };
             let subtract_op = AstNode {
-                kind: NodeKind::Operator(crate::compiler::parsers::expressions::expression::Operator::Subtract),
+                kind: NodeKind::Operator(
+                    crate::compiler::parsers::expressions::expression::Operator::Subtract,
+                ),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             };
-            
+
             let subtraction_expr = Expression::runtime(
                 vec![variable_ref, subtract_value_node, subtract_op],
                 expected_type,
                 location.clone(),
             );
-            
+
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_name.to_owned(), subtraction_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), subtraction_expr),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
         }
-        
+
         TokenKind::MultiplyAssign => {
             // Compound assignment: variable *= value
             token_stream.advance();
-            
+
             let mut expected_type = variable_arg.value.data_type.clone();
-            let multiply_value = create_expression(token_stream, context, &mut expected_type, false)?;
-            
+            let multiply_value =
+                create_expression(token_stream, context, &mut expected_type, false)?;
+
             // Create a multiplication expression in RPN order: variable, multiply_value, *
             let variable_ref = AstNode {
                 kind: NodeKind::Expression(variable_arg.value.clone()),
@@ -177,31 +186,33 @@ pub fn handle_mutation(
                 scope: context.scope_name.to_owned(),
             };
             let multiply_op = AstNode {
-                kind: NodeKind::Operator(crate::compiler::parsers::expressions::expression::Operator::Multiply),
+                kind: NodeKind::Operator(
+                    crate::compiler::parsers::expressions::expression::Operator::Multiply,
+                ),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             };
-            
+
             let multiplication_expr = Expression::runtime(
                 vec![variable_ref, multiply_value_node, multiply_op],
                 expected_type,
                 location.clone(),
             );
-            
+
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_name.to_owned(), multiplication_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), multiplication_expr),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
         }
-        
+
         TokenKind::DivideAssign => {
             // Compound assignment: variable /= value
             token_stream.advance();
-            
+
             let mut expected_type = variable_arg.value.data_type.clone();
             let divide_value = create_expression(token_stream, context, &mut expected_type, false)?;
-            
+
             // Create a division expression in RPN order: variable, divide_value, /
             let variable_ref = AstNode {
                 kind: NodeKind::Expression(variable_arg.value.clone()),
@@ -214,29 +225,31 @@ pub fn handle_mutation(
                 scope: context.scope_name.to_owned(),
             };
             let divide_op = AstNode {
-                kind: NodeKind::Operator(crate::compiler::parsers::expressions::expression::Operator::Divide),
+                kind: NodeKind::Operator(
+                    crate::compiler::parsers::expressions::expression::Operator::Divide,
+                ),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             };
-            
+
             let division_expr = Expression::runtime(
                 vec![variable_ref, divide_value_node, divide_op],
                 expected_type,
                 location.clone(),
             );
-            
+
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_name.to_owned(), division_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), division_expr),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
         }
-        
+
         _ => {
             return_syntax_error!(
                 location.clone(),
                 "Expected assignment operator after variable '{}', found '{:?}'",
-                variable_name,
+                variable_arg.name,
                 token_stream.current_token_kind()
             );
         }

@@ -455,7 +455,7 @@ pub fn parse_template_head(
 
                 // Otherwise, check if it's a regular scene or variable reference
                 // If this is a reference to a function or variable
-                if let Some(arg) = context.find_reference(&name) {
+                if let Some(arg) = context.get_reference(&name) {
                     match &arg.value.kind {
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {

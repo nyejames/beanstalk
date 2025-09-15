@@ -229,7 +229,7 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             TokenKind::Symbol(ref name) => {
-                if let Some(arg) = context.find_reference(name) {
+                if let Some(arg) = context.get_reference(name) {
                     // Then the associated mutation afterward.
                     // Or error if trying to mutate an immutable reference
 
@@ -307,7 +307,11 @@ pub fn new_ast(
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
-                        // Assignment operators - handle mutation
+                        
+                        // Assignment operators
+                        // ---------------------------
+                        //          MUTATION
+                        // ---------------------------
                         TokenKind::Assign
                         | TokenKind::AddAssign
                         | TokenKind::SubtractAssign
@@ -315,7 +319,7 @@ pub fn new_ast(
                         | TokenKind::DivideAssign
                         | TokenKind::ExponentAssign
                         | TokenKind::RootAssign => {
-                            ast.push(handle_mutation(token_stream, name, &arg, &context)?);
+                            ast.push(handle_mutation(token_stream, arg, &context)?);
                         }
 
                         // Type declarations after variable reference - error (shadowing not supported)

@@ -136,12 +136,12 @@ pub fn create_function_signature(
                 // Search through declarations for any data types
                 // Also search through the function parameters,
                 // as the function can return references to those parameters.
-                if let Some(possible_type) = context.find_reference(name) {
+                if let Some(possible_type) = context.get_reference(name) {
                     // Make sure this is actually a type (Args)
                     if matches!(possible_type.value.data_type, DataType::Args(..)) {
                         return_types.push(possible_type.value.data_type.to_owned());
                     }
-                } else if let Some(possible_type) = args.find_reference(name) {
+                } else if let Some(possible_type) = args.get_reference(name) {
                     // TODO:
                     // Function return signature may need to be completely refactors to
                     // A Vec<Arg> or a unique struct. This is so it can return references to specific parameters

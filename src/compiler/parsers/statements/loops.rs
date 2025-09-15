@@ -30,7 +30,7 @@ pub fn create_loop(
             //  (existing variable found)
             // -----------------------------
 
-            if let Some(arg) = context.find_reference(&name) {
+            if let Some(arg) = context.get_reference(&name) {
                 let mut data_type = arg.value.data_type.to_owned();
                 let condition = create_expression(token_stream, &context, &mut data_type, false)?;
 
