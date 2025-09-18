@@ -89,8 +89,8 @@ impl LivenessAnalysis {
 
     /// Analyze liveness for a single function
     pub fn analyze_function(&mut self, function: &mut MirFunction) -> Result<(), String> {
-        // Build control flow graph for this function
-        self.build_control_flow_graph(function)?;
+        // Use the shared CFG from the function instead of building our own
+        self.copy_cfg_from_function(function)?;
         
         // Extract use/def sets from events
         self.extract_use_def_sets(function)?;
@@ -104,40 +104,29 @@ impl LivenessAnalysis {
         Ok(())
     }
 
-    /// Build control flow graph between program points
-    fn build_control_flow_graph(&mut self, function: &MirFunction) -> Result<(), String> {
-        // For now, we'll build a simple linear CFG since the full CFG construction
-        // is planned for later tasks. This provides the basic structure needed.
+    /// Copy CFG from the shared function CFG (eliminates redundant construction)
+    fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
+        let cfg = function.get_cfg_immutable()?;
         
-        let program_points = function.get_program_points_in_order();
+        // Clear existing CFG data
+        self.successors.clear();
+        self.predecessors.clear();
         
-        // First, initialize empty successor/predecessor lists for all points
-        for &point in program_points {
-            self.successors.insert(point, Vec::new());
-            self.predecessors.insert(point, Vec::new());
+        // Copy CFG structure using optimized Vec-indexed access
+        for point in cfg.iter_program_points() {
+            let successors = cfg.get_successors(&point).to_vec();
+            let predecessors = cfg.get_predecessors(&point).to_vec();
+            
+            self.successors.insert(point, successors);
+            self.predecessors.insert(point, predecessors);
         }
-        
-        // Then, build the linear CFG relationships
-        for (i, &current_point) in program_points.iter().enumerate() {
-            // For linear CFG, each point flows to the next
-            if i + 1 < program_points.len() {
-                let next_point = program_points[i + 1];
-                
-                // Add successor relationship
-                self.successors.get_mut(&current_point).unwrap().push(next_point);
-                self.predecessors.get_mut(&next_point).unwrap().push(current_point);
-            }
-        }
-        
-        // TODO: In later tasks, this will be replaced with proper CFG construction
-        // that handles branches, loops, and other control flow structures
         
         Ok(())
     }
 
     /// Extract use and def sets from events at each program point
     fn extract_use_def_sets(&mut self, function: &MirFunction) -> Result<(), String> {
-        for &program_point in function.get_program_points_in_order() {
+        for program_point in function.get_program_points_in_order() {
             // Get events for this program point from the function
             if let Some(events) = function.get_events(&program_point) {
                 // Convert events to use/def sets
@@ -304,9 +293,9 @@ impl LivenessAnalysis {
         let program_points = function.get_program_points_in_order();
         
         // Initialize all live sets to empty
-        for &point in program_points {
-            self.live_in.insert(point, HashSet::new());
-            self.live_out.insert(point, HashSet::new());
+        for point in &program_points {
+            self.live_in.insert(*point, HashSet::new());
+            self.live_out.insert(*point, HashSet::new());
         }
         
         // Worklist algorithm for backward dataflow
@@ -650,11 +639,12 @@ mod tests {
 
     #[test]
     fn test_use_def_extraction() {
-        let function = create_test_function();
+        let mut function = create_test_function();
         let mut analysis = LivenessAnalysis::new();
         
-        // Build CFG and extract use/def sets
-        analysis.build_control_flow_graph(&function).unwrap();
+        // Build CFG first, then copy it and extract use/def sets
+        function.build_cfg().unwrap();
+        analysis.copy_cfg_from_function(&function).unwrap();
         analysis.extract_use_def_sets(&function).unwrap();
         
         // Check that we extracted use/def sets for all program points

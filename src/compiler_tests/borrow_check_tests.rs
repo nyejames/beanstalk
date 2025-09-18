@@ -211,7 +211,7 @@ mod mir_function_tests {
         assert_eq!(function.parameters, params);
         assert_eq!(function.return_types, return_types);
         assert_eq!(function.blocks.len(), 0);
-        assert_eq!(function.program_points.len(), 0);
+        assert_eq!(function.program_point_data.len(), 0);
         assert_eq!(function.loans.len(), 0);
     }
 
@@ -225,7 +225,7 @@ mod mir_function_tests {
         function.add_program_point(point1, 0, 0);
         function.add_program_point(point2, 0, 1);
         
-        assert_eq!(function.program_points.len(), 2);
+        assert_eq!(function.program_point_data.len(), 2);
         assert_eq!(function.get_block_for_program_point(&point1), Some(0));
         assert_eq!(function.get_statement_index_for_program_point(&point1), Some(0));
         assert_eq!(function.get_block_for_program_point(&point2), Some(0));
@@ -598,9 +598,9 @@ mod dataflow_integration_tests {
         let dataflow = dataflow_result.unwrap();
         
         // Verify dataflow sets exist for all program points
-        for point in &function.program_points {
-            assert!(dataflow.live_in_loans.contains_key(point));
-            assert!(dataflow.live_out_loans.contains_key(point));
+        for point in function.get_program_points_in_order() {
+            assert!(dataflow.live_in_loans.contains_key(&point));
+            assert!(dataflow.live_out_loans.contains_key(&point));
         }
     }
 

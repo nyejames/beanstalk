@@ -52,16 +52,22 @@ mod compiler {
     }
 
     pub mod mir {
+        pub mod arena;
         pub mod mir;
         pub mod build_mir;
+        pub mod cfg;
         pub mod check;
         pub mod dataflow;
         pub mod diagnose;
         pub mod extract;
         pub mod liveness;
         pub mod mir_nodes;
+        pub mod optimized_dataflow;
         pub mod place;
+        pub mod place_interner;
+        pub mod place_interner_test;
         pub mod counter;
+        pub mod unified_borrow_checker;
     }
 
     mod html5_codegen {

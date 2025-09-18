@@ -152,7 +152,7 @@ impl BorrowConflictChecker {
     fn check_conflicting_borrows(&mut self, function: &MirFunction) -> Result<(), String> {
         let loans = self.extractor.get_loans();
         
-        for &program_point in function.get_program_points_in_order() {
+        for program_point in function.get_program_points_in_order() {
             // Get live loans at this program point
             let live_loans = self.dataflow.get_live_in_loans(&program_point)
                 .ok_or_else(|| format!("No live loans found for program point {}", program_point))?;
@@ -233,7 +233,7 @@ impl BorrowConflictChecker {
     fn check_move_while_borrowed(&mut self, function: &MirFunction) -> Result<(), String> {
         let loans = self.extractor.get_loans();
         
-        for &program_point in function.get_program_points_in_order() {
+        for program_point in function.get_program_points_in_order() {
             if let Some(events) = function.get_events(&program_point) {
                 // Get live loans at this program point
                 let live_loans = self.dataflow.get_live_in_loans(&program_point)
@@ -292,7 +292,7 @@ impl BorrowConflictChecker {
 
     /// Check use-after-move using separate forward dataflow for moved-out places
     fn check_use_after_move(&mut self, function: &MirFunction) -> Result<(), String> {
-        for &program_point in function.get_program_points_in_order() {
+        for program_point in function.get_program_points_in_order() {
             if let Some(events) = function.get_events(&program_point) {
                 // Get moved-out places at this program point
                 let moved_out_places = self.moved_out_dataflow.get_moved_in_places(&program_point);
@@ -328,7 +328,7 @@ impl BorrowConflictChecker {
         current_point: ProgramPoint,
     ) -> ProgramPoint {
         // Search backwards from current point to find where the place was moved
-        for &program_point in function.get_program_points_in_order() {
+        for program_point in function.get_program_points_in_order() {
             if program_point >= current_point {
                 break;
             }
@@ -420,8 +420,8 @@ impl MovedOutDataflow {
 
     /// Run moved-out dataflow analysis on a function
     pub fn analyze_function(&mut self, function: &MirFunction) -> Result<(), String> {
-        // Build control flow graph
-        self.build_control_flow_graph(function)?;
+        // Use the shared CFG from the function instead of building our own
+        self.copy_cfg_from_function(function)?;
         
         // Initialize moved-out sets
         self.initialize_moved_out_sets(function);
@@ -432,24 +432,21 @@ impl MovedOutDataflow {
         Ok(())
     }
 
-    /// Build control flow graph for moved-out analysis
-    fn build_control_flow_graph(&mut self, function: &MirFunction) -> Result<(), String> {
-        let program_points = function.get_program_points_in_order();
+    /// Copy CFG from the shared function CFG (eliminates redundant construction)
+    fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
+        let cfg = function.get_cfg_immutable()?;
         
-        // Initialize empty successor/predecessor lists
-        for &point in program_points {
-            self.successors.insert(point, Vec::new());
-            self.predecessors.insert(point, Vec::new());
-        }
+        // Clear existing CFG data
+        self.successors.clear();
+        self.predecessors.clear();
         
-        // Build linear CFG (same as in dataflow.rs for now)
-        for (i, &current_point) in program_points.iter().enumerate() {
-            if i + 1 < program_points.len() {
-                let next_point = program_points[i + 1];
-                
-                self.successors.get_mut(&current_point).unwrap().push(next_point);
-                self.predecessors.get_mut(&next_point).unwrap().push(current_point);
-            }
+        // Copy CFG structure using optimized Vec-indexed access
+        for point in cfg.iter_program_points() {
+            let successors = cfg.get_successors(&point).to_vec();
+            let predecessors = cfg.get_predecessors(&point).to_vec();
+            
+            self.successors.insert(point, successors);
+            self.predecessors.insert(point, predecessors);
         }
         
         Ok(())
@@ -457,7 +454,7 @@ impl MovedOutDataflow {
 
     /// Initialize moved-out sets for all program points
     fn initialize_moved_out_sets(&mut self, function: &MirFunction) {
-        for &program_point in function.get_program_points_in_order() {
+        for program_point in function.get_program_points_in_order() {
             self.moved_in.insert(program_point, HashSet::new());
             self.moved_out.insert(program_point, HashSet::new());
         }
@@ -620,6 +617,22 @@ mod tests {
         function.add_program_point(pp1, 0, 0);
         function.add_program_point(pp2, 0, 1);
         
+        // Create loans
+        let loan1 = Loan {
+            id: LoanId::new(0),
+            owner: place_x.clone(),
+            kind: BorrowKind::Shared,
+            origin_stmt: pp1,
+        };
+        let loan2 = Loan {
+            id: LoanId::new(1),
+            owner: place_x.clone(),
+            kind: BorrowKind::Mut,
+            origin_stmt: pp2,
+        };
+        function.add_loan(loan1);
+        function.add_loan(loan2);
+        
         // Create events with conflicting loans
         let mut events1 = Events::default();
         events1.start_loans.push(LoanId::new(0)); // Shared borrow
@@ -633,7 +646,8 @@ mod tests {
         let mut extractor = BorrowFactExtractor::new();
         extractor.extract_function(&function).unwrap();
         
-        let dataflow = LoanLivenessDataflow::new(extractor.get_loan_count());
+        let mut dataflow = LoanLivenessDataflow::new(extractor.get_loan_count());
+        dataflow.analyze_function(&function, &extractor).unwrap();
         
         (function, dataflow, extractor)
     }

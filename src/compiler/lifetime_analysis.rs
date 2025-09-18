@@ -437,6 +437,9 @@ pub fn assign_terminator_for_control_flow(
                     target: *loop_start,
                     loop_header: *loop_start,
                     loop_info: crate::compiler::mir::mir_nodes::WasmLoopInfo {
+                        header_block: 0,
+                        is_infinite: false,
+                        nesting_level: 0,
                         loop_type: crate::compiler::mir::mir_nodes::LoopType::While,
                         has_breaks: false,
                         has_continues: false,

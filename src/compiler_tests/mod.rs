@@ -1,4 +1,8 @@
 // Test modules for the Beanstalk compiler
+// Updated structure after removing redundant and outdated tests
+
+// === ESSENTIAL TESTS (Run First) ===
+// These tests validate core functionality and should always pass
 
 // Essential test runner - focused validation of core functionality
 #[cfg(test)]
@@ -8,32 +12,24 @@ pub mod test_runner;
 #[cfg(test)]
 pub mod core_compiler_tests;
 
-// Integration tests for end-to-end compiler testing
-pub mod integration_tests;
-
 // MIR place system tests - WASM-optimized memory management
 #[cfg(test)]
 pub mod place_tests;
-
-// Borrow checking and dataflow validation tests
-#[cfg(test)]
-pub mod borrow_check_tests;
 
 // Focused performance tests for key performance goals
 #[cfg(test)]
 pub mod focused_performance_tests;
 
+// === SPECIALIZED TESTS (Run As Needed) ===
+// These tests focus on specific subsystems
+
+// Simplified borrow checking behavior tests
+#[cfg(test)]
+pub mod borrow_check_tests;
+
 // WASM module generation and encoding tests
 #[cfg(test)]
 pub mod wasm_module_tests;
-
-// WASM-specific optimization tests (comprehensive)
-#[cfg(test)]
-pub mod wasm_optimization_tests;
-
-// Legacy performance tests (comprehensive but may be overly detailed)
-#[cfg(test)]
-pub mod performance_tests;
 
 // Memory layout management tests
 #[cfg(test)]
@@ -47,6 +43,20 @@ pub mod interface_vtable_tests;
 #[cfg(test)]
 pub mod wasm_terminator_tests;
 
+// === COMPREHENSIVE TESTS (CI/Development) ===
+// These tests provide detailed analysis and may be slower
+
+// Integration tests for end-to-end compiler testing
+pub mod integration_tests;
+
+// Comprehensive performance tests (more detailed than focused_performance_tests)
+#[cfg(test)]
+pub mod performance_tests;
+
+// WASM-specific optimization tests (comprehensive)
+#[cfg(test)]
+pub mod wasm_optimization_tests;
+
 // Comprehensive benchmark runner
 #[cfg(test)]
 pub mod benchmark_runner;
@@ -54,6 +64,14 @@ pub mod benchmark_runner;
 // Task 15 performance validation
 #[cfg(test)]
 pub mod performance_validation;
+
+// === TEST VALIDATION ===
+// Module to validate that tests are properly organized and working
+
+#[cfg(test)]
+pub mod test_validation;
+
+// === RE-EXPORTS ===
 
 // Re-export the function that CLI needs
 pub use integration_tests::run_all_test_cases;

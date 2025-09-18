@@ -155,7 +155,10 @@ impl PerformanceTestSuite {
         // Measure liveness analysis
         let liveness_start = Instant::now();
         let mut mir = MIR::new();
-        mir.functions.push(function.clone());
+        // Create a new function for liveness analysis instead of cloning
+        let function_size = function.program_point_data.len();
+        let liveness_function = create_test_function_for_liveness(function_size);
+        mir.functions.push(liveness_function);
         let _liveness = run_liveness_analysis(&mut mir)?;
         let liveness_time = liveness_start.elapsed();
         
@@ -393,6 +396,36 @@ impl PerformanceTestSuite {
         println!("  • Cache frequently accessed dataflow results");
         println!("  • Use WASM-specific optimizations for structured control flow");
     }
+}
+
+/// Create a test function for liveness analysis (separate from performance function)
+fn create_test_function_for_liveness(size: usize) -> MirFunction {
+    let mut function = MirFunction::new(0, "liveness_test".to_string(), vec![], vec![]);
+    
+    // Create a simple block with statements
+    let mut block = MirBlock::new(0);
+    
+    for i in 0..size {
+        let place = Place::Local {
+            index: i as u32,
+            wasm_type: WasmType::I32,
+        };
+        let stmt = Statement::Assign {
+            place: place.clone(),
+            rvalue: Rvalue::Use(Operand::Constant(Constant::I32(i as i32))),
+        };
+        let pp = ProgramPoint::new(i as u32);
+        block.add_statement_with_program_point(stmt, pp);
+        function.add_program_point(pp, 0, i);
+    }
+    
+    // Add terminator
+    let term_pp = ProgramPoint::new(size as u32);
+    block.set_terminator_with_program_point(Terminator::Return { values: vec![] }, term_pp);
+    function.add_program_point(term_pp, 0, usize::MAX);
+    
+    function.add_block(block);
+    function
 }
 
 /// Create a small test function for performance testing

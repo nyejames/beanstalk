@@ -15,8 +15,6 @@ use std::collections::HashMap;
 /// borrow violations in the simplified MIR borrow checker.
 #[derive(Debug)]
 pub struct BorrowDiagnostics {
-    /// Mapping from program points to source locations
-    program_point_locations: HashMap<ProgramPoint, TextLocation>,
     /// Mapping from loan IDs to their origin information
     loan_origins: HashMap<LoanId, LoanOrigin>,
     /// Function being analyzed (for context)
@@ -151,7 +149,6 @@ impl BorrowDiagnostics {
     /// Create a new borrow diagnostics instance
     pub fn new(function_name: String) -> Self {
         Self {
-            program_point_locations: HashMap::new(),
             loan_origins: HashMap::new(),
             function_name,
             wasm_context: WasmDiagnosticContext {
@@ -166,9 +163,12 @@ impl BorrowDiagnostics {
         }
     }
 
-    /// Add program point to source location mapping
-    pub fn add_program_point_location(&mut self, point: ProgramPoint, location: TextLocation) {
-        self.program_point_locations.insert(point, location);
+
+
+    /// Add program point to source location mapping (deprecated - for tests only)
+    pub fn add_program_point_location(&mut self, _point: ProgramPoint, _location: TextLocation) {
+        // This method is now deprecated since source locations are stored directly in MirFunction
+        // Use function.store_source_location(point, location) instead
     }
 
     /// Add loan origin information
@@ -191,6 +191,7 @@ impl BorrowDiagnostics {
     /// Generate comprehensive diagnostic for a borrow error
     pub fn diagnose_borrow_error(
         &self,
+        function: &MirFunction,
         error: &BorrowError,
     ) -> Result<DiagnosticResult, CompileError> {
         match &error.error_type {
@@ -198,9 +199,9 @@ impl BorrowDiagnostics {
                 existing_borrow,
                 new_borrow,
                 place,
-            } => self.diagnose_conflicting_borrows(error, existing_borrow, new_borrow, place),
+            } => self.diagnose_conflicting_borrows(function, error, existing_borrow, new_borrow, place),
             BorrowErrorType::UseAfterMove { place, move_point } => {
-                self.diagnose_use_after_move(error, place, *move_point)
+                self.diagnose_use_after_move(function, error, place, *move_point)
             }
             BorrowErrorType::BorrowAcrossOwnerInvalidation {
                 borrowed_place,
@@ -208,6 +209,7 @@ impl BorrowDiagnostics {
                 invalidation_point,
                 invalidation_type,
             } => self.diagnose_borrow_across_invalidation(
+                function,
                 error,
                 borrowed_place,
                 owner_place,
@@ -220,12 +222,13 @@ impl BorrowDiagnostics {
     /// Diagnose conflicting borrows error
     fn diagnose_conflicting_borrows(
         &self,
+        function: &MirFunction,
         error: &BorrowError,
         existing_borrow: &BorrowKind,
         new_borrow: &BorrowKind,
         place: &Place,
     ) -> Result<DiagnosticResult, CompileError> {
-        let primary_location = self.get_location_for_program_point(&error.point)?;
+        let primary_location = self.get_location_for_program_point(function, &error.point)?;
         let place_name = self.format_place_name(place);
 
         let message = match (existing_borrow, new_borrow) {
@@ -330,12 +333,13 @@ impl BorrowDiagnostics {
     /// Diagnose use-after-move error
     fn diagnose_use_after_move(
         &self,
+        function: &MirFunction,
         error: &BorrowError,
         place: &Place,
         move_point: ProgramPoint,
     ) -> Result<DiagnosticResult, CompileError> {
-        let primary_location = self.get_location_for_program_point(&error.point)?;
-        let move_location = self.get_location_for_program_point(&move_point)?;
+        let primary_location = self.get_location_for_program_point(function, &error.point)?;
+        let move_location = self.get_location_for_program_point(function, &move_point)?;
         let place_name = self.format_place_name(place);
 
         let message = format!(
@@ -396,12 +400,13 @@ impl BorrowDiagnostics {
     /// Diagnose use-after-drop error
     fn diagnose_use_after_drop(
         &self,
+        function: &MirFunction,
         error: &BorrowError,
         place: &Place,
         drop_point: ProgramPoint,
     ) -> Result<DiagnosticResult, CompileError> {
-        let primary_location = self.get_location_for_program_point(&error.point)?;
-        let drop_location = self.get_location_for_program_point(&drop_point)?;
+        let primary_location = self.get_location_for_program_point(function, &error.point)?;
+        let drop_location = self.get_location_for_program_point(function, &drop_point)?;
         let place_name = self.format_place_name(place);
 
         let message = format!(
@@ -451,14 +456,15 @@ impl BorrowDiagnostics {
     /// Diagnose borrow across owner invalidation error
     fn diagnose_borrow_across_invalidation(
         &self,
+        function: &MirFunction,
         error: &BorrowError,
         borrowed_place: &Place,
         owner_place: &Place,
         invalidation_point: ProgramPoint,
         invalidation_type: &InvalidationType,
     ) -> Result<DiagnosticResult, CompileError> {
-        let primary_location = self.get_location_for_program_point(&error.point)?;
-        let invalidation_location = self.get_location_for_program_point(&invalidation_point)?;
+        let primary_location = self.get_location_for_program_point(function, &error.point)?;
+        let invalidation_location = self.get_location_for_program_point(function, &invalidation_point)?;
         let borrowed_name = self.format_place_name(borrowed_place);
         let owner_name = self.format_place_name(owner_place);
 
@@ -562,10 +568,11 @@ impl BorrowDiagnostics {
     /// Get source location for a program point
     fn get_location_for_program_point(
         &self,
+        function: &MirFunction,
         point: &ProgramPoint,
     ) -> Result<TextLocation, CompileError> {
-        self.program_point_locations
-            .get(point)
+        function
+            .get_source_location(point)
             .cloned()
             .ok_or_else(|| {
                 CompileError::new_rule_error(
@@ -756,7 +763,7 @@ pub fn diagnose_borrow_errors(
     // Generate diagnostics for each error
     let mut results = Vec::new();
     for error in errors {
-        match diagnostics.diagnose_borrow_error(error) {
+        match diagnostics.diagnose_borrow_error(function, error) {
             Ok(diagnostic) => results.push(diagnostic),
             Err(_e) => {
                 // If we can't generate a diagnostic, create a basic one
@@ -812,20 +819,19 @@ mod tests {
     fn test_diagnostics_creation() {
         let diagnostics = BorrowDiagnostics::new("test_function".to_string());
         assert_eq!(diagnostics.function_name, "test_function");
-        assert!(diagnostics.program_point_locations.is_empty());
         assert!(diagnostics.loan_origins.is_empty());
     }
 
     #[test]
     fn test_add_program_point_location() {
-        let mut diagnostics = BorrowDiagnostics::new("test".to_string());
+        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
         let point = ProgramPoint::new(0);
         let location = TextLocation::default();
 
-        diagnostics.add_program_point_location(point, location.clone());
+        function.store_source_location(point, location.clone());
 
         assert_eq!(
-            diagnostics.program_point_locations.get(&point),
+            function.get_source_location(&point),
             Some(&location)
         );
     }
@@ -928,7 +934,7 @@ mod tests {
         let mut diagnostics = BorrowDiagnostics::new("test".to_string());
         let point = ProgramPoint::new(0);
         let location = TextLocation::default();
-        diagnostics.add_program_point_location(point, location);
+        diagnostics.add_program_point_location(point, location.clone());
 
         let place = create_test_place();
         let error = BorrowError {
@@ -942,7 +948,9 @@ mod tests {
             location: TextLocation::default(),
         };
 
-        let result = diagnostics.diagnose_borrow_error(&error);
+        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
+        function.store_source_location(point, location.clone());
+        let result = diagnostics.diagnose_borrow_error(&function, &error);
         assert!(result.is_ok());
 
         let diagnostic = result.unwrap();
@@ -959,7 +967,7 @@ mod tests {
         let location = TextLocation::default();
 
         diagnostics.add_program_point_location(point, location.clone());
-        diagnostics.add_program_point_location(move_point, location);
+        diagnostics.add_program_point_location(move_point, location.clone());
 
         let place = create_test_place();
         let error = BorrowError {
@@ -972,7 +980,10 @@ mod tests {
             location: TextLocation::default(),
         };
 
-        let result = diagnostics.diagnose_borrow_error(&error);
+        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
+        function.store_source_location(point, location.clone());
+        function.store_source_location(move_point, location.clone());
+        let result = diagnostics.diagnose_borrow_error(&function, &error);
         assert!(result.is_ok());
 
         let diagnostic = result.unwrap();

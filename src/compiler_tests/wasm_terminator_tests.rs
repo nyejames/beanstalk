@@ -92,6 +92,7 @@ mod tests {
             is_dense: true,
             min_target: 0,
             max_target: 2,
+            default_index: 0,
         };
         
         let terminator = Terminator::Switch {
@@ -139,6 +140,9 @@ mod tests {
         let local_map = HashMap::new();
         
         let loop_info = WasmLoopInfo {
+            header_block: 0,
+            is_infinite: false,
+            nesting_level: 0,
             loop_type: LoopType::While,
             has_breaks: false,
             has_continues: true,
