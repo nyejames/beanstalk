@@ -67,6 +67,7 @@ mod compiler {
         pub mod place_interner;
         pub mod place_interner_test;
         pub mod counter;
+        pub mod streamlined_diagnostics;
         pub mod unified_borrow_checker;
     }
 
@@ -90,6 +91,7 @@ mod compiler {
 
     pub mod codegen {
         pub mod build_wasm;
+        pub mod lifetime_memory_manager;
         pub mod wat_to_wasm;
         pub mod wasm_encoding;
     }

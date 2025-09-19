@@ -27,13 +27,33 @@ pub mod focused_performance_tests;
 #[cfg(test)]
 pub mod borrow_check_tests;
 
+// Streamlined diagnostics tests
+#[cfg(test)]
+pub mod streamlined_diagnostics_tests;
+
 // WASM module generation and encoding tests
 #[cfg(test)]
 pub mod wasm_module_tests;
 
+// WASM module finish() method tests
+#[cfg(test)]
+pub mod wasm_module_finish_tests;
+
+// WASM validation and error reporting tests
+#[cfg(test)]
+pub mod wasm_validation_tests;
+
+// Comprehensive WASM codegen tests (Task 27)
+#[cfg(test)]
+pub mod wasm_codegen_tests;
+
 // Memory layout management tests
 #[cfg(test)]
 pub mod memory_layout_tests;
+
+// Lifetime-optimized memory management tests
+#[cfg(test)]
+pub mod lifetime_memory_manager_tests;
 
 // Interface VTable generation tests
 #[cfg(test)]
@@ -42,6 +62,10 @@ pub mod interface_vtable_tests;
 // WASM terminator lowering tests
 #[cfg(test)]
 pub mod wasm_terminator_tests;
+
+// Memory operation lowering tests
+#[cfg(test)]
+pub mod memory_operation_tests;
 
 // === COMPREHENSIVE TESTS (CI/Development) ===
 // These tests provide detailed analysis and may be slower
@@ -56,6 +80,10 @@ pub mod performance_tests;
 // WASM-specific optimization tests (comprehensive)
 #[cfg(test)]
 pub mod wasm_optimization_tests;
+
+// WASM performance and validation tests (Task 28)
+#[cfg(test)]
+pub mod wasm_performance_validation_tests;
 
 // Comprehensive benchmark runner
 #[cfg(test)]

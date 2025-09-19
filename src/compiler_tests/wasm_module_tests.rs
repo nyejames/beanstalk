@@ -189,15 +189,7 @@ mod wasm_module_tests {
             vec![WasmType::I32],
         );
 
-        // Create WasmModule and test local index mapping
-        let mut wasm_module = WasmModule::new();
-        let local_map = wasm_module.build_local_index_mapping(&function).unwrap();
-
-        // Verify parameter mapping (should be indices 0, 1)
-        assert_eq!(local_map.get(&function.parameters[0]), Some(&0));
-        assert_eq!(local_map.get(&function.parameters[1]), Some(&1));
-
-        // Verify local variable mapping (should be indices 2, 3 but order may vary)
+        // Add local variables to the function
         let local_var1 = Place::Local {
             index: 2,
             wasm_type: WasmType::I32,
@@ -206,6 +198,16 @@ mod wasm_module_tests {
             index: 3,
             wasm_type: WasmType::F32,
         };
+        function.add_local("local1".to_string(), local_var1.clone());
+        function.add_local("local2".to_string(), local_var2.clone());
+
+        // Create WasmModule and test local index mapping
+        let mut wasm_module = WasmModule::new();
+        let local_map = wasm_module.build_local_index_mapping(&function).unwrap();
+
+        // Verify parameter mapping (should be indices 0, 1)
+        assert_eq!(local_map.get(&function.parameters[0]), Some(&0));
+        assert_eq!(local_map.get(&function.parameters[1]), Some(&1));
 
         // Both local variables should be mapped to indices >= 2 (after parameters)
         let local1_index = local_map.get(&local_var1).copied().unwrap();
@@ -308,7 +310,7 @@ mod wasm_module_tests {
         );
 
         let wasm_module = result.unwrap();
-        assert_eq!(wasm_module.get_global_count(), 1); // One global added
+        assert_eq!(wasm_module.get_global_count(), 2); // One user global + one heap pointer global
     }
 
     #[test]
@@ -1361,8 +1363,8 @@ mod wasm_module_tests {
         };
         let result = wasm_module.lower_rvalue(&load_rvalue, &mut wasm_function, &local_map);
         assert!(
-            result.is_err(),
-            "Load rvalue should return error (not yet implemented)"
+            result.is_ok(),
+            "Load rvalue should now be implemented and succeed"
         );
     }
 }

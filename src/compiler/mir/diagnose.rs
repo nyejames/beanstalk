@@ -4,6 +4,7 @@ use crate::compiler::mir::mir_nodes::{
     ProgramPoint,
 };
 use crate::compiler::mir::place::Place;
+use crate::compiler::mir::streamlined_diagnostics::{StreamlinedDiagnostics, generate_borrow_errors_batch};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
@@ -563,6 +564,11 @@ impl BorrowDiagnostics {
         return_compiler_error!("MIR borrow checker internal error: {}", message);
     }
 
+    /// Generate errors using streamlined diagnostics (performance optimized)
+    pub fn generate_errors_streamlined(&mut self, errors: &[BorrowError]) -> Vec<CompileError> {
+        generate_borrow_errors_batch(&self.function_name, errors)
+    }
+
     // Helper methods
 
     /// Get source location for a program point
@@ -780,6 +786,17 @@ pub fn diagnose_borrow_errors(
     }
 
     Ok(results)
+}
+
+/// Fast entry point for generating streamlined diagnostics (performance optimized)
+/// 
+/// This function provides a fast path for error generation that bypasses the complex
+/// diagnostic generation and uses streamlined error formatting for better performance.
+pub fn diagnose_borrow_errors_fast(
+    function: &MirFunction,
+    errors: &[BorrowError],
+) -> Vec<CompileError> {
+    generate_borrow_errors_batch(&function.name, errors)
 }
 
 /// Convert diagnostic results to compile errors for the error system

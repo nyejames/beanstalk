@@ -12,6 +12,23 @@ use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::{ir_log, return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
+/// Streamlined error generation for common MIR build errors
+mod build_errors {
+    use crate::compiler::compiler_errors::CompileError;
+    use crate::compiler::parsers::tokens::TextLocation;
+    use crate::return_rule_error;
+
+    /// Generate undefined variable error with minimal formatting
+    pub fn undefined_variable(location: TextLocation, var_name: &str) -> Result<(), CompileError> {
+        return_rule_error!(location, "Undefined variable '{}'. Variable must be declared before use.", var_name);
+    }
+
+    /// Generate mutation of undefined variable error with minimal formatting
+    pub fn undefined_variable_mutation(location: TextLocation, var_name: &str) -> Result<(), CompileError> {
+        return_rule_error!(location, "Cannot mutate undefined variable '{}'. Variable must be declared before mutation.", var_name);
+    }
+}
+
 // Import borrow checking modules
 use crate::compiler::mir::counter::UseCounter;
 use crate::compiler::mir::diagnose::{diagnose_borrow_errors, diagnostics_to_compile_errors};
@@ -669,11 +686,8 @@ fn transform_mutation_to_mir(
     let variable_place = match context.lookup_variable(name) {
         Some(place) => place.clone(),
         None => {
-            return_rule_error!(
-                location.clone(),
-                "Cannot mutate undefined variable '{}'. Variable must be declared before mutation.",
-                name
-            )
+            build_errors::undefined_variable_mutation(location.clone(), name)?;
+            unreachable!()
         }
     };
 
@@ -725,11 +739,8 @@ fn transform_expression_to_mir(
             if let Some(place) = context.lookup_variable(name) {
                 Ok((vec![], Some(place.clone())))
             } else {
-                return_rule_error!(
-                    expression.location.clone(),
-                    "Undefined variable '{}'. Variable must be declared before use.",
-                    name
-                )
+                build_errors::undefined_variable(expression.location.clone(), name)?;
+                unreachable!()
             }
         }
         ExpressionKind::Runtime(runtime_nodes) => {
@@ -804,11 +815,8 @@ fn transform_runtime_expression_to_three_address_form(
                             let operand = Operand::Copy(place.clone());
                             operand_stack.push(operand);
                         } else {
-                            return_rule_error!(
-                                expr.location.clone(),
-                                "Undefined variable '{}'. Variable must be declared before use.",
-                                var_name
-                            );
+                            build_errors::undefined_variable(expr.location.clone(), var_name)?;
+                            unreachable!()
                         }
                     }
                     ExpressionKind::Int(value) => {
