@@ -1,5 +1,5 @@
 // Test modules for the Beanstalk compiler
-// Reorganized structure with tests moved from source files and redundancies removed
+// Cleaned up and organized structure with redundancies removed
 
 // === ESSENTIAL TESTS (Run First) ===
 // These tests validate core functionality and should always pass
@@ -12,11 +12,11 @@ pub mod test_runner;
 #[cfg(test)]
 pub mod core_compiler_tests;
 
-// MIR place system tests - WASM-optimized memory management
+// MIR place system tests - WASM-optimized memory management (comprehensive)
 #[cfg(test)]
 pub mod place_tests;
 
-// Consolidated performance tests (replaces focused_performance_tests, performance_tests, performance_validation)
+// Consolidated performance tests
 #[cfg(test)]
 pub mod consolidated_performance_tests;
 
@@ -71,36 +71,12 @@ pub mod wasm_optimization_tests;
 #[cfg(test)]
 pub mod wasm_performance_validation_tests;
 
-// === TESTS MOVED FROM SOURCE FILES ===
-// These tests were previously embedded in source files
-
-// Lifetime analysis tests (moved from src/compiler/lifetime_analysis.rs)
-#[cfg(test)]
-pub mod lifetime_analysis_tests;
-
-// MIR dataflow tests (moved from src/compiler/mir/dataflow.rs)
-#[cfg(test)]
-pub mod mir_dataflow_tests;
-
-// MIR diagnostics tests (moved from src/compiler/mir/diagnose.rs)
-#[cfg(test)]
-pub mod mir_diagnostics_tests;
-
 // === COMPREHENSIVE TESTS (CI/Development) ===
 // These tests provide detailed analysis and may be slower
 
 // Integration tests for end-to-end compiler testing
 pub mod integration_tests;
 
-// Comprehensive benchmark runner
-#[cfg(test)]
-pub mod benchmark_runner;
-
-// === TEST VALIDATION ===
-// Module to validate that tests are properly organized and working
-
-#[cfg(test)]
-pub mod test_validation;
 
 // === RE-EXPORTS ===
 

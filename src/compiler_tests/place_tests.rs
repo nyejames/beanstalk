@@ -19,7 +19,7 @@ mod place_creation_tests {
                 assert_eq!(*index, 0);
                 assert_eq!(*wasm_type, WasmType::I64);
             }
-            _ => panic!("Expected Local place"),
+            _ => assert!(false, "Expected Local place, got {:?}", place),
         }
         
         assert!(place.is_wasm_local());
@@ -37,7 +37,7 @@ mod place_creation_tests {
                 assert_eq!(*index, 5);
                 assert_eq!(*wasm_type, WasmType::F64);
             }
-            _ => panic!("Expected Global place"),
+            _ => assert!(false, "Expected Global place, got {:?}", place),
         }
         
         assert!(!place.is_wasm_local());
@@ -55,7 +55,7 @@ mod place_creation_tests {
                 assert_eq!(*offset, ByteOffset(1024));
                 assert_eq!(*size, TypeSize::Word);
             }
-            _ => panic!("Expected Memory place"),
+            _ => assert!(false, "Expected Memory place, got {:?}", place),
         }
         
         assert!(!place.is_wasm_local());
@@ -74,7 +74,7 @@ mod place_creation_tests {
                         assert_eq!(alloc_id, 1);
                         assert_eq!(size, 256);
                     }
-                    _ => panic!("Expected Heap memory base"),
+                    _ => assert!(false, "Expected Heap memory base, got {:?}", base),
                 }
                 assert_eq!(offset, ByteOffset(2048));
                 match size {
@@ -85,7 +85,7 @@ mod place_creation_tests {
                     _ => panic!("Expected Custom type size"),
                 }
             }
-            _ => panic!("Expected Memory place"),
+            _ => assert!(false, "Expected Memory place, got {:?}", place),
         }
     }
 }

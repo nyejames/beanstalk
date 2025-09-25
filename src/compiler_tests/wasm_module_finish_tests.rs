@@ -37,7 +37,7 @@ fn test_finish_with_function_export() {
     mir.type_info.function_types.push(function_sig);
     
     // Create a module with simulated function count
-    let mut wasm_module = WasmModule::new();
+    let wasm_module = WasmModule::new();
     // We can't directly set function_count as it's private, so we'll test with the export only
     
     let result = wasm_module.finish_with_mir(&mir);
