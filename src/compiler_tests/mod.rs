@@ -1,5 +1,5 @@
 // Test modules for the Beanstalk compiler
-// Updated structure after removing redundant and outdated tests
+// Reorganized structure with tests moved from source files and redundancies removed
 
 // === ESSENTIAL TESTS (Run First) ===
 // These tests validate core functionality and should always pass
@@ -16,9 +16,9 @@ pub mod core_compiler_tests;
 #[cfg(test)]
 pub mod place_tests;
 
-// Focused performance tests for key performance goals
+// Consolidated performance tests (replaces focused_performance_tests, performance_tests, performance_validation)
 #[cfg(test)]
-pub mod focused_performance_tests;
+pub mod consolidated_performance_tests;
 
 // === SPECIALIZED TESTS (Run As Needed) ===
 // These tests focus on specific subsystems
@@ -51,10 +51,6 @@ pub mod wasm_codegen_tests;
 #[cfg(test)]
 pub mod memory_layout_tests;
 
-// Lifetime-optimized memory management tests
-#[cfg(test)]
-pub mod lifetime_memory_manager_tests;
-
 // Interface VTable generation tests
 #[cfg(test)]
 pub mod interface_vtable_tests;
@@ -67,16 +63,6 @@ pub mod wasm_terminator_tests;
 #[cfg(test)]
 pub mod memory_operation_tests;
 
-// === COMPREHENSIVE TESTS (CI/Development) ===
-// These tests provide detailed analysis and may be slower
-
-// Integration tests for end-to-end compiler testing
-pub mod integration_tests;
-
-// Comprehensive performance tests (more detailed than focused_performance_tests)
-#[cfg(test)]
-pub mod performance_tests;
-
 // WASM-specific optimization tests (comprehensive)
 #[cfg(test)]
 pub mod wasm_optimization_tests;
@@ -85,13 +71,30 @@ pub mod wasm_optimization_tests;
 #[cfg(test)]
 pub mod wasm_performance_validation_tests;
 
+// === TESTS MOVED FROM SOURCE FILES ===
+// These tests were previously embedded in source files
+
+// Lifetime analysis tests (moved from src/compiler/lifetime_analysis.rs)
+#[cfg(test)]
+pub mod lifetime_analysis_tests;
+
+// MIR dataflow tests (moved from src/compiler/mir/dataflow.rs)
+#[cfg(test)]
+pub mod mir_dataflow_tests;
+
+// MIR diagnostics tests (moved from src/compiler/mir/diagnose.rs)
+#[cfg(test)]
+pub mod mir_diagnostics_tests;
+
+// === COMPREHENSIVE TESTS (CI/Development) ===
+// These tests provide detailed analysis and may be slower
+
+// Integration tests for end-to-end compiler testing
+pub mod integration_tests;
+
 // Comprehensive benchmark runner
 #[cfg(test)]
 pub mod benchmark_runner;
-
-// Task 15 performance validation
-#[cfg(test)]
-pub mod performance_validation;
 
 // === TEST VALIDATION ===
 // Module to validate that tests are properly organized and working
@@ -106,6 +109,8 @@ pub use integration_tests::run_all_test_cases;
 
 // Re-export essential test functions
 #[cfg(test)]
-pub use test_runner::{
-    run_essential_tests, run_performance_benchmarks, validate_wasm_optimizations,
-};
+pub use test_runner::run_essential_tests;
+
+// Re-export consolidated performance functions
+#[cfg(test)]
+pub use consolidated_performance_tests::{run_performance_benchmarks, validate_wasm_optimizations};

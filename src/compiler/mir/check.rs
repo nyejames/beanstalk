@@ -1,8 +1,7 @@
 use crate::compiler::mir::dataflow::LoanLivenessDataflow;
 use crate::compiler::mir::extract::{BorrowFactExtractor, may_alias};
 use crate::compiler::mir::mir_nodes::{
-    BorrowError, BorrowErrorType, InvalidationType, MirFunction, ProgramPoint, 
-    Loan, BorrowKind
+    BorrowError, BorrowErrorType, BorrowKind, InvalidationType, Loan, MirFunction, ProgramPoint,
 };
 use crate::compiler::mir::place::Place;
 use crate::compiler::parsers::tokens::TextLocation;
@@ -132,15 +131,15 @@ impl BorrowConflictChecker {
     pub fn check_function(&mut self, function: &MirFunction) -> Result<ConflictResults, String> {
         // First, run moved-out dataflow analysis
         self.moved_out_dataflow.analyze_function(function)?;
-        
+
         // Check for different types of conflicts
         self.check_conflicting_borrows(function)?;
         self.check_move_while_borrowed(function)?;
         self.check_use_after_move(function)?;
-        
+
         // Generate results
         let statistics = self.generate_statistics(function);
-        
+
         Ok(ConflictResults {
             errors: self.errors.clone(),
             warnings: self.warnings.clone(),
@@ -151,24 +150,28 @@ impl BorrowConflictChecker {
     /// Detect unique/shared borrow overlaps using live loan sets and may_alias
     fn check_conflicting_borrows(&mut self, function: &MirFunction) -> Result<(), String> {
         let loans = self.extractor.get_loans();
-        
+
         for program_point in function.get_program_points_in_order() {
             // Get live loans at this program point
-            let live_loans = self.dataflow.get_live_in_loans(&program_point)
-                .ok_or_else(|| format!("No live loans found for program point {}", program_point))?;
-            
+            let live_loans = self
+                .dataflow
+                .get_live_in_loans(&program_point)
+                .ok_or_else(|| {
+                    format!("No live loans found for program point {}", program_point)
+                })?;
+
             // Check all pairs of live loans for conflicts
             let live_loan_indices: Vec<usize> = live_loans.iter_set_bits().collect();
-            
+
             for i in 0..live_loan_indices.len() {
                 for j in (i + 1)..live_loan_indices.len() {
                     let loan_idx_a = live_loan_indices[i];
                     let loan_idx_b = live_loan_indices[j];
-                    
+
                     if loan_idx_a < loans.len() && loan_idx_b < loans.len() {
                         let loan_a = &loans[loan_idx_a];
                         let loan_b = &loans[loan_idx_b];
-                        
+
                         // Check if the loans conflict
                         if self.loans_conflict(loan_a, loan_b) {
                             let error = self.create_conflicting_borrows_error(
@@ -182,7 +185,7 @@ impl BorrowConflictChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -191,11 +194,11 @@ impl BorrowConflictChecker {
         // Loans conflict if:
         // 1. Their owners may alias
         // 2. At least one is a mutable/unique borrow
-        
+
         if !may_alias(&loan_a.owner, &loan_b.owner) {
             return false;
         }
-        
+
         match (&loan_a.kind, &loan_b.kind) {
             // Two shared borrows don't conflict
             (BorrowKind::Shared, BorrowKind::Shared) => false,
@@ -216,7 +219,7 @@ impl BorrowConflictChecker {
             borrow_kind_name(&loan_a.kind),
             borrow_kind_name(&loan_b.kind)
         );
-        
+
         BorrowError {
             point,
             error_type: BorrowErrorType::ConflictingBorrows {
@@ -232,19 +235,23 @@ impl BorrowConflictChecker {
     /// Check move-while-borrowed: error if moving place that aliases live loan owner
     fn check_move_while_borrowed(&mut self, function: &MirFunction) -> Result<(), String> {
         let loans = self.extractor.get_loans();
-        
+
         for program_point in function.get_program_points_in_order() {
             if let Some(events) = function.get_events(&program_point) {
                 // Get live loans at this program point
-                let live_loans = self.dataflow.get_live_in_loans(&program_point)
-                    .ok_or_else(|| format!("No live loans found for program point {}", program_point))?;
-                
+                let live_loans =
+                    self.dataflow
+                        .get_live_in_loans(&program_point)
+                        .ok_or_else(|| {
+                            format!("No live loans found for program point {}", program_point)
+                        })?;
+
                 // Check each move against live loans
                 for moved_place in &events.moves {
                     for loan_idx in live_loans.iter_set_bits() {
                         if loan_idx < loans.len() {
                             let loan = &loans[loan_idx];
-                            
+
                             // Check if the moved place aliases the loan owner
                             if may_alias(moved_place, &loan.owner) {
                                 let error = self.create_move_while_borrowed_error(
@@ -259,7 +266,7 @@ impl BorrowConflictChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -276,7 +283,7 @@ impl BorrowConflictChecker {
             loan.id,
             loan.origin_stmt
         );
-        
+
         BorrowError {
             point,
             error_type: BorrowErrorType::BorrowAcrossOwnerInvalidation {
@@ -296,15 +303,16 @@ impl BorrowConflictChecker {
             if let Some(events) = function.get_events(&program_point) {
                 // Get moved-out places at this program point
                 let moved_out_places = self.moved_out_dataflow.get_moved_in_places(&program_point);
-                
+
                 // Check each use against moved-out places
                 for used_place in &events.uses {
                     for moved_place in &moved_out_places {
                         // Check if the used place aliases a moved-out place
                         if may_alias(used_place, &moved_place) {
                             // Find the move point for better error reporting
-                            let move_point = self.find_move_point_for_place(function, used_place, program_point);
-                            
+                            let move_point =
+                                self.find_move_point_for_place(function, used_place, program_point);
+
                             let error = self.create_use_after_move_error(
                                 program_point,
                                 used_place.clone(),
@@ -316,7 +324,7 @@ impl BorrowConflictChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -332,7 +340,7 @@ impl BorrowConflictChecker {
             if program_point >= current_point {
                 break;
             }
-            
+
             if let Some(events) = function.get_events(&program_point) {
                 for moved_place in &events.moves {
                     if may_alias(place, moved_place) {
@@ -341,7 +349,7 @@ impl BorrowConflictChecker {
                 }
             }
         }
-        
+
         // Fallback: return the current point if we can't find the move
         current_point
     }
@@ -358,7 +366,7 @@ impl BorrowConflictChecker {
             place_name(&used_place),
             move_point
         );
-        
+
         BorrowError {
             point,
             error_type: BorrowErrorType::UseAfterMove {
@@ -375,25 +383,29 @@ impl BorrowConflictChecker {
         let mut conflicting_borrows_count = 0;
         let mut move_while_borrowed_count = 0;
         let mut use_after_move_count = 0;
-        
+
         // Count error types
         for error in &self.errors {
             match &error.error_type {
                 BorrowErrorType::ConflictingBorrows { .. } => conflicting_borrows_count += 1,
-                BorrowErrorType::BorrowAcrossOwnerInvalidation { .. } => move_while_borrowed_count += 1,
+                BorrowErrorType::BorrowAcrossOwnerInvalidation { .. } => {
+                    move_while_borrowed_count += 1
+                }
                 BorrowErrorType::UseAfterMove { .. } => use_after_move_count += 1,
             }
         }
-        
+
         // Also count warnings
         for warning in &self.warnings {
             match &warning.error_type {
                 BorrowErrorType::ConflictingBorrows { .. } => conflicting_borrows_count += 1,
-                BorrowErrorType::BorrowAcrossOwnerInvalidation { .. } => move_while_borrowed_count += 1,
+                BorrowErrorType::BorrowAcrossOwnerInvalidation { .. } => {
+                    move_while_borrowed_count += 1
+                }
                 BorrowErrorType::UseAfterMove { .. } => use_after_move_count += 1,
             }
         }
-        
+
         ConflictStatistics {
             total_program_points: function.get_program_points_in_order().len(),
             total_loans: self.extractor.get_loan_count(),
@@ -422,33 +434,33 @@ impl MovedOutDataflow {
     pub fn analyze_function(&mut self, function: &MirFunction) -> Result<(), String> {
         // Use the shared CFG from the function instead of building our own
         self.copy_cfg_from_function(function)?;
-        
+
         // Initialize moved-out sets
         self.initialize_moved_out_sets(function);
-        
+
         // Run forward dataflow analysis
         self.run_forward_dataflow(function)?;
-        
+
         Ok(())
     }
 
     /// Copy CFG from the shared function CFG (eliminates redundant construction)
     fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
         let cfg = function.get_cfg_immutable()?;
-        
+
         // Clear existing CFG data
         self.successors.clear();
         self.predecessors.clear();
-        
+
         // Copy CFG structure using optimized Vec-indexed access
         for point in cfg.iter_program_points() {
             let successors = cfg.get_successors(&point).to_vec();
             let predecessors = cfg.get_predecessors(&point).to_vec();
-            
+
             self.successors.insert(point, successors);
             self.predecessors.insert(point, predecessors);
         }
-        
+
         Ok(())
     }
 
@@ -467,12 +479,12 @@ impl MovedOutDataflow {
     /// - MovedOut[s] = (MovedIn[s] - Reassigns[s]) ∪ Moves[s]
     fn run_forward_dataflow(&mut self, function: &MirFunction) -> Result<(), String> {
         let program_points = function.get_program_points_in_order();
-        
+
         // Worklist algorithm
         let mut worklist: VecDeque<ProgramPoint> = program_points.iter().copied().collect();
         let mut iteration_count = 0;
         const MAX_ITERATIONS: usize = 10000;
-        
+
         while let Some(current_point) = worklist.pop_front() {
             iteration_count += 1;
             if iteration_count > MAX_ITERATIONS {
@@ -481,7 +493,7 @@ impl MovedOutDataflow {
                     MAX_ITERATIONS
                 ));
             }
-            
+
             // Compute MovedIn[s] = ⋃ MovedOut[pred(s)]
             let mut new_moved_in = HashSet::new();
             if let Some(predecessors) = self.predecessors.get(&current_point) {
@@ -491,36 +503,44 @@ impl MovedOutDataflow {
                     }
                 }
             }
-            
+
             // Check if MovedIn changed
-            let old_moved_in = self.moved_in.get(&current_point).cloned().unwrap_or_default();
+            let old_moved_in = self
+                .moved_in
+                .get(&current_point)
+                .cloned()
+                .unwrap_or_default();
             let moved_in_changed = new_moved_in != old_moved_in;
-            
+
             if moved_in_changed {
                 // Update MovedIn
                 self.moved_in.insert(current_point, new_moved_in.clone());
-                
+
                 // Compute MovedOut[s] = (MovedIn[s] - Reassigns[s]) ∪ Moves[s]
                 let mut new_moved_out = new_moved_in.clone();
-                
+
                 // Apply effects from this statement
                 if let Some(events) = function.get_events(&current_point) {
                     // Remove reassigned places (they're no longer moved-out)
                     for reassigned_place in &events.reassigns {
                         new_moved_out.retain(|place| !may_alias(place, reassigned_place));
                     }
-                    
+
                     // Add newly moved places
                     new_moved_out.extend(events.moves.iter().cloned());
                 }
-                
+
                 // Check if MovedOut changed
-                let old_moved_out = self.moved_out.get(&current_point).cloned().unwrap_or_default();
-                
+                let old_moved_out = self
+                    .moved_out
+                    .get(&current_point)
+                    .cloned()
+                    .unwrap_or_default();
+
                 if new_moved_out != old_moved_out {
                     // Update MovedOut
                     self.moved_out.insert(current_point, new_moved_out);
-                    
+
                     // Add successors to worklist
                     if let Some(successors) = self.successors.get(&current_point) {
                         for &succ in successors {
@@ -532,7 +552,7 @@ impl MovedOutDataflow {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -549,7 +569,9 @@ impl MovedOutDataflow {
     /// Check if a place is moved-out at a program point
     pub fn is_place_moved_out(&self, place: &Place, point: &ProgramPoint) -> bool {
         if let Some(moved_places) = self.moved_in.get(point) {
-            moved_places.iter().any(|moved_place| may_alias(place, moved_place))
+            moved_places
+                .iter()
+                .any(|moved_place| may_alias(place, moved_place))
         } else {
             false
         }
@@ -574,7 +596,9 @@ fn place_name(place: &Place) -> String {
         Place::Projection { base, elem } => {
             use crate::compiler::mir::place::ProjectionElem;
             match elem {
-                ProjectionElem::Field { index, .. } => format!("{}.field_{}", place_name(base), index),
+                ProjectionElem::Field { index, .. } => {
+                    format!("{}.field_{}", place_name(base), index)
+                }
                 ProjectionElem::Index { .. } => format!("{}[index]", place_name(base)),
                 ProjectionElem::Length => format!("{}.len", place_name(base)),
                 ProjectionElem::Data => format!("{}.data", place_name(base)),
@@ -592,273 +616,4 @@ pub fn run_conflict_detection(
 ) -> Result<ConflictResults, String> {
     let mut checker = BorrowConflictChecker::new(dataflow, extractor);
     checker.check_function(function)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::mir_nodes::*;
-    use crate::compiler::mir::place::*;
-    use crate::compiler::mir::dataflow::LoanLivenessDataflow;
-    use crate::compiler::mir::extract::BorrowFactExtractor;
-
-    /// Create a test function with conflicting borrows
-    fn create_test_function_with_conflicts() -> (MirFunction, LoanLivenessDataflow, BorrowFactExtractor) {
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        
-        // Create test places
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        
-        // Create program points
-        let pp1 = ProgramPoint::new(0);
-        let pp2 = ProgramPoint::new(1);
-        
-        // Add program points to function
-        function.add_program_point(pp1, 0, 0);
-        function.add_program_point(pp2, 0, 1);
-        
-        // Create loans
-        let loan1 = Loan {
-            id: LoanId::new(0),
-            owner: place_x.clone(),
-            kind: BorrowKind::Shared,
-            origin_stmt: pp1,
-        };
-        let loan2 = Loan {
-            id: LoanId::new(1),
-            owner: place_x.clone(),
-            kind: BorrowKind::Mut,
-            origin_stmt: pp2,
-        };
-        function.add_loan(loan1);
-        function.add_loan(loan2);
-        
-        // Create events with conflicting loans
-        let mut events1 = Events::default();
-        events1.start_loans.push(LoanId::new(0)); // Shared borrow
-        function.store_events(pp1, events1);
-        
-        let mut events2 = Events::default();
-        events2.start_loans.push(LoanId::new(1)); // Mutable borrow of same place
-        function.store_events(pp2, events2);
-        
-        // Create extractor and dataflow
-        let mut extractor = BorrowFactExtractor::new();
-        extractor.extract_function(&function).unwrap();
-        
-        let mut dataflow = LoanLivenessDataflow::new(extractor.get_loan_count());
-        dataflow.analyze_function(&function, &extractor).unwrap();
-        
-        (function, dataflow, extractor)
-    }
-
-    /// Create a test function with move-while-borrowed
-    fn create_test_function_with_move_while_borrowed() -> (MirFunction, LoanLivenessDataflow, BorrowFactExtractor) {
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        
-        // Create test places
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        
-        // Create program points
-        let pp1 = ProgramPoint::new(0);
-        let pp2 = ProgramPoint::new(1);
-        
-        // Add program points to function
-        function.add_program_point(pp1, 0, 0);
-        function.add_program_point(pp2, 0, 1);
-        
-        // Create events: borrow at pp1, move at pp2
-        let mut events1 = Events::default();
-        events1.start_loans.push(LoanId::new(0)); // Borrow place_x
-        function.store_events(pp1, events1);
-        
-        let mut events2 = Events::default();
-        events2.moves.push(place_x.clone()); // Move place_x while borrowed
-        function.store_events(pp2, events2);
-        
-        // Create extractor and dataflow
-        let mut extractor = BorrowFactExtractor::new();
-        extractor.extract_function(&function).unwrap();
-        
-        let dataflow = LoanLivenessDataflow::new(extractor.get_loan_count());
-        
-        (function, dataflow, extractor)
-    }
-
-    #[test]
-    fn test_conflict_checker_creation() {
-        let (_, dataflow, extractor) = create_test_function_with_conflicts();
-        let checker = BorrowConflictChecker::new(dataflow, extractor);
-        
-        assert_eq!(checker.errors.len(), 0);
-        assert_eq!(checker.warnings.len(), 0);
-    }
-
-    #[test]
-    fn test_loans_conflict_detection() {
-        let (_, dataflow, extractor) = create_test_function_with_conflicts();
-        let checker = BorrowConflictChecker::new(dataflow, extractor);
-        
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        
-        let shared_loan = Loan {
-            id: LoanId::new(0),
-            owner: place_x.clone(),
-            kind: BorrowKind::Shared,
-            origin_stmt: ProgramPoint::new(0),
-        };
-        
-        let mut_loan = Loan {
-            id: LoanId::new(1),
-            owner: place_x.clone(),
-            kind: BorrowKind::Mut,
-            origin_stmt: ProgramPoint::new(1),
-        };
-        
-        // Shared and mutable borrows of the same place should conflict
-        assert!(checker.loans_conflict(&shared_loan, &mut_loan));
-        
-        // Two shared borrows should not conflict
-        let shared_loan2 = Loan {
-            id: LoanId::new(2),
-            owner: place_x.clone(),
-            kind: BorrowKind::Shared,
-            origin_stmt: ProgramPoint::new(2),
-        };
-        assert!(!checker.loans_conflict(&shared_loan, &shared_loan2));
-    }
-
-    #[test]
-    fn test_moved_out_dataflow_creation() {
-        let dataflow = MovedOutDataflow::new();
-        
-        assert!(dataflow.moved_in.is_empty());
-        assert!(dataflow.moved_out.is_empty());
-    }
-
-    #[test]
-    fn test_moved_out_dataflow_analysis() {
-        let (function, _, _) = create_test_function_with_move_while_borrowed();
-        let mut moved_out_dataflow = MovedOutDataflow::new();
-        
-        let result = moved_out_dataflow.analyze_function(&function);
-        assert!(result.is_ok(), "Moved-out dataflow should succeed");
-        
-        // Check that we have moved sets for all program points
-        assert_eq!(moved_out_dataflow.moved_in.len(), 2);
-        assert_eq!(moved_out_dataflow.moved_out.len(), 2);
-    }
-
-    #[test]
-    fn test_place_moved_out_query() {
-        let (function, _, _) = create_test_function_with_move_while_borrowed();
-        let mut moved_out_dataflow = MovedOutDataflow::new();
-        
-        moved_out_dataflow.analyze_function(&function).unwrap();
-        
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let pp1 = ProgramPoint::new(0);
-        
-        // Query whether place is moved out (depends on dataflow results)
-        let is_moved = moved_out_dataflow.is_place_moved_out(&place_x, &pp1);
-        // This should not panic and return a boolean
-        let _ = is_moved;
-    }
-
-    #[test]
-    fn test_borrow_kind_name() {
-        assert_eq!(borrow_kind_name(&BorrowKind::Shared), "shared");
-        assert_eq!(borrow_kind_name(&BorrowKind::Mut), "mutable");
-        assert_eq!(borrow_kind_name(&BorrowKind::Unique), "unique");
-    }
-
-    #[test]
-    fn test_place_name() {
-        let local = Place::Local { index: 5, wasm_type: WasmType::I32 };
-        assert_eq!(place_name(&local), "local_5");
-        
-        let global = Place::Global { index: 3, wasm_type: WasmType::F64 };
-        assert_eq!(place_name(&global), "global_3");
-        
-        let memory = Place::Memory {
-            base: MemoryBase::LinearMemory,
-            offset: crate::compiler::mir::place::ByteOffset(1024),
-            size: TypeSize::Word,
-        };
-        assert_eq!(place_name(&memory), "memory[1024]");
-    }
-
-    #[test]
-    fn test_place_name_projections() {
-        let base = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let field_proj = base.clone().project_field(2, 8, FieldSize::WasmType(WasmType::I32));
-        
-        assert_eq!(place_name(&field_proj), "local_0.field_2");
-        
-        let index_place = Place::Local { index: 1, wasm_type: WasmType::I32 };
-        let index_proj = base.project_index(index_place, 4);
-        
-        assert_eq!(place_name(&index_proj), "local_0[index]");
-    }
-
-    #[test]
-    fn test_conflict_statistics_generation() {
-        let (function, dataflow, extractor) = create_test_function_with_conflicts();
-        let checker = BorrowConflictChecker::new(dataflow, extractor);
-        
-        let stats = checker.generate_statistics(&function);
-        
-        assert_eq!(stats.total_program_points, 2);
-        assert_eq!(stats.error_count, 0); // No errors added yet
-        assert_eq!(stats.warning_count, 0); // No warnings added yet
-        assert_eq!(stats.total_conflicts, 0);
-    }
-
-    #[test]
-    fn test_entry_point_function() {
-        let (function, dataflow, extractor) = create_test_function_with_conflicts();
-        
-        let result = run_conflict_detection(&function, dataflow, extractor);
-        assert!(result.is_ok(), "Conflict detection should succeed");
-        
-        let results = result.unwrap();
-        assert!(results.statistics.total_program_points > 0);
-    }
-
-    #[test]
-    fn test_error_creation() {
-        let (_, dataflow, extractor) = create_test_function_with_conflicts();
-        let checker = BorrowConflictChecker::new(dataflow, extractor);
-        
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let loan_a = Loan {
-            id: LoanId::new(0),
-            owner: place_x.clone(),
-            kind: BorrowKind::Shared,
-            origin_stmt: ProgramPoint::new(0),
-        };
-        let loan_b = Loan {
-            id: LoanId::new(1),
-            owner: place_x.clone(),
-            kind: BorrowKind::Mut,
-            origin_stmt: ProgramPoint::new(1),
-        };
-        
-        let error = checker.create_conflicting_borrows_error(
-            ProgramPoint::new(1),
-            &loan_a,
-            &loan_b,
-        );
-        
-        assert!(error.message.contains("shared"));
-        assert!(error.message.contains("mutable"));
-        
-        match error.error_type {
-            BorrowErrorType::ConflictingBorrows { existing_borrow, new_borrow, .. } => {
-                assert_eq!(existing_borrow, BorrowKind::Shared);
-                assert_eq!(new_borrow, BorrowKind::Mut);
-            }
-            _ => panic!("Expected ConflictingBorrows error type"),
-        }
-    }
 }

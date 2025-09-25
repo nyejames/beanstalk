@@ -3,12 +3,6 @@
 /// This module provides a focused test suite that validates the essential
 /// compiler operations without getting bogged down in implementation details.
 
-use crate::compiler_tests::{
-    core_compiler_tests,
-    focused_performance_tests,
-    place_tests,
-    borrow_check_tests,
-};
 
 /// Run essential compiler tests
 pub fn run_essential_tests() -> Result<(), String> {

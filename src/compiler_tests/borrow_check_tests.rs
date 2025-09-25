@@ -114,7 +114,7 @@ mod borrow_checking_behavior_tests {
         let mut function = MirFunction::new(0, "test_function".to_string(), vec![], vec![]);
         
         // Add a simple block with some program points
-        let mut block = MirBlock::new(0);
+        let block = MirBlock::new(0);
         let mut point_gen = ProgramPointGenerator::new();
         
         for i in 0..5 {
@@ -908,7 +908,7 @@ mod comprehensive_field_borrow_tests {
         
         let conflict_result = run_conflict_detection(&function, dataflow, extractor);
         assert!(conflict_result.is_ok());
-        let conflicts = conflict_result.unwrap();
+        let _conflicts = conflict_result.unwrap();
         
         // Should detect conflict between whole struct and field borrows
         // Note: This test may pass if the current implementation doesn't detect this specific conflict

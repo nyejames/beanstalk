@@ -24,17 +24,17 @@ pub struct ControlFlowGraph {
     /// Successors for each program point (Vec-indexed by program point ID)
     /// Uses Vec instead of HashMap for O(1) access
     successors: Vec<Vec<ProgramPoint>>,
-    
+
     /// Predecessors for each program point (Vec-indexed by program point ID)
     /// Uses Vec instead of HashMap for O(1) access
     predecessors: Vec<Vec<ProgramPoint>>,
-    
+
     /// Total number of program points in this CFG
     program_point_count: usize,
-    
+
     /// Whether this CFG represents linear control flow (optimization flag)
     is_linear: bool,
-    
+
     /// CFG validation hash to detect changes requiring reconstruction
     validation_hash: u64,
 }
@@ -60,13 +60,13 @@ impl ControlFlowGraph {
     pub fn build_from_function(function: &MirFunction) -> Result<Self, String> {
         let program_points = function.get_program_points_in_order();
         let program_point_count = program_points.len();
-        
+
         if program_point_count == 0 {
             return Ok(Self::new(0));
         }
-        
+
         let mut cfg = Self::new(program_point_count);
-        
+
         // Check if this function has linear control flow (fast-path optimization)
         if cfg.is_function_linear(function) {
             cfg.build_linear_cfg(&program_points)?;
@@ -75,13 +75,13 @@ impl ControlFlowGraph {
             cfg.build_full_cfg(function)?;
             cfg.is_linear = false;
         }
-        
+
         // Validate the constructed CFG
         cfg.validate()?;
-        
+
         // Compute validation hash for caching
         cfg.validation_hash = cfg.compute_validation_hash();
-        
+
         Ok(cfg)
     }
 
@@ -97,15 +97,15 @@ impl ControlFlowGraph {
                 Terminator::Unreachable => continue,   // Unreachable is fine
                 Terminator::Returns => continue,       // Returns is fine for linear flow
                 Terminator::Goto { .. } => return false, // Goto indicates non-linear flow
-                Terminator::If { .. } => return false,   // Conditional branch
+                Terminator::If { .. } => return false, // Conditional branch
                 Terminator::Switch { .. } => return false, // Multi-way branch
-                Terminator::Loop { .. } => return false,   // Loop
+                Terminator::Loop { .. } => return false, // Loop
                 Terminator::UnconditionalJump(_) => return false, // Jump indicates non-linear flow
                 Terminator::ConditionalJump(_, _) => return false, // Conditional jump
                 Terminator::Block { .. } => return false, // Block structure indicates non-linear flow
             }
         }
-        
+
         // If we have more than one block, it's not linear
         function.blocks.len() <= 1
     }
@@ -118,7 +118,7 @@ impl ControlFlowGraph {
         // Linear CFG: each program point flows to the next
         for (i, current_point) in program_points.iter().enumerate() {
             let current_id = current_point.id() as usize;
-            
+
             // Validate program point ID is within bounds
             if current_id >= self.program_point_count {
                 return Err(format!(
@@ -126,24 +126,24 @@ impl ControlFlowGraph {
                     current_id, self.program_point_count
                 ));
             }
-            
+
             // Add successor relationship (except for last point)
             if i + 1 < program_points.len() {
                 let next_point = program_points[i + 1];
                 let next_id = next_point.id() as usize;
-                
+
                 if next_id >= self.program_point_count {
                     return Err(format!(
                         "Next program point ID {} exceeds CFG capacity {}",
                         next_id, self.program_point_count
                     ));
                 }
-                
+
                 self.successors[current_id].push(next_point);
                 self.predecessors[next_id].push(*current_point);
             }
         }
-        
+
         Ok(())
     }
 
@@ -155,29 +155,39 @@ impl ControlFlowGraph {
         // First, build the basic linear structure
         let program_points = function.get_program_points_in_order();
         self.build_linear_cfg(&program_points)?;
-        
+
         // Then, add edges from terminators
         for block in &function.blocks {
             self.add_terminator_edges(&block.terminator, function)?;
         }
-        
+
         Ok(())
     }
 
     /// Add CFG edges from a terminator
-    fn add_terminator_edges(&mut self, terminator: &Terminator, _function: &MirFunction) -> Result<(), String> {
+    fn add_terminator_edges(
+        &mut self,
+        terminator: &Terminator,
+        _function: &MirFunction,
+    ) -> Result<(), String> {
         match terminator {
             Terminator::Goto { target, .. } => {
                 // Add edge to target block
                 // TODO: Implement when block targeting is available
                 // For now, this is a placeholder
             }
-            Terminator::If { then_block, else_block, .. } => {
+            Terminator::If {
+                then_block,
+                else_block,
+                ..
+            } => {
                 // Add edges to both branches
                 // TODO: Implement when block targeting is available
                 // For now, this is a placeholder
             }
-            Terminator::Switch { targets, default, .. } => {
+            Terminator::Switch {
+                targets, default, ..
+            } => {
                 // Add edges to all switch targets
                 // TODO: Implement when block targeting is available
                 // For now, this is a placeholder
@@ -203,7 +213,7 @@ impl ControlFlowGraph {
                 // No additional edges needed
             }
         }
-        
+
         Ok(())
     }
 
@@ -242,18 +252,20 @@ impl ControlFlowGraph {
         // Check that all successor relationships have corresponding predecessor relationships
         for (point_id, successors) in self.successors.iter().enumerate() {
             let current_point = ProgramPoint::new(point_id as u32);
-            
+
             for &successor in successors {
                 let succ_id = successor.id() as usize;
-                
+
                 // Check bounds
                 if succ_id >= self.predecessors.len() {
                     return Err(format!(
                         "Successor {} of point {} is out of bounds (max: {})",
-                        succ_id, point_id, self.predecessors.len()
+                        succ_id,
+                        point_id,
+                        self.predecessors.len()
                     ));
                 }
-                
+
                 // Check that successor has current_point as predecessor
                 if !self.predecessors[succ_id].contains(&current_point) {
                     return Err(format!(
@@ -263,22 +275,24 @@ impl ControlFlowGraph {
                 }
             }
         }
-        
+
         // Check that all predecessor relationships have corresponding successor relationships
         for (point_id, predecessors) in self.predecessors.iter().enumerate() {
             let current_point = ProgramPoint::new(point_id as u32);
-            
+
             for &predecessor in predecessors {
                 let pred_id = predecessor.id() as usize;
-                
+
                 // Check bounds
                 if pred_id >= self.successors.len() {
                     return Err(format!(
                         "Predecessor {} of point {} is out of bounds (max: {})",
-                        pred_id, point_id, self.successors.len()
+                        pred_id,
+                        point_id,
+                        self.successors.len()
                     ));
                 }
-                
+
                 // Check that predecessor has current_point as successor
                 if !self.successors[pred_id].contains(&current_point) {
                     return Err(format!(
@@ -288,7 +302,7 @@ impl ControlFlowGraph {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -296,13 +310,13 @@ impl ControlFlowGraph {
     fn compute_validation_hash(&self) -> u64 {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
-        
+
         let mut hasher = DefaultHasher::new();
-        
+
         // Hash the CFG structure
         self.program_point_count.hash(&mut hasher);
         self.is_linear.hash(&mut hasher);
-        
+
         // Hash successor relationships
         for successors in &self.successors {
             successors.len().hash(&mut hasher);
@@ -310,7 +324,7 @@ impl ControlFlowGraph {
                 successor.id().hash(&mut hasher);
             }
         }
-        
+
         hasher.finish()
     }
 
@@ -321,7 +335,7 @@ impl ControlFlowGraph {
         if current_count != self.program_point_count {
             return true;
         }
-        
+
         // For now, we'll always reconstruct if the function structure might have changed
         // In a more sophisticated implementation, we could track function modification
         false
@@ -332,7 +346,7 @@ impl ControlFlowGraph {
         let total_edges = self.successors.iter().map(|s| s.len()).sum();
         let max_successors = self.successors.iter().map(|s| s.len()).max().unwrap_or(0);
         let max_predecessors = self.predecessors.iter().map(|p| p.len()).max().unwrap_or(0);
-        
+
         CFGStatistics {
             program_point_count: self.program_point_count,
             total_edges,
@@ -352,21 +366,26 @@ impl ControlFlowGraph {
     pub fn dfs_from(&self, start: &ProgramPoint) -> Vec<ProgramPoint> {
         let mut visited = vec![false; self.program_point_count];
         let mut result = Vec::new();
-        
+
         self.dfs_visit(start, &mut visited, &mut result);
         result
     }
 
     /// DFS visit helper
-    fn dfs_visit(&self, point: &ProgramPoint, visited: &mut [bool], result: &mut Vec<ProgramPoint>) {
+    fn dfs_visit(
+        &self,
+        point: &ProgramPoint,
+        visited: &mut [bool],
+        result: &mut Vec<ProgramPoint>,
+    ) {
         let point_id = point.id() as usize;
         if point_id >= visited.len() || visited[point_id] {
             return;
         }
-        
+
         visited[point_id] = true;
         result.push(*point);
-        
+
         for &successor in self.get_successors(point) {
             self.dfs_visit(&successor, visited, result);
         }
@@ -375,17 +394,17 @@ impl ControlFlowGraph {
     /// Perform breadth-first traversal from a starting point
     pub fn bfs_from(&self, start: &ProgramPoint) -> Vec<ProgramPoint> {
         use std::collections::VecDeque;
-        
+
         let mut visited = vec![false; self.program_point_count];
         let mut result = Vec::new();
         let mut queue = VecDeque::new();
-        
+
         let start_id = start.id() as usize;
         if start_id < visited.len() {
             visited[start_id] = true;
             result.push(*start);
             queue.push_back(*start);
-            
+
             while let Some(current) = queue.pop_front() {
                 for &successor in self.get_successors(&current) {
                     let succ_id = successor.id() as usize;
@@ -397,7 +416,7 @@ impl ControlFlowGraph {
                 }
             }
         }
-        
+
         result
     }
 }
@@ -417,138 +436,4 @@ pub struct CFGStatistics {
     pub is_linear: bool,
     /// Validation hash for caching
     pub validation_hash: u64,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::mir_nodes::*;
-    use crate::compiler::mir::place::*;
-
-    /// Create a test function with linear control flow
-    fn create_linear_test_function() -> MirFunction {
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        
-        // Create a simple block with linear statements
-        let mut block = MirBlock::new(0);
-        
-        // Add some statements
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let stmt1 = Statement::Assign {
-            place: place_x.clone(),
-            rvalue: Rvalue::Use(Operand::Constant(Constant::I32(42))),
-        };
-        let stmt2 = Statement::Assign {
-            place: place_x.clone(),
-            rvalue: Rvalue::Use(Operand::Constant(Constant::I32(43))),
-        };
-        
-        let pp1 = ProgramPoint::new(0);
-        let pp2 = ProgramPoint::new(1);
-        let pp3 = ProgramPoint::new(2);
-        
-        block.add_statement_with_program_point(stmt1, pp1);
-        block.add_statement_with_program_point(stmt2, pp2);
-        
-        // Set terminator
-        let terminator = Terminator::Return { values: vec![] };
-        block.set_terminator_with_program_point(terminator, pp3);
-        
-        function.add_block(block);
-        
-        // Add program points to function
-        function.add_program_point(pp1, 0, 0);
-        function.add_program_point(pp2, 0, 1);
-        function.add_program_point(pp3, 0, usize::MAX);
-        
-        function
-    }
-
-    #[test]
-    fn test_cfg_creation() {
-        let cfg = ControlFlowGraph::new(5);
-        assert_eq!(cfg.program_point_count(), 5);
-        assert_eq!(cfg.successors.len(), 5);
-        assert_eq!(cfg.predecessors.len(), 5);
-    }
-
-    #[test]
-    fn test_linear_function_detection() {
-        let function = create_linear_test_function();
-        let cfg = ControlFlowGraph::new(3);
-        
-        assert!(cfg.is_function_linear(&function));
-    }
-
-    #[test]
-    fn test_linear_cfg_construction() {
-        let function = create_linear_test_function();
-        let cfg = ControlFlowGraph::build_from_function(&function).unwrap();
-        
-        assert!(cfg.is_linear());
-        assert_eq!(cfg.program_point_count(), 3);
-        
-        // Check linear structure
-        let pp1 = ProgramPoint::new(0);
-        let pp2 = ProgramPoint::new(1);
-        let pp3 = ProgramPoint::new(2);
-        
-        assert_eq!(cfg.get_successors(&pp1), &[pp2]);
-        assert_eq!(cfg.get_successors(&pp2), &[pp3]);
-        assert_eq!(cfg.get_successors(&pp3), &[]);
-        
-        assert_eq!(cfg.get_predecessors(&pp1), &[]);
-        assert_eq!(cfg.get_predecessors(&pp2), &[pp1]);
-        assert_eq!(cfg.get_predecessors(&pp3), &[pp2]);
-    }
-
-    #[test]
-    fn test_cfg_validation() {
-        let function = create_linear_test_function();
-        let cfg = ControlFlowGraph::build_from_function(&function).unwrap();
-        
-        // Should validate successfully
-        assert!(cfg.validate().is_ok());
-    }
-
-    #[test]
-    fn test_cfg_statistics() {
-        let function = create_linear_test_function();
-        let cfg = ControlFlowGraph::build_from_function(&function).unwrap();
-        
-        let stats = cfg.get_statistics();
-        assert_eq!(stats.program_point_count, 3);
-        assert_eq!(stats.total_edges, 2); // pp1->pp2, pp2->pp3
-        assert_eq!(stats.max_successors, 1);
-        assert_eq!(stats.max_predecessors, 1);
-        assert!(stats.is_linear);
-    }
-
-    #[test]
-    fn test_dfs_traversal() {
-        let function = create_linear_test_function();
-        let cfg = ControlFlowGraph::build_from_function(&function).unwrap();
-        
-        let pp1 = ProgramPoint::new(0);
-        let traversal = cfg.dfs_from(&pp1);
-        
-        assert_eq!(traversal.len(), 3);
-        assert_eq!(traversal[0], ProgramPoint::new(0));
-        assert_eq!(traversal[1], ProgramPoint::new(1));
-        assert_eq!(traversal[2], ProgramPoint::new(2));
-    }
-
-    #[test]
-    fn test_bfs_traversal() {
-        let function = create_linear_test_function();
-        let cfg = ControlFlowGraph::build_from_function(&function).unwrap();
-        
-        let pp1 = ProgramPoint::new(0);
-        let traversal = cfg.bfs_from(&pp1);
-        
-        assert_eq!(traversal.len(), 3);
-        assert_eq!(traversal[0], ProgramPoint::new(0));
-        assert_eq!(traversal[1], ProgramPoint::new(1));
-        assert_eq!(traversal[2], ProgramPoint::new(2));
-    }
 }

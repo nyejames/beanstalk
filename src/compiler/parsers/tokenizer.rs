@@ -7,7 +7,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::{return_syntax_error, settings};
+use crate::{return_syntax_error, settings, token_log};
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -87,7 +87,7 @@ pub fn get_token_kind(
         }
     }
 
-    if stream.context == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
+    if stream.mode == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
         return tokenize_template_body(current_char, stream);
     }
 
@@ -117,7 +117,7 @@ pub fn get_token_kind(
 
     if current_char == '[' {
         *template_nesting_level += 1;
-        match stream.context {
+        match stream.mode {
             TokenizeMode::TemplateHead => {
                 return_syntax_error!(
                     stream.new_location(),
@@ -128,7 +128,7 @@ pub fn get_token_kind(
 
             TokenizeMode::Normal => {
                 // Going into the template head
-                stream.context = TokenizeMode::TemplateHead;
+                stream.mode = TokenizeMode::TemplateHead;
                 return_token!(TokenKind::ParentTemplate, stream);
             }
 
@@ -153,7 +153,7 @@ pub fn get_token_kind(
                 }
 
                 // Starting a new template head from inside a template body
-                stream.context = TokenizeMode::TemplateHead;
+                stream.mode = TokenizeMode::TemplateHead;
                 return_token!(TokenKind::TemplateHead, stream);
             }
         };
@@ -163,9 +163,9 @@ pub fn get_token_kind(
         *template_nesting_level -= 1;
 
         if *template_nesting_level == 0 {
-            stream.context = TokenizeMode::Normal;
+            stream.mode = TokenizeMode::Normal;
         } else {
-            stream.context = TokenizeMode::TemplateBody;
+            stream.mode = TokenizeMode::TemplateBody;
         }
 
         return_token!(TokenKind::TemplateClose, stream);
@@ -173,8 +173,8 @@ pub fn get_token_kind(
 
     // Check if going into the template body
     if current_char == ':' {
-        if stream.context == TokenizeMode::TemplateHead {
-            stream.context = TokenizeMode::TemplateBody;
+        if stream.mode == TokenizeMode::TemplateHead {
+            stream.mode = TokenizeMode::TemplateBody;
 
             return_token!(TokenKind::Colon, stream);
         }
@@ -418,7 +418,7 @@ pub fn get_token_kind(
 
     // For ID's or labels? Or maybe paths too?
     if current_char == '@' {
-        if stream.context == TokenizeMode::TemplateHead {
+        if stream.mode == TokenizeMode::TemplateHead {
             while let Some(&next_char) = stream.peek() {
                 if next_char.is_alphanumeric() || next_char == '_' {
                     token_value.push(stream.next().unwrap());

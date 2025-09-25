@@ -1,6 +1,6 @@
 use crate::compiler::mir::place::Place;
-use std::collections::{HashMap, HashSet};
 use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 
 /// Interned place identifier for fast comparison and reduced memory usage
 ///
@@ -105,7 +105,7 @@ impl AliasingInfo {
         }
 
         let result = self.place_to_set[place_a_id] == self.place_to_set[place_b_id];
-        
+
         // Cache the result for future queries (but limit cache size)
         {
             let mut cache = self.aliasing_cache.borrow_mut();
@@ -120,7 +120,7 @@ impl AliasingInfo {
     /// Add a place to an existing aliasing set
     pub fn add_to_aliasing_set(&mut self, place_id: PlaceId, set_index: usize) {
         let place_index = place_id.id() as usize;
-        
+
         // Ensure place_to_set is large enough
         if place_index >= self.place_to_set.len() {
             self.place_to_set.resize(place_index + 1, 0);
@@ -142,7 +142,7 @@ impl AliasingInfo {
 
         for place_id in initial_places {
             let place_index = place_id.id() as usize;
-            
+
             // Ensure place_to_set is large enough
             if place_index >= self.place_to_set.len() {
                 self.place_to_set.resize(place_index + 1, set_index);
@@ -276,7 +276,7 @@ impl PlaceInterner {
 
         // Group places into aliasing sets
         let mut processed = vec![false; self.places.len()];
-        
+
         for i in 0..self.places.len() {
             if processed[i] {
                 continue;
@@ -325,8 +325,10 @@ impl PlaceInterner {
     /// Get memory usage statistics
     pub fn get_memory_stats(&self) -> PlaceInternerStats {
         let place_memory = self.places.len() * std::mem::size_of::<Place>();
-        let map_memory = self.place_map.len() * (std::mem::size_of::<Place>() + std::mem::size_of::<PlaceId>());
-        let aliasing_memory = self.aliasing_info.aliasing_sets.len() * std::mem::size_of::<HashSet<PlaceId>>()
+        let map_memory =
+            self.place_map.len() * (std::mem::size_of::<Place>() + std::mem::size_of::<PlaceId>());
+        let aliasing_memory = self.aliasing_info.aliasing_sets.len()
+            * std::mem::size_of::<HashSet<PlaceId>>()
             + self.aliasing_info.place_to_set.len() * std::mem::size_of::<usize>();
 
         PlaceInternerStats {
@@ -357,123 +359,4 @@ pub struct PlaceInternerStats {
     pub memory_usage_bytes: usize,
     /// Number of cache hits (for performance monitoring)
     pub cache_hits: usize,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::place::{Place, WasmType, FieldSize};
-
-    #[test]
-    fn test_place_interning() {
-        let mut interner = PlaceInterner::new();
-        
-        let place1 = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let place2 = Place::Local { index: 1, wasm_type: WasmType::I32 };
-        let place1_copy = Place::Local { index: 0, wasm_type: WasmType::I32 };
-
-        let id1 = interner.intern(place1.clone());
-        let id2 = interner.intern(place2.clone());
-        let id1_again = interner.intern(place1_copy);
-
-        // Same place should get same ID
-        assert_eq!(id1, id1_again);
-        // Different places should get different IDs
-        assert_ne!(id1, id2);
-
-        // Should be able to retrieve places
-        assert_eq!(interner.get_place(id1), Some(&place1));
-        assert_eq!(interner.get_place(id2), Some(&place2));
-    }
-
-    #[test]
-    fn test_aliasing_relationships() {
-        let mut interner = PlaceInterner::new();
-        
-        let base = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let field1 = base.clone().project_field(0, 0, FieldSize::WasmType(WasmType::I32));
-        let field2 = base.clone().project_field(1, 4, FieldSize::WasmType(WasmType::I32));
-        let different_base = Place::Local { index: 1, wasm_type: WasmType::I32 };
-
-        let base_id = interner.intern(base);
-        let field1_id = interner.intern(field1);
-        let field2_id = interner.intern(field2);
-        let different_base_id = interner.intern(different_base);
-
-        // Build aliasing relationships
-        interner.build_aliasing_relationships();
-
-        let aliasing_info = interner.get_aliasing_info();
-
-        // Base should alias with its fields
-        assert!(aliasing_info.may_alias_fast(base_id, field1_id));
-        assert!(aliasing_info.may_alias_fast(base_id, field2_id));
-
-        // Different fields of same base should alias (conservative)
-        assert!(aliasing_info.may_alias_fast(field1_id, field2_id));
-
-        // Different bases shouldn't alias
-        assert!(!aliasing_info.may_alias_fast(base_id, different_base_id));
-    }
-
-    #[test]
-    fn test_aliasing_cache() {
-        let mut aliasing_info = AliasingInfo::new(10);
-        
-        // Create some aliasing sets
-        let set1 = aliasing_info.create_aliasing_set(vec![PlaceId::new(0), PlaceId::new(1)]);
-        let _set2 = aliasing_info.create_aliasing_set(vec![PlaceId::new(2), PlaceId::new(3)]);
-
-        let place0 = PlaceId::new(0);
-        let place1 = PlaceId::new(1);
-        let place2 = PlaceId::new(2);
-
-        // First query should compute and cache result
-        assert!(aliasing_info.may_alias_fast(place0, place1));
-        assert!(!aliasing_info.may_alias_fast(place0, place2));
-
-        // Second query should use cached result
-        assert!(aliasing_info.may_alias_fast(place0, place1));
-        assert!(!aliasing_info.may_alias_fast(place0, place2));
-
-        // Check cache stats
-        let (cache_size, _) = aliasing_info.get_cache_stats();
-        assert!(cache_size > 0);
-    }
-
-    #[test]
-    fn test_memory_stats() {
-        let mut interner = PlaceInterner::new();
-        
-        // Add some places
-        for i in 0..10 {
-            let place = Place::Local { index: i, wasm_type: WasmType::I32 };
-            interner.intern(place);
-        }
-
-        interner.build_aliasing_relationships();
-
-        let stats = interner.get_memory_stats();
-        assert_eq!(stats.total_places, 10);
-        assert_eq!(stats.unique_places, 10);
-        assert!(stats.memory_usage_bytes > 0);
-    }
-
-    #[test]
-    fn test_place_id_operations() {
-        let id1 = PlaceId::new(42);
-        let id2 = PlaceId::new(42);
-        let id3 = PlaceId::new(43);
-
-        // Test equality
-        assert_eq!(id1, id2);
-        assert_ne!(id1, id3);
-
-        // Test ordering
-        assert!(id1 < id3);
-        assert!(id3 > id1);
-
-        // Test display
-        assert_eq!(format!("{}", id1), "place42");
-    }
 }

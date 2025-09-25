@@ -143,9 +143,4 @@ impl AstNode {
     pub fn is_left_associative(&self) -> bool {
         !matches!(self.kind, NodeKind::Operator(Operator::Exponent, ..))
     }
-
-    pub fn to_mir(&self) -> Result<Vec<crate::compiler::mir::mir_nodes::Statement>, CompileError> {
-        // This method is deprecated - use ast_to_mir instead
-        return_compiler_error!("to_mir method is deprecated - use ast_to_mir function instead")
-    }
 }

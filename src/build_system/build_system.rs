@@ -5,7 +5,7 @@
 // - Native/embedded projects with single WASM output
 // - Development vs release build configurations
 
-use crate::build_system::{embedded_project, html_project, jit, native_project, repl};
+use crate::build_system::{embedded_project, html_project, jit, native_project};
 use crate::compiler::compiler_errors::CompileError;
 use crate::settings::{Config, ProjectType};
 use crate::{Flag, InputModule, Project};

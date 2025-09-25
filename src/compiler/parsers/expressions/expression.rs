@@ -182,11 +182,6 @@ impl Expression {
     pub fn is_none(&self) -> bool {
         matches!(self.kind, ExpressionKind::None)
     }
-
-    pub fn expr_to_mir(&self) -> Vec<crate::compiler::mir::mir_nodes::Statement> {
-        // This method is deprecated - use transform_expression_to_mir instead
-        vec![]
-    }
 }
 #[derive(Clone, Debug)]
 pub enum ExpressionKind {

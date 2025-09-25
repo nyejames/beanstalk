@@ -13,24 +13,41 @@ use wasm_encoder::{Function, Instruction, ValType};
 /// Lifetime-optimized memory management for WASM code generation
 ///
 /// This system integrates MIR borrow checking results to make optimal memory management
-/// decisions, implementing single-ownership optimization using WASM value semantics,
-/// minimal ARC generation for shared ownership, and move semantics optimization.
+/// decisions for Beanstalk's reference-by-default semantics, implementing reference
+/// optimization using WASM value semantics, minimal ARC generation for shared ownership,
+/// and copy-to-move optimization for expressions.
 ///
-/// ## Design Principles
+/// ## Beanstalk Reference Semantics
 ///
-/// ### Single-Ownership Optimization
-/// - Variables with single ownership use WASM value semantics (no reference counting)
-/// - Direct value passing for WASM primitive types (i32, i64, f32, f64)
-/// - Eliminates unnecessary ARC operations for non-shared data
+/// **IMPORTANT**: This implementation needs to be updated to match Beanstalk's intended semantics:
+/// - `x = y` should create an immutable reference to y (like `let x = &y` in Rust)
+/// - `x ~= y` should create a mutable reference to y (like `let x = &mut y` in Rust)  
+/// - Copies only happen implicitly in expressions (`x = y + z` copies y and z)
+/// - Explicit copy syntax (TBD) for manual copying
+///
+/// **Current Status**: The memory manager assumes move/copy semantics by default.
+/// **Required Changes**:
+/// 1. Update AST parsing to generate Rvalue::Ref for assignments
+/// 2. Modify MIR lowering to handle reference-by-default semantics
+/// 3. Update this memory manager to optimize reference indirection
+/// 4. Adjust borrow checker for reference-centric model
+///
+/// ## Design Principles for Beanstalk's Reference Semantics
+///
+/// ### Reference-by-Default Optimization
+/// - `x = y` creates immutable reference (no copying unless optimized)
+/// - `x ~= y` creates mutable reference (no copying unless optimized)
+/// - Direct value passing for WASM primitive types when references can be eliminated
+/// - Eliminates unnecessary reference indirection for single-use values
 ///
 /// ### Minimal ARC Generation
-/// - Only generate ARC operations when borrow checker detects shared ownership
+/// - Only generate ARC operations when multiple references exist to the same data
 /// - Use lightweight reference counting for complex types requiring sharing
-/// - Optimize ARC operations based on lifetime analysis results
+/// - Optimize ARC operations based on reference lifetime analysis results
 ///
-/// ### Move Semantics Optimization
-/// - Convert Copy operations to Move when lifetime analysis shows last use
-/// - Eliminate unnecessary copying based on MIR lifetime information
+/// ### Copy-to-Move Optimization for Expressions
+/// - Convert Copy operations to Move when lifetime analysis shows last use in expressions
+/// - `x = y + z` copies y and z, but can be optimized to moves if last use
 /// - Generate efficient WASM instruction sequences for ownership transfer
 ///
 /// ### Drop Elaboration
@@ -247,7 +264,7 @@ impl LifetimeMemoryManager {
         Ok(())
     }
 
-    /// Analyze ownership patterns from borrow checking results
+    /// Analyze reference patterns from borrow checking results for Beanstalk's reference-by-default semantics
     fn analyze_ownership_patterns(
         &mut self,
         function: &MirFunction,
@@ -256,63 +273,70 @@ impl LifetimeMemoryManager {
     ) -> Result<(), CompileError> {
         self.statistics.places_analyzed = function.locals.len() + function.parameters.len();
 
-        // Analyze each place in the function
+        // Analyze each place in the function for reference optimization
         for (_, place) in &function.locals {
-            self.analyze_place_ownership(place, function, borrow_results, extractor)?;
+            self.analyze_place_reference_usage(place, function, borrow_results, extractor)?;
         }
 
         for place in &function.parameters {
-            self.analyze_place_ownership(place, function, borrow_results, extractor)?;
+            self.analyze_place_reference_usage(place, function, borrow_results, extractor)?;
         }
 
         Ok(())
     }
 
-    /// Analyze ownership pattern for a specific place
-    fn analyze_place_ownership(
+    /// Analyze reference usage pattern for a specific place in Beanstalk's reference-by-default model
+    fn analyze_place_reference_usage(
         &mut self,
         place: &Place,
-        function: &MirFunction,
-        borrow_results: &UnifiedBorrowCheckResults,
+        _function: &MirFunction,
+        _borrow_results: &UnifiedBorrowCheckResults,
         extractor: &BorrowFactExtractor,
     ) -> Result<(), CompileError> {
-        // Check if this place has any loans (shared ownership)
-        let has_shared_ownership = self.place_has_shared_ownership(place, extractor);
+        // In Beanstalk, assignments create references by default
+        // Check if this place has multiple references (shared access)
+        let has_multiple_references = self.place_has_multiple_references(place, extractor);
 
-        if has_shared_ownership {
-            // Generate ARC info for shared ownership
+        if has_multiple_references {
+            // Generate ARC info for multiple references
             let arc_info = self.create_arc_info_for_place(place)?;
             self.shared_ownership_places.insert(place.clone(), arc_info);
         } else {
-            // Single ownership - can use WASM value semantics
+            // Single reference - can potentially optimize to direct value
             self.single_ownership_places.insert(place.clone());
             self.statistics.single_ownership_optimizations += 1;
         }
 
-        // Check for WASM value type optimization
-        if self.can_optimize_as_wasm_value_type(place) {
+        // Check for WASM value type optimization (can eliminate reference indirection)
+        if self.can_optimize_reference_to_value_type(place) {
             let optimization = self.create_value_type_optimization(place)?;
-            self.value_type_optimizations.insert(place.clone(), optimization);
+            self.value_type_optimizations
+                .insert(place.clone(), optimization);
         }
 
         Ok(())
     }
 
-    /// Check if a place has shared ownership (multiple borrows)
-    pub fn place_has_shared_ownership(&self, place: &Place, extractor: &BorrowFactExtractor) -> bool {
-        // Count loans that borrow this place
-        let loan_count = extractor
+    /// Check if a place has multiple references in Beanstalk's reference-by-default model
+    pub fn place_has_multiple_references(
+        &self,
+        place: &Place,
+        extractor: &BorrowFactExtractor,
+    ) -> bool {
+        // In Beanstalk, assignments create references by default
+        // Count references (loans) that point to this place
+        let reference_count = extractor
             .place_to_loans
             .get(place)
             .map(|loans| loans.len())
             .unwrap_or(0);
 
-        // If more than one loan, or any mutable loans, consider it shared
-        if loan_count > 1 {
+        // If more than one reference exists, we need reference counting
+        if reference_count > 1 {
             return true;
         }
 
-        // Check for mutable borrows (always considered shared for safety)
+        // Check for mutable references (need special handling)
         if let Some(loans) = extractor.place_to_loans.get(place) {
             for &loan_id in loans {
                 if let Some(loan) = extractor.loans.iter().find(|l| l.id == loan_id) {
@@ -332,7 +356,7 @@ impl LifetimeMemoryManager {
         // ARC layout: [ref_count: i32][data: T]
         let ref_count_size = 4; // i32 reference count
         let data_size = self.calculate_place_size(place);
-        let total_size = ref_count_size + data_size;
+        let _total_size = ref_count_size + data_size;
 
         // For now, use placeholder offsets - in a real implementation,
         // this would integrate with the memory allocator
@@ -375,23 +399,27 @@ impl LifetimeMemoryManager {
         }
     }
 
-    /// Check if a place can be optimized as a WASM value type
-    pub fn can_optimize_as_wasm_value_type(&self, place: &Place) -> bool {
+    /// Check if a reference can be optimized to a WASM value type (eliminating indirection)
+    pub fn can_optimize_reference_to_value_type(&self, place: &Place) -> bool {
         match place {
             Place::Local { wasm_type, .. } | Place::Global { wasm_type, .. } => {
-                // WASM primitive types can always be optimized
+                // WASM primitive types can eliminate reference indirection
+                // if there's only one reference and it's not aliased
                 matches!(
                     wasm_type,
                     WasmType::I32 | WasmType::I64 | WasmType::F32 | WasmType::F64
                 )
             }
-            Place::Memory { .. } => false, // Memory places need allocation
-            Place::Projection { .. } => false, // Projections are complex
+            Place::Memory { .. } => false, // Memory places need reference tracking
+            Place::Projection { .. } => false, // Projections need reference tracking
         }
     }
 
     /// Create value type optimization for a place
-    pub fn create_value_type_optimization(&self, place: &Place) -> Result<ValueTypeOptimization, CompileError> {
+    pub fn create_value_type_optimization(
+        &self,
+        place: &Place,
+    ) -> Result<ValueTypeOptimization, CompileError> {
         let optimized_representation = match place {
             Place::Local { index, wasm_type } => WasmValueRepresentation::Local {
                 index: *index,
@@ -420,10 +448,13 @@ impl LifetimeMemoryManager {
     }
 
     /// Implement single-ownership optimization using WASM value semantics
-    fn implement_single_ownership_optimization(&mut self, function: &MirFunction) -> Result<(), CompileError> {
+    fn implement_single_ownership_optimization(
+        &mut self,
+        _function: &MirFunction,
+    ) -> Result<(), CompileError> {
         // For each single-ownership place, ensure it uses optimal WASM representation
         for place in &self.single_ownership_places {
-            if self.can_optimize_as_wasm_value_type(place) {
+            if self.can_optimize_reference_to_value_type(place) {
                 // Already handled in value type optimization
                 continue;
             }
@@ -454,7 +485,12 @@ impl LifetimeMemoryManager {
 
                 // Generate ARC operations at appropriate program points
                 let arc_info_clone = arc_info.clone();
-                self.generate_arc_operations_for_place(&place, &arc_info_clone, function, borrow_results)?;
+                self.generate_arc_operations_for_place(
+                    &place,
+                    &arc_info_clone,
+                    function,
+                    borrow_results,
+                )?;
             }
         }
 
@@ -488,7 +524,12 @@ impl LifetimeMemoryManager {
     }
 
     /// Add ARC increment operation
-    fn add_arc_increment_operation(&mut self, point: ProgramPoint, place: &Place, arc_info: &ARCInfo) {
+    fn add_arc_increment_operation(
+        &mut self,
+        point: ProgramPoint,
+        _place: &Place,
+        arc_info: &ARCInfo,
+    ) {
         let cleanup_op = CleanupOperation {
             cleanup_type: CleanupType::DecrementRefCount, // Will be increment in actual codegen
             memory_location: Some(arc_info.ref_count_offset),
@@ -502,7 +543,12 @@ impl LifetimeMemoryManager {
     }
 
     /// Add ARC decrement operation
-    fn add_arc_decrement_operation(&mut self, point: ProgramPoint, place: &Place, arc_info: &ARCInfo) {
+    fn add_arc_decrement_operation(
+        &mut self,
+        point: ProgramPoint,
+        _place: &Place,
+        arc_info: &ARCInfo,
+    ) {
         let cleanup_op = CleanupOperation {
             cleanup_type: CleanupType::DecrementRefCount,
             memory_location: Some(arc_info.ref_count_offset),
@@ -566,11 +612,11 @@ impl LifetimeMemoryManager {
         place: &Place,
         point: ProgramPoint,
         function: &MirFunction,
-        borrow_results: &UnifiedBorrowCheckResults,
+        _borrow_results: &UnifiedBorrowCheckResults,
     ) -> bool {
         // Check if this is the last use of the place
         // In a full implementation, this would use liveness analysis from borrow_results
-        
+
         // For now, use a simple heuristic: if the place is single-ownership
         // and not used in subsequent statements, it can be moved
         if !self.single_ownership_places.contains(place) {
@@ -613,13 +659,13 @@ impl LifetimeMemoryManager {
         &mut self,
         point: ProgramPoint,
         function: &MirFunction,
-        borrow_results: &UnifiedBorrowCheckResults,
+        _borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         if let Some(events) = function.generate_events(&point) {
             // Check for places that need to be dropped
             for moved_place in &events.moves {
                 let drop_op = self.create_drop_operation_for_place(moved_place)?;
-                
+
                 self.drop_points
                     .entry(point)
                     .or_insert_with(Vec::new)
@@ -631,11 +677,14 @@ impl LifetimeMemoryManager {
     }
 
     /// Create drop operation for a place
-    fn create_drop_operation_for_place(&mut self, place: &Place) -> Result<DropOperation, CompileError> {
-        let drop_type = if self.can_optimize_as_wasm_value_type(place) {
+    fn create_drop_operation_for_place(
+        &mut self,
+        place: &Place,
+    ) -> Result<DropOperation, CompileError> {
+        let drop_type = if self.can_optimize_reference_to_value_type(place) {
             // WASM value types don't need cleanup
             DropType::ValueDrop
-        } else if let Some(arc_info) = self.shared_ownership_places.get(place) {
+        } else if let Some(_arc_info) = self.shared_ownership_places.get(place) {
             // ARC types need reference count decrement
             DropType::ARCDrop
         } else if let Some(memory_size) = place.memory_size() {
@@ -665,15 +714,15 @@ impl LifetimeMemoryManager {
     /// Add memory cleanup code generation only when required by borrow checker
     fn generate_memory_cleanup_operations(
         &mut self,
-        function: &MirFunction,
-        borrow_results: &UnifiedBorrowCheckResults,
+        _function: &MirFunction,
+        _borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Generate cleanup operations based on drop points and ARC operations
         for (point, drop_ops) in &self.drop_points {
             for drop_op in drop_ops {
                 if !drop_op.can_optimize {
                     let cleanup_op = self.create_cleanup_operation_from_drop(drop_op)?;
-                    
+
                     self.cleanup_operations
                         .entry(*point)
                         .or_insert_with(Vec::new)
@@ -686,13 +735,16 @@ impl LifetimeMemoryManager {
     }
 
     /// Create cleanup operation from drop operation
-    fn create_cleanup_operation_from_drop(&self, drop_op: &DropOperation) -> Result<CleanupOperation, CompileError> {
+    fn create_cleanup_operation_from_drop(
+        &self,
+        drop_op: &DropOperation,
+    ) -> Result<CleanupOperation, CompileError> {
         let cleanup_type = match &drop_op.drop_type {
             DropType::ValueDrop => {
                 return_compiler_error!("Value drops should not generate cleanup operations");
             }
             DropType::ARCDrop => CleanupType::DecrementRefCount,
-            DropType::MemoryDrop { offset, size } => CleanupType::Deallocate,
+            DropType::MemoryDrop { offset: _, size: _ } => CleanupType::Deallocate,
             DropType::ComplexDrop { cleanup_function } => CleanupType::CallDestructor {
                 function_index: *cleanup_function,
             },
@@ -745,9 +797,9 @@ impl LifetimeMemoryManager {
     /// Generate WASM instructions for move optimization
     fn generate_move_optimization_instructions(
         &self,
-        move_opt: &MoveOptimization,
-        function: &mut Function,
-        wasm_module: &WasmModule,
+        _move_opt: &MoveOptimization,
+        _function: &mut Function,
+        _wasm_module: &WasmModule,
     ) -> Result<(), CompileError> {
         // For move optimization, we typically don't need extra instructions
         // The optimization is in using move semantics instead of copy semantics
@@ -763,7 +815,7 @@ impl LifetimeMemoryManager {
         &self,
         cleanup_op: &CleanupOperation,
         function: &mut Function,
-        wasm_module: &WasmModule,
+        _wasm_module: &WasmModule,
     ) -> Result<(), CompileError> {
         match &cleanup_op.cleanup_type {
             CleanupType::DecrementRefCount => {
@@ -777,7 +829,7 @@ impl LifetimeMemoryManager {
                     }));
                     function.instruction(&Instruction::I32Const(1));
                     function.instruction(&Instruction::I32Sub);
-                    
+
                     // Store decremented value
                     function.instruction(&Instruction::I32Const(ref_count_offset as i32));
                     function.instruction(&Instruction::I32Store(wasm_encoder::MemArg {
@@ -785,7 +837,7 @@ impl LifetimeMemoryManager {
                         align: 2,
                         memory_index: 0,
                     }));
-                    
+
                     // TODO: Add conditional deallocation if ref count reaches zero
                 }
             }
@@ -856,99 +908,5 @@ impl LifetimeMemoryManager {
 impl Default for LifetimeMemoryManager {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::mir_nodes::*;
-    use crate::compiler::mir::place::*;
-
-    #[test]
-    fn test_lifetime_memory_manager_creation() {
-        let manager = LifetimeMemoryManager::new();
-        assert_eq!(manager.statistics.places_analyzed, 0);
-        assert!(manager.single_ownership_places.is_empty());
-        assert!(manager.shared_ownership_places.is_empty());
-    }
-
-    #[test]
-    fn test_single_ownership_detection() {
-        let mut manager = LifetimeMemoryManager::new();
-        let place = Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        };
-
-        // Create empty extractor (no loans = single ownership)
-        let extractor = BorrowFactExtractor::new();
-        
-        assert!(!manager.place_has_shared_ownership(&place, &extractor));
-    }
-
-    #[test]
-    fn test_wasm_value_type_optimization() {
-        let manager = LifetimeMemoryManager::new();
-        
-        let i32_place = Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        };
-        
-        let memory_place = Place::Memory {
-            base: crate::compiler::mir::place::MemoryBase::LinearMemory,
-            offset: crate::compiler::mir::place::ByteOffset(0),
-            size: crate::compiler::mir::place::TypeSize::Word,
-        };
-
-        assert!(manager.can_optimize_as_wasm_value_type(&i32_place));
-        assert!(!manager.can_optimize_as_wasm_value_type(&memory_place));
-    }
-
-    #[test]
-    fn test_place_size_calculation() {
-        let manager = LifetimeMemoryManager::new();
-        
-        let i32_place = Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        };
-        
-        let i64_place = Place::Local {
-            index: 1,
-            wasm_type: WasmType::I64,
-        };
-
-        assert_eq!(manager.calculate_place_size(&i32_place), 4);
-        assert_eq!(manager.calculate_place_size(&i64_place), 8);
-    }
-
-    #[test]
-    fn test_arc_info_creation() {
-        let manager = LifetimeMemoryManager::new();
-        let place = Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        };
-
-        let arc_info = manager.create_arc_info_for_place(&place).unwrap();
-        assert_eq!(arc_info.data_size, 4); // i32 size
-        assert_eq!(arc_info.data_type, WasmType::I32);
-        assert!(!arc_info.is_optimized_away);
-    }
-
-    #[test]
-    fn test_value_type_optimization_creation() {
-        let manager = LifetimeMemoryManager::new();
-        let place = Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        };
-
-        let optimization = manager.create_value_type_optimization(&place).unwrap();
-        assert_eq!(optimization.performance_benefit.instruction_reduction, 2);
-        assert_eq!(optimization.performance_benefit.memory_reduction, 4);
-        assert_eq!(optimization.performance_benefit.arc_elimination_count, 1);
     }
 }

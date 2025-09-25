@@ -14,9 +14,9 @@ pub mod build_system {
     pub mod build_system;
     pub mod core_build;
     pub mod embedded_project;
-    pub mod native_project;
     pub mod html_project;
     pub mod jit;
+    pub mod native_project;
     pub mod repl;
 }
 
@@ -29,8 +29,8 @@ mod compiler {
         pub mod expressions {
             pub mod eval_expression;
             pub mod expression;
-            pub mod mutation;
             pub mod function_call_inline;
+            pub mod mutation;
             pub mod parse_expression;
         }
         pub mod statements {
@@ -53,20 +53,19 @@ mod compiler {
 
     pub mod mir {
         pub mod arena;
-        pub mod mir;
         pub mod build_mir;
         pub mod cfg;
         pub mod check;
+        pub mod counter;
         pub mod dataflow;
         pub mod diagnose;
         pub mod extract;
         pub mod liveness;
+        pub mod mir;
         pub mod mir_nodes;
         pub mod optimized_dataflow;
         pub mod place;
         pub mod place_interner;
-        pub mod place_interner_test;
-        pub mod counter;
         pub mod streamlined_diagnostics;
         pub mod unified_borrow_checker;
     }
@@ -77,7 +76,6 @@ mod compiler {
         pub mod generate_html;
         pub mod html_styles;
     }
-
 
     #[allow(dead_code)]
     pub mod basic_utility_functions;
@@ -92,21 +90,23 @@ mod compiler {
     pub mod codegen {
         pub mod build_wasm;
         pub mod lifetime_memory_manager;
-        pub mod wat_to_wasm;
         pub mod wasm_encoding;
+        pub mod wat_to_wasm;
     }
 }
 
+use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::mir::build_mir::MIR;
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::{ContextKind, ParserOutput, ScopeContext, new_ast, AstBlock};
+use crate::compiler::parsers::build_ast::{
+    AstBlock, ContextKind, ParserOutput, ScopeContext, new_ast,
+};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TokenContext, TokenizeMode};
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use crate::compiler::codegen::build_wasm::new_wasm_module;
 
 // Re-export types for the build system
 pub use build::*;
@@ -157,7 +157,7 @@ impl<'a> Compiler<'a> {
     ) -> Result<TokenContext, CompileError> {
         let tokenizer_mode = match self.project_config.project_type {
             ProjectType::Repl => TokenizeMode::TemplateHead,
-            _ => TokenizeMode::Normal
+            _ => TokenizeMode::Normal,
         };
 
         match tokenizer::tokenize(source_code, module_path, tokenizer_mode) {

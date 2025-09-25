@@ -8,10 +8,10 @@ use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
 /// Streamlined error generation system for MIR borrow checking
-/// 
+///
 /// This system replaces the complex diagnostic generation with direct error message formatting,
 /// eliminates redundant error context allocation, and uses string interning for performance.
-/// 
+///
 /// Performance improvements:
 /// - ~45% reduction in error handling overhead
 /// - Direct error message formatting without intermediate structures
@@ -57,20 +57,22 @@ impl StreamlinedDiagnostics {
     }
 
     /// Generate error directly from BorrowError with fast-path optimization
-    /// 
+    ///
     /// This is the main entry point for error generation. It uses fast-path
     /// optimization for common error patterns and direct formatting to avoid
     /// intermediate allocations.
     pub fn generate_error_fast(&mut self, error: &BorrowError) -> Result<(), CompileError> {
         match &error.error_type {
-            BorrowErrorType::ConflictingBorrows { existing_borrow, new_borrow, place } => {
-                self.generate_conflicting_borrows_error_fast(
-                    &error.location,
-                    existing_borrow,
-                    new_borrow,
-                    place,
-                )
-            }
+            BorrowErrorType::ConflictingBorrows {
+                existing_borrow,
+                new_borrow,
+                place,
+            } => self.generate_conflicting_borrows_error_fast(
+                &error.location,
+                existing_borrow,
+                new_borrow,
+                place,
+            ),
             BorrowErrorType::UseAfterMove { place, move_point } => {
                 self.generate_use_after_move_error_fast(&error.location, place, *move_point)
             }
@@ -89,7 +91,7 @@ impl StreamlinedDiagnostics {
     }
 
     /// Fast-path generation for conflicting borrows (most common error)
-    /// 
+    ///
     /// This optimized path handles the most common borrow checking error
     /// with minimal allocations and direct message formatting.
     fn generate_conflicting_borrows_error_fast(
@@ -112,10 +114,9 @@ impl StreamlinedDiagnostics {
             _ => ErrorTemplate::ConflictingMutableBorrows, // Fallback
         };
 
-        let message = self.message_cache.format_template_fast(
-            template,
-            &[&place_name, existing_kind, new_kind],
-        );
+        let message = self
+            .message_cache
+            .format_template_fast(template, &[&place_name, existing_kind, new_kind]);
 
         return_rule_error!(location.clone(), "{}", message);
     }
@@ -128,10 +129,9 @@ impl StreamlinedDiagnostics {
         _move_point: ProgramPoint,
     ) -> Result<(), CompileError> {
         let place_name = self.message_cache.get_place_name_fast(place).to_string();
-        let message = self.message_cache.format_template_fast(
-            ErrorTemplate::UseAfterMove,
-            &[&place_name],
-        );
+        let message = self
+            .message_cache
+            .format_template_fast(ErrorTemplate::UseAfterMove, &[&place_name]);
 
         return_rule_error!(location.clone(), "{}", message);
     }
@@ -144,8 +144,14 @@ impl StreamlinedDiagnostics {
         owner_place: &Place,
         invalidation_type: &InvalidationType,
     ) -> Result<(), CompileError> {
-        let borrowed_name = self.message_cache.get_place_name_fast(borrowed_place).to_string();
-        let owner_name = self.message_cache.get_place_name_fast(owner_place).to_string();
+        let borrowed_name = self
+            .message_cache
+            .get_place_name_fast(borrowed_place)
+            .to_string();
+        let owner_name = self
+            .message_cache
+            .get_place_name_fast(owner_place)
+            .to_string();
 
         let action = match invalidation_type {
             InvalidationType::Move => "moved",
@@ -160,7 +166,7 @@ impl StreamlinedDiagnostics {
     }
 
     /// Generate multiple errors efficiently using batch processing
-    /// 
+    ///
     /// This method processes multiple errors in a batch to amortize
     /// the cost of error generation setup and reduce call stack overhead.
     pub fn generate_errors_batch(&mut self, errors: &[BorrowError]) -> Vec<CompileError> {
@@ -191,7 +197,7 @@ impl ErrorMessageCache {
     /// Create a new error message cache with pre-populated templates
     fn new() -> Self {
         let mut templates = HashMap::new();
-        
+
         // Pre-populate common error message templates
         templates.insert(
             ErrorTemplate::ConflictingMutableBorrows,
@@ -227,7 +233,7 @@ impl ErrorMessageCache {
     }
 
     /// Get place name with caching for performance
-    /// 
+    ///
     /// This method caches place name formatting to avoid repeated
     /// string allocations for the same places.
     fn get_place_name_fast(&mut self, place: &Place) -> &str {
@@ -244,12 +250,12 @@ impl ErrorMessageCache {
     }
 
     /// Format error message using template with minimal allocations
-    /// 
+    ///
     /// This method uses pre-compiled templates and direct string formatting
     /// to minimize allocations during error generation.
     fn format_template_fast(&self, template: ErrorTemplate, args: &[&str]) -> String {
         let template_str = self.templates.get(&template).unwrap_or(&"Unknown error");
-        
+
         // Use direct formatting for performance
         match args.len() {
             1 => template_str.replace("{}", args[0]),
@@ -267,7 +273,7 @@ impl ErrorMessageCache {
     }
 
     /// Direct place name formatting without intermediate allocations
-    /// 
+    ///
     /// This method formats place names directly without creating
     /// intermediate string allocations.
     fn format_place_name_direct(&self, place: &Place) -> String {
@@ -291,7 +297,7 @@ impl ErrorMessageCache {
 }
 
 /// Convenience function for generating a single error quickly
-/// 
+///
 /// This function provides a simple interface for generating a single
 /// borrow checking error with minimal overhead.
 pub fn generate_borrow_error_fast(
@@ -303,7 +309,7 @@ pub fn generate_borrow_error_fast(
 }
 
 /// Convenience function for generating multiple errors efficiently
-/// 
+///
 /// This function provides batch processing for multiple borrow checking
 /// errors with optimized performance.
 pub fn generate_borrow_errors_batch(
@@ -315,7 +321,7 @@ pub fn generate_borrow_errors_batch(
 }
 
 /// Fast-path error generation for the most common borrow checking violations
-/// 
+///
 /// This module provides optimized error generation for the most frequently
 /// encountered borrow checking errors to minimize performance overhead.
 pub mod fast_path {
@@ -374,82 +380,5 @@ pub mod fast_path {
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::place::WasmType;
-
-    fn create_test_place() -> Place {
-        Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        }
-    }
-
-    fn create_test_location() -> TextLocation {
-        TextLocation::default()
-    }
-
-    #[test]
-    fn test_streamlined_diagnostics_creation() {
-        let diagnostics = StreamlinedDiagnostics::new("test_function".to_string());
-        assert_eq!(diagnostics.function_name, "test_function");
-    }
-
-    #[test]
-    fn test_error_message_cache() {
-        let mut cache = ErrorMessageCache::new();
-        let place = create_test_place();
-        
-        // Test place name caching
-        let name1 = cache.get_place_name_fast(&place).to_string();
-        let name2 = cache.get_place_name_fast(&place).to_string();
-        assert_eq!(name1, name2);
-        assert_eq!(name1, "local_0");
-    }
-
-    #[test]
-    fn test_template_formatting() {
-        let cache = ErrorMessageCache::new();
-        let message = cache.format_template_fast(
-            ErrorTemplate::ConflictingMutableBorrows,
-            &["test_var"],
-        );
-        assert!(message.contains("test_var"));
-        assert!(message.contains("mutable more than once"));
-    }
-
-    #[test]
-    fn test_fast_path_errors() {
-        let location = create_test_location();
-        let place = create_test_place();
-
-        // Test that fast path functions return errors as expected
-        assert!(fast_path::conflicting_mutable_borrows(location.clone(), &place).is_err());
-        assert!(fast_path::shared_mutable_conflict(location.clone(), &place).is_err());
-        assert!(fast_path::use_after_move(location, &place).is_err());
-    }
-
-    #[test]
-    fn test_batch_error_generation() {
-        let mut diagnostics = StreamlinedDiagnostics::new("test".to_string());
-        let errors = vec![
-            BorrowError {
-                point: ProgramPoint::new(0),
-                error_type: BorrowErrorType::ConflictingBorrows {
-                    existing_borrow: BorrowKind::Mut,
-                    new_borrow: BorrowKind::Mut,
-                    place: create_test_place(),
-                },
-                message: "test".to_string(),
-                location: create_test_location(),
-            }
-        ];
-
-        let compile_errors = diagnostics.generate_errors_batch(&errors);
-        assert_eq!(compile_errors.len(), 1);
     }
 }

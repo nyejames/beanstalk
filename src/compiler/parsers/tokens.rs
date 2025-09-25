@@ -1,4 +1,5 @@
 use crate::compiler::datatypes::{DataType, Ownership};
+use colour::red_ln;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::Peekable;
@@ -247,7 +248,7 @@ pub struct TokenStream<'a> {
     pub chars: Peekable<Chars<'a>>,
     pub position: CharPosition,
     pub start_position: CharPosition,
-    pub context: TokenizeMode,
+    pub mode: TokenizeMode,
 }
 
 impl<'a> TokenStream<'a> {
@@ -257,7 +258,7 @@ impl<'a> TokenStream<'a> {
             chars: source_code.chars().peekable(),
             position: CharPosition::default(),
             start_position: Default::default(),
-            context: mode,
+            mode,
         }
     }
 
@@ -321,10 +322,10 @@ pub enum TokenKind {
 
     Wat(String), // WAT codeblock (for testing WASM)
 
-    // Scene Style properties
+    /// Scene Style properties
     Ignore, // for commenting the out an entire scene
 
-    // Function Signatures
+    /// Function Signatures
     Arrow,
 
     /// Variable name

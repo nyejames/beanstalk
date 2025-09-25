@@ -4,7 +4,6 @@ use crate::compiler::datatypes::{DataType, Ownership};
 /// Core compiler functionality tests focusing on the essential compilation pipeline
 /// These tests validate the basic compiler operations without getting into complex
 /// implementation details.
-
 #[cfg(test)]
 mod place_system_tests {
     use super::*;

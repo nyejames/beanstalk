@@ -4,7 +4,9 @@ use crate::compiler::mir::mir_nodes::{
     ProgramPoint,
 };
 use crate::compiler::mir::place::Place;
-use crate::compiler::mir::streamlined_diagnostics::{StreamlinedDiagnostics, generate_borrow_errors_batch};
+use crate::compiler::mir::streamlined_diagnostics::{
+    StreamlinedDiagnostics, generate_borrow_errors_batch,
+};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
@@ -164,8 +166,6 @@ impl BorrowDiagnostics {
         }
     }
 
-
-
     /// Add program point to source location mapping (deprecated - for tests only)
     pub fn add_program_point_location(&mut self, _point: ProgramPoint, _location: TextLocation) {
         // This method is now deprecated since source locations are stored directly in MirFunction
@@ -200,7 +200,13 @@ impl BorrowDiagnostics {
                 existing_borrow,
                 new_borrow,
                 place,
-            } => self.diagnose_conflicting_borrows(function, error, existing_borrow, new_borrow, place),
+            } => self.diagnose_conflicting_borrows(
+                function,
+                error,
+                existing_borrow,
+                new_borrow,
+                place,
+            ),
             BorrowErrorType::UseAfterMove { place, move_point } => {
                 self.diagnose_use_after_move(function, error, place, *move_point)
             }
@@ -465,7 +471,8 @@ impl BorrowDiagnostics {
         invalidation_type: &InvalidationType,
     ) -> Result<DiagnosticResult, CompileError> {
         let primary_location = self.get_location_for_program_point(function, &error.point)?;
-        let invalidation_location = self.get_location_for_program_point(function, &invalidation_point)?;
+        let invalidation_location =
+            self.get_location_for_program_point(function, &invalidation_point)?;
         let borrowed_name = self.format_place_name(borrowed_place);
         let owner_name = self.format_place_name(owner_place);
 
@@ -577,15 +584,12 @@ impl BorrowDiagnostics {
         function: &MirFunction,
         point: &ProgramPoint,
     ) -> Result<TextLocation, CompileError> {
-        function
-            .get_source_location(point)
-            .cloned()
-            .ok_or_else(|| {
-                CompileError::new_rule_error(
-                    format!("No source location found for program point {}", point),
-                    TextLocation::default(),
-                )
-            })
+        function.get_source_location(point).cloned().ok_or_else(|| {
+            CompileError::new_rule_error(
+                format!("No source location found for program point {}", point),
+                TextLocation::default(),
+            )
+        })
     }
 
     /// Format a place name for user display
@@ -789,7 +793,7 @@ pub fn diagnose_borrow_errors(
 }
 
 /// Fast entry point for generating streamlined diagnostics (performance optimized)
-/// 
+///
 /// This function provides a fast path for error generation that bypasses the complex
 /// diagnostic generation and uses streamlined error formatting for better performance.
 pub fn diagnose_borrow_errors_fast(
@@ -808,216 +812,4 @@ pub fn diagnostics_to_compile_errors(
         .iter()
         .map(|diagnostic| diagnostics.to_compile_error(diagnostic))
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::mir_nodes::*;
-    use crate::compiler::mir::place::*;
-
-    fn create_test_place() -> Place {
-        Place::Local {
-            index: 0,
-            wasm_type: WasmType::I32,
-        }
-    }
-
-    fn create_test_loan() -> Loan {
-        Loan {
-            id: LoanId::new(0),
-            owner: create_test_place(),
-            kind: BorrowKind::Shared,
-            origin_stmt: ProgramPoint::new(0),
-        }
-    }
-
-    #[test]
-    fn test_diagnostics_creation() {
-        let diagnostics = BorrowDiagnostics::new("test_function".to_string());
-        assert_eq!(diagnostics.function_name, "test_function");
-        assert!(diagnostics.loan_origins.is_empty());
-    }
-
-    #[test]
-    fn test_add_program_point_location() {
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        let point = ProgramPoint::new(0);
-        let location = TextLocation::default();
-
-        function.store_source_location(point, location.clone());
-
-        assert_eq!(
-            function.get_source_location(&point),
-            Some(&location)
-        );
-    }
-
-    #[test]
-    fn test_add_loan_origin() {
-        let mut diagnostics = BorrowDiagnostics::new("test".to_string());
-        let loan = create_test_loan();
-        let location = TextLocation::default();
-        let description = "test borrow".to_string();
-
-        diagnostics.add_loan_origin(&loan, location.clone(), description.clone());
-
-        let origin = diagnostics.loan_origins.get(&loan.id).unwrap();
-        assert_eq!(origin.location, location);
-        assert_eq!(origin.description, description);
-        assert_eq!(origin.borrow_kind, BorrowKind::Shared);
-    }
-
-    #[test]
-    fn test_format_place_name() {
-        let diagnostics = BorrowDiagnostics::new("test".to_string());
-
-        let local = Place::Local {
-            index: 5,
-            wasm_type: WasmType::I32,
-        };
-        assert_eq!(diagnostics.format_place_name(&local), "local variable #5");
-
-        let global = Place::Global {
-            index: 3,
-            wasm_type: WasmType::F64,
-        };
-        assert_eq!(diagnostics.format_place_name(&global), "global variable #3");
-    }
-
-    #[test]
-    fn test_borrow_kind_description() {
-        assert_eq!(borrow_kind_description(&BorrowKind::Shared), "immutable");
-        assert_eq!(borrow_kind_description(&BorrowKind::Mut), "mutable");
-        assert_eq!(borrow_kind_description(&BorrowKind::Unique), "unique");
-    }
-
-    #[test]
-    fn test_wasm_context_generation() {
-        let diagnostics = BorrowDiagnostics::new("test".to_string());
-        let place = Place::Local {
-            index: 2,
-            wasm_type: WasmType::F32,
-        };
-
-        let context = diagnostics.generate_wasm_context_for_place(&place);
-        assert!(context.contains("WASM local 2"));
-        assert!(context.contains("F32"));
-    }
-
-    #[test]
-    fn test_diagnostic_result_creation() {
-        let result = DiagnosticResult {
-            message: "Test error".to_string(),
-            primary_location: TextLocation::default(),
-            notes: vec![],
-            suggestions: vec![],
-            wasm_context: None,
-        };
-
-        assert_eq!(result.message, "Test error");
-        assert!(result.notes.is_empty());
-        assert!(result.suggestions.is_empty());
-    }
-
-    #[test]
-    fn test_diagnostic_note_creation() {
-        let note = DiagnosticNote {
-            message: "Test note".to_string(),
-            location: Some(TextLocation::default()),
-            note_type: DiagnosticNoteType::Origin,
-        };
-
-        assert_eq!(note.message, "Test note");
-        assert_eq!(note.note_type, DiagnosticNoteType::Origin);
-        assert!(note.location.is_some());
-    }
-
-    #[test]
-    fn test_diagnostic_suggestion_creation() {
-        let suggestion = DiagnosticSuggestion {
-            description: "Try this fix".to_string(),
-            code_example: Some("example code".to_string()),
-            confidence: SuggestionConfidence::High,
-        };
-
-        assert_eq!(suggestion.description, "Try this fix");
-        assert_eq!(suggestion.confidence, SuggestionConfidence::High);
-        assert!(suggestion.code_example.is_some());
-    }
-
-    #[test]
-    fn test_conflicting_borrows_error_creation() {
-        let mut diagnostics = BorrowDiagnostics::new("test".to_string());
-        let point = ProgramPoint::new(0);
-        let location = TextLocation::default();
-        diagnostics.add_program_point_location(point, location.clone());
-
-        let place = create_test_place();
-        let error = BorrowError {
-            point,
-            error_type: BorrowErrorType::ConflictingBorrows {
-                existing_borrow: BorrowKind::Shared,
-                new_borrow: BorrowKind::Mut,
-                place: place.clone(),
-            },
-            message: "Test conflict".to_string(),
-            location: TextLocation::default(),
-        };
-
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        function.store_source_location(point, location.clone());
-        let result = diagnostics.diagnose_borrow_error(&function, &error);
-        assert!(result.is_ok());
-
-        let diagnostic = result.unwrap();
-        assert!(diagnostic.message.contains("Cannot borrow"));
-        assert!(diagnostic.message.contains("mutable"));
-        assert!(diagnostic.message.contains("immutable"));
-    }
-
-    #[test]
-    fn test_use_after_move_error_creation() {
-        let mut diagnostics = BorrowDiagnostics::new("test".to_string());
-        let point = ProgramPoint::new(1);
-        let move_point = ProgramPoint::new(0);
-        let location = TextLocation::default();
-
-        diagnostics.add_program_point_location(point, location.clone());
-        diagnostics.add_program_point_location(move_point, location.clone());
-
-        let place = create_test_place();
-        let error = BorrowError {
-            point,
-            error_type: BorrowErrorType::UseAfterMove {
-                place: place.clone(),
-                move_point,
-            },
-            message: "Test use after move".to_string(),
-            location: TextLocation::default(),
-        };
-
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        function.store_source_location(point, location.clone());
-        function.store_source_location(move_point, location.clone());
-        let result = diagnostics.diagnose_borrow_error(&function, &error);
-        assert!(result.is_ok());
-
-        let diagnostic = result.unwrap();
-        assert!(diagnostic.message.contains("Use of moved value"));
-        assert!(!diagnostic.suggestions.is_empty());
-    }
-
-    #[test]
-    fn test_entry_point_function() {
-        let function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        let errors = vec![];
-        let loans = vec![];
-
-        let result = diagnose_borrow_errors(&function, &errors, &loans);
-        assert!(result.is_ok());
-
-        let diagnostics = result.unwrap();
-        assert!(diagnostics.is_empty()); // No errors to diagnose
-    }
 }

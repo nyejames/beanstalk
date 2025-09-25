@@ -1,6 +1,4 @@
-use crate::compiler::mir::mir_nodes::{
-    MIR, MirFunction, Operand, ProgramPoint, Rvalue, Statement
-};
+use crate::compiler::mir::mir_nodes::{MIR, MirFunction, Operand, ProgramPoint, Rvalue, Statement};
 use crate::compiler::mir::place::Place;
 use std::collections::{HashMap, HashSet};
 
@@ -78,12 +76,12 @@ impl LivenessAnalysis {
     /// Run backward liveness analysis on the entire MIR
     pub fn analyze_mir(mir: &mut MIR) -> Result<LivenessAnalysis, String> {
         let mut analysis = LivenessAnalysis::new();
-        
+
         // Analyze each function separately
         for function in &mut mir.functions {
             analysis.analyze_function(function)?;
         }
-        
+
         Ok(analysis)
     }
 
@@ -91,36 +89,36 @@ impl LivenessAnalysis {
     pub fn analyze_function(&mut self, function: &mut MirFunction) -> Result<(), String> {
         // Use the shared CFG from the function instead of building our own
         self.copy_cfg_from_function(function)?;
-        
+
         // Extract use/def sets from events
         self.extract_use_def_sets(function)?;
-        
+
         // Run backward dataflow analysis
         self.run_backward_dataflow(function)?;
-        
+
         // Refine candidate last uses based on liveness
         self.refine_last_uses(function)?;
-        
+
         Ok(())
     }
 
     /// Copy CFG from the shared function CFG (eliminates redundant construction)
     fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
         let cfg = function.get_cfg_immutable()?;
-        
+
         // Clear existing CFG data
         self.successors.clear();
         self.predecessors.clear();
-        
+
         // Copy CFG structure using optimized Vec-indexed access
         for point in cfg.iter_program_points() {
             let successors = cfg.get_successors(&point).to_vec();
             let predecessors = cfg.get_predecessors(&point).to_vec();
-            
+
             self.successors.insert(point, successors);
             self.predecessors.insert(point, predecessors);
         }
-        
+
         Ok(())
     }
 
@@ -132,7 +130,7 @@ impl LivenessAnalysis {
                 // Convert events to use/def sets
                 let uses: HashSet<Place> = events.uses.iter().cloned().collect();
                 let defs: HashSet<Place> = events.reassigns.iter().cloned().collect();
-                
+
                 // Store the sets
                 self.uses.insert(program_point, uses);
                 self.defs.insert(program_point, defs);
@@ -142,38 +140,50 @@ impl LivenessAnalysis {
                 self.defs.insert(program_point, HashSet::new());
             }
         }
-        
+
         Ok(())
     }
 
     /// Extract uses and defs from a single statement
-    fn extract_statement_uses_defs(&self, statement: &Statement, uses: &mut HashSet<Place>, defs: &mut HashSet<Place>) {
+    fn extract_statement_uses_defs(
+        &self,
+        statement: &Statement,
+        uses: &mut HashSet<Place>,
+        defs: &mut HashSet<Place>,
+    ) {
         match statement {
             Statement::Assign { place, rvalue } => {
                 // The place being assigned is a def
                 defs.insert(place.clone());
-                
+
                 // Extract uses from the rvalue
                 self.extract_rvalue_uses(rvalue, uses);
             }
-            Statement::Call { args, destination, .. } => {
+            Statement::Call {
+                args, destination, ..
+            } => {
                 // All arguments are uses
                 for arg in args {
                     self.extract_operand_uses(arg, uses);
                 }
-                
+
                 // Destination is a def if present
                 if let Some(dest) = destination {
                     defs.insert(dest.clone());
                 }
             }
-            Statement::InterfaceCall { receiver, args, destination, .. } => {
+            Statement::InterfaceCall {
+                receiver,
+                args,
+                destination,
+                ..
+            } => {
                 // Receiver and all arguments are uses
                 self.extract_operand_uses(receiver, uses);
                 for arg in args {
                     self.extract_operand_uses(arg, uses);
                 }
-                
+
                 // Destination is a def if present
                 if let Some(dest) = destination {
                     defs.insert(dest.clone());
@@ -269,7 +279,11 @@ impl LivenessAnalysis {
     }
 
     /// Extract uses from terminator operations
-    fn extract_terminator_uses(&self, terminator: &crate::compiler::mir::mir_nodes::Terminator, uses: &mut HashSet<Place>) {
+    fn extract_terminator_uses(
+        &self,
+        terminator: &crate::compiler::mir::mir_nodes::Terminator,
+        uses: &mut HashSet<Place>,
+    ) {
         match terminator {
             crate::compiler::mir::mir_nodes::Terminator::If { condition, .. } => {
                 self.extract_operand_uses(condition, uses);
@@ -291,24 +305,27 @@ impl LivenessAnalysis {
     /// Run backward dataflow analysis using worklist algorithm
     fn run_backward_dataflow(&mut self, function: &MirFunction) -> Result<(), String> {
         let program_points = function.get_program_points_in_order();
-        
+
         // Initialize all live sets to empty
         for point in &program_points {
             self.live_in.insert(*point, HashSet::new());
             self.live_out.insert(*point, HashSet::new());
         }
-        
+
         // Worklist algorithm for backward dataflow
         let mut worklist: Vec<ProgramPoint> = program_points.clone();
         let mut iteration_count = 0;
         const MAX_ITERATIONS: usize = 1000; // Prevent infinite loops
-        
+
         while let Some(current_point) = worklist.pop() {
             iteration_count += 1;
             if iteration_count > MAX_ITERATIONS {
-                return Err(format!("Liveness analysis failed to converge after {} iterations", MAX_ITERATIONS));
+                return Err(format!(
+                    "Liveness analysis failed to converge after {} iterations",
+                    MAX_ITERATIONS
+                ));
             }
-            
+
             // Compute LiveOut[s] = ⋃ LiveIn[succ(s)]
             let mut new_live_out = HashSet::new();
             if let Some(successors) = self.successors.get(&current_point) {
@@ -318,30 +335,38 @@ impl LivenessAnalysis {
                     }
                 }
             }
-            
+
             // Check if LiveOut changed
-            let old_live_out = self.live_out.get(&current_point).cloned().unwrap_or_default();
+            let old_live_out = self
+                .live_out
+                .get(&current_point)
+                .cloned()
+                .unwrap_or_default();
             let live_out_changed = new_live_out != old_live_out;
-            
+
             if live_out_changed {
                 self.live_out.insert(current_point, new_live_out.clone());
-                
+
                 // Compute LiveIn[s] = Uses[s] ∪ (LiveOut[s] - Defs[s])
                 let uses = self.uses.get(&current_point).cloned().unwrap_or_default();
                 let defs = self.defs.get(&current_point).cloned().unwrap_or_default();
-                
+
                 let mut new_live_in = uses;
                 for place in &new_live_out {
                     if !defs.contains(place) {
                         new_live_in.insert(place.clone());
                     }
                 }
-                
+
                 // Check if LiveIn changed
-                let old_live_in = self.live_in.get(&current_point).cloned().unwrap_or_default();
+                let old_live_in = self
+                    .live_in
+                    .get(&current_point)
+                    .cloned()
+                    .unwrap_or_default();
                 if new_live_in != old_live_in {
                     self.live_in.insert(current_point, new_live_in);
-                    
+
                     // Add predecessors to worklist
                     if let Some(predecessors) = self.predecessors.get(&current_point) {
                         for &pred in predecessors {
@@ -353,7 +378,7 @@ impl LivenessAnalysis {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -361,30 +386,38 @@ impl LivenessAnalysis {
     fn refine_last_uses(&mut self, function: &mut MirFunction) -> Result<(), String> {
         // This function will refine Copy operations to Move operations when
         // the place is not live after the statement (confirmed last use)
-        
+
         for block in &mut function.blocks {
             // Collect statement program points first to avoid borrowing issues
             let statement_points: Vec<(usize, ProgramPoint)> = (0..block.statements.len())
                 .filter_map(|i| block.get_statement_program_point(i).map(|pp| (i, pp)))
                 .collect();
-            
+
             for (stmt_index, program_point) in statement_points {
                 // Get LiveOut for this program point
-                let live_out = self.live_out.get(&program_point).cloned().unwrap_or_default();
-                
+                let live_out = self
+                    .live_out
+                    .get(&program_point)
+                    .cloned()
+                    .unwrap_or_default();
+
                 // Refine operands in this statement
                 if let Some(statement) = block.statements.get_mut(stmt_index) {
                     self.refine_statement_operands(statement, &live_out);
                 }
             }
-            
+
             // Also refine terminator operands
             if let Some(terminator_point) = block.get_terminator_program_point() {
-                let live_out = self.live_out.get(&terminator_point).cloned().unwrap_or_default();
+                let live_out = self
+                    .live_out
+                    .get(&terminator_point)
+                    .cloned()
+                    .unwrap_or_default();
                 self.refine_terminator_operands(&mut block.terminator, &live_out);
             }
         }
-        
+
         Ok(())
     }
 
@@ -459,7 +492,11 @@ impl LivenessAnalysis {
     }
 
     /// Refine operands in terminator operations
-    fn refine_terminator_operands(&self, terminator: &mut crate::compiler::mir::mir_nodes::Terminator, live_out: &HashSet<Place>) {
+    fn refine_terminator_operands(
+        &self,
+        terminator: &mut crate::compiler::mir::mir_nodes::Terminator,
+        live_out: &HashSet<Place>,
+    ) {
         match terminator {
             crate::compiler::mir::mir_nodes::Terminator::If { condition, .. } => {
                 self.refine_operand(condition, live_out);
@@ -505,14 +542,16 @@ impl LivenessAnalysis {
 
     /// Check if a place is live at a program point
     pub fn is_live_at(&self, place: &Place, point: &ProgramPoint) -> bool {
-        self.live_in.get(point)
+        self.live_in
+            .get(point)
             .map(|live_set| live_set.contains(place))
             .unwrap_or(false)
     }
 
     /// Check if a place is live after a program point
     pub fn is_live_after(&self, place: &Place, point: &ProgramPoint) -> bool {
-        self.live_out.get(point)
+        self.live_out
+            .get(point)
             .map(|live_set| live_set.contains(place))
             .unwrap_or(false)
     }
@@ -521,7 +560,9 @@ impl LivenessAnalysis {
     pub fn get_statistics(&self) -> LivenessStatistics {
         LivenessStatistics {
             total_program_points: self.live_in.len(),
-            max_live_vars_at_point: self.live_in.values()
+            max_live_vars_at_point: self
+                .live_in
+                .values()
                 .map(|set| set.len())
                 .max()
                 .unwrap_or(0),
@@ -544,130 +585,4 @@ pub struct LivenessStatistics {
 /// Entry point for running liveness analysis on MIR
 pub fn run_liveness_analysis(mir: &mut MIR) -> Result<LivenessAnalysis, String> {
     LivenessAnalysis::analyze_mir(mir)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::mir_nodes::*;
-    use crate::compiler::mir::place::*;
-
-    /// Create a simple test function for liveness analysis
-    fn create_test_function() -> MirFunction {
-        let mut function = MirFunction::new(0, "test".to_string(), vec![], vec![]);
-        
-        // Create a simple block with a few statements
-        let mut block = MirBlock::new(0);
-        
-        // Create some test places
-        let place_x = Place::Local { index: 0, wasm_type: WasmType::I32 };
-        let place_y = Place::Local { index: 1, wasm_type: WasmType::I32 };
-        
-        // Create program points
-        let pp1 = ProgramPoint::new(0);
-        let pp2 = ProgramPoint::new(1);
-        let pp3 = ProgramPoint::new(2);
-        
-        // Add statements with program points
-        block.add_statement_with_program_point(
-            Statement::Assign {
-                place: place_x.clone(),
-                rvalue: Rvalue::Use(Operand::Constant(Constant::I32(42))),
-            },
-            pp1,
-        );
-        
-        block.add_statement_with_program_point(
-            Statement::Assign {
-                place: place_y.clone(),
-                rvalue: Rvalue::Use(Operand::Copy(place_x.clone())),
-            },
-            pp2,
-        );
-        
-        block.add_statement_with_program_point(
-            Statement::Drop { place: place_y.clone() },
-            pp3,
-        );
-        
-        // Set terminator
-        block.set_terminator_with_program_point(
-            Terminator::Return { values: vec![] },
-            ProgramPoint::new(3),
-        );
-        
-        // Add program points to function
-        function.add_program_point(pp1, 0, 0);
-        function.add_program_point(pp2, 0, 1);
-        function.add_program_point(pp3, 0, 2);
-        function.add_program_point(ProgramPoint::new(3), 0, usize::MAX);
-        
-        // Add events for each program point (normally done during MIR construction)
-        let mut events1 = Events::default();
-        events1.reassigns.push(place_x.clone()); // pp1: x = 42 (defines x)
-        function.store_events(pp1, events1);
-        
-        let mut events2 = Events::default();
-        events2.uses.push(place_x.clone()); // pp2: y = x (uses x)
-        events2.reassigns.push(place_y.clone()); // pp2: y = x (defines y)
-        function.store_events(pp2, events2);
-        
-        let mut events3 = Events::default();
-        events3.uses.push(place_y.clone()); // pp3: drop y (uses y)
-        function.store_events(pp3, events3);
-        
-        let events4 = Events::default(); // pp4: return (no events)
-        function.store_events(ProgramPoint::new(3), events4);
-        
-        function.add_block(block);
-        function
-    }
-
-    #[test]
-    fn test_liveness_analysis_basic() {
-        let mut function = create_test_function();
-        let mut analysis = LivenessAnalysis::new();
-        
-        // Run analysis
-        let result = analysis.analyze_function(&mut function);
-        assert!(result.is_ok(), "Liveness analysis should succeed");
-        
-        // Check that we have results for all program points
-        assert_eq!(analysis.live_in.len(), 4); // 3 statements + 1 terminator
-        assert_eq!(analysis.live_out.len(), 4);
-    }
-
-    #[test]
-    fn test_use_def_extraction() {
-        let mut function = create_test_function();
-        let mut analysis = LivenessAnalysis::new();
-        
-        // Build CFG first, then copy it and extract use/def sets
-        function.build_cfg().unwrap();
-        analysis.copy_cfg_from_function(&function).unwrap();
-        analysis.extract_use_def_sets(&function).unwrap();
-        
-        // Check that we extracted use/def sets for all program points
-        assert_eq!(analysis.uses.len(), 4);
-        assert_eq!(analysis.defs.len(), 4);
-        
-        // Check specific use/def patterns
-        let pp1 = ProgramPoint::new(0);
-        let defs_pp1 = analysis.defs.get(&pp1).unwrap();
-        assert_eq!(defs_pp1.len(), 1); // Should define place_x
-    }
-
-    #[test]
-    fn test_copy_to_move_refinement() {
-        let mut function = create_test_function();
-        let mut analysis = LivenessAnalysis::new();
-        
-        // Run full analysis
-        analysis.analyze_function(&mut function).unwrap();
-        
-        // Check that refinements were made
-        // This is a basic test - more sophisticated tests would check specific refinements
-        assert!(analysis.live_in.len() > 0);
-        assert!(analysis.live_out.len() > 0);
-    }
 }

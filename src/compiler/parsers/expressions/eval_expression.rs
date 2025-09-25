@@ -3,7 +3,7 @@ use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::template::{Style, TemplateContent, TemplateControlFlow};
+
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
@@ -174,7 +174,7 @@ fn pop_higher_precedence(
 // Everything else should be left for runtime
 fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
     let mut template: Template = Template::create_default(None);
-    let location = extract_location(simplified_expression)?;
+    let _location = extract_location(simplified_expression)?;
 
     for node in simplified_expression {
         match node.get_expr()?.kind {

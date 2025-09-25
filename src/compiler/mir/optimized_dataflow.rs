@@ -8,7 +8,6 @@
 /// - Reduced memory indirection for hot data access
 /// - Better vectorization opportunities for bulk operations
 /// - Improved memory access patterns for iterative algorithms
-
 use crate::compiler::mir::arena::{Arena, ArenaRef, ArenaSlice, MemoryPool, Poolable};
 use crate::compiler::mir::extract::BitSet;
 use crate::compiler::mir::mir_nodes::{Events, ProgramPoint};
@@ -72,14 +71,21 @@ impl ProgramPointData {
     }
 
     /// Get source location for a program point (cold path)
-    pub fn get_source_location(&self, point_id: usize) -> Option<&crate::compiler::parsers::tokens::TextLocation> {
-        self.source_locations.get(point_id).and_then(|loc| loc.as_ref())
+    pub fn get_source_location(
+        &self,
+        point_id: usize,
+    ) -> Option<&crate::compiler::parsers::tokens::TextLocation> {
+        self.source_locations
+            .get(point_id)
+            .and_then(|loc| loc.as_ref())
     }
 
     /// Check if a program point is a terminator (hot path - optimized)
     #[inline]
     pub fn is_terminator(&self, point_id: usize) -> bool {
-        self.statement_indices.get(point_id).map_or(false, |idx| idx.is_none())
+        self.statement_indices
+            .get(point_id)
+            .map_or(false, |idx| idx.is_none())
     }
 
     /// Iterate over all program points in order (hot path)
@@ -203,7 +209,7 @@ impl OptimizedDataflowState {
         // Use a temporary bitset to avoid borrowing conflicts
         let mut temp_live_out = self.bitset_pool.get();
         temp_live_out.clear_all();
-        
+
         // Fast path: single successor (common case)
         if successor_ids.len() == 1 {
             if let Some(succ_live_in) = self.get_live_in(successor_ids[0]) {
@@ -217,12 +223,12 @@ impl OptimizedDataflowState {
                 }
             }
         }
-        
+
         // Copy result to the actual live-out set
         if let Some(live_out) = self.get_live_out_mut(point_id) {
             live_out.copy_from(&temp_live_out);
         }
-        
+
         // Return temporary bitset to pool
         self.bitset_pool.put(temp_live_out);
     }
@@ -265,9 +271,11 @@ impl OptimizedDataflowState {
     /// Get memory usage statistics
     pub fn get_memory_stats(&self) -> DataflowMemoryStats {
         let bitset_size = std::mem::size_of::<BitSet>();
-        let total_bitsets = self.live_in_sets.len() + self.live_out_sets.len() 
-                          + self.gen_sets.len() + self.kill_sets.len();
-        
+        let total_bitsets = self.live_in_sets.len()
+            + self.live_out_sets.len()
+            + self.gen_sets.len()
+            + self.kill_sets.len();
+
         DataflowMemoryStats {
             program_point_count: self.program_point_count,
             tracked_count: self.tracked_count,
@@ -331,7 +339,7 @@ impl OptimizedEventCache {
             let arena_ref = self.event_arena.alloc(events);
             self.cache.insert(point, arena_ref);
         }
-        
+
         self.cache.get(&point).unwrap().get()
     }
 
@@ -427,7 +435,9 @@ impl OptimizedControlFlowGraph {
     /// Get predecessors for a program point (hot path - direct access)
     #[inline]
     pub fn get_predecessors(&self, point_id: usize) -> &[usize] {
-        self.predecessors.get(point_id).map_or(&[], |v| v.as_slice())
+        self.predecessors
+            .get(point_id)
+            .map_or(&[], |v| v.as_slice())
     }
 
     /// Check if the CFG is linear (optimization query)
@@ -463,7 +473,7 @@ impl OptimizedControlFlowGraph {
     }
 }
 
-/// Statistics for control flow graph
+/// Statistics for the control flow graph
 #[derive(Debug, Clone)]
 pub struct CfgStats {
     pub program_point_count: usize,
@@ -471,120 +481,4 @@ pub struct CfgStats {
     pub max_successors: usize,
     pub max_predecessors: usize,
     pub is_linear: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::compiler::mir::mir_nodes::ProgramPoint;
-
-    #[test]
-    fn test_program_point_data_soa() {
-        let mut data = ProgramPointData::with_capacity(10);
-        
-        // Add some program points
-        let idx1 = data.add_program_point(0, Some(0), None);
-        let idx2 = data.add_program_point(0, Some(1), None);
-        let idx3 = data.add_program_point(1, None, None); // Terminator
-        
-        // Test hot path access
-        assert_eq!(data.get_block_id(idx1), Some(0));
-        assert_eq!(data.get_block_id(idx2), Some(0));
-        assert_eq!(data.get_block_id(idx3), Some(1));
-        
-        assert_eq!(data.get_statement_index(idx1), Some(0));
-        assert_eq!(data.get_statement_index(idx2), Some(1));
-        assert_eq!(data.get_statement_index(idx3), None);
-        
-        assert!(!data.is_terminator(idx1));
-        assert!(!data.is_terminator(idx2));
-        assert!(data.is_terminator(idx3));
-    }
-
-    #[test]
-    fn test_optimized_dataflow_state() {
-        let mut state = OptimizedDataflowState::new(5, 10);
-        
-        // Test direct access to bitsets
-        assert!(state.get_live_in(0).is_some());
-        assert!(state.get_live_out(0).is_some());
-        assert!(state.get_gen(0).is_some());
-        assert!(state.get_kill(0).is_some());
-        
-        // Test bulk operations
-        state.compute_live_out_from_successors(0, &[1, 2]);
-        let changed = state.compute_live_in_from_gen_kill(0);
-        // Should not change since all sets are empty initially
-        assert!(!changed);
-        
-        // Test memory stats
-        let stats = state.get_memory_stats();
-        assert_eq!(stats.program_point_count, 5);
-        assert_eq!(stats.tracked_count, 10);
-        assert_eq!(stats.total_bitsets, 20); // 4 sets * 5 program points
-    }
-
-    #[test]
-    fn test_optimized_event_cache() {
-        let mut cache = OptimizedEventCache::new();
-        
-        let pp1 = ProgramPoint::new(0);
-        let pp2 = ProgramPoint::new(1);
-        
-        // Create events using the cache
-        let events1 = cache.get_or_create(pp1, || {
-            let mut events = Events::default();
-            events.uses.push(crate::compiler::mir::place::Place::Local {
-                index: 0,
-                wasm_type: crate::compiler::mir::place::WasmType::I32,
-            });
-            events
-        });
-        
-        assert_eq!(events1.uses.len(), 1);
-        
-        // Get cached events
-        let cached_events = cache.get(&pp1);
-        assert!(cached_events.is_some());
-        assert_eq!(cached_events.unwrap().uses.len(), 1);
-        
-        // Events for different program point
-        let events2 = cache.get_or_create(pp2, Events::default);
-        assert_eq!(events2.uses.len(), 0);
-        
-        // Check stats
-        let stats = cache.get_stats();
-        assert_eq!(stats.cached_events, 2);
-    }
-
-    #[test]
-    fn test_optimized_cfg() {
-        let mut cfg = OptimizedControlFlowGraph::new(5);
-        
-        // Build a simple linear CFG: 0 -> 1 -> 2 -> 3 -> 4
-        cfg.add_edge(0, 1);
-        cfg.add_edge(1, 2);
-        cfg.add_edge(2, 3);
-        cfg.add_edge(3, 4);
-        
-        // Test successor/predecessor access
-        assert_eq!(cfg.get_successors(0), &[1]);
-        assert_eq!(cfg.get_successors(1), &[2]);
-        assert_eq!(cfg.get_predecessors(1), &[0]);
-        assert_eq!(cfg.get_predecessors(2), &[1]);
-        
-        // Test linearity detection
-        assert!(cfg.is_linear());
-        
-        // Add a branch to make it non-linear
-        cfg.add_edge(1, 3); // 1 -> 3 (branch)
-        assert!(!cfg.is_linear());
-        
-        // Check stats
-        let stats = cfg.get_stats();
-        assert_eq!(stats.program_point_count, 5);
-        assert_eq!(stats.total_edges, 5); // 4 original + 1 branch
-        assert_eq!(stats.max_successors, 2); // Node 1 has 2 successors
-        assert!(!stats.is_linear);
-    }
 }
