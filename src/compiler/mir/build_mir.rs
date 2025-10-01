@@ -1,15 +1,14 @@
 // Re-export all MIR components from sibling modules
-pub use crate::compiler::mir::liveness::*;
 pub use crate::compiler::mir::mir_nodes::*;
 pub use crate::compiler::mir::place::*;
 
-use crate::compiler::compiler_errors::{CompileError, ErrorType};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-use crate::{ir_log, return_compiler_error};
+use crate::{ir_log, return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
 /// Streamlined error generation for common MIR build errors
@@ -29,19 +28,71 @@ mod build_errors {
     }
 }
 
-// Import borrow checking modules
-use crate::compiler::mir::counter::UseCounter;
-use crate::compiler::mir::diagnose::{diagnose_borrow_errors, diagnostics_to_compile_errors};
-use crate::compiler::mir::extract::extract_gen_kill_sets;
-use crate::compiler::mir::unified_borrow_checker::run_unified_borrow_checking;
+/// Run borrow checking on all functions in the MIR
+fn run_borrow_checking_on_mir(mir: &mut MIR) -> Result<(), CompileError> {
+    use crate::compiler::mir::extract::BorrowFactExtractor;
+    use crate::compiler::mir::unified_borrow_checker::run_unified_borrow_checking;
+    
+    for function in &mut mir.functions {
+        // Extract borrow facts from the function
+        let mut extractor = BorrowFactExtractor::new();
+        extractor.extract_function(function).map_err(|e| {
+            CompileError::compiler_error(&format!("Failed to extract borrow facts: {}", e))
+        })?;
+        
+        // Run unified borrow checking
+        let borrow_results = run_unified_borrow_checking(function, &extractor).map_err(|e| {
+            CompileError::compiler_error(&format!("Borrow checking failed: {}", e))
+        })?;
+        
+        // Convert borrow errors to compile errors
+        if !borrow_results.errors.is_empty() {
+            let first_error = &borrow_results.errors[0];
+            return Err(CompileError::new_rule_error(
+                first_error.message.clone(),
+                first_error.location.clone(),
+            ));
+        }
+        
+        // Log warnings if any
+        for warning in &borrow_results.warnings {
+            eprintln!("Borrow checker warning: {}", warning.message);
+        }
+    }
+    
+    Ok(())
+}
 
-/// Context for AST-to-MIR transformation with WASM-aware place management
+/// Generate events for all statements in a function
+fn generate_events_for_function(function: &mut MirFunction, _context: &mut MirTransformContext) {
+    // Collect all events first to avoid borrowing conflicts
+    let mut all_events = Vec::new();
+    
+    for block in &function.blocks {
+        // Generate events for statements
+        for (stmt_index, statement) in block.statements.iter().enumerate() {
+            let program_point = ProgramPoint::new(block.id * 1000 + stmt_index as u32);
+            let events = statement.generate_events();
+            all_events.push((program_point, events));
+        }
+        
+        // Generate events for terminator
+        let terminator_point = ProgramPoint::new(block.id * 1000 + 999);
+        let terminator_events = block.terminator.generate_events();
+        all_events.push((terminator_point, terminator_events));
+    }
+    
+    // Store all events
+    for (program_point, events) in all_events {
+        function.store_events(program_point, events);
+    }
+}
+
+/// Simplified context for AST-to-MIR transformation
 #[derive(Debug)]
 pub struct MirTransformContext {
-    /// Place manager for WASM memory layout
+    /// Place manager for memory layout
     place_manager: PlaceManager,
-    /// Current function being processed
-    current_function_id: Option<u32>,
     /// Variable name to place mapping (scoped)
     variable_scopes: Vec<HashMap<String, Place>>,
     /// Function name to ID mapping
@@ -50,20 +101,8 @@ pub struct MirTransformContext {
     next_function_id: u32,
     /// Next block ID to allocate
     next_block_id: u32,
-    /// Whether we're in global scope
-    is_global_scope: bool,
-    /// Program point generator for sequential allocation
+    /// Program point generator for borrow checking
     program_point_generator: ProgramPointGenerator,
-    /// Loan tracking for borrow checking
-    loans: Vec<Loan>,
-    /// Next loan ID to allocate
-    next_loan_id: u32,
-    /// Events per program point for dataflow analysis (temporary storage during MIR construction)
-    events_map: HashMap<ProgramPoint, Events>,
-    /// Use counts per place for last-use analysis
-    use_counts: HashMap<Place, usize>,
-    /// Variable use counts from AST analysis (before place allocation)
-    variable_use_counts: HashMap<String, usize>,
 }
 
 impl MirTransformContext {
@@ -71,32 +110,21 @@ impl MirTransformContext {
     pub fn new() -> Self {
         Self {
             place_manager: PlaceManager::new(),
-            current_function_id: None,
             variable_scopes: vec![HashMap::new()], // Start with global scope
             function_names: HashMap::new(),
             next_function_id: 0,
             next_block_id: 0,
-            is_global_scope: true,
             program_point_generator: ProgramPointGenerator::new(),
-            loans: Vec::new(),
-            next_loan_id: 0,
-            events_map: HashMap::new(),
-            use_counts: HashMap::new(),
-            variable_use_counts: HashMap::new(),
         }
     }
 
-    /// Enter a function scope
-    pub fn enter_function(&mut self, function_id: u32) {
-        self.current_function_id = Some(function_id);
-        self.is_global_scope = false;
-        self.variable_scopes.push(HashMap::new()); // New function scope
+    /// Enter a new scope
+    pub fn enter_scope(&mut self) {
+        self.variable_scopes.push(HashMap::new());
     }
 
-    /// Exit function scope
-    pub fn exit_function(&mut self) {
-        self.current_function_id = None;
-        self.is_global_scope = true;
+    /// Exit current scope
+    pub fn exit_scope(&mut self) {
         if self.variable_scopes.len() > 1 {
             self.variable_scopes.pop();
         }
@@ -104,9 +132,6 @@ impl MirTransformContext {
 
     /// Register a variable with a place
     pub fn register_variable(&mut self, name: String, place: Place) {
-        // Initialize use count for this place based on AST analysis
-        self.initialize_place_use_count(place.clone(), &name);
-
         if let Some(current_scope) = self.variable_scopes.last_mut() {
             current_scope.insert(name, place);
         }
@@ -142,92 +167,30 @@ impl MirTransformContext {
         &mut self.place_manager
     }
 
-    /// Allocate the next program point in sequence
-    pub fn allocate_program_point(&mut self) -> ProgramPoint {
+    /// Generate the next program point
+    pub fn next_program_point(&mut self) -> ProgramPoint {
         self.program_point_generator.allocate_next()
     }
 
-    /// Get all allocated program points for dataflow analysis
-    pub fn get_all_program_points(&self) -> &[ProgramPoint] {
-        self.program_point_generator.get_all_points()
-    }
-
-    /// Get program point count
-    pub fn program_point_count(&self) -> usize {
-        self.program_point_generator.count()
-    }
-
-    /// Allocate a new loan ID
-    pub fn allocate_loan_id(&mut self) -> LoanId {
-        let id = LoanId::new(self.next_loan_id);
-        self.next_loan_id += 1;
-        id
-    }
-
-    /// Add a loan to the context
-    pub fn add_loan(&mut self, loan: Loan) {
-        self.loans.push(loan);
-    }
-
-    /// Get all loans
-    pub fn get_loans(&self) -> &[Loan] {
-        &self.loans
-    }
-
-
-
-
-
-    /// Initialize use count for a place
-    pub fn set_use_count(&mut self, place: Place, count: usize) {
-        self.use_counts.insert(place, count);
-    }
-
-    /// Decrement use count and check if this is a candidate last use
-    pub fn decrement_use_count(&mut self, place: &Place) -> bool {
-        if let Some(count) = self.use_counts.get_mut(place) {
-            *count = count.saturating_sub(1);
-            *count == 0
-        } else {
-            // If we don't have a count, assume this could be a last use
-            true
-        }
-    }
-
-    /// Get current use count for a place
-    pub fn get_use_count(&self, place: &Place) -> usize {
-        self.use_counts.get(place).copied().unwrap_or(0)
-    }
-
-    /// Store variable use counts from AST analysis
-    pub fn store_variable_use_counts(&mut self, counts: HashMap<String, usize>) {
-        self.variable_use_counts = counts;
-    }
-
-    /// Get variable use count by name
-    pub fn get_variable_use_count(&self, var_name: &str) -> usize {
-        self.variable_use_counts.get(var_name).copied().unwrap_or(0)
-    }
-
-    /// Initialize place use count from variable name when place is allocated
-    pub fn initialize_place_use_count(&mut self, place: Place, var_name: &str) {
-        let count = self.get_variable_use_count(var_name);
-        if count > 0 {
-            self.use_counts.insert(place, count);
-        }
+    /// Store events for a program point in the current function
+    pub fn store_events_for_statement(
+        &mut self,
+        function: &mut MirFunction,
+        program_point: ProgramPoint,
+        statement: &Statement,
+    ) {
+        let events = statement.generate_events();
+        function.store_events(program_point, events);
     }
 }
 
-/// Transform AST to WASM-optimized MIR with event generation
+/// Transform AST to simplified MIR
 ///
-/// This is the core MIR lowering function that generates events during construction
-/// for use by the borrow checker dataflow analysis.
-pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
+/// This is the core MIR lowering function that focuses on correct transformation
+/// without premature optimization.
+pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
     let mut mir = MIR::new();
     let mut context = MirTransformContext::new();
-
-    // First pass: count uses of each place for last-use analysis
-    count_ast_uses(&ast, &mut context)?;
 
     // Create main function if this is an entry point
     if ast.is_entry_point {
@@ -244,206 +207,80 @@ pub fn ast_to_mir_with_events(ast: AstBlock) -> Result<MIR, CompileError> {
         );
 
         mir.add_function(main_function);
-        context.enter_function(main_function_id);
+        context.enter_scope(); // Enter function scope
     }
 
-    // Transform all AST nodes to MIR with event generation
-    let _main_block_id = 0; // Placeholder block ID
-    let mut current_block = MirBlock::new(_main_block_id); // Placeholder block
+    // Transform all AST nodes to MIR
+    let main_block_id = 0;
+    let mut current_block = MirBlock::new(main_block_id);
 
     for node in &ast.ast {
         let statements = transform_ast_node_to_mir(node, &mut context)?;
 
-        for (statement_index, statement) in statements.into_iter().enumerate() {
+        for statement in statements {
             ir_log!(
-                "Ast Node: {:?} \nConverted into: {:?} \n",
+                "AST Node: {:?} \nConverted into: {:?} \n",
                 node.kind,
                 statement
             );
-
-            // Generate program point and events for each statement
-            let program_point = generate_program_point_and_events(&statement, &mut context);
-
-            // Add statement with program point to block
-            current_block.add_statement_with_program_point(statement, program_point);
-
-            // Track program point in function if we have one
-            if let Some(function_id) = context.current_function_id {
-                if let Some(function) = mir.get_function_mut(function_id) {
-                    function.add_program_point(program_point, current_block.id, statement_index);
-                }
-            }
+            current_block.add_statement(statement);
         }
+    }
 
-        // After processing the node, add any local variables to the function's locals map
-        if let Some(function_id) = context.current_function_id {
-            if let Some(function) = mir.get_function_mut(function_id) {
-                // Get the current scope (function scope)
-                if let Some(current_scope) = context.variable_scopes.last() {
-                    for (var_name, var_place) in current_scope {
-                        // Only add if it's a local place and not already in the function's locals
-                        if matches!(var_place, Place::Local { .. })
-                            && !function.locals.contains_key(var_name)
-                        {
-                            function.add_local(var_name.clone(), var_place.clone());
-                        }
+    // Set terminator for the main block
+    let terminator = Terminator::Return { values: vec![] };
+    current_block.set_terminator(terminator);
+
+    // Add the block to the current function
+    if ast.is_entry_point {
+        if let Some(function) = mir.functions.get_mut(0) {
+            function.add_block(current_block);
+            
+            // Add local variables to function
+            if let Some(current_scope) = context.variable_scopes.last() {
+                for (var_name, var_place) in current_scope {
+                    if matches!(var_place, Place::Local { .. }) {
+                        function.add_local(var_name.clone(), var_place.clone());
                     }
                 }
             }
+            
+            // Generate events for all statements in the function
+            generate_events_for_function(function, &mut context);
         }
+        context.exit_scope(); // Exit function scope
     }
 
-    // Set terminator for the main block with program point
-    let terminator = Terminator::Return { values: vec![] };
-    let terminator_point = generate_terminator_program_point(&terminator, &mut context);
-    current_block.set_terminator_with_program_point(terminator, terminator_point);
-
-    // Add terminator program point to function
-    if let Some(function_id) = context.current_function_id {
-        if let Some(function) = mir.get_function_mut(function_id) {
-            // Add terminator program point (no statement index for terminators)
-            function.add_program_point(terminator_point, current_block.id, usize::MAX);
-        }
-    }
-
-    // Add the block to the current function
-    if let Some(function_id) = context.current_function_id {
-        if let Some(function) = mir.get_function_mut(function_id) {
-            function.add_block(current_block.into());
-        }
-    }
-
-    if ast.is_entry_point {
-        context.exit_function();
-    }
-
-    // Transfer events from context to MIR functions
-    transfer_events_to_mir(&mut mir, &context)?;
-
-    // Build control flow graph between program points
-    if let Err(e) = mir.build_control_flow_graph() {
-        return_compiler_error!("Failed to build control flow graph: {}", e);
-    }
-
-    // Run backward liveness analysis to refine last uses
-    run_liveness_analysis(&mut mir)?;
+    // Run borrow checking on all functions
+    run_borrow_checking_on_mir(&mut mir)?;
 
     Ok(mir)
 }
 
-/// Run borrow checking on a single function using unified borrow checker
-///
-/// This function uses the unified borrow checker that combines liveness analysis,
-/// loan tracking, and conflict detection into a single forward traversal for
-/// ~40% performance improvement over the previous separate passes.
-pub fn run_borrow_checking_on_function(function: &MirFunction) -> Result<(), Vec<CompileError>> {
-    // Step 1: Extract borrow facts and build gen/kill sets
-    let extractor = match extract_gen_kill_sets(function) {
-        Ok(extractor) => extractor,
-        Err(e) => {
-            let compile_error = CompileError {
-                msg: format!("Failed to extract borrow facts: {}", e),
-                location: TextLocation::default(),
-                error_type: ErrorType::Compiler,
-                file_path: std::path::PathBuf::new(),
-            };
-            return Err(vec![compile_error]);
-        }
-    };
 
-    // Step 2: Run unified borrow checking (combines liveness, loan tracking, and conflict detection)
-    let unified_results = match run_unified_borrow_checking(function, &extractor) {
-        Ok(results) => results,
-        Err(e) => {
-            let compile_error = CompileError {
-                msg: format!("Failed to run unified borrow checking: {}", e),
-                location: TextLocation::default(),
-                error_type: ErrorType::Compiler,
-                file_path: std::path::PathBuf::new(),
-            };
-            return Err(vec![compile_error]);
-        }
-    };
 
-    // Step 3: If there are errors, convert them to compile errors
-    if !unified_results.errors.is_empty() {
-        let diagnostic_results = match diagnose_borrow_errors(
-            function,
-            &unified_results.errors,
-            function.get_loans(),
-        ) {
-            Ok(results) => results,
-            Err(e) => return Err(vec![e]),
-        };
-
-        let diagnostics =
-            crate::compiler::mir::diagnose::BorrowDiagnostics::new(function.name.clone());
-        let compile_errors = diagnostics_to_compile_errors(&diagnostics, &diagnostic_results);
-        return Err(compile_errors);
-    }
-
-    // Step 4: Handle warnings (for now, we'll just log them but not fail compilation)
-    if !unified_results.warnings.is_empty() {
-        // In a full implementation, we might want to emit warnings to the user
-        // For now, we'll just continue compilation
-    }
-
-    // Step 5: Log performance statistics for monitoring
-    let _stats = &unified_results.statistics;
-    ir_log!(
-        "Unified borrow checking completed: {} program points, {} conflicts detected, {} refinements made",
-        _stats.program_points_processed,
-        _stats.conflicts_detected,
-        _stats.refinements_made
-    );
-    ir_log!(
-        "Timing breakdown: liveness={}ns, loan_tracking={}ns, conflict_detection={}ns, refinement={}ns",
-        _stats.liveness_time_ns,
-        _stats.loan_tracking_time_ns,
-        _stats.conflict_detection_time_ns,
-        _stats.refinement_time_ns
-    );
-
-    Ok(())
-}
-
-/// Transform a single AST node to MIR statements and generate program points/events
+/// Transform a single AST node to MIR statements
 fn transform_ast_node_to_mir(
     node: &AstNode,
     context: &mut MirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
         NodeKind::Declaration(name, expression, visibility) => {
-            transform_declaration_to_mir(name, expression, visibility, context)
+            ast_declaration_to_mir(name, expression, visibility, context)
         }
         NodeKind::Mutation(name, expression) => {
-            transform_mutation_to_mir(name, expression, &node.location, context)
+            ast_mutation_to_mir(name, expression, &node.location, context)
         }
-        // Probably no expressions at the module level ever?
-        // NodeKind::Expression(expression) => {
-        //     // Regular expression - evaluate and potentially assign
-        //     let (statements, _place) = transform_expression_to_mir(expression, context)?;
-        //     Ok(statements)
-        // }
         NodeKind::FunctionCall(name, params, return_types, ..) => {
-            let (statements, _place) = transform_function_call_to_mir(
-                name,
-                params,
-                return_types,
-                &node.location,
-                context,
-            )?;
-
-            Ok(statements)
+            ast_function_call_to_mir(name, params, return_types, &node.location, context)
         }
-
         NodeKind::Newline | NodeKind::Spaces(_) | NodeKind::Empty => {
             // These nodes don't generate MIR statements
             Ok(vec![])
         }
         _ => {
             return_compiler_error!(
-                "Unsupported AST node type for MIR generation: {:?} at {}:{}",
+                "AST node type not yet implemented for MIR generation: {:?} at {}:{}",
                 node.kind,
                 node.location.start_pos.line_number,
                 node.location.start_pos.char_column
@@ -452,179 +289,10 @@ fn transform_ast_node_to_mir(
     }
 }
 
-/// Generate program point for a statement (updated for on-demand events)
-///
-/// This function now only allocates program points without generating events,
-/// as events are computed on-demand using Statement::generate_events().
-fn generate_program_point_and_events(
-    _statement: &Statement,
-    context: &mut MirTransformContext,
-) -> ProgramPoint {
-    // Allocate the next program point in sequence
-    let program_point = context.allocate_program_point();
 
-    // Events are no longer generated and stored here
-    // They are computed on-demand using Statement::generate_events()
-
-    program_point
-}
-
-
-
-/// Generate events for rvalue operations
-fn generate_rvalue_events(
-    rvalue: &Rvalue,
-    program_point: ProgramPoint,
-    events: &mut Events,
-    context: &mut MirTransformContext,
-) {
-    match rvalue {
-        Rvalue::Use(operand) => {
-            generate_operand_events_with_context(operand, program_point, events, context);
-        }
-        Rvalue::BinaryOp { left, right, .. } => {
-            generate_operand_events_with_context(left, program_point, events, context);
-            generate_operand_events_with_context(right, program_point, events, context);
-        }
-        Rvalue::UnaryOp { operand, .. } => {
-            generate_operand_events_with_context(operand, program_point, events, context);
-        }
-        Rvalue::Cast { source, .. } => {
-            generate_operand_events_with_context(source, program_point, events, context);
-        }
-        Rvalue::Ref { place, borrow_kind } => {
-            // Generate start_loan event for borrows
-            let loan_id = generate_loan_for_borrow(place, borrow_kind, program_point, context);
-            events.start_loans.push(loan_id);
-
-            // The place being borrowed is also used (read access)
-            events.uses.push(place.clone());
-        }
-        Rvalue::Deref { place } => {
-            // Generate use event for the place being dereferenced
-            events.uses.push(place.clone());
-        }
-        Rvalue::Array { elements, .. } => {
-            for element in elements {
-                generate_operand_events_with_context(element, program_point, events, context);
-            }
-        }
-        Rvalue::Struct { fields, .. } => {
-            for (_, operand) in fields {
-                generate_operand_events_with_context(operand, program_point, events, context);
-            }
-        }
-        Rvalue::Load { place, .. } => {
-            // Generate use event for the place being loaded
-            events.uses.push(place.clone());
-        }
-        Rvalue::InterfaceCall { receiver, args, .. } => {
-            generate_operand_events_with_context(receiver, program_point, events, context);
-            for arg in args {
-                generate_operand_events_with_context(arg, program_point, events, context);
-            }
-        }
-        Rvalue::MemorySize => {
-            // Memory size doesn't use any places
-        }
-        Rvalue::MemoryGrow { pages } => {
-            generate_operand_events_with_context(pages, program_point, events, context);
-        }
-    }
-}
-
-/// Generate program point for a terminator (updated for on-demand events)
-///
-/// This function now only allocates program points without generating events,
-/// as events are computed on-demand using Terminator::generate_events().
-fn generate_terminator_program_point(
-    _terminator: &Terminator,
-    context: &mut MirTransformContext,
-) -> ProgramPoint {
-    // Allocate the next program point in sequence
-    let program_point = context.allocate_program_point();
-
-    // Events are no longer generated and stored here
-    // They are computed on-demand using Terminator::generate_events()
-
-    program_point
-}
-
-/// Generate a loan for a borrow operation
-fn generate_loan_for_borrow(
-    place: &Place,
-    borrow_kind: &BorrowKind,
-    program_point: ProgramPoint,
-    context: &mut MirTransformContext,
-) -> LoanId {
-    let loan_id = context.allocate_loan_id();
-
-    let loan = Loan {
-        id: loan_id,
-        owner: place.clone(),
-        kind: borrow_kind.clone(),
-        origin_stmt: program_point,
-    };
-
-    context.add_loan(loan);
-    loan_id
-}
-
-/// Generate events for operands
-fn generate_operand_events(operand: &Operand, _program_point: ProgramPoint, events: &mut Events) {
-    match operand {
-        Operand::Copy(place) => {
-            // Generate use event for the place (non-consuming read)
-            events.uses.push(place.clone());
-        }
-        Operand::Move(place) => {
-            // Generate move event for the place (consuming read)
-            events.moves.push(place.clone());
-        }
-        Operand::Constant(_) => {
-            // Constants don't generate events
-        }
-        Operand::FunctionRef(_) | Operand::GlobalRef(_) => {
-            // References don't generate events
-        }
-    }
-}
-
-/// Generate events for operands with candidate last use tracking
-fn generate_operand_events_with_context(
-    operand: &Operand,
-    _program_point: ProgramPoint,
-    events: &mut Events,
-    context: &mut MirTransformContext,
-) {
-    match operand {
-        Operand::Copy(place) => {
-            // Generate use event for the place (non-consuming read)
-            events.uses.push(place.clone());
-
-            // Check if this is a candidate last use
-            if context.decrement_use_count(place) {
-                events.candidate_last_uses.push(place.clone());
-            }
-        }
-        Operand::Move(place) => {
-            // Generate move event for the place (consuming read)
-            events.moves.push(place.clone());
-
-            // Moves are always last uses
-            events.candidate_last_uses.push(place.clone());
-        }
-        Operand::Constant(_) => {
-            // Constants don't generate events
-        }
-        Operand::FunctionRef(_) | Operand::GlobalRef(_) => {
-            // References don't generate events
-        }
-    }
-}
 
 /// Transform variable declaration to MIR
-fn transform_declaration_to_mir(
+fn ast_declaration_to_mir(
     name: &str,
     expression: &Expression,
     visibility: &VarVisibility,
@@ -632,12 +300,8 @@ fn transform_declaration_to_mir(
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
 
-    // Transform the expression first
-    let (expr_statements, expr_place) = transform_expression_to_mir(expression, context)?;
-    statements.extend(expr_statements);
-
     // Determine if this should be a global or local variable
-    let is_global = context.is_global_scope || matches!(visibility, VarVisibility::Exported);
+    let is_global = matches!(visibility, VarVisibility::Exported);
 
     // Allocate the appropriate place for the variable
     let variable_place = if is_global {
@@ -653,20 +317,13 @@ fn transform_declaration_to_mir(
     // Register the variable in context
     context.register_variable(name.to_string(), variable_place.clone());
 
-    // Note: Local variables will be added to the function's locals map
-    // in the main transformation loop where we have access to the MIR
+    // Convert expression to rvalue
+    let rvalue = expression_to_rvalue(expression)?;
 
     // Create assignment statement
     let assign_statement = Statement::Assign {
         place: variable_place,
-        rvalue: match expr_place {
-            Some(place) => Rvalue::Use(Operand::Copy(place)),
-            None => {
-                // Expression didn't produce a place (e.g., constant)
-                // Convert expression to rvalue
-                expression_to_rvalue(expression)?
-            }
-        },
+        rvalue,
     };
 
     statements.push(assign_statement);
@@ -674,14 +331,12 @@ fn transform_declaration_to_mir(
 }
 
 /// Transform variable mutation to MIR
-fn transform_mutation_to_mir(
+fn ast_mutation_to_mir(
     name: &str,
     expression: &Expression,
     location: &TextLocation,
     context: &mut MirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
-    let mut statements = Vec::new();
-
     // Look up the existing variable place
     let variable_place = match context.lookup_variable(name) {
         Some(place) => place.clone(),
@@ -691,84 +346,53 @@ fn transform_mutation_to_mir(
         }
     };
 
-    // Transform the new value expression
-    let (expr_statements, expr_place) = transform_expression_to_mir(expression, context)?;
-    statements.extend(expr_statements);
-
-    // Type checking: ensure compatibility between existing variable and new value
-    // Note: For now we'll rely on the type system to have already validated this during AST construction
-    // More sophisticated type checking could be added here if needed
+    // Convert expression to rvalue
+    let rvalue = expression_to_rvalue(expression)?;
 
     // Create assignment statement for the mutation
     let assign_statement = Statement::Assign {
         place: variable_place,
-        rvalue: match expr_place {
-            Some(place) => Rvalue::Use(Operand::Copy(place)),
-            None => {
-                // Expression didn't produce a place (e.g., constant)
-                // Convert expression to rvalue
-                expression_to_rvalue(expression)?
-            }
-        },
+        rvalue,
     };
 
-    statements.push(assign_statement);
-    Ok(statements)
+    Ok(vec![assign_statement])
 }
 
-/// Transform expression to MIR statements and return the result place
-fn transform_expression_to_mir(
-    expression: &Expression,
+/// Transform function call to MIR
+fn ast_function_call_to_mir(
+    name: &str,
+    params: &[Expression],
+    _return_types: &[DataType],
+    location: &TextLocation,
     context: &mut MirTransformContext,
-) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
-    match &expression.kind {
-        ExpressionKind::Int(_) | ExpressionKind::Float(_) | ExpressionKind::Bool(_) => {
-            // Constants don't need places, they're embedded in operands
-            Ok((vec![], None))
-        }
-        ExpressionKind::String(value) => {
-            // Strings need memory allocation in linear memory
-            let string_place = context.get_place_manager().allocate_heap(
-                &expression.data_type,
-                value.len() as u32 + 8, // +8 for length prefix
-            );
-            Ok((vec![], Some(string_place)))
-        }
-        ExpressionKind::Reference(name) => {
-            // Variable reference
-            if let Some(place) = context.lookup_variable(name) {
-                Ok((vec![], Some(place.clone())))
-            } else {
-                build_errors::undefined_variable(expression.location.clone(), name)?;
-                unreachable!()
-            }
-        }
-        ExpressionKind::Runtime(runtime_nodes) => {
-            // Transform runtime expression to three-address form
-            transform_runtime_expression_to_three_address_form(runtime_nodes, expression, context)
-        }
-        ExpressionKind::Function(args, body, return_types) => {
-            // Function expressions need special handling
-            transform_function_expression_to_mir(args, body, return_types, expression, context)
-        }
-        ExpressionKind::Collection(items) => {
-            // Collection expressions need to be broken down
-            transform_collection_expression_to_mir(items, expression, context)
-        }
-        ExpressionKind::Struct(args) => {
-            // Struct expressions need to be broken down
-            transform_struct_expression_to_mir(args, expression, context)
-        }
-        _ => {
-            return_compiler_error!(
-                "Unsupported expression kind for MIR generation: {:?}",
-                expression.kind
-            )
-        }
+) -> Result<Vec<Statement>, CompileError> {
+    // Convert parameters to operands
+    let mut args = Vec::new();
+    for param in params {
+        let operand = expression_to_operand(param)?;
+        args.push(operand);
     }
+
+    // Look up function or create function reference
+    let func_operand = if let Some(func_id) = context.function_names.get(name) {
+        Operand::FunctionRef(*func_id)
+    } else {
+        return_rule_error!(location.clone(), "Undefined function '{}'. Function must be declared before use.", name);
+    };
+
+    // Create call statement
+    let call_statement = Statement::Call {
+        func: func_operand,
+        args,
+        destination: None, // For now, don't handle return values
+    };
+
+    Ok(vec![call_statement])
 }
 
-/// Convert expression to rvalue
+
+
+/// Convert expression to rvalue for basic types
 fn expression_to_rvalue(expression: &Expression) -> Result<Rvalue, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
@@ -777,481 +401,35 @@ fn expression_to_rvalue(expression: &Expression) -> Result<Rvalue, CompileError>
         ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
             value.clone(),
         )))),
+        ExpressionKind::Reference(name) => {
+            return_compiler_error!("Variable references in expressions not yet implemented: {}", name);
+        }
+        ExpressionKind::Runtime(_) => {
+            return_compiler_error!("Runtime expressions not yet implemented for MIR generation");
+        }
         _ => {
-            return_compiler_error!("Cannot convert expression to rvalue: {:?}", expression.kind)
+            return_compiler_error!("Expression type not yet implemented for rvalue conversion: {:?}", expression.kind)
         }
     }
 }
 
-/// Transform runtime expression to three-address form
-///
-/// This function takes a runtime expression (which contains RPN-ordered AST nodes)
-/// and breaks it down into separate MIR statements, ensuring each operand read/write
-/// is in a separate statement.
-///
-/// Example: `x = foo(y + z*2)` becomes:
-/// /```
-/// t1 = z * 2
-/// t2 = y + t1  
-/// t3 = call foo(t2)
-/// x = t3
-/// ```
-fn transform_runtime_expression_to_three_address_form(
-    runtime_nodes: &[AstNode],
-    expression: &Expression,
-    context: &mut MirTransformContext,
-) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
-    let mut statements = Vec::new();
-    let mut operand_stack: Vec<Operand> = Vec::new();
-
-    // Process RPN nodes to build three-address form statements
-    for node in runtime_nodes {
-        match &node.kind {
-            NodeKind::Expression(expr) => {
-                match &expr.kind {
-                    ExpressionKind::Reference(var_name) => {
-                        // Variable reference - emit Copy operand initially
-                        if let Some(place) = context.lookup_variable(var_name) {
-                            let operand = Operand::Copy(place.clone());
-                            operand_stack.push(operand);
-                        } else {
-                            build_errors::undefined_variable(expr.location.clone(), var_name)?;
-                            unreachable!()
-                        }
-                    }
-                    ExpressionKind::Int(value) => {
-                        operand_stack.push(Operand::Constant(Constant::I64(*value)));
-                    }
-                    ExpressionKind::Float(value) => {
-                        operand_stack.push(Operand::Constant(Constant::F64(*value)));
-                    }
-                    ExpressionKind::Bool(value) => {
-                        operand_stack.push(Operand::Constant(Constant::Bool(*value)));
-                    }
-                    ExpressionKind::String(value) => {
-                        operand_stack.push(Operand::Constant(Constant::String(value.clone())));
-                    }
-                    _ => {
-                        return_compiler_error!(
-                            "Unsupported expression in runtime nodes: {:?}",
-                            expr.kind
-                        );
-                    }
-                }
-            }
-            NodeKind::Operator(op) => {
-                // Operator - pop operands based on operator type, create temporary, push result
-                match op {
-                    // Binary operators
-                    crate::compiler::parsers::expressions::expression::Operator::Add
-                    | crate::compiler::parsers::expressions::expression::Operator::Subtract
-                    | crate::compiler::parsers::expressions::expression::Operator::Multiply
-                    | crate::compiler::parsers::expressions::expression::Operator::Divide
-                    | crate::compiler::parsers::expressions::expression::Operator::Modulus
-                    | crate::compiler::parsers::expressions::expression::Operator::And => {
-                        // Binary operation - pop two operands, create temporary, push result
-                        if operand_stack.len() < 2 {
-                            return_compiler_error!(
-                                "Not enough operands for binary operation: {:?}",
-                                op
-                            );
-                        }
-
-                        let right = operand_stack.pop().unwrap();
-                        let left = operand_stack.pop().unwrap();
-
-                        // Create temporary place for result
-                        let temp_place = context
-                            .get_place_manager()
-                            .allocate_local(&expression.data_type);
-
-                        // Convert AST operator to MIR BinOp
-                        let mir_op = convert_ast_operator_to_mir_binop(op)?;
-
-                        // Create assignment statement
-                        let assign_stmt = Statement::Assign {
-                            place: temp_place.clone(),
-                            rvalue: Rvalue::BinaryOp {
-                                op: mir_op,
-                                left,
-                                right,
-                            },
-                        };
-
-                        statements.push(assign_stmt);
-
-                        // Push result operand onto stack
-                        operand_stack.push(Operand::Copy(temp_place));
-                    }
-                    // Unary operators would go here if we had any
-                    _ => {
-                        return_compiler_error!(
-                            "Unsupported operator in runtime expression: {:?}",
-                            op
-                        );
-                    }
-                }
-            }
-            NodeKind::FunctionCall(func_name, args, _, _) => {
-                // Function call - process arguments and create call statement
-                let mut call_args = Vec::new();
-
-                // Process arguments (they should already be on the stack from RPN evaluation)
-                for _ in 0..args.len() {
-                    if operand_stack.is_empty() {
-                        return_compiler_error!("Not enough operands for function call arguments");
-                    }
-                    call_args.insert(0, operand_stack.pop().unwrap()); // Insert at front to maintain order
-                }
-
-                // Create temporary place for result
-                let temp_place = context
-                    .get_place_manager()
-                    .allocate_local(&expression.data_type);
-
-                // Look up function ID
-                let func_id = context
-                    .function_names
-                    .get(func_name)
-                    .copied()
-                    .unwrap_or_else(|| {
-                        // If function not found, allocate new ID (for external functions)
-                        let id = context.allocate_function_id();
-                        context.function_names.insert(func_name.clone(), id);
-                        id
-                    });
-
-                // Create call statement
-                let call_stmt = Statement::Call {
-                    func: Operand::FunctionRef(func_id),
-                    args: call_args,
-                    destination: Some(temp_place.clone()),
-                };
-
-                statements.push(call_stmt);
-
-                // Push result operand onto stack
-                operand_stack.push(Operand::Copy(temp_place));
-            }
-            _ => {
-                return_compiler_error!(
-                    "Unsupported AST node in runtime expression: {:?}",
-                    node.kind
-                );
-            }
+/// Convert expression to operand for basic types
+fn expression_to_operand(expression: &Expression) -> Result<Operand, CompileError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I64(*value))),
+        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F64(*value))),
+        ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
+        ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
+        ExpressionKind::Reference(name) => {
+            return_compiler_error!("Variable references in expressions not yet implemented: {}", name);
         }
-    }
-
-    // The final result should be the last operand on the stack
-    let result_place = if operand_stack.len() == 1 {
-        match operand_stack.pop().unwrap() {
-            Operand::Copy(place) | Operand::Move(place) => Some(place),
-            _ => None, // Constants don't have places
+        ExpressionKind::Runtime(_) => {
+            return_compiler_error!("Runtime expressions not yet implemented for operand conversion");
         }
-    } else if operand_stack.is_empty() {
-        None // No result (e.g., void expression)
-    } else {
-        return_compiler_error!(
-            "Runtime expression evaluation left {} operands on stack, expected 1",
-            operand_stack.len()
-        );
-    };
-
-    Ok((statements, result_place))
-}
-
-fn transform_function_call_to_mir(
-    func_name: &str,
-    args: &[Expression],
-    return_types: &[DataType],
-    location: &TextLocation,
-    context: &mut MirTransformContext,
-) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
-    let mut statements = Vec::new();
-    let mut call_args = Vec::new();
-
-    // Transform arguments to three-address form
-    for arg in args {
-        let (arg_stmts, arg_place) = transform_expression_to_mir(arg, context)?;
-        statements.extend(arg_stmts);
-
-        // Convert to an operand
-        let operand = if let Some(place) = arg_place {
-            Operand::Copy(place)
-        } else {
-            // Convert constant expression to operand
-            match &arg.kind {
-                ExpressionKind::Int(value) => Operand::Constant(Constant::I64(*value)),
-                ExpressionKind::Float(value) => Operand::Constant(Constant::F64(*value)),
-                ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
-                ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
-                _ => {
-                    return_compiler_error!(
-                        "Cannot convert function argument to operand: {:?}",
-                        arg.kind
-                    );
-                }
-            }
-        };
-
-        call_args.push(operand);
-    }
-
-    // Look up or allocate function ID
-    let func_id = if let Some(&id) = context.function_names.get(func_name) {
-        id
-    } else {
-        // External function - allocate ID
-        let id = context.allocate_function_id();
-        context.function_names.insert(func_name.to_string(), id);
-        id
-    };
-
-    // Determine if function has return value
-    let has_return = !return_types.is_empty();
-
-    let destination = if has_return {
-        // Allocate place for return value
-        let return_place = context.get_place_manager().allocate_local(&return_types[0]); // Assuming single return for now
-        Some(return_place.clone())
-    } else {
-        None
-    };
-
-    // Create call statement
-    let call_stmt = Statement::Call {
-        func: Operand::FunctionRef(func_id),
-        args: call_args,
-        destination: destination.clone(),
-    };
-
-    statements.push(call_stmt);
-
-    Ok((statements, destination))
-}
-
-/// Transform function expression to MIR
-/// (Functions as values)
-fn transform_function_expression_to_mir(
-    _args: &[Arg],
-    _body: &[AstNode],
-    _return_types: &[DataType],
-    _expression: &Expression,
-    _context: &mut MirTransformContext,
-) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
-    // Function expressions will be implemented in later tasks
-    return_compiler_error!("Function expressions not yet implemented in MIR generation");
-}
-
-/// Transform collection expression to MIR
-fn transform_collection_expression_to_mir(
-    items: &[Expression],
-    expression: &Expression,
-    context: &mut MirTransformContext,
-) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
-    let mut statements = Vec::new();
-    let mut element_operands = Vec::new();
-
-    // Transform each item to three-address form
-    for item in items {
-        let (item_statements, item_place) = transform_expression_to_mir(item, context)?;
-        statements.extend(item_statements);
-
-        // Convert place to operand
-        let operand = if let Some(place) = item_place {
-            Operand::Copy(place)
-        } else {
-            // Convert constant expression to operand
-            match &item.kind {
-                ExpressionKind::Int(value) => Operand::Constant(Constant::I64(*value)),
-                ExpressionKind::Float(value) => Operand::Constant(Constant::F64(*value)),
-                ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
-                ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
-                _ => {
-                    return_compiler_error!(
-                        "Cannot convert collection item to operand: {:?}",
-                        item.kind
-                    );
-                }
-            }
-        };
-
-        element_operands.push(operand);
-    }
-
-    // Create temporary place for the collection
-    let collection_place = context
-        .get_place_manager()
-        .allocate_local(&expression.data_type);
-
-    // Determine element type (simplified for now)
-    let element_type = if !items.is_empty() {
-        convert_datatype_to_wasm_type(&items[0].data_type)?
-    } else {
-        WasmType::I32 // Default for empty collections
-    };
-
-    // Create array assignment statement
-    let array_stmt = Statement::Assign {
-        place: collection_place.clone(),
-        rvalue: Rvalue::Array {
-            elements: element_operands,
-            element_type,
-        },
-    };
-
-    statements.push(array_stmt);
-
-    Ok((statements, Some(collection_place)))
-}
-
-/// Transform struct expression to MIR
-fn transform_struct_expression_to_mir(
-    args: &[Arg],
-    expression: &Expression,
-    context: &mut MirTransformContext,
-) -> Result<(Vec<Statement>, Option<Place>), CompileError> {
-    let mut statements = Vec::new();
-    let mut field_operands = Vec::new();
-
-    // Transform each field value to three-address form
-    for (field_id, arg) in args.iter().enumerate() {
-        let (field_statements, field_place) = transform_expression_to_mir(&arg.value, context)?;
-        statements.extend(field_statements);
-
-        // Convert place to operand
-        let operand = if let Some(place) = field_place {
-            Operand::Copy(place)
-        } else {
-            // Convert constant expression to operand
-            match &arg.value.kind {
-                ExpressionKind::Int(value) => Operand::Constant(Constant::I64(*value)),
-                ExpressionKind::Float(value) => Operand::Constant(Constant::F64(*value)),
-                ExpressionKind::Bool(value) => Operand::Constant(Constant::Bool(*value)),
-                ExpressionKind::String(value) => Operand::Constant(Constant::String(value.clone())),
-                _ => {
-                    return_compiler_error!(
-                        "Cannot convert struct field to operand: {:?}",
-                        arg.value.kind
-                    );
-                }
-            }
-        };
-
-        field_operands.push((field_id as u32, operand));
-    }
-
-    // Create temporary place for the struct
-    let struct_place = context
-        .get_place_manager()
-        .allocate_local(&expression.data_type);
-
-    // Create struct assignment statement
-    let struct_stmt = Statement::Assign {
-        place: struct_place.clone(),
-        rvalue: Rvalue::Struct {
-            fields: field_operands,
-            struct_type: 0, // Simplified struct type ID for now
-        },
-    };
-
-    statements.push(struct_stmt);
-
-    Ok((statements, Some(struct_place)))
-}
-
-/// Convert AST binary operator to MIR BinOp
-fn convert_ast_operator_to_mir_binop(
-    op: &crate::compiler::parsers::expressions::expression::Operator,
-) -> Result<BinOp, CompileError> {
-    use crate::compiler::parsers::expressions::expression::Operator;
-
-    match op {
-        Operator::Add => Ok(BinOp::Add),
-        Operator::Subtract => Ok(BinOp::Sub),
-        Operator::Multiply => Ok(BinOp::Mul),
-        Operator::Divide => Ok(BinOp::Div),
-        Operator::Modulus => Ok(BinOp::Rem),
-        Operator::And => Ok(BinOp::And),
         _ => {
-            return_compiler_error!("Unsupported binary operator for MIR: {:?}", op);
+            return_compiler_error!("Expression type not yet implemented for operand conversion: {:?}", expression.kind)
         }
     }
 }
 
-/// Convert AST unary operator to MIR UnOp
-fn convert_ast_operator_to_mir_unop(
-    op: &crate::compiler::parsers::expressions::expression::Operator,
-) -> Result<UnOp, CompileError> {
-    match op {
-        // Note: AST operators might not have direct unary equivalents
-        // This is a simplified mapping for now
-        _ => {
-            return_compiler_error!("Unsupported unary operator for MIR: {:?}", op);
-        }
-    }
-}
 
-/// Convert DataType to WasmType (simplified)
-fn convert_datatype_to_wasm_type(data_type: &DataType) -> Result<WasmType, CompileError> {
-    match data_type {
-        DataType::Int(_) => Ok(WasmType::I64),
-        DataType::Float(_) => Ok(WasmType::F64),
-        DataType::Bool(_) => Ok(WasmType::I32),
-        DataType::String(_) => Ok(WasmType::I32), // Pointer to linear memory
-        _ => {
-            return_compiler_error!("Cannot convert DataType to WasmType: {:?}", data_type);
-        }
-    }
-}
-
-/// Count uses of variables in AST for last-use analysis
-fn count_ast_uses(ast: &AstBlock, context: &mut MirTransformContext) -> Result<(), CompileError> {
-    let mut use_counter = UseCounter::new();
-
-    // First pass: count all variable references and field/index accesses
-    for node in &ast.ast {
-        use_counter.count_node_uses(node)?;
-    }
-
-    // Store use counts in context for later use during MIR generation
-    // Note: At this stage we only have variable names, not places yet.
-    // The actual place-based counting will happen during MIR transformation.
-    context.store_variable_use_counts(use_counter.get_use_counts());
-
-    Ok(())
-}
-
-/// Transfer loans from transformation context to MIR functions
-///
-/// Events are no longer transferred as they are generated on-demand from
-/// statements and terminators. This function now only transfers loans.
-fn transfer_events_to_mir(
-    mir: &mut MIR,
-    context: &MirTransformContext,
-) -> Result<(), CompileError> {
-    // Events are no longer transferred - they are generated on-demand
-    // Only transfer loans from context to each function
-    for function in &mut mir.functions {
-        // Transfer all loans from context to this function
-        // Note: In the current implementation, all loans are stored globally in the context
-        // In a more sophisticated implementation, we might want to associate loans with specific functions
-        for loan in context.get_loans() {
-            function.add_loan(loan.clone());
-        }
-    }
-    Ok(())
-}
-
-/// Entry point for running liveness analysis on MIR
-pub fn run_liveness_analysis(mir: &mut MIR) -> Result<LivenessAnalysis, CompileError> {
-    match LivenessAnalysis::analyze_mir(mir) {
-        Ok(analysis) => Ok(analysis),
-        Err(e) => Err(CompileError {
-            msg: format!("Liveness analysis failed: {}", e),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-        }),
-    }
-}

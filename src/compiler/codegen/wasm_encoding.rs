@@ -1,8 +1,9 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::mir::mir_nodes::{
-    Constant, MIR, MirFunction, Operand, Rvalue, Statement, Terminator,
+    BinOp, Constant, MIR, MirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
 };
 use crate::compiler::mir::place::{Place, WasmType};
+// use crate::compiler::optimizers::interface_dispatch::InterfaceMethodMapping;
 use crate::return_compiler_error;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -94,10 +95,8 @@ impl WasmModule {
         // Initialize global section from MIR globals
         module.initialize_globals_from_mir(mir)?;
 
-        // Initialize interface support if needed
-        if !mir.type_info.interface_info.interfaces.is_empty() {
-            module.initialize_interface_support_from_mir(mir)?;
-        }
+        // Interface support moved to optimizers - skip for now
+        // TODO: Re-integrate interface dispatch from optimizers when needed
         // Record initial heap offset (start of dynamic allocations)
         module.initial_heap_offset = mir.type_info.memory_info.static_data_size;
         Ok(module)
@@ -213,220 +212,69 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Initialize interface support (vtables and function tables)
-    fn initialize_interface_support_from_mir(&mut self, mir: &MIR) -> Result<(), CompileError> {
-        let interface_info = &mir.type_info.interface_info;
-
-        // Generate interface method type signatures
-        self.generate_interface_method_types(interface_info)?;
-
-        // Create function table for call_indirect
-        if !interface_info.function_table.is_empty() {
-            self.create_interface_function_table(interface_info)?;
-        }
-
-        // Generate vtable data structures in linear memory
-        if !interface_info.vtables.is_empty() {
-            self.generate_vtable_data_structures(interface_info)?;
-        }
-
-        Ok(())
+    /// Initialize interface support (moved to optimizers)
+    fn initialize_interface_support_from_mir(&mut self, _mir: &MIR) -> Result<(), CompileError> {
+        return_compiler_error!("Interface dispatch system moved to optimizers - not yet re-integrated");
     }
 
-    /// Generate type signatures for all interface methods
+    /// Generate type signatures for all interface methods (moved to optimizers)
     fn generate_interface_method_types(
         &mut self,
-        interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
+        _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
     ) -> Result<(), CompileError> {
-        for (_interface_id, interface_def) in &interface_info.interfaces {
-            for method in &interface_def.methods {
-                // Convert method signature to WASM function type
-                let param_types = self.wasm_types_to_val_types(&method.param_types);
-                let result_types = self.wasm_types_to_val_types(&method.return_types);
-
-                // Validate the method signature
-                self.validate_function_signature(&param_types, &result_types)?;
-
-                // Add to type section
-                self.type_section.ty().function(param_types, result_types);
-                self.type_count += 1;
-            }
-        }
-        Ok(())
+        return_compiler_error!("Interface method type generation moved to optimizers - not yet re-integrated");
     }
 
-    /// Create WASM function table for interface dispatch
+    /// Create WASM function table for interface dispatch (moved to optimizers)
     fn create_interface_function_table(
         &mut self,
-        interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
+        _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
     ) -> Result<(), CompileError> {
-        let table_type = TableType {
-            element_type: RefType::FUNCREF,
-            minimum: interface_info.function_table.len() as u64,
-            maximum: Some(interface_info.function_table.len() as u64),
-            table64: false,
-            shared: false,
-        };
-
-        self.table_section.table(table_type);
-
-        // Initialize element section with function indices
-        let func_indices: Vec<u32> = interface_info.function_table.clone();
-        self.element_section.active(
-            Some(0),                  // Table index 0
-            &ConstExpr::i32_const(0), // Offset 0
-            Elements::Functions(Cow::Borrowed(&func_indices)),
-        );
-
-        Ok(())
+        return_compiler_error!("Interface function table creation moved to optimizers - not yet re-integrated");
     }
 
-    /// Generate vtable data structures in linear memory
+    /// Generate vtable data structures in linear memory (moved to optimizers)
     fn generate_vtable_data_structures(
         &mut self,
-        interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
+        _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
     ) -> Result<(), CompileError> {
-        let mut current_vtable_offset = 0u32;
-
-        for (_vtable_id, vtable) in &interface_info.vtables {
-            // Calculate vtable size (4 bytes per method function index)
-            let vtable_size = vtable.method_functions.len() * 4;
-
-            // Create vtable data as bytes
-            let mut vtable_bytes = Vec::new();
-            for &func_index in &vtable.method_functions {
-                // Store function indices as little-endian i32
-                vtable_bytes.extend_from_slice(&func_index.to_le_bytes());
-            }
-
-            // Add vtable to data section
-            self.data_section.active(
-                0, // Memory index 0
-                &ConstExpr::i32_const(current_vtable_offset as i32),
-                vtable_bytes.iter().copied(),
-            );
-
-            current_vtable_offset += vtable_size as u32;
-        }
-
-        Ok(())
+        return_compiler_error!("VTable data structure generation moved to optimizers - not yet re-integrated");
     }
 
-    /// Get interface method type index for call_indirect
+    /// Get interface method type index for call_indirect (moved to optimizers)
     pub fn get_interface_method_type_index(
         &self,
         interface_id: u32,
         method_id: u32,
-        interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
+        _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
     ) -> Result<u32, CompileError> {
-        // Find the interface definition
-        let interface_def = interface_info
-            .interfaces
-            .get(&interface_id)
-            .ok_or_else(|| {
-                CompileError::new_thread_panic(format!("Interface {} not found", interface_id))
-            })?;
-
-        // Find the method within the interface
-        let method = interface_def
-            .methods
-            .iter()
-            .find(|m| m.id == method_id)
-            .ok_or_else(|| {
-                CompileError::new_thread_panic(format!(
-                    "Method {} not found in interface {}",
-                    method_id, interface_id
-                ))
-            })?;
-
-        // Calculate type index based on method position
-        // This assumes interface method types are added sequentially after function types
-        let mut type_index = self.type_count;
-
-        // Find the position of this method among all interface methods
-        for (_iface_id, iface_def) in &interface_info.interfaces {
-            if iface_def.id == interface_id {
-                for iface_method in &iface_def.methods {
-                    if iface_method.id == method_id {
-                        return Ok(type_index);
-                    }
-                    type_index += 1;
-                }
-                break;
-            } else {
-                type_index += iface_def.methods.len() as u32;
-            }
-        }
-
         return_compiler_error!(
-            "Could not determine type index for interface {} method {}",
+            "Interface method type index lookup moved to optimizers - interface {} method {} not supported yet",
             interface_id,
             method_id
         );
     }
 
-    /// Calculate vtable offset for a given interface and implementing type
+    /// Calculate vtable offset for a given interface and implementing type (moved to optimizers)
     pub fn calculate_vtable_offset(
         &self,
         interface_id: u32,
         type_id: u32,
-        interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
+        _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
     ) -> Result<u32, CompileError> {
-        let mut offset = 0u32;
-
-        // Collect and sort vtables by type_id for deterministic ordering
-        let mut sorted_vtables: Vec<_> = interface_info.vtables.values().collect();
-        sorted_vtables.sort_by_key(|vtable| vtable.type_id);
-
-        // Find the vtable for this interface and type combination
-        for vtable in sorted_vtables {
-            if vtable.interface_id == interface_id && vtable.type_id == type_id {
-                return Ok(offset);
-            }
-            // Each vtable entry is 4 bytes (function index as i32)
-            offset += vtable.method_functions.len() as u32 * 4;
-        }
-
         return_compiler_error!(
-            "VTable not found for interface {} and type {}",
+            "VTable offset calculation moved to optimizers - interface {} type {} not supported yet",
             interface_id,
             type_id
         );
     }
 
-    /// Generate interface method index mapping for efficient dispatch
+    /// Generate interface method index mapping for efficient dispatch (moved to optimizers)
     pub fn create_interface_method_mapping(
         &self,
-        interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
-    ) -> InterfaceMethodMapping {
-        let mut mapping = InterfaceMethodMapping::new();
-
-        // Map each interface method to its function table index
-        for (_interface_id, interface_def) in &interface_info.interfaces {
-            for method in &interface_def.methods {
-                // Find all implementations of this method across vtables
-                for (_vtable_id, vtable) in &interface_info.vtables {
-                    if vtable.interface_id == interface_def.id {
-                        // Find the method index within the interface
-                        if let Some(method_index) =
-                            interface_def.methods.iter().position(|m| m.id == method.id)
-                        {
-                            if method_index < vtable.method_functions.len() {
-                                let func_index = vtable.method_functions[method_index];
-                                mapping.add_method_implementation(
-                                    interface_def.id,
-                                    method.id,
-                                    vtable.type_id,
-                                    func_index,
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        mapping
+        _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
+    ) -> () { // InterfaceMethodMapping moved to optimizers
+        return_compiler_error!("Interface method mapping moved to optimizers - not yet re-integrated");
     }
 
     /// Compile a MIR function with lifetime-optimized memory management (placeholder)
@@ -1149,8 +997,8 @@ impl WasmModule {
 
     // ===== STATEMENT LOWERING METHODS =====
 
-    /// Lower a MIR statement to WASM instructions
-    /// Each statement maps to ≤3 WASM instructions for optimal performance
+    /// Lower a MIR statement to WASM instructions (simplified for core functionality)
+    /// Focuses on basic Statement::Assign and Statement::Call with simple local.get/local.set operations
     pub fn lower_statement(
         &self,
         statement: &Statement,
@@ -1159,59 +1007,261 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         match statement {
             Statement::Assign { place, rvalue } => {
-                self.lower_assign_statement(place, rvalue, function, local_map)
+                // Simple assignment: evaluate rvalue and store to place
+                self.lower_basic_assign(place, rvalue, function, local_map)
             }
 
             Statement::Call {
                 func,
                 args,
                 destination,
-            } => self.lower_call_statement(func, args, destination, function, local_map),
-
-            Statement::Drop { place } => self.lower_drop_statement(place, function, local_map),
+            } => {
+                // Simple function call: load args, call, store result
+                self.lower_basic_call(func, args, destination, function, local_map)
+            }
 
             Statement::Nop => {
                 // No WASM instructions generated for Nop
                 Ok(())
             }
 
-            Statement::InterfaceCall {
-                interface_id,
-                method_id,
-                receiver,
-                args,
-                destination,
-            } => {
-                // This requires interface_info to be passed - for now we'll return an error
-                // In the full implementation, this would be called from a context that has interface_info
+            // Complex statements moved to optimizers - return clear errors
+            Statement::InterfaceCall { interface_id, method_id, .. } => {
                 return_compiler_error!(
-                    "InterfaceCall statement lowering requires interface_info context - use lower_interface_call method directly"
+                    "Interface dispatch (interface {} method {}) moved to optimizers - not yet re-integrated",
+                    interface_id, method_id
                 );
             }
 
-            Statement::Alloc { place, size, align } => {
-                self.lower_alloc(place, size, *align, function, local_map)
+            Statement::Alloc { .. } => {
+                return_compiler_error!("Memory allocation moved to optimizers - not yet re-integrated");
             }
 
-            Statement::Dealloc { place } => self.lower_dealloc(place, function, local_map),
+            Statement::Dealloc { .. } => {
+                return_compiler_error!("Memory deallocation moved to optimizers - not yet re-integrated");
+            }
 
-            Statement::Store {
-                place,
-                value,
-                alignment,
-                offset,
-            } => self.lower_store(place, value, *alignment, *offset, function, local_map),
+            Statement::Store { .. } => {
+                return_compiler_error!("Memory store operations moved to optimizers - not yet re-integrated");
+            }
 
-            Statement::MemoryOp {
-                op,
-                operand,
-                result,
-            } => self.lower_memory_op(op, operand.as_ref(), result.as_ref(), function, local_map),
+            Statement::MemoryOp { .. } => {
+                return_compiler_error!("Memory operations moved to optimizers - not yet re-integrated");
+            }
+
+            Statement::Drop { .. } => {
+                return_compiler_error!("Drop elaboration moved to optimizers - not yet re-integrated");
+            }
         }
     }
 
-    /// Lower dynamic allocation using a bump-pointer heap with bounds checking
+    /// Lower basic assignment: rvalue → place using simple local.get/local.set
+    fn lower_basic_assign(
+        &self,
+        place: &Place,
+        rvalue: &Rvalue,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        // Evaluate rvalue and leave result on stack
+        self.lower_basic_rvalue(rvalue, function, local_map)?;
+        
+        // Store result to place
+        self.store_to_place(place, function, local_map)?;
+        
+        Ok(())
+    }
+
+    /// Lower basic function call: args → call → result
+    fn lower_basic_call(
+        &self,
+        func: &Operand,
+        args: &[Operand],
+        destination: &Option<Place>,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        // Load arguments onto stack
+        for arg in args {
+            self.lower_basic_operand(arg, function, local_map)?;
+        }
+
+        // Generate call instruction
+        match func {
+            Operand::Constant(Constant::Function(func_index)) => {
+                function.instruction(&Instruction::Call(*func_index));
+            }
+            _ => {
+                return_compiler_error!("Only direct function calls supported in basic lowering");
+            }
+        }
+
+        // Store result if destination provided
+        if let Some(dest_place) = destination {
+            self.store_to_place(dest_place, function, local_map)?;
+        }
+
+        Ok(())
+    }
+
+    /// Lower basic rvalue to WASM instructions
+    fn lower_basic_rvalue(
+        &self,
+        rvalue: &Rvalue,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        match rvalue {
+            Rvalue::Use(operand) => {
+                self.lower_basic_operand(operand, function, local_map)
+            }
+            
+            Rvalue::BinaryOp(op, left, right) => {
+                // Load operands
+                self.lower_basic_operand(left, function, local_map)?;
+                self.lower_basic_operand(right, function, local_map)?;
+                
+                // Generate operation instruction
+                match op {
+                    BinOp::Add => {
+                        function.instruction(&Instruction::I32Add);
+                        Ok(())
+                    }
+                    BinOp::Sub => {
+                        function.instruction(&Instruction::I32Sub);
+                        Ok(())
+                    }
+                    BinOp::Mul => {
+                        function.instruction(&Instruction::I32Mul);
+                        Ok(())
+                    }
+                    BinOp::Div => {
+                        function.instruction(&Instruction::I32DivS);
+                        Ok(())
+                    }
+                    _ => return_compiler_error!("Binary operation {:?} not yet supported in basic lowering", op),
+                }
+            }
+            
+            Rvalue::UnaryOp(op, operand) => {
+                self.lower_basic_operand(operand, function, local_map)?;
+                
+                match op {
+                    UnOp::Not => {
+                        // Logical not: x == 0
+                        function.instruction(&Instruction::I32Eqz);
+                        Ok(())
+                    }
+                    UnOp::Neg => {
+                        // Arithmetic negation: 0 - x
+                        function.instruction(&Instruction::I32Const(0));
+                        function.instruction(&Instruction::I32Sub);
+                        Ok(())
+                    }
+                    _ => return_compiler_error!("Unary operation {:?} not yet supported in basic lowering", op),
+                }
+            }
+            
+            _ => return_compiler_error!("Rvalue {:?} not yet supported in basic lowering", rvalue),
+        }
+    }
+
+    /// Lower basic operand to WASM instructions
+    fn lower_basic_operand(
+        &self,
+        operand: &Operand,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => {
+                self.load_from_place(place, function, local_map)
+            }
+            
+            Operand::Constant(constant) => {
+                match constant {
+                    Constant::I32(value) => {
+                        function.instruction(&Instruction::I32Const(*value));
+                        Ok(())
+                    }
+                    Constant::I64(value) => {
+                        function.instruction(&Instruction::I64Const(*value));
+                        Ok(())
+                    }
+                    Constant::F32(value) => {
+                        function.instruction(&Instruction::F32Const(wasm_encoder::Ieee32::from_bits(value.to_bits())));
+                        Ok(())
+                    }
+                    Constant::F64(value) => {
+                        function.instruction(&Instruction::F64Const(wasm_encoder::Ieee64::from_bits(value.to_bits())));
+                        Ok(())
+                    }
+                    Constant::Bool(value) => {
+                        function.instruction(&Instruction::I32Const(if *value { 1 } else { 0 }));
+                        Ok(())
+                    }
+                    _ => return_compiler_error!("Constant {:?} not yet supported in basic lowering", constant),
+                }
+            }
+            
+            _ => return_compiler_error!("Operand {:?} not yet supported in basic lowering", operand),
+        }
+    }
+
+    /// Load value from place onto stack
+    fn load_from_place(
+        &self,
+        place: &Place,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        match place {
+            Place::Local { index, .. } => {
+                if let Some(&local_index) = local_map.get(place) {
+                    function.instruction(&Instruction::LocalGet(local_index));
+                    Ok(())
+                } else {
+                    return_compiler_error!("Local place not found in local_map: {:?}", place);
+                }
+            }
+            _ => return_compiler_error!("Place {:?} not yet supported in basic lowering", place),
+        }
+    }
+
+    /// Store value from stack to place
+    fn store_to_place(
+        &self,
+        place: &Place,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        match place {
+            Place::Local { index, .. } => {
+                if let Some(&local_index) = local_map.get(place) {
+                    function.instruction(&Instruction::LocalSet(local_index));
+                    Ok(())
+                } else {
+                    return_compiler_error!("Local place not found in local_map: {:?}", place);
+                }
+            }
+            _ => return_compiler_error!("Place {:?} not yet supported in basic lowering", place),
+        }
+    }
+
+    /// Lower dynamic allocation using a bump-pointer heap with bounds checking (moved to optimizers)
     fn lower_alloc(
+        &self,
+        place: &Place,
+        size: &Operand,
+        align: u32,
+        function: &mut Function,
+        local_map: &HashMap<Place, u32>,
+    ) -> Result<(), CompileError> {
+        return_compiler_error!("Memory allocation moved to optimizers - not yet re-integrated");
+    }
+
+    /// Lower dynamic allocation using a bump-pointer heap with bounds checking (moved to optimizers - placeholder)
+    fn _lower_alloc_complex(
         &self,
         place: &Place,
         size: &Operand,
@@ -5370,59 +5420,7 @@ impl TypeIndexMapping {
 }
 
 /// Interface method mapping for efficient dispatch
-/// Maps interface methods to their implementations across different types
-#[derive(Debug, Clone)]
-pub struct InterfaceMethodMapping {
-    /// Maps (interface_id, method_id, type_id) to function_index
-    method_implementations: HashMap<(u32, u32, u32), u32>,
-    /// Maps (interface_id, method_id) to list of implementing types
-    method_implementers: HashMap<(u32, u32), Vec<u32>>,
-}
-
-impl InterfaceMethodMapping {
-    /// Create a new empty interface method mapping
-    pub fn new() -> Self {
-        Self {
-            method_implementations: HashMap::new(),
-            method_implementers: HashMap::new(),
-        }
-    }
-
-    /// Add a method implementation for a specific type
-    pub fn add_method_implementation(
-        &mut self,
-        interface_id: u32,
-        method_id: u32,
-        type_id: u32,
-        function_index: u32,
-    ) {
-        self.method_implementations
-            .insert((interface_id, method_id, type_id), function_index);
-
-        // Track which types implement this method
-        self.method_implementers
-            .entry((interface_id, method_id))
-            .or_insert_with(Vec::new)
-            .push(type_id);
-    }
-
-    /// Get the function index for a method implementation
-    pub fn get_method_implementation(
-        &self,
-        interface_id: u32,
-        method_id: u32,
-        type_id: u32,
-    ) -> Option<u32> {
-        self.method_implementations
-            .get(&(interface_id, method_id, type_id))
-            .copied()
-    }
-
-    /// Get all types that implement a specific method
-    pub fn get_method_implementers(&self, interface_id: u32, method_id: u32) -> Option<&Vec<u32>> {
-        self.method_implementers.get(&(interface_id, method_id))
-    }
-}
+// InterfaceMethodMapping moved to src/compiler/optimizers/interface_dispatch.rs
 
 /// Block label management for proper WASM structured control flow
 /// Tracks nested control flow structures and their label depths

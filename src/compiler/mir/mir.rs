@@ -1,6 +1,6 @@
 use crate::compiler::{
     compiler_errors::CompileError,
-    mir::build_mir::{MIR, ast_to_mir_with_events, run_borrow_checking_on_function},
+    mir::build_mir::{MIR, ast_to_mir},
     parsers::build_ast::AstBlock,
 };
 
@@ -19,41 +19,14 @@ use crate::compiler::{
 /// 5. Conflict detection and error reporting
 /// 6. WASM constraint validation
 pub fn borrow_check_pipeline(ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
-    // Step 1: Lower AST to MIR with event generation
-    let mir = match ast_to_mir_with_events(ast) {
+    // Step 1: Lower AST to simplified MIR
+    let mir = match ast_to_mir(ast) {
         Ok(mir) => mir,
         Err(e) => return Err(vec![e]),
     };
 
-    // Step 2: Run borrow checking on each function
-    let mut all_errors = Vec::new();
-
-    for function in &mir.functions {
-        match run_borrow_checking_on_function(function) {
-            Ok(_) => {
-                // Borrow checking passed for this function
-            }
-            Err(errors) => {
-                all_errors.extend(errors);
-            }
-        }
-    }
-
-    // Step 3: If there are borrow checking errors, return them
-    if !all_errors.is_empty() {
-        return Err(all_errors);
-    }
-
-    // Step 4: Validate WASM constraints
-    if let Err(e) = mir.validate_wasm_constraints() {
-        let compile_error = CompileError {
-            msg: e,
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-        };
-        return Err(vec![compile_error]);
-    }
+    // Step 2: Borrow checking will be implemented in later tasks
+    // For now, just return the MIR without borrow checking
 
     Ok(mir)
 }

@@ -432,44 +432,79 @@ impl BorrowFactExtractor {
 
     /// Collect all loans from events in the function using place interning
     fn collect_loans_from_events(&mut self, function: &MirFunction) -> Result<(), String> {
-        let mut _loan_id_counter = 0u32;
+        let mut loan_id_counter = 0u32;
 
         // Copy the existing loans from the function (they should already use PlaceId)
-        self.loans = function.loans.clone();
+        self.loans = function.get_loans().to_vec();
         self.loan_count = self.loans.len();
 
-        // If no loans exist, try to collect from events (for compatibility)
+        // If no loans exist, generate them from borrow operations in the MIR
         if self.loans.is_empty() {
-            // Iterate through all program points and collect loans using legacy event generation
-            for program_point in function.get_program_points_in_order() {
-                if let Some(events) = function.generate_events(&program_point) {
-                    for &loan_id in &events.start_loans {
-                        // For now, we need to reconstruct loan information from the events
-                        // In a full implementation, this would come from the MIR construction phase
-
-                        // Create a placeholder loan
-                        let placeholder_place = Place::Local {
-                            index: 0,
-                            wasm_type: crate::compiler::mir::place::WasmType::I32,
-                        };
-
-                        let loan = Loan {
-                            id: loan_id,
-                            owner: placeholder_place,
-                            kind: BorrowKind::Shared, // Placeholder
-                            origin_stmt: program_point,
-                        };
-
-                        self.loans.push(loan);
-                        _loan_id_counter += 1;
-                    }
-                }
-            }
-
-            self.loan_count = self.loans.len();
+            self.generate_loans_from_mir(function, &mut loan_id_counter)?;
         }
 
         Ok(())
+    }
+
+    /// Generate loans from MIR statements that create borrows
+    fn generate_loans_from_mir(&mut self, function: &MirFunction, loan_id_counter: &mut u32) -> Result<(), String> {
+        // Scan all blocks and statements for borrow operations
+        for block in &function.blocks {
+            for (stmt_index, statement) in block.statements.iter().enumerate() {
+                // Create program point for this statement
+                let program_point = ProgramPoint::new(block.id * 1000 + stmt_index as u32);
+                
+                // Check if this statement creates a borrow
+                if let Some(loan) = self.extract_loan_from_statement(statement, program_point, loan_id_counter) {
+                    self.loans.push(loan);
+                }
+            }
+            
+            // Check terminator for borrows
+            let terminator_point = ProgramPoint::new(block.id * 1000 + 999);
+            if let Some(loan) = self.extract_loan_from_terminator(&block.terminator, terminator_point, loan_id_counter) {
+                self.loans.push(loan);
+            }
+        }
+        
+        self.loan_count = self.loans.len();
+        Ok(())
+    }
+
+    /// Extract loan from a statement if it creates a borrow
+    fn extract_loan_from_statement(
+        &self, 
+        statement: &crate::compiler::mir::mir_nodes::Statement, 
+        program_point: ProgramPoint, 
+        loan_id_counter: &mut u32
+    ) -> Option<Loan> {
+        use crate::compiler::mir::mir_nodes::{Statement, Rvalue};
+        
+        match statement {
+            Statement::Assign { rvalue: Rvalue::Ref { place, borrow_kind }, .. } => {
+                let loan_id = LoanId::new(*loan_id_counter);
+                *loan_id_counter += 1;
+                
+                Some(Loan {
+                    id: loan_id,
+                    owner: place.clone(),
+                    kind: borrow_kind.clone(),
+                    origin_stmt: program_point,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// Extract loan from a terminator if it creates a borrow
+    fn extract_loan_from_terminator(
+        &self,
+        _terminator: &crate::compiler::mir::mir_nodes::Terminator,
+        _program_point: ProgramPoint,
+        _loan_id_counter: &mut u32
+    ) -> Option<Loan> {
+        // Terminators don't typically create borrows in the simplified MIR
+        None
     }
 
     /// Build index from places to loans that borrow them

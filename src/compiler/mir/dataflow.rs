@@ -100,21 +100,30 @@ impl LoanLivenessDataflow {
         Ok(())
     }
 
-    /// Copy CFG from the shared function CFG (eliminates redundant construction)
+    /// Build simplified CFG from function structure
     fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
-        let cfg = function.get_cfg_immutable()?;
-
         // Clear existing CFG data
         self.successors.clear();
         self.predecessors.clear();
 
-        // Copy CFG structure using optimized Vec-indexed access
-        for point in cfg.iter_program_points() {
-            let successors = cfg.get_successors(&point).to_vec();
-            let predecessors = cfg.get_predecessors(&point).to_vec();
-
-            self.successors.insert(point, successors);
-            self.predecessors.insert(point, predecessors);
+        // Build simple linear CFG for now (simplified MIR doesn't have complex CFG yet)
+        let program_points = function.get_program_points_in_order();
+        
+        for (i, &current_point) in program_points.iter().enumerate() {
+            let mut successors = Vec::new();
+            let mut predecessors = Vec::new();
+            
+            // Simple linear flow for now
+            if i > 0 {
+                predecessors.push(program_points[i - 1]);
+            }
+            
+            if i < program_points.len() - 1 {
+                successors.push(program_points[i + 1]);
+            }
+            
+            self.successors.insert(current_point, successors);
+            self.predecessors.insert(current_point, predecessors);
         }
 
         Ok(())
@@ -285,7 +294,7 @@ impl LoanLivenessDataflow {
     }
 
     /// Get all live loan indices at a program point (optimized to avoid allocation)
-    pub fn for_each_live_loan_at<F>(&self, point: &ProgramPoint, mut f: F)
+    pub fn for_each_live_loan_at<F>(&self, point: &ProgramPoint, f: F)
     where
         F: FnMut(usize),
     {
@@ -295,7 +304,7 @@ impl LoanLivenessDataflow {
     }
 
     /// Get all live loan indices after a program point (optimized to avoid allocation)
-    pub fn for_each_live_loan_after<F>(&self, point: &ProgramPoint, mut f: F)
+    pub fn for_each_live_loan_after<F>(&self, point: &ProgramPoint, f: F)
     where
         F: FnMut(usize),
     {

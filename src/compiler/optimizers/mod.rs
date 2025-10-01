@@ -16,6 +16,8 @@
 /// should work without these optimizations.
 
 pub mod constant_folding;
+pub mod interface_dispatch;
+pub mod lifetime_memory_manager;
 pub mod optimized_dataflow;
 pub mod place_interner;
 pub mod streamlined_diagnostics;

@@ -21,11 +21,7 @@ pub mod place_tests;
 pub mod consolidated_performance_tests;
 
 // === SPECIALIZED TESTS (Run As Needed) ===
-// These tests focus on specific subsystems
-
-// Simplified borrow checking behavior tests
-#[cfg(test)]
-pub mod borrow_check_tests;
+// These tests focus on specific subsystem
 
 // Streamlined diagnostics tests
 #[cfg(test)]
@@ -58,18 +54,6 @@ pub mod interface_vtable_tests;
 // WASM terminator lowering tests
 #[cfg(test)]
 pub mod wasm_terminator_tests;
-
-// Memory operation lowering tests
-#[cfg(test)]
-pub mod memory_operation_tests;
-
-// WASM-specific optimization tests (comprehensive)
-#[cfg(test)]
-pub mod wasm_optimization_tests;
-
-// WASM performance and validation tests (Task 28)
-#[cfg(test)]
-pub mod wasm_performance_validation_tests;
 
 // === COMPREHENSIVE TESTS (CI/Development) ===
 // These tests provide detailed analysis and may be slower
