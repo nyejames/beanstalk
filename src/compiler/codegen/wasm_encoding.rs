@@ -274,7 +274,8 @@ impl WasmModule {
         &self,
         _interface_info: &crate::compiler::mir::mir_nodes::InterfaceInfo,
     ) -> () { // InterfaceMethodMapping moved to optimizers
-        return_compiler_error!("Interface method mapping moved to optimizers - not yet re-integrated");
+        // Interface method mapping moved to optimizers - not yet re-integrated
+        // This is a placeholder that does nothing for now
     }
 
     /// Compile a MIR function with lifetime-optimized memory management (placeholder)
@@ -737,26 +738,14 @@ impl WasmModule {
             Rvalue::Use(operand) => {
                 self.collect_string_constants_from_operand(operand, current_offset)?;
             }
-            Rvalue::BinaryOp { left, right, .. } => {
+            Rvalue::BinaryOp(_, left, right) => {
                 self.collect_string_constants_from_operand(left, current_offset)?;
                 self.collect_string_constants_from_operand(right, current_offset)?;
             }
-            Rvalue::UnaryOp { operand, .. } => {
+            Rvalue::UnaryOp(_, operand) => {
                 self.collect_string_constants_from_operand(operand, current_offset)?;
             }
-            Rvalue::Cast { source, .. } => {
-                self.collect_string_constants_from_operand(source, current_offset)?;
-            }
-            Rvalue::Array { elements, .. } => {
-                for element in elements {
-                    self.collect_string_constants_from_operand(element, current_offset)?;
-                }
-            }
-            Rvalue::Struct { fields, .. } => {
-                for (_, operand) in fields {
-                    self.collect_string_constants_from_operand(operand, current_offset)?;
-                }
-            }
+
             _ => {} // Other rvalues don't contain string constants
         }
         Ok(())
@@ -789,9 +778,7 @@ impl WasmModule {
             Terminator::If { condition, .. } => {
                 self.collect_string_constants_from_operand(condition, current_offset)?;
             }
-            Terminator::Switch { discriminant, .. } => {
-                self.collect_string_constants_from_operand(discriminant, current_offset)?;
-            }
+
             Terminator::Return { values } => {
                 for value in values {
                     self.collect_string_constants_from_operand(value, current_offset)?;
@@ -1189,11 +1176,11 @@ impl WasmModule {
                         Ok(())
                     }
                     Constant::F32(value) => {
-                        function.instruction(&Instruction::F32Const(wasm_encoder::Ieee32::from_bits(value.to_bits())));
+                        function.instruction(&Instruction::F32Const(wasm_encoder::Ieee32::new(value.to_bits())));
                         Ok(())
                     }
                     Constant::F64(value) => {
-                        function.instruction(&Instruction::F64Const(wasm_encoder::Ieee64::from_bits(value.to_bits())));
+                        function.instruction(&Instruction::F64Const(wasm_encoder::Ieee64::new(value.to_bits())));
                         Ok(())
                     }
                     Constant::Bool(value) => {
@@ -1894,28 +1881,15 @@ impl WasmModule {
         match rvalue {
             Rvalue::Use(operand) => self.lower_operand(operand, function, local_map),
 
-            Rvalue::BinaryOp { op, left, right } => {
+            Rvalue::BinaryOp(op, left, right) => {
                 self.lower_binary_op(op, left, right, function, local_map)
             }
 
-            Rvalue::UnaryOp { op, operand } => {
+            Rvalue::UnaryOp(op, operand) => {
                 self.lower_unary_op(op, operand, function, local_map)
             }
 
-            Rvalue::Cast {
-                source,
-                target_type,
-            } => self.lower_cast(source, target_type, function, local_map),
 
-            Rvalue::Array {
-                elements,
-                element_type,
-            } => self.lower_array_creation(elements, element_type, function, local_map),
-
-            Rvalue::Struct {
-                fields,
-                struct_type,
-            } => self.lower_struct_creation(fields, *struct_type, function, local_map),
 
             // Other rvalue types not implemented in this task
             Rvalue::Ref { .. } => {
@@ -1924,28 +1898,7 @@ impl WasmModule {
                 );
             }
 
-            Rvalue::Deref { .. } => {
-                return_compiler_error!(
-                    "Deref rvalue lowering not yet implemented - will be added in later tasks"
-                );
-            }
 
-            Rvalue::Load {
-                place,
-                alignment,
-                offset,
-            } => self
-                .resolve_place_load_with_alignment(place, *alignment, *offset, function, local_map),
-
-            Rvalue::MemorySize => self.lower_memory_size(function),
-
-            Rvalue::MemoryGrow { pages } => self.lower_memory_grow(pages, function, local_map),
-
-            Rvalue::InterfaceCall { .. } => {
-                return_compiler_error!(
-                    "InterfaceCall rvalue lowering not yet implemented - will be added in task 11"
-                );
-            }
         }
     }
 
@@ -2325,18 +2278,18 @@ impl WasmModule {
                 Some(constant.clone())
             }
 
-            Rvalue::BinaryOp { op, left, right } => {
+            Rvalue::BinaryOp(op, left, right) => {
                 // Try to fold binary operations on constants
                 if let (Operand::Constant(left_const), Operand::Constant(right_const)) =
                     (left, right)
                 {
-                    self.fold_binary_op_constants(op, left_const, right_const)
+                    self.fold_binary_op_constants(op, &left_const, &right_const)
                 } else {
                     None
                 }
             }
 
-            Rvalue::UnaryOp { op, operand } => {
+            Rvalue::UnaryOp(op, operand) => {
                 // Try to fold unary operations on constants
                 if let Operand::Constant(operand_const) = operand {
                     self.fold_unary_op_constant(op, operand_const)

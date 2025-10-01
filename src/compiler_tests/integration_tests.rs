@@ -1,187 +1,228 @@
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use colour::{e_red_ln, e_red_ln_bold, green_ln_bold, print_ln_bold};
-use wasmer::{Instance, Module, Store, Value, imports};
+//! End-to-end pipeline integration tests
+//! 
+//! This module tests the complete compilation pipeline components.
 
-use crate::settings::BEANSTALK_FILE_EXTENSION;
-// Simplified integration tests - full pipeline testing will be added later
+use crate::compiler::mir::mir_nodes::MIR;
+use crate::compiler::codegen::build_wasm::new_wasm_module;
 
-#[derive(Clone)]
-struct TestCase {
-    name: String,
-    number_of_tests: usize,
-    expected_results: Vec<i32>,
-}
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
 
-impl TestCase {
-    pub fn new(name: &str, number_of_tests: usize, expected_results: Vec<i32>) -> TestCase {
-        TestCase {
-            name: name.to_string(),
-            number_of_tests,
-            expected_results,
-        }
-    }
-}
-
-const NUMBER_OF_TESTS: usize = 8;
-
-pub fn run_all_test_cases() {
-    let mut tests_failed: Vec<String> = Vec::new();
-    let mut tests_passed: Vec<String> = Vec::with_capacity(NUMBER_OF_TESTS);
-
-    let read_dir = match fs::read_dir("tests/cases") {
-        Ok(e) => e,
-        Err(e) => panic!("Could not find or read test/cases dir: {e}"),
-    };
-
-    print_ln_bold!("\n----------------------");
-    print_ln_bold!("Running Compiler tests");
-    print_ln_bold!("----------------------\n");
-
-    let mut tests_ran = 0;
-    for file in read_dir {
-        let path = match file {
-            Ok(e) => e.path(),
-            Err(e) => {
-                tests_failed.push(format!("Could not read file: {e}"));
-                continue
-            },
-        };
+    /// Test basic MIR to WASM pipeline
+    #[test]
+    fn test_basic_mir_to_wasm_pipeline() {
+        let mir = MIR::new();
         
-        if path.extension().and_then(|s| s.to_str()) == Some(BEANSTALK_FILE_EXTENSION) {
-            let source = match fs::read_to_string(&path) {
-                Ok(s) => s,
-                Err(e) => {
-                    tests_failed.push(format!("Could not read source file {}: {}", path.display(), e));
-                    continue;
-                }
-            };
+        // Generate WASM from empty MIR
+        let wasm_result = new_wasm_module(mir);
+        assert!(wasm_result.is_ok(), "Empty MIR should generate WASM successfully");
+        
+        let wasm_bytes = wasm_result.unwrap();
+        assert!(!wasm_bytes.is_empty(), "Generated WASM should not be empty");
+    }
 
-            tests_ran += 1;
+    /// Test complete pipeline with simple variable declaration
+    #[test]
+    fn test_simple_variable_pipeline() {
+        let source = "let x = 42;";
+        
+        // Parse to AST
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "Simple variable declaration should parse: {:?}", ast_result.err());
+        
+        let ast = ast_result.unwrap();
+        
+        // Transform to MIR
+        let mir_result = build_mir_from_ast(ast);
+        assert!(mir_result.is_ok(), "Variable declaration should transform to MIR: {:?}", mir_result.err());
+        
+        let mir = mir_result.unwrap();
+        
+        // Generate WASM
+        let wasm_result = new_wasm_module(mir);
+        assert!(wasm_result.is_ok(), "Variable declaration MIR should generate WASM: {:?}", wasm_result.err());
+    }
 
-            // TODO: Run full MIR compilation pipeline once ready
-            match compile_beanstalk_to_wasm(&source, &path) {
-                Ok(_wasm_bytes) => {
-                    // For now, just mark as passed since we're returning a placeholder
-                    tests_passed.push(format!("Placeholder test for {}", path.display()));
-                },
-                Err(e) => {
-                    tests_failed.push(format!("Compilation failed for {}: {}", path.display(), e));
+    /// Test complete pipeline with simple function
+    #[test]
+    fn test_simple_function_pipeline() {
+        let source = r#"
+            function test_func() -> Int:
+                return 42
+            ;
+        "#;
+        
+        // Parse to AST
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "Simple function should parse: {:?}", ast_result.err());
+        
+        let ast = ast_result.unwrap();
+        
+        // Transform to MIR
+        let mir_result = build_mir_from_ast(ast);
+        assert!(mir_result.is_ok(), "Function should transform to MIR: {:?}", mir_result.err());
+        
+        let mir = mir_result.unwrap();
+        
+        // Generate WASM
+        let wasm_result = new_wasm_module(mir);
+        assert!(wasm_result.is_ok(), "Function MIR should generate WASM: {:?}", wasm_result.err());
+    }
+
+    /// Test complete pipeline with arithmetic operations
+    #[test]
+    fn test_arithmetic_pipeline() {
+        let source = r#"
+            let a = 10;
+            let b = 20;
+            let result = a + b;
+        "#;
+        
+        // Parse to AST
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "Arithmetic operations should parse: {:?}", ast_result.err());
+        
+        let ast = ast_result.unwrap();
+        
+        // Transform to MIR
+        let mir_result = build_mir_from_ast(ast);
+        assert!(mir_result.is_ok(), "Arithmetic should transform to MIR: {:?}", mir_result.err());
+        
+        let mir = mir_result.unwrap();
+        
+        // Generate WASM
+        let wasm_result = new_wasm_module(mir);
+        assert!(wasm_result.is_ok(), "Arithmetic MIR should generate WASM: {:?}", wasm_result.err());
+    }
+
+    /// Test complete pipeline with control flow
+    #[test]
+    fn test_control_flow_pipeline() {
+        let source = r#"
+            let x = 10;
+            if x > 5:
+                let y = 20
+            else
+                let y = 30
+            ;
+        "#;
+        
+        // Parse to AST
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "Control flow should parse: {:?}", ast_result.err());
+        
+        let ast = ast_result.unwrap();
+        
+        // Transform to MIR
+        let mir_result = build_mir_from_ast(ast);
+        assert!(mir_result.is_ok(), "Control flow should transform to MIR: {:?}", mir_result.err());
+        
+        let mir = mir_result.unwrap();
+        
+        // Generate WASM
+        let wasm_result = new_wasm_module(mir);
+        assert!(wasm_result.is_ok(), "Control flow MIR should generate WASM: {:?}", wasm_result.err());
+    }
+
+    /// Test pipeline error propagation
+    #[test]
+    fn test_error_propagation() {
+        let source = "invalid syntax here !!!";
+        
+        // Parse to AST - should fail
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_err(), "Invalid syntax should fail to parse");
+        
+        // Verify error type
+        if let Err(error) = ast_result {
+            match error.error_type {
+                crate::compiler::compiler_errors::ErrorType::Syntax => {
+                    // Expected syntax error
                 }
+                _ => panic!("Expected syntax error, got: {:?}", error.error_type),
             }
         }
-    };
-
-    if tests_failed.is_empty() {
-        green_ln_bold!("(■_■¬ ) All {tests_ran} tests passed!");
     }
 
-    if !tests_failed.is_empty() {
-        e_red_ln_bold!("{} Tests failed. ({} / {tests_ran} tests passed).\n\n", tests_failed.len(), tests_passed.len());
-        for (i, test) in tests_failed.iter().enumerate() {
-            e_red_ln!("{i}) {test}");
-        }
-    }
-}
-
-/// Compile Beanstalk source through the full MIR pipeline to WASM
-/// TODO: Implement full compilation pipeline once all components are ready
-fn compile_beanstalk_to_wasm(_source: &str, _path: &Path) -> Result<Vec<u8>, String> {
-    // For now, return a minimal valid WASM module
-    Ok(vec![
-        0x00, 0x61, 0x73, 0x6D, // WASM magic number
-        0x01, 0x00, 0x00, 0x00, // WASM version
-    ])
-}
-
-struct TestResult {
-    passes: Vec<String>,
-    fails: Vec<String>,
-}
-fn run_test(wasm_bytes: &[u8], tests: TestCase) -> TestResult {
-    let mut results = TestResult {
-        passes: Vec::with_capacity(tests.number_of_tests),
-        fails: Vec::new(),
-    };
-
-    // 1) create a Store
-    let mut store = Store::default();
-
-    // 2) compile the module
-    let module = match Module::new(&store, wasm_bytes) {
-        Err(e) => {
-            results.fails.push(format!("Wasm module failed to compile: {e}"));
-            return results
-        },
-        Ok(m) => m,
-    };
-
-    // 3) instantiate with no imports (or whatever you need)
-    let import_object = imports! {};
-
-    let instance =
-        match Instance::new(&mut store, &module, &import_object) {
-            Err(e) => {
-                results.fails.push(format!("Wasm module failed to compile: {e}"));
-                return results
-            }
-            Ok(i) => i,
-        };
-
-    // 4) call all expected test functions and collect the results
-    for test_number in 0..tests.number_of_tests {
-        let func = match instance.exports.get_function(&format!("test{}", test_number + 1)) {
-            Ok(f) => f,
-            Err(e) => {
-                results.fails.push(format!("Couldn't find test function: {e}"));
-                continue
-            },
-        };
-
-        let function_returns = match func.call(&mut store, &[]) {
-            Ok(r) => r,
-            Err(e) => {
-                results.fails.push(format!("Test function failed: {e}"));
-                continue
-            },
-        };
-
-        match function_returns[0] {
-            Value::I32(n) => {
-                let valid_result = tests.expected_results[test_number];
-                if n == tests.expected_results[test_number] {
-                    results.passes.push(format!("{}: Test {test_number} passed", tests.name));
-                } else {
-                    results.fails.push(format!("{}: Test {test_number} Failed. Returned: {n} instead of {valid_result}", tests.name))
-                }
-            },
-            _ => results.fails.push(format!("Test function {} inside {} did not return an i32", test_number + 1, tests.name)),
-        };
+    /// Test WASM validation in pipeline
+    #[test]
+    fn test_wasm_validation_in_pipeline() {
+        let source = "let x = 42;";
+        
+        // Complete pipeline
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "Source should parse");
+        
+        let mir_result = build_mir_from_ast(ast_result.unwrap());
+        assert!(mir_result.is_ok(), "AST should transform to MIR");
+        
+        let wasm_result = new_wasm_module(mir_result.unwrap());
+        assert!(wasm_result.is_ok(), "MIR should generate WASM");
+        
+        // Validate generated WASM
+        let wasm_bytes = wasm_result.unwrap();
+        let validation_result = wasmparser::validate(&wasm_bytes);
+        assert!(validation_result.is_ok(), "Generated WASM should be valid: {:?}", validation_result.err());
     }
 
-    results
-}
+    /// Test pipeline with memory operations
+    #[test]
+    fn test_memory_operations_pipeline() {
+        let source = r#"
+            let data = "Hello, World!";
+        "#;
+        
+        // Parse to AST
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "String literal should parse: {:?}", ast_result.err());
+        
+        let ast = ast_result.unwrap();
+        
+        // Transform to MIR
+        let mir_result = build_mir_from_ast(ast);
+        assert!(mir_result.is_ok(), "String literal should transform to MIR: {:?}", mir_result.err());
+        
+        let mir = mir_result.unwrap();
+        
+        // Verify memory configuration
+        assert!(mir.type_info.memory_info.initial_pages > 0, "String literal should require memory");
+        
+        // Generate WASM
+        let wasm_result = new_wasm_module(mir);
+        assert!(wasm_result.is_ok(), "String literal MIR should generate WASM: {:?}", wasm_result.err());
+    }
 
-
-fn get_expected_test_result(filename: &Path) -> Result<TestCase, String> {
-    let all_tests: HashMap<&str, TestCase> = HashMap::from(
-        [
-            ("basic_math", TestCase::new("Basic Maths", 6, vec![7, 6, 5, 4, 3, 2])),
-            ("if_statements", TestCase::new("Basic If Statements", 1, vec![1])),
-        ]
-    );
-
-    match filename.file_stem() {
-        Some(stem) => {
-            let stem = stem.to_str().unwrap();
-            match all_tests.get(stem) {
-                Some(n) => Ok(n.to_owned()),
-                None => Err(format!("Couldn't find an expected output for test: {stem}")),
-            }
-        }
-        None => Err(String::from("No file stem found for this test")),
+    /// Test pipeline performance with reasonable compilation time
+    #[test]
+    fn test_compilation_performance() {
+        let source = r#"
+            function fibonacci(n Int) -> Int:
+                if n <= 1:
+                    return n
+                else
+                    return fibonacci(n - 1) + fibonacci(n - 2)
+                ;
+            ;
+            
+            let result = fibonacci(10);
+        "#;
+        
+        let start_time = std::time::Instant::now();
+        
+        // Complete pipeline
+        let ast_result = build_ast_from_source(source, "test.bst");
+        assert!(ast_result.is_ok(), "Recursive function should parse");
+        
+        let mir_result = build_mir_from_ast(ast_result.unwrap());
+        assert!(mir_result.is_ok(), "Recursive function should transform to MIR");
+        
+        let wasm_result = new_wasm_module(mir_result.unwrap());
+        assert!(wasm_result.is_ok(), "Recursive function should generate WASM");
+        
+        let compilation_time = start_time.elapsed();
+        
+        // Compilation should complete in reasonable time (less than 5 seconds as per requirements)
+        assert!(compilation_time.as_secs() < 5, "Compilation should complete in under 5 seconds, took: {:?}", compilation_time);
     }
 }
-
-

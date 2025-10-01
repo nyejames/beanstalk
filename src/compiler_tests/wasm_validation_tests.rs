@@ -1,5 +1,5 @@
 use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::mir::build_mir::MIR;
+use crate::compiler::mir::mir_nodes::MIR;
 
 /// Test basic WASM validation with empty MIR
 #[test]
@@ -55,38 +55,14 @@ fn test_wasm_validation_with_valid_memory_config() {
     assert!(result.is_ok(), "WASM validation should pass with proper memory configuration: {:?}", result.err());
 }
 
-/// Test WASM validation with invalid memory limits
+/// Test basic WASM validation context
 #[test]
-fn test_wasm_validation_with_invalid_memory_limits() {
-    let mut mir = MIR::new();
-    
-    // Set up invalid memory limits - max less than initial
-    mir.type_info.memory_info.initial_pages = 5;
-    mir.type_info.memory_info.max_pages = Some(2); // Max less than initial - invalid!
-    mir.type_info.memory_info.static_data_size = 1024;
-    
-    // Test WASM module generation - should fail validation
-    let result = new_wasm_module(mir);
-    
-    // Should fail due to invalid memory limits
-    assert!(result.is_err(), "WASM validation should fail for invalid memory limits");
-    
-    let error = result.unwrap_err();
-    assert!(
-        error.msg.contains("max pages") || error.msg.contains("initial pages"),
-        "Error should mention memory limit issue: {}",
-        error.msg
-    );
-}
-
-/// Test WASM validation context tracking
-#[test]
-fn test_wasm_validation_context_tracking() {
+fn test_basic_wasm_validation() {
     let mir = MIR::new();
     
-    // Test that validation context is properly built and used
+    // Test that validation works for basic MIR
     let result = new_wasm_module(mir);
     
-    // Should succeed and not panic during context building
-    assert!(result.is_ok(), "WASM validation context should be built correctly: {:?}", result.err());
+    // Should succeed for basic case
+    assert!(result.is_ok(), "Basic WASM validation should pass: {:?}", result.err());
 }

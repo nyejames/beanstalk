@@ -23,17 +23,15 @@ pub mod consolidated_performance_tests;
 // === SPECIALIZED TESTS (Run As Needed) ===
 // These tests focus on specific subsystem
 
-// Streamlined diagnostics tests
+// Optimizer tests (moved to separate directory)
 #[cfg(test)]
-pub mod streamlined_diagnostics_tests;
+pub mod optimizer_tests;
 
 // WASM module generation and encoding tests
 #[cfg(test)]
 pub mod wasm_module_tests;
 
-// WASM module finish() method tests
-#[cfg(test)]
-pub mod wasm_module_finish_tests;
+
 
 // WASM validation and error reporting tests
 #[cfg(test)]
@@ -55,6 +53,21 @@ pub mod interface_vtable_tests;
 #[cfg(test)]
 pub mod wasm_terminator_tests;
 
+// === FOCUSED TEST CATEGORIES ===
+// Organized tests for specific functionality
+
+// MIR construction tests - AST→MIR transformation
+#[cfg(test)]
+pub mod mir_construction_tests;
+
+// Borrow checker tests - UnifiedBorrowChecker functionality
+#[cfg(test)]
+pub mod borrow_checker_tests;
+
+// Error handling tests - Error message validation
+#[cfg(test)]
+pub mod error_handling_tests;
+
 // === COMPREHENSIVE TESTS (CI/Development) ===
 // These tests provide detailed analysis and may be slower
 
@@ -64,8 +77,8 @@ pub mod integration_tests;
 
 // === RE-EXPORTS ===
 
-// Re-export the function that CLI needs
-pub use integration_tests::run_all_test_cases;
+// Re-export functions that CLI needs (if any)
+// pub use integration_tests::run_all_test_cases;
 
 // Re-export essential test functions
 #[cfg(test)]

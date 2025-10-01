@@ -219,49 +219,16 @@ impl LivenessAnalysis {
             Rvalue::Use(operand) => {
                 self.extract_operand_uses(operand, uses);
             }
-            Rvalue::BinaryOp { left, right, .. } => {
+            Rvalue::BinaryOp(_, left, right) => {
                 self.extract_operand_uses(left, uses);
                 self.extract_operand_uses(right, uses);
             }
-            Rvalue::UnaryOp { operand, .. } => {
+            Rvalue::UnaryOp(_, operand) => {
                 self.extract_operand_uses(operand, uses);
-            }
-            Rvalue::Cast { source, .. } => {
-                self.extract_operand_uses(source, uses);
             }
             Rvalue::Ref { place, .. } => {
                 // Borrowing uses the place
                 uses.insert(place.clone());
-            }
-            Rvalue::Deref { place } => {
-                // Dereferencing uses the place
-                uses.insert(place.clone());
-            }
-            Rvalue::Array { elements, .. } => {
-                for element in elements {
-                    self.extract_operand_uses(element, uses);
-                }
-            }
-            Rvalue::Struct { fields, .. } => {
-                for (_, operand) in fields {
-                    self.extract_operand_uses(operand, uses);
-                }
-            }
-            Rvalue::Load { place, .. } => {
-                // Loading uses the place
-                uses.insert(place.clone());
-            }
-            Rvalue::InterfaceCall { receiver, args, .. } => {
-                self.extract_operand_uses(receiver, uses);
-                for arg in args {
-                    self.extract_operand_uses(arg, uses);
-                }
-            }
-            Rvalue::MemoryGrow { pages } => {
-                self.extract_operand_uses(pages, uses);
-            }
-            Rvalue::MemorySize => {
-                // No uses
             }
         }
     }
@@ -288,9 +255,7 @@ impl LivenessAnalysis {
             crate::compiler::mir::mir_nodes::Terminator::If { condition, .. } => {
                 self.extract_operand_uses(condition, uses);
             }
-            crate::compiler::mir::mir_nodes::Terminator::Switch { discriminant, .. } => {
-                self.extract_operand_uses(discriminant, uses);
-            }
+
             crate::compiler::mir::mir_nodes::Terminator::Return { values } => {
                 for value in values {
                     self.extract_operand_uses(value, uses);
@@ -456,11 +421,11 @@ impl LivenessAnalysis {
             Rvalue::Use(operand) => {
                 self.refine_operand(operand, live_out);
             }
-            Rvalue::BinaryOp { left, right, .. } => {
+            Rvalue::BinaryOp(_, left, right) => {
                 self.refine_operand(left, live_out);
                 self.refine_operand(right, live_out);
             }
-            Rvalue::UnaryOp { operand, .. } => {
+            Rvalue::UnaryOp(_, operand) => {
                 self.refine_operand(operand, live_out);
             }
             Rvalue::Cast { source, .. } => {
@@ -501,9 +466,7 @@ impl LivenessAnalysis {
             crate::compiler::mir::mir_nodes::Terminator::If { condition, .. } => {
                 self.refine_operand(condition, live_out);
             }
-            crate::compiler::mir::mir_nodes::Terminator::Switch { discriminant, .. } => {
-                self.refine_operand(discriminant, live_out);
-            }
+
             crate::compiler::mir::mir_nodes::Terminator::Return { values } => {
                 for value in values {
                     self.refine_operand(value, live_out);
