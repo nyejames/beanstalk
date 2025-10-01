@@ -12,7 +12,7 @@ mod tests {
     /// Test lowering of Terminator::Goto
     #[test]
     fn test_lower_goto_terminator() {
-        let wasm_module = WasmModule::new();
+        let mut wasm_module = WasmModule::new();
         let mut function = Function::new(vec![]);
         let local_map = HashMap::new();
         
@@ -25,7 +25,7 @@ mod tests {
     /// Test lowering of Terminator::If
     #[test]
     fn test_lower_if_terminator() {
-        let wasm_module = WasmModule::new();
+        let mut wasm_module = WasmModule::new();
         let mut function = Function::new(vec![]);
         let local_map = HashMap::new();
         
@@ -44,7 +44,7 @@ mod tests {
     /// Test lowering of Terminator::Return
     #[test]
     fn test_lower_return_terminator() {
-        let wasm_module = WasmModule::new();
+        let mut wasm_module = WasmModule::new();
         let mut function = Function::new(vec![]);
         let local_map = HashMap::new();
         
@@ -59,7 +59,7 @@ mod tests {
     /// Test lowering of Terminator::Unreachable
     #[test]
     fn test_lower_unreachable_terminator() {
-        let wasm_module = WasmModule::new();
+        let mut wasm_module = WasmModule::new();
         let mut function = Function::new(vec![]);
         let local_map = HashMap::new();
         

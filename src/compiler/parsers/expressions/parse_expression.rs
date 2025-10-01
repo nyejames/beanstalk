@@ -100,9 +100,6 @@ pub fn create_expression(
             TokenKind::CloseParenthesis => {
                 if consume_closing_parenthesis {
                     token_stream.advance();
-
-                    // This is for the case this parenthesis is consumed
-                    token_stream.skip_newlines();
                 }
 
                 if expression.is_empty() {
@@ -184,8 +181,6 @@ pub fn create_expression(
                         token
                     )
                 }
-
-                token_stream.go_back();
 
                 break;
             }

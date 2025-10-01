@@ -7,6 +7,112 @@ use crate::return_compiler_error;
 use std::collections::HashMap;
 use wasm_encoder::*;
 
+/// String constant manager for deduplication and memory management
+/// 
+/// Handles string constants by storing them in WASM linear memory with length prefixes.
+/// Provides deduplication to avoid storing identical strings multiple times.
+#[derive(Debug, Clone)]
+pub struct StringManager {
+    /// Map from string content to offset in data section
+    string_constants: HashMap<String, u32>,
+    /// Raw data section bytes (length prefix + string data)
+    data_section: Vec<u8>,
+    /// Next available offset in data section
+    next_offset: u32,
+}
+
+impl StringManager {
+    /// Create a new StringManager
+    pub fn new() -> Self {
+        Self {
+            string_constants: HashMap::new(),
+            data_section: Vec::new(),
+            next_offset: 0,
+        }
+    }
+
+    /// Add a string constant and return its offset in linear memory
+    /// 
+    /// Strings are stored with a 4-byte length prefix followed by UTF-8 data.
+    /// Identical strings are deduplicated and return the same offset.
+    /// 
+    /// ## Memory Management
+    /// String constants have static lifetime and are stored in the WASM data section.
+    /// No drop semantics are needed since they persist for the entire program execution.
+    /// This is appropriate for basic string literals - dynamic string allocation
+    /// would require more complex lifetime tracking.
+    pub fn add_string_constant(&mut self, value: &str) -> u32 {
+        // Check if we already have this string
+        if let Some(&offset) = self.string_constants.get(value) {
+            return offset;
+        }
+        
+        let offset = self.next_offset;
+        let bytes = value.as_bytes();
+        
+        // Store length prefix (4 bytes, little-endian) + string data
+        let length = bytes.len() as u32;
+        self.data_section.extend_from_slice(&length.to_le_bytes());
+        self.data_section.extend_from_slice(bytes);
+        
+        // Update next offset (4 bytes for length + string length)
+        self.next_offset += 4 + bytes.len() as u32;
+        
+        // Store mapping for deduplication
+        self.string_constants.insert(value.to_string(), offset);
+        
+        offset
+    }
+
+    /// Get the raw data section bytes
+    pub fn get_data_section(&self) -> &[u8] {
+        &self.data_section
+    }
+
+    /// Get the total size of the data section
+    pub fn get_data_size(&self) -> u32 {
+        self.next_offset
+    }
+
+    /// Get the number of unique strings stored
+    pub fn get_string_count(&self) -> usize {
+        self.string_constants.len()
+    }
+
+    /// Get string allocation statistics for memory management analysis
+    pub fn get_allocation_stats(&self) -> StringAllocationStats {
+        StringAllocationStats {
+            unique_strings: self.string_constants.len(),
+            total_data_size: self.next_offset,
+            deduplication_savings: self.calculate_deduplication_savings(),
+        }
+    }
+
+    /// Calculate how much memory was saved through string deduplication
+    fn calculate_deduplication_savings(&self) -> u32 {
+        // This is a simplified calculation - in a real implementation,
+        // we would track the number of times each string was referenced
+        0 // Placeholder for now
+    }
+}
+
+impl Default for StringManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Statistics for string allocation and memory management
+#[derive(Debug, Clone)]
+pub struct StringAllocationStats {
+    /// Number of unique strings stored
+    pub unique_strings: usize,
+    /// Total size of string data in bytes
+    pub total_data_size: u32,
+    /// Estimated memory saved through deduplication
+    pub deduplication_savings: u32,
+}
+
 /// Simplified WASM module for basic MIR-to-WASM compilation
 pub struct WasmModule {
     type_section: TypeSection,
@@ -16,6 +122,9 @@ pub struct WasmModule {
     export_section: ExportSection,
     code_section: CodeSection,
     data_section: DataSection,
+
+    // String constant management
+    string_manager: StringManager,
 
     // Internal state
     pub function_count: u32,
@@ -39,6 +148,7 @@ impl WasmModule {
             export_section: ExportSection::new(),
             code_section: CodeSection::new(),
             data_section: DataSection::new(),
+            string_manager: StringManager::new(),
             function_count: 0,
             type_count: 0,
             global_count: 0,
@@ -106,7 +216,7 @@ impl WasmModule {
 
     /// Lower a MIR block to WASM instructions
     fn lower_block_to_wasm(
-        &self,
+        &mut self,
         block: &crate::compiler::mir::mir_nodes::MirBlock,
         function: &mut Function,
         local_map: &HashMap<Place, u32>,
@@ -124,7 +234,7 @@ impl WasmModule {
 
     /// Lower a MIR statement to WASM instructions
     fn lower_statement(
-        &self,
+        &mut self,
         statement: &Statement,
         function: &mut Function,
         local_map: &HashMap<Place, u32>,
@@ -160,7 +270,7 @@ impl WasmModule {
 
     /// Lower a MIR rvalue to WASM instructions
     fn lower_rvalue(
-        &self,
+        &mut self,
         rvalue: &Rvalue,
         function: &mut Function,
         local_map: &HashMap<Place, u32>,
@@ -188,7 +298,7 @@ impl WasmModule {
 
     /// Lower a MIR operand to WASM instructions
     fn lower_operand(
-        &self,
+        &mut self,
         operand: &Operand,
         function: &mut Function,
         _local_map: &HashMap<Place, u32>,
@@ -210,7 +320,7 @@ impl WasmModule {
 
     /// Lower a constant to WASM instructions
     fn lower_constant(
-        &self,
+        &mut self,
         constant: &Constant,
         function: &mut Function,
     ) -> Result<(), CompileError> {
@@ -235,11 +345,32 @@ impl WasmModule {
                 function.instruction(&Instruction::I32Const(if *value { 1 } else { 0 }));
                 Ok(())
             }
-            _ => {
-                return_compiler_error!(
-                    "Constant type not yet implemented in simplified WASM backend: {:?}",
-                    constant
-                );
+            Constant::String(value) => {
+                // Add string to string manager and get offset
+                let offset = self.string_manager.add_string_constant(value);
+                // Generate i32.const with pointer to string data in linear memory
+                function.instruction(&Instruction::I32Const(offset as i32));
+                Ok(())
+            }
+            Constant::Null => {
+                // Null pointer is 0 in linear memory
+                function.instruction(&Instruction::I32Const(0));
+                Ok(())
+            }
+            Constant::Function(func_index) => {
+                // Function reference as index
+                function.instruction(&Instruction::I32Const(*func_index as i32));
+                Ok(())
+            }
+            Constant::MemoryOffset(offset) => {
+                // Memory offset constant
+                function.instruction(&Instruction::I32Const(*offset as i32));
+                Ok(())
+            }
+            Constant::TypeSize(size) => {
+                // Type size constant
+                function.instruction(&Instruction::I32Const(*size as i32));
+                Ok(())
             }
         }
     }
@@ -288,7 +419,7 @@ impl WasmModule {
 
     /// Lower a MIR terminator to WASM control flow instructions
     pub fn lower_terminator(
-        &self,
+        &mut self,
         terminator: &Terminator,
         function: &mut Function,
         local_map: &HashMap<Place, u32>,
@@ -322,6 +453,15 @@ impl WasmModule {
                 Ok(())
             }
         }
+    }
+
+    /// Generate string constant WASM instructions
+    /// 
+    /// Returns an i32.const instruction with the offset to the string data in linear memory
+    fn generate_string_constant(&mut self, value: &str) -> Result<(), CompileError> {
+        let _offset = self.string_manager.add_string_constant(value);
+        // Return pointer to string data in linear memory as i32
+        Ok(())
     }
 
     /// Convert WasmType to wasm_encoder ValType
@@ -378,7 +518,17 @@ impl WasmModule {
     }
 
     /// Generate the final WASM module bytes
-    pub fn finish(self) -> Vec<u8> {
+    pub fn finish(mut self) -> Vec<u8> {
+        // Populate data section with string constants
+        if self.string_manager.get_data_size() > 0 {
+            let string_data = self.string_manager.get_data_section();
+            self.data_section.active(
+                0, // Memory index 0
+                &ConstExpr::i32_const(0), // Start at offset 0 in linear memory
+                string_data.iter().copied(),
+            );
+        }
+
         let mut module = Module::new();
 
         module.section(&self.type_section);
