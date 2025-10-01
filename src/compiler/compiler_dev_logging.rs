@@ -23,7 +23,7 @@ macro_rules! token_log {
 macro_rules! timer_log {
     ($time:expr, $msg:expr) => {
         print!("{}", $msg);
-        green_ln!("{:?}", $time.elapsed());
+        colour::green_ln!("{:?}", $time.elapsed());
     };
 }
 

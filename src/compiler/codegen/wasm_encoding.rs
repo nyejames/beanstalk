@@ -74,7 +74,7 @@ impl WasmModule {
             .iter()
             .map(|p| self.wasm_type_to_val_type(&p.wasm_type()))
             .collect();
-        
+
         let result_types: Vec<ValType> = mir_function
             .return_types
             .iter()
@@ -82,25 +82,25 @@ impl WasmModule {
             .collect();
 
         self.type_section.ty().function(param_types, result_types);
-        
+
         // Add function to function section
         self.function_section.function(self.type_count);
-        
+
         // Create function body
         let mut function = Function::new(vec![]); // No locals for now
         let local_map = HashMap::new(); // Empty local map for now
-        
+
         // Lower each block
         for block in &mir_function.blocks {
             self.lower_block_to_wasm(block, &mut function, &local_map)?;
         }
-        
+
         // Add function to code section
         self.code_section.function(&function);
-        
+
         self.function_count += 1;
         self.type_count += 1;
-        
+
         Ok(())
     }
 
@@ -136,16 +136,24 @@ impl WasmModule {
                 function.instruction(&Instruction::Drop);
                 Ok(())
             }
-            Statement::Call { func: _, args: _, destination: _ } => {
+            Statement::Call {
+                func: _,
+                args: _,
+                destination: _,
+            } => {
                 // Function calls not yet implemented
-                return_compiler_error!("Function calls not yet implemented in simplified WASM backend");
+                return_compiler_error!(
+                    "Function calls not yet implemented in simplified WASM backend"
+                );
             }
             Statement::Nop => {
                 // No-op - generate no instructions
                 Ok(())
             }
             _ => {
-                return_compiler_error!("Statement type not yet implemented in simplified WASM backend");
+                return_compiler_error!(
+                    "Statement type not yet implemented in simplified WASM backend"
+                );
             }
         }
     }
@@ -158,9 +166,7 @@ impl WasmModule {
         local_map: &HashMap<Place, u32>,
     ) -> Result<(), CompileError> {
         match rvalue {
-            Rvalue::Use(operand) => {
-                self.lower_operand(operand, function, local_map)
-            }
+            Rvalue::Use(operand) => self.lower_operand(operand, function, local_map),
             Rvalue::BinaryOp(op, left, right) => {
                 self.lower_operand(left, function, local_map)?;
                 self.lower_operand(right, function, local_map)?;
@@ -170,7 +176,10 @@ impl WasmModule {
                 self.lower_operand(operand, function, local_map)?;
                 self.lower_unary_op(op, function)
             }
-            Rvalue::Ref { place: _, borrow_kind: _ } => {
+            Rvalue::Ref {
+                place: _,
+                borrow_kind: _,
+            } => {
                 // References not yet implemented
                 return_compiler_error!("References not yet implemented in simplified WASM backend");
             }
@@ -185,12 +194,12 @@ impl WasmModule {
         _local_map: &HashMap<Place, u32>,
     ) -> Result<(), CompileError> {
         match operand {
-            Operand::Constant(constant) => {
-                self.lower_constant(constant, function)
-            }
+            Operand::Constant(constant) => self.lower_constant(constant, function),
             Operand::Copy(_place) | Operand::Move(_place) => {
                 // Place operations not yet implemented
-                return_compiler_error!("Place operations not yet implemented in simplified WASM backend");
+                return_compiler_error!(
+                    "Place operations not yet implemented in simplified WASM backend"
+                );
             }
             Operand::FunctionRef(_) | Operand::GlobalRef(_) => {
                 // References not yet implemented
@@ -200,7 +209,11 @@ impl WasmModule {
     }
 
     /// Lower a constant to WASM instructions
-    fn lower_constant(&self, constant: &Constant, function: &mut Function) -> Result<(), CompileError> {
+    fn lower_constant(
+        &self,
+        constant: &Constant,
+        function: &mut Function,
+    ) -> Result<(), CompileError> {
         match constant {
             Constant::I32(value) => {
                 function.instruction(&Instruction::I32Const(*value));
@@ -223,7 +236,10 @@ impl WasmModule {
                 Ok(())
             }
             _ => {
-                return_compiler_error!("Constant type not yet implemented in simplified WASM backend");
+                return_compiler_error!(
+                    "Constant type not yet implemented in simplified WASM backend: {:?}",
+                    constant
+                );
             }
         }
     }
@@ -244,7 +260,10 @@ impl WasmModule {
                 Ok(())
             }
             _ => {
-                return_compiler_error!("Binary operation not yet implemented in simplified WASM backend");
+                return_compiler_error!(
+                    "Binary operation not yet implemented in simplified WASM backend: {:?}",
+                    op
+                );
             }
         }
     }
@@ -259,7 +278,10 @@ impl WasmModule {
                 Ok(())
             }
             _ => {
-                return_compiler_error!("Unary operation not yet implemented in simplified WASM backend");
+                return_compiler_error!(
+                    "Unary operation not yet implemented in simplified WASM backend: {:?}",
+                    op
+                );
             }
         }
     }
@@ -276,7 +298,11 @@ impl WasmModule {
                 // Simple goto - for now just continue
                 Ok(())
             }
-            Terminator::If { condition, then_block: _, else_block: _ } => {
+            Terminator::If {
+                condition,
+                then_block: _,
+                else_block: _,
+            } => {
                 // Load condition and generate if
                 self.lower_operand(condition, function, local_map)?;
                 function.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
@@ -311,20 +337,31 @@ impl WasmModule {
     }
 
     /// Compile a MIR function (alias for compile_function)
-    pub fn compile_mir_function(&mut self, mir_function: &MirFunction) -> Result<u32, CompileError> {
+    pub fn compile_mir_function(
+        &mut self,
+        mir_function: &MirFunction,
+    ) -> Result<u32, CompileError> {
         let function_index = self.function_count;
         self.compile_function(mir_function)?;
         Ok(function_index)
     }
 
     /// Add function export (placeholder)
-    pub fn add_function_export(&mut self, _name: &str, _function_index: u32) -> Result<u32, CompileError> {
+    pub fn add_function_export(
+        &mut self,
+        _name: &str,
+        _function_index: u32,
+    ) -> Result<u32, CompileError> {
         // Export functionality will be added when needed
         Ok(_function_index)
     }
 
     /// Add global export (placeholder)
-    pub fn add_global_export(&mut self, _name: &str, _global_index: u32) -> Result<(), CompileError> {
+    pub fn add_global_export(
+        &mut self,
+        _name: &str,
+        _global_index: u32,
+    ) -> Result<(), CompileError> {
         // Export functionality will be added when needed
         Ok(())
     }
@@ -343,7 +380,7 @@ impl WasmModule {
     /// Generate the final WASM module bytes
     pub fn finish(self) -> Vec<u8> {
         let mut module = Module::new();
-        
+
         module.section(&self.type_section);
         module.section(&self.function_section);
         module.section(&self.memory_section);
@@ -351,7 +388,7 @@ impl WasmModule {
         module.section(&self.export_section);
         module.section(&self.code_section);
         module.section(&self.data_section);
-        
+
         module.finish()
     }
 }
