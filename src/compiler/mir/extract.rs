@@ -1,18 +1,15 @@
-use crate::compiler::mir::mir_nodes::{BorrowKind, Loan, LoanId, MirFunction, ProgramPoint};
+use crate::compiler::mir::mir_nodes::{Loan, LoanId, MirFunction, ProgramPoint};
 use crate::compiler::mir::place::Place;
 use crate::compiler::optimizers::place_interner::{PlaceInterner};
 use std::collections::HashMap;
 
-/// Borrow fact extraction for gen/kill set construction with place interning
+/// Borrow fact extraction for gen/kill set construction
 ///
 /// This module builds gen/kill sets for forward loan-liveness dataflow analysis.
 /// Gen sets contain loans starting at each statement, kill sets contain loans
 /// whose owners may alias places that are moved or reassigned.
 ///
-/// ## Performance Optimizations
-/// - Uses PlaceId instead of Place for ~25% memory reduction
-/// - Pre-computed aliasing relationships for O(1) aliasing queries
-/// - Optimized BitSet operations for hot dataflow analysis paths
+/// This is a simplified implementation focused on correctness over optimization.
 #[derive(Debug)]
 pub struct BorrowFactExtractor {
     /// Gen sets: loans starting at each program point
@@ -21,7 +18,7 @@ pub struct BorrowFactExtractor {
     pub kill_sets: HashMap<ProgramPoint, BitSet>,
     /// All loans in the function (using interned place IDs)
     pub loans: Vec<Loan>,
-    /// Mapping from places to loans that borrow them - TODO: optimize with PlaceId
+    /// Mapping from places to loans that borrow them (direct Place references for simplicity)
     pub place_to_loans: HashMap<Place, Vec<LoanId>>,
     /// Total number of loans (for bitset sizing)
     pub loan_count: usize,
@@ -29,14 +26,10 @@ pub struct BorrowFactExtractor {
     pub place_interner: PlaceInterner,
 }
 
-/// High-performance bitset optimized for dataflow analysis
+/// Simple bitset for dataflow analysis
 ///
-/// This implementation provides significant performance improvements over the previous version:
-/// - Direct bit manipulation without iterator allocations
-/// - Fast-path optimizations for empty sets and single bits
-/// - In-place operations to avoid temporary allocations
-/// - SIMD-friendly bulk operations where available
-/// - Cached capacity checks to avoid redundant bounds checking
+/// This is a straightforward bitset implementation focused on correctness.
+/// Performance optimizations can be added later if needed.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BitSet {
     /// Bits packed into u64 words for efficient SIMD operations
@@ -538,7 +531,8 @@ impl BorrowFactExtractor {
                     continue;
                 }
 
-                let gen_set = self.gen_sets.get_mut(&program_point).unwrap();
+                let gen_set = self.gen_sets.get_mut(&program_point)
+                    .ok_or_else(|| format!("Gen set not found for program point {:?}", program_point))?;
 
                 // Fast path: single loan (common case)
                 if events.start_loans.len() == 1 {
@@ -588,7 +582,8 @@ impl BorrowFactExtractor {
                 places_to_kill.extend(events.reassigns.iter());
 
                 // Process all places that need to be killed
-                let kill_set = self.kill_sets.get_mut(&program_point).unwrap();
+                let kill_set = self.kill_sets.get_mut(&program_point)
+                    .ok_or_else(|| format!("Kill set not found for program point {:?}", program_point))?;
 
                 // Fast path: single place (common case)
                 if places_to_kill.len() == 1 {

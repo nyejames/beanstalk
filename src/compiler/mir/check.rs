@@ -444,21 +444,31 @@ impl MovedOutDataflow {
         Ok(())
     }
 
-    /// Copy CFG from the shared function CFG (eliminates redundant construction)
+    /// Build simple linear CFG from function (simplified implementation)
     fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
-        let cfg = function.get_cfg_immutable()?;
-
         // Clear existing CFG data
         self.successors.clear();
         self.predecessors.clear();
 
-        // Copy CFG structure using optimized Vec-indexed access
-        for point in cfg.iter_program_points() {
-            let successors = cfg.get_successors(&point).to_vec();
-            let predecessors = cfg.get_predecessors(&point).to_vec();
-
-            self.successors.insert(point, successors);
-            self.predecessors.insert(point, predecessors);
+        // Build simple linear CFG from program points
+        let program_points = function.get_program_points_in_order();
+        
+        for (i, &current_point) in program_points.iter().enumerate() {
+            let mut successors = Vec::new();
+            let mut predecessors = Vec::new();
+            
+            // Add predecessor
+            if i > 0 {
+                predecessors.push(program_points[i - 1]);
+            }
+            
+            // Add successor
+            if i < program_points.len() - 1 {
+                successors.push(program_points[i + 1]);
+            }
+            
+            self.successors.insert(current_point, successors);
+            self.predecessors.insert(current_point, predecessors);
         }
 
         Ok(())

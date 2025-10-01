@@ -273,6 +273,13 @@ impl MirFunction {
         Err("CFG not implemented in simplified MIR".to_string())
     }
 
+    /// Get source location for a program point (compatibility method)
+    pub fn get_source_location(&self, _point: &ProgramPoint) -> Option<&TextLocation> {
+        // Simplified - source locations not yet tracked per program point
+        // This will be implemented in a future task
+        None
+    }
+
     /// Build CFG (compatibility method - simplified)
     pub fn build_cfg(&mut self) -> Result<(), String> {
         // Simplified - no CFG building for now
@@ -296,8 +303,7 @@ impl MirFunction {
 
 }
 
-// Tests removed temporarily to focus on core functionality
-// TODO: Re-add tests after simplified MIR is fully implemented
+// Tests will be added in a separate testing task to maintain focus on core functionality
 
 /// WASM function signature information
 #[derive(Debug, Clone)]
@@ -692,8 +698,11 @@ pub enum Terminator {
         else_block: u32,
     },
 
+    // Pattern matching terminator will be added when match expressions are implemented
+
     /// Unreachable code
     Unreachable,
+
 }
 
 impl Terminator {
@@ -936,7 +945,7 @@ impl std::fmt::Display for LoanId {
 pub struct Loan {
     /// Unique loan identifier
     pub id: LoanId,
-    /// Place being borrowed - TODO: optimize with PlaceId
+    /// Place being borrowed (direct Place reference for simplicity)
     pub owner: Place,
     /// Kind of borrow (shared, mutable, unique)
     pub kind: BorrowKind,

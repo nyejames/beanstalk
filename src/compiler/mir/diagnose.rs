@@ -568,7 +568,7 @@ impl BorrowDiagnostics {
 
     /// Generate compiler bug error for internal issues
     pub fn generate_compiler_error(&self, message: &str) -> Result<(), CompileError> {
-        return_compiler_error!("MIR borrow checker internal error: {}", message);
+        return_compiler_error!("MIR borrow checker internal error: {}. This is a compiler bug - please report this issue with the code that triggered it.", message);
     }
 
     /// Generate errors using streamlined diagnostics (performance optimized)

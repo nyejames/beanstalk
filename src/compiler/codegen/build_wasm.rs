@@ -371,33 +371,6 @@ fn validate_terminator_targets(
                 );
             }
         }
-        Terminator::Switch {
-            targets, default, ..
-        } => {
-            for (case_index, target) in targets.iter().enumerate() {
-                if *target as usize >= mir_function.blocks.len() {
-                    return_compiler_error!(
-                        "Function '{}' block {} switch case {} targets block {} but only {} blocks exist. \
-                        This indicates invalid control flow in MIR construction.",
-                        mir_function.name,
-                        block_index,
-                        case_index,
-                        target,
-                        mir_function.blocks.len()
-                    );
-                }
-            }
-            if *default as usize >= mir_function.blocks.len() {
-                return_compiler_error!(
-                    "Function '{}' block {} switch default targets block {} but only {} blocks exist. \
-                    This indicates invalid control flow in MIR construction.",
-                    mir_function.name,
-                    block_index,
-                    default,
-                    mir_function.blocks.len()
-                );
-            }
-        }
         _ => {} // Other terminators don't have block targets
     }
 
@@ -593,7 +566,7 @@ pub fn new_wasm_module(mir: MIR) -> Result<Vec<u8>, CompileError> {
                 exported_items += 1;
             }
             ExportKind::Memory => {
-                module.add_memory_export(export_name, export.index);
+                module.add_memory_export(export_name)?;
                 exported_items += 1;
             }
             ExportKind::Table => {

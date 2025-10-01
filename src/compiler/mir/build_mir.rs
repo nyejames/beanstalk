@@ -11,22 +11,7 @@ use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::{ir_log, return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
-/// Streamlined error generation for common MIR build errors
-mod build_errors {
-    use crate::compiler::compiler_errors::CompileError;
-    use crate::compiler::parsers::tokens::TextLocation;
-    use crate::return_rule_error;
 
-    /// Generate undefined variable error with minimal formatting
-    pub fn undefined_variable(location: TextLocation, var_name: &str) -> Result<(), CompileError> {
-        return_rule_error!(location, "Undefined variable '{}'. Variable must be declared before use.", var_name);
-    }
-
-    /// Generate mutation of undefined variable error with minimal formatting
-    pub fn undefined_variable_mutation(location: TextLocation, var_name: &str) -> Result<(), CompileError> {
-        return_rule_error!(location, "Cannot mutate undefined variable '{}'. Variable must be declared before mutation.", var_name);
-    }
-}
 
 /// Run borrow checking on all functions in the MIR
 fn run_borrow_checking_on_mir(mir: &mut MIR) -> Result<(), CompileError> {
@@ -280,7 +265,7 @@ fn transform_ast_node_to_mir(
         }
         _ => {
             return_compiler_error!(
-                "AST node type not yet implemented for MIR generation: {:?} at {}:{}",
+                "AST node type '{:?}' not yet implemented for MIR generation at line {}, column {}. This language feature needs to be added to the compiler backend. Please report this as a feature request.",
                 node.kind,
                 node.location.start_pos.line_number,
                 node.location.start_pos.char_column
@@ -300,6 +285,13 @@ fn ast_declaration_to_mir(
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
 
+    // Check if variable is already declared in current scope
+    if let Some(current_scope) = context.variable_scopes.last() {
+        if current_scope.contains_key(name) {
+            return_rule_error!(expression.location.clone(), "Variable '{}' is already declared in this scope. Shadowing is not supported in Beanstalk - each variable name can only be used once per scope. Try using a different name like '{}_2' or '{}_{}'.", name, name, name, "new");
+        }
+    }
+
     // Determine if this should be a global or local variable
     let is_global = matches!(visibility, VarVisibility::Exported);
 
@@ -318,7 +310,7 @@ fn ast_declaration_to_mir(
     context.register_variable(name.to_string(), variable_place.clone());
 
     // Convert expression to rvalue
-    let rvalue = expression_to_rvalue(expression)?;
+    let rvalue = expression_to_rvalue(expression, &expression.location)?;
 
     // Create assignment statement
     let assign_statement = Statement::Assign {
@@ -341,13 +333,12 @@ fn ast_mutation_to_mir(
     let variable_place = match context.lookup_variable(name) {
         Some(place) => place.clone(),
         None => {
-            build_errors::undefined_variable_mutation(location.clone(), name)?;
-            unreachable!()
+            return_rule_error!(location.clone(), "Cannot mutate undefined variable '{}'. Variable must be declared before mutation. Did you mean to declare it first with 'let {} = ...' or '{}~= ...'?", name, name, name);
         }
     };
 
     // Convert expression to rvalue
-    let rvalue = expression_to_rvalue(expression)?;
+    let rvalue = expression_to_rvalue(expression, location)?;
 
     // Create assignment statement for the mutation
     let assign_statement = Statement::Assign {
@@ -369,7 +360,7 @@ fn ast_function_call_to_mir(
     // Convert parameters to operands
     let mut args = Vec::new();
     for param in params {
-        let operand = expression_to_operand(param)?;
+        let operand = expression_to_operand(param, &param.location)?;
         args.push(operand);
     }
 
@@ -377,7 +368,7 @@ fn ast_function_call_to_mir(
     let func_operand = if let Some(func_id) = context.function_names.get(name) {
         Operand::FunctionRef(*func_id)
     } else {
-        return_rule_error!(location.clone(), "Undefined function '{}'. Function must be declared before use.", name);
+        return_rule_error!(location.clone(), "Undefined function '{}'. Function must be declared before use. Make sure the function is defined in this file or imported from another module.", name);
     };
 
     // Create call statement
@@ -393,7 +384,7 @@ fn ast_function_call_to_mir(
 
 
 /// Convert expression to rvalue for basic types
-fn expression_to_rvalue(expression: &Expression) -> Result<Rvalue, CompileError> {
+fn expression_to_rvalue(expression: &Expression, location: &TextLocation) -> Result<Rvalue, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
         ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
@@ -402,32 +393,32 @@ fn expression_to_rvalue(expression: &Expression) -> Result<Rvalue, CompileError>
             value.clone(),
         )))),
         ExpressionKind::Reference(name) => {
-            return_compiler_error!("Variable references in expressions not yet implemented: {}", name);
+            return_compiler_error!("Variable references in expressions not yet implemented for variable '{}' at line {}, column {}. This feature is coming soon - for now, try using the variable directly in assignments.", name, location.start_pos.line_number, location.start_pos.char_column);
         }
         ExpressionKind::Runtime(_) => {
-            return_compiler_error!("Runtime expressions not yet implemented for MIR generation");
+            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for MIR generation at line {}, column {}. Try breaking down complex expressions into simpler assignments.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
-            return_compiler_error!("Expression type not yet implemented for rvalue conversion: {:?}", expression.kind)
+            return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
     }
 }
 
 /// Convert expression to operand for basic types
-fn expression_to_operand(expression: &Expression) -> Result<Operand, CompileError> {
+fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Result<Operand, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I64(*value))),
         ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F64(*value))),
         ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
         ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
         ExpressionKind::Reference(name) => {
-            return_compiler_error!("Variable references in expressions not yet implemented: {}", name);
+            return_compiler_error!("Variable references in function parameters not yet implemented for variable '{}' at line {}, column {}. This feature is coming soon - for now, try passing literal values.", name, location.start_pos.line_number, location.start_pos.char_column);
         }
         ExpressionKind::Runtime(_) => {
-            return_compiler_error!("Runtime expressions not yet implemented for operand conversion");
+            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
-            return_compiler_error!("Expression type not yet implemented for operand conversion: {:?}", expression.kind)
+            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
     }
 }

@@ -102,21 +102,31 @@ impl LivenessAnalysis {
         Ok(())
     }
 
-    /// Copy CFG from the shared function CFG (eliminates redundant construction)
+    /// Build simple linear CFG from function (simplified implementation)
     fn copy_cfg_from_function(&mut self, function: &MirFunction) -> Result<(), String> {
-        let cfg = function.get_cfg_immutable()?;
-
         // Clear existing CFG data
         self.successors.clear();
         self.predecessors.clear();
 
-        // Copy CFG structure using optimized Vec-indexed access
-        for point in cfg.iter_program_points() {
-            let successors = cfg.get_successors(&point).to_vec();
-            let predecessors = cfg.get_predecessors(&point).to_vec();
-
-            self.successors.insert(point, successors);
-            self.predecessors.insert(point, predecessors);
+        // Build simple linear CFG from program points
+        let program_points = function.get_program_points_in_order();
+        
+        for (i, &current_point) in program_points.iter().enumerate() {
+            let mut successors = Vec::new();
+            let mut predecessors = Vec::new();
+            
+            // Add predecessor
+            if i > 0 {
+                predecessors.push(program_points[i - 1]);
+            }
+            
+            // Add successor
+            if i < program_points.len() - 1 {
+                successors.push(program_points[i + 1]);
+            }
+            
+            self.successors.insert(current_point, successors);
+            self.predecessors.insert(current_point, predecessors);
         }
 
         Ok(())
@@ -428,28 +438,9 @@ impl LivenessAnalysis {
             Rvalue::UnaryOp(_, operand) => {
                 self.refine_operand(operand, live_out);
             }
-            Rvalue::Cast { source, .. } => {
-                self.refine_operand(source, live_out);
-            }
-            Rvalue::Array { elements, .. } => {
-                for element in elements {
-                    self.refine_operand(element, live_out);
-                }
-            }
-            Rvalue::Struct { fields, .. } => {
-                for (_, operand) in fields {
-                    self.refine_operand(operand, live_out);
-                }
-            }
-            Rvalue::InterfaceCall { receiver, args, .. } => {
-                self.refine_operand(receiver, live_out);
-                for arg in args {
-                    self.refine_operand(arg, live_out);
-                }
-            }
-            Rvalue::MemoryGrow { pages } => {
-                self.refine_operand(pages, live_out);
-            }
+            // Note: Cast, Array, Struct, InterfaceCall, and MemoryGrow variants
+            // were removed during MIR simplification. If these features are needed,
+            // they should be re-added to the Rvalue enum in mir_nodes.rs
             _ => {
                 // Other rvalues don't have operands that can be refined
             }
