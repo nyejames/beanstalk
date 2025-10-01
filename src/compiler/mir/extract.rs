@@ -1,6 +1,6 @@
 use crate::compiler::mir::mir_nodes::{BorrowKind, Loan, LoanId, MirFunction, ProgramPoint};
 use crate::compiler::mir::place::Place;
-use crate::compiler::mir::place_interner::{AliasingInfo, PlaceId, PlaceInterner};
+use crate::compiler::optimizers::place_interner::{PlaceInterner};
 use std::collections::HashMap;
 
 /// Borrow fact extraction for gen/kill set construction with place interning

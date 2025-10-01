@@ -4,7 +4,7 @@ use crate::compiler::mir::mir_nodes::{
     Loan, BorrowKind
 };
 use crate::compiler::mir::place::Place;
-use crate::compiler::mir::streamlined_diagnostics::{StreamlinedDiagnostics, fast_path};
+
 use crate::compiler::parsers::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 
@@ -67,8 +67,6 @@ pub struct UnifiedBorrowChecker {
     warnings: Vec<BorrowError>,
     /// Statistics for performance monitoring
     statistics: UnifiedStatistics,
-    /// Streamlined diagnostics for fast error generation
-    diagnostics: StreamlinedDiagnostics,
 }
 
 /// Statistics for the unified borrow checker
@@ -122,7 +120,6 @@ impl UnifiedBorrowChecker {
             errors: Vec::new(),
             warnings: Vec::new(),
             statistics: UnifiedStatistics::default(),
-            diagnostics: StreamlinedDiagnostics::new(function_name),
         }
     }
 
@@ -436,22 +433,12 @@ impl UnifiedBorrowChecker {
                     if self.loans_conflict(loan_a, loan_b) {
                         // Use fast-path error generation for conflicting borrows
                         let location = TextLocation::default(); // TODO: Get from function
-                        match (&loan_a.kind, &loan_b.kind) {
-                            (BorrowKind::Mut, BorrowKind::Mut) => {
-                                let _ = fast_path::conflicting_mutable_borrows(location, &loan_a.owner);
-                            }
-                            (BorrowKind::Shared, BorrowKind::Mut) | (BorrowKind::Mut, BorrowKind::Shared) => {
-                                let _ = fast_path::shared_mutable_conflict(location, &loan_a.owner);
-                            }
-                            _ => {
-                                let error = self.create_conflicting_borrows_error_streamlined(
-                                    program_point,
-                                    loan_a,
-                                    loan_b,
-                                );
-                                self.errors.push(error);
-                            }
-                        }
+                        let error = self.create_conflicting_borrows_error_streamlined(
+                            program_point,
+                            loan_a,
+                            loan_b,
+                        );
+                        self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
                     }
                 }
@@ -502,9 +489,17 @@ impl UnifiedBorrowChecker {
             for used_place in &events.uses {
                 for moved_place in moved_places {
                     if may_alias(used_place, moved_place) {
-                        // Use fast-path error generation for use after move
-                        let location = TextLocation::default(); // TODO: Get from function
-                        let _ = fast_path::use_after_move(location, used_place);
+                        // Create use after move error
+                        let error = BorrowError {
+                            point: program_point,
+                            error_type: BorrowErrorType::UseAfterMove {
+                                place: used_place.clone(),
+                                move_point: program_point, // TODO: Track actual move point
+                            },
+                            message: "Use of moved value".to_string(),
+                            location: TextLocation::default(),
+                        };
+                        self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
                     }
                 }
@@ -599,26 +594,7 @@ impl UnifiedBorrowChecker {
         }
     }
 
-    /// Create a use-after-move error (streamlined version) - kept for fallback
-    fn create_use_after_move_error_streamlined(
-        &self,
-        point: ProgramPoint,
-        used_place: Place,
-        move_point: ProgramPoint,
-    ) -> BorrowError {
-        // Use minimal message formatting for performance
-        let message = "Use of moved value".to_string();
-        
-        BorrowError {
-            point,
-            error_type: BorrowErrorType::UseAfterMove {
-                place: used_place,
-                move_point,
-            },
-            message,
-            location: TextLocation::default(),
-        }
-    }
+
 }
 
 // Helper functions removed - now using streamlined diagnostics for performance

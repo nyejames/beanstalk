@@ -58,7 +58,7 @@ impl<T> Arena<T> {
             chunks: Vec::new(),
             _phantom: PhantomData,
         };
-        arena.allocate_chunk(capacity);
+        arena.allocate_chunk(capacity).expect("Failed to allocate initial chunk");
         arena
     }
 
@@ -108,7 +108,7 @@ impl<T> Arena<T> {
         if new_ptr > self.end {
             // Need to allocate a new chunk
             let chunk_size = (size.max(64 * 1024) + align - 1) & !(align - 1);
-            self.allocate_chunk(chunk_size);
+            self.allocate_chunk(chunk_size).expect("Failed to allocate chunk");
             return self.alloc_raw(layout);
         }
         
@@ -119,13 +119,13 @@ impl<T> Arena<T> {
     }
 
     /// Allocate a new memory chunk
-    fn allocate_chunk(&mut self, size: usize) {
+    fn allocate_chunk(&mut self, size: usize) -> Result<(), String> {
         let layout = Layout::from_size_align(size, 8).expect("Invalid layout");
         
         unsafe {
             let ptr = alloc(layout);
             if ptr.is_null() {
-                panic!("Arena allocation failed");
+                return Err("Arena allocation failed".to_string());
             }
             
             let chunk_ptr = NonNull::new_unchecked(ptr);
@@ -137,6 +137,7 @@ impl<T> Arena<T> {
                 layout,
             });
         }
+        Ok(())
     }
 
     /// Get the total allocated memory size

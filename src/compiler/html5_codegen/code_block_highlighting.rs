@@ -3,6 +3,7 @@
 
 use crate::compiler::basic_utility_functions::NumericalParsing;
 
+#[allow(dead_code)]
 pub fn highlight_html_code_block(code_block: &str, language: &str) -> String {
     let mut highlighted_code = String::new();
     let mut chars = code_block.chars().peekable();
@@ -165,6 +166,7 @@ pub fn highlight_html_code_block(code_block: &str, language: &str) -> String {
     highlighted_code
 }
 
+#[allow(dead_code)]
 fn keyword_is_in_language(keyword: &str, language: &str) -> bool {
     match language {
         "js" | "javascript" => matches!(
@@ -189,6 +191,7 @@ fn keyword_is_in_language(keyword: &str, language: &str) -> bool {
     }
 }
 
+#[allow(dead_code)]
 fn type_is_in_language(type_keyword: &str, language: &str) -> bool {
     match language {
         "ts" | "typescript" => matches!(

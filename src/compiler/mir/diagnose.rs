@@ -4,8 +4,8 @@ use crate::compiler::mir::mir_nodes::{
     ProgramPoint,
 };
 use crate::compiler::mir::place::Place;
-use crate::compiler::mir::streamlined_diagnostics::{
-    StreamlinedDiagnostics, generate_borrow_errors_batch,
+use crate::compiler::optimizers::streamlined_diagnostics::{
+    generate_borrow_errors_batch,
 };
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_rule_error};

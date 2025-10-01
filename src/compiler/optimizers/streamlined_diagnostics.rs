@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::mir::mir_nodes::{
-    BorrowError, BorrowErrorType, BorrowKind, InvalidationType, MirFunction, ProgramPoint,
+    BorrowError, BorrowErrorType, BorrowKind, InvalidationType, ProgramPoint,
 };
 use crate::compiler::mir::place::Place;
 use crate::compiler::parsers::tokens::TextLocation;

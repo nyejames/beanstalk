@@ -9,7 +9,7 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-use crate::{ir_log, return_compiler_error, return_rule_error};
+use crate::{ir_log, return_compiler_error};
 use std::collections::HashMap;
 
 /// Streamlined error generation for common MIR build errors

@@ -41,7 +41,7 @@ pub fn build_project_files_with_target(
     flags: &[Flag],
     target_override: Option<BuildTarget>,
 ) -> Result<Project, Vec<CompileError>> {
-    let time = Instant::now();
+    let _time = Instant::now();
 
     let entry_dir = match std::env::current_dir() {
         Ok(dir) => dir.join(entry_path),

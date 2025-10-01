@@ -8,11 +8,10 @@
 /// - Reduced memory indirection for hot data access
 /// - Better vectorization opportunities for bulk operations
 /// - Improved memory access patterns for iterative algorithms
-use crate::compiler::mir::arena::{Arena, ArenaRef, ArenaSlice, MemoryPool, Poolable};
+use crate::compiler::mir::arena::{Arena, ArenaRef, MemoryPool, Poolable};
 use crate::compiler::mir::extract::BitSet;
 use crate::compiler::mir::mir_nodes::{Events, ProgramPoint};
-use crate::compiler::mir::place::Place;
-use crate::compiler::mir::place_interner::PlaceId;
+
 use std::collections::HashMap;
 
 /// Struct-of-arrays layout for program point information

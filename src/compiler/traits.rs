@@ -3,6 +3,7 @@ use crate::compiler::parsers::build_ast::ScopeContext;
 
 pub trait ContainsReferences {
     fn get_reference(&self, name: &str) -> Option<&Arg>;
+    #[allow(dead_code)]
     fn get_reference_mut(&mut self, name: &str) -> Option<&mut Arg>;
 }
 

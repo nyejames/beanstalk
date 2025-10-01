@@ -1,5 +1,5 @@
 use crate::compiler::datatypes::{DataType, Ownership};
-use colour::red_ln;
+
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::Peekable;

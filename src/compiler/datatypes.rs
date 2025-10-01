@@ -373,39 +373,4 @@ impl Display for DataType {
 //     ])
 // }
 
-pub fn get_accessed_data_type(data_type: &DataType, members_accessed: &[Arg]) -> DataType {
-    match members_accessed.first() {
-        Some(member) => match &data_type {
-            DataType::Args(inner_types) => {
-                // This part could be recursively check if there are more arguments to access
-                if members_accessed.len() > 1 {
-                    get_accessed_data_type(
-                        &inner_types
-                            .iter()
-                            .find(|t| t.name == member.name)
-                            .unwrap()
-                            .value
-                            .data_type,
-                        &members_accessed[1..],
-                    )
-                } else {
-                    inner_types
-                        .iter()
-                        .find(|t| t.name == member.name)
-                        .unwrap()
-                        .value
-                        .data_type
-                        .to_owned()
-                }
-            }
 
-            // Needs to check built-in methods same as get_accessed_args() does
-            _ => {
-                // TODO - get any implemented or built in methods on this data type
-                data_type.to_owned()
-            }
-        },
-
-        None => data_type.to_owned(),
-    }
-}

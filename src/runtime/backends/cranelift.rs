@@ -21,7 +21,7 @@ pub fn execute_with_cranelift(
         CraneliftOptLevel::SpeedAndSize => WasmerCraneliftOptLevel::SpeedAndSize,
     };
 
-    let cranelift = Cranelift::new().opt_level(wasmer_opt_level);
+    let _cranelift = Cranelift::new().opt_level(wasmer_opt_level);
 
     let mut store = Store::default();
 

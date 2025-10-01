@@ -5,6 +5,7 @@ use crate::settings::HTMLMeta;
 use std::fs;
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 pub fn create_html_boilerplate(
     meta_tags: &HTMLMeta,
     release_build: bool,
@@ -45,6 +46,7 @@ pub fn create_html_boilerplate(
 }
 
 /// Create HTML boilerplate with integrated JS bindings for WASM
+#[allow(dead_code)]
 pub fn create_html_with_js_bindings(
     meta_tags: &HTMLMeta,
     wasm_module_name: &str,
@@ -69,6 +71,7 @@ pub fn create_html_with_js_bindings(
 }
 
 /// Create a standalone HTML file with embedded JS bindings (for simple projects)
+#[allow(dead_code)]
 pub fn create_standalone_html(
     title: &str,
     wasm_module_name: &str,

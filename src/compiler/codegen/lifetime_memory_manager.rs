@@ -2,13 +2,13 @@ use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::mir::extract::BorrowFactExtractor;
 use crate::compiler::mir::mir_nodes::{
-    BorrowKind, Loan, MirFunction, Operand, ProgramPoint, Rvalue, Statement, Terminator,
+    BorrowKind, MirFunction, ProgramPoint,
 };
 use crate::compiler::mir::place::{Place, WasmType};
 use crate::compiler::mir::unified_borrow_checker::UnifiedBorrowCheckResults;
 use crate::return_compiler_error;
 use std::collections::{HashMap, HashSet};
-use wasm_encoder::{Function, Instruction, ValType};
+use wasm_encoder::{Function, Instruction};
 
 /// Lifetime-optimized memory management for WASM code generation
 ///

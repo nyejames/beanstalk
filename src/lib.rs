@@ -49,6 +49,9 @@ mod compiler {
     }
     pub mod optimizers {
         pub mod constant_folding;
+        pub mod optimized_dataflow;
+        pub mod place_interner;
+        pub mod streamlined_diagnostics;
     }
 
     pub mod mir {
@@ -63,10 +66,7 @@ mod compiler {
         pub mod liveness;
         pub mod mir;
         pub mod mir_nodes;
-        pub mod optimized_dataflow;
         pub mod place;
-        pub mod place_interner;
-        pub mod streamlined_diagnostics;
         pub mod unified_borrow_checker;
     }
 
@@ -83,7 +83,6 @@ mod compiler {
     pub mod compiler_errors;
     pub mod compiler_warnings;
     pub mod datatypes;
-    pub mod lifetime_analysis;
     pub mod module_dependencies;
     pub mod traits;
 
