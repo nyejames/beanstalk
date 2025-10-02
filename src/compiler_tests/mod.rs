@@ -51,6 +51,30 @@ pub mod wasm_validation_tests;
 #[cfg(test)]
 pub mod wasm_terminator_tests;
 
+// WASM encoder module builder API tests
+#[cfg(test)]
+pub mod wasm_encoder_module_tests;
+
+// WASM encoder API discovery tests
+#[cfg(test)]
+pub mod wasm_encoder_api_discovery;
+
+// WASM encoder Function builder API tests
+#[cfg(test)]
+pub mod wasm_encoder_function_tests;
+
+// WASM encoder Type system integration tests
+#[cfg(test)]
+pub mod wasm_encoder_type_tests;
+
+// WASM encoder error handling tests
+#[cfg(test)]
+pub mod wasm_encoder_error_handling_tests;
+
+// Simple error validation test
+#[cfg(test)]
+pub mod simple_error_validation_test;
+
 // === FOCUSED TEST CATEGORIES ===
 // Organized tests for specific functionality
 

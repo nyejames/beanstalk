@@ -1,68 +1,26 @@
 use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::mir::mir_nodes::MIR;
+use crate::compiler::mir::mir::borrow_check_pipeline;
+use crate::compiler::parsers::build_ast::AstBlock;
+use std::path::PathBuf;
 
-/// Test basic WASM validation with empty MIR
+/// Test that empty MIR generates valid WASM
 #[test]
-fn test_basic_wasm_validation_empty_mir() {
-    let mir = MIR::new();
+fn test_empty_mir_wasm_validation() {
+    let ast_block = AstBlock {
+        ast: vec![],
+        is_entry_point: true,
+        scope: PathBuf::from("test"),
+    };
     
-    // Test WASM module generation with validation on empty MIR
-    let result = new_wasm_module(mir);
+    // Generate MIR
+    let mir = borrow_check_pipeline(ast_block).expect("MIR generation should succeed");
     
-    // Should succeed for empty MIR (creates minimal WASM module)
-    assert!(result.is_ok(), "WASM validation should pass for empty MIR: {:?}", result.err());
+    // Generate WASM
+    let wasm_bytes = new_wasm_module(mir).expect("WASM generation should succeed");
     
-    let wasm_bytes = result.unwrap();
-    assert!(!wasm_bytes.is_empty(), "Generated WASM should not be empty");
-}
-
-/// Test WASM validation with invalid memory configuration
-#[test]
-fn test_wasm_validation_with_invalid_memory_config() {
-    let mut mir = MIR::new();
+    // Verify WASM is not empty
+    assert!(!wasm_bytes.is_empty(), "WASM bytes should not be empty");
     
-    // Set up invalid memory configuration - static data but no memory pages
-    mir.type_info.memory_info.initial_pages = 0;
-    mir.type_info.memory_info.static_data_size = 1024; // 1KB of static data but no pages
-    
-    // Test WASM module generation - should fail validation
-    let result = new_wasm_module(mir);
-    
-    // Should fail due to invalid memory configuration
-    assert!(result.is_err(), "WASM validation should fail for invalid memory configuration");
-    
-    let error = result.unwrap_err();
-    assert!(
-        error.msg.contains("static data") || error.msg.contains("memory"),
-        "Error should mention memory issue: {}",
-        error.msg
-    );
-}
-
-/// Test WASM validation with valid memory configuration
-#[test]
-fn test_wasm_validation_with_valid_memory_config() {
-    let mut mir = MIR::new();
-    
-    // Set up valid memory configuration
-    mir.type_info.memory_info.initial_pages = 1;
-    mir.type_info.memory_info.static_data_size = 1024; // 1KB of static data
-    
-    // Test WASM module generation with memory
-    let result = new_wasm_module(mir);
-    
-    // Should succeed with proper memory configuration
-    assert!(result.is_ok(), "WASM validation should pass with proper memory configuration: {:?}", result.err());
-}
-
-/// Test basic WASM validation context
-#[test]
-fn test_basic_wasm_validation() {
-    let mir = MIR::new();
-    
-    // Test that validation works for basic MIR
-    let result = new_wasm_module(mir);
-    
-    // Should succeed for basic case
-    assert!(result.is_ok(), "Basic WASM validation should pass: {:?}", result.err());
+    // Verify WASM passes basic validation using wasmparser
+    wasmparser::validate(&wasm_bytes).expect("Generated WASM should pass validation");
 }

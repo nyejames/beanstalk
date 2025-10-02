@@ -521,7 +521,7 @@ pub fn new_wasm_module(mir: MIR) -> Result<Vec<u8>, CompileError> {
         // This is useful for testing and incremental compilation scenarios
         eprintln!("Creating minimal WASM module (no functions in MIR)");
     } else {
-        for mir_function in &mir.functions {
+        for (mir_index, mir_function) in mir.functions.iter().enumerate() {
             let function_start = Instant::now();
             
             // Count MIR statements for metrics
@@ -535,8 +535,8 @@ pub fn new_wasm_module(mir: MIR) -> Result<Vec<u8>, CompileError> {
             
             compiled_functions += 1;
             
-            // Track function mapping for validation
-            validation_context.add_function_mapping(function_index, mir_function);
+            // Track function mapping for validation using MIR index to ensure consistency
+            validation_context.add_function_mapping(mir_index as u32, mir_function);
             
             // Export the function if it's marked for export
             if let Some(export) = mir.exports.get(&mir_function.name) {

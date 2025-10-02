@@ -191,7 +191,7 @@ impl WasmModule {
             .map(|t| self.wasm_type_to_val_type(t))
             .collect();
 
-        self.type_section.ty().function(param_types, result_types);
+        self.type_section.ty().function(param_types, result_types.clone());
 
         // Add function to function section
         self.function_section.function(self.type_count);
@@ -204,6 +204,9 @@ impl WasmModule {
         for block in &mir_function.blocks {
             self.lower_block_to_wasm(block, &mut function, &local_map)?;
         }
+
+        // Every WASM function must end with an End instruction
+        function.instruction(&Instruction::End);
 
         // Add function to code section
         self.code_section.function(&function);
@@ -426,25 +429,27 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         match terminator {
             Terminator::Goto { target: _ } => {
-                // Simple goto - for now just continue
+                // For simple linear control flow, no explicit branch needed
+                // The next block will be processed sequentially
                 Ok(())
             }
             Terminator::If {
-                condition,
+                condition: _,
                 then_block: _,
                 else_block: _,
             } => {
-                // Load condition and generate if
-                self.lower_operand(condition, function, local_map)?;
-                function.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                function.instruction(&Instruction::End);
-                Ok(())
+                // For now, complex control flow is not implemented
+                // This will be properly implemented when we add full control flow support
+                return_compiler_error!(
+                    "Complex control flow (if/else) not yet implemented in simplified WASM backend"
+                );
             }
             Terminator::Return { values } => {
-                // Load return values
+                // Load return values onto the stack
                 for value in values {
                     self.lower_operand(value, function, local_map)?;
                 }
+                // Add explicit Return instruction for proper function termination
                 function.instruction(&Instruction::Return);
                 Ok(())
             }
@@ -453,6 +458,49 @@ impl WasmModule {
                 Ok(())
             }
         }
+    }
+
+    /// Ensure function has proper termination
+    /// 
+    /// WASM functions must end with a terminating instruction (return, unreachable, etc.)
+    /// The wasm_encoder library requires explicit termination for all functions.
+    fn ensure_function_termination(
+        &self,
+        function: &mut Function,
+        result_types: &[ValType],
+    ) -> Result<(), CompileError> {
+        if result_types.is_empty() {
+            // For void functions, add an explicit return instruction
+            function.instruction(&Instruction::Return);
+        } else {
+            // For functions with return types, we need to provide default values
+            // This is a simplified approach - in a full implementation, we would
+            // analyze the control flow to determine if a return is actually needed
+            for result_type in result_types {
+                match result_type {
+                    ValType::I32 => {
+                        function.instruction(&Instruction::I32Const(0));
+                    }
+                    ValType::I64 => {
+                        function.instruction(&Instruction::I64Const(0));
+                    }
+                    ValType::F32 => {
+                        function.instruction(&Instruction::F32Const(0.0.into()));
+                    }
+                    ValType::F64 => {
+                        function.instruction(&Instruction::F64Const(0.0.into()));
+                    }
+                    _ => {
+                        return_compiler_error!(
+                            "Unsupported return type for automatic function termination: {:?}",
+                            result_type
+                        );
+                    }
+                }
+            }
+            function.instruction(&Instruction::Return);
+        }
+        Ok(())
     }
 
     /// Generate string constant WASM instructions
