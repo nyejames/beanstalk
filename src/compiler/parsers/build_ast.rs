@@ -307,7 +307,6 @@ pub fn new_ast(
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
-                        
                         // Assignment operators
                         // ---------------------------
                         //          MUTATION
@@ -409,10 +408,18 @@ pub fn new_ast(
                     &mut context.new_child_control_flow(ContextKind::Branch),
                 )?);
             }
+
             TokenKind::Else => {
-                // This will break out if statements, but must be inside the if_statement context
-                // Preserves the else token for the branching parser to know there is an else case rather than just an end to the scope
-                // TODO: how do we handle this for match blocks?
+                // If we are inside an if / match statement, bre
+                if context.kind == ContextKind::Branch {
+                    break;
+                } else {
+                    return_rule_error!(
+                        token_stream.current_location(),
+                        "Unexpected token '{:?}'. 'else' can only be used inside an if statement or match statement",
+                        token_stream.current_token_kind()
+                    )
+                }
             }
 
             // IGNORED TOKENS

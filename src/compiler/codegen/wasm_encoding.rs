@@ -2,7 +2,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::mir::mir_nodes::{
     BinOp, Constant, MIR, MirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
 };
-use crate::compiler::mir::place::{Place, WasmType};
+use crate::compiler::mir::place::{Place, WasmType, MemoryBase, ProjectionElem, TypeSize};
 use crate::return_compiler_error;
 use std::collections::HashMap;
 use wasm_encoder::*;
@@ -113,6 +113,332 @@ pub struct StringAllocationStats {
     pub deduplication_savings: u32,
 }
 
+/// Local variable mapping from MIR places to WASM local indices
+/// 
+/// This structure manages the mapping between MIR Place::Local indices and
+/// WASM local variable indices, enabling proper place resolution.
+#[derive(Debug, Clone)]
+pub struct LocalMap {
+    /// Map from MIR local index to WASM local index
+    local_mapping: HashMap<u32, u32>,
+    /// Map from MIR global index to WASM global index
+    global_mapping: HashMap<u32, u32>,
+    /// Next available WASM local index
+    next_local_index: u32,
+    /// Next available WASM global index
+    next_global_index: u32,
+}
+
+impl LocalMap {
+    /// Create a new empty local map
+    pub fn new() -> Self {
+        Self {
+            local_mapping: HashMap::new(),
+            global_mapping: HashMap::new(),
+            next_local_index: 0,
+            next_global_index: 0,
+        }
+    }
+
+    /// Create a local map with parameter count (parameters occupy first local indices)
+    pub fn with_parameters(param_count: u32) -> Self {
+        Self {
+            local_mapping: HashMap::new(),
+            global_mapping: HashMap::new(),
+            next_local_index: param_count, // Parameters occupy indices 0..param_count
+            next_global_index: 0,
+        }
+    }
+
+    /// Map a MIR local index to a WASM local index
+    pub fn map_local(&mut self, mir_local: u32, wasm_local: u32) {
+        self.local_mapping.insert(mir_local, wasm_local);
+    }
+
+    /// Map a MIR global index to a WASM global index
+    pub fn map_global(&mut self, mir_global: u32, wasm_global: u32) {
+        self.global_mapping.insert(mir_global, wasm_global);
+    }
+
+    /// Get WASM local index for MIR local
+    pub fn get_local(&self, mir_local: u32) -> Option<u32> {
+        self.local_mapping.get(&mir_local).copied()
+    }
+
+    /// Get WASM global index for MIR global
+    pub fn get_global(&self, mir_global: u32) -> Option<u32> {
+        self.global_mapping.get(&mir_global).copied()
+    }
+
+    /// Allocate next WASM local index for a MIR local
+    pub fn allocate_local(&mut self, mir_local: u32) -> u32 {
+        let wasm_local = self.next_local_index;
+        self.next_local_index += 1;
+        self.local_mapping.insert(mir_local, wasm_local);
+        wasm_local
+    }
+
+    /// Allocate next WASM global index for a MIR global
+    pub fn allocate_global(&mut self, mir_global: u32) -> u32 {
+        let wasm_global = self.next_global_index;
+        self.next_global_index += 1;
+        self.global_mapping.insert(mir_global, wasm_global);
+        wasm_global
+    }
+
+    /// Get all local mappings for debugging
+    pub fn get_all_locals(&self) -> &HashMap<u32, u32> {
+        &self.local_mapping
+    }
+
+    /// Get all global mappings for debugging
+    pub fn get_all_globals(&self) -> &HashMap<u32, u32> {
+        &self.global_mapping
+    }
+}
+
+impl Default for LocalMap {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Local variable analyzer for determining WASM local requirements from MIR
+/// 
+/// This analyzer examines a MIR function to determine what local variables are needed
+/// and builds the appropriate mapping for WASM code generation.
+#[derive(Debug)]
+pub struct LocalAnalyzer {
+    /// Map from MIR local index to WASM type
+    local_types: HashMap<u32, WasmType>,
+    /// Count of each WASM type needed for locals
+    type_counts: HashMap<WasmType, u32>,
+    /// Parameter count (these occupy first local indices)
+    parameter_count: u32,
+}
+
+impl LocalAnalyzer {
+    /// Create a new local analyzer
+    pub fn new() -> Self {
+        Self {
+            local_types: HashMap::new(),
+            type_counts: HashMap::new(),
+            parameter_count: 0,
+        }
+    }
+
+    /// Analyze a MIR function to determine local variable requirements
+    pub fn analyze_function(mir_function: &MirFunction) -> Self {
+        let mut analyzer = Self::new();
+        analyzer.parameter_count = mir_function.parameters.len() as u32;
+
+        // Analyze all places used in the function
+        for block in &mir_function.blocks {
+            for statement in &block.statements {
+                analyzer.collect_from_statement(statement);
+            }
+            analyzer.collect_from_terminator(&block.terminator);
+        }
+
+        // Also analyze local variables declared in the function
+        for (_, place) in &mir_function.locals {
+            analyzer.collect_from_place(place);
+        }
+
+        analyzer
+    }
+
+    /// Collect local variable information from a statement
+    fn collect_from_statement(&mut self, statement: &Statement) {
+        match statement {
+            Statement::Assign { place, rvalue } => {
+                self.collect_from_place(place);
+                self.collect_from_rvalue(rvalue);
+            }
+            Statement::Call { func, args, destination } => {
+                self.collect_from_operand(func);
+                for arg in args {
+                    self.collect_from_operand(arg);
+                }
+                if let Some(dest) = destination {
+                    self.collect_from_place(dest);
+                }
+            }
+            Statement::InterfaceCall { receiver, args, destination, .. } => {
+                self.collect_from_operand(receiver);
+                for arg in args {
+                    self.collect_from_operand(arg);
+                }
+                if let Some(dest) = destination {
+                    self.collect_from_place(dest);
+                }
+            }
+            Statement::Alloc { place, size, .. } => {
+                self.collect_from_place(place);
+                self.collect_from_operand(size);
+            }
+            Statement::Dealloc { place } => {
+                self.collect_from_place(place);
+            }
+            Statement::Store { place, value, .. } => {
+                self.collect_from_place(place);
+                self.collect_from_operand(value);
+            }
+            Statement::Drop { place } => {
+                self.collect_from_place(place);
+            }
+            Statement::MemoryOp { operand, result, .. } => {
+                if let Some(op) = operand {
+                    self.collect_from_operand(op);
+                }
+                if let Some(res) = result {
+                    self.collect_from_place(res);
+                }
+            }
+            Statement::Nop => {
+                // No places to collect
+            }
+        }
+    }
+
+    /// Collect local variable information from a terminator
+    fn collect_from_terminator(&mut self, terminator: &Terminator) {
+        match terminator {
+            Terminator::Return { values } => {
+                for value in values {
+                    self.collect_from_operand(value);
+                }
+            }
+            Terminator::If { condition, .. } => {
+                self.collect_from_operand(condition);
+            }
+            Terminator::Goto { .. } | Terminator::Unreachable => {
+                // No operands to collect
+            }
+        }
+    }
+
+    /// Collect local variable information from an rvalue
+    fn collect_from_rvalue(&mut self, rvalue: &Rvalue) {
+        match rvalue {
+            Rvalue::Use(operand) => {
+                self.collect_from_operand(operand);
+            }
+            Rvalue::BinaryOp(_, left, right) => {
+                self.collect_from_operand(left);
+                self.collect_from_operand(right);
+            }
+            Rvalue::UnaryOp(_, operand) => {
+                self.collect_from_operand(operand);
+            }
+            Rvalue::Ref { place, .. } => {
+                self.collect_from_place(place);
+            }
+        }
+    }
+
+    /// Collect local variable information from an operand
+    fn collect_from_operand(&mut self, operand: &Operand) {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => {
+                self.collect_from_place(place);
+            }
+            Operand::Constant(_) | Operand::FunctionRef(_) | Operand::GlobalRef(_) => {
+                // These don't require local variables
+            }
+        }
+    }
+
+    /// Collect local variable information from a place
+    fn collect_from_place(&mut self, place: &Place) {
+        match place {
+            Place::Local { index, wasm_type } => {
+                // Only collect locals that aren't parameters
+                if *index >= self.parameter_count {
+                    self.local_types.insert(*index, wasm_type.clone());
+                    *self.type_counts.entry(wasm_type.clone()).or_insert(0) += 1;
+                }
+            }
+            Place::Projection { base, elem } => {
+                self.collect_from_place(base);
+                if let ProjectionElem::Index { index, .. } = elem {
+                    self.collect_from_place(index);
+                }
+            }
+            Place::Global { .. } | Place::Memory { .. } => {
+                // These don't require local variables
+            }
+        }
+    }
+
+    /// Generate WASM local variable declarations as (count, ValType) pairs
+    pub fn generate_wasm_locals(&self) -> Vec<(u32, ValType)> {
+        self.type_counts
+            .iter()
+            .map(|(wasm_type, count)| (*count, self.wasm_type_to_val_type(wasm_type)))
+            .collect()
+    }
+
+    /// Build local mapping from MIR analysis
+    pub fn build_local_mapping(&self, mir_function: &MirFunction) -> LocalMap {
+        let mut local_map = LocalMap::with_parameters(mir_function.parameters.len() as u32);
+        let mut wasm_local_index = mir_function.parameters.len() as u32;
+
+        // Map each MIR local to a WASM local index
+        for (mir_local_index, _wasm_type) in &self.local_types {
+            local_map.map_local(*mir_local_index, wasm_local_index);
+            wasm_local_index += 1;
+        }
+
+        // Also map any globals that might be referenced
+        // (This will be expanded when we implement global variable support)
+
+        local_map
+    }
+
+    /// Convert WasmType to ValType for wasm_encoder
+    fn wasm_type_to_val_type(&self, wasm_type: &WasmType) -> ValType {
+        match wasm_type {
+            WasmType::I32 => ValType::I32,
+            WasmType::I64 => ValType::I64,
+            WasmType::F32 => ValType::F32,
+            WasmType::F64 => ValType::F64,
+            WasmType::ExternRef => ValType::Ref(RefType::EXTERNREF),
+            WasmType::FuncRef => ValType::Ref(RefType::FUNCREF),
+        }
+    }
+
+    /// Get statistics about local variable usage
+    pub fn get_local_stats(&self) -> LocalAnalysisStats {
+        LocalAnalysisStats {
+            total_locals: self.local_types.len(),
+            i32_locals: *self.type_counts.get(&WasmType::I32).unwrap_or(&0),
+            i64_locals: *self.type_counts.get(&WasmType::I64).unwrap_or(&0),
+            f32_locals: *self.type_counts.get(&WasmType::F32).unwrap_or(&0),
+            f64_locals: *self.type_counts.get(&WasmType::F64).unwrap_or(&0),
+            ref_locals: *self.type_counts.get(&WasmType::ExternRef).unwrap_or(&0)
+                + *self.type_counts.get(&WasmType::FuncRef).unwrap_or(&0),
+        }
+    }
+}
+
+/// Statistics for local variable analysis
+#[derive(Debug, Clone)]
+pub struct LocalAnalysisStats {
+    /// Total number of local variables
+    pub total_locals: usize,
+    /// Number of i32 locals
+    pub i32_locals: u32,
+    /// Number of i64 locals
+    pub i64_locals: u32,
+    /// Number of f32 locals
+    pub f32_locals: u32,
+    /// Number of f64 locals
+    pub f64_locals: u32,
+    /// Number of reference locals
+    pub ref_locals: u32,
+}
+
 /// Simplified WASM module for basic MIR-to-WASM compilation
 pub struct WasmModule {
     type_section: TypeSection,
@@ -176,8 +502,13 @@ impl WasmModule {
         Ok(module)
     }
 
-    /// Compile a MIR function to WASM
+    /// Compile a MIR function to WASM with proper local variable analysis
     pub fn compile_function(&mut self, mir_function: &MirFunction) -> Result<(), CompileError> {
+        // Analyze local variable requirements
+        let analyzer = LocalAnalyzer::analyze_function(mir_function);
+        let wasm_locals = analyzer.generate_wasm_locals();
+        let local_map = analyzer.build_local_mapping(mir_function);
+
         // Create function type
         let param_types: Vec<ValType> = mir_function
             .parameters
@@ -196,17 +527,13 @@ impl WasmModule {
         // Add function to function section
         self.function_section.function(self.type_count);
 
-        // Create function body
-        let mut function = Function::new(vec![]); // No locals for now
-        let local_map = HashMap::new(); // Empty local map for now
+        // Create function body with proper locals from analysis
+        let mut function = Function::new(wasm_locals);
 
-        // Lower each block
+        // Lower each block with proper local mapping
         for block in &mir_function.blocks {
             self.lower_block_to_wasm(block, &mut function, &local_map)?;
         }
-
-        // Every WASM function must end with an End instruction
-        function.instruction(&Instruction::End);
 
         // Add function to code section
         self.code_section.function(&function);
@@ -222,7 +549,7 @@ impl WasmModule {
         &mut self,
         block: &crate::compiler::mir::mir_nodes::MirBlock,
         function: &mut Function,
-        local_map: &HashMap<Place, u32>,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         // Lower each statement
         for statement in &block.statements {
@@ -240,13 +567,14 @@ impl WasmModule {
         &mut self,
         statement: &Statement,
         function: &mut Function,
-        local_map: &HashMap<Place, u32>,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match statement {
-            Statement::Assign { place: _, rvalue } => {
-                // For now, just lower the rvalue and drop the result
+            Statement::Assign { place, rvalue } => {
+                // Lower the rvalue to put value on stack
                 self.lower_rvalue(rvalue, function, local_map)?;
-                function.instruction(&Instruction::Drop);
+                // Lower the place assignment to store the value
+                self.lower_place_assignment(place, function, local_map)?;
                 Ok(())
             }
             Statement::Call {
@@ -276,7 +604,7 @@ impl WasmModule {
         &mut self,
         rvalue: &Rvalue,
         function: &mut Function,
-        local_map: &HashMap<Place, u32>,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match rvalue {
             Rvalue::Use(operand) => self.lower_operand(operand, function, local_map),
@@ -304,19 +632,309 @@ impl WasmModule {
         &mut self,
         operand: &Operand,
         function: &mut Function,
-        _local_map: &HashMap<Place, u32>,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match operand {
             Operand::Constant(constant) => self.lower_constant(constant, function),
-            Operand::Copy(_place) | Operand::Move(_place) => {
-                // Place operations not yet implemented
-                return_compiler_error!(
-                    "Place operations not yet implemented in simplified WASM backend"
-                );
+            Operand::Copy(place) => {
+                // Copy operation - load value from place
+                self.lower_place_access(place, function, local_map)
             }
-            Operand::FunctionRef(_) | Operand::GlobalRef(_) => {
-                // References not yet implemented
-                return_compiler_error!("References not yet implemented in simplified WASM backend");
+            Operand::Move(place) => {
+                // Move operation - load value from place (same as copy for now)
+                // TODO: In future, this could invalidate the source place for borrow checking
+                self.lower_place_access(place, function, local_map)
+            }
+            Operand::FunctionRef(func_index) => {
+                // Function reference as index constant
+                function.instruction(&Instruction::I32Const(*func_index as i32));
+                Ok(())
+            }
+            Operand::GlobalRef(global_index) => {
+                // Global reference - load global value
+                let wasm_global = local_map.get_global(*global_index)
+                    .ok_or_else(|| CompileError::compiler_error(
+                        &format!("Global index {} not found in local mapping", global_index)
+                    ))?;
+                function.instruction(&Instruction::GlobalGet(wasm_global));
+                Ok(())
+            }
+        }
+    }
+
+    /// Lower place access to WASM instructions (CRITICAL IMPLEMENTATION)
+    /// 
+    /// This method handles the core place resolution system that enables variable access.
+    /// It converts MIR Place operations into appropriate WASM instructions.
+    fn lower_place_access(
+        &mut self,
+        place: &Place,
+        function: &mut Function,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        match place {
+            Place::Local { index, wasm_type: _ } => {
+                // Map MIR local to WASM local index
+                let wasm_local = local_map.get_local(*index)
+                    .ok_or_else(|| CompileError::compiler_error(
+                        &format!("Local variable with index {} not found in mapping. This indicates a problem with local variable analysis.", index)
+                    ))?;
+                function.instruction(&Instruction::LocalGet(wasm_local));
+                Ok(())
+            }
+            
+            Place::Global { index, wasm_type: _ } => {
+                // Map MIR global to WASM global index
+                let wasm_global = local_map.get_global(*index)
+                    .ok_or_else(|| CompileError::compiler_error(
+                        &format!("Global variable with index {} not found in mapping", index)
+                    ))?;
+                function.instruction(&Instruction::GlobalGet(wasm_global));
+                Ok(())
+            }
+            
+            Place::Memory { base, offset, size } => {
+                // Generate memory access with proper alignment
+                self.lower_memory_base(base, function)?;
+                
+                // Add offset if non-zero
+                if offset.0 > 0 {
+                    function.instruction(&Instruction::I32Const(offset.0 as i32));
+                    function.instruction(&Instruction::I32Add);
+                }
+                
+                // Use appropriate load instruction based on type size
+                match size {
+                    TypeSize::Byte => {
+                        function.instruction(&Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0, // 1-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::Short => {
+                        function.instruction(&Instruction::I32Load16U(MemArg {
+                            offset: 0,
+                            align: 1, // 2-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::Word => {
+                        function.instruction(&Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2, // 4-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::DoubleWord => {
+                        function.instruction(&Instruction::I64Load(MemArg {
+                            offset: 0,
+                            align: 3, // 8-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::Custom { bytes, alignment } => {
+                        // For custom sizes, use appropriate load based on size
+                        if *bytes <= 4 {
+                            function.instruction(&Instruction::I32Load(MemArg {
+                                offset: 0,
+                                align: (*alignment as f32).log2() as u32,
+                                memory_index: 0,
+                            }));
+                        } else {
+                            function.instruction(&Instruction::I64Load(MemArg {
+                                offset: 0,
+                                align: (*alignment as f32).log2() as u32,
+                                memory_index: 0,
+                            }));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            
+            Place::Projection { base, elem } => {
+                // Handle field access and array indexing
+                self.lower_place_access(base, function, local_map)?;
+                self.lower_projection_element(elem, function, local_map)?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Lower place assignment to WASM instructions (CRITICAL IMPLEMENTATION)
+    /// 
+    /// This method handles place assignment operations, generating appropriate
+    /// WASM store instructions for different place types.
+    fn lower_place_assignment(
+        &mut self,
+        place: &Place,
+        function: &mut Function,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        match place {
+            Place::Local { index, wasm_type: _ } => {
+                // Map MIR local to WASM local index
+                let wasm_local = local_map.get_local(*index)
+                    .ok_or_else(|| CompileError::compiler_error(
+                        &format!("Local variable with index {} not found in mapping", index)
+                    ))?;
+                function.instruction(&Instruction::LocalSet(wasm_local));
+                Ok(())
+            }
+            
+            Place::Global { index, wasm_type: _ } => {
+                // Map MIR global to WASM global index
+                let wasm_global = local_map.get_global(*index)
+                    .ok_or_else(|| CompileError::compiler_error(
+                        &format!("Global variable with index {} not found in mapping", index)
+                    ))?;
+                function.instruction(&Instruction::GlobalSet(wasm_global));
+                Ok(())
+            }
+            
+            Place::Memory { base, offset, size } => {
+                // Generate address calculation first
+                self.lower_memory_base(base, function)?;
+                
+                // Add offset if non-zero
+                if offset.0 > 0 {
+                    function.instruction(&Instruction::I32Const(offset.0 as i32));
+                    function.instruction(&Instruction::I32Add);
+                }
+                
+                // Use appropriate store instruction based on type size
+                match size {
+                    TypeSize::Byte => {
+                        function.instruction(&Instruction::I32Store8(MemArg {
+                            offset: 0,
+                            align: 0, // 1-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::Short => {
+                        function.instruction(&Instruction::I32Store16(MemArg {
+                            offset: 0,
+                            align: 1, // 2-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::Word => {
+                        function.instruction(&Instruction::I32Store(MemArg {
+                            offset: 0,
+                            align: 2, // 4-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::DoubleWord => {
+                        function.instruction(&Instruction::I64Store(MemArg {
+                            offset: 0,
+                            align: 3, // 8-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    TypeSize::Custom { bytes, alignment } => {
+                        // For custom sizes, use appropriate store based on size
+                        if *bytes <= 4 {
+                            function.instruction(&Instruction::I32Store(MemArg {
+                                offset: 0,
+                                align: (*alignment as f32).log2() as u32,
+                                memory_index: 0,
+                            }));
+                        } else {
+                            function.instruction(&Instruction::I64Store(MemArg {
+                                offset: 0,
+                                align: (*alignment as f32).log2() as u32,
+                                memory_index: 0,
+                            }));
+                        }
+                    }
+                }
+                Ok(())
+            }
+            
+            Place::Projection { base, elem } => {
+                // Handle field assignment and array element assignment
+                self.lower_place_access(base, function, local_map)?;
+                self.lower_projection_element(elem, function, local_map)?;
+                // The actual store will be handled by the caller
+                Ok(())
+            }
+        }
+    }
+
+    /// Lower memory base to WASM instructions
+    fn lower_memory_base(
+        &mut self,
+        base: &MemoryBase,
+        function: &mut Function,
+    ) -> Result<(), CompileError> {
+        match base {
+            MemoryBase::LinearMemory => {
+                // Linear memory base is always at offset 0
+                function.instruction(&Instruction::I32Const(0));
+                Ok(())
+            }
+            MemoryBase::Stack => {
+                // Stack-based memory (should be handled as locals)
+                return_compiler_error!("Stack-based memory should be handled as local variables, not memory operations");
+            }
+            MemoryBase::Heap { alloc_id: _, size: _ } => {
+                // Heap allocation - for now, treat as linear memory
+                // TODO: Implement proper heap management
+                function.instruction(&Instruction::I32Const(0));
+                Ok(())
+            }
+        }
+    }
+
+    /// Lower projection element to WASM instructions
+    fn lower_projection_element(
+        &mut self,
+        elem: &ProjectionElem,
+        function: &mut Function,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        match elem {
+            ProjectionElem::Field { index: _, offset, size: _ } => {
+                // Field access - add field offset to base address
+                function.instruction(&Instruction::I32Const(offset.0 as i32));
+                function.instruction(&Instruction::I32Add);
+                Ok(())
+            }
+            ProjectionElem::Index { index, element_size } => {
+                // Array indexing - calculate offset from index
+                self.lower_place_access(index, function, local_map)?;
+                function.instruction(&Instruction::I32Const(*element_size as i32));
+                function.instruction(&Instruction::I32Mul);
+                function.instruction(&Instruction::I32Add);
+                Ok(())
+            }
+            ProjectionElem::Length => {
+                // Length field access (for arrays/strings)
+                // Length is typically stored at offset 0
+                function.instruction(&Instruction::I32Load(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+                Ok(())
+            }
+            ProjectionElem::Data => {
+                // Data pointer access (for arrays/strings)
+                // Data pointer is typically stored after length
+                function.instruction(&Instruction::I32Const(4)); // Skip length field
+                function.instruction(&Instruction::I32Add);
+                Ok(())
+            }
+            ProjectionElem::Deref => {
+                // Dereference operation - load from memory
+                function.instruction(&Instruction::I32Load(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+                Ok(())
             }
         }
     }
@@ -425,7 +1043,7 @@ impl WasmModule {
         &mut self,
         terminator: &Terminator,
         function: &mut Function,
-        local_map: &HashMap<Place, u32>,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match terminator {
             Terminator::Goto { target: _ } => {

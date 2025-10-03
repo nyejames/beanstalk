@@ -87,6 +87,7 @@ impl Template {
                 }
 
                 TokenKind::TemplateClose => {
+                    ast_log!("Breaking out of template body. Found a template close.");
                     // Need to skip the closer
                     token_stream.advance();
                     break;
@@ -383,9 +384,9 @@ pub fn parse_template_head(
 
     // Each expression must be separated with a comma
     let mut comma_separator = true;
+    token_stream.advance();
 
     while token_stream.index < token_stream.length {
-        token_stream.advance();
         let token = token_stream.current_token_kind().to_owned();
 
         ast_log!("Parsing template head token: {:?}", token);
@@ -419,6 +420,7 @@ pub fn parse_template_head(
             }
 
             comma_separator = true;
+            token_stream.advance();
             continue;
         };
 
@@ -439,7 +441,6 @@ pub fn parse_template_head(
                 match template.style.unlocked_templates.to_owned().get(&name) {
                     Some(ExpressionKind::Template(inserted_template)) => {
                         template.insert_template_into_head(inserted_template, foldable)?;
-                        continue;
                     }
 
                     // Constant inherited
@@ -483,8 +484,6 @@ pub fn parse_template_head(
                             template.content.before.push(expr);
                         }
                     }
-
-                    continue;
                 } else {
                     return_syntax_error!(
                         token_stream.current_location(),
@@ -541,7 +540,9 @@ pub fn parse_template_head(
             }
 
             // Newlines / empty things in the scene head are ignored
-            TokenKind::Newline | TokenKind::Empty => {}
+            TokenKind::Newline | TokenKind::Empty => {
+                token_stream.advance();
+            }
 
             _ => {
                 return_syntax_error!(
@@ -551,6 +552,8 @@ pub fn parse_template_head(
                 )
             }
         }
+
+        comma_separator = false;
     }
 
     Ok(())

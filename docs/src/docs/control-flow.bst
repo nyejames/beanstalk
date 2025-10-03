@@ -29,37 +29,37 @@ They can also be used for pattern matching, all with a similar syntax.
 ]
 
 # Loops
-Only 1 keyword for loops "for". 
+Only 1 keyword for loops "loop". 
 
 Using the "in" keyword, you can specify an integer, float or collection to iterate through or define a new integer, float or collection. 
 
 [code:
-    for thing in things:
+    loop thing in things:
         print(thing)
     ;
 
-    for -20 to big_number:
+    loop -20 to big_number:
         print("hello")
     ;
 
     -- reverse loop
-    for n in big_number to smaller_number:
+    loop n in big_number to smaller_number:
         print(n)
     ;
 
-    for item in collection:
+    loop item in collection:
         print(item.to_string())
     ;
 
     -- Getting the index
-    for item, index in collection:
+    loop item, index in collection:
         print(index.to_string())
     ;
 
     -- Using a loop in a scene
     names = {"Priya", "Sam", "Chad"}
     [main:
-        [for name in names:
+        [loop name in names:
             Name: [name]
         ]
     ]
@@ -87,13 +87,13 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     name = "Bob"
     msg = if name is (
         "Sam": 
-            "yo"
+            "yo, whats up"
         ;
         "Priya": "hey!"
         else: "go away"
     )
 
-    for c in collection_of_choices:
+    loop c in collection_of_choices:
         if c is Thing::cool: 
             print(..)
         else: 

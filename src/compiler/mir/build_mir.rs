@@ -309,8 +309,8 @@ fn ast_declaration_to_mir(
     // Register the variable in context
     context.register_variable(name.to_string(), variable_place.clone());
 
-    // Convert expression to rvalue
-    let rvalue = expression_to_rvalue(expression, &expression.location)?;
+    // Convert expression to rvalue with context for variable references
+    let rvalue = expression_to_rvalue_with_context(expression, &expression.location, context)?;
 
     // Create assignment statement
     let assign_statement = Statement::Assign {
@@ -337,8 +337,8 @@ fn ast_mutation_to_mir(
         }
     };
 
-    // Convert expression to rvalue
-    let rvalue = expression_to_rvalue(expression, location)?;
+    // Convert expression to rvalue with context for variable references
+    let rvalue = expression_to_rvalue_with_context(expression, location, context)?;
 
     // Create assignment statement for the mutation
     let assign_statement = Statement::Assign {
@@ -357,10 +357,10 @@ fn ast_function_call_to_mir(
     location: &TextLocation,
     context: &mut MirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
-    // Convert parameters to operands
+    // Convert parameters to operands with context for variable references
     let mut args = Vec::new();
     for param in params {
-        let operand = expression_to_operand(param, &param.location)?;
+        let operand = expression_to_operand_with_context(param, &param.location, context)?;
         args.push(operand);
     }
 
@@ -393,7 +393,33 @@ fn expression_to_rvalue(expression: &Expression, location: &TextLocation) -> Res
             value.clone(),
         )))),
         ExpressionKind::Reference(name) => {
-            return_compiler_error!("Variable references in expressions not yet implemented for variable '{}' at line {}, column {}. This feature is coming soon - for now, try using the variable directly in assignments.", name, location.start_pos.line_number, location.start_pos.char_column);
+            return_compiler_error!("Variable references in expressions not yet implemented for variable '{}' at line {}, column {}. This feature requires context parameter - use transform_variable_reference instead.", name, location.start_pos.line_number, location.start_pos.char_column);
+        }
+        ExpressionKind::Runtime(_) => {
+            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for MIR generation at line {}, column {}. Try breaking down complex expressions into simpler assignments.", location.start_pos.line_number, location.start_pos.char_column);
+        }
+        _ => {
+            return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+        }
+    }
+}
+
+/// Convert expression to rvalue with context for variable references
+fn expression_to_rvalue_with_context(
+    expression: &Expression, 
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
+        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
+        ExpressionKind::Bool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
+        ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
+            value.clone(),
+        )))),
+        ExpressionKind::Reference(name) => {
+            // Transform variable reference using context
+            transform_variable_reference(name, location, context)
         }
         ExpressionKind::Runtime(_) => {
             return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for MIR generation at line {}, column {}. Try breaking down complex expressions into simpler assignments.", location.start_pos.line_number, location.start_pos.char_column);
@@ -412,7 +438,35 @@ fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Re
         ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
         ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
         ExpressionKind::Reference(name) => {
-            return_compiler_error!("Variable references in function parameters not yet implemented for variable '{}' at line {}, column {}. This feature is coming soon - for now, try passing literal values.", name, location.start_pos.line_number, location.start_pos.char_column);
+            return_compiler_error!("Variable references in function parameters not yet implemented for variable '{}' at line {}, column {}. This feature requires context parameter - use expression_to_operand_with_context instead.", name, location.start_pos.line_number, location.start_pos.char_column);
+        }
+        ExpressionKind::Runtime(_) => {
+            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
+        }
+        _ => {
+            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+        }
+    }
+}
+
+/// Convert expression to operand with context for variable references
+fn expression_to_operand_with_context(
+    expression: &Expression, 
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Operand, CompileError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I64(*value))),
+        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F64(*value))),
+        ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
+        ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
+        ExpressionKind::Reference(name) => {
+            // Transform variable reference to operand
+            let rvalue = transform_variable_reference(name, location, context)?;
+            match rvalue {
+                Rvalue::Use(operand) => Ok(operand),
+                _ => return_compiler_error!("Variable reference '{}' produced non-use rvalue, which is not supported in operand context", name),
+            }
         }
         ExpressionKind::Runtime(_) => {
             return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
@@ -424,3 +478,28 @@ fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Re
 }
 
 
+
+/// Transform variable reference to MIR rvalue with proper usage context
+/// 
+/// This method handles variable references by looking up the variable in the context
+/// and generating appropriate MIR operands based on usage patterns.
+fn transform_variable_reference(
+    name: &str,
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    // Look up the variable's place in the context
+    let variable_place = match context.lookup_variable(name) {
+        Some(place) => place.clone(),
+        None => {
+            return_rule_error!(location.clone(), "Undefined variable '{}'. Variable must be declared before use. Make sure the variable is declared in this scope or a parent scope.", name);
+        }
+    };
+
+    // Determine whether to use Copy or Move semantics
+    // For now, we'll use Copy semantics for all variable references
+    // TODO: In the future, this could be enhanced with move analysis
+    let operand = Operand::Copy(variable_place);
+    
+    Ok(Rvalue::Use(operand))
+}

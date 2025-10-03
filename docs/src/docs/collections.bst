@@ -56,19 +56,22 @@ Set keys for items in your dynamic collection to turn it into a key/value list.
 [Code:
 
     -- Hash Map
-    dictionary ~= |
+    dictionary ~= {
         "key1" = 1,
         "key2" = 2,
         "key3" = 3,
-    |
+    }
 
     dictionary.get("key1") -- returns 1
 
     -- Hash Set
-    set ~= | "value1", "value2", "value3" |
-
-    -- Any basic type can be used as a key or value in a hash map or set
-    set = | 1, 2, 3, "four", "five", 6.0 |
+    -- By setting the value of a key immutably to a wildcard
+    -- The compiler will implement this as a Hashset, as you have indicated the keys matter, but not the values
+    set ~= {
+        "value1" = _,
+        4 = _,
+        "AnotherValue" = _
+    }
 ]
 
 ## Types
