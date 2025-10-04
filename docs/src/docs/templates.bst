@@ -13,6 +13,7 @@ Templates are scoped using square brackets and can be passed special types calle
 The main purpose of a template is to generate either text content, markdown, HTML, code or just formatted strings.
 
 They will also turn into regular strings at compile time if they identify that they can be folded and won't change at runtime.
+Otherwise, you can think of them in their most basic form as a function at runtime that returns a string.
 
 In the future, templates **might** be extended to generate more than just strings, 
 and become a small macro system (not sure if this is the right direction for the language yet).
@@ -38,7 +39,7 @@ is used to define the content of the template. This is a string.
 Inside the body of a template, you can nest more templates using square brackets. 
 
 ## Beanstalk Markdown
-Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template has the markdown option enabled. 
+Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template is using it as a body parsing option. 
 Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
 Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
@@ -51,6 +52,7 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
     which by default will add a main tag to the HTML and wrap the content in a centered container.
 
     PAGE is a top-level style that unlocks all the basic HTML styles for nested templates.
+    It uses the built-in markdown parser function to parse this template body into markdown at compile time.
 
     # A Heading
     Some text that has a [link("example.com"): link] inside it.
@@ -188,7 +190,7 @@ These are directly from the HTMX library and will be the same keywords, but with
 Variables and expressions are typecast into strings when put into a template. This is the behaviour of all the numerical types and most of the string types. There are some exceptions to how other types are handled by templates.
 
 ### Booleans
-Booleans in a templatehead will conditonally hide or show itself based on the value of the boolean. 
+If statements in a templatehead will conditonally hide or show itself based on the value of the boolean. 
 If the boolean is true, the template and it's children will be shown, if false, it will be hidden.
 
 [Code:

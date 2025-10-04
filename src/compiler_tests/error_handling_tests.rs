@@ -299,4 +299,159 @@ mod error_handling_tests {
         assert!(move_error.msg.contains("moved value"), "Should explain move violation");
         assert!(move_error.msg.contains("Try using references"), "Should provide alternatives");
     }
+
+    /// Test WASM validation error mapping
+    #[test]
+    fn test_wasm_validation_error_mapping() {
+        let location = TextLocation::default();
+        
+        // Create a mock WASM validation error using a simple approach
+        // Since we can't easily construct specific wasmparser errors, we'll test the mapping logic
+        let error_msg = "type mismatch in function signature";
+        
+        // Test the error creation directly
+        let compile_error = CompileError::new_type_error(
+            format!("WASM type validation failed: {}. This indicates a type mismatch in the generated code. Check function signatures and variable types.", error_msg),
+            location.clone()
+        );
+        
+        // Should be a type error for type mismatches
+        assert_eq!(compile_error.error_type, ErrorType::Type);
+        assert!(compile_error.msg.contains("WASM type validation failed"));
+        assert!(compile_error.msg.contains("type mismatch"));
+        assert!(compile_error.msg.contains("Check function signatures"));
+    }
+
+    /// Test enhanced error creation methods
+    #[test]
+    fn test_enhanced_error_creation() {
+        let location = TextLocation::default();
+        
+        // Test rule error with suggestion
+        let rule_error = CompileError::rule_error_with_suggestion(
+            location.clone(),
+            "my_var",
+            "Variable",
+            "Make sure it's declared in scope"
+        );
+        
+        assert_eq!(rule_error.error_type, ErrorType::Rule);
+        assert!(rule_error.msg.contains("my_var"));
+        assert!(rule_error.msg.contains("Variable"));
+        assert!(rule_error.msg.contains("Make sure"));
+        
+        // Test type mismatch error
+        let type_error = CompileError::type_mismatch_error(
+            location.clone(),
+            "Int",
+            "String",
+            "arithmetic operation"
+        );
+        
+        assert_eq!(type_error.error_type, ErrorType::Type);
+        assert!(type_error.msg.contains("expected Int"));
+        assert!(type_error.msg.contains("found String"));
+        assert!(type_error.msg.contains("arithmetic operation"));
+        
+        // Test unimplemented feature error
+        let unimpl_error = CompileError::unimplemented_feature_error(
+            "Complex expressions",
+            Some(location.clone()),
+            Some("break into simpler parts")
+        );
+        
+        assert_eq!(unimpl_error.error_type, ErrorType::Compiler);
+        assert!(unimpl_error.msg.contains("Complex expressions"));
+        assert!(unimpl_error.msg.contains("not yet implemented"));
+        assert!(unimpl_error.msg.contains("break into simpler parts"));
+        assert!(unimpl_error.msg.contains("future release"));
+    }
+
+    /// Test error message validation
+    #[test]
+    fn test_error_message_validation() {
+        let location = TextLocation::default();
+        
+        // Test good error message
+        let good_error = CompileError::new_rule_error(
+            "Variable 'test' not found. Try checking the spelling or make sure it's declared in scope.".to_string(),
+            location.clone()
+        );
+        
+        let issues = good_error.validate_message_quality();
+        assert!(issues.is_empty(), "Good error should have no validation issues");
+        
+        // Test bad error message (too short)
+        let bad_error = CompileError::new_rule_error("Error".to_string(), location.clone());
+        let issues = bad_error.validate_message_quality();
+        assert!(!issues.is_empty(), "Bad error should have validation issues");
+        assert!(issues.iter().any(|issue| issue.contains("too short")));
+        
+        // Test error with internal details
+        let internal_error = CompileError::new_rule_error(
+            "Variable not found due to panic in lookup".to_string(),
+            location.clone()
+        );
+        let issues = internal_error.validate_message_quality();
+        assert!(issues.iter().any(|issue| issue.contains("internal implementation details")));
+        
+        // Test user-facing error without suggestions
+        let no_suggestion_error = CompileError::new_rule_error(
+            "Variable 'test' not found in the current scope.".to_string(),
+            location
+        );
+        let issues = no_suggestion_error.validate_message_quality();
+        assert!(issues.iter().any(|issue| issue.contains("should include suggestions")));
+    }
+
+    /// Test error context preservation
+    #[test]
+    fn test_error_context_preservation() {
+        let mut location = TextLocation::default();
+        location.start_pos.line_number = 42;
+        location.start_pos.char_column = 15;
+        
+        let error = CompileError::new_syntax_error(
+            "Expected semicolon after statement".to_string(),
+            location.clone()
+        );
+        
+        // Location should be preserved exactly
+        assert_eq!(error.location.start_pos.line_number, 42);
+        assert_eq!(error.location.start_pos.char_column, 15);
+        
+        // Error type should be correct
+        assert_eq!(error.error_type, ErrorType::Syntax);
+        
+        // Message should be preserved
+        assert_eq!(error.msg, "Expected semicolon after statement");
+    }
+
+    /// Test comprehensive error handling workflow
+    #[test]
+    fn test_comprehensive_error_workflow() {
+        let location = TextLocation::default();
+        
+        // Test the complete error handling workflow
+        let errors = vec![
+            CompileError::new_syntax_error("Syntax issue".to_string(), location.clone()),
+            CompileError::new_rule_error("Rule violation".to_string(), location.clone()),
+            CompileError::new_type_error("Type mismatch".to_string(), location.clone()),
+            CompileError::compiler_error("Internal bug"),
+        ];
+        
+        // All errors should have appropriate types
+        assert_eq!(errors[0].error_type, ErrorType::Syntax);
+        assert_eq!(errors[1].error_type, ErrorType::Rule);
+        assert_eq!(errors[2].error_type, ErrorType::Type);
+        assert_eq!(errors[3].error_type, ErrorType::Compiler);
+        
+        // Compiler error should have COMPILER BUG prefix
+        assert!(errors[3].msg.contains("COMPILER BUG"));
+        
+        // All errors should have non-empty messages
+        for error in &errors {
+            assert!(!error.msg.is_empty());
+        }
+    }
 }

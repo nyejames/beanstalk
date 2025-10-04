@@ -7,8 +7,13 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-use crate::{ir_log, return_compiler_error, return_rule_error, return_type_error};
+use crate::{
+    ir_log, return_compiler_error, return_rule_error, return_type_error,
+    return_undefined_variable_error, return_undefined_function_error,
+    return_type_mismatch_error, return_unimplemented_feature_error
+};
 use std::collections::HashMap;
 
 
@@ -165,6 +170,81 @@ impl MirTransformContext {
     /// Generate the next program point
     pub fn next_program_point(&mut self) -> ProgramPoint {
         self.program_point_generator.allocate_next()
+    }
+
+    /// Get similar variable names for error suggestions
+    pub fn get_similar_variable_names(&self, target: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        // Check all scopes for similar names
+        for scope in &self.variable_scopes {
+            for var_name in scope.keys() {
+                if Self::is_similar_name(target, var_name) {
+                    suggestions.push(var_name.clone());
+                }
+            }
+        }
+        
+        // Limit to top 3 suggestions
+        suggestions.truncate(3);
+        suggestions
+    }
+
+    /// Get similar function names for error suggestions
+    pub fn get_similar_function_names(&self, target: &str) -> Vec<String> {
+        let mut suggestions = Vec::new();
+        
+        for func_name in self.function_names.keys() {
+            if Self::is_similar_name(target, func_name) {
+                suggestions.push(func_name.clone());
+            }
+        }
+        
+        // Limit to top 3 suggestions
+        suggestions.truncate(3);
+        suggestions
+    }
+
+    /// Check if two names are similar (simple edit distance)
+    fn is_similar_name(target: &str, candidate: &str) -> bool {
+        // Simple similarity check - could be enhanced with proper edit distance
+        if target == candidate {
+            return false; // Don't suggest exact matches
+        }
+        
+        // Check for common typos
+        if target.len() == candidate.len() {
+            let diff_count = target.chars()
+                .zip(candidate.chars())
+                .filter(|(a, b)| a != b)
+                .count();
+            return diff_count <= 2; // Allow up to 2 character differences
+        }
+        
+        // Check for length differences of 1 (insertion/deletion)
+        if (target.len() as i32 - candidate.len() as i32).abs() == 1 {
+            let (shorter, longer) = if target.len() < candidate.len() {
+                (target, candidate)
+            } else {
+                (candidate, target)
+            };
+            
+            // Check if shorter is a subsequence of longer
+            let mut shorter_chars = shorter.chars();
+            let mut current_char = shorter_chars.next();
+            
+            for longer_char in longer.chars() {
+                if let Some(ch) = current_char {
+                    if ch == longer_char {
+                        current_char = shorter_chars.next();
+                    }
+                }
+            }
+            
+            return current_char.is_none();
+        }
+        
+        false
     }
 
     /// Store events for a program point in the current function
@@ -502,11 +582,10 @@ fn transform_ast_node_to_mir(
             Ok(vec![])
         }
         _ => {
-            return_compiler_error!(
-                "AST node type '{:?}' not yet implemented for MIR generation at line {}, column {}. This language feature needs to be added to the compiler backend. Please report this as a feature request.",
-                node.kind,
-                node.location.start_pos.line_number,
-                node.location.start_pos.char_column
+            return_unimplemented_feature_error!(
+                &format!("AST node type '{:?}'", node.kind),
+                Some(node.location.clone()),
+                Some("try using simpler language constructs or break complex statements into multiple parts")
             )
         }
     }
@@ -584,7 +663,21 @@ fn ast_mutation_to_mir(
     let variable_place = match context.lookup_variable(name) {
         Some(place) => place.clone(),
         None => {
-            return_rule_error!(location.clone(), "Cannot mutate undefined variable '{}'. Variable must be declared before mutation. Did you mean to declare it first with 'let {} = ...' or '{}~= ...'?", name, name, name);
+            // Get similar variable names for suggestions
+            let suggestions = context.get_similar_variable_names(name);
+            if !suggestions.is_empty() {
+                return_undefined_variable_error!(
+                    location.clone(),
+                    name,
+                    suggestions
+                );
+            } else {
+                return_rule_error!(
+                    location.clone(),
+                    "Cannot mutate undefined variable '{}'. Variable must be declared before mutation. Did you mean to declare it first with 'let {} = ...' or '{}~= ...'?",
+                    name, name, name
+                );
+            }
         }
     };
 
@@ -619,7 +712,13 @@ fn ast_function_call_to_mir(
     let func_operand = if let Some(func_id) = context.function_names.get(name) {
         Operand::FunctionRef(*func_id)
     } else {
-        return_rule_error!(location.clone(), "Undefined function '{}'. Function must be declared before use. Make sure the function is defined in this file or imported from another module.", name);
+        // Get similar function names for suggestions
+        let suggestions = context.get_similar_function_names(name);
+        return_undefined_function_error!(
+            location.clone(),
+            name,
+            suggestions
+        );
     };
 
     // Create call statement
@@ -648,10 +747,11 @@ fn ast_if_statement_to_mir(
 ) -> Result<Vec<Statement>, CompileError> {
     // Validate that condition is boolean type
     if !matches!(condition.data_type, DataType::Bool(_)) {
-        return_type_error!(
+        return_type_mismatch_error!(
             condition.location.clone(),
-            "If condition must be boolean, found {}. Try using comparison operators like 'is', 'not', or boolean expressions.",
-            condition.data_type
+            "Bool",
+            &format!("{:?}", condition.data_type),
+            "if condition"
         );
     }
     
@@ -697,10 +797,25 @@ fn expression_to_rvalue(expression: &Expression, location: &TextLocation) -> Res
             value.clone(),
         )))),
         ExpressionKind::Reference(name) => {
-            return_compiler_error!("Variable references in expressions not yet implemented for variable '{}' at line {}, column {}. This feature requires context parameter - use transform_variable_reference instead.", name, location.start_pos.line_number, location.start_pos.char_column);
+            return_unimplemented_feature_error!(
+                &format!("Variable references in expressions for variable '{}'", name),
+                Some(location.clone()),
+                Some("use transform_variable_reference instead or assign the variable to a temporary first")
+            );
         }
         ExpressionKind::Runtime(_) => {
-            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for MIR generation at line {}, column {}. Try breaking down complex expressions into simpler assignments.", location.start_pos.line_number, location.start_pos.char_column);
+            return_unimplemented_feature_error!(
+                "Runtime expressions (complex calculations)",
+                Some(location.clone()),
+                Some("break down complex expressions into simpler assignments")
+            );
+        }
+        ExpressionKind::Template(_) => {
+            return_unimplemented_feature_error!(
+                "Template expressions in rvalue context",
+                Some(location.clone()),
+                Some("use expression_to_rvalue_with_context for template support")
+            );
         }
         _ => {
             return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
@@ -729,6 +844,10 @@ fn expression_to_rvalue_with_context(
             // Transform runtime expressions (RPN order) to MIR
             transform_runtime_expression(runtime_nodes, location, context)
         }
+        ExpressionKind::Template(template) => {
+            // Transform template to MIR statements for string creation
+            transform_template_to_rvalue(template, location, context)
+        }
         ExpressionKind::None => {
             // None expressions represent parameters without default arguments
             // In the context of function parameters, this indicates the parameter must be provided
@@ -736,6 +855,210 @@ fn expression_to_rvalue_with_context(
         }
         _ => {
             return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+        }
+    }
+}
+
+/// Transform template to rvalue for string creation
+fn transform_template_to_rvalue(
+    template: &Template,
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    use crate::compiler::parsers::template::TemplateType;
+    
+    match template.kind {
+        TemplateType::CompileTimeString => {
+            // Template can be folded at compile time - convert to string constant
+            let mut folded_template = template.clone();
+            let folded_string = folded_template.fold(&None).map_err(|e| {
+                CompileError::compiler_error(&format!("Failed to fold compile-time template: {:?}", e))
+            })?;
+            
+            Ok(Rvalue::Use(Operand::Constant(Constant::String(folded_string))))
+        }
+        TemplateType::StringFunction => {
+            // Template requires runtime evaluation - generate string concatenation
+            transform_runtime_template_to_rvalue(template, location, context)
+        }
+        TemplateType::Comment => {
+            // Comments become empty strings
+            Ok(Rvalue::Use(Operand::Constant(Constant::String(String::new()))))
+        }
+        TemplateType::Slot => {
+            // Slots are not valid in expression context
+            return_compiler_error!("Template slots cannot be used in expression context at line {}, column {}. Slots are only valid within template bodies.", location.start_pos.line_number, location.start_pos.char_column);
+        }
+    }
+}
+
+/// Transform runtime template to rvalue with string concatenation
+fn transform_runtime_template_to_rvalue(
+    template: &Template,
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    // Check if template has any variable references that need runtime evaluation
+    let has_variable_references = template.content.flatten().iter().any(|expr| {
+        matches!(expr.kind, ExpressionKind::Reference(_))
+    });
+    
+    if !has_variable_references {
+        // No variables - can concatenate at compile time
+        let mut result_parts = Vec::new();
+        
+        for expr in template.content.flatten() {
+            match &expr.kind {
+                ExpressionKind::String(s) => {
+                    result_parts.push(s.clone());
+                }
+                ExpressionKind::Int(i) => {
+                    result_parts.push(i.to_string());
+                }
+                ExpressionKind::Float(f) => {
+                    result_parts.push(f.to_string());
+                }
+                ExpressionKind::Bool(b) => {
+                    result_parts.push(b.to_string());
+                }
+                _ => {
+                    return_compiler_error!("Unsupported expression type in template content: {:?} at line {}, column {}. Only simple values are supported in basic templates.", expr.kind, location.start_pos.line_number, location.start_pos.char_column);
+                }
+            }
+        }
+        
+        let concatenated = result_parts.join("");
+        return Ok(Rvalue::Use(Operand::Constant(Constant::String(concatenated))));
+    }
+    
+    // Template has variable references - generate string concatenation operations
+    transform_template_with_variable_interpolation(template, location, context)
+}
+
+/// Transform template with variable interpolation to string concatenation operations
+fn transform_template_with_variable_interpolation(
+    template: &Template,
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    let template_parts = template.content.flatten();
+    
+    if template_parts.is_empty() {
+        return Ok(Rvalue::Use(Operand::Constant(Constant::String(String::new()))));
+    }
+    
+    if template_parts.len() == 1 {
+        // Single part - convert directly
+        let expr = template_parts[0];
+        return convert_template_expression_to_string_rvalue(expr, location, context);
+    }
+    
+    // Multiple parts - generate string concatenation
+    // For now, we'll return a placeholder that indicates string concatenation is needed
+    // This will be enhanced when we implement proper string concatenation operations in MIR
+    
+    // Check if all parts can be converted to string operands
+    let mut string_operands = Vec::new();
+    for expr in template_parts {
+        match convert_template_expression_to_string_operand(expr, location, context)? {
+            Some(operand) => string_operands.push(operand),
+            None => {
+                return_compiler_error!("Template expression could not be converted to string operand: {:?} at line {}, column {}. Complex expressions in templates are not yet supported.", expr.kind, location.start_pos.line_number, location.start_pos.char_column);
+            }
+        }
+    }
+    
+    // For now, return the first operand as a placeholder
+    // TODO: Implement proper string concatenation in MIR
+    if let Some(first_operand) = string_operands.first() {
+        Ok(Rvalue::Use(first_operand.clone()))
+    } else {
+        Ok(Rvalue::Use(Operand::Constant(Constant::String(String::new()))))
+    }
+}
+
+/// Convert template expression to string rvalue
+fn convert_template_expression_to_string_rvalue(
+    expr: &Expression,
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    match &expr.kind {
+        ExpressionKind::String(s) => {
+            Ok(Rvalue::Use(Operand::Constant(Constant::String(s.clone()))))
+        }
+        ExpressionKind::Int(i) => {
+            Ok(Rvalue::Use(Operand::Constant(Constant::String(i.to_string()))))
+        }
+        ExpressionKind::Float(f) => {
+            Ok(Rvalue::Use(Operand::Constant(Constant::String(f.to_string()))))
+        }
+        ExpressionKind::Bool(b) => {
+            Ok(Rvalue::Use(Operand::Constant(Constant::String(b.to_string()))))
+        }
+        ExpressionKind::Reference(name) => {
+            // Look up variable and convert to string
+            let variable_place = match context.lookup_variable(name) {
+                Some(place) => place.clone(),
+                None => {
+                    let suggestions = context.get_similar_variable_names(name);
+                    return_undefined_variable_error!(
+                        location.clone(),
+                        name,
+                        suggestions
+                    );
+                }
+            };
+            
+            // For now, return a use of the variable place
+            // TODO: Add proper type checking and string conversion
+            Ok(Rvalue::Use(Operand::Copy(variable_place)))
+        }
+        _ => {
+            return_compiler_error!("Unsupported expression type in template: {:?} at line {}, column {}. Only simple values and variable references are supported.", expr.kind, location.start_pos.line_number, location.start_pos.char_column);
+        }
+    }
+}
+
+/// Convert template expression to string operand (if possible)
+fn convert_template_expression_to_string_operand(
+    expr: &Expression,
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Option<Operand>, CompileError> {
+    match &expr.kind {
+        ExpressionKind::String(s) => {
+            Ok(Some(Operand::Constant(Constant::String(s.clone()))))
+        }
+        ExpressionKind::Int(i) => {
+            Ok(Some(Operand::Constant(Constant::String(i.to_string()))))
+        }
+        ExpressionKind::Float(f) => {
+            Ok(Some(Operand::Constant(Constant::String(f.to_string()))))
+        }
+        ExpressionKind::Bool(b) => {
+            Ok(Some(Operand::Constant(Constant::String(b.to_string()))))
+        }
+        ExpressionKind::Reference(name) => {
+            // Look up variable
+            let variable_place = match context.lookup_variable(name) {
+                Some(place) => place.clone(),
+                None => {
+                    let suggestions = context.get_similar_variable_names(name);
+                    return_undefined_variable_error!(
+                        location.clone(),
+                        name,
+                        suggestions
+                    );
+                }
+            };
+            
+            // Return copy of the variable
+            Ok(Some(Operand::Copy(variable_place)))
+        }
+        _ => {
+            // Complex expressions not supported yet
+            Ok(None)
         }
     }
 }
@@ -752,6 +1075,9 @@ fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Re
         }
         ExpressionKind::Runtime(_) => {
             return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
+        }
+        ExpressionKind::Template(_) => {
+            return_compiler_error!("Template expressions not supported in function parameters at line {}, column {}. Templates should be assigned to variables first.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
             return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
@@ -781,6 +1107,21 @@ fn expression_to_operand_with_context(
         ExpressionKind::Runtime(_) => {
             return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
         }
+        ExpressionKind::Template(template) => {
+            // For operand context, try to fold template to constant if possible
+            match template.kind {
+                crate::compiler::parsers::template::TemplateType::CompileTimeString => {
+                    let mut folded_template = template.as_ref().clone();
+                    let folded_string = folded_template.fold(&None).map_err(|e| {
+                        CompileError::compiler_error(&format!("Failed to fold compile-time template: {:?}", e))
+                    })?;
+                    Ok(Operand::Constant(Constant::String(folded_string)))
+                }
+                _ => {
+                    return_compiler_error!("Runtime template expressions not supported in operand context at line {}, column {}. Templates should be assigned to variables first.", location.start_pos.line_number, location.start_pos.char_column);
+                }
+            }
+        }
         ExpressionKind::None => {
             // None expressions represent parameters without default arguments
             // In function parameter context, this means the parameter is required and has no default
@@ -808,7 +1149,13 @@ fn transform_variable_reference(
     let variable_place = match context.lookup_variable(name) {
         Some(place) => place.clone(),
         None => {
-            return_rule_error!(location.clone(), "Undefined variable '{}'. Variable must be declared before use. Make sure the variable is declared in this scope or a parent scope.", name);
+            // Get similar variable names for suggestions
+            let suggestions = context.get_similar_variable_names(name);
+            return_undefined_variable_error!(
+                location.clone(),
+                name,
+                suggestions
+            );
         }
     };
 

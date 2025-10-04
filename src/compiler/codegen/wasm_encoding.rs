@@ -3,7 +3,7 @@ use crate::compiler::mir::mir_nodes::{
     BinOp, Constant, MIR, MirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
 };
 use crate::compiler::mir::place::{Place, WasmType, MemoryBase, ProjectionElem, TypeSize};
-use crate::return_compiler_error;
+use crate::{return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error};
 use std::collections::HashMap;
 use wasm_encoder::*;
 
@@ -440,6 +440,74 @@ pub struct LocalAnalysisStats {
     pub ref_locals: u32,
 }
 
+/// Comprehensive statistics for WASM module generation
+#[derive(Debug, Clone)]
+pub struct WasmModuleStats {
+    /// Number of functions in the module
+    pub function_count: u32,
+    /// Number of types in the module
+    pub type_count: u32,
+    /// Number of global variables
+    pub global_count: u32,
+    /// String allocation statistics
+    pub string_stats: StringAllocationStats,
+    /// Estimated module size in bytes
+    pub estimated_size: u32,
+}
+
+impl WasmModuleStats {
+    /// Generate a human-readable report of module statistics
+    pub fn generate_report(&self) -> String {
+        format!(
+            "WASM Module Statistics:\n\
+             - Functions: {}\n\
+             - Types: {}\n\
+             - Globals: {}\n\
+             - Unique Strings: {}\n\
+             - String Data Size: {} bytes\n\
+             - Estimated Total Size: {} bytes\n\
+             - Memory Saved by Deduplication: {} bytes",
+            self.function_count,
+            self.type_count,
+            self.global_count,
+            self.string_stats.unique_strings,
+            self.string_stats.total_data_size,
+            self.estimated_size,
+            self.string_stats.deduplication_savings
+        )
+    }
+
+    /// Check if the module is within reasonable size limits
+    pub fn validate_size_limits(&self) -> Result<(), CompileError> {
+        const MAX_FUNCTIONS: u32 = 10000;
+        const MAX_TYPES: u32 = 1000;
+        const MAX_MODULE_SIZE: u32 = 50 * 1024 * 1024; // 50MB
+
+        if self.function_count > MAX_FUNCTIONS {
+            return_compiler_error!(
+                "Module has too many functions ({}). Maximum supported: {}. Consider splitting into multiple modules.",
+                self.function_count, MAX_FUNCTIONS
+            );
+        }
+
+        if self.type_count > MAX_TYPES {
+            return_compiler_error!(
+                "Module has too many types ({}). Maximum supported: {}. Consider simplifying type usage.",
+                self.type_count, MAX_TYPES
+            );
+        }
+
+        if self.estimated_size > MAX_MODULE_SIZE {
+            return_compiler_error!(
+                "Module size is too large ({} bytes). Maximum supported: {} bytes. Consider splitting into multiple modules or reducing complexity.",
+                self.estimated_size, MAX_MODULE_SIZE
+            );
+        }
+
+        Ok(())
+    }
+}
+
 /// Simplified WASM module for basic MIR-to-WASM compilation
 pub struct WasmModule {
     type_section: TypeSection,
@@ -486,7 +554,7 @@ impl WasmModule {
         }
     }
 
-    /// Create a new WasmModule from MIR
+    /// Create a new WasmModule from MIR with comprehensive error handling
     pub fn from_mir(mir: &MIR) -> Result<WasmModule, CompileError> {
         let mut module = WasmModule::new();
 
@@ -499,12 +567,36 @@ impl WasmModule {
             page_size_log2: None,
         });
 
-        // Process functions
-        for function in &mir.functions {
-            module.compile_function(function)?;
+        // Process functions with enhanced error context
+        for (index, function) in mir.functions.iter().enumerate() {
+            module.compile_function(function).map_err(|mut error| {
+                // Add context about which function failed
+                error.msg = format!(
+                    "Failed to compile function '{}' (index {}): {}",
+                    function.name, index, error.msg
+                );
+                error
+            })?;
         }
 
+        // Note: Validation is optional here since it consumes the module
+        // Use finish_with_validation() if validation is needed
+
         Ok(module)
+    }
+
+    /// Validate the generated WASM module using wasmparser
+    pub fn validate_module(self) -> Result<(), CompileError> {
+        // Generate the WASM bytes for validation
+        let wasm_bytes = self.finish();
+        
+        // Use wasmparser to validate the module
+        match wasmparser::validate(&wasm_bytes) {
+            Ok(_) => Ok(()),
+            Err(wasm_error) => {
+                return_wasm_validation_error!(&wasm_error, None);
+            }
+        }
     }
 
     /// Compile a MIR function to WASM with proper local variable analysis
@@ -593,8 +685,10 @@ impl WasmModule {
                 Ok(())
             }
             _ => {
-                return_compiler_error!(
-                    "Statement type not yet implemented in simplified WASM backend"
+                return_unimplemented_feature_error!(
+                    &format!("Statement type '{:?}'", statement),
+                    None,
+                    Some("try using simpler statements or break complex operations into multiple steps")
                 );
             }
         }
@@ -624,8 +718,11 @@ impl WasmModule {
                 place: _,
                 borrow_kind: _,
             } => {
-                // References not yet implemented
-                return_compiler_error!("References not yet implemented in simplified WASM backend");
+                return_unimplemented_feature_error!(
+                    "Reference operations",
+                    None,
+                    Some("use direct value access instead of references for now")
+                );
             }
         }
     }
@@ -793,10 +890,10 @@ impl WasmModule {
                 function.instruction(&Instruction::Call(*func_index));
             }
             _ => {
-                // For now, we only support direct function calls
-                // Indirect calls (function pointers) will be implemented later
-                return_compiler_error!(
-                    "Indirect function calls not yet implemented. Only direct function calls are supported."
+                return_unimplemented_feature_error!(
+                    "Indirect function calls (function pointers)",
+                    None,
+                    Some("use direct function calls by name instead of function variables")
                 );
             }
         }
@@ -1529,6 +1626,41 @@ impl WasmModule {
         module.section(&self.data_section);
 
         module.finish()
+    }
+
+    /// Validate and finish building the WASM module with comprehensive error handling
+    pub fn finish_with_validation(self) -> Result<Vec<u8>, CompileError> {
+        let wasm_bytes = self.finish();
+        
+        // Validate the generated WASM module
+        match wasmparser::validate(&wasm_bytes) {
+            Ok(_) => Ok(wasm_bytes),
+            Err(wasm_error) => {
+                return_wasm_validation_error!(&wasm_error, None);
+            }
+        }
+    }
+
+    /// Get comprehensive module statistics for debugging and optimization
+    pub fn get_module_stats(&self) -> WasmModuleStats {
+        WasmModuleStats {
+            function_count: self.function_count,
+            type_count: self.type_count,
+            global_count: self.global_count,
+            string_stats: self.string_manager.get_allocation_stats(),
+            estimated_size: self.estimate_module_size(),
+        }
+    }
+
+    /// Estimate the final module size for memory planning
+    fn estimate_module_size(&self) -> u32 {
+        // Rough estimation based on section counts
+        let base_size = 100; // Basic module overhead
+        let type_size = self.type_count * 20; // Rough estimate per type
+        let function_size = self.function_count * 50; // Rough estimate per function
+        let data_size = self.string_manager.get_data_size();
+        
+        base_size + type_size + function_size + data_size
     }
 
     /// Get function index by name for function calls
