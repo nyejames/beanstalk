@@ -8,7 +8,7 @@ use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-use crate::{ir_log, return_compiler_error, return_rule_error};
+use crate::{ir_log, return_compiler_error, return_rule_error, return_type_error};
 use std::collections::HashMap;
 
 
@@ -71,6 +71,16 @@ fn generate_events_for_function(function: &mut MirFunction, _context: &mut MirTr
     for (program_point, events) in all_events {
         function.store_events(program_point, events);
     }
+}
+
+/// Function information for tracking function metadata and signatures
+#[derive(Debug, Clone)]
+pub struct FunctionInfo {
+    pub name: String,
+    pub parameters: Vec<(String, DataType)>,
+    pub return_type: Option<DataType>,
+    pub wasm_function_index: Option<u32>,
+    pub mir_function: MirFunction,
 }
 
 /// Simplified context for AST-to-MIR transformation
@@ -167,6 +177,203 @@ impl MirTransformContext {
         let events = statement.generate_events();
         function.store_events(program_point, events);
     }
+
+    /// Transform function definition from expression to MIR
+    pub fn transform_function_definition_from_expression(
+        &mut self,
+        name: &str,
+        parameters: &[crate::compiler::parsers::ast_nodes::Arg],
+        return_types: &[DataType],
+        body: &[AstNode],
+    ) -> Result<FunctionInfo, CompileError> {
+        let function_index = self.allocate_function_id();
+        
+        // Register function name for future calls
+        self.function_names.insert(name.to_string(), function_index);
+        
+        // Create new scope for function parameters
+        self.enter_scope();
+        
+        // Convert parameters to MIR places and register them
+        let mut mir_parameters = Vec::new();
+        let mut param_info = Vec::new();
+        
+        for param in parameters {
+            // Allocate a local place for the parameter
+            let param_place = self.get_place_manager().allocate_local(&param.value.data_type);
+            
+            // Register parameter in current scope
+            self.register_variable(param.name.clone(), param_place.clone());
+            
+            mir_parameters.push(param_place);
+            param_info.push((param.name.clone(), param.value.data_type.clone()));
+        }
+        
+        // Convert return types to WASM types
+        let wasm_return_types: Vec<crate::compiler::mir::place::WasmType> = return_types
+            .iter()
+            .map(|dt| self.datatype_to_wasm_type(dt))
+            .collect::<Result<Vec<_>, _>>()?;
+        
+        // Create MIR function
+        let mut mir_function = MirFunction::new(
+            function_index,
+            name.to_string(),
+            mir_parameters.clone(),
+            wasm_return_types,
+        );
+        
+        // Transform function body
+        let main_block_id = 0;
+        let mut current_block = crate::compiler::mir::mir_nodes::MirBlock::new(main_block_id);
+        
+        for node in body {
+            let statements = transform_ast_node_to_mir(node, self)?;
+            for statement in statements {
+                current_block.add_statement(statement);
+            }
+        }
+        
+        // Set terminator for the function block
+        let terminator = if return_types.is_empty() {
+            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+        } else {
+            // For now, we'll use an empty return - proper return value handling will be added later
+            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+        };
+        current_block.set_terminator(terminator);
+        
+        // Add the block to the function
+        mir_function.add_block(current_block);
+        
+        // Add local variables to function
+        if let Some(current_scope) = self.variable_scopes.last() {
+            for (var_name, var_place) in current_scope {
+                if matches!(var_place, crate::compiler::mir::place::Place::Local { .. }) {
+                    mir_function.add_local(var_name.clone(), var_place.clone());
+                }
+            }
+        }
+        
+        // Generate events for all statements in the function
+        generate_events_for_function(&mut mir_function, self);
+        
+        self.exit_scope(); // Exit function scope
+        
+        Ok(FunctionInfo {
+            name: name.to_string(),
+            parameters: param_info,
+            return_type: return_types.first().cloned(), // For now, support single return type
+            wasm_function_index: Some(function_index),
+            mir_function,
+        })
+    }
+
+    /// Transform function definition to MIR
+    pub fn transform_function_definition(
+        &mut self,
+        name: &str,
+        parameters: &[crate::compiler::parsers::ast_nodes::Arg],
+        return_types: &[DataType],
+        body: &crate::compiler::parsers::build_ast::AstBlock,
+    ) -> Result<FunctionInfo, CompileError> {
+        let function_index = self.allocate_function_id();
+        
+        // Register function name for future calls
+        self.function_names.insert(name.to_string(), function_index);
+        
+        // Create new scope for function parameters
+        self.enter_scope();
+        
+        // Convert parameters to MIR places and register them
+        let mut mir_parameters = Vec::new();
+        let mut param_info = Vec::new();
+        
+        for param in parameters {
+            // Allocate a local place for the parameter
+            let param_place = self.get_place_manager().allocate_local(&param.value.data_type);
+            
+            // Register parameter in current scope
+            self.register_variable(param.name.clone(), param_place.clone());
+            
+            mir_parameters.push(param_place);
+            param_info.push((param.name.clone(), param.value.data_type.clone()));
+        }
+        
+        // Convert return types to WASM types
+        let wasm_return_types: Vec<crate::compiler::mir::place::WasmType> = return_types
+            .iter()
+            .map(|dt| self.datatype_to_wasm_type(dt))
+            .collect::<Result<Vec<_>, _>>()?;
+        
+        // Create MIR function
+        let mut mir_function = MirFunction::new(
+            function_index,
+            name.to_string(),
+            mir_parameters.clone(),
+            wasm_return_types,
+        );
+        
+        // Transform function body
+        let main_block_id = 0;
+        let mut current_block = crate::compiler::mir::mir_nodes::MirBlock::new(main_block_id);
+        
+        for node in &body.ast {
+            let statements = transform_ast_node_to_mir(node, self)?;
+            for statement in statements {
+                current_block.add_statement(statement);
+            }
+        }
+        
+        // Set terminator for the function block
+        let terminator = if return_types.is_empty() {
+            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+        } else {
+            // For now, we'll use an empty return - proper return value handling will be added later
+            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+        };
+        current_block.set_terminator(terminator);
+        
+        // Add the block to the function
+        mir_function.add_block(current_block);
+        
+        // Add local variables to function
+        if let Some(current_scope) = self.variable_scopes.last() {
+            for (var_name, var_place) in current_scope {
+                if matches!(var_place, crate::compiler::mir::place::Place::Local { .. }) {
+                    mir_function.add_local(var_name.clone(), var_place.clone());
+                }
+            }
+        }
+        
+        // Generate events for all statements in the function
+        generate_events_for_function(&mut mir_function, self);
+        
+        self.exit_scope(); // Exit function scope
+        
+        Ok(FunctionInfo {
+            name: name.to_string(),
+            parameters: param_info,
+            return_type: return_types.first().cloned(), // For now, support single return type
+            wasm_function_index: Some(function_index),
+            mir_function,
+        })
+    }
+
+    /// Convert DataType to WasmType
+    fn datatype_to_wasm_type(&self, data_type: &DataType) -> Result<crate::compiler::mir::place::WasmType, CompileError> {
+        use crate::compiler::mir::place::WasmType;
+        
+        match data_type {
+            DataType::Int(_) => Ok(WasmType::I64),
+            DataType::Float(_) => Ok(WasmType::F64),
+            DataType::Bool(_) => Ok(WasmType::I32),
+            DataType::String(_) => Ok(WasmType::I32), // String pointer
+            _ => {
+                return_compiler_error!("DataType {:?} not yet supported for WASM type conversion", data_type);
+            }
+        }
+    }
 }
 
 /// Transform AST to simplified MIR
@@ -176,6 +383,27 @@ impl MirTransformContext {
 pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
     let mut mir = MIR::new();
     let mut context = MirTransformContext::new();
+    let mut defined_functions = Vec::new();
+
+    // First pass: collect all function definitions
+    for node in &ast.ast {
+        if let NodeKind::Declaration(name, expression, _visibility) = &node.kind {
+            if let crate::compiler::parsers::expressions::expression::ExpressionKind::Function(parameters, body, return_types) = &expression.kind {
+                let function_info = context.transform_function_definition_from_expression(
+                    name, 
+                    parameters, 
+                    return_types, 
+                    body
+                )?;
+                defined_functions.push(function_info);
+            }
+        }
+    }
+
+    // Add all defined functions to MIR
+    for function_info in defined_functions {
+        mir.add_function(function_info.mir_function);
+    }
 
     // Create main function if this is an entry point
     if ast.is_entry_point {
@@ -195,11 +423,18 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
         context.enter_scope(); // Enter function scope
     }
 
-    // Transform all AST nodes to MIR
+    // Transform all non-function AST nodes to MIR
     let main_block_id = 0;
     let mut current_block = MirBlock::new(main_block_id);
 
     for node in &ast.ast {
+        // Skip function declarations as they were already processed
+        if let NodeKind::Declaration(_, expression, _) = &node.kind {
+            if matches!(expression.kind, crate::compiler::parsers::expressions::expression::ExpressionKind::Function(..)) {
+                continue;
+            }
+        }
+
         let statements = transform_ast_node_to_mir(node, &mut context)?;
 
         for statement in statements {
@@ -218,7 +453,7 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
 
     // Add the block to the current function
     if ast.is_entry_point {
-        if let Some(function) = mir.functions.get_mut(0) {
+        if let Some(function) = mir.functions.last_mut() {
             function.add_block(current_block);
             
             // Add local variables to function
@@ -259,6 +494,9 @@ fn transform_ast_node_to_mir(
         NodeKind::FunctionCall(name, params, return_types, ..) => {
             ast_function_call_to_mir(name, params, return_types, &node.location, context)
         }
+        NodeKind::If(condition, then_body, else_body) => {
+            ast_if_statement_to_mir(condition, then_body, else_body, &node.location, context)
+        }
         NodeKind::Newline | NodeKind::Spaces(_) | NodeKind::Empty => {
             // These nodes don't generate MIR statements
             Ok(vec![])
@@ -283,6 +521,19 @@ fn ast_declaration_to_mir(
     visibility: &VarVisibility,
     context: &mut MirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
+    // Check if this is a function declaration
+    if let crate::compiler::parsers::expressions::expression::ExpressionKind::Function(parameters, body, return_types) = &expression.kind {
+        // Transform function declaration
+        let _function_info = context.transform_function_definition_from_expression(
+            name, 
+            parameters, 
+            return_types, 
+            body
+        )?;
+        // Function declarations don't generate statements in the current block
+        return Ok(vec![]);
+    }
+
     let mut statements = Vec::new();
 
     // Check if variable is already declared in current scope
@@ -381,6 +632,59 @@ fn ast_function_call_to_mir(
     Ok(vec![call_statement])
 }
 
+/// Transform if statement to MIR with proper control flow
+/// 
+/// This function creates the MIR representation for if/else statements by:
+/// 1. Converting the condition expression to an operand
+/// 2. Validating that the condition is boolean type
+/// 3. Creating block IDs for then and else branches
+/// 4. Generating a Terminator::If for structured control flow
+fn ast_if_statement_to_mir(
+    condition: &Expression,
+    then_body: &AstBlock,
+    else_body: &Option<AstBlock>,
+    location: &TextLocation,
+    context: &mut MirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Validate that condition is boolean type
+    if !matches!(condition.data_type, DataType::Bool(_)) {
+        return_type_error!(
+            condition.location.clone(),
+            "If condition must be boolean, found {}. Try using comparison operators like 'is', 'not', or boolean expressions.",
+            condition.data_type
+        );
+    }
+    
+    // Convert condition expression to operand
+    let condition_operand = expression_to_operand_with_context(condition, &condition.location, context)?;
+    
+    // Allocate block IDs for control flow
+    let then_block_id = context.allocate_block_id();
+    let else_block_id = context.allocate_block_id();
+    
+    // For now, we'll create a simplified MIR representation
+    // In a full implementation, we would need to:
+    // 1. Create separate MIR blocks for then/else branches
+    // 2. Transform the body statements into those blocks
+    // 3. Handle block merging and continuation
+    
+    // This is a placeholder implementation that demonstrates the structure
+    // The actual block creation and statement transformation will be implemented
+    // when we have full block-based MIR construction
+    
+    // Create a nop statement as a placeholder for the if logic
+    // In the real implementation, this would be replaced by proper block management
+    let if_placeholder = Statement::Nop;
+    
+    // TODO: Transform then_body and else_body into separate MIR blocks
+    // TODO: Create proper Terminator::If with block references
+    // TODO: Handle block merging and continuation flow
+    
+    // For now, return a placeholder that won't break compilation
+    // This will be expanded in the next phase of implementation
+    Ok(vec![if_placeholder])
+}
+
 
 
 /// Convert expression to rvalue for basic types
@@ -421,8 +725,14 @@ fn expression_to_rvalue_with_context(
             // Transform variable reference using context
             transform_variable_reference(name, location, context)
         }
-        ExpressionKind::Runtime(_) => {
-            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for MIR generation at line {}, column {}. Try breaking down complex expressions into simpler assignments.", location.start_pos.line_number, location.start_pos.char_column);
+        ExpressionKind::Runtime(runtime_nodes) => {
+            // Transform runtime expressions (RPN order) to MIR
+            transform_runtime_expression(runtime_nodes, location, context)
+        }
+        ExpressionKind::None => {
+            // None expressions represent parameters without default arguments
+            // In the context of function parameters, this indicates the parameter must be provided
+            return_compiler_error!("None expression encountered in rvalue context at line {}, column {}. This typically indicates a function parameter without a default argument being used in an invalid context.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
             return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
@@ -471,6 +781,12 @@ fn expression_to_operand_with_context(
         ExpressionKind::Runtime(_) => {
             return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
         }
+        ExpressionKind::None => {
+            // None expressions represent parameters without default arguments
+            // In function parameter context, this means the parameter is required and has no default
+            // This should not be converted to an operand as it represents the absence of a default value
+            return_compiler_error!("None expression encountered in operand context at line {}, column {}. This indicates a function parameter without a default argument, which should not be converted to an operand.", location.start_pos.line_number, location.start_pos.char_column);
+        }
         _ => {
             return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
@@ -503,3 +819,88 @@ fn transform_variable_reference(
     
     Ok(Rvalue::Use(operand))
 }
+
+/// Transform runtime expressions (RPN order) to MIR rvalue
+/// 
+/// Runtime expressions contain AST nodes in Reverse Polish Notation order.
+/// This function processes them using a stack-based approach to build MIR binary operations.
+fn transform_runtime_expression(
+    runtime_nodes: &[AstNode],
+    location: &TextLocation,
+    context: &MirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    if runtime_nodes.is_empty() {
+        return_compiler_error!("Empty runtime expression at line {}, column {}", location.start_pos.line_number, location.start_pos.char_column);
+    }
+
+    // Use a stack to process RPN expression
+    let mut operand_stack: Vec<Operand> = Vec::new();
+
+    for node in runtime_nodes {
+        match &node.kind {
+            NodeKind::Expression(expr) => {
+                // Convert expression to operand and push to stack
+                let operand = expression_to_operand_with_context(expr, &node.location, context)?;
+                operand_stack.push(operand);
+            }
+            NodeKind::Operator(ast_op) => {
+                // Pop two operands for binary operation
+                if operand_stack.len() < 2 {
+                    return_compiler_error!("Not enough operands for binary operator {:?} in runtime expression at line {}, column {}", ast_op, node.location.start_pos.line_number, node.location.start_pos.char_column);
+                }
+
+                let right = operand_stack.pop().unwrap();
+                let left = operand_stack.pop().unwrap();
+
+                // Convert AST operator to MIR BinOp
+                let mir_op = ast_operator_to_mir_binop(ast_op, &node.location)?;
+                
+                // For now, we'll return the binary operation directly
+                // In a more complex implementation, we might need to handle chained operations
+                if operand_stack.is_empty() {
+                    // This is the final operation
+                    return Ok(Rvalue::BinaryOp(mir_op, left, right));
+                } else {
+                    // This is an intermediate operation - we would need to create temporary assignments
+                    // For now, we'll simplify and only handle single binary operations
+                    return_compiler_error!("Complex chained arithmetic expressions not yet implemented. Please break down the expression into simpler assignments at line {}, column {}", node.location.start_pos.line_number, node.location.start_pos.char_column);
+                }
+            }
+            _ => {
+                return_compiler_error!("Unsupported node type in runtime expression: {:?} at line {}, column {}", node.kind, node.location.start_pos.line_number, node.location.start_pos.char_column);
+            }
+        }
+    }
+
+    // If we have exactly one operand left, it's a simple value
+    if operand_stack.len() == 1 {
+        Ok(Rvalue::Use(operand_stack.pop().unwrap()))
+    } else {
+        return_compiler_error!("Invalid runtime expression - expected single result but got {} operands at line {}, column {}", operand_stack.len(), location.start_pos.line_number, location.start_pos.char_column);
+    }
+}
+
+/// Convert AST Operator to MIR BinOp
+fn ast_operator_to_mir_binop(ast_op: &crate::compiler::parsers::expressions::expression::Operator, location: &TextLocation) -> Result<BinOp, CompileError> {
+    use crate::compiler::parsers::expressions::expression::Operator;
+    
+    match ast_op {
+        Operator::Add => Ok(BinOp::Add),
+        Operator::Subtract => Ok(BinOp::Sub),
+        Operator::Multiply => Ok(BinOp::Mul),
+        Operator::Divide => Ok(BinOp::Div),
+        Operator::Modulus => Ok(BinOp::Rem),
+        Operator::Equality => Ok(BinOp::Eq),
+        Operator::NotEqual => Ok(BinOp::Ne),
+        Operator::LessThan => Ok(BinOp::Lt),
+        Operator::LessThanOrEqual => Ok(BinOp::Le),
+        Operator::GreaterThan => Ok(BinOp::Gt),
+        Operator::GreaterThanOrEqual => Ok(BinOp::Ge),
+        Operator::And => Ok(BinOp::And),
+        Operator::Or => Ok(BinOp::Or),
+        _ => {
+            return_compiler_error!("Operator {:?} not yet implemented for MIR binary operations at line {}, column {}", ast_op, location.start_pos.line_number, location.start_pos.char_column);
+        }
+    }
+}
+

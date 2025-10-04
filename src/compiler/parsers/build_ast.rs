@@ -67,7 +67,8 @@ pub enum ContextKind {
     Module, // Global scope
     Expression,
     Function,
-    Condition, // For loops and if statements
+    Parameters, // Inside a function signature
+    Condition,  // For loops and if statements
     Loop,
     Branch,
     Template,
@@ -91,11 +92,26 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_function(&self, name: &str, returns: &[DataType]) -> ScopeContext {
+    pub fn new_child_function(
+        &self,
+        name: &str,
+        returns: &[DataType],
+        arguments: Vec<Arg>,
+    ) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.returns = returns.to_owned();
         new_context.scope_name.push(name);
+        new_context.declarations = arguments;
+
+        new_context
+    }
+
+    pub fn new_parameters(&self) -> ScopeContext {
+        let mut new_context = self.to_owned();
+        new_context.kind = ContextKind::Parameters;
+        new_context.scope_name.push("parameters");
+
         new_context
     }
 
@@ -452,7 +468,7 @@ pub fn new_ast(
             }
 
             TokenKind::End => {
-                // Check that this is a valid scope for an explicit 'end' to be used
+                // Check that this is a valid scope for a scope to close
                 // Module scope should not have an 'end' anywhere
                 match context.kind {
                     ContextKind::Expression => {
@@ -477,6 +493,7 @@ pub fn new_ast(
                         )
                     }
                     _ => {
+                        token_stream.advance();
                         break;
                     }
                 }

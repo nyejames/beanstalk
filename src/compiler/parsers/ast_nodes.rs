@@ -96,6 +96,19 @@ impl AstNode {
             NodeKind::Declaration(_, value, ..)
             | NodeKind::Expression(value, ..)
             | NodeKind::Mutation(_, value) => Ok(value.to_owned()),
+            NodeKind::FunctionCall(_, _, return_types, location) => {
+                let data_type = if return_types.len() == 1 {
+                    return_types[0].to_owned()
+                } else {
+                    DataType::Choices(return_types.to_owned())
+                };
+
+                Ok(Expression::runtime(
+                    vec![self.to_owned()],
+                    data_type,
+                    location.to_owned(),
+                ))
+            }
             _ => return_compiler_error!(
                 "Compiler tried to get the expression of a node that cannot contain expressions: {:?}",
                 self.kind

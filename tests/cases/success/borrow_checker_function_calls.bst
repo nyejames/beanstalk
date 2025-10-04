@@ -1,14 +1,14 @@
--- Test file for development and debugging
--- Can add a bunch of random Beanstalk code here to see if it compiles
+-- Test file: Function calls with borrow checker
+-- Tests requirement 7.3: borrow checker integration with function calls
 
 -- Simple function definition
-simple_function |value Int| -> Int:
+simple_function = |value Int| -> Int:
     result = value + 1
     return result
 ;
 
 -- Function that takes a string parameter
-string_function |text String| -> String:
+string_function = |text String| -> String:
     return text
 ;
 

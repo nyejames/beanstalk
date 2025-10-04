@@ -7,4 +7,4 @@ data ~= "important data"
 moved_data = data
 
 -- INVALID: Trying to use data after it was moved
-result = data + " more text"
+result = [data: more text]

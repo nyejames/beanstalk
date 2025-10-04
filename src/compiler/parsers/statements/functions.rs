@@ -20,7 +20,7 @@ pub fn create_function_signature(
     pure: &mut bool,
     context: &ScopeContext,
 ) -> Result<(Vec<Arg>, Vec<DataType>), CompileError> {
-    let args = create_arg_constructor(token_stream, context, pure)?;
+    let args = create_arg_constructor(token_stream, &context.new_parameters(), pure)?;
 
     match token_stream.current_token_kind() {
         TokenKind::Arrow => {}

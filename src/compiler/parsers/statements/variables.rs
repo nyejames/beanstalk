@@ -1,7 +1,7 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::AstNode;
-use crate::compiler::parsers::build_ast::{ScopeContext, new_ast};
+use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::{
     create_function_signature, parse_function_call,
@@ -11,7 +11,7 @@ use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
     expressions::parse_expression::create_expression,
 };
-use crate::return_syntax_error;
+use crate::{return_rule_error, return_syntax_error};
 #[allow(unused_imports)]
 use colour::{blue_ln, green_ln, red_ln};
 
@@ -82,33 +82,36 @@ pub fn new_arg(
             let (constructor_args, return_types) =
                 create_function_signature(token_stream, &mut true, context)?;
 
-            let context = context.new_child_function(name, &return_types);
+            let context =
+                context.new_child_function(name, &return_types, constructor_args.to_owned());
+
+            // TODO: fast check for function without signature
+            // let context = context.new_child_function(name, &[]);
+            // return Ok(Arg {
+            //     name: name.to_owned(),
+            //     value: Expression::function_without_signature(
+            //         new_ast(token_stream, context, false)?.ast,
+            //         token_stream.current_location(),
+            //     ),
+            // });
+
+            let function_body = new_ast(token_stream, context, false)?.ast;
 
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function(
                     constructor_args,
-                    new_ast(token_stream, context.to_owned(), false)?.ast,
+                    function_body,
                     return_types,
                     token_stream.current_location(),
                 ),
             });
         }
 
-        // Function with no args
-        TokenKind::Colon => {
-            token_stream.advance();
-
-            let context = context.new_child_function(name, &[]);
-
-            return Ok(Arg {
-                name: name.to_owned(),
-                value: Expression::function_without_signature(
-                    new_ast(token_stream, context, false)?.ast,
-                    token_stream.current_location(),
-                ),
-            });
-        }
+        // TODO Class / Object / Struct
+        // TokenKind::Colon => {
+        //     token_stream.advance();
+        // }
 
         // Has a type declaration
         TokenKind::DatatypeInt => data_type = DataType::Int(ownership),
@@ -176,7 +179,16 @@ pub fn new_arg(
         }
 
         // If end of statement, then it's a zero-value variable
-        TokenKind::Comma | TokenKind::Eof | TokenKind::Newline => {
+        // Struct bracket should only be hit here in the context of the end of some parameters
+        TokenKind::Comma | TokenKind::Eof | TokenKind::Newline | TokenKind::StructBracket => {
+            // If this is Parameters, then instead of a zero-value, we want to return None
+            if context.kind == ContextKind::Parameters {
+                return Ok(Arg {
+                    name: name.to_owned(),
+                    value: Expression::none(),
+                });
+            }
+
             return Ok(Arg {
                 name: name.to_owned(),
                 value: data_type.get_zero_value(token_stream.current_location()),

@@ -83,6 +83,9 @@ pub enum DataType {
 
     // Type Types
     // Unions allow types such as option and result
+
+    // TODO: IS THIS JUST MULITPLE TYPES FOR FUNCTION RETURNS?
+    // Choices should actually just be enums for now
     Choices(Vec<DataType>), // Union of types
     Option(Box<DataType>),  // Shorthand for a choice of a type or None
 }
@@ -372,5 +375,3 @@ impl Display for DataType {
 //         },
 //     ])
 // }
-
-
