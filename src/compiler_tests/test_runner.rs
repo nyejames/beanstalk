@@ -4,6 +4,162 @@
 /// compiler operations without getting bogged down in implementation details.
 
 
+/// Run all test cases from tests/cases directory
+pub fn run_all_test_cases() {
+    use crate::build::build_project_files;
+    use crate::Flag;
+    use std::fs;
+    use std::path::Path;
+    use colour::{green_ln, red_ln, yellow_ln, cyan_ln};
+
+    println!("Running all Beanstalk test cases...\n");
+
+    let test_cases_dir = Path::new("tests/cases");
+    let success_dir = test_cases_dir.join("success");
+    let failure_dir = test_cases_dir.join("failure");
+
+    let mut total_tests = 0;
+    let mut passed_tests = 0;
+    let mut failed_tests = 0;
+    let mut expected_failures = 0;
+    let mut unexpected_successes = 0;
+
+    // Test files that should succeed
+    if success_dir.exists() {
+        cyan_ln!("Testing files that should succeed:");
+        if let Ok(entries) = fs::read_dir(&success_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().map_or(false, |ext| ext == "bst") {
+                        total_tests += 1;
+                        let file_name = path.file_name().unwrap().to_string_lossy();
+                        
+                        print!("  {} ... ", file_name);
+                        
+                        let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
+                        match build_project_files(&path, false, &flags) {
+                            Ok(_) => {
+                                green_ln!("✓ PASS");
+                                passed_tests += 1;
+                            }
+                            Err(errors) => {
+                                red_ln!("✗ FAIL");
+                                failed_tests += 1;
+                                for error in errors.iter().take(3) {
+                                    println!("    Error: {:?}", error);
+                                }
+                                if errors.len() > 3 {
+                                    println!("    ... and {} more errors", errors.len() - 3);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!();
+
+    // Test files that should fail
+    if failure_dir.exists() {
+        cyan_ln!("Testing files that should fail:");
+        if let Ok(entries) = fs::read_dir(&failure_dir) {
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    let path = entry.path();
+                    if path.extension().map_or(false, |ext| ext == "bst") {
+                        total_tests += 1;
+                        let file_name = path.file_name().unwrap().to_string_lossy();
+                        
+                        print!("  {} ... ", file_name);
+                        
+                        let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
+                        match build_project_files(&path, false, &flags) {
+                            Ok(_) => {
+                                yellow_ln!("✗ UNEXPECTED SUCCESS");
+                                unexpected_successes += 1;
+                            }
+                            Err(_) => {
+                                green_ln!("✓ EXPECTED FAILURE");
+                                expected_failures += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!();
+
+    // Test individual files in the root tests/cases directory
+    if let Ok(entries) = fs::read_dir(&test_cases_dir) {
+        let mut root_files = Vec::new();
+        for entry in entries {
+            if let Ok(entry) = entry {
+                let path = entry.path();
+                if path.is_file() && path.extension().map_or(false, |ext| ext == "bst") {
+                    root_files.push(path);
+                }
+            }
+        }
+        
+        if !root_files.is_empty() {
+            cyan_ln!("Testing individual files:");
+            for path in root_files {
+                total_tests += 1;
+                let file_name = path.file_name().unwrap().to_string_lossy();
+                
+                print!("  {} ... ", file_name);
+                
+                let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
+                match build_project_files(&path, false, &flags) {
+                    Ok(_) => {
+                        green_ln!("✓ PASS");
+                        passed_tests += 1;
+                    }
+                    Err(errors) => {
+                        red_ln!("✗ FAIL");
+                        failed_tests += 1;
+                        for error in errors.iter().take(2) {
+                            println!("    Error: {:?}", error);
+                        }
+                        if errors.len() > 2 {
+                            println!("    ... and {} more errors", errors.len() - 2);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Print summary
+    println!("\n{}", "=".repeat(50));
+    println!("Test Results Summary:");
+    println!("  Total tests: {}", total_tests);
+    println!("  Successful compilations: {}", passed_tests);
+    println!("  Failed compilations: {}", failed_tests);
+    println!("  Expected failures: {}", expected_failures);
+    println!("  Unexpected successes: {}", unexpected_successes);
+    
+    let correct_results = passed_tests + expected_failures;
+    let incorrect_results = failed_tests + unexpected_successes;
+    
+    println!("\n  Correct results: {} / {}", correct_results, total_tests);
+    println!("  Incorrect results: {} / {}", incorrect_results, total_tests);
+    
+    if incorrect_results == 0 {
+        green_ln!("\n🎉 All tests behaved as expected!");
+    } else {
+        let percentage = (correct_results as f64 / total_tests as f64) * 100.0;
+        yellow_ln!("\n⚠ {:.1}% of tests behaved as expected", percentage);
+    }
+    
+    println!("{}", "=".repeat(50));
+}
+
 /// Run essential compiler tests
 pub fn run_essential_tests() -> Result<(), String> {
     println!("Running essential Beanstalk compiler tests...\n");

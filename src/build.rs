@@ -27,6 +27,28 @@ pub struct Project {
     pub output_files: Vec<OutputFile>,
 }
 
+/// Build a Beanstalk project from source files
+///
+/// This is the main entry point for compiling Beanstalk projects. It handles both
+/// single-file compilation and multi-file project builds with automatic dependency
+/// resolution and target detection.
+///
+/// ## Parameters
+///
+/// - `entry_path`: Path to the main source file or project directory
+/// - `release_build`: Whether to enable release optimizations
+/// - `flags`: Compilation flags for debugging and feature control
+///
+/// ## Returns
+///
+/// A [`Project`] containing the compiled configuration and output files, or a vector
+/// of [`CompileError`]s if compilation fails.
+///
+/// ## Supported Targets
+///
+/// - **HTML Projects**: Generate WASM + HTML with JavaScript bindings
+/// - **Native Projects**: Generate standalone WASM for native execution
+/// - **Single Files**: Compile individual `.bst` files with automatic target detection
 pub fn build_project_files(
     entry_path: &Path,
     release_build: bool,
@@ -35,6 +57,27 @@ pub fn build_project_files(
     build_project_files_with_target(entry_path, release_build, flags, None)
 }
 
+/// Build a Beanstalk project with explicit target specification
+///
+/// Extended version of [`build_project_files`] that allows overriding the automatic
+/// target detection with a specific build target. This is useful for:
+/// - Cross-compilation scenarios
+/// - Testing different target configurations
+/// - Build system integration with explicit target control
+///
+/// ## Parameters
+///
+/// - `entry_path`: Path to the main source file or project directory
+/// - `release_build`: Whether to enable release optimizations
+/// - `flags`: Compilation flags for debugging and feature control
+/// - `target_override`: Optional explicit target specification
+///
+/// ## Target Override
+///
+/// When `target_override` is provided, it bypasses automatic target detection:
+/// - `Some(BuildTarget::HtmlProject)`: Force HTML/WASM output
+/// - `Some(BuildTarget::Native { .. })`: Force native WASM output
+/// - `None`: Use automatic target detection based on project structure
 pub fn build_project_files_with_target(
     entry_path: &Path,
     release_build: bool,

@@ -1,7 +1,7 @@
 use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
 use crate::compiler::compiler_errors::{print_errors, print_formatted_error};
-// use crate::compiler_tests::run_all_test_cases;
+use crate::compiler_tests::run_all_test_cases;
 use crate::{Flag, build, create_new_project, dev_server};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
 use std::path::PathBuf;
@@ -114,8 +114,7 @@ pub fn start_cli() {
         }
 
         Command::CompilerTests => {
-            // run_all_test_cases();
-            println!("Compiler tests functionality temporarily disabled during cleanup");
+            run_all_test_cases();
         }
     }
 }

@@ -1,13 +1,54 @@
+//! # Constant Folding Optimizer
+//!
+//! This module implements compile-time constant folding for Beanstalk expressions.
+//! It evaluates constant expressions during AST construction to reduce runtime overhead
+//! and enable further optimizations.
+//!
+//! ## Algorithm
+//!
+//! The constant folder operates on expressions in Reverse Polish Notation (RPN) order:
+//! 1. **Stack-Based Evaluation**: Processes operands and operators in RPN order
+//! 2. **Immediate Folding**: Evaluates operations on constant operands immediately
+//! 3. **Runtime Preservation**: Preserves non-constant expressions for runtime evaluation
+//!
+//! ## Supported Operations
+//!
+//! - **Arithmetic**: Addition, subtraction, multiplication, division for integers and floats
+//! - **Boolean**: Logical AND, OR, NOT operations
+//! - **Comparison**: Equality, inequality, relational comparisons
+//! - **Type Coercion**: Automatic promotion between compatible numeric types
+//!
+//! ## Benefits
+//!
+//! - **Performance**: Eliminates runtime calculations for constant expressions
+//! - **Code Size**: Reduces generated WASM by pre-computing known values
+//! - **Optimization**: Enables dead code elimination and further optimizations
+
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::{return_rule_error, return_syntax_error};
-#[allow(unused_imports)]
-use colour::{blue_ln, green_ln_bold, red_ln};
 
-// This will evaluate everything possible at compile time
-// returns either a literal or an evaluated runtime expression
-// Output stack must be in RPN order
+/// Perform constant folding on an expression in RPN order
+///
+/// Takes a stack of AST nodes representing an expression in Reverse Polish Notation
+/// and evaluates all constant sub-expressions at compile time. Returns a simplified
+/// expression with constant operations pre-computed.
+///
+/// ## Algorithm
+///
+/// 1. **Process RPN Stack**: Iterate through nodes in RPN order
+/// 2. **Accumulate Operands**: Push operands onto evaluation stack
+/// 3. **Evaluate Operators**: When encountering operators, attempt to fold with constant operands
+/// 4. **Preserve Runtime**: Non-constant expressions are preserved for runtime evaluation
+///
+/// ## Error Handling
+///
+/// Returns [`CompileError`] for:
+/// - Malformed expressions (insufficient operands for operators)
+/// - Type mismatches in operations
+/// - Division by zero in constant expressions
+/// - Unsupported operations on constant types
 pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileError> {
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 

@@ -3,7 +3,7 @@
 
 use wasm_encoder::{
     Module, TypeSection, FunctionSection, ExportSection, CodeSection,
-    Function, FuncType, ValType, ExportKind, Instruction, BlockType, MemArg
+    Function, FuncType, ValType, ExportKind, Instruction, BlockType
 };
 use wasmparser::Validator;
 

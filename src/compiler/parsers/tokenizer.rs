@@ -1,5 +1,4 @@
-#[allow(unused_imports)]
-use colour::{blue_ln, green_ln, red_ln};
+
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 

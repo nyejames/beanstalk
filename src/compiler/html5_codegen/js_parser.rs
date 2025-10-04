@@ -9,8 +9,7 @@ use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_compiler_error;
 use crate::settings::BS_VAR_PREFIX;
-#[allow(unused_imports)]
-use colour::{blue_ln, green_ln, red_ln};
+
 
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(

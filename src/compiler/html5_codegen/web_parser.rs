@@ -1,7 +1,6 @@
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
-#[allow(unused_imports)]
-use colour::{blue_ln, green_ln, red_ln};
+
 
 use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::compiler::compiler_errors::CompileError;

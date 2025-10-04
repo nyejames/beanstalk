@@ -1,6 +1,5 @@
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-#[allow(unused_imports)]
-use colour::{blue_ln, green_ln, red_ln};
+
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
