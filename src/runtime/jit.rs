@@ -102,9 +102,16 @@ fn setup_beanstalk_io_imports(
     imports: &mut wasmer::Imports,
 ) -> Result<(), CompileError> {
     // Print function: (ptr: i32, len: i32) -> ()
-    // TODO: Implement proper memory access with correct Wasmer API
     let print_func = Function::new_typed(store, |msg_ptr: i32, msg_len: i32| {
-        println!("Beanstalk Print: ptr={}, len={} (memory access to be implemented)", msg_ptr, msg_len);
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("RUNTIME: Host function 'print' called with ptr={}, len={}", msg_ptr, msg_len);
+        
+        // For now, just print the pointer and length info
+        // TODO: Access memory properly when we have the instance context
+        println!("Beanstalk Print: message at ptr={}, len={}", msg_ptr, msg_len);
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("RUNTIME: Host function 'print' execution completed");
     });
     imports.define("beanstalk_io", "print", print_func);
 

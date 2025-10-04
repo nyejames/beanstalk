@@ -1,6 +1,5 @@
 use crate::compiler::parsers::build_ast::ContextKind;
 
-
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
@@ -164,7 +163,8 @@ pub fn create_expression(
             }
 
             TokenKind::CloseCurly
-            | TokenKind::StructBracket
+            // No longer supporting struct literals this way
+            // | TokenKind::StructBracket
             | TokenKind::Comma
             | TokenKind::Eof
             | TokenKind::TemplateClose

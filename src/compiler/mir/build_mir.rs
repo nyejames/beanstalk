@@ -155,6 +155,8 @@ pub struct MirTransformContext {
     program_point_generator: ProgramPointGenerator,
     /// Host function imports used in this module
     host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
+    /// Pending return operands for the current block
+    pending_return: Option<Vec<Operand>>,
 }
 
 impl MirTransformContext {
@@ -168,6 +170,7 @@ impl MirTransformContext {
             next_block_id: 0,
             program_point_generator: ProgramPointGenerator::new(),
             host_imports: std::collections::HashSet::new(),
+            pending_return: None,
         }
     }
 
@@ -378,7 +381,9 @@ impl MirTransformContext {
         }
         
         // Set terminator for the function block
-        let terminator = if return_types.is_empty() {
+        let terminator = if let Some(return_operands) = self.pending_return.take() {
+            crate::compiler::mir::mir_nodes::Terminator::Return { values: return_operands }
+        } else if return_types.is_empty() {
             crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
         } else {
             // For now, we'll use an empty return - proper return value handling will be added later
@@ -469,7 +474,9 @@ impl MirTransformContext {
         }
         
         // Set terminator for the function block
-        let terminator = if return_types.is_empty() {
+        let terminator = if let Some(return_operands) = self.pending_return.take() {
+            crate::compiler::mir::mir_nodes::Terminator::Return { values: return_operands }
+        } else if return_types.is_empty() {
             crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
         } else {
             // For now, we'll use an empty return - proper return value handling will be added later
@@ -622,7 +629,11 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
     }
 
     // Set terminator for the main block
-    let terminator = Terminator::Return { values: vec![] };
+    let terminator = if let Some(return_operands) = context.pending_return.take() {
+        Terminator::Return { values: return_operands }
+    } else {
+        Terminator::Return { values: vec![] }
+    };
     current_block.set_terminator(terminator);
 
     // Add the block to the current function
@@ -676,6 +687,9 @@ fn transform_ast_node_to_mir(
         }
         NodeKind::If(condition, then_body, else_body) => {
             ast_if_statement_to_mir(condition, then_body, else_body, &node.location, context)
+        }
+        NodeKind::Return(expressions) => {
+            ast_return_statement_to_mir(expressions, &node.location, context)
         }
         NodeKind::Newline | NodeKind::Spaces(_) | NodeKind::Empty => {
             // These nodes don't generate MIR statements
@@ -839,6 +853,10 @@ fn ast_host_function_call_to_mir(
     location: &TextLocation,
     context: &mut MirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
+    // Verbose logging for host function call generation
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("MIR: Processing host function call '{}' with {} parameters", name, params.len());
+    
     // Get the host function definition from the registry
     // For now, we'll create a placeholder HostFunctionDef since we need access to the registry
     // This will be properly implemented when the registry is integrated into the context
@@ -881,13 +899,20 @@ fn ast_host_function_call_to_mir(
 
     // Track this host function as an import
     context.add_host_import(host_function.clone());
+    
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("MIR: Added host function '{}' to imports, module: {}", name, host_function.module);
 
     // Determine destination place if there's a return value
     let destination = if !return_types.is_empty() {
         // Allocate a local place for the return value
         let return_place = context.get_place_manager().allocate_local(&return_types[0]);
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("MIR: Allocated return place for host function '{}': {:?}", name, return_place);
         Some(return_place)
     } else {
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("MIR: Host function '{}' has no return value", name);
         None
     };
 
@@ -897,6 +922,9 @@ fn ast_host_function_call_to_mir(
         args,
         destination,
     };
+    
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("MIR: Generated host call statement for '{}'", name);
 
     Ok(vec![host_call_statement])
 }
@@ -961,8 +989,8 @@ fn ast_if_statement_to_mir(
 /// Convert expression to rvalue for basic types
 fn expression_to_rvalue(expression: &Expression, location: &TextLocation) -> Result<Rvalue, CompileError> {
     match &expression.kind {
-        ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
-        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
+        ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I32(*value as i32)))),
+        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F32(*value as f32)))),
         ExpressionKind::Bool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
         ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
             value.clone(),
@@ -1001,8 +1029,8 @@ fn expression_to_rvalue_with_context(
     context: &MirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     match &expression.kind {
-        ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I64(*value)))),
-        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
+        ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I32(*value as i32)))),
+        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F32(*value as f32)))),
         ExpressionKind::Bool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
         ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
             value.clone(),
@@ -1396,8 +1424,8 @@ fn convert_template_expression_to_string_operand(
 /// Convert expression to operand for basic types
 fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Result<Operand, CompileError> {
     match &expression.kind {
-        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I64(*value))),
-        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F64(*value))),
+        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I32(*value as i32))),
+        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F32(*value as f32))),
         ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
         ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
         ExpressionKind::Reference(name) => {
@@ -1422,8 +1450,8 @@ fn expression_to_operand_with_context(
     context: &MirTransformContext,
 ) -> Result<Operand, CompileError> {
     match &expression.kind {
-        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I64(*value))),
-        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F64(*value))),
+        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I32(*value as i32))),
+        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F32(*value as f32))),
         ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
         ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
         ExpressionKind::Reference(name) => {
@@ -1583,3 +1611,38 @@ fn ast_operator_to_mir_binop(ast_op: &crate::compiler::parsers::expressions::exp
     }
 }
 
+/// Transform return statement to MIR terminator
+/// 
+/// Return statements become MIR terminators that end the current basic block.
+/// The return values are converted to operands and included in the terminator.
+fn ast_return_statement_to_mir(
+    expressions: &[Expression],
+    location: &TextLocation,
+    context: &mut MirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Convert return value expressions to operands
+    let mut return_operands = Vec::new();
+    
+    for expr in expressions {
+        let operand = expression_to_operand_with_context(expr, location, context)?;
+        return_operands.push(operand);
+    }
+    
+    // Return statements don't generate regular statements, they set the terminator
+    // We need to set the terminator on the current block
+    // For now, we'll return an empty statement list and handle terminator setting elsewhere
+    // This is a limitation of the current architecture where statements and terminators are handled separately
+    
+    // TODO: Improve architecture to handle terminators properly
+    // For now, we'll create a special statement that indicates a return
+    // This will need to be handled specially in the block building logic
+    
+    // Since we can't directly set the terminator here, we'll return an empty statement list
+    // The terminator will need to be set by the caller or through a different mechanism
+    
+    // Actually, let's create a way to signal that this block should end with a return
+    // We can do this by storing the return information in the context
+    context.pending_return = Some(return_operands);
+    
+    Ok(vec![])
+}

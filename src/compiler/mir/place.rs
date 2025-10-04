@@ -450,8 +450,8 @@ impl WasmType {
     /// Convert from Beanstalk DataType to WASM type
     pub fn from_data_type(data_type: &DataType) -> Self {
         match data_type {
-            DataType::Int(_) => WasmType::I64,
-            DataType::Float(_) => WasmType::F64,
+            DataType::Int(_) => WasmType::I32,
+            DataType::Float(_) => WasmType::F32,
             DataType::Bool(_) => WasmType::I32,
             DataType::String(_) | DataType::Collection(_, _) => WasmType::I32, // Pointer to linear memory
             DataType::Function(_, _) => WasmType::FuncRef,

@@ -681,6 +681,9 @@ impl WasmModule {
             self.lower_block_to_wasm(block, &mut function, &local_map)?;
         }
 
+        // Note: Function termination is handled by the terminator lowering
+        // No need to add additional return instructions
+
         // Add function to code section
         self.code_section.function(&function);
 
@@ -717,10 +720,12 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         match statement {
             Statement::Assign { place, rvalue } => {
+                // Determine the value type from the rvalue
+                let value_type = self.get_rvalue_wasm_type(rvalue)?;
                 // Lower the rvalue to put value on stack
                 self.lower_rvalue(rvalue, function, local_map)?;
                 // Lower the place assignment to store the value
-                self.lower_place_assignment(place, function, local_map)?;
+                self.lower_place_assignment_with_type(place, &value_type, function, local_map)?;
                 Ok(())
             }
             Statement::Call { func, args, destination } => {
@@ -952,7 +957,9 @@ impl WasmModule {
 
         // If there's a destination place, store the result
         if let Some(dest_place) = destination {
-            self.lower_place_assignment(dest_place, function, local_map)?;
+            // For function calls, use the place's own type as the return type
+            let return_type = dest_place.wasm_type();
+            self.lower_place_assignment_with_type(dest_place, &return_type, function, local_map)?;
         }
 
         Ok(())
@@ -961,10 +968,11 @@ impl WasmModule {
     /// Lower place assignment to WASM instructions (CRITICAL IMPLEMENTATION)
     /// 
     /// This method handles place assignment operations, generating appropriate
-    /// WASM store instructions for different place types.
-    fn lower_place_assignment(
+    /// WASM store instructions for different place types with type awareness.
+    fn lower_place_assignment_with_type(
         &mut self,
         place: &Place,
+        value_type: &WasmType,
         function: &mut Function,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
@@ -999,38 +1007,68 @@ impl WasmModule {
                     function.instruction(&Instruction::I32Add);
                 }
                 
-                // Use appropriate store instruction based on type size
-                match size {
-                    TypeSize::Byte => {
+                // Use appropriate store instruction based on value type and size
+                match (value_type, size) {
+                    // Float stores
+                    (WasmType::F32, TypeSize::Word) => {
+                        function.instruction(&Instruction::F32Store(MemArg {
+                            offset: 0,
+                            align: 2, // 4-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    (WasmType::F64, TypeSize::DoubleWord) => {
+                        function.instruction(&Instruction::F64Store(MemArg {
+                            offset: 0,
+                            align: 3, // 8-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    // Integer stores
+                    (WasmType::I32, TypeSize::Byte) => {
                         function.instruction(&Instruction::I32Store8(MemArg {
                             offset: 0,
                             align: 0, // 1-byte alignment
                             memory_index: 0,
                         }));
                     }
-                    TypeSize::Short => {
+                    (WasmType::I32, TypeSize::Short) => {
                         function.instruction(&Instruction::I32Store16(MemArg {
                             offset: 0,
                             align: 1, // 2-byte alignment
                             memory_index: 0,
                         }));
                     }
-                    TypeSize::Word => {
+                    (WasmType::I32, TypeSize::Word) => {
                         function.instruction(&Instruction::I32Store(MemArg {
                             offset: 0,
                             align: 2, // 4-byte alignment
                             memory_index: 0,
                         }));
                     }
-                    TypeSize::DoubleWord => {
+                    (WasmType::I64, TypeSize::DoubleWord) => {
                         function.instruction(&Instruction::I64Store(MemArg {
                             offset: 0,
                             align: 3, // 8-byte alignment
                             memory_index: 0,
                         }));
                     }
-                    TypeSize::Custom { bytes, alignment } => {
-                        // For custom sizes, use appropriate store based on size
+                    // Custom sizes - use value type to determine instruction
+                    (WasmType::F32, TypeSize::Custom { .. }) => {
+                        function.instruction(&Instruction::F32Store(MemArg {
+                            offset: 0,
+                            align: 2, // 4-byte alignment for f32
+                            memory_index: 0,
+                        }));
+                    }
+                    (WasmType::F64, TypeSize::Custom { .. }) => {
+                        function.instruction(&Instruction::F64Store(MemArg {
+                            offset: 0,
+                            align: 3, // 8-byte alignment for f64
+                            memory_index: 0,
+                        }));
+                    }
+                    (WasmType::I32, TypeSize::Custom { bytes, alignment }) => {
                         if *bytes <= 4 {
                             function.instruction(&Instruction::I32Store(MemArg {
                                 offset: 0,
@@ -1038,12 +1076,25 @@ impl WasmModule {
                                 memory_index: 0,
                             }));
                         } else {
-                            function.instruction(&Instruction::I64Store(MemArg {
-                                offset: 0,
-                                align: (*alignment as f32).log2() as u32,
-                                memory_index: 0,
-                            }));
+                            return_compiler_error!(
+                                "I32 value cannot be stored in {} bytes. Use I64 for larger values.",
+                                bytes
+                            );
                         }
+                    }
+                    (WasmType::I64, TypeSize::Custom { alignment, .. }) => {
+                        function.instruction(&Instruction::I64Store(MemArg {
+                            offset: 0,
+                            align: (*alignment as f32).log2() as u32,
+                            memory_index: 0,
+                        }));
+                    }
+                    // Unsupported combinations
+                    (value_type, size) => {
+                        return_compiler_error!(
+                            "Unsupported store combination: {:?} value to {:?} size",
+                            value_type, size
+                        );
                     }
                 }
                 Ok(())
@@ -1102,8 +1153,13 @@ impl WasmModule {
         function: &mut Function,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Lowering host function call '{}' with {} arguments", host_function.name, args.len());
+        
         // Load all arguments onto the stack in order
-        for arg in args {
+        for (i, arg) in args.iter().enumerate() {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WASM: Loading argument {} for host function '{}'", i, host_function.name);
             self.lower_operand(arg, function, local_map)?;
         }
 
@@ -1114,13 +1170,26 @@ impl WasmModule {
                 &format!("Host function '{}' not found in import table. This indicates the import section was not properly generated.", host_function.name)
             ))?;
 
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Calling host function '{}' with index {}", host_function.name, func_index);
+
         // Generate call instruction with the host function index
         function.instruction(&Instruction::Call(*func_index));
 
         // If there's a destination place, store the result
         if let Some(dest_place) = destination {
-            self.lower_place_assignment(dest_place, function, local_map)?;
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WASM: Storing result of host function '{}' to place: {:?}", host_function.name, dest_place);
+            // For host function calls, use the place's own type as the return type
+            let return_type = dest_place.wasm_type();
+            self.lower_place_assignment_with_type(dest_place, &return_type, function, local_map)?;
+        } else {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WASM: Host function '{}' has no return value", host_function.name);
         }
+
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Successfully generated call for host function '{}'", host_function.name);
 
         Ok(())
     }
@@ -1229,6 +1298,25 @@ impl WasmModule {
                 // Type size constant
                 function.instruction(&Instruction::I32Const(*size as i32));
                 Ok(())
+            }
+        }
+    }
+
+    /// Get the WASM type of an rvalue for type-aware instruction generation
+    fn get_rvalue_wasm_type(&self, rvalue: &Rvalue) -> Result<WasmType, CompileError> {
+        match rvalue {
+            Rvalue::Use(operand) => self.get_operand_wasm_type(operand),
+            Rvalue::BinaryOp(_, left, _) => {
+                // Binary operations preserve the type of their operands
+                self.get_operand_wasm_type(left)
+            }
+            Rvalue::UnaryOp(_, operand) => {
+                // Unary operations preserve the type of their operand
+                self.get_operand_wasm_type(operand)
+            }
+            Rvalue::Ref { .. } => {
+                // References are pointers (i32)
+                Ok(WasmType::I32)
             }
         }
     }

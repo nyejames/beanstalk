@@ -193,7 +193,7 @@ impl TokenContext {
             // without breaking a statement or expression
             &TokenKind::Colon
             | &TokenKind::OpenParenthesis
-            | &TokenKind::StructBracket
+            | &TokenKind::FuncParameterBracket
             | &TokenKind::Comma
             | &TokenKind::End
             | &TokenKind::Assign
@@ -344,7 +344,7 @@ pub enum TokenKind {
     OpenCurly,  // {
     CloseCurly, // }
 
-    StructBracket, // |
+    FuncParameterBracket, // |
 
     // Structure of Syntax
     Newline,

@@ -13,7 +13,6 @@ use crate::compiler::parsers::{
 };
 use crate::return_syntax_error;
 
-
 pub fn create_reference(
     token_stream: &mut TokenContext,
     arg: &Arg,
@@ -77,7 +76,7 @@ pub fn new_arg(
         }
 
         // New Function
-        TokenKind::StructBracket => {
+        TokenKind::FuncParameterBracket => {
             let (constructor_args, return_types) =
                 create_function_signature(token_stream, &mut true, context)?;
 
@@ -179,7 +178,10 @@ pub fn new_arg(
 
         // If end of statement, then it's a zero-value variable
         // Struct bracket should only be hit here in the context of the end of some parameters
-        TokenKind::Comma | TokenKind::Eof | TokenKind::Newline | TokenKind::StructBracket => {
+        TokenKind::Comma
+        | TokenKind::Eof
+        | TokenKind::Newline
+        | TokenKind::FuncParameterBracket => {
             // If this is Parameters, then instead of a zero-value, we want to return None
             if context.kind == ContextKind::Parameters {
                 return Ok(Arg {

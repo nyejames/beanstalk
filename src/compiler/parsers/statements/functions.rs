@@ -1,17 +1,15 @@
-
-
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::host_functions::registry::{HostFunctionRegistry, HostFunctionDef};
+use crate::compiler::host_functions::registry::{HostFunctionDef, HostFunctionRegistry};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind, TextLocation};
+use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, return_syntax_error, return_type_error, return_rule_error};
+use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 // Arg names and types are required
 // Can have default values
@@ -345,7 +343,7 @@ pub fn parse_function_call_with_registry(
     if let Some(host_func) = registry.get_function(name) {
         return parse_host_function_call(token_stream, host_func, context);
     }
-    
+
     // If not a host function, we need to look up the function in the context
     if let Some(func_ref) = context.get_reference(name) {
         if let DataType::Function(required_arguments, returned_types) = &func_ref.value.data_type {
@@ -358,7 +356,7 @@ pub fn parse_function_call_with_registry(
             );
         }
     }
-    
+
     return_rule_error!(
         token_stream.current_location(),
         "Function '{}' is not defined. Make sure the function is declared before calling it",
@@ -373,16 +371,16 @@ pub fn parse_host_function_call(
     context: &ScopeContext,
 ) -> Result<AstNode, CompileError> {
     let location = token_stream.current_location();
-    
+
     // Advance past the function name
     token_stream.advance();
-    
+
     // Parse arguments using the same logic as regular function calls
     let args = parse_host_function_arguments(token_stream, host_func, context)?;
-    
+
     // Validate the host function call
     validate_host_function_call(host_func, &args, &location)?;
-    
+
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall(
             host_func.name.clone(),
@@ -407,7 +405,7 @@ pub fn validate_host_function_call(
     if args.len() != function.parameters.len() {
         let expected = function.parameters.len();
         let got = args.len();
-        
+
         if expected == 0 {
             return_type_error!(
                 location.clone(),
@@ -432,11 +430,15 @@ pub fn validate_host_function_call(
                 expected,
                 if expected == 1 { "" } else { "s" },
                 got,
-                if got > expected { "Too many arguments provided" } else { "Not enough arguments provided" }
+                if got > expected {
+                    "Too many arguments provided"
+                } else {
+                    "Not enough arguments provided"
+                }
             );
         }
     }
-    
+
     // Check argument types
     for (i, (arg, param)) in args.iter().zip(&function.parameters).enumerate() {
         if !types_compatible(&arg.data_type, &param.value.data_type) {
@@ -450,7 +452,7 @@ pub fn validate_host_function_call(
                 get_type_conversion_hint(&arg.data_type, &param.value.data_type)
             );
         }
-        
+
         // Check mutability requirements
         if param.value.data_type.is_mutable() && !arg.data_type.is_mutable() {
             return_type_error!(
@@ -463,7 +465,7 @@ pub fn validate_host_function_call(
             );
         }
     }
-    
+
     Ok(())
 }
 
@@ -509,7 +511,7 @@ fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String 
         (DataType::String(_), DataType::Int(_)) => {
             "Try parsing the string as an integer first".to_string()
         }
-        _ => "Check the function documentation for the expected argument types".to_string()
+        _ => "Check the function documentation for the expected argument types".to_string(),
     }
 }
 
@@ -525,25 +527,25 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
         (DataType::Float(_), DataType::Float(_)) => true,
         (DataType::Bool(_), DataType::Bool(_)) => true,
         (DataType::Template(_), DataType::Template(_)) => true,
-        
+
         // Handle inferred types - they should be compatible with their target
         (DataType::Inferred(_), target) | (target, DataType::Inferred(_)) => {
             // For now, assume inferred types are compatible
             // In a full implementation, this would check the inferred type
             true
         }
-        
+
         // Handle choice types - check if any choice matches
-        (DataType::Choices(choices), target) => {
-            choices.iter().any(|choice| types_compatible(choice, target))
-        }
-        (source, DataType::Choices(choices)) => {
-            choices.iter().any(|choice| types_compatible(source, choice))
-        }
-        
+        (DataType::Choices(choices), target) => choices
+            .iter()
+            .any(|choice| types_compatible(choice, target)),
+        (source, DataType::Choices(choices)) => choices
+            .iter()
+            .any(|choice| types_compatible(source, choice)),
+
         // Numeric type promotions (if we want to allow them)
         // (DataType::Int(_), DataType::Float(_)) => true,  // Int can be promoted to Float
-        
+
         // All other combinations are incompatible
         _ => false,
     }
@@ -555,8 +557,11 @@ pub fn parse_host_function_arguments(
     host_func: &HostFunctionDef,
     context: &ScopeContext,
 ) -> Result<Vec<Expression>, CompileError> {
-    ast_log!("Parsing host function call arguments for '{}'", host_func.name);
-    
+    ast_log!(
+        "Parsing host function call arguments for '{}'",
+        host_func.name
+    );
+
     // Make sure there is an open parenthesis
     if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
         return_syntax_error!(
@@ -566,9 +571,9 @@ pub fn parse_host_function_arguments(
             token_stream.current_token_kind()
         );
     }
-    
+
     token_stream.advance();
-    
+
     if host_func.parameters.is_empty() {
         // Make sure there is a closing parenthesis
         if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
@@ -579,19 +584,20 @@ pub fn parse_host_function_arguments(
                 token_stream.current_token_kind()
             );
         }
-        
+
         token_stream.advance();
         Ok(Vec::new())
     } else {
-        let required_argument_types = host_func.parameters
+        let required_argument_types = host_func
+            .parameters
             .iter()
             .map(|param| param.value.data_type.clone())
             .collect::<Vec<DataType>>();
-        
+
         let call_context = context.new_child_expression(required_argument_types);
-        
+
         let args = create_multiple_expressions(token_stream, &call_context, false)?;
-        
+
         // Make sure there is a closing parenthesis
         if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
             return_syntax_error!(
@@ -601,7 +607,7 @@ pub fn parse_host_function_arguments(
                 token_stream.current_token_kind()
             );
         }
-        
+
         token_stream.advance();
         Ok(args)
     }
@@ -712,7 +718,7 @@ fn create_arg_constructor(
     let mut args = Vec::<Arg>::new();
     let mut next_in_list: bool = true;
 
-    if token_stream.current_token_kind() != &TokenKind::StructBracket {
+    if token_stream.current_token_kind() != &TokenKind::FuncParameterBracket {
         return_syntax_error!(
             token_stream.current_location(),
             "Expected a | after the function name",
@@ -723,7 +729,7 @@ fn create_arg_constructor(
 
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {
-            TokenKind::StructBracket => {
+            TokenKind::FuncParameterBracket => {
                 token_stream.advance();
                 return Ok(args);
             }

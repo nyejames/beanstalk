@@ -1,4 +1,3 @@
-
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
@@ -257,7 +256,7 @@ pub fn get_token_kind(
 
     // Structs
     if current_char == '|' {
-        return_token!(TokenKind::StructBracket, stream);
+        return_token!(TokenKind::FuncParameterBracket, stream);
     }
 
     // Currently not using bangs
