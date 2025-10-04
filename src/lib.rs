@@ -91,10 +91,15 @@ mod compiler {
         pub mod wasm_encoding;
         pub mod wat_to_wasm;
     }
+
+    pub mod host_functions {
+        pub mod registry;
+    }
 }
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::mir::build_mir::MIR;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{
@@ -176,10 +181,15 @@ impl<'a> Compiler<'a> {
         mut module_tokens: TokenContext,
         public_declarations: &[Arg],
     ) -> Result<ParserOutput, CompileError> {
-        let ast_context = ScopeContext::new(
+        // Create the host function registry
+        let host_registry = create_builtin_registry()
+            .map_err(|e| e.with_file_path(module_tokens.src_path.clone()))?;
+        
+        let ast_context = ScopeContext::new_with_registry(
             ContextKind::Module,
             module_tokens.src_path.to_owned(),
             public_declarations,
+            host_registry,
         );
 
         let is_entry_point = self.project_config.entry_point == module_tokens.src_path;

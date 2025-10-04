@@ -1,3 +1,6 @@
+-- Test host function call
+print("Hello from Beanstalk!")
+
 -- Test template assignment to variables
 template_result = ["hello world"]
 

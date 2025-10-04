@@ -90,6 +90,10 @@ pub mod simple_error_validation_test;
 #[cfg(test)]
 pub mod error_handling_tests;
 
+// Host function system tests - Registry, AST parsing, and MIR lowering
+#[cfg(test)]
+pub mod host_function_tests;
+
 // === COMPREHENSIVE TESTS (CI/Development) ===
 // These tests provide detailed analysis and may be slower
 
@@ -113,3 +117,7 @@ pub use test_runner::run_essential_tests;
 // Re-export consolidated performance functions
 #[cfg(test)]
 pub use consolidated_performance_tests::{run_performance_benchmarks, validate_wasm_optimizations};
+
+// Re-export host function test functions
+#[cfg(test)]
+pub use host_function_tests::run_host_function_tests;

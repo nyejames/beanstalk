@@ -1,10 +1,10 @@
 use crate::tokenizer::END_SCOPE_CHAR;
 
-
 use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::DataType;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
@@ -12,7 +12,9 @@ use crate::compiler::parsers::expressions::parse_expression::{
     create_args_from_types, create_multiple_expressions,
 };
 use crate::compiler::parsers::statements::branching::create_branch;
-use crate::compiler::parsers::statements::functions::parse_function_call;
+use crate::compiler::parsers::statements::functions::{
+    parse_function_call, parse_function_call_with_registry,
+};
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
@@ -60,6 +62,7 @@ pub struct ScopeContext {
     pub scope_name: PathBuf,
     pub declarations: Vec<Arg>,
     pub returns: Vec<DataType>,
+    pub host_registry: HostFunctionRegistry,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -75,11 +78,30 @@ pub enum ContextKind {
 
 impl ScopeContext {
     pub fn new(kind: ContextKind, scope: PathBuf, declarations: &[Arg]) -> ScopeContext {
+        // Create a default registry - this will be replaced with the actual registry
+        let host_registry = HostFunctionRegistry::new();
+
         ScopeContext {
             kind,
             scope_name: scope,
             declarations: declarations.to_owned(),
             returns: Vec::new(),
+            host_registry,
+        }
+    }
+
+    pub fn new_with_registry(
+        kind: ContextKind,
+        scope: PathBuf,
+        declarations: &[Arg],
+        host_registry: HostFunctionRegistry,
+    ) -> ScopeContext {
+        ScopeContext {
+            kind,
+            scope_name: scope,
+            declarations: declarations.to_owned(),
+            returns: Vec::new(),
+            host_registry,
         }
     }
 
@@ -139,6 +161,7 @@ macro_rules! new_template_context {
             scope_name: $context.scope_name.to_owned(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
+            host_registry: $context.host_registry.clone(),
         }
     };
 }
@@ -148,12 +171,13 @@ macro_rules! new_template_context {
 /// name (for scope), args (declarations it can reference)
 #[macro_export]
 macro_rules! new_config_context {
-    ($name:expr, $args:expr) => {
+    ($name:expr, $args:expr, $registry:expr) => {
         ScopeContext {
             kind: ContextKind::Template,
             scope_name: PathBuf::from($name),
             declarations: $args,
             returns: vec![],
+            host_registry: $registry,
         }
     };
 }
@@ -163,12 +187,13 @@ macro_rules! new_config_context {
 /// name (for scope), args (declarations it can reference)
 #[macro_export]
 macro_rules! new_condition_context {
-    ($name:expr, $args:expr) => {
+    ($name:expr, $args:expr, $registry:expr) => {
         ScopeContext {
             kind: ContextKind::Condition,
             scope_name: PathBuf::from($name),
             declarations: $args,
             returns: vec![], //Empty because conditions are always booleans
+            host_registry: $registry,
         }
     };
 }
@@ -244,6 +269,20 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             TokenKind::Symbol(ref name) => {
+                // Check if this might be a host function call first
+                if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
+                    // This looks like a function call - check if it's a host function
+                    if context.host_registry.has_function(name) {
+                        ast.push(parse_function_call_with_registry(
+                            token_stream,
+                            name,
+                            &context,
+                            &context.host_registry,
+                        )?);
+                        continue;
+                    }
+                }
+
                 if let Some(arg) = context.get_reference(name) {
                     // Then the associated mutation afterward.
                     // Or error if trying to mutate an immutable reference

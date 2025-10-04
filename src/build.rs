@@ -2,6 +2,7 @@ use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
@@ -150,7 +151,18 @@ pub fn build_project_files_with_target(
                 Err(e) => return Err(vec![e.with_file_path(config_path)]),
             };
 
-            let ast_context = ScopeContext::new(ContextKind::Module, config_path.to_owned(), &[]);
+            // Create the host function registry
+            let host_registry = match create_builtin_registry() {
+                Ok(registry) => registry,
+                Err(e) => return Err(vec![e.with_file_path(config_path.clone())]),
+            };
+            
+            let ast_context = ScopeContext::new_with_registry(
+                ContextKind::Module, 
+                config_path.to_owned(), 
+                &[],
+                host_registry,
+            );
 
             let config_public_vars = match new_ast(&mut tokenizer_output, ast_context, true) {
                 Ok(module) => module.public,

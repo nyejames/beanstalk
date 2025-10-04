@@ -217,6 +217,17 @@ impl LivenessAnalysis {
                 // Dealloc uses the place
                 uses.insert(place.clone());
             }
+            Statement::HostCall { args, destination, .. } => {
+                // Host function call uses all arguments
+                for arg in args {
+                    self.extract_operand_uses(arg, uses);
+                }
+
+                // If there's a destination, it's a def
+                if let Some(dest_place) = destination {
+                    defs.insert(dest_place.clone());
+                }
+            }
             Statement::Nop | Statement::MemoryOp { .. } => {
                 // These don't have clear use/def patterns for basic analysis
             }
@@ -418,6 +429,12 @@ impl LivenessAnalysis {
             }
             Statement::Alloc { size, .. } => {
                 self.refine_operand(size, live_out);
+            }
+            Statement::HostCall { args, .. } => {
+                // Refine all argument operands
+                for arg in args {
+                    self.refine_operand(arg, live_out);
+                }
             }
             _ => {
                 // Other statements don't have operands that can be refined

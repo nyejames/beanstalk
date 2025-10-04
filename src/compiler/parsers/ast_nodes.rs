@@ -1,5 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
+use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
@@ -61,6 +62,17 @@ pub enum NodeKind {
         // bool, // Function is pure
     ),
 
+    // Host function call (functions provided by the runtime)
+    // Uses the same structure as regular function calls but includes binding info
+    HostFunctionCall(
+        String,              // Function name
+        Vec<Expression>,     // Arguments passed in
+        Vec<DataType>,       // Return types
+        String,              // WASM module name (e.g., "beanstalk_io")
+        String,              // WASM import name (e.g., "print")
+        TextLocation,        // Location for error reporting
+    ),
+
     // Variable names should be the full namespace (module path + variable name)
     Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
 
@@ -99,6 +111,22 @@ impl AstNode {
             NodeKind::FunctionCall(_, _, return_types, location) => {
                 let data_type = if return_types.len() == 1 {
                     return_types[0].to_owned()
+                } else {
+                    DataType::Choices(return_types.to_owned())
+                };
+
+                Ok(Expression::runtime(
+                    vec![self.to_owned()],
+                    data_type,
+                    location.to_owned(),
+                ))
+            }
+            NodeKind::HostFunctionCall(_, _, return_types, _, _, location) => {
+                let data_type = if return_types.len() == 1 {
+                    return_types[0].to_owned()
+                } else if return_types.is_empty() {
+                    // Void function - use None type or a special void type
+                    DataType::None
                 } else {
                     DataType::Choices(return_types.to_owned())
                 };

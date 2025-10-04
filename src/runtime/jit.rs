@@ -102,9 +102,9 @@ fn setup_beanstalk_io_imports(
     imports: &mut wasmer::Imports,
 ) -> Result<(), CompileError> {
     // Print function: (ptr: i32, len: i32) -> ()
+    // TODO: Implement proper memory access with correct Wasmer API
     let print_func = Function::new_typed(store, |msg_ptr: i32, msg_len: i32| {
-        // TODO: Read from WASM memory when memory access is available
-        println!("Beanstalk Print: ptr={}, len={}", msg_ptr, msg_len);
+        println!("Beanstalk Print: ptr={}, len={} (memory access to be implemented)", msg_ptr, msg_len);
     });
     imports.define("beanstalk_io", "print", print_func);
 

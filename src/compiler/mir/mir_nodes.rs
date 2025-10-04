@@ -45,6 +45,8 @@ pub struct MIR {
     pub exports: HashMap<String, Export>,
     /// Type information for WASM module generation
     pub type_info: TypeInfo,
+    /// Host function imports for WASM generation
+    pub host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
 }
 
 impl MIR {
@@ -68,12 +70,18 @@ impl MIR {
                     function_table: Vec::new(),
                 },
             },
+            host_imports: std::collections::HashSet::new(),
         }
     }
 
     /// Add a function to the MIR
     pub fn add_function(&mut self, function: MirFunction) {
         self.functions.push(function);
+    }
+
+    /// Add host function imports to the MIR
+    pub fn add_host_imports(&mut self, imports: &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>) {
+        self.host_imports.extend(imports.iter().cloned());
     }
 
     /// Get all program points from all functions
@@ -423,6 +431,13 @@ pub enum Statement {
 
     /// Drop value (for lifetime analysis)
     Drop { place: Place },
+
+    /// Host function call (functions provided by the runtime)
+    HostCall {
+        function: crate::compiler::host_functions::registry::HostFunctionDef,
+        args: Vec<Operand>,
+        destination: Option<Place>,
+    },
 }
 
 impl Statement {
@@ -505,6 +520,17 @@ impl Statement {
             Statement::Dealloc { place } => {
                 // Deallocation uses the place (to free it)
                 events.uses.push(place.clone());
+            }
+            Statement::HostCall { args, destination, .. } => {
+                // Generate use events for all arguments
+                for arg in args {
+                    self.generate_operand_events(arg, &mut events);
+                }
+
+                // If there's a destination, it gets reassigned
+                if let Some(dest_place) = destination {
+                    events.reassigns.push(dest_place.clone());
+                }
             }
             Statement::Nop | Statement::MemoryOp { .. } => {
                 // These don't generate events for basic borrow checking

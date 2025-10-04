@@ -153,6 +153,8 @@ pub struct MirTransformContext {
     next_block_id: u32,
     /// Program point generator for borrow checking
     program_point_generator: ProgramPointGenerator,
+    /// Host function imports used in this module
+    host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
 }
 
 impl MirTransformContext {
@@ -165,6 +167,7 @@ impl MirTransformContext {
             next_function_id: 0,
             next_block_id: 0,
             program_point_generator: ProgramPointGenerator::new(),
+            host_imports: std::collections::HashSet::new(),
         }
     }
 
@@ -220,6 +223,16 @@ impl MirTransformContext {
     /// Generate the next program point
     pub fn next_program_point(&mut self) -> ProgramPoint {
         self.program_point_generator.allocate_next()
+    }
+
+    /// Add a host function to the imports set
+    pub fn add_host_import(&mut self, host_function: crate::compiler::host_functions::registry::HostFunctionDef) {
+        self.host_imports.insert(host_function);
+    }
+
+    /// Get all host function imports
+    pub fn get_host_imports(&self) -> &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef> {
+        &self.host_imports
     }
 
     /// Get similar variable names for error suggestions
@@ -632,6 +645,9 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
         context.exit_scope(); // Exit function scope
     }
 
+    // Add host function imports to MIR
+    mir.add_host_imports(context.get_host_imports());
+
     // Run borrow checking on all functions
     run_borrow_checking_on_mir(&mut mir)?;
 
@@ -654,6 +670,9 @@ fn transform_ast_node_to_mir(
         }
         NodeKind::FunctionCall(name, params, return_types, ..) => {
             ast_function_call_to_mir(name, params, return_types, &node.location, context)
+        }
+        NodeKind::HostFunctionCall(name, params, return_types, ..) => {
+            ast_host_function_call_to_mir(name, params, return_types, &node.location, context)
         }
         NodeKind::If(condition, then_body, else_body) => {
             ast_if_statement_to_mir(condition, then_body, else_body, &node.location, context)
@@ -810,6 +829,76 @@ fn ast_function_call_to_mir(
     };
 
     Ok(vec![call_statement])
+}
+
+/// Transform host function call to MIR
+fn ast_host_function_call_to_mir(
+    name: &str,
+    params: &[Expression],
+    return_types: &[DataType],
+    location: &TextLocation,
+    context: &mut MirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Get the host function definition from the registry
+    // For now, we'll create a placeholder HostFunctionDef since we need access to the registry
+    // This will be properly implemented when the registry is integrated into the context
+    
+    // Convert parameters to operands with context for variable references
+    let mut args = Vec::new();
+    for param in params {
+        let operand = expression_to_operand_with_context(param, &param.location, context)?;
+        args.push(operand);
+    }
+
+    // Create a placeholder host function definition
+    // In a complete implementation, this would come from the host function registry
+    use crate::compiler::host_functions::registry::HostFunctionDef;
+    use crate::compiler::parsers::ast_nodes::Arg;
+    use crate::compiler::parsers::expressions::expression::Expression as AstExpression;
+    
+    // Create parameter definitions for the host function
+    let mut host_params = Vec::new();
+    for (i, param) in params.iter().enumerate() {
+        let param_arg = Arg {
+            name: format!("param_{}", i),
+            value: AstExpression::new(
+                crate::compiler::parsers::expressions::expression::ExpressionKind::None,
+                param.location.clone(),
+                param.data_type.clone()
+            ),
+        };
+        host_params.push(param_arg);
+    }
+    
+    let host_function = HostFunctionDef::new(
+        name,
+        host_params,
+        return_types.to_vec(),
+        "beanstalk_io", // Default module for now
+        name, // Use same name for import
+        &format!("Host function: {}", name)
+    );
+
+    // Track this host function as an import
+    context.add_host_import(host_function.clone());
+
+    // Determine destination place if there's a return value
+    let destination = if !return_types.is_empty() {
+        // Allocate a local place for the return value
+        let return_place = context.get_place_manager().allocate_local(&return_types[0]);
+        Some(return_place)
+    } else {
+        None
+    };
+
+    // Create host call statement
+    let host_call_statement = Statement::HostCall {
+        function: host_function,
+        args,
+        destination,
+    };
+
+    Ok(vec![host_call_statement])
 }
 
 /// Transform if statement to MIR with proper control flow

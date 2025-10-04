@@ -27,12 +27,13 @@
 //! ```
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::mir::mir_nodes::{
     BinOp, Constant, MIR, MirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
 };
 use crate::compiler::mir::place::{Place, WasmType, MemoryBase, ProjectionElem, TypeSize};
 use crate::{return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
 
 /// String constant manager for deduplication and memory management
@@ -323,6 +324,14 @@ impl LocalAnalyzer {
                     self.collect_from_place(res);
                 }
             }
+            Statement::HostCall { args, destination, .. } => {
+                for arg in args {
+                    self.collect_from_operand(arg);
+                }
+                if let Some(dest) = destination {
+                    self.collect_from_place(dest);
+                }
+            }
             Statement::Nop => {
                 // No places to collect
             }
@@ -539,6 +548,7 @@ impl WasmModuleStats {
 /// Simplified WASM module for basic MIR-to-WASM compilation
 pub struct WasmModule {
     type_section: TypeSection,
+    import_section: ImportSection,
     function_section: FunctionSection,
     memory_section: MemorySection,
     global_section: GlobalSection,
@@ -551,6 +561,9 @@ pub struct WasmModule {
 
     // Function registry for name resolution
     function_registry: HashMap<String, u32>,
+
+    // Host function index mapping
+    host_function_indices: HashMap<String, u32>,
 
     // Internal state
     pub function_count: u32,
@@ -568,6 +581,7 @@ impl WasmModule {
     pub fn new() -> Self {
         Self {
             type_section: TypeSection::new(),
+            import_section: ImportSection::new(),
             function_section: FunctionSection::new(),
             memory_section: MemorySection::new(),
             global_section: GlobalSection::new(),
@@ -576,6 +590,7 @@ impl WasmModule {
             data_section: DataSection::new(),
             string_manager: StringManager::new(),
             function_registry: HashMap::new(),
+            host_function_indices: HashMap::new(),
             function_count: 0,
             type_count: 0,
             global_count: 0,
@@ -594,6 +609,9 @@ impl WasmModule {
             shared: false,
             page_size_log2: None,
         });
+
+        // Generate WASM import section for host functions
+        module.encode_host_function_imports(&mir.host_imports)?;
 
         // Process functions with enhanced error context
         for (index, function) in mir.functions.iter().enumerate() {
@@ -707,6 +725,9 @@ impl WasmModule {
             }
             Statement::Call { func, args, destination } => {
                 self.lower_function_call(func, args, destination, function, local_map)
+            }
+            Statement::HostCall { function: host_func, args, destination } => {
+                self.lower_host_function_call(host_func, args, destination, function, local_map)
             }
             Statement::Nop => {
                 // No-op - generate no instructions
@@ -1067,6 +1088,41 @@ impl WasmModule {
                 Ok(())
             }
         }
+    }
+
+    /// Lower host function call to WASM call instruction
+    /// 
+    /// This method handles host function calls by loading arguments onto the WASM stack
+    /// and generating call instructions with correct function indices.
+    fn lower_host_function_call(
+        &mut self,
+        host_function: &HostFunctionDef,
+        args: &[Operand],
+        destination: &Option<Place>,
+        function: &mut Function,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Load all arguments onto the stack in order
+        for arg in args {
+            self.lower_operand(arg, function, local_map)?;
+        }
+
+        // Get the function index for this host function
+        let func_index = self.host_function_indices
+            .get(&host_function.name)
+            .ok_or_else(|| CompileError::compiler_error(
+                &format!("Host function '{}' not found in import table. This indicates the import section was not properly generated.", host_function.name)
+            ))?;
+
+        // Generate call instruction with the host function index
+        function.instruction(&Instruction::Call(*func_index));
+
+        // If there's a destination place, store the result
+        if let Some(dest_place) = destination {
+            self.lower_place_assignment(dest_place, function, local_map)?;
+        }
+
+        Ok(())
     }
 
     /// Lower projection element to WASM instructions
@@ -1640,6 +1696,109 @@ impl WasmModule {
         LifetimeMemoryStatistics::default()
     }
 
+    /// Generate WASM import section entries for host functions used in MIR
+    /// 
+    /// This method creates WASM function type signatures from host function definitions
+    /// and adds import entries with correct module and function names.
+    pub fn encode_host_function_imports(&mut self, host_imports: &HashSet<HostFunctionDef>) -> Result<(), CompileError> {
+        for host_func in host_imports {
+            // Create WASM function type signature from host function definition
+            let param_types = self.create_wasm_param_types(&host_func.parameters)?;
+            let result_types = self.create_wasm_result_types(&host_func.return_types)?;
+            
+            // Add function type to type section
+            self.type_section.ty().function(param_types, result_types);
+            
+            // Add import entry to import section
+            self.import_section.import(
+                &host_func.module,
+                &host_func.import_name,
+                EntityType::Function(self.type_count),
+            );
+            
+            // Register function index for calls - host functions come before regular functions
+            self.host_function_indices.insert(host_func.name.clone(), self.function_count);
+            
+            // Also register in the main function registry for unified lookup
+            self.function_registry.insert(host_func.name.clone(), self.function_count);
+            
+            // Increment counters
+            self.function_count += 1;
+            self.type_count += 1;
+        }
+        
+        Ok(())
+    }
+    
+    /// Create WASM parameter types from host function parameters
+    fn create_wasm_param_types(&self, parameters: &[crate::compiler::parsers::ast_nodes::Arg]) -> Result<Vec<ValType>, CompileError> {
+        let mut param_types = Vec::new();
+        
+        for param in parameters {
+            let wasm_type = self.datatype_to_wasm_type(&param.value.data_type)?;
+            param_types.push(self.wasm_type_to_val_type(&wasm_type));
+        }
+        
+        Ok(param_types)
+    }
+    
+    /// Create WASM result types from host function return types
+    fn create_wasm_result_types(&self, return_types: &[crate::compiler::datatypes::DataType]) -> Result<Vec<ValType>, CompileError> {
+        let mut result_types = Vec::new();
+        
+        for return_type in return_types {
+            let wasm_type = self.datatype_to_wasm_type(return_type)?;
+            result_types.push(self.wasm_type_to_val_type(&wasm_type));
+        }
+        
+        Ok(result_types)
+    }
+    
+    /// Get the function index for a host function by name
+    pub fn get_host_function_index(&self, name: &str) -> Option<u32> {
+        self.host_function_indices.get(name).copied()
+    }
+    
+    /// Get the function index for a regular function by name
+    pub fn get_function_index(&self, name: &str) -> Option<u32> {
+        self.function_registry.get(name).copied()
+    }
+    
+    /// Get the total number of functions (host + regular)
+    pub fn get_total_function_count(&self) -> u32 {
+        self.function_count
+    }
+    
+    /// Get the number of host function imports
+    pub fn get_host_function_count(&self) -> usize {
+        self.host_function_indices.len()
+    }
+
+    /// Convert Beanstalk DataType to WasmType for host function signatures
+    fn datatype_to_wasm_type(&self, data_type: &crate::compiler::datatypes::DataType) -> Result<WasmType, CompileError> {
+        use crate::compiler::datatypes::DataType;
+        
+        match data_type {
+            DataType::Int(_) => Ok(WasmType::I32),
+            DataType::Float(_) => Ok(WasmType::F32),
+            DataType::Bool(_) => Ok(WasmType::I32), // Booleans are represented as i32 in WASM
+            DataType::String(_) => Ok(WasmType::I32), // Strings are pointers to linear memory
+            DataType::None => {
+                // None types don't contribute to WASM signature
+                return_compiler_error!(
+                    "None type should not appear in host function signatures. This indicates a problem with host function definition."
+                );
+            }
+            _ => {
+                return_unimplemented_feature_error!(
+                    &format!("DataType '{:?}' in host function signatures", data_type),
+                    None,
+                    Some("use basic types (Int, Float, Bool, String) for host function parameters and return values")
+                );
+            }
+        }
+    }
+
     /// Generate the final WASM module bytes
     pub fn finish(mut self) -> Vec<u8> {
         // Populate data section with string constants
@@ -1655,6 +1814,7 @@ impl WasmModule {
         let mut module = Module::new();
 
         module.section(&self.type_section);
+        module.section(&self.import_section);
         module.section(&self.function_section);
         module.section(&self.memory_section);
         module.section(&self.global_section);
@@ -1698,11 +1858,6 @@ impl WasmModule {
         let data_size = self.string_manager.get_data_size();
         
         base_size + type_size + function_size + data_size
-    }
-
-    /// Get function index by name for function calls
-    pub fn get_function_index(&self, name: &str) -> Option<u32> {
-        self.function_registry.get(name).copied()
     }
 
     /// Register a function name with its index

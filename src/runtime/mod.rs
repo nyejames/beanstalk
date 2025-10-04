@@ -14,6 +14,7 @@ pub mod io {
     pub mod native;
 }
 pub mod jit;
+pub mod memory_utils;
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::backends::cranelift::execute_with_cranelift;

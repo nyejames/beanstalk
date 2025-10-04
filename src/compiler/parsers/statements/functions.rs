@@ -3,14 +3,15 @@
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::host_functions::registry::{HostFunctionRegistry, HostFunctionDef};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{TokenContext, TokenKind, TextLocation};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, return_syntax_error};
+use crate::{ast_log, return_syntax_error, return_type_error, return_rule_error};
 
 // Arg names and types are required
 // Can have default values
@@ -332,6 +333,279 @@ pub fn create_function_signature(
 //
 //     Ok(sorted_values)
 // }
+
+/// Parse a function call, checking host function registry first
+pub fn parse_function_call_with_registry(
+    token_stream: &mut TokenContext,
+    name: &str,
+    context: &ScopeContext,
+    registry: &HostFunctionRegistry,
+) -> Result<AstNode, CompileError> {
+    // Check if it's a host function first
+    if let Some(host_func) = registry.get_function(name) {
+        return parse_host_function_call(token_stream, host_func, context);
+    }
+    
+    // If not a host function, we need to look up the function in the context
+    if let Some(func_ref) = context.get_reference(name) {
+        if let DataType::Function(required_arguments, returned_types) = &func_ref.value.data_type {
+            return parse_function_call(
+                token_stream,
+                name,
+                context,
+                required_arguments,
+                returned_types,
+            );
+        }
+    }
+    
+    return_rule_error!(
+        token_stream.current_location(),
+        "Function '{}' is not defined. Make sure the function is declared before calling it",
+        name
+    );
+}
+
+/// Parse a host function call
+pub fn parse_host_function_call(
+    token_stream: &mut TokenContext,
+    host_func: &HostFunctionDef,
+    context: &ScopeContext,
+) -> Result<AstNode, CompileError> {
+    let location = token_stream.current_location();
+    
+    // Advance past the function name
+    token_stream.advance();
+    
+    // Parse arguments using the same logic as regular function calls
+    let args = parse_host_function_arguments(token_stream, host_func, context)?;
+    
+    // Validate the host function call
+    validate_host_function_call(host_func, &args, &location)?;
+    
+    Ok(AstNode {
+        kind: NodeKind::HostFunctionCall(
+            host_func.name.clone(),
+            args,
+            host_func.return_types.clone(),
+            host_func.module.clone(),
+            host_func.import_name.clone(),
+            location.clone(),
+        ),
+        location,
+        scope: context.scope_name.to_owned(),
+    })
+}
+
+/// Validate a host function call against its signature
+pub fn validate_host_function_call(
+    function: &HostFunctionDef,
+    args: &[Expression],
+    location: &TextLocation,
+) -> Result<(), CompileError> {
+    // Check argument count
+    if args.len() != function.parameters.len() {
+        let expected = function.parameters.len();
+        let got = args.len();
+        
+        if expected == 0 {
+            return_type_error!(
+                location.clone(),
+                "Function '{}' doesn't take any arguments, but {} {} provided. Did you mean to call it without parentheses?",
+                function.name,
+                got,
+                if got == 1 { "was" } else { "were" }
+            );
+        } else if got == 0 {
+            return_type_error!(
+                location.clone(),
+                "Function '{}' expects {} argument{}, but none were provided",
+                function.name,
+                expected,
+                if expected == 1 { "" } else { "s" }
+            );
+        } else {
+            return_type_error!(
+                location.clone(),
+                "Function '{}' expects {} argument{}, got {}. {}",
+                function.name,
+                expected,
+                if expected == 1 { "" } else { "s" },
+                got,
+                if got > expected { "Too many arguments provided" } else { "Not enough arguments provided" }
+            );
+        }
+    }
+    
+    // Check argument types
+    for (i, (arg, param)) in args.iter().zip(&function.parameters).enumerate() {
+        if !types_compatible(&arg.data_type, &param.value.data_type) {
+            return_type_error!(
+                location.clone(),
+                "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
+                i + 1,
+                function.name,
+                format_type_for_error(&param.value.data_type),
+                format_type_for_error(&arg.data_type),
+                get_type_conversion_hint(&arg.data_type, &param.value.data_type)
+            );
+        }
+        
+        // Check mutability requirements
+        if param.value.data_type.is_mutable() && !arg.data_type.is_mutable() {
+            return_type_error!(
+                location.clone(),
+                "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
+                i + 1,
+                function.name,
+                format_type_for_error(&arg.data_type),
+                format_type_for_error(&param.value.data_type).to_lowercase()
+            );
+        }
+    }
+    
+    Ok(())
+}
+
+/// Format a DataType for user-friendly error messages
+fn format_type_for_error(data_type: &DataType) -> String {
+    match data_type {
+        DataType::String(_) => "String".to_string(),
+        DataType::Int(_) => "Int".to_string(),
+        DataType::Float(_) => "Float".to_string(),
+        DataType::Bool(_) => "Bool".to_string(),
+        DataType::Template(_) => "Template".to_string(),
+        DataType::Function(_, _) => "Function".to_string(),
+        DataType::Args(_) => "Args".to_string(),
+        DataType::Choices(types) => {
+            let type_names: Vec<String> = types.iter().map(format_type_for_error).collect();
+            format!("({})", type_names.join(" | "))
+        }
+        DataType::Inferred(_) => "Inferred".to_string(),
+        DataType::Range => "Range".to_string(),
+        DataType::None => "None".to_string(),
+        DataType::True => "True".to_string(),
+        DataType::False => "False".to_string(),
+        DataType::CoerceToString(_) => "String".to_string(),
+        DataType::Decimal(_) => "Decimal".to_string(),
+        DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
+        DataType::Struct(_, _) => "Struct".to_string(),
+        DataType::Option(inner) => format!("Option<{}>", format_type_for_error(inner)),
+    }
+}
+
+/// Provide helpful hints for type conversion
+fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String {
+    match (from_type, to_type) {
+        (DataType::Int(_), DataType::String(_)) => {
+            "Try converting the integer to a string first".to_string()
+        }
+        (DataType::Float(_), DataType::String(_)) => {
+            "Try converting the float to a string first".to_string()
+        }
+        (DataType::Bool(_), DataType::String(_)) => {
+            "Try converting the boolean to a string first".to_string()
+        }
+        (DataType::String(_), DataType::Int(_)) => {
+            "Try parsing the string as an integer first".to_string()
+        }
+        _ => "Check the function documentation for the expected argument types".to_string()
+    }
+}
+
+/// Check if two types are compatible for function call arguments
+fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
+    // Basic type compatibility check
+    // This is a simplified version - in a full implementation, this would handle
+    // more complex type relationships, ownership, mutability, etc.
+    match (arg_type, param_type) {
+        // Exact type matches
+        (DataType::String(_), DataType::String(_)) => true,
+        (DataType::Int(_), DataType::Int(_)) => true,
+        (DataType::Float(_), DataType::Float(_)) => true,
+        (DataType::Bool(_), DataType::Bool(_)) => true,
+        (DataType::Template(_), DataType::Template(_)) => true,
+        
+        // Handle inferred types - they should be compatible with their target
+        (DataType::Inferred(_), target) | (target, DataType::Inferred(_)) => {
+            // For now, assume inferred types are compatible
+            // In a full implementation, this would check the inferred type
+            true
+        }
+        
+        // Handle choice types - check if any choice matches
+        (DataType::Choices(choices), target) => {
+            choices.iter().any(|choice| types_compatible(choice, target))
+        }
+        (source, DataType::Choices(choices)) => {
+            choices.iter().any(|choice| types_compatible(source, choice))
+        }
+        
+        // Numeric type promotions (if we want to allow them)
+        // (DataType::Int(_), DataType::Float(_)) => true,  // Int can be promoted to Float
+        
+        // All other combinations are incompatible
+        _ => false,
+    }
+}
+
+/// Parse arguments for a host function call
+pub fn parse_host_function_arguments(
+    token_stream: &mut TokenContext,
+    host_func: &HostFunctionDef,
+    context: &ScopeContext,
+) -> Result<Vec<Expression>, CompileError> {
+    ast_log!("Parsing host function call arguments for '{}'", host_func.name);
+    
+    // Make sure there is an open parenthesis
+    if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
+        return_syntax_error!(
+            token_stream.current_location(),
+            "Expected a parenthesis after function call '{}'. Found '{:?}' instead.",
+            host_func.name,
+            token_stream.current_token_kind()
+        );
+    }
+    
+    token_stream.advance();
+    
+    if host_func.parameters.is_empty() {
+        // Make sure there is a closing parenthesis
+        if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+            return_syntax_error!(
+                token_stream.current_location(),
+                "Function '{}' does not accept any arguments, found '{:?}' instead",
+                host_func.name,
+                token_stream.current_token_kind()
+            );
+        }
+        
+        token_stream.advance();
+        Ok(Vec::new())
+    } else {
+        let required_argument_types = host_func.parameters
+            .iter()
+            .map(|param| param.value.data_type.clone())
+            .collect::<Vec<DataType>>();
+        
+        let call_context = context.new_child_expression(required_argument_types);
+        
+        let args = create_multiple_expressions(token_stream, &call_context, false)?;
+        
+        // Make sure there is a closing parenthesis
+        if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
+            return_syntax_error!(
+                token_stream.current_location(),
+                "Missing a closing parenthesis at the end of the function call '{}': found a '{:?}' instead",
+                host_func.name,
+                token_stream.current_token_kind()
+            );
+        }
+        
+        token_stream.advance();
+        Ok(args)
+    }
+}
 
 // Built-in functions will do their own thing
 pub fn parse_function_call(
