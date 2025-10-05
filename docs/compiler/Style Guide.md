@@ -139,7 +139,7 @@ for node in ast_nodes {
 ### Testing Commands
 ```bash
 # Test specific Beanstalk code (development)
-cargo run --features "verbose_ast_logging,verbose_eval_logging,verbose_codegen_logging,detailed_timers" -- build tests/cases/test.bs
+cargo run --features "verbose_ast_logging,verbose_eval_logging,verbose_codegen_logging,detailed_timers" -- build tests/cases/test.bst
 
 # Performance testing on all cases
 cargo run --features "detailed_timers" -- build tests

@@ -8,6 +8,13 @@ use crate::{ast_log, return_rule_error};
 
 // IF STATEMENTS / MATCH STATEMENTS
 // Can also be expressions (todo)
+// Example:
+
+// if x < 5:
+//     print("x is less than 5")
+// else:
+//     print("x is greater than 5")
+// ;
 pub fn create_branch(
     token_stream: &mut TokenContext,
     context: &mut ScopeContext,

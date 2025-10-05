@@ -56,6 +56,7 @@ pub fn create_multiple_expressions(
 
                 token_stream.advance(); // Skip the comma
             }
+            
             _ => {
                 if type_index < context.returns.len() {
                     return_type_error!(
