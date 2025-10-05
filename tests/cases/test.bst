@@ -1,5 +1,5 @@
 -- Simple return statement test
-simple_function |x Int| -> Int:
+simple_function |x ~Int| -> Int:
     return x + 1
 ;
 

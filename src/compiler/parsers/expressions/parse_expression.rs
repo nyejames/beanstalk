@@ -438,20 +438,43 @@ pub fn create_expression(
 
             // LOGICAL OPERATORS
             TokenKind::Is => {
-                // Check if the next token is a not
-                if let Some(TokenKind::Not) = token_stream.peek_next_token() {
-                    token_stream.advance();
-                    expression.push(AstNode {
-                        kind: NodeKind::Operator(Operator::NotEqual),
-                        location: token_stream.current_location(),
-                        scope: context.scope_name.to_owned(),
-                    });
-                } else {
-                    expression.push(AstNode {
-                        kind: NodeKind::Operator(Operator::Equality),
-                        location: token_stream.current_location(),
-                        scope: context.scope_name.to_owned(),
-                    })
+                // Check if the next token is a "not" or the start of a match statement
+                match token_stream.peek_next_token() {
+
+                    // IS NOT
+                    Some(TokenKind::Not) => {
+                        token_stream.advance();
+                        expression.push(AstNode {
+                            kind: NodeKind::Operator(Operator::NotEqual),
+                            location: token_stream.current_location(),
+                            scope: context.scope_name.to_owned(),
+                        });
+                    }
+
+                    // MATCH STATEMENTS
+                    Some(TokenKind::Colon) => {
+                        // Match statements have a colon right after the "is".
+                        // Currently, this should only match on one value
+                        // So, we should make sure if there is a colon now, there is just one valid expression being matched
+                        if expression.len() > 1 {
+                            return_type_error!(
+                                token_stream.current_location(),
+                                "Match statements can only have one value to match against. Found: {}",
+                                expression.len()
+                            )
+                        }
+
+                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type)
+                    }
+
+                    // IS
+                    _ => {
+                        expression.push(AstNode {
+                            kind: NodeKind::Operator(Operator::Equality),
+                            location: token_stream.current_location(),
+                            scope: context.scope_name.to_owned(),
+                        })
+                    }
                 }
             }
 

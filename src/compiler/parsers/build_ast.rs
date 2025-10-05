@@ -457,7 +457,8 @@ pub fn new_ast(
             TokenKind::If => {
                 token_stream.advance();
 
-                ast.push(create_branch(
+                // This is extending as it might get folded into a vec of nodes
+                ast.extend(create_branch(
                     token_stream,
                     &mut context.new_child_control_flow(ContextKind::Branch),
                 )?);

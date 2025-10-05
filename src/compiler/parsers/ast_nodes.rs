@@ -6,6 +6,7 @@ use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::return_compiler_error;
 use std::path::PathBuf;
+use crate::compiler::parsers::statements::branching::MatchArm;
 
 #[derive(Debug, Clone)]
 pub struct Arg {
@@ -46,7 +47,7 @@ pub enum NodeKind {
 
     Match(
         Expression,                  // Subject (condition)
-        Vec<(Expression, AstBlock)>, // Arms
+        Vec<MatchArm>, // Arms
         Option<AstBlock>,            // for the wildcard/else case
     ),
 
