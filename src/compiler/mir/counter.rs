@@ -56,9 +56,9 @@ impl UseCounter {
             }
             NodeKind::Match(subject, arms, default_arm) => {
                 self.count_expression_uses(subject)?;
-                for (pattern, block) in arms {
-                    self.count_expression_uses(pattern)?;
-                    self.count_block_uses(&block.ast)?;
+                for arm in arms {
+                    self.count_expression_uses(&arm.condition)?;
+                    self.count_block_uses(&arm.body.ast)?;
                 }
                 if let Some(default_block) = default_arm {
                     self.count_block_uses(&default_block.ast)?;

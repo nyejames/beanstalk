@@ -23,6 +23,7 @@ pub fn tokenize(
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
     let imports_initial_capacity = settings::IMPORTS_CAPACITY;
+    let type_declarations_initial_capacity = settings::IMPORTS_CAPACITY;
 
     let mut template_nesting_level: i64 = if mode == TokenizeMode::Normal {
         0
@@ -34,6 +35,7 @@ pub fn tokenize(
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode);
     let mut imports = HashSet::with_capacity(imports_initial_capacity);
+    let mut type_declarations = HashSet::with_capacity(type_declarations_initial_capacity);
 
     let mut token: Token = Token::new(
         TokenKind::ModuleStart(String::new()),
@@ -49,7 +51,12 @@ pub fn tokenize(
         }
 
         tokens.push(token);
-        token = get_token_kind(&mut stream, &mut template_nesting_level, &mut imports)?;
+        token = get_token_kind(
+            &mut stream,
+            &mut template_nesting_level,
+            &mut imports,
+            &mut type_declarations,
+        )?;
     }
 
     tokens.push(token);
@@ -62,6 +69,7 @@ pub fn get_token_kind(
     stream: &mut TokenStream,
     template_nesting_level: &mut i64,
     imports: &mut HashSet<PathBuf>,
+    type_declarations: &mut HashSet<String>,
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
@@ -286,7 +294,7 @@ pub fn get_token_kind(
                 }
 
                 // Do not add any token to the stream, call this function again
-                return get_token_kind(stream, template_nesting_level, imports);
+                return get_token_kind(stream, template_nesting_level, imports, type_declarations);
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -488,7 +496,7 @@ pub fn get_token_kind(
 
     if current_char.is_alphabetic() {
         token_value.push(current_char);
-        return keyword_or_variable(&mut token_value, stream);
+        return keyword_or_variable(&mut token_value, stream, type_declarations);
     }
 
     return_syntax_error!(
@@ -501,6 +509,7 @@ pub fn get_token_kind(
 fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
+    type_declarations: &mut HashSet<String>,
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
     loop {
@@ -561,7 +570,11 @@ fn keyword_or_variable(
 
         // VARIABLE
         if is_valid_identifier(token_value) {
-            // Check if this declaration has any modifiers in front of it
+            // If this has a capital letter at the start of it, it's a type declaration
+            if token_value.chars().next().unwrap().is_uppercase() {
+                type_declarations.insert(token_value.clone());
+            }
+
             return_token!(TokenKind::Symbol(token_value.to_string()), stream);
         } else {
             // Failing all of that, this is an invalid variable name
