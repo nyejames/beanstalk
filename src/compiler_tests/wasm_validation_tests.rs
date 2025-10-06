@@ -1,5 +1,5 @@
 use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::mir::mir::borrow_check_pipeline;
+use crate::compiler::wir::wir::borrow_check_pipeline;
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::build_system::core_build::compile_modules;
 use crate::settings::{Config, ProjectType};

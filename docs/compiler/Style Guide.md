@@ -26,10 +26,10 @@ let wasm_bytes = generate_wasm_from_ir(&ir_instruction);
 ## Architecture Patterns
 
 ### Compiler Pipeline Structure
-Follow the established pipeline: **Source → AST → IR → WASM → Runtime**
+Follow the established pipeline: **Source → AST → WIR → WASM → Runtime**
 
 - **AST nodes**: Define in `src/compiler/parsers/ast_nodes.rs`
-- **IR nodes**: Define in `src/compiler/ir/ir_nodes.rs`
+- **IR nodes**: Define in `src/compiler/wir/wir_nodes.rs`
 - **Codegen**: Separate modules for WASM (`src/compiler/codegen/`) and HTML5 (`src/compiler/html5_codegen/`)
 
 ### Node Implementation Requirements

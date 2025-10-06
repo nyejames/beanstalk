@@ -1,6 +1,5 @@
-use crate::compiler::mir::mir_nodes::{Loan, LoanId, MirFunction, ProgramPoint};
-use crate::compiler::mir::place::Place;
-use crate::compiler::optimizers::place_interner::{PlaceInterner};
+use crate::compiler::wir::wir_nodes::{Loan, LoanId, WirFunction, ProgramPoint};
+use crate::compiler::wir::place::Place;
 use std::collections::HashMap;
 
 /// Borrow fact extraction for gen/kill set construction
@@ -16,14 +15,12 @@ pub struct BorrowFactExtractor {
     pub gen_sets: HashMap<ProgramPoint, BitSet>,
     /// Kill sets: loans killed at each program point
     pub kill_sets: HashMap<ProgramPoint, BitSet>,
-    /// All loans in the function (using interned place IDs)
+    /// All loans in the function
     pub loans: Vec<Loan>,
-    /// Mapping from places to loans that borrow them (direct Place references for simplicity)
+    /// Mapping from places to loans that borrow them
     pub place_to_loans: HashMap<Place, Vec<LoanId>>,
     /// Total number of loans (for bitset sizing)
     pub loan_count: usize,
-    /// Place interner for this function
-    pub place_interner: PlaceInterner,
 }
 
 /// Simple bitset for dataflow analysis
@@ -402,12 +399,11 @@ impl BorrowFactExtractor {
             loans: Vec::new(),
             place_to_loans: HashMap::new(),
             loan_count: 0,
-            place_interner: PlaceInterner::new(),
         }
     }
 
     /// Extract gen/kill sets for a function with place interning optimization
-    pub fn extract_function(&mut self, function: &MirFunction) -> Result<(), String> {
+    pub fn extract_function(&mut self, function: &WirFunction) -> Result<(), String> {
         // First, collect all loans from events
         self.collect_loans_from_events(function)?;
 
@@ -424,23 +420,23 @@ impl BorrowFactExtractor {
     }
 
     /// Collect all loans from events in the function using place interning
-    fn collect_loans_from_events(&mut self, function: &MirFunction) -> Result<(), String> {
+    fn collect_loans_from_events(&mut self, function: &WirFunction) -> Result<(), String> {
         let mut loan_id_counter = 0u32;
 
-        // Copy the existing loans from the function (they should already use PlaceId)
+        // Copy the existing loans from the function
         self.loans = function.get_loans().to_vec();
         self.loan_count = self.loans.len();
 
-        // If no loans exist, generate them from borrow operations in the MIR
+        // If no loans exist, generate them from borrow operations in the WIR
         if self.loans.is_empty() {
-            self.generate_loans_from_mir(function, &mut loan_id_counter)?;
+            self.generate_loans_from_wir(function, &mut loan_id_counter)?;
         }
 
         Ok(())
     }
 
-    /// Generate loans from MIR statements that create borrows
-    fn generate_loans_from_mir(&mut self, function: &MirFunction, loan_id_counter: &mut u32) -> Result<(), String> {
+    /// Generate loans from WIR statements that create borrows
+    fn generate_loans_from_wir(&mut self, function: &WirFunction, loan_id_counter: &mut u32) -> Result<(), String> {
         // Scan all blocks and statements for borrow operations
         for block in &function.blocks {
             for (stmt_index, statement) in block.statements.iter().enumerate() {
@@ -467,11 +463,11 @@ impl BorrowFactExtractor {
     /// Extract loan from a statement if it creates a borrow
     fn extract_loan_from_statement(
         &self, 
-        statement: &crate::compiler::mir::mir_nodes::Statement, 
+        statement: &crate::compiler::wir::wir_nodes::Statement, 
         program_point: ProgramPoint, 
         loan_id_counter: &mut u32
     ) -> Option<Loan> {
-        use crate::compiler::mir::mir_nodes::{Statement, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Statement, Rvalue};
         
         match statement {
             Statement::Assign { rvalue: Rvalue::Ref { place, borrow_kind }, .. } => {
@@ -492,11 +488,11 @@ impl BorrowFactExtractor {
     /// Extract loan from a terminator if it creates a borrow
     fn extract_loan_from_terminator(
         &self,
-        _terminator: &crate::compiler::mir::mir_nodes::Terminator,
+        _terminator: &crate::compiler::wir::wir_nodes::Terminator,
         _program_point: ProgramPoint,
         _loan_id_counter: &mut u32
     ) -> Option<Loan> {
-        // Terminators don't typically create borrows in the simplified MIR
+        // Terminators don't typically create borrows in the simplified WIR
         None
     }
 
@@ -514,7 +510,7 @@ impl BorrowFactExtractor {
     }
 
     /// Build gen sets containing loans starting at each statement (optimized with place interning)
-    fn build_gen_sets(&mut self, function: &MirFunction) -> Result<(), String> {
+    fn build_gen_sets(&mut self, function: &WirFunction) -> Result<(), String> {
         // Pre-allocate empty BitSet for reuse
         let empty_bitset = BitSet::new(self.loan_count);
 
@@ -558,7 +554,7 @@ impl BorrowFactExtractor {
     }
 
     /// Build kill sets for loans whose owners may alias moved/reassigned places (optimized with fast aliasing)
-    fn build_kill_sets(&mut self, function: &MirFunction) -> Result<(), String> {
+    fn build_kill_sets(&mut self, function: &WirFunction) -> Result<(), String> {
         // Pre-allocate empty BitSet for reuse
         let empty_bitset = BitSet::new(self.loan_count);
 
@@ -658,7 +654,7 @@ impl BorrowFactExtractor {
 /// - Constant indices: arr[0] vs arr[1] don't alias
 /// - Dynamic indices: Unknown(_) conservatively aliases everything
 pub fn may_alias(place_a: &Place, place_b: &Place) -> bool {
-    use crate::compiler::mir::place::{Place, ProjectionElem};
+    use crate::compiler::wir::place::{Place, ProjectionElem};
 
     // Same place always aliases
     if place_a == place_b {
@@ -767,7 +763,7 @@ pub fn may_alias(place_a: &Place, place_b: &Place) -> bool {
 }
 
 /// Entry point for extracting gen/kill sets from a function with place interning optimization
-pub fn extract_gen_kill_sets(function: &MirFunction) -> Result<BorrowFactExtractor, String> {
+pub fn extract_gen_kill_sets(function: &WirFunction) -> Result<BorrowFactExtractor, String> {
     let mut extractor = BorrowFactExtractor::new();
     extractor.extract_function(function)?;
     Ok(extractor)

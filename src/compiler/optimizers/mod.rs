@@ -6,9 +6,9 @@
 ///
 /// ## Organization
 /// - `constant_folding`: Compile-time constant evaluation
-/// - `optimized_dataflow`: Struct-of-arrays dataflow analysis optimizations
+
 /// - `streamlined_diagnostics`: Fast-path error generation for borrow checking
-/// - `place_interner`: Place ID interning for memory and performance optimization
+
 ///
 /// ## Usage
 /// These modules are intended to be used as optional optimizations that can
@@ -18,6 +18,6 @@
 pub mod constant_folding;
 pub mod interface_dispatch;
 pub mod lifetime_memory_manager;
-pub mod optimized_dataflow;
-pub mod place_interner;
+
+
 pub mod streamlined_diagnostics;

@@ -1,19 +1,39 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: ['src/compiler/mir/**/*.rs', 'src/compiler/borrow_check/**/*.rs']
+fileMatchPattern: ['src/compiler/WIR/**/*.rs', 'src/compiler/borrow_check/**/*.rs']
 ---
 
-# Beanstalk MIR Implementation Guide
+# Beanstalk WIR Implementation Guide
 
-This guide defines the architecture and implementation patterns for Beanstalk's Mid-level Intermediate Representation (MIR) and Polonius-style borrow checker. Follow these patterns when implementing or modifying MIR-related code.
+This guide defines the architecture and implementation patterns for Beanstalk's Mid-level Intermediate Representation (WIR). The WIR serves exactly two purposes: direct WASM lowering and precise borrow checking. It is NOT an optimization IR - folding and optimizations are handled at the AST stage or left to external WASM tools.
 
 ## Core Design Principles
 
-- **WASM-first**: MIR designed specifically for efficient WASM generation
+**Dual Purpose**: WIR serves exactly two functions:
+1. **Direct WASM Lowering**: Each WIR statement maps directly to ≤3 WASM instructions
+2. **Precise Borrow Checking**: Polonius-style lifetime analysis with place-based tracking
+
+**Key Design Constraints**:
 - **Statement-level precision**: Each program point tracked for borrow checking
-- **Field-sensitive**: Struct fields and array indices tracked separately
-- **Three-address form**: Every operand read/write in separate statement
-- **Bitset dataflow**: Use efficient bitsets for loan liveness analysis
+- **Field-sensitive places**: Struct fields and array indices tracked separately  
+- **Three-address form**: Every operand read/write in separate statement for precise tracking
+- **WASM-compatible types**: All operands use WASM value types (i32, i64, f32, f64)
+- **No optimization passes**: Folding done at AST stage, complex optimizations left to external tools
+
+## What WIR is NOT Used For
+
+**WIR explicitly avoids optimization passes**:
+- ❌ **Constant folding**: Handled at AST construction stage
+- ❌ **Dead code elimination**: Left to external WASM optimization tools
+- ❌ **Loop optimizations**: Not performed in WIR
+- ❌ **Inlining**: Not a WIR responsibility
+- ❌ **Complex transformations**: WIR maintains simple 1:1 mapping to WASM
+
+**Why this design choice**:
+- **Compilation speed**: Fewer passes means faster compilation
+- **Simplicity**: Clear separation of concerns between stages
+- **Tool ecosystem**: External WASM optimizers (like Binaryen) handle complex optimizations
+- **Maintainability**: Simpler WIR is easier to debug and maintain
 
 ## Borrow Checking Rules
 
@@ -25,9 +45,9 @@ This guide defines the architecture and implementation patterns for Beanstalk's 
 ## Module Structure
 
 ```
-src/compiler/mir/
-├── mir_nodes.rs     // Core MIR types (Place, Stmt, Rvalue, Events, Loan)
-├── build_mir.rs     // AST → MIR lowering with three-address form
+src/compiler/WIR/
+├── mir_nodes.rs     // Core WIR types (Place, Stmt, Rvalue, Events, Loan)
+├── build_mir.rs     // AST → WIR lowering with three-address form
 ├── cfg.rs           // Control Flow Graph construction
 ├── liveness.rs      // Backward liveness analysis for last-use refinement
 ├── extract.rs       // Extract borrow facts and build gen/kill sets
@@ -50,7 +70,7 @@ pub enum Place {
 }
 ```
 
-### MIR Statements (Three-Address Form)
+### WIR Statements (Three-Address Form)
 
 ```rust
 #[derive(Clone, Debug)]
@@ -95,24 +115,26 @@ pub struct Events {
 
 ## Implementation Pipeline
 
-### 1. AST → MIR Lowering (`build_mir.rs`)
+### 1. AST → WIR Lowering (`build_mir.rs`)
 
-**Key Pattern**: Break complex expressions into temporaries for precise tracking
+**Key Pattern**: Break complex expressions into temporaries for precise borrow tracking and direct WASM lowering
 
 ```rust
 // Input: x = foo(y + z*2)
-// Output MIR:
-// t1 = z * 2
-// t2 = y + t1  
-// t3 = call foo(t2)
-// x = t3
+// Output WIR (designed for both borrow checking and WASM lowering):
+// t1 = z * 2        // Maps to: i32.const 2; local.get z; i32.mul
+// t2 = y + t1       // Maps to: local.get y; local.get t1; i32.add  
+// t3 = call foo(t2) // Maps to: local.get t2; call foo_idx
+// x = t3            // Maps to: local.get t3; local.set x
 ```
 
-**Lowering Rules**:
-- Count AST uses per Place to hint last-uses
-- Emit `Copy(place)` for reads, refine to `Move` later
-- Create `Loan` for borrows, track in `events.start_loans`
-- Mark `reassigns` for assignments
+**Lowering Rules for Dual Purpose**:
+- **Borrow Checking**: Count AST uses per Place to hint last-uses
+- **Borrow Checking**: Emit `Copy(place)` for reads, refine to `Move` later
+- **Borrow Checking**: Create `Loan` for borrows, track in `events.start_loans`
+- **Borrow Checking**: Mark `reassigns` for assignments
+- **WASM Lowering**: Use WASM-compatible types (i32, i64, f32, f64) for all temporaries
+- **WASM Lowering**: Structure statements for direct instruction mapping
 
 ### 2. CFG Construction (`cfg.rs`)
 
@@ -182,7 +204,7 @@ note: borrow of `x.field1` starts here
 
 Use appropriate error macros:
 - `return_rule_error!(location, "message")` - borrow checking violations
-- `return_compiler_error!("message")` - unimplemented MIR features
+- `return_compiler_error!("message")` - unimplemented WIR features
 - Include precise source locations for user errors
 
 ## Testing Requirements
@@ -204,14 +226,14 @@ Essential test cases:
 
 ## Integration Points
 
-**Entry Point**: `pub fn borrow_check_pipeline(fn_ast: &FnAst) -> Result<MirBody, Vec<Diagnostic>>`
+**Entry Point**: `pub fn wir_pipeline(fn_ast: &FnAst) -> Result<WIRBody, Vec<Diagnostic>>`
 
-**Pipeline Order**:
-1. `lower_fn_to_mir(ast)` - AST to MIR with events
-2. `build_cfg(&mut mir)` - construct CFG
-3. `refine_last_uses(&mut mir, &mut events)` - liveness analysis
-4. `build_gen_kill(&events, &loans)` - extract borrow facts
-5. `compute_live_loans(&cfg, &gen, &kill)` - loan dataflow
-6. `run_checks(&mir, &events, &loans, &live_in)` - conflict detection
+**Pipeline Order (Dual Purpose)**:
+1. `lower_fn_to_WIR(ast)` - AST to WIR with WASM-compatible structure and borrow events
+2. `build_cfg(&mut WIR)` - construct CFG for both borrow analysis and WASM control flow
+3. `refine_last_uses(&mut WIR, &mut events)` - liveness analysis for precise move semantics
+4. `build_gen_kill(&events, &loans)` - extract borrow facts for Polonius analysis
+5. `compute_live_loans(&cfg, &gen, &kill)` - loan dataflow for borrow checking
+6. `run_checks(&WIR, &events, &loans, &live_in)` - borrow conflict detection
 
-**WASM Integration**: MIR passes to WASM codegen after successful borrow checking.
+**Output**: Validated WIR ready for direct WASM lowering with memory safety guarantees.

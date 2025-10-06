@@ -1,37 +1,37 @@
 //! # WASM Encoding Module
 //!
-//! This module provides direct MIR-to-WASM lowering for the Beanstalk compiler.
+//! This module provides direct WIR-to-WASM lowering for the Beanstalk compiler.
 //! It implements a simplified, efficient approach to WASM generation that maps
-//! MIR constructs directly to WASM instructions with minimal overhead.
+//! WIR constructs directly to WASM instructions with minimal overhead.
 //!
 //! ## Architecture
 //!
 //! The WASM encoding follows these key principles:
-//! - **Direct Lowering**: Each MIR statement maps to ≤3 WASM instructions
-//! - **Memory Safety**: Leverages MIR's borrow checking for safe memory access
+//! - **Direct Lowering**: Each WIR statement maps to ≤3 WASM instructions
+//! - **Memory Safety**: Leverages WIR's borrow checking for safe memory access
 //! - **String Management**: Efficient string constant deduplication and storage
-//! - **Local Analysis**: Automatic WASM local variable allocation from MIR places
+//! - **Local Analysis**: Automatic WASM local variable allocation from WIR places
 //!
 //! ## Key Components
 //!
 //! - [`WasmModule`]: Main module builder that orchestrates WASM generation
 //! - [`StringManager`]: Handles string constant deduplication and memory layout
-//! - [`LocalAnalyzer`]: Analyzes MIR functions to determine WASM local requirements
-//! - [`LocalMap`]: Maps MIR places to WASM local/global indices
+//! - [`LocalAnalyzer`]: Analyzes WIR functions to determine WASM local requirements
+//! - [`LocalMap`]: Maps WIR places to WASM local/global indices
 //!
 //! ## Usage
 //!
 //! ```rust
-//! let wasm_module = WasmModule::from_mir(&mir)?;
+//! let wasm_module = WasmModule::from_wir(&wir)?;
 //! let wasm_bytes = wasm_module.finish();
 //! ```
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::HostFunctionDef;
-use crate::compiler::mir::mir_nodes::{
-    BinOp, Constant, MIR, MirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
+use crate::compiler::wir::wir_nodes::{
+    BinOp, Constant, WIR, WirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
 };
-use crate::compiler::mir::place::{Place, WasmType, MemoryBase, ProjectionElem, TypeSize};
+use crate::compiler::wir::place::{Place, WasmType, MemoryBase, ProjectionElem, TypeSize};
 use crate::{return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error};
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
@@ -142,15 +142,15 @@ pub struct StringAllocationStats {
     pub deduplication_savings: u32,
 }
 
-/// Local variable mapping from MIR places to WASM local indices
+/// Local variable mapping from WIR places to WASM local indices
 /// 
-/// This structure manages the mapping between MIR Place::Local indices and
+/// This structure manages the mapping between WIR Place::Local indices and
 /// WASM local variable indices, enabling proper place resolution.
 #[derive(Debug, Clone)]
 pub struct LocalMap {
-    /// Map from MIR local index to WASM local index
+    /// Map from WIR local index to WASM local index
     local_mapping: HashMap<u32, u32>,
-    /// Map from MIR global index to WASM global index
+    /// Map from WIR global index to WASM global index
     global_mapping: HashMap<u32, u32>,
     /// Next available WASM local index
     next_local_index: u32,
@@ -179,27 +179,27 @@ impl LocalMap {
         }
     }
 
-    /// Map a MIR local index to a WASM local index
-    pub fn map_local(&mut self, mir_local: u32, wasm_local: u32) {
-        self.local_mapping.insert(mir_local, wasm_local);
+    /// Map a WIR local index to a WASM local index
+    pub fn map_local(&mut self, wir_local: u32, wasm_local: u32) {
+        self.local_mapping.insert(wir_local, wasm_local);
     }
 
-    /// Map a MIR global index to a WASM global index
-    pub fn map_global(&mut self, mir_global: u32, wasm_global: u32) {
-        self.global_mapping.insert(mir_global, wasm_global);
+    /// Map a WIR global index to a WASM global index
+    pub fn map_global(&mut self, wir_global: u32, wasm_global: u32) {
+        self.global_mapping.insert(wir_global, wasm_global);
     }
 
-    /// Get WASM local index for MIR local
-    pub fn get_local(&self, mir_local: u32) -> Option<u32> {
-        self.local_mapping.get(&mir_local).copied()
+    /// Get WASM local index for WIR local
+    pub fn get_local(&self, wir_local: u32) -> Option<u32> {
+        self.local_mapping.get(&wir_local).copied()
     }
 
-    /// Get WASM global index for MIR global
-    pub fn get_global(&self, mir_global: u32) -> Option<u32> {
-        self.global_mapping.get(&mir_global).copied()
+    /// Get WASM global index for WIR global
+    pub fn get_global(&self, wir_global: u32) -> Option<u32> {
+        self.global_mapping.get(&wir_global).copied()
     }
 
-    /// Allocate next WASM local index for a MIR local
+    /// Allocate next WASM local index for a WIR local
     pub fn allocate_local(&mut self, mir_local: u32) -> u32 {
         let wasm_local = self.next_local_index;
         self.next_local_index += 1;
@@ -207,7 +207,7 @@ impl LocalMap {
         wasm_local
     }
 
-    /// Allocate next WASM global index for a MIR global
+    /// Allocate next WASM global index for a WIR global
     pub fn allocate_global(&mut self, mir_global: u32) -> u32 {
         let wasm_global = self.next_global_index;
         self.next_global_index += 1;
@@ -232,13 +232,13 @@ impl Default for LocalMap {
     }
 }
 
-/// Local variable analyzer for determining WASM local requirements from MIR
+/// Local variable analyzer for determining WASM local requirements from WIR
 /// 
-/// This analyzer examines a MIR function to determine what local variables are needed
+/// This analyzer examines a WIR function to determine what local variables are needed
 /// and builds the appropriate mapping for WASM code generation.
 #[derive(Debug)]
 pub struct LocalAnalyzer {
-    /// Map from MIR local index to WASM type
+    /// Map from WIR local index to WASM type
     local_types: HashMap<u32, WasmType>,
     /// Count of each WASM type needed for locals
     type_counts: HashMap<WasmType, u32>,
@@ -256,13 +256,13 @@ impl LocalAnalyzer {
         }
     }
 
-    /// Analyze a MIR function to determine local variable requirements
-    pub fn analyze_function(mir_function: &MirFunction) -> Self {
+    /// Analyze a WIR function to determine local variable requirements
+    pub fn analyze_function(wir_function: &WirFunction) -> Self {
         let mut analyzer = Self::new();
-        analyzer.parameter_count = mir_function.parameters.len() as u32;
+        analyzer.parameter_count = wir_function.parameters.len() as u32;
 
         // Analyze all places used in the function
-        for block in &mir_function.blocks {
+        for block in &wir_function.blocks {
             for statement in &block.statements {
                 analyzer.collect_from_statement(statement);
             }
@@ -270,7 +270,7 @@ impl LocalAnalyzer {
         }
 
         // Also analyze local variables declared in the function
-        for (_, place) in &mir_function.locals {
+        for (_, place) in &wir_function.locals {
             analyzer.collect_from_place(place);
         }
 
@@ -416,12 +416,12 @@ impl LocalAnalyzer {
             .collect()
     }
 
-    /// Build local mapping from MIR analysis
-    pub fn build_local_mapping(&self, mir_function: &MirFunction) -> LocalMap {
-        let mut local_map = LocalMap::with_parameters(mir_function.parameters.len() as u32);
-        let mut wasm_local_index = mir_function.parameters.len() as u32;
+    /// Build local mapping from WIR analysis
+    pub fn build_local_mapping(&self, wir_function: &WirFunction) -> LocalMap {
+        let mut local_map = LocalMap::with_parameters(wir_function.parameters.len() as u32);
+        let mut wasm_local_index = wir_function.parameters.len() as u32;
 
-        // Map each MIR local to a WASM local index
+        // Map each WIR local to a WASM local index
         for (mir_local_index, _wasm_type) in &self.local_types {
             local_map.map_local(*mir_local_index, wasm_local_index);
             wasm_local_index += 1;
@@ -477,75 +477,9 @@ pub struct LocalAnalysisStats {
     pub ref_locals: u32,
 }
 
-/// Comprehensive statistics for WASM module generation
-#[derive(Debug, Clone)]
-pub struct WasmModuleStats {
-    /// Number of functions in the module
-    pub function_count: u32,
-    /// Number of types in the module
-    pub type_count: u32,
-    /// Number of global variables
-    pub global_count: u32,
-    /// String allocation statistics
-    pub string_stats: StringAllocationStats,
-    /// Estimated module size in bytes
-    pub estimated_size: u32,
-}
 
-impl WasmModuleStats {
-    /// Generate a human-readable report of module statistics
-    pub fn generate_report(&self) -> String {
-        format!(
-            "WASM Module Statistics:\n\
-             - Functions: {}\n\
-             - Types: {}\n\
-             - Globals: {}\n\
-             - Unique Strings: {}\n\
-             - String Data Size: {} bytes\n\
-             - Estimated Total Size: {} bytes\n\
-             - Memory Saved by Deduplication: {} bytes",
-            self.function_count,
-            self.type_count,
-            self.global_count,
-            self.string_stats.unique_strings,
-            self.string_stats.total_data_size,
-            self.estimated_size,
-            self.string_stats.deduplication_savings
-        )
-    }
 
-    /// Check if the module is within reasonable size limits
-    pub fn validate_size_limits(&self) -> Result<(), CompileError> {
-        const MAX_FUNCTIONS: u32 = 10000;
-        const MAX_TYPES: u32 = 1000;
-        const MAX_MODULE_SIZE: u32 = 50 * 1024 * 1024; // 50MB
-
-        if self.function_count > MAX_FUNCTIONS {
-            return_compiler_error!(
-                "Module has too many functions ({}). Maximum supported: {}. Consider splitting into multiple modules.",
-                self.function_count, MAX_FUNCTIONS
-            );
-        }
-
-        if self.type_count > MAX_TYPES {
-            return_compiler_error!(
-                "Module has too many types ({}). Maximum supported: {}. Consider simplifying type usage.",
-                self.type_count, MAX_TYPES
-            );
-        }
-
-        if self.estimated_size > MAX_MODULE_SIZE {
-            return_compiler_error!(
-                "Module size is too large ({} bytes). Maximum supported: {} bytes. Consider splitting into multiple modules or reducing complexity.",
-                self.estimated_size, MAX_MODULE_SIZE
-            );
-        }
-
-        Ok(())
-    }
-}
-
-/// Simplified WASM module for basic MIR-to-WASM compilation
+/// Simplified WASM module for basic WIR-to-WASM compilation
 pub struct WasmModule {
     type_section: TypeSection,
     import_section: ImportSection,
@@ -597,8 +531,8 @@ impl WasmModule {
         }
     }
 
-    /// Create a new WasmModule from MIR with comprehensive error handling
-    pub fn from_mir(mir: &MIR) -> Result<WasmModule, CompileError> {
+    /// Create a new WasmModule from WIR with comprehensive error handling
+    pub fn from_wir(wir: &WIR) -> Result<WasmModule, CompileError> {
         let mut module = WasmModule::new();
 
         // Initialize memory section (1 page = 64KB)
@@ -611,10 +545,10 @@ impl WasmModule {
         });
 
         // Generate WASM import section for host functions
-        module.encode_host_function_imports(&mir.host_imports)?;
+        module.encode_host_function_imports(&wir.host_imports)?;
 
         // Process functions with enhanced error context
-        for (index, function) in mir.functions.iter().enumerate() {
+        for (index, function) in wir.functions.iter().enumerate() {
             module.compile_function(function).map_err(|mut error| {
                 // Add context about which function failed
                 error.msg = format!(
@@ -645,24 +579,24 @@ impl WasmModule {
         }
     }
 
-    /// Compile a MIR function to WASM with proper local variable analysis
-    pub fn compile_function(&mut self, mir_function: &MirFunction) -> Result<(), CompileError> {
+    /// Compile a WIR function to WASM with proper local variable analysis
+    pub fn compile_function(&mut self, wir_function: &WirFunction) -> Result<(), CompileError> {
         // Register function in the function registry
-        self.function_registry.insert(mir_function.name.clone(), self.function_count);
+        self.function_registry.insert(wir_function.name.clone(), self.function_count);
 
         // Analyze local variable requirements
-        let analyzer = LocalAnalyzer::analyze_function(mir_function);
+        let analyzer = LocalAnalyzer::analyze_function(wir_function);
         let wasm_locals = analyzer.generate_wasm_locals();
-        let local_map = analyzer.build_local_mapping(mir_function);
+        let local_map = analyzer.build_local_mapping(wir_function);
 
         // Create function type
-        let param_types: Vec<ValType> = mir_function
+        let param_types: Vec<ValType> = wir_function
             .parameters
             .iter()
             .map(|p| self.wasm_type_to_val_type(&p.wasm_type()))
             .collect();
 
-        let result_types: Vec<ValType> = mir_function
+        let result_types: Vec<ValType> = wir_function
             .return_types
             .iter()
             .map(|t| self.wasm_type_to_val_type(t))
@@ -677,7 +611,7 @@ impl WasmModule {
         let mut function = Function::new(wasm_locals);
 
         // Lower each block with proper local mapping
-        for block in &mir_function.blocks {
+        for block in &wir_function.blocks {
             self.lower_block_to_wasm(block, &mut function, &local_map)?;
         }
 
@@ -693,10 +627,10 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Lower a MIR block to WASM instructions
+    /// Lower a WIR block to WASM instructions
     fn lower_block_to_wasm(
         &mut self,
-        block: &crate::compiler::mir::mir_nodes::MirBlock,
+        block: &crate::compiler::wir::wir_nodes::WirBlock,
         function: &mut Function,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
@@ -711,7 +645,7 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Lower a MIR statement to WASM instructions
+    /// Lower a WIR statement to WASM instructions
     fn lower_statement(
         &mut self,
         statement: &Statement,
@@ -748,7 +682,7 @@ impl WasmModule {
         }
     }
 
-    /// Lower a MIR rvalue to WASM instructions
+    /// Lower a WIR rvalue to WASM instructions
     fn lower_rvalue(
         &mut self,
         rvalue: &Rvalue,
@@ -781,7 +715,7 @@ impl WasmModule {
         }
     }
 
-    /// Lower a MIR operand to WASM instructions
+    /// Lower a WIR operand to WASM instructions
     fn lower_operand(
         &mut self,
         operand: &Operand,
@@ -822,7 +756,7 @@ impl WasmModule {
     /// Lower place access to WASM instructions (CRITICAL IMPLEMENTATION)
     /// 
     /// This method handles the core place resolution system that enables variable access.
-    /// It converts MIR Place operations into appropriate WASM instructions.
+    /// It converts WIR Place operations into appropriate WASM instructions.
     fn lower_place_access(
         &mut self,
         place: &Place,
@@ -831,7 +765,7 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         match place {
             Place::Local { index, wasm_type: _ } => {
-                // Map MIR local to WASM local index
+                // Map WIR local to WASM local index
                 let wasm_local = local_map.get_local(*index)
                     .ok_or_else(|| CompileError::compiler_error(
                         &format!("Local variable with index {} not found in mapping. This indicates a problem with local variable analysis.", index)
@@ -841,7 +775,7 @@ impl WasmModule {
             }
             
             Place::Global { index, wasm_type: _ } => {
-                // Map MIR global to WASM global index
+                // Map WIR global to WASM global index
                 let wasm_global = local_map.get_global(*index)
                     .ok_or_else(|| CompileError::compiler_error(
                         &format!("Global variable with index {} not found in mapping", index)
@@ -978,7 +912,7 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         match place {
             Place::Local { index, wasm_type: _ } => {
-                // Map MIR local to WASM local index
+                // Map WIR local to WASM local index
                 let wasm_local = local_map.get_local(*index)
                     .ok_or_else(|| CompileError::compiler_error(
                         &format!("Local variable with index {} not found in mapping", index)
@@ -988,7 +922,7 @@ impl WasmModule {
             }
             
             Place::Global { index, wasm_type: _ } => {
-                // Map MIR global to WASM global index
+                // Map WIR global to WASM global index
                 let wasm_global = local_map.get_global(*index)
                     .ok_or_else(|| CompileError::compiler_error(
                         &format!("Global variable with index {} not found in mapping", index)
@@ -1612,7 +1546,7 @@ impl WasmModule {
         let condition_type = self.get_operand_wasm_type(condition)?;
         if !matches!(condition_type, WasmType::I32) {
             return_compiler_error!(
-                "If condition must be boolean (i32 in WASM), found {:?}. This indicates a type checking error in MIR generation.",
+                "If condition must be boolean (i32 in WASM), found {:?}. This indicates a type checking error in WIR generation.",
                 condition_type
             );
         }
@@ -1629,13 +1563,13 @@ impl WasmModule {
         // This is a simplified implementation that maintains stack discipline
         
         // Then block (executed when condition is true)
-        // In a full implementation, this would lower the actual then_block MIR
+        // In a full implementation, this would lower the actual then_block WIR
         function.instruction(&Instruction::Nop); // Placeholder for then block
         
         function.instruction(&Instruction::Else);
         
         // Else block (executed when condition is false)  
-        // In a full implementation, this would lower the actual else_block MIR
+        // In a full implementation, this would lower the actual else_block WIR
         function.instruction(&Instruction::Nop); // Placeholder for else block
         
         function.instruction(&Instruction::End);
@@ -1643,7 +1577,7 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Lower a MIR terminator to WASM control flow instructions
+    /// Lower a WIR terminator to WASM control flow instructions
     pub fn lower_terminator(
         &mut self,
         terminator: &Terminator,
@@ -1743,13 +1677,13 @@ impl WasmModule {
         }
     }
 
-    /// Compile a MIR function (alias for compile_function)
-    pub fn compile_mir_function(
+    /// Compile a WIR function (alias for compile_function)
+    pub fn compile_wir_function(
         &mut self,
-        mir_function: &MirFunction,
+        wir_function: &WirFunction,
     ) -> Result<u32, CompileError> {
         let function_index = self.function_count;
-        self.compile_function(mir_function)?;
+        self.compile_function(wir_function)?;
         Ok(function_index)
     }
 
@@ -1779,12 +1713,9 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Get lifetime memory statistics
-    pub fn get_lifetime_memory_statistics(&self) -> LifetimeMemoryStatistics {
-        LifetimeMemoryStatistics::default()
-    }
 
-    /// Generate WASM import section entries for host functions used in MIR
+
+    /// Generate WASM import section entries for host functions used in WIR
     /// 
     /// This method creates WASM function type signatures from host function definitions
     /// and adds import entries with correct module and function names.
@@ -1926,27 +1857,7 @@ impl WasmModule {
         }
     }
 
-    /// Get comprehensive module statistics for debugging and optimization
-    pub fn get_module_stats(&self) -> WasmModuleStats {
-        WasmModuleStats {
-            function_count: self.function_count,
-            type_count: self.type_count,
-            global_count: self.global_count,
-            string_stats: self.string_manager.get_allocation_stats(),
-            estimated_size: self.estimate_module_size(),
-        }
-    }
 
-    /// Estimate the final module size for memory planning
-    fn estimate_module_size(&self) -> u32 {
-        // Rough estimation based on section counts
-        let base_size = 100; // Basic module overhead
-        let type_size = self.type_count * 20; // Rough estimate per type
-        let function_size = self.function_count * 50; // Rough estimate per function
-        let data_size = self.string_manager.get_data_size();
-        
-        base_size + type_size + function_size + data_size
-    }
 
     /// Register a function name with its index
     pub fn register_function(&mut self, name: String, index: u32) {
@@ -1959,26 +1870,5 @@ impl WasmModule {
     }
 }
 
-/// Placeholder for lifetime memory statistics
-#[derive(Debug, Clone)]
-pub struct LifetimeMemoryStatistics {
-    pub single_ownership_optimizations: usize,
-    pub arc_operations_eliminated: usize,
-    pub move_optimizations_applied: usize,
-    pub drop_operations_optimized: usize,
-    pub memory_allocation_reduction: usize,
-    pub instruction_count_reduction: usize,
-}
 
-impl Default for LifetimeMemoryStatistics {
-    fn default() -> Self {
-        Self {
-            single_ownership_optimizations: 0,
-            arc_operations_eliminated: 0,
-            move_optimizations_applied: 0,
-            drop_operations_optimized: 0,
-            memory_allocation_reduction: 0,
-            instruction_count_reduction: 0,
-        }
-    }
-}
+

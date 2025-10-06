@@ -1,5 +1,5 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::mir::mir_nodes::{MIR, MirBlock};
+use crate::compiler::wir::wir_nodes::{WIR, WirBlock};
 use crate::return_compiler_error;
 /// Lifetime Analysis Module for the Beanstalk Compiler
 ///
@@ -133,8 +133,8 @@ impl LifetimeAnalyzer {
         used_after
     }
 
-    /// Integrate with MIR lifetime analysis
-    pub fn sync_with_ir_lifetime_analysis(&self, _ir: &mut MIR) {
+    /// Integrate with WIR lifetime analysis
+    pub fn sync_with_ir_lifetime_analysis(&self, _ir: &mut WIR) {
         // Collect all variables that have been tracked (either defined or used)
         let mut all_variables = std::collections::HashSet::new();
 
@@ -157,21 +157,21 @@ impl LifetimeAnalyzer {
             // Find definition block (if any)
             let _definition_block = self.get_variable_definition_block(variable_id).unwrap_or(0);
 
-            // Track variable usage pattern in MIR
-            // TODO: Implement ownership tracking in simplified MIR
-            // TODO: Implement variable usage tracking in simplified MIR
+            // Track variable usage pattern in WIR
+            // TODO: Implement ownership tracking in simplified WIR
+            // TODO: Implement variable usage tracking in simplified WIR
 
             // Record all usage blocks
             for (&_block_id, usage) in &self.block_variable_usage {
                 if usage.contains(&variable_id) {
-                    // TODO: Implement variable usage recording in simplified MIR
+                    // TODO: Implement variable usage recording in simplified WIR
                 }
             }
         }
     }
 
     /// Create lifetime annotations for variables with complex usage patterns
-    pub fn create_lifetime_annotations(&self, _ir: &mut MIR) -> HashMap<u32, u32> {
+    pub fn create_lifetime_annotations(&self, _ir: &mut WIR) -> HashMap<u32, u32> {
         let mut variable_to_lifetime = HashMap::new();
 
         for &variable_id in self.block_variable_definitions.keys() {
@@ -180,10 +180,10 @@ impl LifetimeAnalyzer {
             // Create a lifetime if variable is used across multiple blocks
             if lifetime.usage_blocks.len() > 1 {
                 let _lifetime_name = format!("var_{}_lifetime", variable_id);
-                let lifetime_id = 0; // TODO: Implement lifetime creation in simplified MIR
+                let lifetime_id = 0; // TODO: Implement lifetime creation in simplified WIR
 
                 // Associate lifetime with all usage blocks
-                // TODO: This will be replaced by the simplified MIR borrow checker
+                // TODO: This will be replaced by the simplified WIR borrow checker
                 // The new system uses program points and dataflow analysis instead
 
                 variable_to_lifetime.insert(variable_id, lifetime_id);
@@ -303,12 +303,12 @@ impl LifetimeAnalyzer {
     }
 }
 
-/// Finalize lifetime analysis after MIR generation
+/// Finalize lifetime analysis after WIR generation
 pub fn finalize_lifetime_analysis(
-    ir: &mut MIR,
+    ir: &mut WIR,
     analyzer: &LifetimeAnalyzer,
 ) -> Result<(), CompileError> {
-    // Sync analyzer data with MIR lifetime analysis
+    // Sync analyzer data with WIR lifetime analysis
     analyzer.sync_with_ir_lifetime_analysis(ir);
 
     // Create lifetime annotations for complex variables
@@ -336,18 +336,18 @@ pub fn finalize_lifetime_analysis(
 }
 
 /// Analyze which variables need automatic reference counting
-pub fn analyze_reference_counting_needs(_mir: &mut MIR) {
-    // TODO: Implement reference counting analysis in simplified MIR
+pub fn analyze_reference_counting_needs(_wir: &mut WIR) {
+    // TODO: Implement reference counting analysis in simplified WIR
 }
 
 /// Detect opportunities for move semantics
-pub fn detect_move_semantics(_mir: &mut MIR) {
-    // TODO: Implement move semantics detection in simplified MIR
+pub fn detect_move_semantics(_wir: &mut WIR) {
+    // TODO: Implement move semantics detection in simplified WIR
 }
 
 /// Finalize a block with lifetime analysis and variable tracking
 pub fn finalize_block_with_lifetime_analysis(
-    block: &mut MirBlock,
+    block: &mut WirBlock,
     analyzer: &LifetimeAnalyzer,
     all_blocks: &[u32],
 ) {
@@ -356,28 +356,28 @@ pub fn finalize_block_with_lifetime_analysis(
     // Add variable definitions to the block
     if let Some(definitions) = analyzer.block_variable_definitions.get(&block_id) {
         for &_var_id in definitions {
-            // TODO: Implement variable definition tracking in MirBlock
+            // TODO: Implement variable definition tracking in WirBlock
         }
     }
 
     // Add variable usage to the block
     if let Some(usage) = analyzer.block_variable_usage.get(&block_id) {
         for &_var_id in usage {
-            // TODO: Implement variable use tracking in MirBlock
+            // TODO: Implement variable use tracking in WirBlock
         }
     }
 
     // Analyze variables used after this block
     let used_after = analyzer.analyze_variables_used_after(block_id, all_blocks);
     for _var_id in used_after {
-        // TODO: Implement variable use after tracking in MirBlock
+        // TODO: Implement variable use after tracking in WirBlock
     }
 }
 
 /// Create a new block with proper ID allocation and parent tracking
-pub fn create_block_with_parent(_mir: &mut MIR, _parent_block_id: Option<u32>) -> MirBlock {
-    let block_id = 0; // TODO: Implement proper block ID allocation in MIR
-    MirBlock::new(block_id)
+pub fn create_block_with_parent(_wir: &mut WIR, _parent_block_id: Option<u32>) -> WirBlock {
+    let block_id = 0; // TODO: Implement proper block ID allocation in WIR
+    WirBlock::new(block_id)
 }
 
 /// Types of control flow for terminator assignment
@@ -391,11 +391,11 @@ pub enum ControlFlowType {
 
 /// Assign appropriate terminator for control flow constructs
 pub fn assign_terminator_for_control_flow(
-    block: &mut MirBlock,
+    block: &mut WirBlock,
     control_flow_type: ControlFlowType,
     target_blocks: Vec<u32>,
 ) -> Result<(), CompileError> {
-    use crate::compiler::mir::mir_nodes::Terminator;
+    use crate::compiler::wir::wir_nodes::Terminator;
     use crate::return_compiler_error;
 
     let terminator = match control_flow_type {
@@ -412,12 +412,12 @@ pub fn assign_terminator_for_control_flow(
         ControlFlowType::Conditional => {
             if target_blocks.len() >= 2 {
                 Terminator::If {
-                    condition: crate::compiler::mir::mir_nodes::Operand::Constant(
-                        crate::compiler::mir::mir_nodes::Constant::Bool(true),
+                    condition: crate::compiler::wir::wir_nodes::Operand::Constant(
+                        crate::compiler::wir::wir_nodes::Constant::Bool(true),
                     ),
                     then_block: target_blocks[0],
                     else_block: target_blocks[1],
-                    wasm_if_info: crate::compiler::mir::mir_nodes::WasmIfInfo {
+                    wasm_if_info: crate::compiler::wir::wir_nodes::WasmIfInfo {
                         has_else: true,
                         result_type: None,
                         nesting_level: 0,
@@ -436,11 +436,11 @@ pub fn assign_terminator_for_control_flow(
                 Terminator::Loop {
                     target: *loop_start,
                     loop_header: *loop_start,
-                    loop_info: crate::compiler::mir::mir_nodes::WasmLoopInfo {
+                    loop_info: crate::compiler::wir::wir_nodes::WasmLoopInfo {
                         header_block: 0,
                         is_infinite: false,
                         nesting_level: 0,
-                        loop_type: crate::compiler::mir::mir_nodes::LoopType::While,
+                        loop_type: crate::compiler::wir::wir_nodes::LoopType::While,
                         has_breaks: false,
                         has_continues: false,
                         result_type: None,
@@ -458,16 +458,16 @@ pub fn assign_terminator_for_control_flow(
 
 /// Enhanced block builder for complex control flow structures
 pub struct BlockBuilder {
-    mir: *mut MIR,
+    wir: *mut WIR,
     analyzer: *mut LifetimeAnalyzer,
-    current_blocks: Vec<MirBlock>,
+    current_blocks: Vec<WirBlock>,
     block_relationships: HashMap<u32, Vec<u32>>, // parent -> children mapping
 }
 
 impl BlockBuilder {
-    pub fn new(mir: &mut MIR, analyzer: &mut LifetimeAnalyzer) -> Self {
+    pub fn new(wir: &mut WIR, analyzer: &mut LifetimeAnalyzer) -> Self {
         Self {
-            mir,
+            wir,
             analyzer,
             current_blocks: Vec::new(),
             block_relationships: HashMap::new(),
@@ -476,8 +476,8 @@ impl BlockBuilder {
 
     /// Create a new block and track it in the builder
     pub fn create_block(&mut self, parent_id: Option<u32>) -> u32 {
-        let mir = unsafe { &mut *self.mir };
-        let block = create_block_with_parent(mir, parent_id);
+        let wir = unsafe { &mut *self.wir };
+        let block = create_block_with_parent(wir, parent_id);
         let block_id = block.id;
 
         // Track parent-child relationship
@@ -511,9 +511,9 @@ impl BlockBuilder {
             finalize_block_with_lifetime_analysis(&mut block, analyzer, &all_block_ids);
 
             // Add to appropriate function or global scope
-            let _mir = unsafe { &mut *self.mir };
-            // TODO: This will be replaced by the simplified MIR system
-            // The new MIR handles function and block management directly
+            let _wir = unsafe { &mut *self.wir };
+            // TODO: This will be replaced by the simplified WIR system
+            // The new WIR handles function and block management directly
         }
 
         Ok(())

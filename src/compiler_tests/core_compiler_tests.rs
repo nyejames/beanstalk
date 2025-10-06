@@ -1,4 +1,4 @@
-use crate::compiler::mir::place::{Place, WasmType};
+use crate::compiler::wir::place::{Place, WasmType};
 use crate::compiler::datatypes::{DataType, Ownership};
 
 /// Core compiler functionality tests focusing on the essential compilation pipeline
@@ -20,7 +20,7 @@ mod place_system_tests {
 
     #[test]
     fn test_memory_place_creation() {
-        let place = Place::memory(1024, crate::compiler::mir::place::TypeSize::Word);
+        let place = Place::memory(1024, crate::compiler::wir::place::TypeSize::Word);
         
         assert!(place.requires_memory_access(), "Memory place should require memory access");
         assert_eq!(place.load_instruction_count(), 2, "Memory load should be 2 instructions");
@@ -31,7 +31,7 @@ mod place_system_tests {
     fn test_field_projection() {
         let data_type = DataType::String(Ownership::ImmutableOwned(false));
         let base = Place::local(0, &data_type);
-        let field = base.project_field(0, 8, crate::compiler::mir::place::FieldSize::WasmType(WasmType::I32));
+        let field = base.project_field(0, 8, crate::compiler::wir::place::FieldSize::WasmType(WasmType::I32));
         
         assert_eq!(field.load_instruction_count(), 3, "Field projection should be 3 instructions");
         assert!(field.load_instruction_count() <= 5, "Field projection should be WASM-efficient");
@@ -57,7 +57,7 @@ mod place_system_tests {
     fn test_wasm_instruction_efficiency() {
         // Test that places generate efficient WASM instruction sequences
         let local_place = Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)));
-        let memory_place = Place::memory(1024, crate::compiler::mir::place::TypeSize::Word);
+        let memory_place = Place::memory(1024, crate::compiler::wir::place::TypeSize::Word);
         
         // Local operations should be very efficient
         assert_eq!(local_place.load_instruction_count(), 1);
@@ -71,7 +71,7 @@ mod place_system_tests {
         let field_place = local_place.project_field(
             0, 
             8, 
-            crate::compiler::mir::place::FieldSize::WasmType(WasmType::I32)
+            crate::compiler::wir::place::FieldSize::WasmType(WasmType::I32)
         );
         assert!(field_place.load_instruction_count() <= 5);
     }
@@ -81,9 +81,9 @@ mod place_system_tests {
         // Test that stack operations are balanced (push/pop correctly)
         let places = vec![
             Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))),
-            Place::memory(1024, crate::compiler::mir::place::TypeSize::Word),
+            Place::memory(1024, crate::compiler::wir::place::TypeSize::Word),
             Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)))
-                .project_field(0, 4, crate::compiler::mir::place::FieldSize::WasmType(WasmType::I32)),
+                .project_field(0, 4, crate::compiler::wir::place::FieldSize::WasmType(WasmType::I32)),
         ];
         
         for place in places {

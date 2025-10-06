@@ -4,7 +4,7 @@ This document provides a comprehensive overview of the Beanstalk compiler's inte
 
 ## Compilation Pipeline Overview
 
-The Beanstalk compiler follows a multi-stage pipeline: **Source -> tokens (can run in parallel for each file) -> module dependancy order sort (import info is parsed at tokenizer stage) -> ast -> mir -> borrow checking -> wasm -> wasm runtime**
+The Beanstalk compiler follows a multi-stage pipeline: **Source -> tokens (can run in parallel for each file) -> module dependancy order sort (import info is parsed at tokenizer stage) -> ast -> wir -> borrow checking -> wasm -> wasm runtime**
 
 ### Stage 1: Tokenization
 - **Location**: `src/compiler/parsers/tokenizer.rs`
@@ -42,23 +42,23 @@ The Beanstalk compiler follows a multi-stage pipeline: **Source -> tokens (can r
 - `DataType` information is attached to all expressions
 - Type mismatches are caught early in the pipeline
 
-### Stage 3: WASM-Optimized MIR Generation (Polonius-Compatible)
-- **Location**: `src/compiler/mir/build_mir.rs`
+### Stage 3: WASM-Optimized WIR Generation (Polonius-Compatible)
+- **Location**: `src/compiler/wir/build_wir.rs`
 - **Input**: Optimized AST with Runtime expressions
 - **Output**: WASM-targeted Mid-level IR with precise lifetime tracking
 - **Key Features**:
-  - **Direct WASM mapping** - each MIR statement lowers to ≤3 WASM instructions
+  - **Direct WASM mapping** - each WIR statement lowers to ≤3 WASM instructions
   - **WASM-native place abstraction** for memory location tracking
   - **WASM memory model integration** with linear memory and stack awareness
   - **Polonius fact generation** optimized for WASM's simpler memory model
   - **WASM-efficient interface dispatch** using function tables
 
-#### WASM-Optimized MIR Design Philosophy
+#### WASM-Optimized WIR Design Philosophy
 
-**WASM-First Architecture**: The MIR is designed specifically for efficient WASM generation:
-- **Direct Instruction Mapping**: MIR operations correspond directly to WASM instruction sequences
-- **WASM Type Alignment**: All MIR operands use WASM value types (i32, i64, f32, f64)
-- **Structured Control Flow**: MIR blocks map directly to WASM's structured control flow
+**WASM-First Architecture**: The WIR is designed specifically for efficient WASM generation:
+- **Direct Instruction Mapping**: WIR operations correspond directly to WASM instruction sequences
+- **WASM Type Alignment**: All WIR operands use WASM value types (i32, i64, f32, f64)
+- **Structured Control Flow**: WIR blocks map directly to WASM's structured control flow
 - **Linear Memory Optimization**: Place analysis optimized for WASM's linear memory model
 
 **Polonius Integration with WASM Constraints**: Lifetime analysis accounts for WASM execution model:
@@ -67,9 +67,9 @@ The Beanstalk compiler follows a multi-stage pipeline: **Source -> tokens (can r
 - **Linear Memory Borrows**: Loan tracking optimized for WASM's simple memory hierarchy
 - **WASM-Specific Facts**: Polonius facts generated with WASM memory model constraints
 
-**WASM-Efficient Statement Design**: MIR statements designed for optimal WASM lowering:
+**WASM-Efficient Statement Design**: WIR statements designed for optimal WASM lowering:
 ```rust
-// WASM-optimized MIR statements
+// WASM-optimized WIR statements
 Statement::Assign { 
     place: Place::Local(wasm_local_index),  // Direct WASM local mapping
     rvalue: Rvalue::BinaryOp(op, lhs, rhs)  // Maps to WASM arithmetic ops
@@ -89,8 +89,8 @@ Statement::Call {
 
 ### Stage 4: WASM-Aware Borrow Checking and Lifetime Analysis
 - **Location**: `src/compiler/borrow_check/`
-- **Input**: WASM-optimized MIR with region and loan information
-- **Output**: Validated MIR with WASM-compatible memory safety guarantees
+- **Input**: WASM-optimized WIR with region and loan information
+- **Output**: Validated WIR with WASM-compatible memory safety guarantees
 - **Key Features**:
   - **WASM-optimized Polonius analysis** leveraging simpler memory model
   - **WASM calling convention awareness** for two-phase borrow checking
@@ -120,43 +120,43 @@ wasm_memory_region_subset(MemoryRegion, MemoryRegion, Point)
 - Move vs. copy recommendations consider WASM value type semantics
 - Memory layout suggestions for WASM linear memory efficiency
 
-### Stage 5: Direct MIR-to-WASM Lowering
+### Stage 5: Direct WIR-to-WASM Lowering
 - **Location**: `src/compiler/codegen/`
-- **Input**: Validated WASM-optimized MIR with lifetime information
+- **Input**: Validated WASM-optimized WIR with lifetime information
 - **Output**: Optimized WASM bytecode with memory safety guarantees
 - **Key Features**:
-  - **One-to-few instruction mapping** from MIR statements to WASM
+  - **One-to-few instruction mapping** from WIR statements to WASM
   - **Direct WASM module generation** without intermediate representations
   - **Lifetime-derived memory management** with optimal ARC insertion
   - **WASM function table generation** for interface dispatch
-  - **Linear memory layout optimization** from MIR place analysis
+  - **Linear memory layout optimization** from WIR place analysis
 
 #### Direct WASM Lowering Architecture
 
-**Statement-to-Instruction Mapping**: Each MIR statement maps directly to WASM:
+**Statement-to-Instruction Mapping**: Each WIR statement maps directly to WASM:
 ```rust
 // Direct lowering examples
-MIR::Assign { place: Place::Local(idx), rvalue: Rvalue::Use(op) }
+WIR::Assign { place: Place::Local(idx), rvalue: Rvalue::Use(op) }
 → WASM: local.get src_idx; local.set dst_idx
 
-MIR::Call { func: WasmFunction(idx), args, destination }
+WIR::Call { func: WasmFunction(idx), args, destination }
 → WASM: [load args]; call func_idx; local.set result_idx
 
-MIR::Terminator::Goto(block_id)
+WIR::Terminator::Goto(block_id)
 → WASM: br block_label
 ```
 
 **WASM Module Construction**: Direct generation of WASM module components:
-- **Function Section**: Generated directly from MIR function definitions
-- **Memory Section**: Layout determined by MIR place analysis
+- **Function Section**: Generated directly from WIR function definitions
+- **Memory Section**: Layout determined by WIR place analysis
 - **Table Section**: Interface vtables become WASM function tables
-- **Export Section**: Based on MIR visibility and interface implementations
+- **Export Section**: Based on WIR visibility and interface implementations
 
-**Lifetime-Optimized Memory Management**: MIR analysis drives WASM memory decisions:
+**Lifetime-Optimized Memory Management**: WIR analysis drives WASM memory decisions:
 - **ARC Elimination**: Single-ownership variables use WASM value semantics
 - **Memory Layout**: Complex types laid out optimally in linear memory
-- **Drop Elaboration**: Cleanup code generated based on MIR lifetime analysis
-- **GC Integration**: Prepared for WASM GC proposal with MIR lifetime information
+- **Drop Elaboration**: Cleanup code generated based on WIR lifetime analysis
+- **GC Integration**: Prepared for WASM GC proposal with WIR lifetime information
 
 ## Error Handling Patterns
 
@@ -217,7 +217,7 @@ return_compiler_error!("User provided invalid variable name"); // Should be rule
 return_rule_error!(location, "Match expressions not supported"); // Should be compiler_error!
 ```
 
-## Beanstalk Language Features and MIR Integration
+## Beanstalk Language Features and WIR Integration
 
 ### Interface System (Dynamic Dispatch Without Traits)
 
@@ -228,14 +228,14 @@ Beanstalk supports interfaces for dynamic dispatch but deliberately avoids trait
 **Dynamic Dispatch**: Interface method calls use vtables for runtime dispatch
 **No Trait Bounds**: Unlike Rust, no complex trait bound resolution or associated types
 
-**MIR Lowering for Interfaces**:
+**WIR Lowering for Interfaces**:
 - Interface method calls become indirect calls through vtables
-- Vtable construction happens during MIR generation
+- Vtable construction happens during WIR generation
 - Borrow checker accounts for interface receiver types and method signatures
 - Interface implementations are tracked for dispatch table generation
 
 ```rust
-// MIR representation of interface calls
+// WIR representation of interface calls
 Rvalue::Call {
     func: Operand::Constant(InterfaceMethod { interface_id, method_id }),
     args: vec![receiver, arg1, arg2],
@@ -243,12 +243,12 @@ Rvalue::Call {
 }
 ```
 
-### WASM-Optimized Memory Management in MIR
+### WASM-Optimized Memory Management in WIR
 
-**WASM-Native Memory Model**: MIR designed around WASM's memory architecture
-- **Stack Locals**: MIR `Place::Local` maps directly to WASM local indices
+**WASM-Native Memory Model**: WIR designed around WASM's memory architecture
+- **Stack Locals**: WIR `Place::Local` maps directly to WASM local indices
 - **Linear Memory**: Complex types allocated in WASM linear memory with offset tracking
-- **Global Variables**: MIR `Place::Global` corresponds to WASM global indices
+- **Global Variables**: WIR `Place::Global` corresponds to WASM global indices
 - **Function Tables**: Interface vtables stored in WASM function tables
 
 **WASM-Efficient Reference Counting**: ARC optimized for WASM execution
@@ -279,19 +279,19 @@ Place::Projection {                      // Optimized field access
 ### WASM-Specific Design Principles
 
 **Single-Target Optimization**: Leveraging WASM-only compilation for better design decisions
-- **No Backend Abstraction**: MIR operations chosen specifically for optimal WASM lowering
-- **WASM Type System Integration**: MIR types align exactly with WASM value types
-- **Structured Control Flow**: MIR control flow designed for WASM's structured execution
+- **No Backend Abstraction**: WIR operations chosen specifically for optimal WASM lowering
+- **WASM Type System Integration**: WIR types align exactly with WASM value types
+- **Structured Control Flow**: WIR control flow designed for WASM's structured execution
 - **Memory Model Alignment**: Place analysis optimized for WASM's linear memory + stack model
 
 **Direct Lowering Philosophy**: Eliminating unnecessary abstraction layers
-- **Statement-to-Instruction**: Each MIR statement maps to ≤3 WASM instructions
-- **Type Preservation**: WASM types maintained throughout MIR analysis
-- **Optimization Preservation**: MIR optimizations directly benefit WASM output
+- **Statement-to-Instruction**: Each WIR statement maps to ≤3 WASM instructions
+- **Type Preservation**: WASM types maintained throughout WIR analysis
+- **Optimization Preservation**: WIR optimizations directly benefit WASM output
 - **Debug Information**: Source locations preserved through direct lowering
 
-**WASM Performance Integration**: MIR analysis drives WASM optimization
-- **Instruction Selection**: MIR operations chosen for optimal WASM instruction sequences
+**WASM Performance Integration**: WIR analysis drives WASM optimization
+- **Instruction Selection**: WIR operations chosen for optimal WASM instruction sequences
 - **Memory Access Patterns**: Place projections optimized for WASM memory instructions
 - **Function Call Optimization**: Interface dispatch uses WASM call_indirect efficiently
 - **Control Flow Efficiency**: Terminators designed for WASM br/br_if/br_table patterns
@@ -303,22 +303,22 @@ Place::Projection {                      // Optimized field access
 1. **Parse**: Raw text → Tokens → AST nodes
 2. **Fold**: Constant expressions evaluated immediately
 3. **Convert**: Complex expressions → RPN in Runtime nodes
-4. **Transform**: Runtime nodes → MIR statements with places
+4. **Transform**: Runtime nodes → WIR statements with places
 5. **Analyze**: Polonius borrow checking and lifetime inference
-6. **Generate**: MIR → WASM bytecode with safety guarantees
+6. **Generate**: WIR → WASM bytecode with safety guarantees
 
 ### Variable and Scope Management
 
 - **AST Stage**: Variable declarations create scope entries
-- **MIR Stage**: Variables become places with precise lifetime tracking
+- **WIR Stage**: Variables become places with precise lifetime tracking
 - **Scope Context**: Maintained throughout transformation pipeline
 - **Memory Model**: Polonius-based borrow checking with region inference
 
 ### Type System Integration
 
 - **Early Checking**: Types resolved during AST construction
-- **MIR Preservation**: Type information carried through to MIR with place types
-- **Operation Selection**: MIR operations chosen based on types and borrowing
+- **WIR Preservation**: Type information carried through to WIR with place types
+- **Operation Selection**: WIR operations chosen based on types and borrowing
 - **WASM Mapping**: Types and lifetimes determine WASM instruction selection
 
 ## Development Guidelines
@@ -328,12 +328,12 @@ Place::Projection {                      // Optimized field access
 1. **AST Representation**: Define in `ast_nodes.rs`
 2. **Parsing Logic**: Add to appropriate parser module
 3. **Constant Folding**: Extend if compile-time evaluation possible
-4. **MIR Transformation**: Implement in `build_mir.rs` with place-aware lowering
+4. **WIR Transformation**: Implement in `build_wir.rs` with place-aware lowering
 5. **Borrow Checking**: Add lifetime and borrowing rules if needed
 6. **WASM Codegen**: Add to codegen modules with lifetime preservation
 7. **Testing**: Comprehensive unit and integration tests including borrow checker tests
 
-### MIR Development Patterns
+### WIR Development Patterns
 
 **Place Construction**: Always use place abstraction for memory locations
 ```rust
@@ -346,7 +346,7 @@ statements.push(Statement::Assign { place, rvalue });
 statements.push(IRNode::SetInt(var_id, value, is_global));
 ```
 
-**Lifetime Tracking**: Generate facts during MIR construction
+**Lifetime Tracking**: Generate facts during WIR construction
 ```rust
 // Track borrows with precise points
 let loan_id = self.issue_loan(region, borrow_kind, borrowed_place);
@@ -364,18 +364,18 @@ let method_ptr = self.load_method_from_vtable(vtable_place, method_id);
 
 - **Be Specific**: Include exact tokens, types, or names in errors
 - **Be Helpful**: Suggest corrections when possible, especially for borrow checker errors
-- **Be Precise**: Use exact source locations and MIR points for lifetime errors
+- **Be Precise**: Use exact source locations and WIR points for lifetime errors
 - **Be Consistent**: Follow established error message patterns
 - **Lifetime Hints**: Provide lifetime elision suggestions and borrow scope recommendations
 
 ### Testing Patterns
 
-- **Unit Tests**: Individual MIR transformation functions and place construction
+- **Unit Tests**: Individual WIR transformation functions and place construction
 - **Integration Tests**: Full pipeline with `.bs` files in `tests/cases/`
 - **Borrow Checker Tests**: Verify correct lifetime analysis and error detection
 - **Error Tests**: Verify proper error types and messages including lifetime errors
 - **Edge Cases**: Complex borrowing patterns, interface dispatch, nested structures
-- **Performance Tests**: Ensure MIR compilation time remains reasonable
+- **Performance Tests**: Ensure WIR compilation time remains reasonable
 
 ## Memory and Performance Considerations
 
@@ -388,7 +388,7 @@ The compiler prioritizes compile-time work to reduce runtime overhead:
 - **Lifetime inference** eliminates runtime borrow checking
 - **Early error detection** prevents runtime failures
 
-### MIR Design for WASM Efficiency
+### WIR Design for WASM Efficiency
 
 - **Place-based analysis** enables precise memory layout optimization
 - **Statement-level granularity** allows fine-grained optimization
@@ -398,7 +398,7 @@ The compiler prioritizes compile-time work to reduce runtime overhead:
 
 ### Polonius Integration Performance
 
-- **Fact generation** happens incrementally during MIR construction
+- **Fact generation** happens incrementally during WIR construction
 - **Constraint solving** uses efficient algorithms for region inference
 - **Caching** of borrow checker results for incremental compilation
 - **Parallel analysis** where possible for large functions
@@ -409,6 +409,6 @@ Beanstalk makes deliberate tradeoffs for compilation speed:
 - **Interfaces instead of traits** avoid complex trait resolution
 - **Simplified generics** reduce monomorphization overhead
 - **Eager lifetime inference** prevents complex constraint solving
-- **Statement-level MIR** balances precision with compilation speed
+- **Statement-level WIR** balances precision with compilation speed
 
 This architecture ensures that the Beanstalk compiler produces efficient WASM with memory safety guarantees while maintaining reasonable compilation times and providing excellent developer experience through precise error reporting and compile-time optimization.

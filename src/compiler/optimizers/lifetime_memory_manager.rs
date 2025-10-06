@@ -1,18 +1,18 @@
 use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::mir::extract::BorrowFactExtractor;
-use crate::compiler::mir::mir_nodes::{
-    BorrowKind, MirFunction, ProgramPoint,
+use crate::compiler::wir::extract::BorrowFactExtractor;
+use crate::compiler::wir::wir_nodes::{
+    BorrowKind, WirFunction, ProgramPoint,
 };
-use crate::compiler::mir::place::{Place, WasmType};
-use crate::compiler::mir::unified_borrow_checker::UnifiedBorrowCheckResults;
+use crate::compiler::wir::place::{Place, WasmType};
+use crate::compiler::wir::unified_borrow_checker::UnifiedBorrowCheckResults;
 use crate::return_compiler_error;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::{Function, Instruction};
 
 /// Lifetime-optimized memory management for WASM code generation
 ///
-/// This system integrates MIR borrow checking results to make optimal memory management
+/// This system integrates WIR borrow checking results to make optimal memory management
 /// decisions for Beanstalk's reference-by-default semantics, implementing reference
 /// optimization using WASM value semantics, minimal ARC generation for shared ownership,
 /// and copy-to-move optimization for expressions.
@@ -28,7 +28,7 @@ use wasm_encoder::{Function, Instruction};
 /// **Current Status**: The memory manager assumes move/copy semantics by default.
 /// **Required Changes**:
 /// 1. Update AST parsing to generate Rvalue::Ref for assignments
-/// 2. Modify MIR lowering to handle reference-by-default semantics
+/// 2. Modify WIR lowering to handle reference-by-default semantics
 /// 3. Update this memory manager to optimize reference indirection
 /// 4. Adjust borrow checker for reference-centric model
 ///
@@ -239,7 +239,7 @@ impl LifetimeMemoryManager {
     /// Analyze a function and integrate borrow checking results for memory management decisions
     pub fn analyze_function(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
         extractor: &BorrowFactExtractor,
     ) -> Result<(), CompileError> {
@@ -255,7 +255,7 @@ impl LifetimeMemoryManager {
         // Phase 4: Create move semantics optimization to eliminate unnecessary copying
         self.optimize_move_semantics(function, borrow_results)?;
 
-        // Phase 5: Implement drop elaboration based on MIR lifetime analysis
+        // Phase 5: Implement drop elaboration based on WIR lifetime analysis
         self.elaborate_drop_operations(function, borrow_results)?;
 
         // Phase 6: Add memory cleanup code generation only when required by borrow checker
@@ -267,7 +267,7 @@ impl LifetimeMemoryManager {
     /// Analyze reference patterns from borrow checking results for Beanstalk's reference-by-default semantics
     fn analyze_ownership_patterns(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
         extractor: &BorrowFactExtractor,
     ) -> Result<(), CompileError> {
@@ -289,7 +289,7 @@ impl LifetimeMemoryManager {
     fn analyze_place_reference_usage(
         &mut self,
         place: &Place,
-        _function: &MirFunction,
+        _function: &WirFunction,
         _borrow_results: &UnifiedBorrowCheckResults,
         extractor: &BorrowFactExtractor,
     ) -> Result<(), CompileError> {
@@ -381,13 +381,13 @@ impl LifetimeMemoryManager {
             Place::Projection { base, elem } => {
                 // For projections, calculate based on the element
                 match elem {
-                    crate::compiler::mir::place::ProjectionElem::Field { size, .. } => {
+                    crate::compiler::wir::place::ProjectionElem::Field { size, .. } => {
                         match size {
-                            crate::compiler::mir::place::FieldSize::Fixed(bytes) => *bytes,
-                            crate::compiler::mir::place::FieldSize::WasmType(wasm_type) => {
+                            crate::compiler::wir::place::FieldSize::Fixed(bytes) => *bytes,
+                            crate::compiler::wir::place::FieldSize::WasmType(wasm_type) => {
                                 wasm_type.byte_size()
                             }
-                            crate::compiler::mir::place::FieldSize::Variable => {
+                            crate::compiler::wir::place::FieldSize::Variable => {
                                 // Variable size - use base size as estimate
                                 self.calculate_place_size(base)
                             }
@@ -450,7 +450,7 @@ impl LifetimeMemoryManager {
     /// Implement single-ownership optimization using WASM value semantics
     fn implement_single_ownership_optimization(
         &mut self,
-        _function: &MirFunction,
+        _function: &WirFunction,
     ) -> Result<(), CompileError> {
         // For each single-ownership place, ensure it uses optimal WASM representation
         for place in &self.single_ownership_places {
@@ -472,7 +472,7 @@ impl LifetimeMemoryManager {
     /// Add minimal ARC generation for shared ownership
     fn generate_minimal_arc_operations(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Only generate ARC operations for places that actually need them
@@ -502,7 +502,7 @@ impl LifetimeMemoryManager {
         &mut self,
         place: &Place,
         arc_info: &ARCInfo,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Find program points where ARC operations are needed
@@ -564,7 +564,7 @@ impl LifetimeMemoryManager {
     /// Create move semantics optimization to eliminate unnecessary copying
     fn optimize_move_semantics(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Analyze each program point for move optimization opportunities
@@ -579,7 +579,7 @@ impl LifetimeMemoryManager {
     fn analyze_move_optimization_at_point(
         &mut self,
         point: ProgramPoint,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         if let Some(events) = function.generate_events(&point) {
@@ -611,7 +611,7 @@ impl LifetimeMemoryManager {
         &self,
         place: &Place,
         point: ProgramPoint,
-        function: &MirFunction,
+        function: &WirFunction,
         _borrow_results: &UnifiedBorrowCheckResults,
     ) -> bool {
         // Check if this is the last use of the place
@@ -640,10 +640,10 @@ impl LifetimeMemoryManager {
         true // Safe to move
     }
 
-    /// Implement drop elaboration based on MIR lifetime analysis
+    /// Implement drop elaboration based on WIR lifetime analysis
     fn elaborate_drop_operations(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Find drop points from lifetime analysis
@@ -658,7 +658,7 @@ impl LifetimeMemoryManager {
     fn analyze_drop_operations_at_point(
         &mut self,
         point: ProgramPoint,
-        function: &MirFunction,
+        function: &WirFunction,
         _borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         if let Some(events) = function.generate_events(&point) {
@@ -714,7 +714,7 @@ impl LifetimeMemoryManager {
     /// Add memory cleanup code generation only when required by borrow checker
     fn generate_memory_cleanup_operations(
         &mut self,
-        _function: &MirFunction,
+        _function: &WirFunction,
         _borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Generate cleanup operations based on drop points and ARC operations

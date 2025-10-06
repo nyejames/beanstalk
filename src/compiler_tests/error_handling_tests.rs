@@ -5,7 +5,7 @@
 
 use crate::compiler::compiler_errors::{CompileError, ErrorType};
 use crate::compiler::parsers::tokens::TextLocation;
-use crate::compiler::mir::build_mir::MirTransformContext;
+use crate::compiler::wir::build_wir::WirTransformContext;
 use crate::compiler::datatypes::DataType;
 
 #[cfg(test)]
@@ -186,7 +186,7 @@ mod error_handling_tests {
     fn test_mir_error_handling_patterns() {
         use crate::compiler::datatypes::Ownership;
         
-        let mut context = MirTransformContext::new();
+        let mut context = WirTransformContext::new();
         
         // Test undefined variable error (should be rule error)
         let undefined_var_result = context.lookup_variable("undefined_var");

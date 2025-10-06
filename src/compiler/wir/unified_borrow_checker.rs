@@ -1,9 +1,9 @@
-use crate::compiler::mir::extract::{BitSet, BorrowFactExtractor, may_alias};
-use crate::compiler::mir::mir_nodes::{
-    BorrowError, BorrowErrorType, InvalidationType, MirFunction, ProgramPoint, 
+use crate::compiler::wir::extract::{BitSet, BorrowFactExtractor, may_alias};
+use crate::compiler::wir::wir_nodes::{
+    BorrowError, BorrowErrorType, InvalidationType, WirFunction, ProgramPoint, 
     Loan, LoanId, BorrowKind
 };
-use crate::compiler::mir::place::Place;
+use crate::compiler::wir::place::Place;
 
 use crate::compiler::parsers::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
@@ -126,7 +126,7 @@ impl UnifiedBorrowChecker {
     /// Run unified borrow checking analysis on a function
     pub fn analyze_function(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         extractor: &BorrowFactExtractor,
     ) -> Result<UnifiedBorrowCheckResults, String> {
         let _start_time = std::time::Instant::now();
@@ -167,7 +167,7 @@ impl UnifiedBorrowChecker {
     /// Initialize data structures from function and extractor
     fn initialize_from_function_and_extractor(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         extractor: &BorrowFactExtractor,
     ) -> Result<(), String> {
         // Build simplified CFG from function blocks
@@ -211,9 +211,9 @@ impl UnifiedBorrowChecker {
     }
 
     /// Build simplified CFG from function blocks
-    fn build_simplified_cfg(&mut self, function: &MirFunction) -> Result<(), String> {
+    fn build_simplified_cfg(&mut self, function: &WirFunction) -> Result<(), String> {
         // For now, build a simple linear CFG
-        // In the simplified MIR, we don't have complex CFG structures yet
+        // In the simplified WIR, we don't have complex CFG structures yet
         let program_points = function.get_program_points_in_order();
         
         for (i, &current_point) in program_points.iter().enumerate() {
@@ -237,7 +237,7 @@ impl UnifiedBorrowChecker {
     }
 
     /// Compute backward liveness analysis (done once, results cached for unified analysis)
-    fn compute_liveness_analysis(&mut self, function: &MirFunction) -> Result<(), String> {
+    fn compute_liveness_analysis(&mut self, function: &WirFunction) -> Result<(), String> {
         let program_points = function.get_program_points_in_order();
         
         // Worklist algorithm for backward liveness
@@ -301,7 +301,7 @@ impl UnifiedBorrowChecker {
     /// Extract uses and defs from events at a program point
     fn extract_uses_defs_from_events(
         &self,
-        function: &MirFunction,
+        function: &WirFunction,
         program_point: &ProgramPoint,
     ) -> (HashSet<Place>, HashSet<Place>) {
         let mut uses = HashSet::new();
@@ -316,7 +316,7 @@ impl UnifiedBorrowChecker {
     }
 
     /// Run unified forward analysis combining loan tracking, moved-out tracking, and conflict detection
-    fn run_unified_forward_analysis(&mut self, function: &MirFunction) -> Result<(), String> {
+    fn run_unified_forward_analysis(&mut self, function: &WirFunction) -> Result<(), String> {
         let program_points = function.get_program_points_in_order();
         
         // Single forward traversal combining all analyses
@@ -373,7 +373,7 @@ impl UnifiedBorrowChecker {
     /// Compute moved-out places at a program point (forward dataflow)
     fn compute_moved_places_at_point(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         current_point: &ProgramPoint,
     ) -> Result<(), String> {
         // Compute MovedIn[s] = ⋃ MovedOut[pred(s)]
@@ -411,7 +411,7 @@ impl UnifiedBorrowChecker {
     /// Detect conflicts at a program point using current live sets
     fn detect_conflicts_at_point(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         current_point: &ProgramPoint,
     ) -> Result<(), String> {
         // Get current live loans (clone to avoid borrowing issues)
@@ -475,7 +475,7 @@ impl UnifiedBorrowChecker {
     /// Check for move-while-borrowed at a program point
     fn check_move_while_borrowed_at_point(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         program_point: ProgramPoint,
         live_loans: &BitSet,
     ) -> Result<(), String> {
@@ -505,7 +505,7 @@ impl UnifiedBorrowChecker {
     /// Check for use-after-move at a program point
     fn check_use_after_move_at_point(
         &mut self,
-        function: &MirFunction,
+        function: &WirFunction,
         program_point: ProgramPoint,
         moved_places: &HashSet<Place>,
     ) -> Result<(), String> {
@@ -536,7 +536,7 @@ impl UnifiedBorrowChecker {
     /// Refine Copy→Move operations at a program point based on liveness
     fn refine_operations_at_point(
         &mut self,
-        _function: &MirFunction,
+        _function: &WirFunction,
         current_point: &ProgramPoint,
     ) -> Result<(), String> {
         // Get live variables after this point
@@ -544,12 +544,12 @@ impl UnifiedBorrowChecker {
             .cloned()
             .unwrap_or_default();
         
-        // Note: In a full implementation, this would modify the MIR statements
+        // Note: In a full implementation, this would modify the WIR statements
         // to convert Copy(place) to Move(place) when place ∉ live_out
         // For now, we just count potential refinements
         
         // This is a simplified version - in practice, we'd need to access
-        // and modify the actual MIR statements
+        // and modify the actual WIR statements
         let _potential_refinements = live_out.len(); // Placeholder
         self.statistics.refinements_made += 1; // Simplified counting
         
@@ -580,7 +580,7 @@ impl UnifiedBorrowChecker {
     }
 
     /// Improved region inference for lifetime analysis
-    fn infer_loan_regions(&self, function: &MirFunction) -> Result<HashMap<LoanId, Vec<ProgramPoint>>, String> {
+    fn infer_loan_regions(&self, function: &WirFunction) -> Result<HashMap<LoanId, Vec<ProgramPoint>>, String> {
         let mut loan_regions = HashMap::new();
         
         // For each loan, compute the region where it's live
@@ -668,7 +668,7 @@ impl UnifiedBorrowChecker {
 
 /// Entry point for running unified borrow checking
 pub fn run_unified_borrow_checking(
-    function: &MirFunction,
+    function: &WirFunction,
     extractor: &BorrowFactExtractor,
 ) -> Result<UnifiedBorrowCheckResults, String> {
     let loan_count = extractor.get_loan_count();

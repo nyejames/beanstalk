@@ -1,5 +1,5 @@
 use crate::compiler::datatypes::DataType;
-use crate::compiler::mir::place::{
+use crate::compiler::wir::place::{
     Place, PlaceManager, WasmType, TypeSize, FieldSize, FieldOffset,
     MemoryBase, ByteOffset, ProjectionElem, StackOpType,
     ArithmeticOp, MemoryLayout

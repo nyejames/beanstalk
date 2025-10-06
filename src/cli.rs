@@ -24,6 +24,7 @@ enum Command {
 
     Help,
     CompilerTests,
+    AnalyzeCode,
 }
 
 pub fn start_cli() {
@@ -116,6 +117,18 @@ pub fn start_cli() {
         Command::CompilerTests => {
             run_all_test_cases();
         }
+
+        Command::AnalyzeCode => {
+            use crate::compiler_tests::run_comprehensive_analysis;
+            match run_comprehensive_analysis() {
+                Ok(()) => {
+                    green_ln_bold!("Code analysis completed successfully!");
+                }
+                Err(e) => {
+                    e_red_ln!("Code analysis failed: {}", e);
+                }
+            }
+        }
     }
 }
 
@@ -202,6 +215,8 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         },
 
         Some("tests") => Ok(Command::CompilerTests),
+        
+        Some("analyze") => Ok(Command::AnalyzeCode),
 
         _ => Err(format!("Invalid command: '{}'", command.unwrap())),
     }

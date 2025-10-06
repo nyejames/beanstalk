@@ -1,5 +1,5 @@
 //! Unit tests for the host function system
-//! Tests registry creation, AST parsing, and MIR lowering of host function calls
+//! Tests registry creation, AST parsing, and WIR lowering of host function calls
 
 use crate::compiler::host_functions::registry::{
     HostFunctionDef, HostFunctionRegistry, ErrorHandling, create_builtin_registry
@@ -260,19 +260,19 @@ mod host_function_ast_tests {
 }
 
 #[cfg(test)]
-mod host_function_mir_tests {
+mod host_function_wir_tests {
     use super::*;
 
     #[test]
-    fn test_mir_integration_placeholder() {
-        // TODO: Implement MIR integration tests once MIR interface is stable
-        // This test verifies that host function definitions are suitable for MIR lowering
+    fn test_wir_integration_placeholder() {
+        // TODO: Implement WIR integration tests once WIR interface is stable
+        // This test verifies that host function definitions are suitable for WIR lowering
         
         let registry = create_builtin_registry().expect("Failed to create registry");
         let print_func = registry.get_function("print").unwrap();
         
-        // Verify host function has all information needed for MIR lowering
-        assert!(!print_func.name.is_empty(), "Function name required for MIR");
+        // Verify host function has all information needed for WIR lowering
+        assert!(!print_func.name.is_empty(), "Function name required for WIR");
         assert!(!print_func.module.is_empty(), "Module name required for WASM imports");
         assert!(!print_func.import_name.is_empty(), "Import name required for WASM imports");
         
@@ -282,7 +282,7 @@ mod host_function_mir_tests {
 
     #[test]
     fn test_wasm_import_information() {
-        // Test that host functions have correct WASM import information for MIR
+        // Test that host functions have correct WASM import information for WIR
         let registry = create_builtin_registry().expect("Failed to create registry");
         let print_func = registry.get_function("print").unwrap();
         
@@ -303,7 +303,7 @@ mod host_function_mir_tests {
         // Test that multiple calls to the same host function can be handled efficiently
         let registry = create_builtin_registry().expect("Failed to create registry");
         
-        // Simulate multiple lookups of the same function (as would happen in MIR)
+        // Simulate multiple lookups of the same function (as would happen in WIR)
         let print_func1 = registry.get_function("print").unwrap();
         let print_func2 = registry.get_function("print").unwrap();
         
@@ -312,7 +312,7 @@ mod host_function_mir_tests {
         assert_eq!(print_func1.module, print_func2.module);
         assert_eq!(print_func1.import_name, print_func2.import_name);
         
-        // Verify function definitions are equal (for deduplication in MIR)
+        // Verify function definitions are equal (for deduplication in WIR)
         assert_eq!(print_func1, print_func2);
     }
 }
@@ -414,8 +414,8 @@ pub fn run_host_function_tests() -> Result<(), CompileError> {
     // AST parsing tests  
     println!("  ✓ AST parsing integration tests");
     
-    // MIR lowering tests
-    println!("  ✓ MIR lowering integration tests");
+    // WIR lowering tests
+    println!("  ✓ WIR lowering integration tests");
     
     // Error handling tests
     println!("  ✓ Error handling and validation tests");

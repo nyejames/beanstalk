@@ -1,7 +1,7 @@
 use crate::compiler::codegen::wasm_encoding::WasmModule;
-use crate::compiler::mir::mir_nodes::Terminator;
-use crate::compiler::mir::place::{Place, WasmType};
-use crate::compiler::mir::mir_nodes::{Operand, Constant};
+use crate::compiler::wir::wir_nodes::Terminator;
+use crate::compiler::wir::place::{Place, WasmType};
+use crate::compiler::wir::wir_nodes::{Operand, Constant};
 use wasm_encoder::Function;
 use std::collections::HashMap;
 

@@ -279,7 +279,7 @@ undefined_variable = nonexistent_var + 5
         }
     }
 
-    /// Test that AST→MIR→WASM pipeline preserves program semantics
+    /// Test that AST→WIR→WASM pipeline preserves program semantics
     #[test]
     fn test_pipeline_semantic_preservation() {
         let source_code = r#"

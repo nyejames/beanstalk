@@ -1,13 +1,13 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::mir::mir_nodes::{
+use crate::compiler::wir::wir_nodes::{
     BorrowError, BorrowErrorType, BorrowKind, InvalidationType, ProgramPoint,
 };
-use crate::compiler::mir::place::Place;
+use crate::compiler::wir::place::Place;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_rule_error};
 use std::collections::HashMap;
 
-/// Streamlined error generation system for MIR borrow checking
+/// Streamlined error generation system for WIR borrow checking
 ///
 /// This system replaces the complex diagnostic generation with direct error message formatting,
 /// eliminates redundant error context allocation, and uses string interning for performance.
@@ -189,7 +189,7 @@ impl StreamlinedDiagnostics {
 
     /// Generate compiler error for internal issues (simplified)
     pub fn generate_compiler_error_fast(&self, message: &str) -> Result<(), CompileError> {
-        return_compiler_error!("MIR borrow checker: {}", message);
+        return_compiler_error!("WIR borrow checker: {}", message);
     }
 }
 
@@ -282,7 +282,7 @@ impl ErrorMessageCache {
             Place::Global { index, .. } => format!("global_{}", index),
             Place::Memory { offset, .. } => format!("memory[{}]", offset.0),
             Place::Projection { base, elem } => {
-                use crate::compiler::mir::place::ProjectionElem;
+                use crate::compiler::wir::place::ProjectionElem;
                 let base_name = self.format_place_name_direct(base);
                 match elem {
                     ProjectionElem::Field { index, .. } => format!("{}.field_{}", base_name, index),
@@ -370,7 +370,7 @@ pub mod fast_path {
             Place::Global { index, .. } => format!("global_{}", index),
             Place::Memory { offset, .. } => format!("memory[{}]", offset.0),
             Place::Projection { base, elem } => {
-                use crate::compiler::mir::place::ProjectionElem;
+                use crate::compiler::wir::place::ProjectionElem;
                 match elem {
                     ProjectionElem::Field { index, .. } => {
                         format!("{}.field_{}", format_place_name_minimal(base), index)

@@ -17,7 +17,7 @@ pub struct PerformanceMetrics {
 pub struct CompilationPhaseMetrics {
     pub tokenization_time: Duration,
     pub ast_generation_time: Duration,
-    pub mir_generation_time: Duration,
+    pub wir_generation_time: Duration,
     pub wasm_generation_time: Duration,
     pub total_compilation_time: Duration,
 }
@@ -207,7 +207,7 @@ remainder = x % y
                     compilation_phases: CompilationPhaseMetrics {
                         tokenization_time: Duration::from_millis(0), // TODO: Extract from compiler
                         ast_generation_time: Duration::from_millis(0),
-                        mir_generation_time: Duration::from_millis(0),
+                        wir_generation_time: Duration::from_millis(0),
                         wasm_generation_time: Duration::from_millis(0),
                         total_compilation_time: total_time,
                     },
@@ -222,7 +222,7 @@ remainder = x % y
                     compilation_phases: CompilationPhaseMetrics {
                         tokenization_time: Duration::from_millis(0),
                         ast_generation_time: Duration::from_millis(0),
-                        mir_generation_time: Duration::from_millis(0),
+                        wir_generation_time: Duration::from_millis(0),
                         wasm_generation_time: Duration::from_millis(0),
                         total_compilation_time: total_time,
                     },

@@ -11,7 +11,7 @@ pub mod test_runner;
 #[cfg(test)]
 pub mod core_compiler_tests;
 
-// MIR place system tests - WASM-optimized memory management (comprehensive)
+// WIR place system tests - WASM-optimized memory management (comprehensive)
 #[cfg(test)]
 pub mod place_tests;
 
@@ -78,9 +78,9 @@ pub mod simple_error_validation_test;
 // === FOCUSED TEST CATEGORIES ===
 // Organized tests for specific functionality
 
-// MIR construction tests - DISABLED during backend simplification
+// WIR construction tests - DISABLED during backend simplification
 // #[cfg(test)]
-// pub mod mir_construction_tests;
+// pub mod wir_construction_tests;
 
 // Borrow checker tests - DISABLED during backend simplification
 // #[cfg(test)]
@@ -90,7 +90,7 @@ pub mod simple_error_validation_test;
 #[cfg(test)]
 pub mod error_handling_tests;
 
-// Host function system tests - Registry, AST parsing, and MIR lowering
+// Host function system tests - Registry, AST parsing, and WIR lowering
 #[cfg(test)]
 pub mod host_function_tests;
 
@@ -104,6 +104,15 @@ pub mod integration_tests;
 // WASM execution tests for runtime validation
 #[cfg(test)]
 pub mod wasm_execution_tests;
+
+// === CODE ANALYSIS TOOLS ===
+// Tools for analyzing code usage and identifying dead code
+
+// Code usage analyzer for backend cleanup
+pub mod code_usage_analyzer;
+
+// Code analysis runner for generating reports
+pub mod run_code_analysis;
 
 
 // === RE-EXPORTS ===
@@ -121,3 +130,6 @@ pub use consolidated_performance_tests::{run_performance_benchmarks, validate_wa
 // Re-export host function test functions
 #[cfg(test)]
 pub use host_function_tests::run_host_function_tests;
+
+// Re-export code analysis functions
+pub use run_code_analysis::run_comprehensive_analysis;

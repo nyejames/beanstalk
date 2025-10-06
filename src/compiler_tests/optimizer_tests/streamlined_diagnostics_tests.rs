@@ -1,5 +1,5 @@
-use crate::compiler::mir::mir_nodes::{BorrowError, BorrowErrorType, BorrowKind, ProgramPoint};
-use crate::compiler::mir::place::{Place, WasmType};
+use crate::compiler::wir::wir_nodes::{BorrowError, BorrowErrorType, BorrowKind, ProgramPoint};
+use crate::compiler::wir::place::{Place, WasmType};
 use crate::compiler::optimizers::streamlined_diagnostics::{fast_path, generate_borrow_errors_batch};
 use crate::compiler::parsers::tokens::TextLocation;
 

@@ -4,26 +4,26 @@
 //! for task 9 of the WASM backend implementation.
 
 use crate::compiler::codegen::wasm_encoding::{WasmModule, MemoryLayoutManager, WASM_PAGE_SIZE};
-use crate::compiler::mir::mir_nodes::{MIR, MemoryInfo, TypeInfo, InterfaceInfo};
-use crate::compiler::mir::place::{Place, WasmType};
+use crate::compiler::wir::wir_nodes::{WIR, MemoryInfo, TypeInfo, InterfaceInfo};
+use crate::compiler::wir::place::{Place, WasmType};
 use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Test creating a memory layout manager from MIR
+    /// Test creating a memory layout manager from WIR
     #[test]
     fn test_create_memory_layout_manager() {
         let mut wasm_module = WasmModule::new();
-        let mir = create_test_mir();
+        let wir = create_test_wir();
         
-        let result = wasm_module.create_memory_layout_manager(&mir);
+        let result = wasm_module.create_memory_layout_manager(&wir);
         assert!(result.is_ok(), "Should create memory layout manager successfully");
         
         let layout_manager = result.unwrap();
         // The layout manager may add some overhead for globals, so check it's at least the base size
-        assert!(layout_manager.get_total_static_size() >= mir.type_info.memory_info.static_data_size);
+        assert!(layout_manager.get_total_static_size() >= wir.type_info.memory_info.static_data_size);
     }
 
     /// Test struct field layout calculation
@@ -132,9 +132,9 @@ mod tests {
 
     // Helper functions
 
-    fn create_test_mir() -> MIR {
-        let mut mir = MIR::new();
-        mir.type_info = TypeInfo {
+    fn create_test_wir() -> WIR {
+        let mut wir = WIR::new();
+        wir.type_info = TypeInfo {
             function_types: Vec::new(),
             global_types: Vec::new(),
             memory_info: MemoryInfo {
@@ -150,23 +150,23 @@ mod tests {
         };
         
         // Add some test globals
-        mir.globals.insert(0, Place::Global { 
+        wir.globals.insert(0, Place::Global { 
             index: 0, 
             wasm_type: WasmType::I32 
         });
-        mir.globals.insert(1, Place::Global { 
+        wir.globals.insert(1, Place::Global { 
             index: 1, 
             wasm_type: WasmType::F64 
         });
         
-        mir
+        wir
     }
 
     fn create_test_layout_manager() -> MemoryLayoutManager {
         let mut layout_manager = MemoryLayoutManager::new();
-        let mir = create_test_mir();
+        let wir = create_test_wir();
         
-        layout_manager.initialize_from_mir(&mir).unwrap();
+        layout_manager.initialize_from_wir(&wir).unwrap();
         layout_manager.setup_heap_region().unwrap();
         
         layout_manager

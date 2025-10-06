@@ -49,23 +49,16 @@ mod compiler {
     }
     pub mod optimizers {
         pub mod constant_folding;
-        pub mod optimized_dataflow;
-        pub mod place_interner;
+        pub mod interface_dispatch;
+        pub mod lifetime_memory_manager;
         pub mod streamlined_diagnostics;
     }
 
-    pub mod mir {
-        pub mod arena;
-        pub mod build_mir;
-        pub mod cfg;
-        pub mod check;
-        pub mod counter;
-        pub mod dataflow;
-        pub mod diagnose;
+    pub mod wir {
+        pub mod build_wir;
         pub mod extract;
-        pub mod liveness;
-        pub mod mir;
-        pub mod mir_nodes;
+        pub mod wir;
+        pub mod wir_nodes;
         pub mod place;
         pub mod unified_borrow_checker;
     }
@@ -100,7 +93,7 @@ mod compiler {
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::create_builtin_registry;
-use crate::compiler::mir::build_mir::MIR;
+use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{
     AstBlock, ContextKind, ParserOutput, ScopeContext, new_ast,
@@ -201,20 +194,20 @@ impl<'a> Compiler<'a> {
     }
 
     /// -----------------------------
-    ///         MIR CREATION
+    ///         WIR CREATION
     /// -----------------------------
     /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
-    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<MIR, Vec<CompileError>> {
+    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<WIR, Vec<CompileError>> {
         // Use the new borrow checking pipeline
-        compiler::mir::mir::borrow_check_pipeline(ast)
+        compiler::wir::wir::borrow_check_pipeline(ast)
     }
 
     /// -----------------------
     ///        BACKEND
     ///    (Wasm Generation)
     /// -----------------------
-    pub fn ir_to_wasm(mir: MIR) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(mir)
+    pub fn ir_to_wasm(wir: WIR) -> Result<Vec<u8>, CompileError> {
+        new_wasm_module(wir)
     }
 }

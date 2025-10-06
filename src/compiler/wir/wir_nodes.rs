@@ -1,10 +1,10 @@
-use crate::compiler::mir::place::{Place, WasmType};
+use crate::compiler::wir::place::{Place, WasmType};
 use crate::compiler::parsers::tokens::TextLocation;
 use std::collections::HashMap;
 
-/// WASM-optimized Mid-level IR structure with simplified borrow checking
+/// WASM Intermediate Representation structure with simplified borrow checking
 ///
-/// This MIR is designed specifically for efficient WASM generation with
+/// This WIR is designed specifically for efficient WASM generation with
 /// simple dataflow-based borrow checking using program points and events.
 ///
 /// ## Design Principles
@@ -29,16 +29,16 @@ use std::collections::HashMap;
 ///
 /// ## Core Data Structures
 ///
-/// - `ProgramPoint`: Sequential identifiers for each MIR statement
+/// - `ProgramPoint`: Sequential identifiers for each WIR statement
 /// - `Events`: Simple event records per program point for dataflow analysis
 /// - `Loan`: Simplified borrow tracking with origin points
 /// - `Place`: WASM-optimized memory location abstractions (unchanged)
 ///
 /// See `docs/dataflow-analysis-guide.md` for detailed algorithm documentation.
 #[derive(Debug)]
-pub struct MIR {
+pub struct WIR {
     /// Functions in the module
-    pub functions: Vec<MirFunction>,
+    pub functions: Vec<WirFunction>,
     /// Global variables and their places
     pub globals: HashMap<u32, Place>,
     /// Module exports
@@ -49,8 +49,8 @@ pub struct MIR {
     pub host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
 }
 
-impl MIR {
-    /// Create a new MIR structure
+impl WIR {
+    /// Create a new WIR structure
     pub fn new() -> Self {
         Self {
             functions: Vec::new(),
@@ -74,12 +74,12 @@ impl MIR {
         }
     }
 
-    /// Add a function to the MIR
-    pub fn add_function(&mut self, function: MirFunction) {
+    /// Add a function to the WIR
+    pub fn add_function(&mut self, function: WirFunction) {
         self.functions.push(function);
     }
 
-    /// Add host function imports to the MIR
+    /// Add host function imports to the WIR
     pub fn add_host_imports(&mut self, imports: &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>) {
         self.host_imports.extend(imports.iter().cloned());
     }
@@ -119,14 +119,14 @@ impl MIR {
     }
 
     /// Find the function containing a given program point
-    pub fn find_function_for_program_point(&self, point: &ProgramPoint) -> Option<&MirFunction> {
+    pub fn find_function_for_program_point(&self, point: &ProgramPoint) -> Option<&WirFunction> {
         self.functions
             .iter()
             .find(|f| f.events.contains_key(point))
     }
 
     /// Get a mutable reference to a function by ID
-    pub fn get_function_mut(&mut self, function_id: u32) -> Option<&mut MirFunction> {
+    pub fn get_function_mut(&mut self, function_id: u32) -> Option<&mut WirFunction> {
         self.functions.iter_mut().find(|f| f.id == function_id)
     }
 
@@ -143,51 +143,17 @@ impl MIR {
     }
 }
 
-/// Simple program point information
-#[derive(Debug, Clone)]
-pub struct ProgramPointInfo {
-    /// Block ID containing this program point
-    pub block_id: u32,
-    /// Statement index within the block (None for terminators)
-    pub statement_index: Option<usize>,
-    /// Source location for error reporting
-    pub source_location: Option<TextLocation>,
-}
 
-impl ProgramPointInfo {
-    /// Create new program point info for a statement
-    pub fn new_statement(block_id: u32, statement_index: usize, source_location: Option<TextLocation>) -> Self {
-        Self {
-            block_id,
-            statement_index: Some(statement_index),
-            source_location,
-        }
-    }
 
-    /// Create new program point info for a terminator
-    pub fn new_terminator(block_id: u32, source_location: Option<TextLocation>) -> Self {
-        Self {
-            block_id,
-            statement_index: None,
-            source_location,
-        }
-    }
-
-    /// Check if this program point is a terminator
-    pub fn is_terminator(&self) -> bool {
-        self.statement_index.is_none()
-    }
-}
-
-/// Simplified MIR function representation
+/// Simplified WIR function representation
 /// 
 /// This simplified design removes complex optimizations in favor of correctness:
 /// - No arena allocation - uses standard Vec and HashMap
 /// - No place interning - uses direct Place references
 /// - No complex event caching - simple HashMap storage
-/// - Essential fields only for basic MIR functionality
+/// - Essential fields only for basic WIR functionality
 #[derive(Debug, Clone)]
-pub struct MirFunction {
+pub struct WirFunction {
     /// Function ID
     pub id: u32,
     /// Function name
@@ -197,7 +163,7 @@ pub struct MirFunction {
     /// Return type information
     pub return_types: Vec<WasmType>,
     /// Basic blocks
-    pub blocks: Vec<MirBlock>,
+    pub blocks: Vec<WirBlock>,
     /// Local variable places
     pub locals: HashMap<String, Place>,
     /// WASM function signature
@@ -210,8 +176,8 @@ pub struct MirFunction {
 
 
 
-impl MirFunction {
-    /// Create a new simplified MIR function
+impl WirFunction {
+    /// Create a new simplified WIR function
     pub fn new(id: u32, name: String, parameters: Vec<Place>, return_types: Vec<WasmType>) -> Self {
         Self {
             id,
@@ -230,7 +196,7 @@ impl MirFunction {
     }
 
     /// Add a block to this function
-    pub fn add_block(&mut self, block: MirBlock) {
+    pub fn add_block(&mut self, block: WirBlock) {
         self.blocks.push(block);
     }
 
@@ -251,10 +217,10 @@ impl MirFunction {
 
     /// Get all program points in execution order
     pub fn get_program_points_in_order(&self) -> Vec<ProgramPoint> {
-        let mut points = Vec::new();
-        for block in &self.blocks {
-            points.extend(block.get_all_program_points());
-        }
+        // Since program points are managed at the function level,
+        // return the keys from the events HashMap
+        let mut points: Vec<ProgramPoint> = self.events.keys().copied().collect();
+        points.sort();
         points
     }
 
@@ -275,24 +241,7 @@ impl MirFunction {
         self.get_events(program_point).cloned()
     }
 
-    /// Get CFG (compatibility method - simplified)
-    pub fn get_cfg_immutable(&self) -> Result<&(), String> {
-        // Simplified - no CFG for now
-        Err("CFG not implemented in simplified MIR".to_string())
-    }
 
-    /// Get source location for a program point (compatibility method)
-    pub fn get_source_location(&self, _point: &ProgramPoint) -> Option<&TextLocation> {
-        // Simplified - source locations not yet tracked per program point
-        // This will be implemented in a future task
-        None
-    }
-
-    /// Build CFG (compatibility method - simplified)
-    pub fn build_cfg(&mut self) -> Result<(), String> {
-        // Simplified - no CFG building for now
-        Ok(())
-    }
 
     /// Add a loan to this function
     pub fn add_loan(&mut self, loan: Loan) {
@@ -322,7 +271,7 @@ pub struct FunctionSignature {
     pub result_types: Vec<WasmType>,
 }
 
-/// Basic MIR block
+/// Basic WIR block
 /// 
 /// Simplified design with essential fields only:
 /// - No complex program point tracking
@@ -330,17 +279,17 @@ pub struct FunctionSignature {
 /// - No parent/child block relationships
 /// - Simple construction and manipulation methods
 #[derive(Debug, Clone)]
-pub struct MirBlock {
+pub struct WirBlock {
     /// Block ID for control flow
     pub id: u32,
-    /// MIR statements
+    /// WIR statements
     pub statements: Vec<Statement>,
     /// Block terminator
     pub terminator: Terminator,
 }
 
-impl MirBlock {
-    /// Create a new MIR block
+impl WirBlock {
+    /// Create a new WIR block
     pub fn new(id: u32) -> Self {
         Self {
             id,
@@ -359,26 +308,10 @@ impl MirBlock {
         self.terminator = terminator;
     }
 
-    /// Get all program points in this block (for compatibility)
-    pub fn get_all_program_points(&self) -> Vec<ProgramPoint> {
-        // This is a simplified implementation - program points are managed at the function level
-        Vec::new()
-    }
 
-    /// Get the program point for a specific statement index (compatibility)
-    pub fn get_statement_program_point(&self, _statement_index: usize) -> Option<ProgramPoint> {
-        // Simplified - program points are managed at function level
-        None
-    }
-
-    /// Get the terminator program point (compatibility)
-    pub fn get_terminator_program_point(&self) -> Option<ProgramPoint> {
-        // Simplified - program points are managed at function level
-        None
-    }
 }
 
-/// MIR statement that maps efficiently to WASM instructions
+/// WIR statement that maps efficiently to WASM instructions
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     /// Assign the rvalue to a place
@@ -444,11 +377,11 @@ impl Statement {
     /// Generate events for this statement on-demand
     ///
     /// This method computes events dynamically from the statement structure,
-    /// eliminating the need to store events in MirFunction. Events are computed
+    /// eliminating the need to store events in WirFunction. Events are computed
     /// based on the statement type and operands.
     ///
     /// ## Performance Benefits
-    /// - Reduces MIR memory footprint by ~30%
+    /// - Reduces WIR memory footprint by ~30%
     /// - Eliminates redundant event storage
     /// - Enables efficient event caching for repeated access patterns
     ///
@@ -620,7 +553,7 @@ pub enum MemoryOpKind {
     Copy,
 }
 
-/// Operands for MIR operations
+/// Operands for WIR operations
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
     /// Copy from a place
@@ -785,9 +718,9 @@ pub enum BorrowKind {
 
 
 
-/// Program point identifier (one per MIR statement)
+/// Program point identifier (one per WIR statement)
 ///
-/// Program points provide a unique identifier for each MIR statement to enable
+/// Program points provide a unique identifier for each WIR statement to enable
 /// precise dataflow analysis. Each statement gets exactly one program point.
 ///
 /// ## Design Rationale
@@ -837,48 +770,7 @@ impl std::fmt::Display for ProgramPoint {
     }
 }
 
-/// Program point generator for sequential allocation during MIR construction
-#[derive(Debug)]
-pub struct ProgramPointGenerator {
-    /// Next program point ID to allocate
-    next_id: u32,
-    /// All allocated program points in order
-    allocated_points: Vec<ProgramPoint>,
-}
 
-impl ProgramPointGenerator {
-    /// Create a new program point generator
-    pub fn new() -> Self {
-        Self {
-            next_id: 0,
-            allocated_points: Vec::new(),
-        }
-    }
-
-    /// Allocate the next program point in sequence
-    pub fn allocate_next(&mut self) -> ProgramPoint {
-        let point = ProgramPoint::new(self.next_id);
-        self.next_id += 1;
-        self.allocated_points.push(point);
-        point
-    }
-
-    /// Get all allocated program points
-    pub fn get_all_points(&self) -> &[ProgramPoint] {
-        &self.allocated_points
-    }
-
-    /// Get the count of allocated program points
-    pub fn count(&self) -> usize {
-        self.allocated_points.len()
-    }
-}
-
-impl Default for ProgramPointGenerator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Simple events for dataflow analysis
 ///

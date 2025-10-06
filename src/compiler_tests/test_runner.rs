@@ -171,8 +171,8 @@ pub fn run_essential_tests() -> Result<(), String> {
         Ok(())
     })?;
     
-    run_test_module("MIR Lowering", || {
-        // These would run the MIR lowering tests
+    run_test_module("WIR Lowering", || {
+        // These would run the WIR lowering tests
         Ok(())
     })?;
     
@@ -319,8 +319,8 @@ fn benchmark_memory_usage() -> Result<(), String> {
 pub fn validate_wasm_optimizations() -> Result<(), String> {
     println!("Validating WASM optimization goals...\n");
     
-    // Goal 1: MIR statements map to ≤3 WASM instructions
-    println!("1. Validating MIR-to-WASM instruction mapping...");
+    // Goal 1: WIR statements map to ≤3 WASM instructions
+    println!("1. Validating WIR-to-WASM instruction mapping...");
     validate_instruction_mapping()?;
     
     // Goal 2: Place operations are WASM-efficient
@@ -339,7 +339,7 @@ pub fn validate_wasm_optimizations() -> Result<(), String> {
     Ok(())
 }
 
-/// Validate that MIR statements map efficiently to WASM instructions
+/// Validate that WIR statements map efficiently to WASM instructions
 fn validate_instruction_mapping() -> Result<(), String> {
     // Test basic operations
     println!("  Local operations: 1 instruction ✓");

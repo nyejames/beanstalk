@@ -2,16 +2,16 @@
 mod wasm_codegen_tests {
     use crate::compiler::codegen::wasm_encoding::WasmModule;
     use crate::compiler::codegen::build_wasm::new_wasm_module;
-    use crate::compiler::mir::mir_nodes::{
-        MIR, MirBlock, MirFunction, Statement, Terminator, Rvalue, Operand, Constant, BinOp,
+    use crate::compiler::wir::wir_nodes::{
+        WIR, WirBlock, WirFunction, Statement, Terminator, Rvalue, Operand, Constant, BinOp,
         UnOp, Export, ExportKind, MemoryInfo,
     };
-    use crate::compiler::mir::place::{Place, WasmType};
+    use crate::compiler::wir::place::{Place, WasmType};
     use std::collections::HashMap;
     use wasm_encoder::Function;
 
     // ===== BASIC STATEMENT LOWERING TESTS =====
-    // Test core MIR statement types for proper WASM instruction generation
+    // Test core WIR statement types for proper WASM instruction generation
 
     #[test]
     fn test_statement_lowering_assign_constant() {
@@ -193,30 +193,30 @@ mod wasm_codegen_tests {
         assert!(result.is_ok(), "Unreachable terminator should lower successfully");
     }
 
-    // ===== COMPLETE MIR TO WASM TESTS =====
+    // ===== COMPLETE WIR TO WASM TESTS =====
 
     #[test]
-    fn test_complete_mir_to_wasm_empty_module() {
-        let mir = MIR::new();
+    fn test_complete_wir_to_wasm_empty_module() {
+        let wir = WIR::new();
 
-        let result = new_wasm_module(mir);
-        assert!(result.is_ok(), "Empty MIR should generate valid WASM");
+        let result = new_wasm_module(wir);
+        assert!(result.is_ok(), "Empty WIR should generate valid WASM");
 
         let wasm_bytes = result.unwrap();
         assert!(!wasm_bytes.is_empty(), "Generated WASM should not be empty");
     }
 
     #[test]
-    fn test_complete_mir_to_wasm_simple_function() {
-        let mut mir = MIR::new();
+    fn test_complete_wir_to_wasm_simple_function() {
+        let mut wir = WIR::new();
 
         // Create a simple function that returns a constant
-        let mut function = MirFunction {
+        let mut function = WirFunction {
             id: 0,
             name: "test_func".to_string(),
             parameters: vec![],
             return_types: vec![WasmType::I32],
-            blocks: vec![MirBlock {
+            blocks: vec![WirBlock {
                 id: 0,
                 statements: vec![],
                 terminator: Terminator::Return {
@@ -224,58 +224,58 @@ mod wasm_codegen_tests {
                 },
             }],
             locals: HashMap::new(),
-            signature: crate::compiler::mir::mir_nodes::FunctionSignature {
+            signature: crate::compiler::wir::wir_nodes::FunctionSignature {
                 params: vec![],
                 returns: vec![WasmType::I32],
             },
             events: HashMap::new(),
         };
 
-        mir.add_function(function);
+        wir.add_function(function);
 
-        let result = new_wasm_module(mir);
-        assert!(result.is_ok(), "Simple function MIR should generate valid WASM");
+        let result = new_wasm_module(wir);
+        assert!(result.is_ok(), "Simple function WIR should generate valid WASM");
     }
 
     #[test]
-    fn test_complete_mir_to_wasm_with_memory() {
-        let mut mir = MIR::new();
+    fn test_complete_wir_to_wasm_with_memory() {
+        let mut wir = WIR::new();
 
         // Set up memory configuration
-        mir.type_info.memory_info.initial_pages = 1;
-        mir.type_info.memory_info.static_data_size = 1024;
+        wir.type_info.memory_info.initial_pages = 1;
+        wir.type_info.memory_info.static_data_size = 1024;
 
-        let result = new_wasm_module(mir);
-        assert!(result.is_ok(), "MIR with memory should generate valid WASM");
+        let result = new_wasm_module(wir);
+        assert!(result.is_ok(), "WIR with memory should generate valid WASM");
     }
 
     #[test]
     fn test_wasm_module_validation_integration() {
-        let mut mir = MIR::new();
+        let mut wir = WIR::new();
 
         // Create a function with basic operations
-        let function = MirFunction {
+        let function = WirFunction {
             id: 0,
             name: "main".to_string(),
             parameters: vec![],
             return_types: vec![],
-            blocks: vec![MirBlock {
+            blocks: vec![WirBlock {
                 id: 0,
                 statements: vec![Statement::Nop],
                 terminator: Terminator::Return { values: vec![] },
             }],
             locals: HashMap::new(),
-            signature: crate::compiler::mir::mir_nodes::FunctionSignature {
+            signature: crate::compiler::wir::wir_nodes::FunctionSignature {
                 params: vec![],
                 returns: vec![],
             },
             events: HashMap::new(),
         };
 
-        mir.add_function(function);
+        wir.add_function(function);
 
-        let result = new_wasm_module(mir);
-        assert!(result.is_ok(), "Basic MIR should pass WASM validation");
+        let result = new_wasm_module(wir);
+        assert!(result.is_ok(), "Basic WIR should pass WASM validation");
 
         // Verify the generated WASM is valid
         let wasm_bytes = result.unwrap();

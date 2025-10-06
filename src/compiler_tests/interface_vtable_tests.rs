@@ -5,8 +5,8 @@
 //! call_indirect instruction generation.
 
 use crate::compiler::codegen::wasm_encoding::WasmModule;
-use crate::compiler::mir::mir_nodes::{MIR, InterfaceInfo, InterfaceDefinition, MethodSignature, VTable, Constant, Operand};
-use crate::compiler::mir::place::{WasmType, Place};
+use crate::compiler::wir::wir_nodes::{MIR, InterfaceInfo, InterfaceDefinition, MethodSignature, VTable, Constant, Operand};
+use crate::compiler::wir::place::{WasmType, Place};
 use crate::compiler::compiler_errors::CompileError;
 use wasm_encoder::{Function, ValType};
 use std::collections::HashMap;
@@ -207,8 +207,8 @@ fn test_interface_support_initialization() -> Result<(), CompileError> {
     let interface_info = create_test_interface_info();
     let mut mir = create_test_mir_with_interfaces(interface_info);
     
-    // Create WasmModule from MIR with interface support
-    let wasm_module = WasmModule::from_mir(&mir)?;
+    // Create WasmModule from WIR with interface support
+    let wasm_module = WasmModule::from_wir(&wir)?;
     
     // Verify that interface support was initialized
     assert_eq!(wasm_module.get_type_count(), 2); // Should have 2 interface method types
@@ -217,8 +217,8 @@ fn test_interface_support_initialization() -> Result<(), CompileError> {
 }
 
 /// Helper function to create a test MIR with interface information
-fn create_test_mir_with_interfaces(interface_info: InterfaceInfo) -> MIR {
-    use crate::compiler::mir::mir_nodes::{TypeInfo, MemoryInfo};
+fn create_test_mir_with_interfaces(interface_info: InterfaceInfo) -> WIR {
+    use crate::compiler::wir::wir_nodes::{TypeInfo, MemoryInfo};
     
     MIR {
         functions: vec![],

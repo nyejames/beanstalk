@@ -1,34 +1,34 @@
 #[cfg(test)]
 mod wasm_module_tests {
     use crate::compiler::codegen::wasm_encoding::WasmModule;
-    use crate::compiler::mir::mir_nodes::{MIR, MirBlock, MirFunction, Statement, Terminator, Rvalue, Operand, Constant, BinOp};
-    use crate::compiler::mir::place::{Place, WasmType};
+    use crate::compiler::wir::wir_nodes::{WIR, WirBlock, WirFunction, Statement, Terminator, Rvalue, Operand, Constant, BinOp};
+    use crate::compiler::wir::place::{Place, WasmType};
     use crate::compiler::datatypes::{DataType, Ownership};
     use std::f32::consts::PI;
     use std::f64::consts::E;
 
     #[test]
     fn test_wasm_module_creation() {
-        // Create a basic MIR structure
-        let mir = MIR::new();
+        // Create a basic WIR structure
+        let wir = WIR::new();
 
-        // Create WasmModule from MIR
-        let result = WasmModule::from_mir(&mir);
-        assert!(result.is_ok(), "WasmModule::from_mir should succeed for empty MIR");
+        // Create WasmModule from WIR
+        let result = WasmModule::from_wir(&wir);
+        assert!(result.is_ok(), "WasmModule::from_wir should succeed for empty WIR");
 
         let wasm_module = result.unwrap();
         
         // Verify basic module structure
-        assert_eq!(wasm_module.get_function_count(), 0, "Empty MIR should produce no functions");
+        assert_eq!(wasm_module.get_function_count(), 0, "Empty WIR should produce no functions");
     }
 
     #[test]
     fn test_simple_function_compilation() {
-        // Create a MIR with a simple function
-        let mut mir = MIR::new();
+        // Create a WIR with a simple function
+        let mut wir = WIR::new();
 
         // Create a function that returns a constant
-        let mut function = MirFunction::new(
+        let mut function = WirFunction::new(
             0,
             "return_constant".to_string(),
             vec![], // No parameters
@@ -36,7 +36,7 @@ mod wasm_module_tests {
         );
 
         // Add a block with a return statement
-        let mut block = MirBlock::new(0);
+        let mut block = WirBlock::new(0);
         
         // Add return statement: return 42
         let return_stmt = Statement::Assign {
@@ -51,11 +51,11 @@ mod wasm_module_tests {
         };
         
         function.add_block(block);
-        mir.add_function(function);
+        wir.add_function(function);
 
         // Create and test WASM module
-        let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
-        let result = wasm_module.compile_mir_function(&mir.functions[0]);
+        let mut wasm_module = WasmModule::from_wir(&wir).unwrap();
+        let result = wasm_module.compile_wir_function(&wir.functions[0]);
         
         assert!(result.is_ok(), "Simple function compilation should succeed");
         
@@ -66,10 +66,10 @@ mod wasm_module_tests {
 
     #[test]
     fn test_function_with_parameters() {
-        let mut mir = MIR::new();
+        let mut wir = WIR::new();
 
         // Create a function that adds two parameters
-        let mut function = MirFunction::new(
+        let mut function = WirFunction::new(
             0,
             "add_two".to_string(),
             vec![
@@ -80,7 +80,7 @@ mod wasm_module_tests {
         );
 
         // Add a block that adds the parameters
-        let mut block = MirBlock::new(0);
+        let mut block = WirBlock::new(0);
         
         // result = a + b
         let add_stmt = Statement::Assign {
@@ -99,11 +99,11 @@ mod wasm_module_tests {
         };
         
         function.add_block(block);
-        mir.add_function(function);
+        wir.add_function(function);
 
         // Test compilation
-        let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
-        let result = wasm_module.compile_mir_function(&mir.functions[0]);
+        let mut wasm_module = WasmModule::from_wir(&wir).unwrap();
+        let result = wasm_module.compile_wir_function(&wir.functions[0]);
         
         assert!(result.is_ok(), "Function with parameters should compile successfully");
     }
@@ -126,7 +126,7 @@ mod wasm_module_tests {
     fn test_wasm_instruction_efficiency() {
         // Test that places generate efficient WASM instruction sequences
         let local_place = Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)));
-        let memory_place = Place::memory(1024, crate::compiler::mir::place::TypeSize::Word);
+        let memory_place = Place::memory(1024, crate::compiler::wir::place::TypeSize::Word);
         
         // Local operations should be very efficient
         assert_eq!(local_place.load_instruction_count(), 1);
@@ -140,34 +140,34 @@ mod wasm_module_tests {
         let field_place = local_place.project_field(
             0, 
             8, 
-            crate::compiler::mir::place::FieldSize::WasmType(WasmType::I32)
+            crate::compiler::wir::place::FieldSize::WasmType(WasmType::I32)
         );
         assert!(field_place.load_instruction_count() <= 5);
     }
 
     #[test]
     fn test_module_encoding() {
-        let mut mir = MIR::new();
+        let mut wir = WIR::new();
         
         // Create a minimal valid function
-        let mut function = MirFunction::new(
+        let mut function = WirFunction::new(
             0,
             "minimal".to_string(),
             vec![],
             vec![WasmType::I32],
         );
         
-        let mut block = MirBlock::new(0);
+        let mut block = WirBlock::new(0);
         block.terminator = Terminator::Return { 
             values: vec![Operand::Constant(Constant::I32(0))]
         };
         
         function.add_block(block);
-        mir.add_function(function);
+        wir.add_function(function);
         
         // Test full encoding pipeline
-        let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
-        wasm_module.compile_mir_function(&mir.functions[0]).unwrap();
+        let mut wasm_module = WasmModule::from_wir(&wir).unwrap();
+        wasm_module.compile_wir_function(&wir.functions[0]).unwrap();
         
         let bytes = wasm_module.finish();
         assert!(!bytes.is_empty(), "Encoded WASM should not be empty");
@@ -178,8 +178,8 @@ mod wasm_module_tests {
     fn test_place_resolution_local_index_mapping() {
         use std::collections::HashMap;
 
-        // Create a MIR function with parameters and locals
-        let mut function = MirFunction::new(
+        // Create a WIR function with parameters and locals
+        let mut function = WirFunction::new(
             0,
             "test_function".to_string(),
             vec![
@@ -255,7 +255,7 @@ mod wasm_module_tests {
         use wasm_encoder::Function;
 
         // Create a simple function with locals
-        let function = MirFunction::new(
+        let function = WirFunction::new(
             0,
             "test_function".to_string(),
             vec![Place::Local {
@@ -292,21 +292,21 @@ mod wasm_module_tests {
 
     #[test]
     fn test_wasm_module_with_globals() {
-        // Create MIR with globals
-        let mut mir = MIR::new();
+        // Create WIR with globals
+        let mut wir = WIR::new();
 
         // Add a global variable
         let global_place = Place::Global {
             index: 0,
             wasm_type: WasmType::I32,
         };
-        mir.globals.insert(0, global_place);
+        wir.globals.insert(0, global_place);
 
-        // Create WasmModule from MIR
-        let result = WasmModule::from_mir(&mir);
+        // Create WasmModule from WIR
+        let result = WasmModule::from_wir(&wir);
         assert!(
             result.is_ok(),
-            "WasmModule::from_mir with globals should succeed"
+            "WasmModule::from_wir with globals should succeed"
         );
 
         let wasm_module = result.unwrap();
@@ -315,11 +315,11 @@ mod wasm_module_tests {
 
     #[test]
     fn test_wasm_module_finish() {
-        // Create a basic MIR structure
-        let mir = MIR::new();
+        // Create a basic WIR structure
+        let wir = WIR::new();
 
-        // Create WasmModule from MIR
-        let wasm_module = WasmModule::from_mir(&mir).unwrap();
+        // Create WasmModule from WIR
+        let wasm_module = WasmModule::from_wir(&wir).unwrap();
 
         // Finish the module to get WASM bytes
         let wasm_bytes = wasm_module.finish();
@@ -347,30 +347,30 @@ mod wasm_module_tests {
 
     #[test]
     fn test_wasm_module_string_constants() {
-        // Create MIR with string constants (this will be tested more thoroughly in later tasks)
-        let mir = MIR::new();
+        // Create WIR with string constants (this will be tested more thoroughly in later tasks)
+        let wir = WIR::new();
 
-        // Create WasmModule from MIR
-        let wasm_module = WasmModule::from_mir(&mir).unwrap();
+        // Create WasmModule from WIR
+        let wasm_module = WasmModule::from_wir(&wir).unwrap();
 
-        // Verify string constants are empty for basic MIR
+        // Verify string constants are empty for basic WIR
         assert!(
             wasm_module.get_string_constants().is_empty(),
-            "Basic MIR should have no string constants"
+            "Basic WIR should have no string constants"
         );
         assert!(
             wasm_module.get_string_constant_map().is_empty(),
-            "Basic MIR should have empty string constant map"
+            "Basic WIR should have empty string constant map"
         );
     }
 
     #[test]
     fn test_wasm_module_exports() {
-        // Create a basic MIR structure
-        let mut mir = MIR::new();
+        // Create a basic WIR structure
+        let mut wir = WIR::new();
 
         // Add a function
-        let mut function = MirFunction::new(
+        let mut function = WirFunction::new(
             0,
             "exported_function".to_string(),
             vec![],
@@ -378,16 +378,16 @@ mod wasm_module_tests {
         );
 
         // Add a basic block to the function
-        let block = MirBlock::new(0);
+        let block = WirBlock::new(0);
         function.blocks.push(block);
 
-        mir.add_function(function);
+        wir.add_function(function);
 
-        // Create WasmModule from MIR
-        let mut wasm_module = WasmModule::from_mir(&mir).unwrap();
+        // Create WasmModule from WIR
+        let mut wasm_module = WasmModule::from_wir(&wir).unwrap();
 
         // Compile the function
-        let function_index = wasm_module.compile_mir_function(&mir.functions[0]).unwrap();
+        let function_index = wasm_module.compile_wir_function(&wir.functions[0]).unwrap();
 
         // Add function export
         wasm_module.add_function_export("exported_function", function_index);
@@ -409,7 +409,7 @@ mod wasm_module_tests {
         let mut wasm_module = WasmModule::new();
 
         // Create a function with multiple parameter and return types
-        let function = MirFunction::new(
+        let function = WirFunction::new(
             0,
             "complex_function".to_string(),
             vec![
@@ -426,7 +426,7 @@ mod wasm_module_tests {
         );
 
         // Generate function signature
-        let result = wasm_module.add_function_signature_from_mir(&function);
+        let result = wasm_module.add_function_signature_from_wir(&function);
         assert!(
             result.is_ok(),
             "Function signature generation should succeed"
@@ -491,11 +491,11 @@ mod wasm_module_tests {
     }
 
     #[test]
-    fn test_mir_types_validation() {
-        let mut mir = MIR::new();
+    fn test_wir_types_validation() {
+        let mut wir = WIR::new();
 
         // Add function with various types
-        let function = MirFunction::new(
+        let function = WirFunction::new(
             0,
             "test_function".to_string(),
             vec![
@@ -514,27 +514,27 @@ mod wasm_module_tests {
             ],
             vec![WasmType::I64],
         );
-        mir.add_function(function);
+        wir.add_function(function);
 
         // Add global with valid type
         let global_place = Place::Global {
             index: 0,
             wasm_type: WasmType::F32,
         };
-        mir.globals.insert(0, global_place);
+        wir.globals.insert(0, global_place);
 
         let wasm_module = WasmModule::new();
 
-        // Validate all types in MIR
-        let result = wasm_module.validate_mir_types(&mir);
-        assert!(result.is_ok(), "All MIR types should be valid for WASM");
+        // Validate all types in WIR
+        let result = wasm_module.validate_wir_types(&wir);
+        assert!(result.is_ok(), "All WIR types should be valid for WASM");
     }
 
     // ===== STATEMENT LOWERING TESTS =====
 
     #[test]
     fn test_lower_assign_statement_constant() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue, Statement};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue, Statement};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -560,7 +560,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_call_statement() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Statement};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Statement};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -592,7 +592,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_drop_statement() {
-        use crate::compiler::mir::mir_nodes::Statement;
+        use crate::compiler::wir::wir_nodes::Statement;
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -616,7 +616,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_nop_statement() {
-        use crate::compiler::mir::mir_nodes::Statement;
+        use crate::compiler::wir::wir_nodes::Statement;
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -634,7 +634,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_operand_constant() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -665,7 +665,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_operand_copy_move() {
-        use crate::compiler::mir::mir_nodes::Operand;
+        use crate::compiler::wir::wir_nodes::Operand;
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -693,7 +693,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_operand_function_global_ref() {
-        use crate::compiler::mir::mir_nodes::Operand;
+        use crate::compiler::wir::wir_nodes::Operand;
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -720,7 +720,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_constant_string() {
-        use crate::compiler::mir::mir_nodes::Constant;
+        use crate::compiler::wir::wir_nodes::Constant;
         use wasm_encoder::Function;
 
         let mut wasm_module = WasmModule::new();
@@ -738,7 +738,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_constant_memory_types() {
-        use crate::compiler::mir::mir_nodes::Constant;
+        use crate::compiler::wir::wir_nodes::Constant;
         use wasm_encoder::Function;
 
         let wasm_module = WasmModule::new();
@@ -759,7 +759,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_unsupported_statement_types() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Statement};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Statement};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -802,7 +802,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_rvalue_use_operand() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -818,7 +818,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_binary_op_arithmetic() {
-        use crate::compiler::mir::mir_nodes::{BinOp, Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -847,7 +847,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_binary_op_bitwise() {
-        use crate::compiler::mir::mir_nodes::{BinOp, Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -882,7 +882,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_binary_op_comparison() {
-        use crate::compiler::mir::mir_nodes::{BinOp, Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -918,7 +918,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_binary_op_logical_error() {
-        use crate::compiler::mir::mir_nodes::{BinOp, Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -947,7 +947,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_unary_op() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue, UnOp};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue, UnOp};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -974,7 +974,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_cast_operations() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -1024,7 +1024,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_array_creation() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -1048,7 +1048,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_struct_creation() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -1072,7 +1072,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_lower_memory_operations() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -1095,7 +1095,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_infer_operand_type() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand};
 
         let wasm_module = WasmModule::new();
 
@@ -1186,7 +1186,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_try_fold_rvalue_constants() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
 
         let wasm_module = WasmModule::new();
 
@@ -1207,7 +1207,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_fold_binary_op_constants() {
-        use crate::compiler::mir::mir_nodes::{BinOp, Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue};
 
         let wasm_module = WasmModule::new();
 
@@ -1248,7 +1248,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_fold_unary_op_constants() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue, UnOp};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue, UnOp};
 
         let wasm_module = WasmModule::new();
 
@@ -1279,7 +1279,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_fold_cast_constants() {
-        use crate::compiler::mir::mir_nodes::{Constant, Operand, Rvalue};
+        use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue};
 
         let wasm_module = WasmModule::new();
 
@@ -1319,7 +1319,7 @@ mod wasm_module_tests {
 
     #[test]
     fn test_unsupported_rvalue_types() {
-        use crate::compiler::mir::mir_nodes::Rvalue;
+        use crate::compiler::wir::wir_nodes::Rvalue;
         use std::collections::HashMap;
         use wasm_encoder::Function;
 
@@ -1333,7 +1333,7 @@ mod wasm_module_tests {
                 index: 0,
                 wasm_type: WasmType::I32,
             },
-            borrow_kind: crate::compiler::mir::mir_nodes::BorrowKind::Shared,
+            borrow_kind: crate::compiler::wir::wir_nodes::BorrowKind::Shared,
         };
         let result = wasm_module.lower_rvalue(&ref_rvalue, &mut wasm_function, &local_map);
         assert!(

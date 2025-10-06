@@ -1,36 +1,36 @@
-//! Tests for MIR construction and transformation
+//! Tests for WIR construction and transformation
 //! 
-//! This module tests MIR data structures and basic operations.
+//! This module tests WIR data structures and basic operations.
 
-use crate::compiler::mir::mir_nodes::{MIR, MirFunction, Statement, Terminator, Rvalue, Operand, Constant};
-use crate::compiler::mir::place::{Place, WasmType};
+use crate::compiler::wir::wir_nodes::{WIR, WirFunction, Statement, Terminator, Rvalue, Operand, Constant};
+use crate::compiler::wir::place::{Place, WasmType};
 use std::collections::HashMap;
 
 #[cfg(test)]
-mod mir_construction_tests {
+mod wir_construction_tests {
     use super::*;
 
-    /// Test basic MIR creation
+    /// Test basic WIR creation
     #[test]
-    fn test_mir_creation() {
-        let mir = MIR::new();
+    fn test_wir_creation() {
+        let wir = WIR::new();
         
-        assert_eq!(mir.functions.len(), 0, "New MIR should have no functions");
-        assert_eq!(mir.globals.len(), 0, "New MIR should have no globals");
-        assert_eq!(mir.exports.len(), 0, "New MIR should have no exports");
+        assert_eq!(wir.functions.len(), 0, "New WIR should have no functions");
+        assert_eq!(wir.globals.len(), 0, "New WIR should have no globals");
+        assert_eq!(wir.exports.len(), 0, "New WIR should have no exports");
     }
 
-    /// Test MIR function creation
+    /// Test WIR function creation
     #[test]
-    fn test_mir_function_creation() {
-        let function = MirFunction {
+    fn test_wir_function_creation() {
+        let function = WirFunction {
             id: 0,
             name: "test_func".to_string(),
             parameters: vec![],
             return_types: vec![WasmType::I32],
             blocks: vec![],
             locals: HashMap::new(),
-            signature: crate::compiler::mir::mir_nodes::FunctionSignature {
+            signature: crate::compiler::wir::wir_nodes::FunctionSignature {
                 params: vec![],
                 returns: vec![WasmType::I32],
             },
@@ -42,9 +42,9 @@ mod mir_construction_tests {
         assert_eq!(function.blocks.len(), 0, "New function should have no blocks");
     }
 
-    /// Test basic MIR statements
+    /// Test basic WIR statements
     #[test]
-    fn test_mir_statements() {
+    fn test_wir_statements() {
         let place = Place::Local { index: 0, wasm_type: WasmType::I32 };
         let constant = Constant::I32(42);
         

@@ -3,10 +3,10 @@
 //! This module tests the borrow checking system to ensure memory safety
 //! violations are properly detected and reported.
 
-use crate::compiler::mir::unified_borrow_checker::{UnifiedBorrowChecker, run_unified_borrow_checking};
-use crate::compiler::mir::mir_nodes::{MirFunction, MirBlock, Statement, Terminator, Rvalue, Operand, Constant, BorrowKind};
-use crate::compiler::mir::place::{Place, WasmType};
-use crate::compiler::mir::extract::BorrowFactExtractor;
+use crate::compiler::wir::unified_borrow_checker::{UnifiedBorrowChecker, run_unified_borrow_checking};
+use crate::compiler::wir::wir_nodes::{WirFunction, WirBlock, Statement, Terminator, Rvalue, Operand, Constant, BorrowKind};
+use crate::compiler::wir::place::{Place, WasmType};
+use crate::compiler::wir::extract::BorrowFactExtractor;
 use crate::compiler::compiler_errors::CompileError;
 use std::collections::HashMap;
 
@@ -15,19 +15,19 @@ mod borrow_checker_tests {
     use super::*;
 
     /// Create a simple test function for borrow checking
-    fn create_test_function() -> MirFunction {
-        MirFunction {
+    fn create_test_function() -> WirFunction {
+        WirFunction {
             id: 0,
             name: "test_func".to_string(),
             parameters: vec![],
             return_types: vec![],
-            blocks: vec![MirBlock {
+            blocks: vec![WirBlock {
                 id: 0,
                 statements: vec![Statement::Nop],
                 terminator: Terminator::Return { values: vec![] },
             }],
             locals: HashMap::new(),
-            signature: crate::compiler::mir::mir_nodes::FunctionSignature {
+            signature: crate::compiler::wir::wir_nodes::FunctionSignature {
                 params: vec![],
                 returns: vec![],
             },
@@ -349,7 +349,7 @@ mod borrow_checker_tests {
     /// Test borrow checker with variable system - proper error messages
     #[test]
     fn test_borrow_checker_variable_error_messages() {
-        use crate::compiler::mir::mir_nodes::{BorrowError, BorrowErrorType};
+        use crate::compiler::wir::wir_nodes::{BorrowError, BorrowErrorType};
         use crate::compiler::parsers::tokens::TextLocation;
         
         // Test that borrow checker generates proper error messages for variable violations
@@ -358,7 +358,7 @@ mod borrow_checker_tests {
         
         // Test conflicting borrows error
         let conflicting_error = BorrowError {
-            point: crate::compiler::mir::mir_nodes::ProgramPoint::new(0),
+            point: crate::compiler::wir::wir_nodes::ProgramPoint::new(0),
             error_type: BorrowErrorType::ConflictingBorrows {
                 existing_borrow: BorrowKind::Mut,
                 new_borrow: BorrowKind::Shared,
@@ -374,10 +374,10 @@ mod borrow_checker_tests {
         
         // Test use after move error
         let use_after_move_error = BorrowError {
-            point: crate::compiler::mir::mir_nodes::ProgramPoint::new(1),
+            point: crate::compiler::wir::wir_nodes::ProgramPoint::new(1),
             error_type: BorrowErrorType::UseAfterMove {
                 place: var_place.clone(),
-                move_point: crate::compiler::mir::mir_nodes::ProgramPoint::new(0),
+                move_point: crate::compiler::wir::wir_nodes::ProgramPoint::new(0),
             },
             message: "Use of moved value. Value was moved at previous statement. Try using references instead of moving the value.".to_string(),
             location,

@@ -1,35 +1,35 @@
-//! # MIR Construction Module
+//! # WIR Construction Module
 //!
-//! This module transforms the Abstract Syntax Tree (AST) into Mid-level Intermediate
-//! Representation (MIR) optimized for WASM generation. The MIR provides a simplified,
+//! This module transforms the Abstract Syntax Tree (AST) into WASM Intermediate
+//! Representation (WIR) optimized for WASM generation. The WIR provides a simplified,
 //! place-based representation that enables efficient borrow checking and direct
 //! WASM lowering.
 //!
 //! ## Design Philosophy
 //!
-//! The MIR construction follows these principles:
+//! The WIR construction follows these principles:
 //! - **Place-Based**: All memory locations are represented as places with precise types
-//! - **WASM-Optimized**: MIR operations map directly to efficient WASM instruction sequences
+//! - **WASM-Optimized**: WIR operations map directly to efficient WASM instruction sequences
 //! - **Borrow-Aware**: Generates facts for Polonius-based borrow checking
 //! - **Type-Preserving**: Maintains type information throughout the transformation
 //!
 //! ## Key Transformations
 //!
-//! - **Variable Declarations**: AST variables → MIR places with lifetime tracking
-//! - **Expressions**: AST expressions → MIR rvalues with proper operand handling
-//! - **Function Calls**: AST calls → MIR call statements with argument lowering
-//! - **Control Flow**: AST if/else → MIR blocks with structured terminators
+//! - **Variable Declarations**: AST variables → WIR places with lifetime tracking
+//! - **Expressions**: AST expressions → WIR rvalues with proper operand handling
+//! - **Function Calls**: AST calls → WIR call statements with argument lowering
+//! - **Control Flow**: AST if/else → WIR blocks with structured terminators
 //!
 //! ## Usage
 //!
 //! ```rust
-//! let mut context = MirTransformContext::new();
-//! let mir = context.transform_ast_to_mir(&ast)?;
+//! let mut context = WirTransformContext::new();
+//! let wir = context.transform_ast_to_wir(&ast)?;
 //! ```
 
-// Re-export all MIR components from sibling modules
-pub use crate::compiler::mir::mir_nodes::*;
-pub use crate::compiler::mir::place::*;
+// Re-export all WIR components from sibling modules
+pub use crate::compiler::wir::wir_nodes::*;
+pub use crate::compiler::wir::place::*;
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
@@ -47,12 +47,12 @@ use std::collections::HashMap;
 
 
 
-/// Run borrow checking on all functions in the MIR
-fn run_borrow_checking_on_mir(mir: &mut MIR) -> Result<(), CompileError> {
-    use crate::compiler::mir::extract::BorrowFactExtractor;
-    use crate::compiler::mir::unified_borrow_checker::run_unified_borrow_checking;
+/// Run borrow checking on all functions in the WIR
+fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
+    use crate::compiler::wir::extract::BorrowFactExtractor;
+    use crate::compiler::wir::unified_borrow_checker::run_unified_borrow_checking;
     
-    for function in &mut mir.functions {
+    for function in &mut wir.functions {
         // Extract borrow facts from the function
         let mut extractor = BorrowFactExtractor::new();
         extractor.extract_function(function).map_err(|e| {
@@ -83,7 +83,7 @@ fn run_borrow_checking_on_mir(mir: &mut MIR) -> Result<(), CompileError> {
 }
 
 /// Generate events for all statements in a function
-fn generate_events_for_function(function: &mut MirFunction, _context: &mut MirTransformContext) {
+fn generate_events_for_function(function: &mut WirFunction, _context: &mut WirTransformContext) {
     // Collect all events first to avoid borrowing conflicts
     let mut all_events = Vec::new();
     
@@ -114,15 +114,15 @@ pub struct FunctionInfo {
     pub parameters: Vec<(String, DataType)>,
     pub return_type: Option<DataType>,
     pub wasm_function_index: Option<u32>,
-    pub mir_function: MirFunction,
+    pub wir_function: WirFunction,
 }
 
-/// Context for AST-to-MIR transformation with place-based memory management
+/// Context for AST-to-WIR transformation with place-based memory management
 ///
-/// The `MirTransformContext` orchestrates the conversion from AST to MIR by maintaining:
+/// The `WirTransformContext` orchestrates the conversion from AST to WIR by maintaining:
 /// - **Place Management**: Tracks memory locations and their types
 /// - **Scope Tracking**: Manages variable visibility and lifetime scopes
-/// - **Function Registry**: Maps function names to MIR function IDs
+/// - **Function Registry**: Maps function names to WIR function IDs
 /// - **Program Points**: Generates unique points for borrow checking analysis
 ///
 /// ## Memory Model
@@ -140,7 +140,7 @@ pub struct FunctionInfo {
 /// - Block-level variable declarations
 /// - Variable shadowing and lifetime tracking
 #[derive(Debug)]
-pub struct MirTransformContext {
+pub struct WirTransformContext {
     /// Place manager for memory layout
     place_manager: PlaceManager,
     /// Variable name to place mapping (scoped)
@@ -151,15 +151,14 @@ pub struct MirTransformContext {
     next_function_id: u32,
     /// Next block ID to allocate
     next_block_id: u32,
-    /// Program point generator for borrow checking
-    program_point_generator: ProgramPointGenerator,
+
     /// Host function imports used in this module
     host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
 }
 
-impl MirTransformContext {
+impl WirTransformContext {
     /// Create a new transformation context
     pub fn new() -> Self {
         Self {
@@ -168,7 +167,7 @@ impl MirTransformContext {
             function_names: HashMap::new(),
             next_function_id: 0,
             next_block_id: 0,
-            program_point_generator: ProgramPointGenerator::new(),
+
             host_imports: std::collections::HashSet::new(),
             pending_return: None,
         }
@@ -223,10 +222,7 @@ impl MirTransformContext {
         &mut self.place_manager
     }
 
-    /// Generate the next program point
-    pub fn next_program_point(&mut self) -> ProgramPoint {
-        self.program_point_generator.allocate_next()
-    }
+
 
     /// Add a host function to the imports set
     pub fn add_host_import(&mut self, host_function: crate::compiler::host_functions::registry::HostFunctionDef) {
@@ -316,7 +312,7 @@ impl MirTransformContext {
     /// Store events for a program point in the current function
     pub fn store_events_for_statement(
         &mut self,
-        function: &mut MirFunction,
+        function: &mut WirFunction,
         program_point: ProgramPoint,
         statement: &Statement,
     ) {
@@ -324,7 +320,7 @@ impl MirTransformContext {
         function.store_events(program_point, events);
     }
 
-    /// Transform function definition from expression to MIR
+    /// Transform function definition from expression to WIR
     pub fn transform_function_definition_from_expression(
         &mut self,
         name: &str,
@@ -340,8 +336,8 @@ impl MirTransformContext {
         // Create new scope for function parameters
         self.enter_scope();
         
-        // Convert parameters to MIR places and register them
-        let mut mir_parameters = Vec::new();
+        // Convert parameters to WIR places and register them
+        let mut wir_parameters = Vec::new();
         let mut param_info = Vec::new();
         
         for param in parameters {
@@ -351,30 +347,30 @@ impl MirTransformContext {
             // Register parameter in current scope
             self.register_variable(param.name.clone(), param_place.clone());
             
-            mir_parameters.push(param_place);
+            wir_parameters.push(param_place);
             param_info.push((param.name.clone(), param.value.data_type.clone()));
         }
         
         // Convert return types to WASM types
-        let wasm_return_types: Vec<crate::compiler::mir::place::WasmType> = return_types
+        let wasm_return_types: Vec<crate::compiler::wir::place::WasmType> = return_types
             .iter()
             .map(|dt| self.datatype_to_wasm_type(dt))
             .collect::<Result<Vec<_>, _>>()?;
         
-        // Create MIR function
-        let mut mir_function = MirFunction::new(
+        // Create WIR function
+        let mut wir_function = WirFunction::new(
             function_index,
             name.to_string(),
-            mir_parameters.clone(),
+            wir_parameters.clone(),
             wasm_return_types,
         );
         
         // Transform function body
         let main_block_id = 0;
-        let mut current_block = crate::compiler::mir::mir_nodes::MirBlock::new(main_block_id);
+        let mut current_block = crate::compiler::wir::wir_nodes::WirBlock::new(main_block_id);
         
         for node in body {
-            let statements = transform_ast_node_to_mir(node, self)?;
+            let statements = transform_ast_node_to_wir(node, self)?;
             for statement in statements {
                 current_block.add_statement(statement);
             }
@@ -382,29 +378,29 @@ impl MirTransformContext {
         
         // Set terminator for the function block
         let terminator = if let Some(return_operands) = self.pending_return.take() {
-            crate::compiler::mir::mir_nodes::Terminator::Return { values: return_operands }
+            crate::compiler::wir::wir_nodes::Terminator::Return { values: return_operands }
         } else if return_types.is_empty() {
-            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
         } else {
             // For now, we'll use an empty return - proper return value handling will be added later
-            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
         };
         current_block.set_terminator(terminator);
         
         // Add the block to the function
-        mir_function.add_block(current_block);
+        wir_function.add_block(current_block);
         
         // Add local variables to function
         if let Some(current_scope) = self.variable_scopes.last() {
             for (var_name, var_place) in current_scope {
-                if matches!(var_place, crate::compiler::mir::place::Place::Local { .. }) {
-                    mir_function.add_local(var_name.clone(), var_place.clone());
+                if matches!(var_place, crate::compiler::wir::place::Place::Local { .. }) {
+                    wir_function.add_local(var_name.clone(), var_place.clone());
                 }
             }
         }
         
         // Generate events for all statements in the function
-        generate_events_for_function(&mut mir_function, self);
+        generate_events_for_function(&mut wir_function, self);
         
         self.exit_scope(); // Exit function scope
         
@@ -413,11 +409,11 @@ impl MirTransformContext {
             parameters: param_info,
             return_type: return_types.first().cloned(), // For now, support single return type
             wasm_function_index: Some(function_index),
-            mir_function,
+            wir_function,
         })
     }
 
-    /// Transform function definition to MIR
+    /// Transform function definition to WIR
     pub fn transform_function_definition(
         &mut self,
         name: &str,
@@ -433,8 +429,8 @@ impl MirTransformContext {
         // Create new scope for function parameters
         self.enter_scope();
         
-        // Convert parameters to MIR places and register them
-        let mut mir_parameters = Vec::new();
+        // Convert parameters to WIR places and register them
+        let mut wir_parameters = Vec::new();
         let mut param_info = Vec::new();
         
         for param in parameters {
@@ -444,30 +440,30 @@ impl MirTransformContext {
             // Register parameter in current scope
             self.register_variable(param.name.clone(), param_place.clone());
             
-            mir_parameters.push(param_place);
+            wir_parameters.push(param_place);
             param_info.push((param.name.clone(), param.value.data_type.clone()));
         }
         
         // Convert return types to WASM types
-        let wasm_return_types: Vec<crate::compiler::mir::place::WasmType> = return_types
+        let wasm_return_types: Vec<crate::compiler::wir::place::WasmType> = return_types
             .iter()
             .map(|dt| self.datatype_to_wasm_type(dt))
             .collect::<Result<Vec<_>, _>>()?;
         
-        // Create MIR function
-        let mut mir_function = MirFunction::new(
+        // Create WIR function
+        let mut wir_function = WirFunction::new(
             function_index,
             name.to_string(),
-            mir_parameters.clone(),
+            wir_parameters.clone(),
             wasm_return_types,
         );
         
         // Transform function body
         let main_block_id = 0;
-        let mut current_block = crate::compiler::mir::mir_nodes::MirBlock::new(main_block_id);
+        let mut current_block = crate::compiler::wir::wir_nodes::WirBlock::new(main_block_id);
         
         for node in &body.ast {
-            let statements = transform_ast_node_to_mir(node, self)?;
+            let statements = transform_ast_node_to_wir(node, self)?;
             for statement in statements {
                 current_block.add_statement(statement);
             }
@@ -475,29 +471,29 @@ impl MirTransformContext {
         
         // Set terminator for the function block
         let terminator = if let Some(return_operands) = self.pending_return.take() {
-            crate::compiler::mir::mir_nodes::Terminator::Return { values: return_operands }
+            crate::compiler::wir::wir_nodes::Terminator::Return { values: return_operands }
         } else if return_types.is_empty() {
-            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
         } else {
             // For now, we'll use an empty return - proper return value handling will be added later
-            crate::compiler::mir::mir_nodes::Terminator::Return { values: vec![] }
+            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
         };
         current_block.set_terminator(terminator);
         
         // Add the block to the function
-        mir_function.add_block(current_block);
+        wir_function.add_block(current_block);
         
         // Add local variables to function
         if let Some(current_scope) = self.variable_scopes.last() {
             for (var_name, var_place) in current_scope {
-                if matches!(var_place, crate::compiler::mir::place::Place::Local { .. }) {
-                    mir_function.add_local(var_name.clone(), var_place.clone());
+                if matches!(var_place, crate::compiler::wir::place::Place::Local { .. }) {
+                    wir_function.add_local(var_name.clone(), var_place.clone());
                 }
             }
         }
         
         // Generate events for all statements in the function
-        generate_events_for_function(&mut mir_function, self);
+        generate_events_for_function(&mut wir_function, self);
         
         self.exit_scope(); // Exit function scope
         
@@ -506,13 +502,13 @@ impl MirTransformContext {
             parameters: param_info,
             return_type: return_types.first().cloned(), // For now, support single return type
             wasm_function_index: Some(function_index),
-            mir_function,
+            wir_function,
         })
     }
 
     /// Convert DataType to WasmType
-    fn datatype_to_wasm_type(&self, data_type: &DataType) -> Result<crate::compiler::mir::place::WasmType, CompileError> {
-        use crate::compiler::mir::place::WasmType;
+    fn datatype_to_wasm_type(&self, data_type: &DataType) -> Result<crate::compiler::wir::place::WasmType, CompileError> {
+        use crate::compiler::wir::place::WasmType;
         
         match data_type {
             DataType::Int(_) => Ok(WasmType::I64),
@@ -526,26 +522,26 @@ impl MirTransformContext {
     }
 }
 
-/// Transform AST to simplified MIR
+/// Transform AST to simplified WIR
 ///
-/// Transform an Abstract Syntax Tree (AST) into Mid-level Intermediate Representation (MIR)
+/// Transform an Abstract Syntax Tree (AST) into Mid-level Intermediate Representation (WIR)
 ///
 /// This is the core transformation function that converts the parsed AST into a place-based
-/// MIR suitable for borrow checking and WASM generation. The transformation process:
+/// WIR suitable for borrow checking and WASM generation. The transformation process:
 ///
 /// ## Two-Pass Algorithm
 ///
 /// 1. **Function Collection Pass**: Identifies all function definitions and builds a registry
 ///    for forward references and recursive calls
-/// 2. **Statement Transformation Pass**: Converts AST nodes to MIR statements with proper
+/// 2. **Statement Transformation Pass**: Converts AST nodes to WIR statements with proper
 ///    place allocation and type tracking
 ///
 /// ## Key Transformations
 ///
-/// - **Variables**: AST variable declarations → MIR places with lifetime tracking
-/// - **Expressions**: AST expressions → MIR rvalues with operand lowering
-/// - **Functions**: AST function definitions → MIR functions with parameter mapping
-/// - **Control Flow**: AST if/else statements → MIR blocks with structured terminators
+/// - **Variables**: AST variable declarations → WIR places with lifetime tracking
+/// - **Expressions**: AST expressions → WIR rvalues with operand lowering
+/// - **Functions**: AST function definitions → WIR functions with parameter mapping
+/// - **Control Flow**: AST if/else statements → WIR blocks with structured terminators
 ///
 /// ## Memory Safety
 ///
@@ -561,9 +557,9 @@ impl MirTransformContext {
 /// - Type mismatches in expressions
 /// - Invalid function signatures
 /// - Unimplemented language features
-pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
-    let mut mir = MIR::new();
-    let mut context = MirTransformContext::new();
+pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
+    let mut wir = WIR::new();
+    let mut context = WirTransformContext::new();
     let mut defined_functions = Vec::new();
 
     // First pass: collect all function definitions
@@ -581,9 +577,9 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
         }
     }
 
-    // Add all defined functions to MIR
+    // Add all defined functions to WIR
     for function_info in defined_functions {
-        mir.add_function(function_info.mir_function);
+        wir.add_function(function_info.wir_function);
     }
 
     // Create main function if this is an entry point
@@ -593,20 +589,20 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
             .function_names
             .insert("main".to_string(), main_function_id);
 
-        let main_function = MirFunction::new(
+        let main_function = WirFunction::new(
             main_function_id,
             "main".to_string(),
             vec![], // No parameters
             vec![], // No return values for main
         );
 
-        mir.add_function(main_function);
+        wir.add_function(main_function);
         context.enter_scope(); // Enter function scope
     }
 
-    // Transform all non-function AST nodes to MIR
+    // Transform all non-function AST nodes to WIR
     let main_block_id = 0;
-    let mut current_block = MirBlock::new(main_block_id);
+    let mut current_block = WirBlock::new(main_block_id);
 
     for node in &ast.ast {
         // Skip function declarations as they were already processed
@@ -616,7 +612,7 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
             }
         }
 
-        let statements = transform_ast_node_to_mir(node, &mut context)?;
+        let statements = transform_ast_node_to_wir(node, &mut context)?;
 
         for statement in statements {
             ir_log!(
@@ -638,7 +634,7 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
 
     // Add the block to the current function
     if ast.is_entry_point {
-        if let Some(function) = mir.functions.last_mut() {
+        if let Some(function) = wir.functions.last_mut() {
             function.add_block(current_block);
             
             // Add local variables to function
@@ -656,43 +652,43 @@ pub fn ast_to_mir(ast: AstBlock) -> Result<MIR, CompileError> {
         context.exit_scope(); // Exit function scope
     }
 
-    // Add host function imports to MIR
-    mir.add_host_imports(context.get_host_imports());
+    // Add host function imports to WIR
+    wir.add_host_imports(context.get_host_imports());
 
     // Run borrow checking on all functions
-    run_borrow_checking_on_mir(&mut mir)?;
+    run_borrow_checking_on_wir(&mut wir)?;
 
-    Ok(mir)
+    Ok(wir)
 }
 
 
 
-/// Transform a single AST node to MIR statements
-fn transform_ast_node_to_mir(
+/// Transform a single AST node to WIR statements
+fn transform_ast_node_to_wir(
     node: &AstNode,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
         NodeKind::Declaration(name, expression, visibility) => {
-            ast_declaration_to_mir(name, expression, visibility, context)
+            ast_declaration_to_wir(name, expression, visibility, context)
         }
         NodeKind::Mutation(name, expression) => {
-            ast_mutation_to_mir(name, expression, &node.location, context)
+            ast_mutation_to_wir(name, expression, &node.location, context)
         }
         NodeKind::FunctionCall(name, params, return_types, ..) => {
-            ast_function_call_to_mir(name, params, return_types, &node.location, context)
+            ast_function_call_to_wir(name, params, return_types, &node.location, context)
         }
         NodeKind::HostFunctionCall(name, params, return_types, ..) => {
-            ast_host_function_call_to_mir(name, params, return_types, &node.location, context)
+            ast_host_function_call_to_wir(name, params, return_types, &node.location, context)
         }
         NodeKind::If(condition, then_body, else_body) => {
-            ast_if_statement_to_mir(condition, then_body, else_body, &node.location, context)
+            ast_if_statement_to_wir(condition, then_body, else_body, &node.location, context)
         }
         NodeKind::Return(expressions) => {
-            ast_return_statement_to_mir(expressions, &node.location, context)
+            ast_return_statement_to_wir(expressions, &node.location, context)
         }
         NodeKind::Newline | NodeKind::Spaces(_) | NodeKind::Empty => {
-            // These nodes don't generate MIR statements
+            // These nodes don't generate WIR statements
             Ok(vec![])
         }
         _ => {
@@ -707,12 +703,12 @@ fn transform_ast_node_to_mir(
 
 
 
-/// Transform variable declaration to MIR
-fn ast_declaration_to_mir(
+/// Transform variable declaration to WIR
+fn ast_declaration_to_wir(
     name: &str,
     expression: &Expression,
     visibility: &VarVisibility,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Check if this is a function declaration
     if let crate::compiler::parsers::expressions::expression::ExpressionKind::Function(parameters, body, return_types) = &expression.kind {
@@ -766,12 +762,12 @@ fn ast_declaration_to_mir(
     Ok(statements)
 }
 
-/// Transform variable mutation to MIR
-fn ast_mutation_to_mir(
+/// Transform variable mutation to WIR
+fn ast_mutation_to_wir(
     name: &str,
     expression: &Expression,
     location: &TextLocation,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Look up the existing variable place
     let variable_place = match context.lookup_variable(name) {
@@ -807,13 +803,13 @@ fn ast_mutation_to_mir(
     Ok(vec![assign_statement])
 }
 
-/// Transform function call to MIR
-fn ast_function_call_to_mir(
+/// Transform function call to WIR
+fn ast_function_call_to_wir(
     name: &str,
     params: &[Expression],
     _return_types: &[DataType],
     location: &TextLocation,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Convert parameters to operands with context for variable references
     let mut args = Vec::new();
@@ -845,17 +841,17 @@ fn ast_function_call_to_mir(
     Ok(vec![call_statement])
 }
 
-/// Transform host function call to MIR
-fn ast_host_function_call_to_mir(
+/// Transform host function call to WIR
+fn ast_host_function_call_to_wir(
     name: &str,
     params: &[Expression],
     return_types: &[DataType],
     location: &TextLocation,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Verbose logging for host function call generation
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("MIR: Processing host function call '{}' with {} parameters", name, params.len());
+    println!("WIR: Processing host function call '{}' with {} parameters", name, params.len());
     
     // Get the host function definition from the registry
     // For now, we'll create a placeholder HostFunctionDef since we need access to the registry
@@ -901,18 +897,18 @@ fn ast_host_function_call_to_mir(
     context.add_host_import(host_function.clone());
     
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("MIR: Added host function '{}' to imports, module: {}", name, host_function.module);
+    println!("WIR: Added host function '{}' to imports, module: {}", name, host_function.module);
 
     // Determine destination place if there's a return value
     let destination = if !return_types.is_empty() {
         // Allocate a local place for the return value
         let return_place = context.get_place_manager().allocate_local(&return_types[0]);
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("MIR: Allocated return place for host function '{}': {:?}", name, return_place);
+        println!("WIR: Allocated return place for host function '{}': {:?}", name, return_place);
         Some(return_place)
     } else {
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("MIR: Host function '{}' has no return value", name);
+        println!("WIR: Host function '{}' has no return value", name);
         None
     };
 
@@ -924,24 +920,24 @@ fn ast_host_function_call_to_mir(
     };
     
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("MIR: Generated host call statement for '{}'", name);
+    println!("WIR: Generated host call statement for '{}'", name);
 
     Ok(vec![host_call_statement])
 }
 
-/// Transform if statement to MIR with proper control flow
+/// Transform if statement to WIR with proper control flow
 /// 
-/// This function creates the MIR representation for if/else statements by:
+/// This function creates the WIR representation for if/else statements by:
 /// 1. Converting the condition expression to an operand
 /// 2. Validating that the condition is boolean type
 /// 3. Creating block IDs for then and else branches
 /// 4. Generating a Terminator::If for structured control flow
-fn ast_if_statement_to_mir(
+fn ast_if_statement_to_wir(
     condition: &Expression,
     then_body: &AstBlock,
     else_body: &Option<AstBlock>,
     location: &TextLocation,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Validate that condition is boolean type
     if !matches!(condition.data_type, DataType::Bool(_)) {
@@ -960,20 +956,20 @@ fn ast_if_statement_to_mir(
     let then_block_id = context.allocate_block_id();
     let else_block_id = context.allocate_block_id();
     
-    // For now, we'll create a simplified MIR representation
+    // For now, we'll create a simplified WIR representation
     // In a full implementation, we would need to:
-    // 1. Create separate MIR blocks for then/else branches
+    // 1. Create separate WIR blocks for then/else branches
     // 2. Transform the body statements into those blocks
     // 3. Handle block merging and continuation
     
     // This is a placeholder implementation that demonstrates the structure
     // The actual block creation and statement transformation will be implemented
-    // when we have full block-based MIR construction
+    // when we have full block-based WIR construction
     
     // Create a nop statement as a placeholder for the if logic
     // 
     // IMPLEMENTATION NOTE: Full if/else support requires:
-    // 1. Transform then_body and else_body into separate MIR blocks
+    // 1. Transform then_body and else_body into separate WIR blocks
     // 2. Create proper Terminator::If with block references  
     // 3. Handle block merging and continuation flow
     //
@@ -1017,7 +1013,7 @@ fn expression_to_rvalue(expression: &Expression, location: &TextLocation) -> Res
             );
         }
         _ => {
-            return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+            return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the WIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
     }
 }
@@ -1026,7 +1022,7 @@ fn expression_to_rvalue(expression: &Expression, location: &TextLocation) -> Res
 fn expression_to_rvalue_with_context(
     expression: &Expression, 
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok(Rvalue::Use(Operand::Constant(Constant::I32(*value as i32)))),
@@ -1040,11 +1036,11 @@ fn expression_to_rvalue_with_context(
             transform_variable_reference(name, location, context)
         }
         ExpressionKind::Runtime(runtime_nodes) => {
-            // Transform runtime expressions (RPN order) to MIR
+            // Transform runtime expressions (RPN order) to WIR
             transform_runtime_expression(runtime_nodes, location, context)
         }
         ExpressionKind::Template(template) => {
-            // Transform template to MIR statements for string creation
+            // Transform template to WIR statements for string creation
             transform_template_to_rvalue(template, location, context)
         }
         ExpressionKind::None => {
@@ -1053,7 +1049,7 @@ fn expression_to_rvalue_with_context(
             return_compiler_error!("None expression encountered in rvalue context at line {}, column {}. This typically indicates a function parameter without a default argument being used in an invalid context.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
-            return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+            return_compiler_error!("Expression type '{:?}' not yet implemented for rvalue conversion at line {}, column {}. This expression type needs to be added to the WIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
     }
 }
@@ -1062,7 +1058,7 @@ fn expression_to_rvalue_with_context(
 fn transform_template_to_rvalue(
     template: &Template,
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     use crate::compiler::parsers::template::TemplateType;
     
@@ -1095,7 +1091,7 @@ fn transform_template_to_rvalue(
 fn transform_runtime_template_to_rvalue(
     template: &Template,
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Check if template has any variable references that need runtime evaluation
     let has_variable_references = template.content.flatten().iter().any(|expr| {
@@ -1138,7 +1134,7 @@ fn transform_runtime_template_to_rvalue(
 fn transform_template_with_variable_interpolation(
     template: &Template,
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Process both before (head variables) and after (body content) vectors
     let before_parts = &template.content.before;
@@ -1210,22 +1206,22 @@ fn can_coerce_place_to_string_at_compile_time(place: &Place) -> bool {
     // This function determines whether we can perform string coercion at runtime
     
     match place.wasm_type() {
-        crate::compiler::mir::place::WasmType::I32 |
-        crate::compiler::mir::place::WasmType::I64 => {
+        crate::compiler::wir::place::WasmType::I32 |
+        crate::compiler::wir::place::WasmType::I64 => {
             // Integer types can be coerced to strings via runtime conversion
             true
         }
-        crate::compiler::mir::place::WasmType::F32 |
-        crate::compiler::mir::place::WasmType::F64 => {
+        crate::compiler::wir::place::WasmType::F32 |
+        crate::compiler::wir::place::WasmType::F64 => {
             // Floating point types can be coerced to strings via runtime conversion
             true
         }
-        crate::compiler::mir::place::WasmType::ExternRef => {
+        crate::compiler::wir::place::WasmType::ExternRef => {
             // External reference types (strings, objects) can potentially be coerced
             // Strings can be used directly, objects may have string representations
             true
         }
-        crate::compiler::mir::place::WasmType::FuncRef => {
+        crate::compiler::wir::place::WasmType::FuncRef => {
             // Function references cannot be coerced to strings
             false
         }
@@ -1240,37 +1236,37 @@ fn can_coerce_place_to_string_at_compile_time(place: &Place) -> bool {
 fn generate_string_coercion_rvalue(
     place: Place,
     location: &TextLocation,
-    _context: &MirTransformContext,
+    _context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Generate appropriate string coercion based on the place's WASM type
-    // This creates the proper MIR operations for runtime string conversion
+    // This creates the proper WIR operations for runtime string conversion
     
     match place.wasm_type() {
-        crate::compiler::mir::place::WasmType::I32 => {
+        crate::compiler::wir::place::WasmType::I32 => {
             // For I32 values, we need to generate a string conversion operation
             // In a full implementation, this would call a runtime string conversion function
             // For now, we'll use a copy operation and rely on WASM codegen to handle conversion
             Ok(Rvalue::Use(Operand::Copy(place)))
         }
-        crate::compiler::mir::place::WasmType::I64 => {
+        crate::compiler::wir::place::WasmType::I64 => {
             // For I64 values, similar to I32
             Ok(Rvalue::Use(Operand::Copy(place)))
         }
-        crate::compiler::mir::place::WasmType::F32 => {
+        crate::compiler::wir::place::WasmType::F32 => {
             // For F32 values, floating point to string conversion
             Ok(Rvalue::Use(Operand::Copy(place)))
         }
-        crate::compiler::mir::place::WasmType::F64 => {
+        crate::compiler::wir::place::WasmType::F64 => {
             // For F64 values, floating point to string conversion
             Ok(Rvalue::Use(Operand::Copy(place)))
         }
-        crate::compiler::mir::place::WasmType::ExternRef => {
+        crate::compiler::wir::place::WasmType::ExternRef => {
             // For external reference types (strings, objects), check if it's already a string
             // If it's a string reference, use it directly
             // If it's another object type, we need to call its string representation method
             Ok(Rvalue::Use(Operand::Copy(place)))
         }
-        crate::compiler::mir::place::WasmType::FuncRef => {
+        crate::compiler::wir::place::WasmType::FuncRef => {
             // Function references cannot be converted to strings
             return_type_error!(
                 location.clone(),
@@ -1307,7 +1303,7 @@ fn extract_string_from_operand(operand: &Operand) -> Result<String, CompileError
 fn convert_template_expression_to_string_rvalue(
     expr: &Expression,
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     match &expr.kind {
         ExpressionKind::String(s) => {
@@ -1363,7 +1359,7 @@ fn convert_template_expression_to_string_rvalue(
 fn convert_template_expression_to_string_operand(
     expr: &Expression,
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Option<Operand>, CompileError> {
     match &expr.kind {
         ExpressionKind::String(s) => {
@@ -1438,7 +1434,7 @@ fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Re
             return_compiler_error!("Template expressions not supported in function parameters at line {}, column {}. Templates should be assigned to variables first.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
-            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the WIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
     }
 }
@@ -1447,7 +1443,7 @@ fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Re
 fn expression_to_operand_with_context(
     expression: &Expression, 
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Operand, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I32(*value as i32))),
@@ -1487,21 +1483,21 @@ fn expression_to_operand_with_context(
             return_compiler_error!("None expression encountered in operand context at line {}, column {}. This indicates a function parameter without a default argument, which should not be converted to an operand.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {
-            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the MIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
+            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the WIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
         }
     }
 }
 
 
 
-/// Transform variable reference to MIR rvalue with proper usage context
+/// Transform variable reference to WIR rvalue with proper usage context
 /// 
 /// This method handles variable references by looking up the variable in the context
-/// and generating appropriate MIR operands based on usage patterns.
+/// and generating appropriate WIR operands based on usage patterns.
 fn transform_variable_reference(
     name: &str,
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Look up the variable's place in the context
     let variable_place = match context.lookup_variable(name) {
@@ -1527,14 +1523,14 @@ fn transform_variable_reference(
     Ok(Rvalue::Use(operand))
 }
 
-/// Transform runtime expressions (RPN order) to MIR rvalue
+/// Transform runtime expressions (RPN order) to WIR rvalue
 /// 
 /// Runtime expressions contain AST nodes in Reverse Polish Notation order.
-/// This function processes them using a stack-based approach to build MIR binary operations.
+/// This function processes them using a stack-based approach to build WIR binary operations.
 fn transform_runtime_expression(
     runtime_nodes: &[AstNode],
     location: &TextLocation,
-    context: &MirTransformContext,
+    context: &WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     if runtime_nodes.is_empty() {
         return_compiler_error!("Empty runtime expression at line {}, column {}", location.start_pos.line_number, location.start_pos.char_column);
@@ -1559,14 +1555,14 @@ fn transform_runtime_expression(
                 let right = operand_stack.pop().unwrap();
                 let left = operand_stack.pop().unwrap();
 
-                // Convert AST operator to MIR BinOp
-                let mir_op = ast_operator_to_mir_binop(ast_op, &node.location)?;
+                // Convert AST operator to WIR BinOp
+                let wir_op = ast_operator_to_wir_binop(ast_op, &node.location)?;
                 
                 // For now, we'll return the binary operation directly
                 // In a more complex implementation, we might need to handle chained operations
                 if operand_stack.is_empty() {
                     // This is the final operation
-                    return Ok(Rvalue::BinaryOp(mir_op, left, right));
+                    return Ok(Rvalue::BinaryOp(wir_op, left, right));
                 } else {
                     // This is an intermediate operation - we would need to create temporary assignments
                     // For now, we'll simplify and only handle single binary operations
@@ -1587,8 +1583,8 @@ fn transform_runtime_expression(
     }
 }
 
-/// Convert AST Operator to MIR BinOp
-fn ast_operator_to_mir_binop(ast_op: &crate::compiler::parsers::expressions::expression::Operator, location: &TextLocation) -> Result<BinOp, CompileError> {
+/// Convert AST Operator to WIR BinOp
+fn ast_operator_to_wir_binop(ast_op: &crate::compiler::parsers::expressions::expression::Operator, location: &TextLocation) -> Result<BinOp, CompileError> {
     use crate::compiler::parsers::expressions::expression::Operator;
     
     match ast_op {
@@ -1606,19 +1602,19 @@ fn ast_operator_to_mir_binop(ast_op: &crate::compiler::parsers::expressions::exp
         Operator::And => Ok(BinOp::And),
         Operator::Or => Ok(BinOp::Or),
         _ => {
-            return_compiler_error!("Operator {:?} not yet implemented for MIR binary operations at line {}, column {}", ast_op, location.start_pos.line_number, location.start_pos.char_column);
+            return_compiler_error!("Operator {:?} not yet implemented for WIR binary operations at line {}, column {}", ast_op, location.start_pos.line_number, location.start_pos.char_column);
         }
     }
 }
 
-/// Transform return statement to MIR terminator
+/// Transform return statement to WIR terminator
 /// 
-/// Return statements become MIR terminators that end the current basic block.
+/// Return statements become WIR terminators that end the current basic block.
 /// The return values are converted to operands and included in the terminator.
-fn ast_return_statement_to_mir(
+fn ast_return_statement_to_wir(
     expressions: &[Expression],
     location: &TextLocation,
-    context: &mut MirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Convert return value expressions to operands
     let mut return_operands = Vec::new();

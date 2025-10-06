@@ -1,5 +1,5 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::mir::mir_nodes::{InterfaceInfo, InterfaceDefinition, VTable};
+use crate::compiler::wir::wir_nodes::{InterfaceInfo, InterfaceDefinition, VTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
 use wasm_encoder::{TableType, RefType, ConstExpr};
@@ -207,15 +207,17 @@ impl InterfaceDispatchSystem {
     /// Convert WASM types to wasm_encoder ValType
     fn wasm_types_to_val_types(
         &self,
-        wasm_types: &[crate::compiler::mir::place::WasmType],
+        wasm_types: &[crate::compiler::wir::place::WasmType],
     ) -> Vec<wasm_encoder::ValType> {
         wasm_types
             .iter()
             .map(|wt| match wt {
-                crate::compiler::mir::place::WasmType::I32 => wasm_encoder::ValType::I32,
-                crate::compiler::mir::place::WasmType::I64 => wasm_encoder::ValType::I64,
-                crate::compiler::mir::place::WasmType::F32 => wasm_encoder::ValType::F32,
-                crate::compiler::mir::place::WasmType::F64 => wasm_encoder::ValType::F64,
+                crate::compiler::wir::place::WasmType::I32 => wasm_encoder::ValType::I32,
+                crate::compiler::wir::place::WasmType::I64 => wasm_encoder::ValType::I64,
+                crate::compiler::wir::place::WasmType::F32 => wasm_encoder::ValType::F32,
+                crate::compiler::wir::place::WasmType::F64 => wasm_encoder::ValType::F64,
+                crate::compiler::wir::place::WasmType::ExternRef => wasm_encoder::ValType::EXTERNREF,
+                crate::compiler::wir::place::WasmType::FuncRef => wasm_encoder::ValType::FUNCREF,
             })
             .collect()
     }
