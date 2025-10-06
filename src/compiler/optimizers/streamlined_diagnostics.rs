@@ -221,9 +221,8 @@ impl ErrorMessageCache {
         );
 
         let mut borrow_kinds = HashMap::new();
-        borrow_kinds.insert(BorrowKind::Shared, "immutable");
+        borrow_kinds.insert(BorrowKind::Shared, "shared");
         borrow_kinds.insert(BorrowKind::Mut, "mutable");
-        borrow_kinds.insert(BorrowKind::Unique, "unique");
 
         Self {
             templates,

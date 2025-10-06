@@ -65,13 +65,6 @@ declarations with inferred types are private.
 
     mutable_collection ~= {}
     immutable_collection = {}
-    
-    instance_of_a_type = |
-        value = 1,
-        another_value = 2.0,
-    |
-]
-
 ]
 
 ## Static Assignment
@@ -137,11 +130,11 @@ But statements must start after a newline.
 # Imports
 [Code:
     -- Importing everything inside an object
-    #import(/libs/math)
+    import(/libs/math)
     root(2, 8)
 
     -- Renaming the import
-    encryption = #import("libs/encrypt")
+    encryption = import("libs/encrypt")
 ]
 
 # Data Types

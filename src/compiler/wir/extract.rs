@@ -410,7 +410,7 @@ impl BorrowFactExtractor {
         // Build place-to-loans index for efficient kill set construction
         self.build_place_to_loans_index();
 
-        // Build gen sets from start_loans events
+        // Build gen sets from the loans we created
         self.build_gen_sets(function)?;
 
         // Build kill sets from moves and reassigns using fast aliasing
@@ -457,6 +457,16 @@ impl BorrowFactExtractor {
         }
         
         self.loan_count = self.loans.len();
+        
+        // Log loan generation for debugging
+        if self.loan_count > 0 {
+            println!("Generated {} loans for function '{}'", self.loan_count, function.name);
+            for (i, loan) in self.loans.iter().enumerate() {
+                println!("  Loan {}: {:?} borrow of {:?} at {:?}", 
+                        i, loan.kind, loan.owner, loan.origin_stmt);
+            }
+        }
+        
         Ok(())
     }
 
@@ -509,45 +519,40 @@ impl BorrowFactExtractor {
         }
     }
 
-    /// Build gen sets containing loans starting at each statement (optimized with place interning)
+    /// Build gen sets containing loans starting at each statement
     fn build_gen_sets(&mut self, function: &WirFunction) -> Result<(), String> {
         // Pre-allocate empty BitSet for reuse
         let empty_bitset = BitSet::new(self.loan_count);
 
-        // Initialize gen sets for all program points using optimized allocation
+        // Initialize gen sets for all program points
         for program_point in function.get_program_points_in_order() {
             self.gen_sets.insert(program_point, empty_bitset.clone());
         }
 
-        // Populate gen sets from start_loans events using optimized generation
-        for program_point in function.get_program_points_in_order() {
-            if let Some(events) = function.generate_events(&program_point) {
-                // Fast path: if no start_loans, skip processing
-                if events.start_loans.is_empty() {
-                    continue;
-                }
-
-                let gen_set = self.gen_sets.get_mut(&program_point)
-                    .ok_or_else(|| format!("Gen set not found for program point {:?}", program_point))?;
-
-                // Fast path: single loan (common case)
-                if events.start_loans.len() == 1 {
-                    let loan_id = events.start_loans[0];
-                    if let Some(loan_index) = self.loans.iter().position(|loan| loan.id == loan_id)
-                    {
-                        gen_set.set(loan_index);
-                    }
-                } else {
-                    // Multiple loans: batch processing
-                    for &loan_id in &events.start_loans {
-                        if let Some(loan_index) =
-                            self.loans.iter().position(|loan| loan.id == loan_id)
-                        {
-                            gen_set.set(loan_index);
-                        }
-                    }
-                }
+        // Build gen sets based on loans we created, not from events
+        // Since we generate loans from WIR statements, we know exactly where they start
+        for loan in &self.loans {
+            let gen_set = self.gen_sets.get_mut(&loan.origin_stmt)
+                .ok_or_else(|| format!("Gen set not found for program point {:?}", loan.origin_stmt))?;
+            
+            // Find the loan index and set it in the gen set
+            if let Some(loan_index) = self.loans.iter().position(|l| l.id == loan.id) {
+                gen_set.set(loan_index);
             }
+        }
+
+        // Log gen set construction for debugging
+        let mut total_gen_bits = 0;
+        for (program_point, gen_set) in &self.gen_sets {
+            let count = gen_set.count_ones();
+            if count > 0 {
+                total_gen_bits += count;
+                println!("Gen set at {}: {} loans starting", program_point, count);
+            }
+        }
+        
+        if total_gen_bits > 0 {
+            println!("Total gen set bits: {}", total_gen_bits);
         }
 
         Ok(())
@@ -642,6 +647,23 @@ impl BorrowFactExtractor {
     /// Get loans that borrow a specific place - for tests
     pub fn get_loans_for_place(&self, place: &Place) -> Option<&[LoanId]> {
         self.place_to_loans.get(place).map(|v| v.as_slice())
+    }
+
+    /// Update function events with the loans that were created
+    /// This ensures that the events contain the correct loan IDs for borrow checking
+    pub fn update_function_events(&self, function: &mut crate::compiler::wir::wir_nodes::WirFunction) {
+        // Update events to include the loan IDs we created
+        for loan in &self.loans {
+            if let Some(events) = function.events.get_mut(&loan.origin_stmt) {
+                // Add the loan ID to the start_loans if it's not already there
+                if !events.start_loans.contains(&loan.id) {
+                    events.start_loans.push(loan.id);
+                }
+            }
+        }
+        
+        // Also store the loans in the function for reference
+        function.loans = self.loans.clone();
     }
 }
 

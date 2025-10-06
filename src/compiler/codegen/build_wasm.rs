@@ -34,16 +34,16 @@ pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir)?;
     
-    // Create WASM module from WIR
+    // Create WASM module from WIR (this already compiles all functions)
     let mut module = WasmModule::from_wir(&wir)?;
     
-    // Compile functions
+    // Handle exports (functions are already compiled in from_wir)
     for wir_function in &wir.functions {
-        let function_index = module.compile_wir_function(wir_function)?;
-        
         // Export the function if it's marked for export
         if let Some(export) = wir.exports.get(&wir_function.name) {
             if export.kind == ExportKind::Function {
+                // Function index is the same as the order in wir.functions since from_wir processes them in order
+                let function_index = wir.functions.iter().position(|f| f.name == wir_function.name).unwrap() as u32;
                 let _ = module.add_function_export(&export.name, function_index);
             }
         }

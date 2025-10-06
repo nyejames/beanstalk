@@ -489,6 +489,10 @@ impl Statement {
             Rvalue::Ref { place, .. } => {
                 // The place being borrowed is also used (read access)
                 events.uses.push(place.clone());
+                
+                // Note: Loan creation is handled by the borrow fact extractor
+                // which scans WIR statements for Rvalue::Ref operations
+                // and creates appropriate loans with unique IDs
             }
         }
     }
@@ -516,24 +520,26 @@ impl Statement {
 
 }
 
-/// Essential right-hand side values
+/// Right-hand side values for Beanstalk's implicit borrowing system
 /// 
-/// Simplified to contain only essential variants:
-/// - Removed complex projection systems
-/// - Removed optimization-specific operations
-/// - Kept only basic operations needed for core functionality
+/// These represent the different ways values can be used in assignments:
+/// - Use: Direct use of operands (constants, copies, moves)
+/// - BinaryOp/UnaryOp: Arithmetic and logical operations
+/// - Ref: Explicit representation of Beanstalk's implicit borrows
 #[derive(Debug, Clone, PartialEq)]
 pub enum Rvalue {
-    /// Use a place or constant
+    /// Use a place or constant (copies, moves, constants)
     Use(Operand),
 
-    /// Binary operation
+    /// Binary operation (arithmetic, comparison, logical)
     BinaryOp(BinOp, Operand, Operand),
 
-    /// Unary operation
+    /// Unary operation (negation, not)
     UnaryOp(UnOp, Operand),
 
-    /// Reference to a place (borrow)
+    /// Borrow operation (makes Beanstalk's implicit borrows explicit in WIR)
+    /// - `x = y` becomes Ref { place: y, borrow_kind: Shared }
+    /// - `x ~= y` becomes Ref { place: y, borrow_kind: Mut }
     Ref {
         place: Place,
         borrow_kind: BorrowKind,
@@ -553,16 +559,16 @@ pub enum MemoryOpKind {
     Copy,
 }
 
-/// Operands for WIR operations
+/// Operands for WIR operations in Beanstalk's memory model
 #[derive(Debug, Clone, PartialEq)]
 pub enum Operand {
-    /// Copy from a place
+    /// Explicit copy from a place (rare - only for types that support copying)
     Copy(Place),
 
-    /// Move from a place
+    /// Move from a place (ownership transfer: `~x` in Beanstalk)
     Move(Place),
 
-    /// Constant value
+    /// Constant value (literals: 42, "hello", true)
     Constant(Constant),
 
     /// WASM function reference
@@ -705,15 +711,18 @@ impl Terminator {
     }
 }
 
-/// Simplified borrow kinds for dataflow analysis
+/// Borrow kinds for Beanstalk's implicit borrowing system
+/// 
+/// In Beanstalk, borrowing is the default semantics:
+/// - `x = y` creates a shared borrow (multiple allowed)
+/// - `x ~= y` creates a mutable borrow (exclusive)
+/// - `x ~= ~y` is a move (ownership transfer, not a borrow)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BorrowKind {
-    /// Shared/immutable borrow
+    /// Shared borrow: `x = y` (default, multiple allowed)
     Shared,
-    /// Mutable borrow
+    /// Mutable borrow: `x ~= y` (exclusive, conflicts with any other borrow)
     Mut,
-    /// Unique borrow (move)
-    Unique,
 }
 
 

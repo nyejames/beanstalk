@@ -581,6 +581,8 @@ impl WasmModule {
 
     /// Compile a WIR function to WASM with proper local variable analysis
     pub fn compile_function(&mut self, wir_function: &WirFunction) -> Result<(), CompileError> {
+
+
         // Register function in the function registry
         self.function_registry.insert(wir_function.name.clone(), self.function_count);
 
@@ -616,7 +618,7 @@ impl WasmModule {
         }
 
         // Note: Function termination is handled by the terminator lowering
-        // No need to add additional return instructions
+        // Each WIR block should have a proper terminator that generates the appropriate WASM instructions
 
         // Add function to code section
         self.code_section.function(&function);
@@ -640,6 +642,7 @@ impl WasmModule {
         }
 
         // Lower the terminator
+        
         self.lower_terminator(&block.terminator, function, local_map)?;
 
         Ok(())
@@ -1617,18 +1620,25 @@ impl WasmModule {
     /// 
     /// WASM functions must end with a terminating instruction (return, unreachable, etc.)
     /// The wasm_encoder library requires explicit termination for all functions.
+    /// 
+    /// This method should only be called if the function doesn't already have proper termination
+    /// from its terminators.
     fn ensure_function_termination(
         &self,
         function: &mut Function,
         result_types: &[ValType],
     ) -> Result<(), CompileError> {
+        // Only add termination if needed - the terminator lowering should handle most cases
+        // This is a fallback for functions that might not have proper termination
+        
         if result_types.is_empty() {
-            // For void functions, add an explicit return instruction
+            // For void functions, add an explicit return instruction only if needed
+            // Note: This might be redundant if the terminator lowering already added a return
+            // but WASM allows multiple return instructions
             function.instruction(&Instruction::Return);
         } else {
             // For functions with return types, we need to provide default values
-            // This is a simplified approach - in a full implementation, we would
-            // analyze the control flow to determine if a return is actually needed
+            // This should rarely be needed if the WIR generation is correct
             for result_type in result_types {
                 match result_type {
                     ValType::I32 => {
@@ -1687,29 +1697,44 @@ impl WasmModule {
         Ok(function_index)
     }
 
-    /// Add function export (placeholder)
+    /// Add function export to the WASM module
     pub fn add_function_export(
         &mut self,
-        _name: &str,
-        _function_index: u32,
+        name: &str,
+        function_index: u32,
     ) -> Result<u32, CompileError> {
-        // Export functionality will be added when needed
-        Ok(_function_index)
+        // Add export entry to export section
+        self.export_section.export(name, ExportKind::Func, function_index);
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Exported function '{}' at index {}", name, function_index);
+        
+        Ok(function_index)
     }
 
-    /// Add global export (placeholder)
+    /// Add global export to the WASM module
     pub fn add_global_export(
         &mut self,
-        _name: &str,
-        _global_index: u32,
+        name: &str,
+        global_index: u32,
     ) -> Result<(), CompileError> {
-        // Export functionality will be added when needed
+        // Add export entry to export section
+        self.export_section.export(name, ExportKind::Global, global_index);
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Exported global '{}' at index {}", name, global_index);
+        
         Ok(())
     }
 
-    /// Add memory export (placeholder)
-    pub fn add_memory_export(&mut self, _name: &str) -> Result<(), CompileError> {
-        // Export functionality will be added when needed
+    /// Add memory export to the WASM module
+    pub fn add_memory_export(&mut self, name: &str) -> Result<(), CompileError> {
+        // Add export entry to export section (memory index is always 0 for single memory)
+        self.export_section.export(name, ExportKind::Memory, 0);
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Exported memory '{}'", name);
+        
         Ok(())
     }
 

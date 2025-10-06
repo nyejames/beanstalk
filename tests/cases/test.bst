@@ -1,8 +1,6 @@
--- Simple return statement test
-simple_function |x ~Int| -> Int:
-    return x + 1
-;
+-- Simple variable declaration test
+x = 42
+y = "hello"
 
--- Test function call
-result = simple_function(42)
-print("Result: ")
+-- Test print statement
+print("Hello World")

@@ -568,14 +568,12 @@ impl UnifiedBorrowChecker {
             return false;
         }
         
-        // Apply Polonius-style conflict rules
+        // Apply Beanstalk borrow conflict rules
         match (&loan_a.kind, &loan_b.kind) {
             // Multiple shared borrows are allowed
             (BorrowKind::Shared, BorrowKind::Shared) => false,
-            // Mutable borrows conflict with everything
+            // Mutable borrows conflict with everything (exclusive access)
             (BorrowKind::Mut, _) | (_, BorrowKind::Mut) => true,
-            // Unique borrows (moves) conflict with everything
-            (BorrowKind::Unique, _) | (_, BorrowKind::Unique) => true,
         }
     }
 

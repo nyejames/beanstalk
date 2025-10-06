@@ -33,10 +33,11 @@ pub use crate::compiler::wir::place::*;
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Arg};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
+use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
 use crate::{
     ir_log, return_compiler_error, return_rule_error, return_type_error,
@@ -53,37 +54,72 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
     use crate::compiler::wir::unified_borrow_checker::run_unified_borrow_checking;
     
     for function in &mut wir.functions {
+        // Ensure events are generated for all statements and terminators
+        regenerate_events_for_function(function);
+        
         // Extract borrow facts from the function
         let mut extractor = BorrowFactExtractor::new();
         extractor.extract_function(function).map_err(|e| {
-            CompileError::compiler_error(&format!("Failed to extract borrow facts: {}", e))
+            CompileError::compiler_error(&format!("Failed to extract borrow facts for function '{}': {}", function.name, e))
         })?;
+        
+        // Update the function's events with the loans that were created
+        extractor.update_function_events(function);
         
         // Run unified borrow checking
         let borrow_results = run_unified_borrow_checking(function, &extractor).map_err(|e| {
-            CompileError::compiler_error(&format!("Borrow checking failed: {}", e))
+            CompileError::compiler_error(&format!("Borrow checking failed for function '{}': {}", function.name, e))
         })?;
         
-        // Convert borrow errors to compile errors
+        // Handle borrow checking errors with proper diagnostics
         if !borrow_results.errors.is_empty() {
+            // Report the first error with detailed context
             let first_error = &borrow_results.errors[0];
-            return Err(CompileError::new_rule_error(
-                first_error.message.clone(),
-                first_error.location.clone(),
-            ));
+            
+            // Create a more detailed error message
+            let detailed_message = format!(
+                "Borrow checking error in function '{}': {}. This error occurred at program point {}.",
+                function.name,
+                first_error.message,
+                first_error.point
+            );
+            
+            // Use the error location if available, otherwise use a default location
+            let error_location = if first_error.location != TextLocation::default() {
+                first_error.location.clone()
+            } else {
+                TextLocation::default() // TODO: Map program points to source locations
+            };
+            
+            return Err(CompileError::new_rule_error(detailed_message, error_location));
         }
         
-        // Log warnings if any
+        // Log warnings with function context
         for warning in &borrow_results.warnings {
-            eprintln!("Borrow checker warning: {}", warning.message);
+            eprintln!("Borrow checker warning in function '{}': {}", function.name, warning.message);
         }
+        
+        // Log successful borrow checking for debugging
+        ir_log!("Borrow checking completed successfully for function '{}'", function.name);
     }
     
     Ok(())
 }
 
-/// Generate events for all statements in a function
+/// Generate events for all statements in a function during WIR construction
 fn generate_events_for_function(function: &mut WirFunction, _context: &mut WirTransformContext) {
+    regenerate_events_for_function(function);
+}
+
+/// Regenerate events for all statements and terminators in a function
+/// 
+/// This function ensures that all WIR statements and terminators have proper
+/// event generation for borrow checking. It's called both during WIR construction
+/// and before borrow checking to ensure events are up-to-date.
+fn regenerate_events_for_function(function: &mut WirFunction) {
+    // Clear existing events to regenerate them
+    function.events.clear();
+    
     // Collect all events first to avoid borrowing conflicts
     let mut all_events = Vec::new();
     
@@ -92,19 +128,44 @@ fn generate_events_for_function(function: &mut WirFunction, _context: &mut WirTr
         for (stmt_index, statement) in block.statements.iter().enumerate() {
             let program_point = ProgramPoint::new(block.id * 1000 + stmt_index as u32);
             let events = statement.generate_events();
+            
+            // Log event generation for debugging
+            ir_log!(
+                "Generated events for statement at {}: uses={:?}, moves={:?}, reassigns={:?}, start_loans={:?}",
+                program_point,
+                events.uses,
+                events.moves,
+                events.reassigns,
+                events.start_loans
+            );
+            
             all_events.push((program_point, events));
         }
         
         // Generate events for terminator
         let terminator_point = ProgramPoint::new(block.id * 1000 + 999);
         let terminator_events = block.terminator.generate_events();
+        
+        // Log terminator event generation for debugging
+        ir_log!(
+            "Generated events for terminator at {}: uses={:?}, moves={:?}, reassigns={:?}, start_loans={:?}",
+            terminator_point,
+            terminator_events.uses,
+            terminator_events.moves,
+            terminator_events.reassigns,
+            terminator_events.start_loans
+        );
+        
         all_events.push((terminator_point, terminator_events));
     }
     
-    // Store all events
+    // Store all events in the function
     for (program_point, events) in all_events {
         function.store_events(program_point, events);
     }
+    
+    ir_log!("Event generation completed for function '{}' with {} program points", 
+            function.name, function.events.len());
 }
 
 /// Function information for tracking function metadata and signatures
@@ -511,8 +572,8 @@ impl WirTransformContext {
         use crate::compiler::wir::place::WasmType;
         
         match data_type {
-            DataType::Int(_) => Ok(WasmType::I64),
-            DataType::Float(_) => Ok(WasmType::F64),
+            DataType::Int(_) => Ok(WasmType::I32),
+            DataType::Float(_) => Ok(WasmType::F32),
             DataType::Bool(_) => Ok(WasmType::I32),
             DataType::String(_) => Ok(WasmType::I32), // String pointer
             _ => {
@@ -687,16 +748,58 @@ fn transform_ast_node_to_wir(
         NodeKind::Return(expressions) => {
             ast_return_statement_to_wir(expressions, &node.location, context)
         }
+        NodeKind::Expression(expression) => {
+            ast_expression_to_wir(expression, &node.location, context)
+        }
+        NodeKind::Print(expression) => {
+            ast_print_to_wir(expression, &node.location, context)
+        }
+        NodeKind::ForLoop(item, collection, body) => {
+            ast_for_loop_to_wir(item, collection, body, &node.location, context)
+        }
+        NodeKind::WhileLoop(condition, body) => {
+            ast_while_loop_to_wir(condition, body, &node.location, context)
+        }
+        NodeKind::Match(subject, arms, else_body) => {
+            ast_match_to_wir(subject, arms, else_body, &node.location, context)
+        }
+        NodeKind::Warning(message) => {
+            ast_warning_to_wir(message, &node.location, context)
+        }
+        NodeKind::Config(args) => {
+            ast_config_to_wir(args, &node.location, context)
+        }
+        NodeKind::Use(path) => {
+            ast_use_to_wir(path, &node.location, context)
+        }
+        NodeKind::Free(path) => {
+            ast_free_to_wir(path, &node.location, context)
+        }
+        NodeKind::Access => {
+            ast_access_to_wir(&node.location, context)
+        }
+        NodeKind::JS(code) => {
+            ast_js_to_wir(code, &node.location, context)
+        }
+        NodeKind::Css(code) => {
+            ast_css_to_wir(code, &node.location, context)
+        }
+        NodeKind::TemplateFormatter => {
+            ast_template_formatter_to_wir(&node.location, context)
+        }
+        NodeKind::Slot => {
+            ast_slot_to_wir(&node.location, context)
+        }
+        NodeKind::Operator(_) => {
+            // Operators should only appear within runtime expressions, not as standalone statements
+            return_rule_error!(
+                node.location.clone(),
+                "Operator cannot be used as a standalone statement. Operators must be part of expressions or assignments."
+            );
+        }
         NodeKind::Newline | NodeKind::Spaces(_) | NodeKind::Empty => {
             // These nodes don't generate WIR statements
             Ok(vec![])
-        }
-        _ => {
-            return_unimplemented_feature_error!(
-                &format!("AST node type '{:?}'", node.kind),
-                Some(node.location.clone()),
-                Some("try using simpler language constructs or break complex statements into multiple parts")
-            )
         }
     }
 }
@@ -846,7 +949,7 @@ fn ast_host_function_call_to_wir(
     name: &str,
     params: &[Expression],
     return_types: &[DataType],
-    location: &TextLocation,
+    _location: &TextLocation,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Verbose logging for host function call generation
@@ -950,11 +1053,14 @@ fn ast_if_statement_to_wir(
     }
     
     // Convert condition expression to operand
-    let condition_operand = expression_to_operand_with_context(condition, &condition.location, context)?;
+    let _condition_operand = expression_to_operand_with_context(condition, &condition.location, context)?;
     
     // Allocate block IDs for control flow
-    let then_block_id = context.allocate_block_id();
-    let else_block_id = context.allocate_block_id();
+    let _then_block_id = context.allocate_block_id();
+    let _else_block_id = context.allocate_block_id();
+    
+    // Suppress unused variable warnings - these will be used when full control flow is implemented
+    let _ = (then_body, else_body, location);
     
     // For now, we'll create a simplified WIR representation
     // In a full implementation, we would need to:
@@ -1225,10 +1331,6 @@ fn can_coerce_place_to_string_at_compile_time(place: &Place) -> bool {
             // Function references cannot be coerced to strings
             false
         }
-        _ => {
-            // Other WASM types (like function references) cannot be coerced to strings
-            false
-        }
     }
 }
 
@@ -1271,14 +1373,6 @@ fn generate_string_coercion_rvalue(
             return_type_error!(
                 location.clone(),
                 "Function references cannot be converted to string in template context. Functions cannot be used as values in template heads."
-            );
-        }
-        _ => {
-            // For unsupported types, generate an error
-            return_type_error!(
-                location.clone(),
-                "Cannot convert type to string in template context. Type {:?} does not support string coercion. Only primitive types (int, float, bool) and strings can be used in template heads.",
-                place.wasm_type()
             );
         }
     }
@@ -1342,7 +1436,7 @@ fn convert_template_expression_to_string_rvalue(
         }
         ExpressionKind::Runtime(runtime_nodes) => {
             // Handle runtime expressions by transforming them first
-            let runtime_rvalue = transform_runtime_expression(runtime_nodes, location, context)?;
+            let _runtime_rvalue = transform_runtime_expression(runtime_nodes, location, context)?;
             
             // Then convert the result to string
             // For now, we'll assume the runtime expression produces a value that can be coerced to string
@@ -1458,8 +1552,10 @@ fn expression_to_operand_with_context(
                 _ => return_compiler_error!("Variable reference '{}' produced non-use rvalue, which is not supported in operand context", name),
             }
         }
-        ExpressionKind::Runtime(_) => {
-            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
+        ExpressionKind::Runtime(runtime_nodes) => {
+            // For operand context, we need to create a temporary assignment for runtime expressions
+            // This is a simplified approach - in a full implementation, we'd integrate this better
+            return_compiler_error!("Runtime expressions (complex calculations) in operand context not yet fully implemented at line {}, column {}. For now, assign the expression to a variable first: 'temp_var = x + 1; return temp_var;'", location.start_pos.line_number, location.start_pos.char_column);
         }
         ExpressionKind::Template(template) => {
             // For operand context, try to fold template to constant if possible
@@ -1513,11 +1609,14 @@ fn transform_variable_reference(
         }
     };
 
-    // Use Copy semantics for variable references
+    // TODO: Implement Beanstalk's implicit borrowing semantics
     // 
-    // DESIGN NOTE: Copy semantics are used for basic types (integers, floats, booleans).
-    // Move semantics will be implemented when complex types (strings, collections) 
-    // require ownership transfer for memory efficiency.
+    // BEANSTALK SEMANTICS:
+    // - `x = y` should create Rvalue::Ref { place: y, borrow_kind: BorrowKind::Shared }
+    // - `x ~= y` should create Rvalue::Ref { place: y, borrow_kind: BorrowKind::Mut }
+    // - `x ~= ~y` should create Rvalue::Use(Operand::Move(y))
+    // 
+    // CURRENT STATUS: Using Copy as placeholder until AST supports ~ syntax
     let operand = Operand::Copy(variable_place);
     
     Ok(Rvalue::Use(operand))
@@ -1641,4 +1740,283 @@ fn ast_return_statement_to_wir(
     context.pending_return = Some(return_operands);
     
     Ok(vec![])
+}
+
+/// Transform expression statement to WIR
+/// 
+/// Expression statements are expressions that are evaluated for their side effects.
+/// The result is typically discarded unless it's assigned to a variable.
+fn ast_expression_to_wir(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // For expression statements, we evaluate the expression but don't assign the result
+    // This is useful for function calls that have side effects but no return value we care about
+    
+    match &expression.kind {
+        ExpressionKind::Function(..) => {
+            // Function expressions should be handled as declarations, not statements
+            return_rule_error!(
+                location.clone(),
+                "Function definitions cannot be used as expression statements. Use 'let function_name = |params| -> ReturnType: body;' syntax instead."
+            );
+        }
+        _ => {
+            // Convert expression to rvalue and create a temporary assignment
+            // This ensures the expression is evaluated even if the result is discarded
+            let rvalue = expression_to_rvalue_with_context(expression, location, context)?;
+            
+            // Allocate a temporary place for the result
+            let temp_place = context.get_place_manager().allocate_local(&expression.data_type);
+            
+            // Create assignment to temporary (result will be discarded)
+            let assign_statement = Statement::Assign {
+                place: temp_place,
+                rvalue,
+            };
+            
+            Ok(vec![assign_statement])
+        }
+    }
+}
+
+/// Transform print statement to WIR host function call
+/// 
+/// Print statements are converted to host function calls to the runtime's print function.
+fn ast_print_to_wir(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Convert the expression to an operand
+    let operand = expression_to_operand_with_context(expression, location, context)?;
+    
+    // Create a host function definition for print
+    use crate::compiler::host_functions::registry::HostFunctionDef;
+    use crate::compiler::parsers::ast_nodes::Arg;
+    use crate::compiler::parsers::expressions::expression::Expression as AstExpression;
+    
+    let print_param = Arg {
+        name: "value".to_string(),
+        value: AstExpression::new(
+            crate::compiler::parsers::expressions::expression::ExpressionKind::None,
+            location.clone(),
+            expression.data_type.clone()
+        ),
+    };
+    
+    let print_function = HostFunctionDef::new(
+        "print",
+        vec![print_param],
+        vec![], // Print returns void
+        "beanstalk_io",
+        "print",
+        "Print a value to the console"
+    );
+    
+    // Track this host function as an import
+    context.add_host_import(print_function.clone());
+    
+    // Create host call statement
+    let print_statement = Statement::HostCall {
+        function: print_function,
+        args: vec![operand],
+        destination: None, // Print has no return value
+    };
+    
+    Ok(vec![print_statement])
+}
+
+/// Transform for loop to WIR control flow
+/// 
+/// For loops are converted to WIR blocks with iteration logic.
+/// This is a complex transformation that will be implemented incrementally.
+fn ast_for_loop_to_wir(
+    _item: &Arg,
+    _collection: &Expression,
+    _body: &AstBlock,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "For loops",
+        Some(location.clone()),
+        Some("use while loops or manual iteration for now")
+    );
+}
+
+/// Transform while loop to WIR control flow
+/// 
+/// While loops are converted to WIR blocks with conditional branching.
+/// This requires proper block management and control flow.
+fn ast_while_loop_to_wir(
+    _condition: &Expression,
+    _body: &AstBlock,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "While loops",
+        Some(location.clone()),
+        Some("use if statements and manual control flow for now")
+    );
+}
+
+/// Transform match statement to WIR control flow
+/// 
+/// Match statements are converted to WIR blocks with pattern matching logic.
+/// This is a complex feature that requires pattern analysis.
+fn ast_match_to_wir(
+    _subject: &Expression,
+    _arms: &[MatchArm],
+    _else_body: &Option<AstBlock>,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Match expressions",
+        Some(location.clone()),
+        Some("use if-else chains for pattern matching")
+    );
+}
+
+/// Transform warning node to WIR
+/// 
+/// Warning nodes are compiler-generated and don't produce runtime code.
+/// They are used for diagnostics and analysis.
+fn ast_warning_to_wir(
+    message: &str,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Warnings don't generate WIR statements, but we can log them
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("WIR: Warning at {}:{}: {}", location.start_pos.line_number, location.start_pos.char_column, message);
+    
+    // Suppress unused variable warnings for release builds
+    let _ = (message, location);
+    
+    // Return empty statement list - warnings are compile-time only
+    Ok(vec![])
+}
+
+/// Transform config node to WIR
+/// 
+/// Config nodes set compilation parameters and don't generate runtime code.
+fn ast_config_to_wir(
+    _args: &[Arg],
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Config statements",
+        Some(location.clone()),
+        Some("config is handled at the module level, not in function bodies")
+    );
+}
+
+/// Transform use statement to WIR
+/// 
+/// Use statements import modules and don't generate runtime code.
+/// They are handled at the module level during compilation.
+fn ast_use_to_wir(
+    _path: &std::path::PathBuf,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Use statements in function bodies",
+        Some(location.clone()),
+        Some("use statements should be at module level, not inside functions")
+    );
+}
+
+/// Transform free statement to WIR
+/// 
+/// Free statements are memory management hints inserted by the compiler.
+/// They will be converted to appropriate memory deallocation operations.
+fn ast_free_to_wir(
+    _path: &std::path::PathBuf,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Explicit memory management (free)",
+        Some(location.clone()),
+        Some("memory management is automatic in Beanstalk - explicit free is not needed")
+    );
+}
+
+/// Transform access statement to WIR
+/// 
+/// Access statements are used for field access and indexing operations.
+fn ast_access_to_wir(
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Access operations",
+        Some(location.clone()),
+        Some("use direct variable references or implement field access")
+    );
+}
+
+/// Transform JavaScript code block to WIR
+/// 
+/// JavaScript blocks are embedded code that runs in web environments.
+/// They don't generate WASM code directly.
+fn ast_js_to_wir(
+    _code: &str,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "JavaScript code blocks",
+        Some(location.clone()),
+        Some("JavaScript blocks are handled by the HTML5 codegen, not WASM")
+    );
+}
+
+/// Transform CSS code block to WIR
+/// 
+/// CSS blocks are styling code that doesn't generate WASM instructions.
+fn ast_css_to_wir(
+    _code: &str,
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "CSS code blocks",
+        Some(location.clone()),
+        Some("CSS blocks are handled by the HTML5 codegen, not WASM")
+    );
+}
+
+/// Transform template formatter to WIR
+/// 
+/// Template formatters are used in template processing and don't generate WASM code.
+fn ast_template_formatter_to_wir(
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Template formatters",
+        Some(location.clone()),
+        Some("template formatters are handled during template processing")
+    );
+}
+
+/// Transform slot to WIR
+/// 
+/// Slots are template placeholders and don't generate WASM code directly.
+fn ast_slot_to_wir(
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_unimplemented_feature_error!(
+        "Template slots",
+        Some(location.clone()),
+        Some("slots are handled during template processing")
+    );
 }

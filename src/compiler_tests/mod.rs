@@ -75,6 +75,10 @@ pub mod wasm_encoder_error_handling_tests;
 #[cfg(test)]
 pub mod simple_error_validation_test;
 
+// WASM module generation tests - Basic WASM module creation and validation
+#[cfg(test)]
+pub mod wasm_module_generation_tests;
+
 // === FOCUSED TEST CATEGORIES ===
 // Organized tests for specific functionality
 
