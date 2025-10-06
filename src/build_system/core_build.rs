@@ -3,7 +3,7 @@
 // Contains the common compilation pipeline steps that are used by all project builders:
 // - Tokenization
 // - AST generation
-// - MIR generation
+// - WIR generation
 // - WASM generation
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
@@ -149,19 +149,19 @@ pub fn compile_modules(
     }
 
     // ----------------------------------
-    //          MIR generation
+    //          WIR generation
     // ----------------------------------
-    let mir = match compiler.ast_to_ir(AstBlock {
+    let wir = match compiler.ast_to_ir(AstBlock {
         ast: combined_module,
         is_entry_point: true,
         scope: config.entry_point.to_owned(),
     }) {
-        Ok(mir) => {
+        Ok(wir) => {
             if !flags.contains(&Flag::DisableTimers) {
-                print!("MIR generated in: ");
+                print!("Wasm Intermediate Representation generated in: ");
                 green_ln!("{:?}", time.elapsed());
             }
-            mir
+            wir
         }
         Err(e) => return Err(e),
     };
@@ -169,7 +169,7 @@ pub fn compile_modules(
     // ----------------------------------
     //          WASM generation
     // ----------------------------------
-    let wasm_bytes = match new_wasm_module(mir) {
+    let wasm_bytes = match new_wasm_module(wir) {
         Ok(w) => w,
         Err(e) => return Err(vec![e]),
     };

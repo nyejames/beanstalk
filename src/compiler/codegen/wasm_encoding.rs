@@ -28,16 +28,18 @@
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::HostFunctionDef;
+use crate::compiler::wir::place::{MemoryBase, Place, ProjectionElem, TypeSize, WasmType};
 use crate::compiler::wir::wir_nodes::{
-    BinOp, Constant, WIR, WirFunction, Operand, Rvalue, Statement, Terminator, UnOp,
+    BinOp, Constant, Operand, Rvalue, Statement, Terminator, UnOp, WIR, WirFunction,
 };
-use crate::compiler::wir::place::{Place, WasmType, MemoryBase, ProjectionElem, TypeSize};
-use crate::{return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error};
+use crate::{
+    return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error,
+};
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
 
 /// String constant manager for deduplication and memory management
-/// 
+///
 /// Handles string constants by storing them in WASM linear memory with length prefixes.
 /// Provides deduplication to avoid storing identical strings multiple times.
 #[derive(Debug, Clone)]
@@ -61,10 +63,10 @@ impl StringManager {
     }
 
     /// Add a string constant and return its offset in linear memory
-    /// 
+    ///
     /// Strings are stored with a 4-byte length prefix followed by UTF-8 data.
     /// Identical strings are deduplicated and return the same offset.
-    /// 
+    ///
     /// ## Memory Management
     /// String constants have static lifetime and are stored in the WASM data section.
     /// No drop semantics are needed since they persist for the entire program execution.
@@ -75,21 +77,21 @@ impl StringManager {
         if let Some(&offset) = self.string_constants.get(value) {
             return offset;
         }
-        
+
         let offset = self.next_offset;
         let bytes = value.as_bytes();
-        
+
         // Store length prefix (4 bytes, little-endian) + string data
         let length = bytes.len() as u32;
         self.data_section.extend_from_slice(&length.to_le_bytes());
         self.data_section.extend_from_slice(bytes);
-        
+
         // Update next offset (4 bytes for length + string length)
         self.next_offset += 4 + bytes.len() as u32;
-        
+
         // Store mapping for deduplication
         self.string_constants.insert(value.to_string(), offset);
-        
+
         offset
     }
 
@@ -143,7 +145,7 @@ pub struct StringAllocationStats {
 }
 
 /// Local variable mapping from WIR places to WASM local indices
-/// 
+///
 /// This structure manages the mapping between WIR Place::Local indices and
 /// WASM local variable indices, enabling proper place resolution.
 #[derive(Debug, Clone)]
@@ -200,18 +202,18 @@ impl LocalMap {
     }
 
     /// Allocate next WASM local index for a WIR local
-    pub fn allocate_local(&mut self, mir_local: u32) -> u32 {
+    pub fn allocate_local(&mut self, wir_local: u32) -> u32 {
         let wasm_local = self.next_local_index;
         self.next_local_index += 1;
-        self.local_mapping.insert(mir_local, wasm_local);
+        self.local_mapping.insert(wir_local, wasm_local);
         wasm_local
     }
 
     /// Allocate next WASM global index for a WIR global
-    pub fn allocate_global(&mut self, mir_global: u32) -> u32 {
+    pub fn allocate_global(&mut self, wir_global: u32) -> u32 {
         let wasm_global = self.next_global_index;
         self.next_global_index += 1;
-        self.global_mapping.insert(mir_global, wasm_global);
+        self.global_mapping.insert(wir_global, wasm_global);
         wasm_global
     }
 
@@ -233,7 +235,7 @@ impl Default for LocalMap {
 }
 
 /// Local variable analyzer for determining WASM local requirements from WIR
-/// 
+///
 /// This analyzer examines a WIR function to determine what local variables are needed
 /// and builds the appropriate mapping for WASM code generation.
 #[derive(Debug)]
@@ -284,7 +286,11 @@ impl LocalAnalyzer {
                 self.collect_from_place(place);
                 self.collect_from_rvalue(rvalue);
             }
-            Statement::Call { func, args, destination } => {
+            Statement::Call {
+                func,
+                args,
+                destination,
+            } => {
                 self.collect_from_operand(func);
                 for arg in args {
                     self.collect_from_operand(arg);
@@ -293,7 +299,12 @@ impl LocalAnalyzer {
                     self.collect_from_place(dest);
                 }
             }
-            Statement::InterfaceCall { receiver, args, destination, .. } => {
+            Statement::InterfaceCall {
+                receiver,
+                args,
+                destination,
+                ..
+            } => {
                 self.collect_from_operand(receiver);
                 for arg in args {
                     self.collect_from_operand(arg);
@@ -316,7 +327,9 @@ impl LocalAnalyzer {
             Statement::Drop { place } => {
                 self.collect_from_place(place);
             }
-            Statement::MemoryOp { operand, result, .. } => {
+            Statement::MemoryOp {
+                operand, result, ..
+            } => {
                 if let Some(op) = operand {
                     self.collect_from_operand(op);
                 }
@@ -324,7 +337,9 @@ impl LocalAnalyzer {
                     self.collect_from_place(res);
                 }
             }
-            Statement::HostCall { args, destination, .. } => {
+            Statement::HostCall {
+                args, destination, ..
+            } => {
                 for arg in args {
                     self.collect_from_operand(arg);
                 }
@@ -445,7 +460,6 @@ impl LocalAnalyzer {
         }
     }
 
-
     /// Get statistics about local variable usage
     pub fn get_local_stats(&self) -> LocalAnalysisStats {
         LocalAnalysisStats {
@@ -476,8 +490,6 @@ pub struct LocalAnalysisStats {
     /// Number of reference locals
     pub ref_locals: u32,
 }
-
-
 
 /// Simplified WASM module for basic WIR-to-WASM compilation
 pub struct WasmModule {
@@ -569,7 +581,7 @@ impl WasmModule {
     pub fn validate_module(self) -> Result<(), CompileError> {
         // Generate the WASM bytes for validation
         let wasm_bytes = self.finish();
-        
+
         // Use wasmparser to validate the module
         match wasmparser::validate(&wasm_bytes) {
             Ok(_) => Ok(()),
@@ -581,10 +593,9 @@ impl WasmModule {
 
     /// Compile a WIR function to WASM with proper local variable analysis
     pub fn compile_function(&mut self, wir_function: &WirFunction) -> Result<(), CompileError> {
-
-
         // Register function in the function registry
-        self.function_registry.insert(wir_function.name.clone(), self.function_count);
+        self.function_registry
+            .insert(wir_function.name.clone(), self.function_count);
 
         // Analyze local variable requirements
         let analyzer = LocalAnalyzer::analyze_function(wir_function);
@@ -604,7 +615,9 @@ impl WasmModule {
             .map(|t| self.wasm_type_to_val_type(t))
             .collect();
 
-        self.type_section.ty().function(param_types, result_types.clone());
+        self.type_section
+            .ty()
+            .function(param_types, result_types.clone());
 
         // Add function to function section
         self.function_section.function(self.type_count);
@@ -626,6 +639,17 @@ impl WasmModule {
         self.function_count += 1;
         self.type_count += 1;
 
+        #[cfg(feature = "verbose_codegen_logging")]
+        {
+            println!("WASM: Successfully compiled function '{}' with {} blocks", wir_function.name, wir_function.blocks.len());
+            for (i, block) in wir_function.blocks.iter().enumerate() {
+                println!("  Block {}: {} statements, terminator: {:?}", i, block.statements.len(), block.terminator);
+                for (j, statement) in block.statements.iter().enumerate() {
+                    println!("    Statement {}: {:?}", j, statement);
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -642,7 +666,7 @@ impl WasmModule {
         }
 
         // Lower the terminator
-        
+
         self.lower_terminator(&block.terminator, function, local_map)?;
 
         Ok(())
@@ -665,12 +689,16 @@ impl WasmModule {
                 self.lower_place_assignment_with_type(place, &value_type, function, local_map)?;
                 Ok(())
             }
-            Statement::Call { func, args, destination } => {
-                self.lower_function_call(func, args, destination, function, local_map)
-            }
-            Statement::HostCall { function: host_func, args, destination } => {
-                self.lower_host_function_call(host_func, args, destination, function, local_map)
-            }
+            Statement::Call {
+                func,
+                args,
+                destination,
+            } => self.lower_function_call(func, args, destination, function, local_map),
+            Statement::HostCall {
+                function: host_func,
+                args,
+                destination,
+            } => self.lower_host_function_call(host_func, args, destination, function, local_map),
             Statement::Nop => {
                 // No-op - generate no instructions
                 Ok(())
@@ -679,7 +707,9 @@ impl WasmModule {
                 return_unimplemented_feature_error!(
                     &format!("Statement type '{:?}'", statement),
                     None,
-                    Some("try using simpler statements or break complex operations into multiple steps")
+                    Some(
+                        "try using simpler statements or break complex operations into multiple steps"
+                    )
                 );
             }
         }
@@ -733,7 +763,7 @@ impl WasmModule {
             }
             Operand::Move(place) => {
                 // Move operation - load value from place
-                // 
+                //
                 // IMPLEMENTATION NOTE: Currently identical to Copy for basic types.
                 // Future enhancement: invalidate source place for borrow checking
                 // when complex types require ownership transfer.
@@ -746,10 +776,12 @@ impl WasmModule {
             }
             Operand::GlobalRef(global_index) => {
                 // Global reference - load global value
-                let wasm_global = local_map.get_global(*global_index)
-                    .ok_or_else(|| CompileError::compiler_error(
-                        &format!("Global index {} not found in local mapping", global_index)
-                    ))?;
+                let wasm_global = local_map.get_global(*global_index).ok_or_else(|| {
+                    CompileError::compiler_error(&format!(
+                        "Global index {} not found in local mapping",
+                        global_index
+                    ))
+                })?;
                 function.instruction(&Instruction::GlobalGet(wasm_global));
                 Ok(())
             }
@@ -757,7 +789,7 @@ impl WasmModule {
     }
 
     /// Lower place access to WASM instructions (CRITICAL IMPLEMENTATION)
-    /// 
+    ///
     /// This method handles the core place resolution system that enables variable access.
     /// It converts WIR Place operations into appropriate WASM instructions.
     fn lower_place_access(
@@ -767,7 +799,10 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match place {
-            Place::Local { index, wasm_type: _ } => {
+            Place::Local {
+                index,
+                wasm_type: _,
+            } => {
                 // Map WIR local to WASM local index
                 let wasm_local = local_map.get_local(*index)
                     .ok_or_else(|| CompileError::compiler_error(
@@ -776,27 +811,32 @@ impl WasmModule {
                 function.instruction(&Instruction::LocalGet(wasm_local));
                 Ok(())
             }
-            
-            Place::Global { index, wasm_type: _ } => {
+
+            Place::Global {
+                index,
+                wasm_type: _,
+            } => {
                 // Map WIR global to WASM global index
-                let wasm_global = local_map.get_global(*index)
-                    .ok_or_else(|| CompileError::compiler_error(
-                        &format!("Global variable with index {} not found in mapping", index)
-                    ))?;
+                let wasm_global = local_map.get_global(*index).ok_or_else(|| {
+                    CompileError::compiler_error(&format!(
+                        "Global variable with index {} not found in mapping",
+                        index
+                    ))
+                })?;
                 function.instruction(&Instruction::GlobalGet(wasm_global));
                 Ok(())
             }
-            
+
             Place::Memory { base, offset, size } => {
                 // Generate memory access with proper alignment
                 self.lower_memory_base(base, function)?;
-                
+
                 // Add offset if non-zero
                 if offset.0 > 0 {
                     function.instruction(&Instruction::I32Const(offset.0 as i32));
                     function.instruction(&Instruction::I32Add);
                 }
-                
+
                 // Use appropriate load instruction based on type size
                 match size {
                     TypeSize::Byte => {
@@ -846,7 +886,7 @@ impl WasmModule {
                 }
                 Ok(())
             }
-            
+
             Place::Projection { base, elem } => {
                 // Handle field access and array indexing
                 self.lower_place_access(base, function, local_map)?;
@@ -857,7 +897,7 @@ impl WasmModule {
     }
 
     /// Lower function call to WASM instructions (CRITICAL IMPLEMENTATION)
-    /// 
+    ///
     /// This method handles function calls by loading arguments onto the WASM stack
     /// and generating appropriate call instructions.
     fn lower_function_call(
@@ -903,7 +943,7 @@ impl WasmModule {
     }
 
     /// Lower place assignment to WASM instructions (CRITICAL IMPLEMENTATION)
-    /// 
+    ///
     /// This method handles place assignment operations, generating appropriate
     /// WASM store instructions for different place types with type awareness.
     fn lower_place_assignment_with_type(
@@ -914,36 +954,46 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match place {
-            Place::Local { index, wasm_type: _ } => {
+            Place::Local {
+                index,
+                wasm_type: _,
+            } => {
                 // Map WIR local to WASM local index
-                let wasm_local = local_map.get_local(*index)
-                    .ok_or_else(|| CompileError::compiler_error(
-                        &format!("Local variable with index {} not found in mapping", index)
-                    ))?;
+                let wasm_local = local_map.get_local(*index).ok_or_else(|| {
+                    CompileError::compiler_error(&format!(
+                        "Local variable with index {} not found in mapping",
+                        index
+                    ))
+                })?;
                 function.instruction(&Instruction::LocalSet(wasm_local));
                 Ok(())
             }
-            
-            Place::Global { index, wasm_type: _ } => {
+
+            Place::Global {
+                index,
+                wasm_type: _,
+            } => {
                 // Map WIR global to WASM global index
-                let wasm_global = local_map.get_global(*index)
-                    .ok_or_else(|| CompileError::compiler_error(
-                        &format!("Global variable with index {} not found in mapping", index)
-                    ))?;
+                let wasm_global = local_map.get_global(*index).ok_or_else(|| {
+                    CompileError::compiler_error(&format!(
+                        "Global variable with index {} not found in mapping",
+                        index
+                    ))
+                })?;
                 function.instruction(&Instruction::GlobalSet(wasm_global));
                 Ok(())
             }
-            
+
             Place::Memory { base, offset, size } => {
                 // Generate address calculation first
                 self.lower_memory_base(base, function)?;
-                
+
                 // Add offset if non-zero
                 if offset.0 > 0 {
                     function.instruction(&Instruction::I32Const(offset.0 as i32));
                     function.instruction(&Instruction::I32Add);
                 }
-                
+
                 // Use appropriate store instruction based on value type and size
                 match (value_type, size) {
                     // Float stores
@@ -1030,13 +1080,14 @@ impl WasmModule {
                     (value_type, size) => {
                         return_compiler_error!(
                             "Unsupported store combination: {:?} value to {:?} size",
-                            value_type, size
+                            value_type,
+                            size
                         );
                     }
                 }
                 Ok(())
             }
-            
+
             Place::Projection { base, elem } => {
                 // Handle field assignment and array element assignment
                 self.lower_place_access(base, function, local_map)?;
@@ -1061,16 +1112,21 @@ impl WasmModule {
             }
             MemoryBase::Stack => {
                 // Stack-based memory (should be handled as locals)
-                return_compiler_error!("Stack-based memory should be handled as local variables, not memory operations");
+                return_compiler_error!(
+                    "Stack-based memory should be handled as local variables, not memory operations"
+                );
             }
-            MemoryBase::Heap { alloc_id: _, size: _ } => {
+            MemoryBase::Heap {
+                alloc_id: _,
+                size: _,
+            } => {
                 // Heap allocation - simplified implementation using linear memory base
-                // 
+                //
                 // IMPLEMENTATION NOTE: Full heap management requires:
                 // - Dynamic allocation tracking
                 // - Garbage collection integration
                 // - Memory layout optimization
-                // 
+                //
                 // For basic language features, linear memory at offset 0 is sufficient.
                 function.instruction(&Instruction::I32Const(0));
                 Ok(())
@@ -1079,7 +1135,7 @@ impl WasmModule {
     }
 
     /// Lower host function call to WASM call instruction
-    /// 
+    ///
     /// This method handles host function calls by loading arguments onto the WASM stack
     /// and generating call instructions with correct function indices.
     fn lower_host_function_call(
@@ -1091,12 +1147,19 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Lowering host function call '{}' with {} arguments", host_function.name, args.len());
-        
+        println!(
+            "WASM: Lowering host function call '{}' with {} arguments",
+            host_function.name,
+            args.len()
+        );
+
         // Load all arguments onto the stack in order
         for (i, arg) in args.iter().enumerate() {
             #[cfg(feature = "verbose_codegen_logging")]
-            println!("WASM: Loading argument {} for host function '{}'", i, host_function.name);
+            println!(
+                "WASM: Loading argument {} for host function '{}'",
+                i, host_function.name
+            );
             self.lower_operand(arg, function, local_map)?;
         }
 
@@ -1108,7 +1171,10 @@ impl WasmModule {
             ))?;
 
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Calling host function '{}' with index {}", host_function.name, func_index);
+        println!(
+            "WASM: Calling host function '{}' with index {}",
+            host_function.name, func_index
+        );
 
         // Generate call instruction with the host function index
         function.instruction(&Instruction::Call(*func_index));
@@ -1116,17 +1182,26 @@ impl WasmModule {
         // If there's a destination place, store the result
         if let Some(dest_place) = destination {
             #[cfg(feature = "verbose_codegen_logging")]
-            println!("WASM: Storing result of host function '{}' to place: {:?}", host_function.name, dest_place);
+            println!(
+                "WASM: Storing result of host function '{}' to place: {:?}",
+                host_function.name, dest_place
+            );
             // For host function calls, use the place's own type as the return type
             let return_type = dest_place.wasm_type();
             self.lower_place_assignment_with_type(dest_place, &return_type, function, local_map)?;
         } else {
             #[cfg(feature = "verbose_codegen_logging")]
-            println!("WASM: Host function '{}' has no return value", host_function.name);
+            println!(
+                "WASM: Host function '{}' has no return value",
+                host_function.name
+            );
         }
 
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Successfully generated call for host function '{}'", host_function.name);
+        println!(
+            "WASM: Successfully generated call for host function '{}'",
+            host_function.name
+        );
 
         Ok(())
     }
@@ -1139,13 +1214,20 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match elem {
-            ProjectionElem::Field { index: _, offset, size: _ } => {
+            ProjectionElem::Field {
+                index: _,
+                offset,
+                size: _,
+            } => {
                 // Field access - add field offset to base address
                 function.instruction(&Instruction::I32Const(offset.0 as i32));
                 function.instruction(&Instruction::I32Add);
                 Ok(())
             }
-            ProjectionElem::Index { index, element_size } => {
+            ProjectionElem::Index {
+                index,
+                element_size,
+            } => {
                 // Array indexing - calculate offset from index
                 self.lower_place_access(index, function, local_map)?;
                 function.instruction(&Instruction::I32Const(*element_size as i32));
@@ -1269,19 +1351,25 @@ impl WasmModule {
                     Constant::F64(_) => Ok(WasmType::F64),
                     Constant::Bool(_) => Ok(WasmType::I32), // Booleans are i32 in WASM
                     Constant::String(_) => Ok(WasmType::I32), // String pointers are i32
-                    _ => return_compiler_error!("Unsupported constant type for WASM type determination: {:?}", constant),
+                    _ => return_compiler_error!(
+                        "Unsupported constant type for WASM type determination: {:?}",
+                        constant
+                    ),
                 }
             }
-            Operand::Copy(place) | Operand::Move(place) => {
-                Ok(place.wasm_type())
-            }
+            Operand::Copy(place) | Operand::Move(place) => Ok(place.wasm_type()),
             Operand::FunctionRef(_) => Ok(WasmType::I32), // Function references are i32 indices
-            Operand::GlobalRef(_) => Ok(WasmType::I32), // Global references are i32 indices
+            Operand::GlobalRef(_) => Ok(WasmType::I32),   // Global references are i32 indices
         }
     }
 
     /// Lower binary operations to WASM instructions with type awareness
-    fn lower_binary_op(&self, op: &BinOp, wasm_type: &WasmType, function: &mut Function) -> Result<(), CompileError> {
+    fn lower_binary_op(
+        &self,
+        op: &BinOp,
+        wasm_type: &WasmType,
+        function: &mut Function,
+    ) -> Result<(), CompileError> {
         match (op, wasm_type) {
             // Integer arithmetic operations
             (BinOp::Add, WasmType::I32) => {
@@ -1501,14 +1589,17 @@ impl WasmModule {
 
             // Logical operations (implemented as short-circuiting control flow)
             (BinOp::And, _) | (BinOp::Or, _) => {
-                return_compiler_error!("Logical operations (and/or) should be implemented as control flow, not binary operations. Use if/else statements for short-circuiting behavior.");
+                return_compiler_error!(
+                    "Logical operations (and/or) should be implemented as control flow, not binary operations. Use if/else statements for short-circuiting behavior."
+                );
             }
 
             // Unsupported combinations
             (op, wasm_type) => {
                 return_compiler_error!(
                     "Binary operation {:?} not supported for WASM type {:?}. Check that the operation is valid for the given type.",
-                    op, wasm_type
+                    op,
+                    wasm_type
                 );
             }
         }
@@ -1533,7 +1624,7 @@ impl WasmModule {
     }
 
     /// Lower if terminator to WASM structured control flow
-    /// 
+    ///
     /// This method implements WASM structured control flow for if/else statements.
     /// It generates proper WASM if/else/end instruction sequences with correct
     /// block types and stack discipline.
@@ -1553,30 +1644,28 @@ impl WasmModule {
                 condition_type
             );
         }
-        
+
         // Load condition onto stack
         self.lower_operand(condition, function, local_map)?;
-        
+
         // Generate structured control flow using WASM if/else/end
         // The condition is already on the stack from the operand lowering
         function.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-        
-        // For now, we'll generate placeholder blocks
-        // TODO: Generate actual block instructions when block lowering is implemented
-        // This is a simplified implementation that maintains stack discipline
-        
+
         // Then block (executed when condition is true)
-        // In a full implementation, this would lower the actual then_block WIR
+        // For now, generate minimal placeholder that maintains stack discipline
+        // TODO: Generate actual block instructions when block lowering is implemented
         function.instruction(&Instruction::Nop); // Placeholder for then block
-        
+
         function.instruction(&Instruction::Else);
-        
-        // Else block (executed when condition is false)  
-        // In a full implementation, this would lower the actual else_block WIR
+
+        // Else block (executed when condition is false)
+        // Generate minimal placeholder that maintains stack discipline
         function.instruction(&Instruction::Nop); // Placeholder for else block
-        
+
+        // CRITICAL: Always close the if/else control frame with end instruction
         function.instruction(&Instruction::End);
-        
+
         Ok(())
     }
 
@@ -1588,24 +1677,33 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match terminator {
-            Terminator::Goto { target: _ } => {
-                // For simple linear control flow, no explicit branch needed
-                // The next block will be processed sequentially
+            Terminator::Goto { target } => {
+                // Generate branch instruction for goto
+                // In WASM, we use br instruction to branch to a label
+                // For now, we'll generate a simple branch to the target block
+                // TODO: Implement proper block label management when multi-block functions are supported
+                
+                // For single-block functions (like our simple arithmetic test),
+                // a goto at the end should just fall through, so no instruction needed
+                // But we should ensure proper control flow for multi-block functions
+                
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WASM: Goto terminator to block {}, generating fallthrough", target);
+                
                 Ok(())
             }
             Terminator::If {
                 condition,
                 then_block,
                 else_block,
-            } => {
-                self.lower_if_terminator(condition, *then_block, *else_block, function, local_map)
-            }
+            } => self.lower_if_terminator(condition, *then_block, *else_block, function, local_map),
             Terminator::Return { values } => {
                 // Load return values onto the stack
                 for value in values {
                     self.lower_operand(value, function, local_map)?;
                 }
-                // Add explicit Return instruction for proper function termination
+                // Always add return instruction for proper WASM termination
+                // This is required for both void and non-void functions
                 function.instruction(&Instruction::Return);
                 Ok(())
             }
@@ -1617,28 +1715,26 @@ impl WasmModule {
     }
 
     /// Ensure function has proper termination
-    /// 
+    ///
     /// WASM functions must end with a terminating instruction (return, unreachable, etc.)
-    /// The wasm_encoder library requires explicit termination for all functions.
-    /// 
-    /// This method should only be called if the function doesn't already have proper termination
-    /// from its terminators.
+    /// This method ensures every function has proper termination by adding a return instruction.
+    /// For void functions, this adds an empty return. For functions with return types,
+    /// this provides default values and return.
     fn ensure_function_termination(
         &self,
         function: &mut Function,
         result_types: &[ValType],
     ) -> Result<(), CompileError> {
-        // Only add termination if needed - the terminator lowering should handle most cases
-        // This is a fallback for functions that might not have proper termination
+        // Always add proper termination to ensure WASM validation passes
+        // This is essential for fixing the "control frames remain" error
         
         if result_types.is_empty() {
-            // For void functions, add an explicit return instruction only if needed
-            // Note: This might be redundant if the terminator lowering already added a return
-            // but WASM allows multiple return instructions
+            // For void functions, add an explicit return instruction
+            // This ensures the function properly terminates
             function.instruction(&Instruction::Return);
         } else {
-            // For functions with return types, we need to provide default values
-            // This should rarely be needed if the WIR generation is correct
+            // For functions with return types, provide default values
+            // This handles cases where WIR doesn't have explicit returns
             for result_type in result_types {
                 match result_type {
                     ValType::I32 => {
@@ -1667,7 +1763,7 @@ impl WasmModule {
     }
 
     /// Generate string constant WASM instructions
-    /// 
+    ///
     /// Returns an i32.const instruction with the offset to the string data in linear memory
     fn generate_string_constant(&mut self, value: &str) -> Result<(), CompileError> {
         let _offset = self.string_manager.add_string_constant(value);
@@ -1704,26 +1800,27 @@ impl WasmModule {
         function_index: u32,
     ) -> Result<u32, CompileError> {
         // Add export entry to export section
-        self.export_section.export(name, ExportKind::Func, function_index);
-        
+        self.export_section
+            .export(name, ExportKind::Func, function_index);
+
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Exported function '{}' at index {}", name, function_index);
-        
+        println!(
+            "WASM: Exported function '{}' at index {}",
+            name, function_index
+        );
+
         Ok(function_index)
     }
 
     /// Add global export to the WASM module
-    pub fn add_global_export(
-        &mut self,
-        name: &str,
-        global_index: u32,
-    ) -> Result<(), CompileError> {
+    pub fn add_global_export(&mut self, name: &str, global_index: u32) -> Result<(), CompileError> {
         // Add export entry to export section
-        self.export_section.export(name, ExportKind::Global, global_index);
-        
+        self.export_section
+            .export(name, ExportKind::Global, global_index);
+
         #[cfg(feature = "verbose_codegen_logging")]
         println!("WASM: Exported global '{}' at index {}", name, global_index);
-        
+
         Ok(())
     }
 
@@ -1731,97 +1828,109 @@ impl WasmModule {
     pub fn add_memory_export(&mut self, name: &str) -> Result<(), CompileError> {
         // Add export entry to export section (memory index is always 0 for single memory)
         self.export_section.export(name, ExportKind::Memory, 0);
-        
+
         #[cfg(feature = "verbose_codegen_logging")]
         println!("WASM: Exported memory '{}'", name);
-        
+
         Ok(())
     }
 
-
-
     /// Generate WASM import section entries for host functions used in WIR
-    /// 
+    ///
     /// This method creates WASM function type signatures from host function definitions
     /// and adds import entries with correct module and function names.
-    pub fn encode_host_function_imports(&mut self, host_imports: &HashSet<HostFunctionDef>) -> Result<(), CompileError> {
+    pub fn encode_host_function_imports(
+        &mut self,
+        host_imports: &HashSet<HostFunctionDef>,
+    ) -> Result<(), CompileError> {
         for host_func in host_imports {
             // Create WASM function type signature from host function definition
             let param_types = self.create_wasm_param_types(&host_func.parameters)?;
             let result_types = self.create_wasm_result_types(&host_func.return_types)?;
-            
+
             // Add function type to type section
             self.type_section.ty().function(param_types, result_types);
-            
+
             // Add import entry to import section
             self.import_section.import(
                 &host_func.module,
                 &host_func.import_name,
                 EntityType::Function(self.type_count),
             );
-            
+
             // Register function index for calls - host functions come before regular functions
-            self.host_function_indices.insert(host_func.name.clone(), self.function_count);
-            
+            self.host_function_indices
+                .insert(host_func.name.clone(), self.function_count);
+
             // Also register in the main function registry for unified lookup
-            self.function_registry.insert(host_func.name.clone(), self.function_count);
-            
+            self.function_registry
+                .insert(host_func.name.clone(), self.function_count);
+
             // Increment counters
             self.function_count += 1;
             self.type_count += 1;
         }
-        
+
         Ok(())
     }
-    
+
     /// Create WASM parameter types from host function parameters
-    fn create_wasm_param_types(&self, parameters: &[crate::compiler::parsers::ast_nodes::Arg]) -> Result<Vec<ValType>, CompileError> {
+    fn create_wasm_param_types(
+        &self,
+        parameters: &[crate::compiler::parsers::ast_nodes::Arg],
+    ) -> Result<Vec<ValType>, CompileError> {
         let mut param_types = Vec::new();
-        
+
         for param in parameters {
             let wasm_type = self.datatype_to_wasm_type(&param.value.data_type)?;
             param_types.push(self.wasm_type_to_val_type(&wasm_type));
         }
-        
+
         Ok(param_types)
     }
-    
+
     /// Create WASM result types from host function return types
-    fn create_wasm_result_types(&self, return_types: &[crate::compiler::datatypes::DataType]) -> Result<Vec<ValType>, CompileError> {
+    fn create_wasm_result_types(
+        &self,
+        return_types: &[crate::compiler::datatypes::DataType],
+    ) -> Result<Vec<ValType>, CompileError> {
         let mut result_types = Vec::new();
-        
+
         for return_type in return_types {
             let wasm_type = self.datatype_to_wasm_type(return_type)?;
             result_types.push(self.wasm_type_to_val_type(&wasm_type));
         }
-        
+
         Ok(result_types)
     }
-    
+
     /// Get the function index for a host function by name
     pub fn get_host_function_index(&self, name: &str) -> Option<u32> {
         self.host_function_indices.get(name).copied()
     }
-    
+
     /// Get the function index for a regular function by name
     pub fn get_function_index(&self, name: &str) -> Option<u32> {
         self.function_registry.get(name).copied()
     }
-    
+
     /// Get the total number of functions (host + regular)
     pub fn get_total_function_count(&self) -> u32 {
         self.function_count
     }
-    
+
     /// Get the number of host function imports
     pub fn get_host_function_count(&self) -> usize {
         self.host_function_indices.len()
     }
 
     /// Convert Beanstalk DataType to WasmType for host function signatures
-    fn datatype_to_wasm_type(&self, data_type: &crate::compiler::datatypes::DataType) -> Result<WasmType, CompileError> {
+    fn datatype_to_wasm_type(
+        &self,
+        data_type: &crate::compiler::datatypes::DataType,
+    ) -> Result<WasmType, CompileError> {
         use crate::compiler::datatypes::DataType;
-        
+
         match data_type {
             DataType::Int(_) => Ok(WasmType::I32),
             DataType::Float(_) => Ok(WasmType::F32),
@@ -1837,7 +1946,9 @@ impl WasmModule {
                 return_unimplemented_feature_error!(
                     &format!("DataType '{:?}' in host function signatures", data_type),
                     None,
-                    Some("use basic types (Int, Float, Bool, String) for host function parameters and return values")
+                    Some(
+                        "use basic types (Int, Float, Bool, String) for host function parameters and return values"
+                    )
                 );
             }
         }
@@ -1849,7 +1960,7 @@ impl WasmModule {
         if self.string_manager.get_data_size() > 0 {
             let string_data = self.string_manager.get_data_section();
             self.data_section.active(
-                0, // Memory index 0
+                0,                        // Memory index 0
                 &ConstExpr::i32_const(0), // Start at offset 0 in linear memory
                 string_data.iter().copied(),
             );
@@ -1872,7 +1983,7 @@ impl WasmModule {
     /// Validate and finish building the WASM module with comprehensive error handling
     pub fn finish_with_validation(self) -> Result<Vec<u8>, CompileError> {
         let wasm_bytes = self.finish();
-        
+
         // Validate the generated WASM module
         match wasmparser::validate(&wasm_bytes) {
             Ok(_) => Ok(wasm_bytes),
@@ -1881,8 +1992,6 @@ impl WasmModule {
             }
         }
     }
-
-
 
     /// Register a function name with its index
     pub fn register_function(&mut self, name: String, index: u32) {
@@ -1894,6 +2003,3 @@ impl WasmModule {
         &self.function_registry
     }
 }
-
-
-

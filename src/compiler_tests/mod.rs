@@ -118,6 +118,11 @@ pub mod code_usage_analyzer;
 // Code analysis runner for generating reports
 pub mod run_code_analysis;
 
+// === DEBUG TOOLS ===
+// Debug tests for WASM compilation pipeline
+#[cfg(test)]
+pub mod wasm_compilation_debug;
+
 
 // === RE-EXPORTS ===
 
