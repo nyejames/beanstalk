@@ -199,7 +199,7 @@ fn extract_required_imports(exported_declarations: &[Arg]) -> Vec<ExternalImport
     // Add standard IO imports that are always required
     imports.extend(get_standard_io_imports());
 
-    // TODO: Scan the MIR/AST for user-defined external function calls
+    // TODO: Scan the WIR/AST for user-defined external function calls
     // This will be implemented when we add support for importing external functions
 
     imports

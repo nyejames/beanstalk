@@ -89,12 +89,19 @@ impl ProjectBuilder for HtmlProjectBuilder {
         release_build: bool,
         flags: &[Flag],
     ) -> Result<Project, Vec<CompileError>> {
+
         // Validate configuration
         if let Err(e) = self.validate_config(config) {
             return Err(vec![e]);
         }
 
         // TODO
+        // An HTML project has a directory-as-namespace structure.
+        // So each directory becomes a separate HTML page.
+        // Any .bst files in that directory are combined into a single WASM module.
+
+        // Each directory becomes a separate Wasm module and has a specified index page.
+        // Any other files (JS / CSS / HTML) would be copied over and have to be referenced from the index page for use.
 
         let mut output_files = Vec::new();
 
