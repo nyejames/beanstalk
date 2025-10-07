@@ -26,38 +26,25 @@ pub mod consolidated_performance_tests;
 #[cfg(test)]
 pub mod optimizer_tests;
 
-// WASM module generation and encoding tests - DISABLED during backend simplification
-// #[cfg(test)]
-// pub mod wasm_module_tests;
+// WASM module generation and encoding tests - REMOVED (outdated API usage)
 
 // WASM validation and error reporting tests
 #[cfg(test)]
 pub mod wasm_validation_tests;
 
-// Comprehensive WASM codegen tests - DISABLED during backend simplification
-// #[cfg(test)]
-// pub mod wasm_codegen_tests;
+// Comprehensive WASM codegen tests - REMOVED (outdated API usage)
 
-// Memory layout management tests - DISABLED during backend simplification
-// #[cfg(test)]
-// pub mod memory_layout_tests;
+// Memory layout management tests - REMOVED (outdated API usage)
 
-// Interface VTable generation tests - DISABLED during backend simplification
-// #[cfg(test)]
-// pub mod interface_vtable_tests;
+// Interface VTable generation tests - REMOVED (outdated API usage)
 
-// WASM terminator lowering tests
-// Temporarily disabled due to API changes
-// #[cfg(test)]
-// pub mod wasm_terminator_tests;
+// WASM terminator lowering tests - REMOVED (outdated API usage)
 
 // WASM encoder module builder API tests
 #[cfg(test)]
 pub mod wasm_encoder_module_tests;
 
-// WASM encoder API discovery tests
-#[cfg(test)]
-pub mod wasm_encoder_api_discovery;
+// WASM encoder API discovery tests - REMOVED (no longer needed)
 
 // WASM encoder Function builder API tests
 #[cfg(test)]
@@ -71,6 +58,10 @@ pub mod wasm_encoder_type_tests;
 #[cfg(test)]
 pub mod wasm_encoder_error_handling_tests;
 
+// Beanstalk language compliance tests - Tests for language-specific WASM generation
+#[cfg(test)]
+pub mod beanstalk_language_compliance_tests;
+
 // Simple error validation test
 #[cfg(test)]
 pub mod simple_error_validation_test;
@@ -82,13 +73,9 @@ pub mod wasm_module_generation_tests;
 // === FOCUSED TEST CATEGORIES ===
 // Organized tests for specific functionality
 
-// WIR construction tests - DISABLED during backend simplification
-// #[cfg(test)]
-// pub mod wir_construction_tests;
+// WIR construction tests - REMOVED (outdated API usage)
 
-// Borrow checker tests - DISABLED during backend simplification
-// #[cfg(test)]
-// pub mod borrow_checker_tests;
+// Borrow checker tests - REMOVED (outdated API usage)
 
 // Error handling tests - Error message validation
 #[cfg(test)]

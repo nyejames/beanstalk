@@ -4,8 +4,6 @@ use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::wir::wir_nodes::ExportKind;
 use crate::return_compiler_error;
 
-
-
 /// Basic WASM validation using wasmparser
 fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
     match wasmparser::validate(wasm_bytes) {
@@ -18,12 +16,6 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
         }
     }
 }
-
-
-
-
-
-
 
 /// Simplified WIR-to-WASM compilation entry point
 /// 
@@ -73,8 +65,6 @@ pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
     
     Ok(compiled_wasm)
 }
-
-
 
 /// Validate WIR structure before WASM compilation
 fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
