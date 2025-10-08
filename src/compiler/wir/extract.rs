@@ -80,6 +80,7 @@ impl BitSet {
     }
 
     /// Clear a specific bit (set to 0) - for tests
+    #[allow(dead_code)] // Utility method for future testing
     #[inline]
     pub fn clear(&mut self, bit: usize) {
         if bit >= self.capacity {
@@ -94,6 +95,7 @@ impl BitSet {
     }
 
     /// Fast intersection with another bitset (self &= other) - for tests
+    #[allow(dead_code)] // Utility method for future testing
     #[inline]
     pub fn intersect_with(&mut self, other: &BitSet) {
         // Fast path: if other is empty, result is empty
@@ -327,6 +329,7 @@ impl BitSet {
     }
 
     /// Collect set bit indices into a vector (for compatibility with existing code)
+    #[allow(dead_code)] // Utility method for future compatibility
     pub fn iter_set_bits(&self) -> impl Iterator<Item = usize> + '_ {
         // For compatibility, but prefer for_each_set_bit for performance
         let mut bits = Vec::new();
@@ -335,6 +338,7 @@ impl BitSet {
     }
 
     /// Fast clear all bits without allocation
+    #[allow(dead_code)] // Utility method for future use
     #[inline]
     pub fn clear_all(&mut self) {
         self.clear_all_fast();
@@ -384,6 +388,7 @@ impl BitSet {
     }
 
     /// Get the capacity of this bitset (cached for fast access)
+    #[allow(dead_code)] // Utility method for future use
     #[inline]
     pub fn capacity(&self) -> usize {
         self.capacity

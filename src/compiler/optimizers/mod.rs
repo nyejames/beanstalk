@@ -6,9 +6,6 @@
 ///
 /// ## Organization
 /// - `constant_folding`: Compile-time constant evaluation
-
-/// - `streamlined_diagnostics`: Fast-path error generation for borrow checking
-
 ///
 /// ## Usage
 /// These modules are intended to be used as optional optimizations that can
@@ -16,8 +13,3 @@
 /// should work without these optimizations.
 
 pub mod constant_folding;
-pub mod interface_dispatch;
-pub mod lifetime_memory_manager;
-
-
-pub mod streamlined_diagnostics;

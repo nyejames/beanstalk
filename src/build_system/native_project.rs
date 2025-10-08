@@ -58,7 +58,7 @@ impl ProjectBuilder for NativeProjectBuilder {
         &self.target
     }
 
-    fn validate_config(&self, config: &Config) -> Result<(), CompileError> {
+    fn validate_config(&self, _config: &Config) -> Result<(), CompileError> {
         // Validate native-specific configuration
         if let BuildTarget::Native { target_arch: _, .. } = &self.target {
             // Don't bother checking for valid targets for now

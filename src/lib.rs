@@ -4,7 +4,6 @@ pub mod settings;
 pub mod cli;
 mod create_new_project;
 mod dev_server;
-mod file_output;
 
 pub mod compiler_tests;
 
@@ -25,7 +24,7 @@ mod compiler {
         pub mod ast_nodes;
         pub mod build_ast;
         pub mod collections;
-        pub mod markdown;
+        // pub mod markdown; // Commented out to silence unused warnings - will be used by frontend later
         pub mod expressions {
             pub mod eval_expression;
             pub mod expression;
@@ -49,9 +48,6 @@ mod compiler {
     }
     pub mod optimizers {
         pub mod constant_folding;
-        pub mod interface_dispatch;
-        pub mod lifetime_memory_manager;
-        pub mod streamlined_diagnostics;
     }
 
     pub mod wir {
@@ -60,7 +56,7 @@ mod compiler {
         pub mod wir;
         pub mod wir_nodes;
         pub mod place;
-        pub mod unified_borrow_checker;
+        pub mod borrow_checker;
     }
 
     mod html5_codegen {

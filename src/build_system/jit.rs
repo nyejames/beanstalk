@@ -8,7 +8,7 @@ use crate::build_system::core_build;
 use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
-use crate::{Flag, InputModule, Project, timer_log};
+use crate::{Flag, InputModule, Project};
 
 pub struct JitProjectBuilder {
     target: BuildTarget,

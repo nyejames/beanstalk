@@ -12,6 +12,8 @@ use std::{
     path::Path,
 };
 
+
+
 enum Command {
     NewHTMLProject(PathBuf),
     Build(PathBuf), // Builds a file or project in development mode
@@ -28,6 +30,8 @@ enum Command {
 }
 
 pub fn start_cli() {
+
+    
     let compiler_args: Vec<String> = env::args().collect();
 
     if compiler_args.len() < 2 {

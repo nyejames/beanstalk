@@ -98,10 +98,10 @@ impl DataType {
 
         match self {
             DataType::Bool(_) => {
-                return matches!(
+                matches!(
                     accepted_type,
                     DataType::Bool(_) | DataType::Int(_) | DataType::Float(_)
-                );
+                )
             }
 
             DataType::Choices(types) => {
@@ -110,11 +110,11 @@ impl DataType {
                         return false;
                     }
                 }
-                return true;
+                true
             }
 
             DataType::Range => {
-                return matches!(
+                matches!(
                     accepted_type,
                     DataType::Collection(..)
                         | DataType::Args(_)
@@ -122,40 +122,39 @@ impl DataType {
                         | DataType::Int(_)
                         | DataType::Decimal(_)
                         | DataType::String(_)
-                );
-            }
-
-            _accepted_type => return true,
-
-            _ => {}
-        }
-
-        match accepted_type {
-            // Might be needed here later?
-            // DataType::Pointer => true,
-            DataType::Inferred(_) => {
-                *accepted_type = self.to_owned();
-                true
-            }
-            DataType::CoerceToString(_) => true,
-
-            DataType::Choices(types) => {
-                for t in types {
-                    if !self.is_valid_type(t) {
-                        return false;
-                    }
-                }
-                true
-            }
-
-            DataType::Bool(_) => {
-                matches!(
-                    self,
-                    &DataType::Bool(_) | &DataType::Int(_) | &DataType::Float(_)
                 )
             }
 
-            _ => false,
+            _ => {
+                // For other self types, check the accepted_type
+                match accepted_type {
+                    // Might be needed here later?
+                    // DataType::Pointer => true,
+                    DataType::Inferred(_) => {
+                        *accepted_type = self.to_owned();
+                        true
+                    }
+                    DataType::CoerceToString(_) => true,
+
+                    DataType::Choices(types) => {
+                        for t in types {
+                            if !self.is_valid_type(t) {
+                                return false;
+                            }
+                        }
+                        true
+                    }
+
+                    DataType::Bool(_) => {
+                        matches!(
+                            self,
+                            &DataType::Bool(_) | &DataType::Int(_) | &DataType::Float(_)
+                        )
+                    }
+
+                    _ => false,
+                }
+            }
         }
     }
 

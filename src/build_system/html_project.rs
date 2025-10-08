@@ -19,6 +19,7 @@ impl HtmlProjectBuilder {
     }
 
     /// Generate JavaScript bindings for WASM module using the new comprehensive generator
+    #[allow(dead_code)] // Will be used when HTML build system is fully integrated
     fn generate_js_bindings(&self, wasm_name: &str, release_build: bool) -> String {
         let generator = JsBindingsGenerator::new(wasm_name.to_string())
             .with_dom_functions(true)
@@ -28,6 +29,7 @@ impl HtmlProjectBuilder {
     }
 
     /// Generate HTML template with WASM integration
+    #[allow(dead_code)] // Will be used when HTML build system is fully integrated
     fn generate_html_template(&self, title: &str, js_filename: &str) -> String {
         format!(
             r#"<!DOCTYPE html>
@@ -103,7 +105,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
         // Each directory becomes a separate Wasm module and has a specified index page.
         // Any other files (JS / CSS / HTML) would be copied over and have to be referenced from the index page for use.
 
-        let mut output_files = Vec::new();
+        let output_files = Vec::new();
 
         Ok(Project {
             config: config.clone(),

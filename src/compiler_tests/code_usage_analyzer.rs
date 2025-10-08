@@ -44,12 +44,15 @@ pub struct CodeUsageAnalyzer {
     /// Functions that are actively called from entry points
     used_functions: HashSet<String>,
     /// Structs/types that are actively used
+    #[allow(dead_code)] // Used for future analysis features
     used_types: HashSet<String>,
     /// Modules that have active integration
+    #[allow(dead_code)] // Used for future analysis features
     active_modules: HashSet<String>,
     /// Function call graph for tracing usage
     call_graph: HashMap<String, Vec<String>>,
     /// Type usage graph
+    #[allow(dead_code)] // Used for future analysis features
     type_usage: HashMap<String, Vec<String>>,
 }
 

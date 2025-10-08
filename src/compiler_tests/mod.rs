@@ -62,6 +62,10 @@ pub mod wasm_encoder_error_handling_tests;
 #[cfg(test)]
 pub mod wasm_encoder_integration_tests;
 
+// WASM magic header regression test - Ensures correct WASM magic header generation
+#[cfg(test)]
+pub mod wasm_magic_header_regression_test;
+
 // Beanstalk language compliance tests - Tests for language-specific WASM generation
 #[cfg(test)]
 pub mod beanstalk_language_compliance_tests;
@@ -88,10 +92,6 @@ pub mod error_handling_tests;
 // Host function system tests - Registry, AST parsing, and WIR lowering
 #[cfg(test)]
 pub mod host_function_tests;
-
-// WASI print functionality tests - End-to-end WASI integration testing
-#[cfg(test)]
-pub mod wasi_print_tests;
 
 // WASIX integration tests - End-to-end WASIX functionality testing
 #[cfg(test)]

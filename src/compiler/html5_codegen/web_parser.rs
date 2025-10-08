@@ -1,7 +1,6 @@
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::parsers::tokens::TextLocation;
 
-
 use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::html5_codegen::js_parser::combine_vec_to_js;
@@ -28,7 +27,7 @@ pub struct ParserOutput {
 
     // May not ever use.
     // Might just stick with inlined styles.
-    // Classes can be used for more complex built-in styling that will go in the standard HTML project BS CSS reset file.
+    // Classes can be used for more complex built-in styling that will go in the standard HTML project CSS reset file.
     // pub css: String,
 }
 

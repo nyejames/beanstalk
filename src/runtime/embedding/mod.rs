@@ -12,7 +12,7 @@ use std::collections::HashMap;
 
 /// Embedded runtime for running Beanstalk code within Rust applications
 pub struct EmbeddedRuntime {
-    runtime: BeanstalkRuntime,
+    _runtime: BeanstalkRuntime,
     store: Arc<Mutex<Store>>,
     loaded_modules: Arc<Mutex<HashMap<String, Module>>>,
     hot_reload_enabled: bool,
@@ -26,7 +26,7 @@ impl EmbeddedRuntime {
         let loaded_modules = Arc::new(Mutex::new(HashMap::new()));
         
         Ok(Self {
-            runtime,
+            _runtime: runtime,
             store,
             loaded_modules,
             hot_reload_enabled: config.hot_reload,

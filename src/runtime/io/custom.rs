@@ -7,12 +7,12 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::io::io::{IoInterface, IoConfig};
 
 pub struct CustomIoBackend {
-    config: IoConfig,
+    _config: IoConfig,
 }
 
 impl CustomIoBackend {
     pub fn new(config: IoConfig) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 }
 

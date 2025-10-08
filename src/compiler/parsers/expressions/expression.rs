@@ -294,23 +294,4 @@ impl Operator {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum AssignmentOperator {
-    Assign,
-    AddAssign,
-    SubtractAssign,
-    MultiplyAssign,
-    DivideAssign,
-}
 
-impl AssignmentOperator {
-    pub fn to_string(&self) -> String {
-        match self {
-            AssignmentOperator::Assign => "=".to_string(),
-            AssignmentOperator::AddAssign => "+=".to_string(),
-            AssignmentOperator::SubtractAssign => "-=".to_string(),
-            AssignmentOperator::MultiplyAssign => "*=".to_string(),
-            AssignmentOperator::DivideAssign => "/=".to_string(),
-        }
-    }
-}
