@@ -1,8 +1,7 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::wir::wir_nodes::{InterfaceInfo, InterfaceDefinition, VTable};
-use crate::return_compiler_error;
+use crate::compiler::wir::wir_nodes::InterfaceInfo;
 use std::collections::HashMap;
-use wasm_encoder::{TableType, RefType, ConstExpr};
+use wasm_encoder::{TableType, RefType};
 
 /// Interface dispatch system for dynamic method calls
 ///

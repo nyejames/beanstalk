@@ -4,7 +4,7 @@
 // WASM linear memory and host functions, with proper error handling.
 
 use crate::compiler::compiler_errors::CompileError;
-use wasmer::{Memory, MemoryView};
+use wasmer::MemoryView;
 
 /// Utilities for reading and writing WASM memory from host functions
 pub struct MemoryUtils;
@@ -296,7 +296,7 @@ mod tests {
     
     #[test]
     fn test_read_write_string() {
-        let (mut store, memory) = create_test_memory();
+        let (store, memory) = create_test_memory();
         let memory_view = memory.view(&store);
         
         let test_string = "Hello, Beanstalk!";
@@ -315,7 +315,7 @@ mod tests {
     
     #[test]
     fn test_read_write_cstring() {
-        let (mut store, memory) = create_test_memory();
+        let (store, memory) = create_test_memory();
         let memory_view = memory.view(&store);
         
         let test_string = "Hello, World!";
@@ -334,7 +334,7 @@ mod tests {
     
     #[test]
     fn test_read_write_i32() {
-        let (mut store, memory) = create_test_memory();
+        let (store, memory) = create_test_memory();
         let memory_view = memory.view(&store);
         
         let test_value = 0x12345678i32;
@@ -352,7 +352,7 @@ mod tests {
     
     #[test]
     fn test_empty_string() {
-        let (mut store, memory) = create_test_memory();
+        let (store, memory) = create_test_memory();
         let memory_view = memory.view(&store);
         
         let empty_string = "";
@@ -371,7 +371,7 @@ mod tests {
     
     #[test]
     fn test_memory_bounds_checking() {
-        let (mut store, memory) = create_test_memory();
+        let (store, memory) = create_test_memory();
         let memory_view = memory.view(&store);
         
         let memory_size = memory_view.size().bytes().0 as u32;
@@ -392,7 +392,7 @@ mod tests {
     
     #[test]
     fn test_validate_memory_range() {
-        let (mut store, memory) = create_test_memory();
+        let (store, memory) = create_test_memory();
         let memory_view = memory.view(&store);
         
         // Valid range

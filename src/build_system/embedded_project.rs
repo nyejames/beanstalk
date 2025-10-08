@@ -127,7 +127,7 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
         &self,
         modules: Vec<InputModule>,
         config: &Config,
-        release_build: bool,
+        _release_build: bool,
         flags: &[Flag],
     ) -> Result<Project, Vec<CompileError>> {
         // Validate configuration

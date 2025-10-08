@@ -1,3 +1,4 @@
+use std::f32::consts::PI;
 // Simple validation test for wasm_encoder error handling
 use wasm_encoder::{
     Module, TypeSection, FunctionSection, CodeSection,
@@ -52,7 +53,7 @@ fn test_wasm_encoder_type_mismatch_detection() {
     let mut func = Function::new(vec![]);
     
     // ERROR: Function should return i32, but we're producing f32
-    func.instruction(&Instruction::F32Const(3.14.into()));
+    func.instruction(&Instruction::F32Const(PI.into()));
     func.instruction(&Instruction::End);
     
     code.function(&func);

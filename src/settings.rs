@@ -5,7 +5,7 @@ use crate::compiler::parsers::tokens::TextLocation;
 use crate::runtime::RuntimeConfig;
 use crate::{return_config_error, return_type_error};
 use std::path::PathBuf;
-use wasmer_types::target::Target;
+use wasmer::sys::Target;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";

@@ -28,6 +28,7 @@
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::HostFunctionDef;
+use crate::compiler::host_functions::wasix_registry::{WasixFunctionRegistry, create_wasix_registry};
 use crate::compiler::wir::place::{MemoryBase, Place, ProjectionElem, TypeSize, WasmType};
 use crate::compiler::wir::wir_nodes::{
     BinOp, BorrowKind, Constant, MemoryOpKind, Operand, Rvalue, Statement, Terminator, UnOp, WIR, WirFunction,
@@ -436,6 +437,15 @@ impl StringManager {
         // we would track the number of times each string was referenced
         0 // Placeholder for now
     }
+
+    /// Add raw data to the data section and return its offset
+    /// This is used for non-string data like IOVec structures
+    pub fn add_raw_data(&mut self, data: &[u8]) -> u32 {
+        let offset = self.next_offset;
+        self.data_section.extend_from_slice(data);
+        self.next_offset += data.len() as u32;
+        offset
+    }
 }
 
 impl Default for StringManager {
@@ -658,6 +668,16 @@ impl LocalAnalyzer {
                     self.collect_from_place(dest);
                 }
             }
+            Statement::WasixCall {
+                args, destination, ..
+            } => {
+                for arg in args {
+                    self.collect_from_operand(arg);
+                }
+                if let Some(dest) = destination {
+                    self.collect_from_place(dest);
+                }
+            }
             Statement::Nop => {
                 // No places to collect
             }
@@ -823,6 +843,12 @@ pub struct WasmModule {
     // Host function index mapping
     host_function_indices: HashMap<String, u32>,
 
+    // WASIX function registry for WASIX imports
+    wasix_registry: WasixFunctionRegistry,
+
+    // WASIX memory manager for enhanced allocation strategies
+    wasix_memory_manager: crate::compiler::host_functions::wasix_registry::WasixMemoryManager,
+
     // Source location tracking for error reporting
     function_source_map: HashMap<u32, FunctionSourceInfo>,
 
@@ -867,6 +893,8 @@ impl WasmModule {
             string_manager: StringManager::new(),
             function_registry: HashMap::new(),
             host_function_indices: HashMap::new(),
+            wasix_registry: create_wasix_registry().unwrap_or_default(),
+            wasix_memory_manager: crate::compiler::host_functions::wasix_registry::WasixMemoryManager::new(),
             function_source_map: HashMap::new(),
             function_count: 0,
             type_count: 0,
@@ -890,6 +918,9 @@ impl WasmModule {
         // Generate WASM import section for host functions
         module.encode_host_function_imports(&wir.host_imports)?;
 
+        // Generate WASIX import section for WASIX functions
+        module.add_wasix_imports()?;
+
         // Process functions with enhanced error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
             module.compile_function(function).map_err(|mut error| {
@@ -901,6 +932,14 @@ impl WasmModule {
                 error
             })?;
         }
+
+        // Export the main function if it exists
+        if let Some(main_function_index) = module.get_function_index("main") {
+            module.add_function_export("main", main_function_index)?;
+        }
+
+        // Export memory for WASIX access
+        module.add_memory_export("memory")?;
 
         // Always validate the generated module using wasm_encoder's validation
         module.validate_with_wasm_encoder()?;
@@ -1282,6 +1321,14 @@ impl WasmModule {
                 // WIR-faithful host call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
                 self.lower_wir_host_call_enhanced(host_func, args, destination, function_builder, local_map)
             }
+            Statement::WasixCall {
+                function_name,
+                args,
+                destination,
+            } => {
+                // WASIX function call: handled by WASIX registry
+                self.lower_wasix_host_call(function_name, args, destination, function_builder, local_map)
+            }
             Statement::Nop => {
                 // No-op generates no instructions (0 instructions)
                 Ok(())
@@ -1413,6 +1460,14 @@ impl WasmModule {
             } => {
                 // WIR-faithful host call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
                 self.lower_wir_host_call(host_func, args, destination, function, local_map)
+            }
+            Statement::WasixCall {
+                function_name,
+                args,
+                destination,
+            } => {
+                // WASIX function call: handled by WASIX registry (simplified version)
+                self.lower_wasix_host_call_simple(function_name, args, destination, function, local_map)
             }
             Statement::Nop => {
                 // No-op generates no instructions (0 instructions)
@@ -1623,6 +1678,12 @@ impl WasmModule {
         function: &mut Function,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
+        // Check if this is a WASIX function (identified by module name)
+        if host_function.module == "wasix_32v1" {
+            // This is a WASIX function - handle it specially
+            return self.lower_wasix_host_call_simple(&host_function.name, args, destination, function, local_map);
+        }
+
         // Step 1: Load all arguments onto stack (1 instruction per arg)
         for arg in args {
             self.lower_operand(arg, function, local_map)?;
@@ -1642,6 +1703,128 @@ impl WasmModule {
             let return_type = dest_place.wasm_type();
             self.lower_place_assignment_with_type(dest_place, &return_type, function, local_map)?;
         }
+
+        Ok(())
+    }
+
+    /// Lower WASIX host function call (simplified version for Function)
+    fn lower_wasix_host_call_simple(
+        &mut self,
+        function_name: &str,
+        args: &[Operand],
+        _destination: &Option<Place>,
+        function: &mut Function,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        match function_name {
+            "print" => self.lower_wasix_print_simple(args, function, local_map),
+            _ => {
+                return_compiler_error!(
+                    "Unsupported WASIX function: {}. Only 'print' is currently implemented.",
+                    function_name
+                );
+            }
+        }
+    }
+
+    /// Lower print() function to WASIX fd_write call (simplified version for Function)
+    fn lower_wasix_print_simple(
+        &mut self,
+        args: &[Operand],
+        function: &mut Function,
+        _local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Validate arguments - print() should have exactly one string argument
+        if args.len() != 1 {
+            return_compiler_error!(
+                "print() function expects exactly 1 argument, got {}. This should be caught during type checking.",
+                args.len()
+            );
+        }
+
+        let string_arg = &args[0];
+
+        // Extract string content from the operand
+        let string_content = match string_arg {
+            Operand::Constant(Constant::String(content)) => content.clone(),
+            _ => {
+                // For non-constant strings, we need to handle them differently
+                // For now, this is a limitation - we only support string literals
+                return_compiler_error!(
+                    "WASI print() currently only supports string literals. Variable string printing not yet implemented."
+                );
+            }
+        };
+
+        // Get the WASIX fd_write function index
+        let wasix_function = match self.wasix_registry.get_function("print") {
+            Some(func) => func,
+            None => {
+                return_compiler_error!(
+                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
+                );
+            }
+        };
+
+        let fd_write_func_index = wasix_function.get_function_index()?;
+
+        // Add string data to WASM data section with proper alignment
+        let string_offset = self.string_manager.add_string_constant(&string_content);
+        let string_len = string_content.len() as u32;
+        
+        // FIXED: Use the StringManager offset (where data actually exists) instead of WasixMemoryManager
+        // The StringManager writes actual string data to the WASM data section
+        // Skip the 4-byte length prefix to get to the actual string data
+        let string_ptr = string_offset + 4;
+        
+
+        
+        // Create IOVec structure with WASIX alignment (8-byte aligned)
+        let _iovec_ptr = match self.wasix_memory_manager.allocate_iovec_array(1) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX IOVec allocation failed: {}", e);
+            }
+        };
+        let iovec = crate::compiler::host_functions::wasix_registry::IOVec::new(
+            string_ptr,
+            string_len,
+        );
+        
+        // Add IOVec structure to data section with proper WASIX alignment
+        let iovec_bytes = iovec.to_bytes();
+        let iovec_offset = self.add_raw_data_to_section(&iovec_bytes);
+
+        // Allocate space for nwritten result with WASIX alignment
+        let _nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX nwritten allocation failed: {}", e);
+            }
+        };
+        let nwritten_bytes = [0u8; 4]; // Initialize to 0
+        let nwritten_offset = self.add_raw_data_to_section(&nwritten_bytes);
+
+        // Generate WASM instruction sequence for fd_write call
+        // Load stdout file descriptor (constant 1) onto WASM stack
+        function.instruction(&Instruction::I32Const(1));
+
+        // Load IOVec pointer (offset in linear memory where IOVec structure is stored)
+        function.instruction(&Instruction::I32Const(iovec_offset as i32));
+
+        // Load IOVec count (1 for single string argument)
+        function.instruction(&Instruction::I32Const(1));
+
+        // Load nwritten result pointer (where fd_write will store bytes written)
+        function.instruction(&Instruction::I32Const(nwritten_offset as i32));
+
+        // Generate call instruction to imported fd_write function
+        function.instruction(&Instruction::Call(fd_write_func_index));
+
+        // Handle the return value (errno) for basic error detection
+        // Store errno in a local variable for potential error checking
+        // For now, we'll just drop it, but this provides the foundation for error handling
+        function.instruction(&Instruction::Drop);
 
         Ok(())
     }
@@ -2801,6 +2984,74 @@ impl WasmModule {
         self.host_function_indices.get(name).copied()
     }
 
+    /// Generate WASIX import section entries for functions that need WASIX support
+    ///
+    /// This method adds WASIX function imports (like fd_write) to the WASM module
+    /// based on the functions used in the Beanstalk program. It supports both
+    /// native function implementations and import-based function resolution.
+    pub fn add_wasix_imports(&mut self) -> Result<(), CompileError> {
+        // Collect information about WASIX functions to import
+        let mut wasix_imports = Vec::new();
+        
+        for (beanstalk_name, wasix_func) in self.wasix_registry.list_functions() {
+            wasix_imports.push((
+                beanstalk_name.clone(),
+                wasix_func.module.clone(),
+                wasix_func.name.clone(),
+                wasix_func.parameters.clone(),
+                wasix_func.returns.clone(),
+            ));
+        }
+        
+        // Process each WASIX import
+        for (beanstalk_name, module, name, parameters, returns) in &wasix_imports {
+            // Check if this function has a native implementation available
+            let has_native_impl = self.wasix_registry.get_function(&beanstalk_name)
+                .map(|func| func.has_native_impl())
+                .unwrap_or(false);
+
+            if has_native_impl {
+                // For native implementations, we still need to add the import for fallback
+                // but mark it as having native support available
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WASM: WASIX function '{}' has native implementation, adding import as fallback", beanstalk_name);
+            }
+
+            // Add function type to type section
+            self.type_section.ty().function(parameters.clone(), returns.clone());
+
+            // Add import entry to import section from WASIX module
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WASM: Adding import: module='{}', name='{}', function_index={}", module, name, self.function_count);
+            self.import_section.import(
+                &module,  // This should be "wasix_32v1" for WASIX functions
+                &name,    // This should be "fd_write" etc. for WASIX functions
+                EntityType::Function(self.type_count),
+            );
+
+            // Update the WASIX registry with the function index
+            if let Some(mut_wasix_func) = self.wasix_registry.get_function_mut(&beanstalk_name) {
+                mut_wasix_func.set_function_index(self.function_count);
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WASM: Assigned function index {} to WASIX function '{}'", self.function_count, beanstalk_name);
+            }
+
+            // Register function index for calls - WASIX functions come after host functions
+            self.host_function_indices
+                .insert(beanstalk_name.clone(), self.function_count);
+
+            // Also register in the main function registry for unified lookup
+            self.function_registry
+                .insert(beanstalk_name.clone(), self.function_count);
+
+            // Increment counters
+            self.function_count += 1;
+            self.type_count += 1;
+        }
+
+        Ok(())
+    }
+
     /// Get the function index for a regular function by name
     pub fn get_function_index(&self, name: &str) -> Option<u32> {
         self.function_registry.get(name).copied()
@@ -3111,8 +3362,8 @@ impl WasmModule {
     fn lower_beanstalk_error_handling(
         &mut self,
         error_condition: &Operand,
-        _error_handler_block: u32,
-        _success_block: u32,
+        error_handler_block: u32,
+        success_block: u32,
         function: &mut Function,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
@@ -3617,6 +3868,18 @@ impl WasmModule {
         function_builder: &mut EnhancedFunctionBuilder,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
+        // Check if this is a WASIX function first
+        if self.wasix_registry.has_function(&host_func.name) {
+            return self.lower_wasix_host_call(
+                &host_func.name,
+                args,
+                destination,
+                function_builder,
+                local_map,
+            );
+        }
+
+        // Fall back to regular host function handling
         // Load arguments
         for arg in args {
             self.lower_operand_enhanced(arg, function_builder, local_map)?;
@@ -3634,6 +3897,311 @@ impl WasmModule {
             let return_type = dest_place.wasm_type();
             self.lower_place_assignment_with_type_enhanced(dest_place, &return_type, function_builder, local_map)?;
         }
+
+        Ok(())
+    }
+
+    /// Lower WASIX-specific host function calls with native function support
+    /// 
+    /// This method handles WASIX function calls by routing them to appropriate
+    /// lowering methods. It supports both native implementations and import-based
+    /// function calls, with the choice determined at runtime.
+    fn lower_wasix_host_call(
+        &mut self,
+        function_name: &str,
+        args: &[Operand],
+        destination: &Option<Place>,
+        function_builder: &mut EnhancedFunctionBuilder,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        match function_name {
+            "print" => self.lower_wasix_print(args, destination, function_builder, local_map),
+            _ => {
+                return_compiler_error!(
+                    "Unsupported WASIX function: {}. Only 'print' is currently implemented.",
+                    function_name
+                );
+            }
+        }
+    }
+
+    /// Lower print() function to WASIX fd_write call
+    /// 
+    /// This method converts a Beanstalk print() call into a WASIX fd_write call by:
+    /// 1. Adding string data to the WASM data section using StringManager
+    /// 2. Creating IOVec structure in the data section pointing to string data
+    /// 3. Generating WASM instruction sequence for WASIX fd_write call
+    /// 4. Supporting both native and import-based function calls
+    fn lower_wasix_print(
+        &mut self,
+        args: &[Operand],
+        _destination: &Option<Place>,
+        function_builder: &mut EnhancedFunctionBuilder,
+        _local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Validate arguments - print() should have exactly one string argument
+        if args.len() != 1 {
+            return_compiler_error!(
+                "print() function expects exactly 1 argument, got {}. This should be caught during type checking.",
+                args.len()
+            );
+        }
+
+        let string_arg = &args[0];
+
+        // Extract string content from the operand
+        let string_content = match string_arg {
+            Operand::Constant(Constant::String(content)) => content.clone(),
+            _ => {
+                // For non-constant strings, we need to handle them differently
+                // For now, this is a limitation - we only support string literals
+                return_compiler_error!(
+                    "WASI print() currently only supports string literals. Variable string printing not yet implemented."
+                );
+            }
+        };
+
+        // Add string data to WASM data section with proper alignment
+        let string_offset = self.string_manager.add_string_constant(&string_content);
+        let string_len = string_content.len() as u32;
+        
+        // FIXED: Use the StringManager offset (where data actually exists) instead of WasixMemoryManager
+        // The StringManager writes actual string data to the WASM data section
+        // Skip the 4-byte length prefix to get to the actual string data
+        let string_ptr = string_offset + 4;
+        
+        // Create IOVec structure with WASIX alignment (8-byte aligned)
+        let iovec = crate::compiler::host_functions::wasix_registry::IOVec::new(
+            string_ptr,
+            string_len,
+        );
+        
+        // Add IOVec structure to data section with proper WASIX alignment
+        let iovec_bytes = iovec.to_bytes();
+        let iovec_offset = self.add_raw_data_to_section(&iovec_bytes);
+
+        // Allocate space for nwritten result with WASIX alignment
+        let _nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX nwritten allocation failed: {}", e);
+            }
+        };
+        let nwritten_bytes = [0u8; 4]; // Initialize to 0
+        let nwritten_offset = self.add_raw_data_to_section(&nwritten_bytes);
+
+        // Get the WASIX fd_write function index
+        let wasix_function = match self.wasix_registry.get_function("print") {
+            Some(func) => func,
+            None => {
+                return_compiler_error!(
+                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
+                );
+            }
+        };
+
+        let fd_write_func_index = wasix_function.get_function_index()?;
+
+        // Generate WASM instruction sequence for fd_write call
+        self.generate_fd_write_instructions_with_offsets(
+            iovec_offset,
+            nwritten_offset,
+            fd_write_func_index,
+            function_builder,
+        )?;
+
+        Ok(())
+    }
+
+    /// Generate native WASIX function call for JIT runtime integration
+    /// 
+    /// This method generates appropriate WASM instructions for native function calls
+    /// and provides fallback to import-based calls when native functions are unavailable.
+    /// The choice between native and import-based calls is determined at runtime.
+    fn generate_native_wasix_call(
+        &mut self,
+        function_name: &str,
+        args: &[Operand],
+        function_builder: &mut EnhancedFunctionBuilder,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Check if this function has a native implementation available
+        let has_native_impl = self.wasix_registry.get_function(function_name)
+            .map(|func| func.has_native_impl())
+            .unwrap_or(false);
+
+        if has_native_impl {
+            // Generate native function call
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WASM: Generating native WASIX call for '{}'", function_name);
+            
+            self.generate_native_function_call(function_name, args, function_builder, local_map)
+        } else {
+            // Fallback to import-based call
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WASM: Falling back to import-based WASIX call for '{}'", function_name);
+            
+            self.generate_import_based_call(function_name, args, function_builder, local_map)
+        }
+    }
+
+    /// Generate native function call instructions for JIT runtime
+    /// 
+    /// This generates WASM instructions that will be handled by the JIT runtime's
+    /// native function dispatch system. The JIT will intercept these calls and
+    /// route them to native WASIX implementations.
+    fn generate_native_function_call(
+        &mut self,
+        function_name: &str,
+        args: &[Operand],
+        function_builder: &mut EnhancedFunctionBuilder,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Load arguments onto the WASM stack
+        for arg in args {
+            self.lower_operand_enhanced(arg, function_builder, local_map)?;
+        }
+
+        // Get the function index for the native call
+        // Native functions are still imported but marked for native handling
+        let func_index = match self.host_function_indices.get(function_name) {
+            Some(&index) => index,
+            None => {
+                return_compiler_error!(
+                    "Native WASIX function '{}' not found in function indices. This should be registered during import generation.",
+                    function_name
+                );
+            }
+        };
+
+        // Generate call instruction - the JIT runtime will intercept this
+        // and route it to the native implementation
+        function_builder.instruction(&Instruction::Call(func_index))?;
+
+        // The native implementation handles the result directly
+        // No additional result processing needed here
+
+        Ok(())
+    }
+
+    /// Generate import-based function call as fallback
+    /// 
+    /// This generates standard WASM import calls when native implementations
+    /// are not available. This ensures compatibility with all WASIX runtimes.
+    fn generate_import_based_call(
+        &mut self,
+        function_name: &str,
+        args: &[Operand],
+        function_builder: &mut EnhancedFunctionBuilder,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Load arguments onto the WASM stack
+        for arg in args {
+            self.lower_operand_enhanced(arg, function_builder, local_map)?;
+        }
+
+        // Get the function index for the import-based call
+        let func_index = match self.host_function_indices.get(function_name) {
+            Some(&index) => index,
+            None => {
+                return_compiler_error!(
+                    "WASIX function '{}' not found in function indices. This should be registered during import generation.",
+                    function_name
+                );
+            }
+        };
+
+        // Generate standard call instruction to imported function
+        function_builder.instruction(&Instruction::Call(func_index))?;
+
+        Ok(())
+    }
+
+    /// Add raw data to the string manager's data section
+    /// This is a helper method for adding non-string data like IOVec structures
+    fn add_raw_data_to_section(&mut self, data: &[u8]) -> u32 {
+        self.string_manager.add_raw_data(data)
+    }
+
+    /// Generate WASM instruction sequence for WASIX fd_write call with specific memory offsets
+    fn generate_fd_write_instructions_with_offsets(
+        &mut self,
+        iovec_offset: u32,
+        nwritten_offset: u32,
+        fd_write_func_index: u32,
+        function_builder: &mut EnhancedFunctionBuilder,
+    ) -> Result<(), CompileError> {
+        // Load stdout file descriptor (constant 1) onto WASM stack
+        function_builder.instruction(&Instruction::I32Const(1))?;
+
+        // Load IOVec pointer (offset in linear memory where IOVec structure is stored)
+        function_builder.instruction(&Instruction::I32Const(iovec_offset as i32))?;
+
+        // Load IOVec count (1 for single string argument)
+        function_builder.instruction(&Instruction::I32Const(1))?;
+
+        // Load nwritten result pointer (where fd_write will store bytes written)
+        function_builder.instruction(&Instruction::I32Const(nwritten_offset as i32))?;
+
+        // Generate call instruction to imported fd_write function
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Generating call instruction to fd_write with function index: {}", fd_write_func_index);
+        let call_result = function_builder.instruction(&Instruction::Call(fd_write_func_index));
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASM: Call instruction result: {:?}", call_result);
+        call_result?;
+
+        // Handle the return value (errno) for basic error detection
+        // Store errno in a local variable for potential error checking
+        // For now, we'll just drop it, but this provides the foundation for error handling
+        function_builder.instruction(&Instruction::Drop)?;
+
+        // TODO: In the future, we could:
+        // 1. Check if errno != 0 (error occurred)
+        // 2. Read nwritten value to verify bytes written
+        // 3. Generate appropriate error handling code
+
+        Ok(())
+    }
+
+    /// Generate WASM instruction sequence for WASIX fd_write call
+    /// 
+    /// WASIX fd_write signature: (fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
+    /// - fd: File descriptor (1 for stdout)
+    /// - iovs: Pointer to IOVec array in linear memory
+    /// - iovs_len: Number of IOVec structures (1 for single string)
+    /// - nwritten: Pointer to write the number of bytes written
+    /// - Returns: Error code (0 for success)
+    fn generate_fd_write_instructions(
+        &mut self,
+        call_context: &crate::compiler::host_functions::wasix_registry::WasixCallContext,
+        fd_write_func_index: u32,
+        function_builder: &mut EnhancedFunctionBuilder,
+    ) -> Result<(), CompileError> {
+        // Load stdout file descriptor (constant 1) onto WASM stack
+        function_builder.instruction(&Instruction::I32Const(1))?;
+
+        // Load IOVec pointer (pointer to IOVec structure in linear memory)
+        function_builder.instruction(&Instruction::I32Const(call_context.iovec_region.ptr as i32))?;
+
+        // Load IOVec count (1 for single string argument)
+        function_builder.instruction(&Instruction::I32Const(1))?;
+
+        // Load nwritten result pointer (where fd_write will store bytes written)
+        function_builder.instruction(&Instruction::I32Const(call_context.result_region.ptr as i32))?;
+
+        // Generate call instruction to imported fd_write function
+        function_builder.instruction(&Instruction::Call(fd_write_func_index))?;
+
+        // Handle the return value (errno) for basic error detection
+        // Store errno in a local variable for potential error checking
+        // For now, we'll just drop it, but this provides the foundation for error handling
+        function_builder.instruction(&Instruction::Drop)?;
+
+        // TODO: In the future, we could:
+        // 1. Check if errno != 0 (error occurred)
+        // 2. Read nwritten value to verify bytes written
+        // 3. Generate appropriate error handling code
 
         Ok(())
     }

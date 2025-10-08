@@ -529,7 +529,7 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
         (DataType::Template(_), DataType::Template(_)) => true,
 
         // Handle inferred types - they should be compatible with their target
-        (DataType::Inferred(_), target) | (target, DataType::Inferred(_)) => {
+        (DataType::Inferred(_), _target) | (_target, DataType::Inferred(_)) => {
             // For now, assume inferred types are compatible
             // In a full implementation, this would check the inferred type
             true

@@ -1,9 +1,10 @@
 // Tests for wasm_encoder error handling patterns
 // These tests validate our error handling research and examples
 
+use std::f32::consts::PI;
 use wasm_encoder::{
-    Module, TypeSection, FunctionSection, CodeSection, MemorySection,
-    Function, FuncType, ValType, Instruction, MemArg, MemoryType
+    CodeSection, FuncType, Function, FunctionSection, Instruction, MemArg, MemorySection,
+    MemoryType, Module, TypeSection, ValType,
 };
 use wasmparser::Validator;
 
@@ -12,9 +13,12 @@ use wasmparser::Validator;
 fn test_basic_validation_pattern() {
     let result = build_simple_valid_module();
     assert!(result.is_ok(), "Basic validation should succeed");
-    
+
     let wasm_bytes = result.unwrap();
-    assert!(validate_wasm_module(&wasm_bytes).is_ok(), "Module should be valid");
+    assert!(
+        validate_wasm_module(&wasm_bytes).is_ok(),
+        "Module should be valid"
+    );
 }
 
 /// Test that type mismatches are properly detected
@@ -22,7 +26,7 @@ fn test_basic_validation_pattern() {
 fn test_type_mismatch_detection() {
     let result = build_module_with_type_mismatch();
     assert!(result.is_err(), "Type mismatch should be detected");
-    
+
     let error = result.unwrap_err();
     let error_str = error.to_string();
     assert!(
@@ -65,11 +69,11 @@ fn test_error_recovery_pattern() {
 #[test]
 fn test_safe_builder_pattern() {
     let mut builder = SafeModuleBuilder::new();
-    
+
     // Add valid function type and function
     let type_index = builder.add_function_type(vec![], vec![ValType::I32]);
     assert!(builder.add_function(type_index).is_ok());
-    
+
     // Build should succeed
     let result = builder.build_with_simple_functions();
     assert!(result.is_ok(), "Safe builder should produce valid module");
@@ -79,38 +83,41 @@ fn test_safe_builder_pattern() {
 #[test]
 fn test_builder_error_handling() {
     let mut builder = SafeModuleBuilder::new();
-    
+
     // Try to add function with invalid type index
     let result = builder.add_function(99);
     assert!(result.is_err(), "Invalid type index should be rejected");
-    
+
     // Try to add memory twice
     assert!(builder.add_memory(1).is_ok());
-    assert!(builder.add_memory(1).is_err(), "Duplicate memory should be rejected");
+    assert!(
+        builder.add_memory(1).is_err(),
+        "Duplicate memory should be rejected"
+    );
 }
 
 // Helper functions for building test modules
 
 fn build_simple_valid_module() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut module = Module::new();
-    
+
     // Add a simple function: () -> i32
     let mut types = TypeSection::new();
     let func_type = FuncType::new(vec![], vec![ValType::I32]);
     types.ty().func_type(&func_type);
     module.section(&types);
-    
+
     let mut functions = FunctionSection::new();
     functions.function(0);
     module.section(&functions);
-    
+
     let mut code = CodeSection::new();
     let mut func = Function::new(vec![]);
     func.instruction(&Instruction::I32Const(42));
     func.instruction(&Instruction::End);
     code.function(&func);
     module.section(&code);
-    
+
     let wasm_bytes = module.finish();
     validate_wasm_module(&wasm_bytes)?;
     Ok(wasm_bytes)
@@ -118,27 +125,27 @@ fn build_simple_valid_module() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 
 fn build_module_with_type_mismatch() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut module = Module::new();
-    
+
     // Function type: () -> i32 (expects i32 return)
     let mut types = TypeSection::new();
     let func_type = FuncType::new(vec![], vec![ValType::I32]);
     types.ty().func_type(&func_type);
     module.section(&types);
-    
+
     let mut functions = FunctionSection::new();
     functions.function(0);
     module.section(&functions);
-    
+
     let mut code = CodeSection::new();
     let mut func = Function::new(vec![]);
-    
+
     // ERROR: Function should return i32, but we're producing f32
-    func.instruction(&Instruction::F32Const(3.14.into()));
+    func.instruction(&Instruction::F32Const(PI.into()));
     func.instruction(&Instruction::End);
-    
+
     code.function(&func);
     module.section(&code);
-    
+
     let wasm_bytes = module.finish();
     validate_wasm_module(&wasm_bytes)?;
     Ok(wasm_bytes)
@@ -146,26 +153,26 @@ fn build_module_with_type_mismatch() -> Result<Vec<u8>, Box<dyn std::error::Erro
 
 fn build_module_with_invalid_control_flow() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut module = Module::new();
-    
+
     let mut types = TypeSection::new();
     let func_type = FuncType::new(vec![], vec![]);
     types.ty().func_type(&func_type);
     module.section(&types);
-    
+
     let mut functions = FunctionSection::new();
     functions.function(0);
     module.section(&functions);
-    
+
     let mut code = CodeSection::new();
     let mut func = Function::new(vec![]);
-    
+
     // ERROR: Branch to non-existent label
     func.instruction(&Instruction::Br(5)); // No such label depth
     func.instruction(&Instruction::End);
-    
+
     code.function(&func);
     module.section(&code);
-    
+
     let wasm_bytes = module.finish();
     validate_wasm_module(&wasm_bytes)?;
     Ok(wasm_bytes)
@@ -173,27 +180,31 @@ fn build_module_with_invalid_control_flow() -> Result<Vec<u8>, Box<dyn std::erro
 
 fn build_module_with_invalid_memory_access() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut module = Module::new();
-    
+
     let mut types = TypeSection::new();
     let func_type = FuncType::new(vec![], vec![ValType::I32]);
     types.ty().func_type(&func_type);
     module.section(&types);
-    
+
     let mut functions = FunctionSection::new();
     functions.function(0);
     module.section(&functions);
-    
+
     let mut code = CodeSection::new();
     let mut func = Function::new(vec![]);
-    
+
     // ERROR: Try to load from memory without declaring memory
     func.instruction(&Instruction::I32Const(0)); // Address
-    func.instruction(&Instruction::I32Load(MemArg { offset: 0, align: 2, memory_index: 0 }));
+    func.instruction(&Instruction::I32Load(MemArg {
+        offset: 0,
+        align: 2,
+        memory_index: 0,
+    }));
     func.instruction(&Instruction::End);
-    
+
     code.function(&func);
     module.section(&code);
-    
+
     let wasm_bytes = module.finish();
     validate_wasm_module(&wasm_bytes)?;
     Ok(wasm_bytes)
@@ -201,12 +212,12 @@ fn build_module_with_invalid_memory_access() -> Result<Vec<u8>, Box<dyn std::err
 
 fn build_module_with_missing_sections() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let mut module = Module::new();
-    
+
     // Create function section without corresponding type section
     let mut functions = FunctionSection::new();
     functions.function(0); // Reference type 0, but no type section exists
     module.section(&functions);
-    
+
     let wasm_bytes = module.finish();
     validate_wasm_module(&wasm_bytes)?;
     Ok(wasm_bytes)
@@ -226,11 +237,11 @@ fn build_module_with_fallback() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
 fn build_complex_module() -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     // This intentionally fails to test fallback
     let mut module = Module::new();
-    
+
     let mut functions = FunctionSection::new();
     functions.function(99); // Invalid type index
     module.section(&functions);
-    
+
     let wasm_bytes = module.finish();
     validate_wasm_module(&wasm_bytes)?;
     Ok(wasm_bytes)
@@ -258,13 +269,13 @@ impl SafeModuleBuilder {
             has_memory: false,
         }
     }
-    
+
     pub fn add_function_type(&mut self, params: Vec<ValType>, results: Vec<ValType>) -> u32 {
         let type_index = self.types.len() as u32;
         self.types.push((params, results));
         type_index
     }
-    
+
     pub fn add_function(&mut self, type_index: u32) -> Result<(), String> {
         if type_index >= self.types.len() as u32 {
             return Err(format!("Invalid type index: {}", type_index));
@@ -272,12 +283,12 @@ impl SafeModuleBuilder {
         self.functions.push(type_index);
         Ok(())
     }
-    
+
     pub fn add_memory(&mut self, min_pages: u64) -> Result<(), String> {
         if self.has_memory {
             return Err("Memory already added".to_string());
         }
-        
+
         let mut memory = MemorySection::new();
         memory.memory(MemoryType {
             minimum: min_pages,
@@ -290,7 +301,7 @@ impl SafeModuleBuilder {
         self.has_memory = true;
         Ok(())
     }
-    
+
     pub fn build_with_simple_functions(mut self) -> Result<Vec<u8>, String> {
         // Add type section
         if !self.types.is_empty() {
@@ -301,7 +312,7 @@ impl SafeModuleBuilder {
             }
             self.module.section(&types_section);
         }
-        
+
         // Add function section
         if !self.functions.is_empty() {
             let mut functions_section = FunctionSection::new();
@@ -310,31 +321,35 @@ impl SafeModuleBuilder {
             }
             self.module.section(&functions_section);
         }
-        
+
         // Add code section with simple implementations
         if !self.functions.is_empty() {
             let mut code_section = CodeSection::new();
-            
+
             for &type_index in &self.functions {
                 let (params, results) = &self.types[type_index as usize];
                 let func = self.create_simple_function(params, results)?;
                 code_section.function(&func);
             }
-            
+
             self.module.section(&code_section);
         }
-        
+
         // Generate and validate
         let wasm_bytes = self.module.finish();
         validate_wasm_module(&wasm_bytes)
             .map_err(|e| format!("Module validation failed: {}", e))?;
-        
+
         Ok(wasm_bytes)
     }
-    
-    fn create_simple_function(&self, params: &[ValType], results: &[ValType]) -> Result<Function, String> {
+
+    fn create_simple_function(
+        &self,
+        params: &[ValType],
+        results: &[ValType],
+    ) -> Result<Function, String> {
         let mut func = Function::new(vec![]); // No additional locals
-        
+
         match (params.len(), results.len()) {
             (0, 0) => {
                 // () -> ()
@@ -345,8 +360,8 @@ impl SafeModuleBuilder {
                 match results[0] {
                     ValType::I32 => func.instruction(&Instruction::I32Const(42)),
                     ValType::I64 => func.instruction(&Instruction::I64Const(42)),
-                    ValType::F32 => func.instruction(&Instruction::F32Const(3.14.into())),
-                    ValType::F64 => func.instruction(&Instruction::F64Const(3.14.into())),
+                    ValType::F32 => func.instruction(&Instruction::F32Const(PI.into())),
+                    ValType::F64 => func.instruction(&Instruction::F64Const(core::f64::consts::PI.into())),
                     _ => return Err("Unsupported result type".to_string()),
                 };
                 func.instruction(&Instruction::End);
@@ -370,7 +385,7 @@ impl SafeModuleBuilder {
                 func.instruction(&Instruction::End);
             }
         }
-        
+
         Ok(func)
     }
 }

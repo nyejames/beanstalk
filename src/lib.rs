@@ -87,6 +87,7 @@ mod compiler {
 
     pub mod host_functions {
         pub mod registry;
+        pub mod wasix_registry;
     }
 }
 

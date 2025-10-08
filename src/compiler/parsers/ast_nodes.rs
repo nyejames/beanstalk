@@ -1,6 +1,5 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
-use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};

@@ -8,8 +8,7 @@ use crate::build_system::core_build;
 use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
-use crate::{timer_log, Flag, InputModule, Project};
-
+use crate::{Flag, InputModule, Project, timer_log};
 
 pub struct JitProjectBuilder {
     target: BuildTarget,
@@ -34,20 +33,13 @@ impl ProjectBuilder for JitProjectBuilder {
             return Err(vec![e]);
         }
 
-        // Use core build pipeline to compile to WASM
+        // Use the core build pipeline to compile to WASM
         let compilation_result = core_build::compile_modules(modules, config, flags)?;
-
-        let time = std::time::Instant::now();
 
         // Execute the WASM directly using JIT
         match execute_direct_jit(&compilation_result.wasm_bytes, &config.runtime) {
-            Ok(_) => {
-                timer_log!(time, "Jit executed in: ");
-                Ok(())
-            }
-            Err(e) => {
-                Err(vec![e])
-            }
+            Ok(_) => Ok(()),
+            Err(e) => Err(vec![e]),
         }?;
 
         // For JIT mode, we don't create any output files

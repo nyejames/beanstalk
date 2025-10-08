@@ -215,6 +215,8 @@ pub struct WirTransformContext {
 
     /// Host function imports used in this module
     host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
+    /// WASIX function registry for WASIX import mapping
+    wasix_registry: crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry,
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
 }
@@ -222,6 +224,13 @@ pub struct WirTransformContext {
 impl WirTransformContext {
     /// Create a new transformation context
     pub fn new() -> Self {
+        use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
+        
+        let wasix_registry = create_wasix_registry().unwrap_or_default();
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Created WASIX registry with {} functions", wasix_registry.count());
+        
         Self {
             place_manager: PlaceManager::new(),
             variable_scopes: vec![HashMap::new()], // Start with global scope
@@ -230,6 +239,7 @@ impl WirTransformContext {
             next_block_id: 0,
 
             host_imports: std::collections::HashSet::new(),
+            wasix_registry,
             pending_return: None,
         }
     }
@@ -987,20 +997,52 @@ fn ast_host_function_call_to_wir(
         host_params.push(param_arg);
     }
     
-    let host_function = HostFunctionDef::new(
-        name,
-        host_params,
-        return_types.to_vec(),
-        "beanstalk_io", // Default module for now
-        name, // Use same name for import
-        &format!("Host function: {}", name)
-    );
-
-    // Track this host function as an import
-    context.add_host_import(host_function.clone());
+    // Check if there's a WASIX mapping for this function
+    let is_wasix_function = name == "print" && context.wasix_registry.has_function("print");
     
-    #[cfg(feature = "verbose_codegen_logging")]
-    println!("WIR: Added host function '{}' to imports, module: {}", name, host_function.module);
+    let host_function = if is_wasix_function {
+        // Use WASIX mapping for print function
+        let wasix_func = context.wasix_registry.get_function("print").unwrap();
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Using WASIX mapping for host function '{}': module={}, name={}", name, wasix_func.module, wasix_func.name);
+        
+        // For WASIX functions, we don't add them to host imports because they have
+        // different signatures (low-level WASM vs high-level Beanstalk)
+        // The WASIX registry handles the import generation separately
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Skipping host import for WASIX function '{}' - handled by WASIX registry", name);
+        
+        HostFunctionDef::new(
+            name,
+            host_params,
+            return_types.to_vec(),
+            &wasix_func.module,  // Use WASIX module name
+            &wasix_func.name,    // Use WASIX function name
+            &format!("Host function: {} (WASIX)", name)
+        )
+    } else {
+        // Use legacy module for other functions
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Using legacy module for host function '{}'", name);
+        
+        let host_func = HostFunctionDef::new(
+            name,
+            host_params,
+            return_types.to_vec(),
+            "beanstalk_io", // Default module for legacy functions
+            name, // Use same name for import
+            &format!("Host function: {}", name)
+        );
+        
+        // Only add non-WASIX functions to host imports
+        context.add_host_import(host_func.clone());
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Added host function '{}' to imports, module: {}", name, host_func.module);
+        
+        host_func
+    };
 
     // Determine destination place if there's a return value
     let destination = if !return_types.is_empty() {
@@ -1015,17 +1057,30 @@ fn ast_host_function_call_to_wir(
         None
     };
 
-    // Create host call statement
-    let host_call_statement = Statement::HostCall {
-        function: host_function,
-        args,
-        destination,
+    // Create appropriate statement based on function type
+    let call_statement = if is_wasix_function {
+        // For WASIX functions, use WasixCall statement
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Generated WASIX call statement for '{}'", name);
+        
+        Statement::WasixCall {
+            function_name: name.to_string(),
+            args,
+            destination,
+        }
+    } else {
+        // For regular host functions, use HostCall statement
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Generated host call statement for '{}'", name);
+        
+        Statement::HostCall {
+            function: host_function,
+            args,
+            destination,
+        }
     };
-    
-    #[cfg(feature = "verbose_codegen_logging")]
-    println!("WIR: Generated host call statement for '{}'", name);
 
-    Ok(vec![host_call_statement])
+    Ok(vec![call_statement])
 }
 
 /// Transform if statement to WIR with proper control flow
@@ -1495,7 +1550,7 @@ fn convert_template_expression_to_string_operand(
             // Return the place for runtime string conversion
             Ok(Some(Operand::Copy(variable_place)))
         }
-        ExpressionKind::Template(nested_template) => {
+        ExpressionKind::Template(_nested_template) => {
             // Nested templates need to be processed recursively
             // For now, we'll indicate they can't be converted to simple operands
             Ok(None)
@@ -1552,7 +1607,7 @@ fn expression_to_operand_with_context(
                 _ => return_compiler_error!("Variable reference '{}' produced non-use rvalue, which is not supported in operand context", name),
             }
         }
-        ExpressionKind::Runtime(runtime_nodes) => {
+        ExpressionKind::Runtime(_runtime_nodes) => {
             // For operand context, we need to create a temporary assignment for runtime expressions
             // This is a simplified approach - in a full implementation, we'd integrate this better
             return_compiler_error!("Runtime expressions (complex calculations) in operand context not yet fully implemented at line {}, column {}. For now, assign the expression to a variable first: 'temp_var = x + 1; return temp_var;'", location.start_pos.line_number, location.start_pos.char_column);
@@ -1806,23 +1861,77 @@ fn ast_print_to_wir(
         ),
     };
     
-    let print_function = HostFunctionDef::new(
-        "print",
-        vec![print_param],
-        vec![], // Print returns void
-        "beanstalk_io",
-        "print",
-        "Print a value to the console"
-    );
+    // Check if there's a WASIX mapping for print function
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("WIR: Checking WASIX registry for 'print' function...");
     
-    // Track this host function as an import
-    context.add_host_import(print_function.clone());
+    let has_wasix_print = context.wasix_registry.has_function("print");
     
-    // Create host call statement
-    let print_statement = Statement::HostCall {
-        function: print_function,
-        args: vec![operand],
-        destination: None, // Print has no return value
+    #[cfg(feature = "verbose_codegen_logging")]
+    {
+        println!("WIR: WASIX registry has_function('print') = {}", has_wasix_print);
+        if has_wasix_print {
+            let wasix_func = context.wasix_registry.get_function("print").unwrap();
+            println!("WIR: Found WASIX function: module={}, name={}", wasix_func.module, wasix_func.name);
+        }
+    }
+    
+    let print_function = if has_wasix_print {
+        // Use WASIX mapping - create a HostFunctionDef that matches the WASIX function
+        let wasix_func = context.wasix_registry.get_function("print").unwrap();
+        
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Using WASIX mapping for print: module={}, name={}", wasix_func.module, wasix_func.name);
+        
+        // For WASIX functions, we don't add them to host imports because they have
+        // different signatures (low-level WASM vs high-level Beanstalk)
+        // The WASIX registry handles the import generation separately
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: Skipping host import for WASIX function 'print' - handled by WASIX registry");
+        
+        HostFunctionDef::new(
+            "print",
+            vec![print_param],
+            vec![], // Print returns void (we handle the WASIX errno internally)
+            &wasix_func.module,  // Use WASIX module name
+            &wasix_func.name,    // Use WASIX function name
+            "Print a value to the console using WASIX fd_write"
+        )
+    } else {
+        // Fall back to legacy beanstalk_io import
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WIR: No WASIX mapping found for print, using legacy beanstalk_io");
+        
+        let host_func = HostFunctionDef::new(
+            "print",
+            vec![print_param],
+            vec![], // Print returns void
+            "beanstalk_io",
+            "print",
+            "Print a value to the console"
+        );
+        
+        // Only add non-WASIX functions to host imports
+        context.add_host_import(host_func.clone());
+        host_func
+    };
+    
+    // Create appropriate statement based on function type
+    let print_statement = if has_wasix_print {
+        // For WASIX functions, use WasixCall statement
+        // This will be handled specially during WASM generation
+        Statement::WasixCall {
+            function_name: "print".to_string(),
+            args: vec![operand],
+            destination: None, // Print has no return value at Beanstalk level
+        }
+    } else {
+        // For regular host functions, use Statement::HostCall
+        Statement::HostCall {
+            function: print_function,
+            args: vec![operand],
+            destination: None, // Print has no return value
+        }
     };
     
     Ok(vec![print_statement])

@@ -6,6 +6,8 @@ verbose_ast_logging = []
 verbose_eval_logging = []
 verbose_ir_logging = []
 verbose_codegen_logging = []
+wasix_native_functions = []
+wasix_enhanced_io = []
 
 [package]
 name = "beanstalk"
@@ -22,6 +24,8 @@ colour = "2.1.0"
 wat = "1.235.0"
 wasmparser = "0.238.1"
 rayon = "1.10.0"
-wasmer = "6.0.1"
+wasmer = "6.1.0-rc.5"
 wasm-encoder = "0.238.1"
-wasmer-types = "6.0.1"
+wasmer-types = "6.1.0-rc.5"
+wasix = "0.13.0"
+wasmer-wasix = "0.601.0-rc.5"

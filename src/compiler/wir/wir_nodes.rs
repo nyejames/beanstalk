@@ -371,6 +371,13 @@ pub enum Statement {
         args: Vec<Operand>,
         destination: Option<Place>,
     },
+
+    /// WASIX function call (low-level WASM system calls)
+    WasixCall {
+        function_name: String,
+        args: Vec<Operand>,
+        destination: Option<Place>,
+    },
 }
 
 impl Statement {
@@ -456,6 +463,17 @@ impl Statement {
             }
             Statement::HostCall { args, destination, .. } => {
                 // Generate use events for all arguments
+                for arg in args {
+                    self.generate_operand_events(arg, &mut events);
+                }
+
+                // If there's a destination, it gets reassigned
+                if let Some(dest_place) = destination {
+                    events.reassigns.push(dest_place.clone());
+                }
+            }
+            Statement::WasixCall { args, destination, .. } => {
+                // Generate use events for all arguments (same as HostCall)
                 for arg in args {
                     self.generate_operand_events(arg, &mut events);
                 }

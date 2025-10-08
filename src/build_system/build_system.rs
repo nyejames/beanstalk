@@ -10,7 +10,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::settings::{Config, ProjectType};
 use crate::{Flag, InputModule, Project};
 use std::path::Path;
-use wasmer_types::target::Target;
+use wasmer::sys::Target;
 
 /// Build configuration that determines how WASM files are generated and organized
 #[derive(Debug, Clone)]

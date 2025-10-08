@@ -14,6 +14,7 @@ pub mod io {
     pub mod native;
 }
 pub mod jit;
+pub use jit::JitRuntime;
 pub mod memory_utils;
 
 use crate::compiler::compiler_errors::CompileError;
@@ -62,8 +63,8 @@ pub enum CraneliftOptLevel {
 
 #[derive(Debug, Clone)]
 pub enum IoBackend {
-    /// Standard WASI interface
-    Wasi,
+    /// Standard WASIX interface
+    Wasix,
     /// Custom IO hooks for embedded scenarios
     Custom(String), // Configuration path or identifier
     /// JavaScript/DOM bindings for web targets
@@ -86,7 +87,7 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             compilation_mode: CompilationMode::Cranelift(CraneliftOptLevel::Speed),
-            io_backend: IoBackend::Wasi,
+            io_backend: IoBackend::Wasix,
             hot_reload: false,
             flags: vec![],
         }
@@ -98,7 +99,7 @@ impl RuntimeConfig {
     pub fn for_development() -> Self {
         Self {
             compilation_mode: CompilationMode::Cranelift(CraneliftOptLevel::None),
-            io_backend: IoBackend::Native,
+            io_backend: IoBackend::Wasix, // Use WASIX for enhanced system call support
             hot_reload: true,
             flags: vec![RuntimeFlag::Debug],
         }
@@ -108,7 +109,7 @@ impl RuntimeConfig {
     pub fn for_native_release() -> Self {
         Self {
             compilation_mode: CompilationMode::Cranelift(CraneliftOptLevel::Speed),
-            io_backend: IoBackend::Native,
+            io_backend: IoBackend::Wasix, // Use WASIX for enhanced system call support
             hot_reload: false,
             flags: vec![],
         }
@@ -156,7 +157,19 @@ impl BeanstalkRuntime {
     /// Execute WASM bytecode with the configured runtime
     pub fn execute(&self, wasm_bytes: &[u8]) -> Result<(), CompileError> {
         match &self.config.compilation_mode {
-            CompilationMode::DirectJit => jit::execute_direct_jit(wasm_bytes, &self.config),
+            CompilationMode::DirectJit => {
+                // Check if we should use WASIX-specific runtime
+                match &self.config.io_backend {
+                    IoBackend::Wasix => {
+                        // Use WASIX-specific runtime with native function support
+                        jit::execute_wasm_with_wasix_runtime(wasm_bytes, &self.config)
+                    }
+                    _ => {
+                        // Use standard JIT execution
+                        jit::execute_direct_jit(wasm_bytes, &self.config)
+                    }
+                }
+            }
             CompilationMode::Cranelift(opt_level) => {
                 execute_with_cranelift(wasm_bytes, &self.config, &opt_level)
             }

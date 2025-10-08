@@ -125,7 +125,7 @@ impl DataType {
                 );
             }
 
-            accepted_type => return true,
+            _accepted_type => return true,
 
             _ => {}
         }

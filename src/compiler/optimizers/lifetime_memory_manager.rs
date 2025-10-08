@@ -503,7 +503,7 @@ impl LifetimeMemoryManager {
         place: &Place,
         arc_info: &ARCInfo,
         function: &WirFunction,
-        borrow_results: &UnifiedBorrowCheckResults,
+        _borrow_results: &UnifiedBorrowCheckResults,
     ) -> Result<(), CompileError> {
         // Find program points where ARC operations are needed
         for program_point in function.get_program_points_in_order() {

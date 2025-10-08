@@ -35,8 +35,8 @@ impl EmbeddedRuntime {
 
     /// Load a Beanstalk module from WASM bytes
     pub fn load_module(&self, module_name: &str, wasm_bytes: &[u8]) -> Result<(), CompileError> {
-        let store = self.store.lock().unwrap();
-        let module = Module::new(&store, wasm_bytes)
+        let store_guard = self.store.lock().unwrap();
+        let module = Module::new(&*store_guard, wasm_bytes)
             .map_err(|e| CompileError::compiler_error(&format!("Failed to load module '{}': {}", module_name, e)))?;
         
         let mut modules = self.loaded_modules.lock().unwrap();
@@ -64,13 +64,13 @@ impl EmbeddedRuntime {
         // Create import object (simplified for embedding)
         let import_object = wasmer::imports! {};
         
-        let instance = Instance::new(&mut store_guard, module, &import_object)
+        let instance = Instance::new(&mut *store_guard, module, &import_object)
             .map_err(|e| CompileError::compiler_error(&format!("Failed to instantiate module '{}': {}", module_name, e)))?;
 
         let function = instance.exports.get_function(function_name)
             .map_err(|e| CompileError::compiler_error(&format!("Function '{}' not found in module '{}': {}", function_name, module_name, e)))?;
 
-        let result = function.call(&mut store_guard, args)
+        let result = function.call(&mut *store_guard, args)
             .map_err(|e| CompileError::compiler_error(&format!("Error calling function '{}': {}", function_name, e)))?;
 
         Ok(result.to_vec())

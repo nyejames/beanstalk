@@ -84,10 +84,10 @@ impl HtmlProjectBuilder {
 impl ProjectBuilder for HtmlProjectBuilder {
     fn build_project(
         &self,
-        modules: Vec<InputModule>,
+        _modules: Vec<InputModule>,
         config: &Config,
-        release_build: bool,
-        flags: &[Flag],
+        _release_build: bool,
+        _flags: &[Flag],
     ) -> Result<Project, Vec<CompileError>> {
         // Validate configuration
         if let Err(e) = self.validate_config(config) {

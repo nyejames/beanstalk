@@ -25,7 +25,7 @@ impl ProjectBuilder for NativeProjectBuilder {
         &self,
         modules: Vec<InputModule>,
         config: &Config,
-        release_build: bool,
+        _release_build: bool,
         flags: &[Flag],
     ) -> Result<Project, Vec<CompileError>> {
         // Validate configuration
@@ -60,7 +60,7 @@ impl ProjectBuilder for NativeProjectBuilder {
 
     fn validate_config(&self, config: &Config) -> Result<(), CompileError> {
         // Validate native-specific configuration
-        if let BuildTarget::Native { target_arch, .. } = &self.target {
+        if let BuildTarget::Native { target_arch: _, .. } = &self.target {
             // Don't bother checking for valid targets for now
             // The list of valid target types is built into Cranelift itself so should always be supported here
             return Ok(());
