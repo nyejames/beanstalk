@@ -84,6 +84,9 @@ mod compiler {
     pub mod host_functions {
         pub mod registry;
         pub mod wasix_registry;
+        pub mod wasi_compatibility;
+        pub mod migration_diagnostics;
+        pub mod fallback_mechanisms;
     }
 }
 

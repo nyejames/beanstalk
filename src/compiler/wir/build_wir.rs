@@ -217,6 +217,12 @@ pub struct WirTransformContext {
     host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
     /// WASIX function registry for WASIX import mapping
     wasix_registry: crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry,
+    /// WASI compatibility layer for automatic migration
+    wasi_compatibility: crate::compiler::host_functions::wasi_compatibility::WasiCompatibilityLayer,
+    /// Migration diagnostics for WASI usage detection and guidance
+    migration_diagnostics: crate::compiler::host_functions::migration_diagnostics::MigrationDiagnostics,
+    /// Fallback mechanisms for runtime compatibility
+    fallback_mechanisms: crate::compiler::host_functions::fallback_mechanisms::FallbackMechanisms,
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
 }
@@ -225,8 +231,19 @@ impl WirTransformContext {
     /// Create a new transformation context
     pub fn new() -> Self {
         use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
+        use crate::compiler::host_functions::wasi_compatibility::create_wasi_compatibility_layer;
+        use crate::compiler::host_functions::migration_diagnostics::create_migration_diagnostics;
+        use crate::compiler::host_functions::fallback_mechanisms::create_fallback_mechanisms;
         
         let wasix_registry = create_wasix_registry().unwrap_or_default();
+        let wasi_compatibility = create_wasi_compatibility_layer(wasix_registry.clone())
+            .unwrap_or_else(|_| {
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WIR: Failed to create WASI compatibility layer, using default");
+                crate::compiler::host_functions::wasi_compatibility::WasiCompatibilityLayer::new(wasix_registry.clone())
+            });
+        let migration_diagnostics = create_migration_diagnostics(wasi_compatibility.clone());
+        let fallback_mechanisms = create_fallback_mechanisms(wasi_compatibility.clone());
         
         #[cfg(feature = "verbose_codegen_logging")]
         println!("WIR: Created WASIX registry with {} functions", wasix_registry.count());
@@ -240,6 +257,9 @@ impl WirTransformContext {
 
             host_imports: std::collections::HashSet::new(),
             wasix_registry,
+            wasi_compatibility,
+            migration_diagnostics,
+            fallback_mechanisms,
             pending_return: None,
         }
     }
@@ -303,6 +323,40 @@ impl WirTransformContext {
     /// Get all host function imports
     pub fn get_host_imports(&self) -> &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef> {
         &self.host_imports
+    }
+
+    /// Get mutable access to migration diagnostics
+    pub fn get_migration_diagnostics_mut(&mut self) -> &mut crate::compiler::host_functions::migration_diagnostics::MigrationDiagnostics {
+        &mut self.migration_diagnostics
+    }
+
+    /// Get migration diagnostics
+    pub fn get_migration_diagnostics(&self) -> &crate::compiler::host_functions::migration_diagnostics::MigrationDiagnostics {
+        &self.migration_diagnostics
+    }
+
+    /// Generate and print migration report if there are any WASI detections
+    pub fn print_migration_report(&self) {
+        let report = self.migration_diagnostics.generate_migration_report();
+        if report.total_wasi_detections > 0 {
+            println!("\n{}", report.format_report());
+        }
+    }
+
+    /// Get mutable access to fallback mechanisms
+    pub fn get_fallback_mechanisms_mut(&mut self) -> &mut crate::compiler::host_functions::fallback_mechanisms::FallbackMechanisms {
+        &mut self.fallback_mechanisms
+    }
+
+    /// Get fallback mechanisms
+    pub fn get_fallback_mechanisms(&self) -> &crate::compiler::host_functions::fallback_mechanisms::FallbackMechanisms {
+        &self.fallback_mechanisms
+    }
+
+    /// Generate and print compatibility report
+    pub fn print_compatibility_report(&self) {
+        let report = self.fallback_mechanisms.generate_compatibility_report();
+        println!("\n{}", report.format_report());
     }
 
     /// Get similar variable names for error suggestions
@@ -997,49 +1051,139 @@ fn ast_host_function_call_to_wir(
         host_params.push(param_arg);
     }
     
-    // Check if there's a WASIX mapping for this function
-    let is_wasix_function = name == "print" && context.wasix_registry.has_function("print");
+    // Detect runtime environment if not already done
+    let current_environment = context.get_fallback_mechanisms().get_detected_environment()
+        .cloned()
+        .unwrap_or_else(|| {
+            // Default to mixed environment for now - in a real implementation,
+            // this would be detected from available imports
+            use crate::compiler::host_functions::fallback_mechanisms::RuntimeEnvironment;
+            RuntimeEnvironment::Mixed
+        });
+
+    // Check for WASI compatibility and automatic migration using diagnostics and fallbacks
+    let (final_name, migration_guidance, fallback_info) = if context.wasi_compatibility.is_wasi_function(name) {
+        // Detect WASI usage and record for diagnostics
+        let guidance = context.get_migration_diagnostics_mut()
+            .detect_wasi_usage(name, Some("wasi_snapshot_preview1"), _location)
+            .unwrap_or(None);
+        
+        // Get fallback information for this function in the current environment
+        let fallback = context.get_fallback_mechanisms()
+            .get_fallback_for_function(name, &current_environment)
+            .unwrap_or_else(|_| {
+                use crate::compiler::host_functions::fallback_mechanisms::{FunctionFallback, FunctionFallbackType};
+                FunctionFallback {
+                    function_name: name.to_string(),
+                    fallback_type: FunctionFallbackType::Unknown,
+                    fallback_module: "beanstalk_io".to_string(),
+                    fallback_function: name.to_string(),
+                    warning_message: Some(format!("Unknown fallback for function '{}'", name)),
+                    error_message: None,
+                }
+            });
+        
+        // This is a WASI function that needs migration
+        match context.wasi_compatibility.migrate_function_name(name) {
+            Ok(wasix_name) => {
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WIR: Migrating WASI function '{}' to WASIX function '{}'", name, wasix_name);
+                
+                (wasix_name, guidance, Some(fallback))
+            },
+            Err(_e) => {
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WIR: Failed to migrate WASI function '{}': {}", name, _e);
+                
+                // Check if this is a supported function and emit error if configured
+                let _ = context.get_migration_diagnostics().check_function_support(name, _location);
+                
+                (name.to_string(), guidance, Some(fallback))
+            }
+        }
+    } else {
+        // Check fallback for non-WASI functions
+        let fallback = context.get_fallback_mechanisms()
+            .get_fallback_for_function(name, &current_environment)
+            .ok();
+        
+        (name.to_string(), None, fallback)
+    };
+
+    // Emit migration guidance if available
+    if let Some(_guidance) = migration_guidance {
+        if context.wasi_compatibility.should_emit_warnings() {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WIR: WASI Migration Guidance:\n{}", _guidance.format_message());
+        }
+    }
+
+    // Handle fallback warnings and errors
+    if let Some(ref fallback) = fallback_info {
+        if let Some(ref _warning) = fallback.warning_message {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!("WIR: Fallback Warning: {}", _warning);
+        }
+        
+        if let Some(ref _error) = fallback.error_message {
+            use crate::compiler::host_functions::fallback_mechanisms::FunctionFallbackType;
+            match fallback.fallback_type {
+                FunctionFallbackType::Error => {
+                    #[cfg(feature = "verbose_codegen_logging")]
+                    println!("WIR: Fallback Error: {}", _error);
+                    // In a complete implementation, this might return an error
+                },
+                _ => {
+                    #[cfg(feature = "verbose_codegen_logging")]
+                    println!("WIR: Fallback Note: {}", _error);
+                }
+            }
+        }
+    }
+    
+    // Check if there's a WASIX mapping for this function (using potentially migrated name)
+    let is_wasix_function = final_name == "print" && context.wasix_registry.has_function("print");
     
     let host_function = if is_wasix_function {
         // Use WASIX mapping for print function
         let wasix_func = context.wasix_registry.get_function("print").unwrap();
         
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Using WASIX mapping for host function '{}': module={}, name={}", name, wasix_func.module, wasix_func.name);
+        println!("WIR: Using WASIX mapping for host function '{}': module={}, name={}", final_name, wasix_func.module, wasix_func.name);
         
         // For WASIX functions, we don't add them to host imports because they have
         // different signatures (low-level WASM vs high-level Beanstalk)
         // The WASIX registry handles the import generation separately
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Skipping host import for WASIX function '{}' - handled by WASIX registry", name);
+        println!("WIR: Skipping host import for WASIX function '{}' - handled by WASIX registry", final_name);
         
         HostFunctionDef::new(
-            name,
+            &final_name,
             host_params,
             return_types.to_vec(),
             &wasix_func.module,  // Use WASIX module name
             &wasix_func.name,    // Use WASIX function name
-            &format!("Host function: {} (WASIX)", name)
+            &format!("Host function: {} (WASIX)", final_name)
         )
     } else {
         // Use legacy module for other functions
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Using legacy module for host function '{}'", name);
+        println!("WIR: Using legacy module for host function '{}'", final_name);
         
         let host_func = HostFunctionDef::new(
-            name,
+            &final_name,
             host_params,
             return_types.to_vec(),
             "beanstalk_io", // Default module for legacy functions
-            name, // Use same name for import
-            &format!("Host function: {}", name)
+            &final_name, // Use same name for import
+            &format!("Host function: {}", final_name)
         );
         
         // Only add non-WASIX functions to host imports
         context.add_host_import(host_func.clone());
         
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Added host function '{}' to imports, module: {}", name, host_func.module);
+        println!("WIR: Added host function '{}' to imports, module: {}", final_name, host_func.module);
         
         host_func
     };
@@ -1049,11 +1193,11 @@ fn ast_host_function_call_to_wir(
         // Allocate a local place for the return value
         let return_place = context.get_place_manager().allocate_local(&return_types[0]);
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Allocated return place for host function '{}': {:?}", name, return_place);
+        println!("WIR: Allocated return place for host function '{}': {:?}", final_name, return_place);
         Some(return_place)
     } else {
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Host function '{}' has no return value", name);
+        println!("WIR: Host function '{}' has no return value", final_name);
         None
     };
 
@@ -1061,17 +1205,17 @@ fn ast_host_function_call_to_wir(
     let call_statement = if is_wasix_function {
         // For WASIX functions, use WasixCall statement
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Generated WASIX call statement for '{}'", name);
+        println!("WIR: Generated WASIX call statement for '{}'", final_name);
         
         Statement::WasixCall {
-            function_name: name.to_string(),
+            function_name: final_name.clone(),
             args,
             destination,
         }
     } else {
         // For regular host functions, use HostCall statement
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WIR: Generated host call statement for '{}'", name);
+        println!("WIR: Generated host call statement for '{}'", final_name);
         
         Statement::HostCall {
             function: host_function,

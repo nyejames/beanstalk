@@ -2374,4 +2374,870 @@ impl WasixMemoryManager {
         (self.total_allocated_size() as f32 / self.max_memory_size as f32) * 100.0
     }
 }
+/// Convert WasixError to CompileError with enhanced error messages and context
+impl From<WasixError> for CompileError {
+    fn from(error: WasixError) -> Self {
+        match error {
+            // Legacy error formats (for compatibility)
+            WasixError::InvalidFileDescriptor(fd) => {
+                CompileError::compiler_error(&format!(
+                    "WASIX operation failed: Invalid file descriptor {}. WASIX supports stdout (1), stderr (2), and stdin (0). This may indicate a bug in WASIX function call generation.",
+                    fd
+                ))
+            },
+            WasixError::MemoryOutOfBounds => {
+                CompileError::compiler_error(
+                    "WASIX operation failed: Memory access out of bounds. This indicates a bug in WASM memory management or pointer arithmetic in WASIX operations."
+                )
+            },
+            WasixError::InvalidArgumentCount => {
+                CompileError::compiler_error(
+                    "WASIX operation failed: Invalid argument count for WASIX function call. This indicates a bug in WASIX function signature handling."
+                )
+            },
+            WasixError::EnvironmentError(msg) => {
+                CompileError::compiler_error(&format!(
+                    "WASIX environment error: {}. This may indicate missing WASIX runtime support or configuration issues.",
+                    msg
+                ))
+            },
+            WasixError::NativeFunctionNotFound(name) => {
+                CompileError::compiler_error(&format!(
+                    "Native WASIX function '{}' not found in registry. This indicates a bug in WASIX function registration or lookup.",
+                    name
+                ))
+            },
+
+            // Enhanced error formats with detailed context
+            WasixError::InvalidFileDescriptorWithContext { fd, function, context } => {
+                CompileError::compiler_error(&format!(
+                    "WASIX function '{}' failed: Invalid file descriptor {} ({}). WASIX supports stdout (1), stderr (2), and stdin (0). Check WASIX function call generation.",
+                    function, fd, context
+                ))
+            },
+            WasixError::MemoryOutOfBoundsWithContext { address, size, function, context } => {
+                CompileError::compiler_error(&format!(
+                    "WASIX function '{}' failed: Memory access out of bounds at address 0x{:x} (size: {} bytes). Context: {}. This indicates a bug in WASM memory layout or pointer handling.",
+                    function, address, size, context
+                ))
+            },
+            WasixError::InvalidArgumentCountWithContext { expected, actual, function } => {
+                CompileError::compiler_error(&format!(
+                    "WASIX function '{}' called with wrong argument count: expected {}, got {}. This indicates a bug in WASIX function call generation.",
+                    function, expected, actual
+                ))
+            },
+            WasixError::EnvironmentErrorWithContext { message, function, suggestion } => {
+                let mut error_msg = format!(
+                    "WASIX function '{}' failed: {}",
+                    function, message
+                );
+                if let Some(hint) = suggestion {
+                    error_msg.push_str(&format!(" Suggestion: {}", hint));
+                }
+                error_msg.push_str(" This may indicate missing WASIX runtime support or configuration issues.");
+                CompileError::compiler_error(&error_msg)
+            },
+            WasixError::NativeFunctionNotFoundWithContext { function, available_functions } => {
+                let mut error_msg = format!(
+                    "Native WASIX function '{}' not found in registry.",
+                    function
+                );
+                if available_functions.is_empty() {
+                    error_msg.push_str(" No WASIX functions are currently registered.");
+                } else {
+                    error_msg.push_str(&format!(
+                        " Available functions: {}.",
+                        available_functions.join(", ")
+                    ));
+                }
+                error_msg.push_str(" This indicates a bug in WASIX function registration.");
+                CompileError::compiler_error(&error_msg)
+            },
+
+            // Import resolution and runtime errors
+            WasixError::ImportResolutionError { module, function, reason, suggestion } => {
+                CompileError::compiler_error(&format!(
+                    "Failed to resolve WASIX import '{}:{}': {}. Suggestion: {}. This indicates missing WASIX runtime support or incorrect import generation.",
+                    module, function, reason, suggestion
+                ))
+            },
+            WasixError::AllocationError { requested_size, available_size, function, suggestion } => {
+                CompileError::compiler_error(&format!(
+                    "Memory allocation failed in WASIX function '{}': requested {} bytes, only {} bytes available. Suggestion: {}. This may indicate insufficient WASM memory configuration.",
+                    function, requested_size, available_size, suggestion
+                ))
+            },
+            WasixError::IOVecError { iovec_index, ptr, len, reason } => {
+                CompileError::compiler_error(&format!(
+                    "IOVec validation failed at index {}: ptr=0x{:x}, len={}, reason: {}. This indicates a bug in IOVec handling or memory layout.",
+                    iovec_index, ptr, len, reason
+                ))
+            },
+            WasixError::StringEncodingError { position, encoding, context } => {
+                CompileError::compiler_error(&format!(
+                    "String encoding error at position {}: invalid {} encoding. Context: {}. This indicates a bug in string handling or memory management.",
+                    position, encoding, context
+                ))
+            },
+            WasixError::ConfigurationError { setting, value, expected, suggestion } => {
+                CompileError::compiler_error(&format!(
+                    "WASIX configuration error: setting '{}' has value '{}', expected '{}'. Suggestion: {}. This indicates incorrect WASIX runtime configuration.",
+                    setting, value, expected, suggestion
+                ))
+            },
+        }
+    }
+}
+
+/// WASIX import resolution error handling and diagnostics
+impl WasixFunctionRegistry {
+    /// Detect and handle WASIX import resolution failures
+    /// This function checks if WASIX imports can be resolved and provides helpful error messages
+    pub fn validate_import_resolution(
+        &self,
+        available_imports: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    ) -> Result<(), WasixError> {
+        for (beanstalk_name, wasix_function) in &self.functions {
+            let module_name = &wasix_function.module;
+            let function_name = &wasix_function.name;
+
+            // Check if the module is available
+            if !available_imports.contains_key(module_name) {
+                return Err(WasixError::import_resolution_error(
+                    module_name,
+                    function_name,
+                    &format!("WASIX module '{}' not available in runtime", module_name),
+                    &self.get_module_availability_suggestion(module_name),
+                ));
+            }
+
+            // Check if the function is available in the module
+            let module_functions = &available_imports[module_name];
+            if !module_functions.contains_key(function_name) {
+                let available_functions: Vec<String> = module_functions.keys().cloned().collect();
+                return Err(WasixError::import_resolution_error(
+                    module_name,
+                    function_name,
+                    &format!(
+                        "WASIX function '{}' not available in module '{}'",
+                        function_name, module_name
+                    ),
+                    &self.get_function_availability_suggestion(function_name, &available_functions),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get suggestion for missing WASIX module
+    fn get_module_availability_suggestion(&self, module_name: &str) -> String {
+        match module_name {
+            "wasix_32v1" => {
+                "Ensure you're using a WASIX-compatible runtime like Wasmer with WASIX support enabled. Try: wasmer run --enable-wasix your_program.wasm".to_string()
+            },
+            "wasix_64v1" => {
+                "Ensure you're using a WASIX-compatible runtime with 64-bit support. Try: wasmer run --enable-wasix --arch=x86_64 your_program.wasm".to_string()
+            },
+            "wasix_snapshot_preview1" => {
+                "This is a preview WASIX module. Ensure your runtime supports WASIX preview features.".to_string()
+            },
+            "wasi_snapshot_preview1" => {
+                "This program uses WASI compatibility mode. Most WASM runtimes support this. Try: wasmer run your_program.wasm".to_string()
+            },
+            "wasi_unstable" => {
+                "This program uses legacy WASI. Consider upgrading to WASIX or use a runtime with legacy WASI support.".to_string()
+            },
+            _ => {
+                format!("Unknown WASIX module '{}'. Check your runtime's WASIX module support.", module_name)
+            }
+        }
+    }
+
+    /// Get suggestion for missing WASIX function
+    fn get_function_availability_suggestion(&self, function_name: &str, available_functions: &[String]) -> String {
+        // Find similar function names
+        let similar_functions: Vec<&String> = available_functions
+            .iter()
+            .filter(|f| {
+                // Simple similarity check: same prefix or contains the function name
+                f.starts_with(&function_name[..function_name.len().min(3)]) ||
+                f.contains(function_name) ||
+                function_name.contains(f.as_str())
+            })
+            .collect();
+
+        if !similar_functions.is_empty() {
+            format!(
+                "Did you mean one of: {}? Check the WASIX specification for correct function names.",
+                similar_functions.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            )
+        } else if available_functions.is_empty() {
+            "No functions are available in this WASIX module. Check your runtime's WASIX support.".to_string()
+        } else {
+            format!(
+                "Available functions in this module: {}. Check the WASIX specification for correct function names.",
+                available_functions.join(", ")
+            )
+        }
+    }
+
+    /// Check if a specific WASIX import is available
+    pub fn check_import_availability(
+        &self,
+        beanstalk_name: &str,
+        runtime_modules: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    ) -> Result<(), WasixError> {
+        let wasix_function = self.functions.get(beanstalk_name)
+            .ok_or_else(|| WasixError::function_not_found_with_context(
+                beanstalk_name,
+                self.functions.keys().cloned().collect(),
+            ))?;
+
+        let module_name = &wasix_function.module;
+        let function_name = &wasix_function.name;
+
+        // Check module availability
+        let module_functions = runtime_modules.get(module_name)
+            .ok_or_else(|| WasixError::import_resolution_error(
+                module_name,
+                function_name,
+                &format!("WASIX module '{}' not supported by runtime", module_name),
+                &self.get_module_availability_suggestion(module_name),
+            ))?;
+
+        // Check function availability
+        if !module_functions.contains_key(function_name) {
+            let available_functions: Vec<String> = module_functions.keys().cloned().collect();
+            return Err(WasixError::import_resolution_error(
+                module_name,
+                function_name,
+                &format!("Function '{}' not available in WASIX module '{}'", function_name, module_name),
+                &self.get_function_availability_suggestion(function_name, &available_functions),
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Generate comprehensive import resolution diagnostics
+    pub fn generate_import_diagnostics(
+        &self,
+        runtime_modules: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+    ) -> ImportResolutionDiagnostics {
+        let mut diagnostics = ImportResolutionDiagnostics::new();
+
+        for (beanstalk_name, wasix_function) in &self.functions {
+            let module_name = &wasix_function.module;
+            let function_name = &wasix_function.name;
+
+            // Check module availability
+            if !runtime_modules.contains_key(module_name) {
+                diagnostics.add_missing_module(
+                    beanstalk_name.clone(),
+                    module_name.clone(),
+                    self.get_module_availability_suggestion(module_name),
+                );
+                continue;
+            }
+
+            // Check function availability
+            let module_functions = &runtime_modules[module_name];
+            if !module_functions.contains_key(function_name) {
+                let available_functions: Vec<String> = module_functions.keys().cloned().collect();
+                diagnostics.add_missing_function(
+                    beanstalk_name.clone(),
+                    module_name.clone(),
+                    function_name.clone(),
+                    available_functions,
+                    self.get_function_availability_suggestion(function_name, &module_functions.keys().cloned().collect::<Vec<_>>()),
+                );
+            } else {
+                diagnostics.add_available_function(
+                    beanstalk_name.clone(),
+                    module_name.clone(),
+                    function_name.clone(),
+                );
+            }
+        }
+
+        diagnostics
+    }
+}
+
+/// Diagnostics for WASIX import resolution
+#[derive(Debug, Clone)]
+pub struct ImportResolutionDiagnostics {
+    /// Successfully resolved imports
+    pub available_imports: Vec<AvailableImport>,
+    /// Missing WASIX modules
+    pub missing_modules: Vec<MissingModule>,
+    /// Missing WASIX functions
+    pub missing_functions: Vec<MissingFunction>,
+}
+
+/// Information about an available WASIX import
+#[derive(Debug, Clone)]
+pub struct AvailableImport {
+    /// Beanstalk function name
+    pub beanstalk_name: String,
+    /// WASIX module name
+    pub module_name: String,
+    /// WASIX function name
+    pub function_name: String,
+}
+
+/// Information about a missing WASIX module
+#[derive(Debug, Clone)]
+pub struct MissingModule {
+    /// Beanstalk function name that needs this module
+    pub beanstalk_name: String,
+    /// Missing WASIX module name
+    pub module_name: String,
+    /// Suggestion for resolving the missing module
+    pub suggestion: String,
+}
+
+/// Information about a missing WASIX function
+#[derive(Debug, Clone)]
+pub struct MissingFunction {
+    /// Beanstalk function name
+    pub beanstalk_name: String,
+    /// WASIX module name
+    pub module_name: String,
+    /// Missing WASIX function name
+    pub function_name: String,
+    /// Available functions in the module
+    pub available_functions: Vec<String>,
+    /// Suggestion for resolving the missing function
+    pub suggestion: String,
+}
+
+impl ImportResolutionDiagnostics {
+    /// Create new import resolution diagnostics
+    pub fn new() -> Self {
+        Self {
+            available_imports: Vec::new(),
+            missing_modules: Vec::new(),
+            missing_functions: Vec::new(),
+        }
+    }
+
+    /// Add an available import
+    pub fn add_available_function(&mut self, beanstalk_name: String, module_name: String, function_name: String) {
+        self.available_imports.push(AvailableImport {
+            beanstalk_name,
+            module_name,
+            function_name,
+        });
+    }
+
+    /// Add a missing module
+    pub fn add_missing_module(&mut self, beanstalk_name: String, module_name: String, suggestion: String) {
+        self.missing_modules.push(MissingModule {
+            beanstalk_name,
+            module_name,
+            suggestion,
+        });
+    }
+
+    /// Add a missing function
+    pub fn add_missing_function(
+        &mut self,
+        beanstalk_name: String,
+        module_name: String,
+        function_name: String,
+        available_functions: Vec<String>,
+        suggestion: String,
+    ) {
+        self.missing_functions.push(MissingFunction {
+            beanstalk_name,
+            module_name,
+            function_name,
+            available_functions,
+            suggestion,
+        });
+    }
+
+    /// Check if all imports are available
+    pub fn all_imports_available(&self) -> bool {
+        self.missing_modules.is_empty() && self.missing_functions.is_empty()
+    }
+
+    /// Get the number of missing imports
+    pub fn missing_import_count(&self) -> usize {
+        self.missing_modules.len() + self.missing_functions.len()
+    }
+
+    /// Generate a summary report
+    pub fn generate_summary(&self) -> String {
+        if self.all_imports_available() {
+            format!(
+                "All {} WASIX imports are available and can be resolved.",
+                self.available_imports.len()
+            )
+        } else {
+            let mut summary = format!(
+                "WASIX import resolution: {} available, {} missing ({} modules, {} functions).\n",
+                self.available_imports.len(),
+                self.missing_import_count(),
+                self.missing_modules.len(),
+                self.missing_functions.len()
+            );
+
+            if !self.missing_modules.is_empty() {
+                summary.push_str("\nMissing modules:\n");
+                for missing in &self.missing_modules {
+                    summary.push_str(&format!(
+                        "  - {} needs module '{}': {}\n",
+                        missing.beanstalk_name, missing.module_name, missing.suggestion
+                    ));
+                }
+            }
+
+            if !self.missing_functions.is_empty() {
+                summary.push_str("\nMissing functions:\n");
+                for missing in &self.missing_functions {
+                    summary.push_str(&format!(
+                        "  - {} needs '{}:{}': {}\n",
+                        missing.beanstalk_name, missing.module_name, missing.function_name, missing.suggestion
+                    ));
+                }
+            }
+
+            summary
+        }
+    }
+}
+
+impl Default for ImportResolutionDiagnostics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Enhanced memory allocation error handling for WASIX operations
+impl WasixMemoryManager {
+    /// Allocate memory with comprehensive error handling and diagnostics
+    pub fn allocate_with_error_handling(
+        &mut self,
+        size: u32,
+        alignment: u32,
+        context: &str,
+    ) -> Result<u32, WasixError> {
+        // Validate allocation request
+        self.validate_allocation_request(size, alignment, context)?;
+
+        // Check available memory
+        let available_memory = self.get_available_memory();
+        if size > available_memory {
+            return Err(WasixError::allocation_error(
+                size,
+                available_memory,
+                context,
+                &self.get_memory_increase_suggestion(size, available_memory),
+            ));
+        }
+
+        // Perform the allocation in the heap area
+        let heap_start = self.layout.heap_start;
+        let heap_size = self.layout.heap_size;
+        match self.allocate_in_area(size, alignment, heap_start, heap_size) {
+            Ok(ptr) => {
+                // Update peak usage tracking
+                let current_usage = self.total_allocated_size();
+                self.stats.update_peak_usage(current_usage);
+                Ok(ptr)
+            }
+            Err(e) => {
+                self.stats.record_failure();
+                Err(self.enhance_allocation_error(e, size, alignment, context))
+            }
+        }
+    }
+
+    /// Validate allocation request parameters
+    fn validate_allocation_request(
+        &self,
+        size: u32,
+        alignment: u32,
+        context: &str,
+    ) -> Result<(), WasixError> {
+        // Check for zero-size allocation
+        if size == 0 {
+            return Err(WasixError::allocation_error(
+                size,
+                0,
+                context,
+                "Zero-size allocations are not allowed. Check your string length calculations.",
+            ));
+        }
+
+        // Check for excessive size (prevent memory exhaustion)
+        if size > 0x10000000 {
+            // 256MB limit
+            return Err(WasixError::allocation_error(
+                size,
+                0x10000000,
+                context,
+                "Allocation size exceeds 256MB limit. This may indicate a bug in size calculation or an attempt to allocate excessive memory.",
+            ));
+        }
+
+        // Validate alignment
+        if alignment == 0 || (alignment & (alignment - 1)) != 0 {
+            return Err(WasixError::configuration_error(
+                "memory_alignment",
+                &alignment.to_string(),
+                "power of 2 (1, 2, 4, 8, 16, etc.)",
+                "Use a valid alignment value like 8 for WASIX operations.",
+            ));
+        }
+
+        // Check if alignment is reasonable (not too large)
+        if alignment > 4096 {
+            return Err(WasixError::configuration_error(
+                "memory_alignment",
+                &alignment.to_string(),
+                "≤ 4096 bytes",
+                "Excessive alignment may waste memory. Consider using 8 or 16 byte alignment for WASIX.",
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Get available memory for allocation
+    fn get_available_memory(&self) -> u32 {
+        if self.max_memory_size > self.total_allocated_size() {
+            self.max_memory_size - self.total_allocated_size()
+        } else {
+            0
+        }
+    }
+
+    /// Generate suggestion for increasing memory limits
+    fn get_memory_increase_suggestion(&self, requested: u32, available: u32) -> String {
+        let current_usage = self.total_allocated_size();
+        let needed_total = current_usage + requested;
+        let suggested_limit = ((needed_total as f32 * 1.5) as u32).max(0x1000000); // At least 16MB
+
+        format!(
+            "Increase WASM memory limit to at least {} bytes (currently {}). Current usage: {} bytes, requested: {} bytes, available: {} bytes. Try setting --max-memory={} when running with Wasmer.",
+            suggested_limit,
+            self.max_memory_size,
+            current_usage,
+            requested,
+            available,
+            suggested_limit
+        )
+    }
+
+    /// Enhance allocation error with context and suggestions
+    fn enhance_allocation_error(
+        &self,
+        original_error: WasixError,
+        size: u32,
+        _alignment: u32,
+        context: &str,
+    ) -> WasixError {
+        match original_error {
+            WasixError::MemoryOutOfBounds => {
+                WasixError::allocation_error(
+                    size,
+                    self.get_available_memory(),
+                    context,
+                    &format!(
+                        "Memory allocation failed due to insufficient space. {}",
+                        self.get_memory_increase_suggestion(size, self.get_available_memory())
+                    ),
+                )
+            }
+            WasixError::EnvironmentError(msg) => {
+                WasixError::allocation_error(
+                    size,
+                    self.get_available_memory(),
+                    context,
+                    &format!(
+                        "Memory allocation failed: {}. Check WASM memory configuration and limits.",
+                        msg
+                    ),
+                )
+            }
+            _ => original_error,
+        }
+    }
+
+    /// Check memory health and generate warnings
+    pub fn check_memory_health(&self) -> MemoryHealthReport {
+        let mut report = MemoryHealthReport::new();
+        let usage_percentage = self.memory_usage_percentage();
+        let fragmentation = self.calculate_fragmentation();
+
+        // Check memory usage levels
+        if usage_percentage > 90.0 {
+            report.add_warning(
+                MemoryWarningLevel::Critical,
+                format!(
+                    "Memory usage is {}% of maximum. Consider increasing memory limits or optimizing allocations.",
+                    usage_percentage as u32
+                ),
+            );
+        } else if usage_percentage > 75.0 {
+            report.add_warning(
+                MemoryWarningLevel::High,
+                format!(
+                    "Memory usage is {}% of maximum. Monitor memory usage closely.",
+                    usage_percentage as u32
+                ),
+            );
+        } else if usage_percentage > 50.0 {
+            report.add_warning(
+                MemoryWarningLevel::Medium,
+                format!(
+                    "Memory usage is {}% of maximum. Memory usage is moderate.",
+                    usage_percentage as u32
+                ),
+            );
+        }
+
+        // Check fragmentation
+        if fragmentation > 0.3 {
+            report.add_warning(
+                MemoryWarningLevel::Medium,
+                format!(
+                    "Memory fragmentation is {:.1}%. Consider memory compaction or larger initial allocations.",
+                    fragmentation * 100.0
+                ),
+            );
+        }
+
+        // Check allocation failure rate
+        let failure_rate = if self.stats.total_allocations > 0 {
+            self.stats.allocation_failures as f32 / self.stats.total_allocations as f32
+        } else {
+            0.0
+        };
+
+        if failure_rate > 0.1 {
+            report.add_warning(
+                MemoryWarningLevel::High,
+                format!(
+                    "Allocation failure rate is {:.1}%. Check memory limits and allocation patterns.",
+                    failure_rate * 100.0
+                ),
+            );
+        }
+
+        report
+    }
+
+    /// Calculate memory fragmentation as a ratio
+    fn calculate_fragmentation(&self) -> f32 {
+        if self.allocated_regions.is_empty() {
+            return 0.0;
+        }
+
+        let total_allocated: u32 = self.allocated_regions.iter().map(|r| r.size).sum();
+        let total_span = self.total_allocated_size();
+
+        if total_span == 0 {
+            return 0.0;
+        }
+
+        1.0 - (total_allocated as f32 / total_span as f32)
+    }
+
+    /// Generate memory allocation diagnostics
+    pub fn generate_allocation_diagnostics(&self) -> AllocationDiagnostics {
+        AllocationDiagnostics {
+            total_allocations: self.stats.total_allocations,
+            total_bytes_allocated: self.stats.total_bytes_allocated,
+            peak_memory_usage: self.stats.peak_memory_usage,
+            current_memory_usage: self.total_allocated_size(),
+            memory_usage_percentage: self.memory_usage_percentage(),
+            fragmentation_ratio: self.calculate_fragmentation(),
+            allocation_failures: self.stats.allocation_failures,
+            alignment_adjustments: self.stats.alignment_adjustments,
+            allocated_regions_count: self.allocated_regions.len(),
+            max_memory_size: self.max_memory_size,
+            available_memory: self.get_available_memory(),
+        }
+    }
+
+    /// Suggest memory configuration optimizations
+    pub fn suggest_memory_optimizations(&self) -> Vec<MemoryOptimizationSuggestion> {
+        let mut suggestions = Vec::new();
+        let diagnostics = self.generate_allocation_diagnostics();
+
+        // Suggest memory limit increases
+        if diagnostics.memory_usage_percentage > 80.0 {
+            suggestions.push(MemoryOptimizationSuggestion {
+                category: OptimizationCategory::MemoryLimit,
+                priority: OptimizationPriority::High,
+                description: format!(
+                    "Increase WASM memory limit from {} to {} bytes to prevent allocation failures.",
+                    self.max_memory_size,
+                    (self.max_memory_size as f32 * 1.5) as u32
+                ),
+                implementation: "Use --max-memory flag with Wasmer or configure memory limits in your WASM runtime.".to_string(),
+            });
+        }
+
+        // Suggest fragmentation reduction
+        if diagnostics.fragmentation_ratio > 0.2 {
+            suggestions.push(MemoryOptimizationSuggestion {
+                category: OptimizationCategory::Fragmentation,
+                priority: OptimizationPriority::Medium,
+                description: format!(
+                    "Reduce memory fragmentation (currently {:.1}%) by using larger initial allocations.",
+                    diagnostics.fragmentation_ratio * 100.0
+                ),
+                implementation: "Allocate larger blocks initially and sub-allocate from them, or implement memory pooling.".to_string(),
+            });
+        }
+
+        // Suggest alignment optimization
+        if diagnostics.alignment_adjustments > diagnostics.total_allocations / 4 {
+            suggestions.push(MemoryOptimizationSuggestion {
+                category: OptimizationCategory::Alignment,
+                priority: OptimizationPriority::Low,
+                description: format!(
+                    "Optimize memory alignment to reduce {} alignment adjustments.",
+                    diagnostics.alignment_adjustments
+                ),
+                implementation: "Use consistent alignment requirements (8 or 16 bytes) for all allocations.".to_string(),
+            });
+        }
+
+        suggestions
+    }
+}
+
+/// Memory health report for diagnostics
+#[derive(Debug, Clone)]
+pub struct MemoryHealthReport {
+    /// Memory warnings by severity
+    pub warnings: Vec<MemoryWarning>,
+}
+
+/// Memory warning information
+#[derive(Debug, Clone)]
+pub struct MemoryWarning {
+    /// Warning severity level
+    pub level: MemoryWarningLevel,
+    /// Warning message
+    pub message: String,
+}
+
+/// Memory warning severity levels
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MemoryWarningLevel {
+    /// Low priority warning
+    Low,
+    /// Medium priority warning
+    Medium,
+    /// High priority warning
+    High,
+    /// Critical warning requiring immediate attention
+    Critical,
+}
+
+impl MemoryHealthReport {
+    /// Create a new memory health report
+    pub fn new() -> Self {
+        Self {
+            warnings: Vec::new(),
+        }
+    }
+
+    /// Add a warning to the report
+    pub fn add_warning(&mut self, level: MemoryWarningLevel, message: String) {
+        self.warnings.push(MemoryWarning { level, message });
+    }
+
+    /// Check if there are any critical warnings
+    pub fn has_critical_warnings(&self) -> bool {
+        self.warnings.iter().any(|w| w.level == MemoryWarningLevel::Critical)
+    }
+
+    /// Get warnings by level
+    pub fn get_warnings_by_level(&self, level: MemoryWarningLevel) -> Vec<&MemoryWarning> {
+        self.warnings.iter().filter(|w| w.level == level).collect()
+    }
+}
+
+impl Default for MemoryHealthReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Comprehensive allocation diagnostics
+#[derive(Debug, Clone)]
+pub struct AllocationDiagnostics {
+    /// Total number of allocations performed
+    pub total_allocations: u64,
+    /// Total bytes allocated across all allocations
+    pub total_bytes_allocated: u64,
+    /// Peak memory usage reached
+    pub peak_memory_usage: u32,
+    /// Current memory usage
+    pub current_memory_usage: u32,
+    /// Memory usage as percentage of maximum
+    pub memory_usage_percentage: f32,
+    /// Memory fragmentation ratio (0.0 = no fragmentation, 1.0 = maximum fragmentation)
+    pub fragmentation_ratio: f32,
+    /// Number of allocation failures
+    pub allocation_failures: u64,
+    /// Number of alignment adjustments made
+    pub alignment_adjustments: u64,
+    /// Number of allocated regions
+    pub allocated_regions_count: usize,
+    /// Maximum memory size configured
+    pub max_memory_size: u32,
+    /// Available memory for allocation
+    pub available_memory: u32,
+}
+
+/// Memory optimization suggestion
+#[derive(Debug, Clone)]
+pub struct MemoryOptimizationSuggestion {
+    /// Category of optimization
+    pub category: OptimizationCategory,
+    /// Priority level
+    pub priority: OptimizationPriority,
+    /// Description of the optimization
+    pub description: String,
+    /// Implementation guidance
+    pub implementation: String,
+}
+
+/// Categories of memory optimization
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OptimizationCategory {
+    /// Memory limit configuration
+    MemoryLimit,
+    /// Memory fragmentation reduction
+    Fragmentation,
+    /// Memory alignment optimization
+    Alignment,
+    /// Allocation pattern optimization
+    AllocationPattern,
+}
+
+/// Priority levels for optimizations
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OptimizationPriority {
+    /// Low priority optimization
+    Low,
+    /// Medium priority optimization
+    Medium,
+    /// High priority optimization
+    High,
+    /// Critical optimization required
+    Critical,
+}
+
 // Utility functions for WASIX operations will be added here when JIT runtime integration is implemented

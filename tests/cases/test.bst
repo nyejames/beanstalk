@@ -3,4 +3,4 @@ x = 42
 things = "ANYTHING I WANT"
 
 -- Test print statement
-print([:I CAN PRINT [y] IN MY OWN LANGUAGE!])
+print([:I CAN PRINT [things] IN MY OWN LANGUAGE!])
