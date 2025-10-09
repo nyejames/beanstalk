@@ -1710,28 +1710,6 @@ fn convert_template_expression_to_string_operand(
     }
 }
 
-/// Convert expression to operand for basic types
-fn expression_to_operand(expression: &Expression, location: &TextLocation) -> Result<Operand, CompileError> {
-    match &expression.kind {
-        ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I32(*value as i32))),
-        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F32(*value as f32))),
-        ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
-        ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
-        ExpressionKind::Reference(name) => {
-            return_compiler_error!("Variable references in function parameters not yet implemented for variable '{}' at line {}, column {}. This feature requires context parameter - use expression_to_operand_with_context instead.", name, location.start_pos.line_number, location.start_pos.char_column);
-        }
-        ExpressionKind::Runtime(_) => {
-            return_compiler_error!("Runtime expressions (complex calculations) not yet implemented for function parameters at line {}, column {}. Try passing simpler values or pre-calculating the result.", location.start_pos.line_number, location.start_pos.char_column);
-        }
-        ExpressionKind::Template(_) => {
-            return_compiler_error!("Template expressions not supported in function parameters at line {}, column {}. Templates should be assigned to variables first.", location.start_pos.line_number, location.start_pos.char_column);
-        }
-        _ => {
-            return_compiler_error!("Expression type '{:?}' not yet implemented for function parameters at line {}, column {}. This expression type needs to be added to the WIR generator.", expression.kind, location.start_pos.line_number, location.start_pos.char_column)
-        }
-    }
-}
-
 /// Convert expression to operand with context for variable references
 fn expression_to_operand_with_context(
     expression: &Expression, 
@@ -1751,10 +1729,14 @@ fn expression_to_operand_with_context(
                 _ => return_compiler_error!("Variable reference '{}' produced non-use rvalue, which is not supported in operand context", name),
             }
         }
-        ExpressionKind::Runtime(_runtime_nodes) => {
+        ExpressionKind::Runtime(runtime_nodes) => {
             // For operand context, we need to create a temporary assignment for runtime expressions
             // This is a simplified approach - in a full implementation, we'd integrate this better
-            return_compiler_error!("Runtime expressions (complex calculations) in operand context not yet fully implemented at line {}, column {}. For now, assign the expression to a variable first: 'temp_var = x + 1; return temp_var;'", location.start_pos.line_number, location.start_pos.char_column);
+            let rvalue = transform_runtime_expression(runtime_nodes, location, context)?;
+            match rvalue {
+                Rvalue::Use(operand) => Ok(operand),
+                _ => return_compiler_error!("Runtime expression produced non-use rvalue, which is not supported in operand context"),
+            }
         }
         ExpressionKind::Template(template) => {
             // For operand context, try to fold template to constant if possible
@@ -1775,6 +1757,7 @@ fn expression_to_operand_with_context(
             // None expressions represent parameters without default arguments
             // In function parameter context, this means the parameter is required and has no default
             // This should not be converted to an operand as it represents the absence of a default value
+            
             return_compiler_error!("None expression encountered in operand context at line {}, column {}. This indicates a function parameter without a default argument, which should not be converted to an operand.", location.start_pos.line_number, location.start_pos.char_column);
         }
         _ => {

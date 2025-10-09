@@ -33,6 +33,7 @@ pub fn run_all_test_cases() {
                     total_tests += 1;
                     let file_name = path.file_name().unwrap().to_string_lossy();
 
+                    println!("\n------------------------------------------");
                     print!("  {} ... ", file_name);
 
                     let flags = vec![Flag::DisableWarnings];
@@ -53,6 +54,8 @@ pub fn run_all_test_cases() {
                         }
                     }
                 }
+
+                println!("------------------------------------------");
             }
         }
     }
@@ -69,6 +72,7 @@ pub fn run_all_test_cases() {
                     total_tests += 1;
                     let file_name = path.file_name().unwrap().to_string_lossy();
 
+                    println!("\n------------------------------------------");
                     print!("  {} ... ", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
@@ -83,6 +87,7 @@ pub fn run_all_test_cases() {
                         }
                     }
                 }
+                println!("------------------------------------------");
             }
         }
     }
