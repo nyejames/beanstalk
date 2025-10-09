@@ -4,7 +4,7 @@
 // for rapid development iteration without additional compilation steps.
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::host_functions::wasix_registry::{WasixContext, WasixFunctionRegistry, create_wasix_registry};
+use crate::compiler::host_functions::wasix_registry::{WasixFunctionRegistry, create_wasix_registry};
 use crate::runtime::{IoBackend, RuntimeConfig};
 use wasmer::{Instance, Module, Store, imports, Function, Memory};
 use wasmer_wasix::WasiEnvBuilder;
@@ -654,9 +654,7 @@ fn setup_native_imports(
 
 /// JIT Runtime with WASIX integration
 pub struct JitRuntime {
-    /// WASIX context for managing runtime state
-    pub wasix_context: Option<WasixContext>,
-    /// WASIX function registry for native implementations
+    /// WASIX function registry for import-based calls
     pub wasix_registry: WasixFunctionRegistry,
     /// Wasmer store for JIT execution
     pub store: Store,
@@ -677,7 +675,6 @@ impl JitRuntime {
             .map_err(|e| CompileError::compiler_error(&format!("Failed to create WASIX registry: {:?}", e)))?;
 
         Ok(Self {
-            wasix_context: None,
             wasix_registry,
             store,
         })
@@ -685,60 +682,29 @@ impl JitRuntime {
 
     /// Setup WASIX environment and native functions
     pub fn setup_wasix_environment(&mut self) -> Result<(), CompileError> {
-        // Create WASIX context
-        let wasix_context = WasixContext::new()
-            .map_err(|e| CompileError::compiler_error(&format!("Failed to create WASIX context: {:?}", e)))?;
-
-        // Store context in runtime
-        self.wasix_context = Some(wasix_context);
-
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASIX environment initialized with native function support");
+        println!("WASIX environment initialized with import-based function support");
 
         Ok(())
     }
 
-    /// Initialize WASIX context with memory integration
-    /// TODO: This will be implemented in task 4 when we integrate WASIX with JIT runtime
+    /// Initialize WASIX context with memory integration (simplified)
     pub fn initialize_wasix_context_with_memory(&mut self, _memory: wasmer::Memory) -> Result<(), CompileError> {
-        if self.wasix_context.is_some() {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!("WASIX context memory integration - placeholder (requires task 4 implementation)");
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASIX memory integration - using import-based calls");
 
-            Ok(())
-        } else {
-            Err(CompileError::compiler_error("WASIX context not initialized. Call setup_wasix_environment first."))
-        }
+        Ok(())
     }
 
     /// Cleanup WASIX context and resources
     pub fn cleanup_wasix_context(&mut self) {
-        if let Some(ref mut context) = self.wasix_context {
-            // Cleanup logic is not yet implemented
-            // Future cleanup may include memory deallocation and resource management
-            let _ = context; // Context available for future cleanup implementation
-
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!("WASIX context cleanup completed");
-        }
-
-        // Clear the context
-        self.wasix_context = None;
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!("WASIX cleanup completed (simplified registry)");
     }
 
-    /// Get WASIX context for external access
-    pub fn get_wasix_context(&self) -> Option<&WasixContext> {
-        self.wasix_context.as_ref()
-    }
-
-    /// Get mutable WASIX context for external access
-    pub fn get_wasix_context_mut(&mut self) -> Option<&mut WasixContext> {
-        self.wasix_context.as_mut()
-    }
-
-    /// Check if WASIX context is initialized
+    /// Check if WASIX is initialized (always true for simplified registry)
     pub fn is_wasix_initialized(&self) -> bool {
-        self.wasix_context.is_some()
+        true
     }
 
     /// Register native WASIX function implementations
@@ -753,25 +719,9 @@ impl JitRuntime {
         Ok(())
     }
 
-    /// Execute native WASIX function call
-    pub fn call_native_wasix_function(
-        &mut self,
-        function_name: &str,
-        args: &[wasmer::Value],
-    ) -> Result<Vec<wasmer::Value>, CompileError> {
-        let context = self.wasix_context.as_mut()
-            .ok_or_else(|| CompileError::compiler_error("WASIX context not initialized"))?;
-
-        let native_func = self.wasix_registry.get_native_function(function_name)
-            .ok_or_else(|| CompileError::compiler_error(&format!("Native WASIX function not found: {}", function_name)))?;
-
-        native_func(context, args)
-            .map_err(|e| CompileError::compiler_error(&format!("WASIX function call failed: {:?}", e)))
-    }
-
-    /// Check if a WASIX function has native implementation
-    pub fn has_native_wasix_function(&self, function_name: &str) -> bool {
-        self.wasix_registry.get_native_function(function_name).is_some()
+    /// Check if a WASIX function is available (import-based only)
+    pub fn has_wasix_function(&self, function_name: &str) -> bool {
+        self.wasix_registry.has_function(function_name)
     }
 
     /// Get the WASIX function registry (for codegen integration)
@@ -790,10 +740,8 @@ impl JitRuntime {
         wasm_bytes: &[u8],
         config: &RuntimeConfig,
     ) -> Result<(), CompileError> {
-        // Setup WASIX environment if not already done
-        if self.wasix_context.is_none() {
-            self.setup_wasix_environment()?;
-        }
+        // Setup WASIX environment (simplified)
+        self.setup_wasix_environment()?;
 
         // Register native WASIX functions
         self.register_native_wasix_functions()?;

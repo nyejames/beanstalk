@@ -39,14 +39,7 @@ impl ProjectBuilder for NativeProjectBuilder {
         // For native projects, we produce a single WASM file
         let output_files = vec![OutputFile::Wasm(compilation_result.wasm_bytes)];
 
-        if !compilation_result.required_imports.is_empty() {
-            for import in &compilation_result.required_imports {
-                println!(
-                    "  {}::{} ({:?})",
-                    import.module, import.function, import.import_type
-                );
-            }
-        }
+        // Required imports are handled by the runtime - no need to print them
 
         Ok(Project {
             config: config.clone(),

@@ -778,7 +778,7 @@ impl LocalAnalyzer {
         let mut wasm_local_index = wir_function.parameters.len() as u32;
 
         // Map each WIR local to a WASM local index
-        for (mir_local_index, _wasm_type) in &self.local_types {
+        for mir_local_index in self.local_types.keys() {
             local_map.map_local(*mir_local_index, wasm_local_index);
             wasm_local_index += 1;
         }
@@ -1094,7 +1094,7 @@ impl WasmModule {
         // Try to map WASM offset to source location
         // This is a simplified implementation - a full implementation would need
         // more sophisticated offset-to-source mapping
-        for (_, function_info) in &self.function_source_map {
+        for function_info in self.function_source_map.values() {
             // Look for the closest instruction location
             if let Some(_location) = function_info.instruction_locations.first() {
                 return Some(SourceLocationInfo {
@@ -1122,10 +1122,10 @@ impl WasmModule {
         debug_parts.push(format!("WASM offset: 0x{:x}", wasm_error.offset()));
 
         // Add source file information if available
-        if let Some(ctx) = source_context {
-            if let Some(ref file) = ctx.source_file {
-                debug_parts.push(format!("Source: {}:{}", file, ctx.line));
-            }
+        if let Some(ctx) = source_context
+            && let Some(ref file) = ctx.source_file
+        {
+            debug_parts.push(format!("Source: {}:{}", file, ctx.line));
         }
 
         if debug_parts.is_empty() {
@@ -1158,20 +1158,6 @@ impl WasmModule {
         }
 
         Ok(module)
-    }
-
-    /// Validate the generated WASM module using wasmparser
-    pub fn validate_module(self) -> Result<(), CompileError> {
-        // Generate the WASM bytes for validation
-        let wasm_bytes = self.finish();
-
-        // Use wasmparser to validate the module
-        match wasmparser::validate(&wasm_bytes) {
-            Ok(_) => Ok(()),
-            Err(wasm_error) => {
-                return_wasm_validation_error!(&wasm_error, None);
-            }
-        }
     }
 
     /// Compile a WIR function to WASM with enhanced wasm_encoder integration

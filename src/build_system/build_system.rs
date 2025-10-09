@@ -71,11 +71,8 @@ pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
 pub fn determine_build_target(config: &Config, entry_path: &Path) -> BuildTarget {
     // Check if this is a single file or project
     if entry_path.extension().is_some() {
-        // Single file - default to native
-        BuildTarget::Native {
-            target_arch: None,
-            enable_syscalls: true,
-        }
+        // Single file - default to JIT
+        BuildTarget::Jit
     } else {
         // Project directory - check config for the target type
         match &config.project_type {
