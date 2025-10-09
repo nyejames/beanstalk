@@ -27,12 +27,14 @@ condition1 = mutable_counter > 0
 condition2 = mutable_accumulator > 150
 
 if condition1:
+    final_result ~= 0
+
     if condition2:
         -- Deep nesting with borrowing and mutation
         temp_ref = ref2
         mutable_counter = mutable_counter + 10
         final_result = mutable_accumulator + mutable_counter
-    else
+    else:
         -- Alternative path
         temp_ref = ref3
         final_result = mutable_accumulator
@@ -40,7 +42,7 @@ if condition1:
     
     -- Scope-local operations
     scope_result = final_result + 5
-else
+else:
     -- Outer else branch
     scope_result = 0
 ;

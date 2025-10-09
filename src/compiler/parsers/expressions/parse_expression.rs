@@ -188,40 +188,13 @@ pub fn create_expression(
             TokenKind::Newline => {
                 // Fine if inside parenthesis (not closed yet)
                 // Otherwise break out of the expression
-                ast_log!("Breaking out of expression with newline");
-
                 if consume_closing_parenthesis {
                     token_stream.skip_newlines();
                     continue;
-                } else {
-                    // Check ahead if the next token must continue the expression
-                    // So something like:
-                    // x = 1 + 2
-                    // + 3
-                    // '+' would be a valid continuation,
-                    // as '+' doesn't make sense outside expressions like this anyway
-                    token_stream.skip_newlines();
-
-                    match token_stream.current_token_kind() {
-                        TokenKind::Add
-                        | TokenKind::Subtract
-                        | TokenKind::Multiply
-                        | TokenKind::Root
-                        | TokenKind::Divide
-                        | TokenKind::Modulus
-                        | TokenKind::Is
-                        | TokenKind::GreaterThan
-                        | TokenKind::GreaterThanOrEqual
-                        | TokenKind::LessThan
-                        | TokenKind::LessThanOrEqual
-                        | TokenKind::Exponent
-                        | TokenKind::Not
-                        | TokenKind::Or
-                        | TokenKind::Remainder
-                        | TokenKind::RemainderAssign => continue,
-                        _ => break,
-                    }
                 }
+
+                ast_log!("Breaking out of expression with newline");
+                break;
             }
 
             // Check if the name is a reference to another variable or function call
@@ -464,7 +437,7 @@ pub fn create_expression(
                             )
                         }
 
-                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type)
+                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type);
                     }
 
                     // IS

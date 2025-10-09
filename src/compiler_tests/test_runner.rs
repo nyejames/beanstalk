@@ -1,4 +1,7 @@
 //! Test runner for validating core Beanstalk compiler functionality
+
+use crate::compiler::compiler_errors::print_formatted_error;
+
 ///
 /// This module provides a focused test suite that validates the essential
 /// compiler operations without getting bogged down in implementation details.
@@ -12,6 +15,7 @@ pub fn run_all_test_cases() {
     use std::path::Path;
 
     println!("Running all Beanstalk test cases...\n");
+    let timer = std::time::Instant::now();
 
     let test_cases_dir = Path::new("tests/cases");
     let success_dir = test_cases_dir.join("success");
@@ -36,7 +40,7 @@ pub fn run_all_test_cases() {
                     println!("\n------------------------------------------");
                     print!("  {} ... ", file_name);
 
-                    let flags = vec![Flag::DisableWarnings];
+                    let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
                     match build_project_files(&path, false, &flags) {
                         Ok(_) => {
                             green_ln!("✓ PASS");
@@ -45,11 +49,8 @@ pub fn run_all_test_cases() {
                         Err(errors) => {
                             red_ln!("✗ FAIL");
                             failed_tests += 1;
-                            for error in errors.iter().take(3) {
-                                println!("    Error: {:?}", error);
-                            }
-                            if errors.len() > 3 {
-                                println!("    ... and {} more errors", errors.len() - 3);
+                            for error in errors {
+                                print_formatted_error(error);
                             }
                         }
                     }
@@ -96,7 +97,8 @@ pub fn run_all_test_cases() {
 
     // Print summary
     println!("\n{}", "=".repeat(50));
-    println!("Test Results Summary:");
+    print!("Test Results Summary. Took: ");
+    green_ln!("{:?}", timer.elapsed());
     println!("  Total tests: {}", total_tests);
     println!("  Successful compilations: {}", passed_tests);
     println!("  Failed compilations: {}", failed_tests);
@@ -120,77 +122,6 @@ pub fn run_all_test_cases() {
     }
 
     println!("{}", "=".repeat(50));
-}
-
-/// Run essential compiler tests
-pub fn run_essential_tests() -> Result<(), String> {
-    println!("Running essential Beanstalk compiler tests...\n");
-
-    // Test 1: Core compilation pipeline
-    println!("1. Testing core compilation pipeline...");
-    run_test_module("AST Generation", || {
-        // These would run the AST generation tests
-        Ok(())
-    })?;
-
-    run_test_module("WIR Lowering", || {
-        // These would run the WIR lowering tests
-        Ok(())
-    })?;
-
-    run_test_module("Error Handling", || {
-        // These would run the error handling tests
-        Ok(())
-    })?;
-
-    // Test 2: Place system (WASM optimization foundation)
-    println!("\n2. Testing WASM-optimized place system...");
-    run_test_module("Place Creation", || {
-        // These would run place creation tests
-        Ok(())
-    })?;
-
-    run_test_module("Place Projections", || {
-        // These would run projection tests
-        Ok(())
-    })?;
-
-    run_test_module("WASM Instruction Efficiency", || {
-        // These would run WASM efficiency tests
-        Ok(())
-    })?;
-
-    // Test 3: Borrow checking
-    println!("\n3. Testing borrow checking...");
-    run_test_module("Valid Borrows", || {
-        // These would run valid borrow tests
-        Ok(())
-    })?;
-
-    run_test_module("Conflict Detection", || {
-        // These would run conflict detection tests
-        Ok(())
-    })?;
-
-    // Test 4: Performance validation
-    println!("\n4. Testing performance goals...");
-    run_test_module("Compilation Speed", || {
-        // These would run compilation speed tests
-        Ok(())
-    })?;
-
-    run_test_module("Memory Efficiency", || {
-        // These would run memory efficiency tests
-        Ok(())
-    })?;
-
-    run_test_module("WASM Optimization", || {
-        // These would run WASM optimization tests
-        Ok(())
-    })?;
-
-    println!("\n✓ All essential tests passed!");
-    Ok(())
 }
 
 /// Run a specific test module with error handling

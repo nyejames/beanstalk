@@ -128,9 +128,6 @@ pub mod wasm_compilation_debug;
 // Re-export functions that CLI needs
 pub use test_runner::run_all_test_cases;
 
-// Re-export essential test functions
-pub use test_runner::run_essential_tests;
-
 // Re-export consolidated performance functions
 #[cfg(test)]
 pub use consolidated_performance_tests::{run_performance_benchmarks, validate_wasm_optimizations};

@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
+use colour::red_ln;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {

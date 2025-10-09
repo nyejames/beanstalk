@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-
+use colour::green_ln;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::{return_syntax_error, settings};
+use crate::{return_syntax_error, settings, token_log};
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -286,7 +286,6 @@ pub fn get_token_kind(
 
                 while let Some(ch) = stream.peek() {
                     if ch == &'\n' {
-                        stream.next();
                         break;
                     }
 
