@@ -56,7 +56,7 @@ pub fn create_multiple_expressions(
 
                 token_stream.advance(); // Skip the comma
             }
-            
+
             _ => {
                 if type_index < context.returns.len() {
                     return_type_error!(
@@ -441,15 +441,15 @@ pub fn create_expression(
                 // Check if the next token is a "not" or the start of a match statement
                 match token_stream.peek_next_token() {
 
-                    // IS NOT
-                    Some(TokenKind::Not) => {
-                        token_stream.advance();
-                        expression.push(AstNode {
-                            kind: NodeKind::Operator(Operator::NotEqual),
-                            location: token_stream.current_location(),
-                            scope: context.scope_name.to_owned(),
-                        });
-                    }
+                    // // IS NOT
+                    // Some(TokenKind::Not) => {
+                    //     token_stream.advance();
+                    //     expression.push(AstNode {
+                    //         kind: NodeKind::Operator(Operator::NotEqual),
+                    //         location: token_stream.current_location(),
+                    //         scope: context.scope_name.to_owned(),
+                    //     });
+                    // }
 
                     // MATCH STATEMENTS
                     Some(TokenKind::Colon) => {
@@ -516,6 +516,13 @@ pub fn create_expression(
             TokenKind::Or => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Or),
+                    location: token_stream.current_location(),
+                    scope: context.scope_name.to_owned(),
+                });
+            }
+            TokenKind::Not => {
+                expression.push(AstNode {
+                    kind: NodeKind::Operator(Operator::Not),
                     location: token_stream.current_location(),
                     scope: context.scope_name.to_owned(),
                 });

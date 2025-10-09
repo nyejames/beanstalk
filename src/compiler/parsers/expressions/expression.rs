@@ -265,13 +265,35 @@ pub enum Operator {
     LessThan,
     LessThanOrEqual,
     Equality,
-    NotEqual,
+    Not,
 
     // Special
     Range,
 }
 
 impl Operator {
+    pub fn required_values(&self) -> usize {
+        match self {
+            Operator::Add
+            | Operator::Subtract
+            | Operator::Multiply
+            | Operator::Divide
+            | Operator::Modulus
+            | Operator::Root
+            | Operator::Exponent
+            | Operator::And
+            | Operator::Or
+            | Operator::GreaterThan
+            | Operator::GreaterThanOrEqual
+            | Operator::LessThan
+            | Operator::LessThanOrEqual
+            | Operator::Range
+            | Operator::Equality => 2,
+            
+            // Not is a unary operator
+            _ => 1,
+        }
+    }
     pub fn to_str(&self) -> &str {
         match self {
             Operator::Add => "+",
@@ -288,10 +310,8 @@ impl Operator {
             Operator::LessThan => "<",
             Operator::LessThanOrEqual => "<=",
             Operator::Equality => "is",
-            Operator::NotEqual => "is not",
+            Operator::Not => "not",
             Operator::Range => "..",
         }
     }
 }
-
-

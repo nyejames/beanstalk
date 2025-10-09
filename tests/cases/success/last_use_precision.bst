@@ -14,4 +14,4 @@ temp = data_ref
 mut_data_ref ~= data
 
 -- Use the mutable reference
-mut_data_ref ~= 42
+mut_data_ref = 42

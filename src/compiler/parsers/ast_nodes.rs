@@ -1,11 +1,11 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::expressions::expression::{Expression, Operator};
-use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
-use crate::return_compiler_error;
-use std::path::PathBuf;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
+use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
+use crate::{return_compiler_error, return_type_error};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Arg {
@@ -45,9 +45,9 @@ pub enum NodeKind {
     If(Expression, AstBlock, Option<AstBlock>), // Condition, If true, Else
 
     Match(
-        Expression,                  // Subject (condition)
-        Vec<MatchArm>, // Arms
-        Option<AstBlock>,            // for the wildcard/else case
+        Expression,       // Subject (condition)
+        Vec<MatchArm>,    // Arms
+        Option<AstBlock>, // for the wildcard/else case
     ),
 
     ForLoop(Box<Arg>, Expression, AstBlock), // Item, Collection, Body,
@@ -65,12 +65,12 @@ pub enum NodeKind {
     // Host function call (functions provided by the runtime)
     // Uses the same structure as regular function calls but includes binding info
     HostFunctionCall(
-        String,              // Function name
-        Vec<Expression>,     // Arguments passed in
-        Vec<DataType>,       // Return types
-        String,              // WASM module name (e.g., "beanstalk_io")
-        String,              // WASM import name (e.g., "print")
-        TextLocation,        // Location for error reporting
+        String,          // Function name
+        Vec<Expression>, // Arguments passed in
+        Vec<DataType>,   // Return types
+        String,          // WASM module name (e.g., "beanstalk_io")
+        String,          // WASM import name (e.g., "print")
+        TextLocation,    // Location for error reporting
     ),
 
     // Variable names should be the full namespace (module path + variable name)
@@ -144,11 +144,49 @@ impl AstNode {
         }
     }
 
+    // If this is a boolean value, flip it to the opposite value
+    pub fn flip(&mut self) -> Result<bool, CompileError> {
+        if let NodeKind::Expression(value) = &mut self.kind {
+            match value.kind {
+                ExpressionKind::Bool(val) => {
+                    value.kind = ExpressionKind::Bool(!val);
+                    return Ok(true)
+                }
+                ExpressionKind::Runtime(_) => {
+                    if let DataType::Bool(ref ownership) = value.data_type {
+                        if !ownership.is_mutable() {
+                            return_type_error!(
+                                self.location.to_owned(),
+                                "Tried to use the 'not' operator on a non-mutable value"
+                            )
+                        }
+                    } else {
+                        return_type_error!(
+                            self.location.to_owned(),
+                            "Tried to use the 'not' operator on value of type {:?}",
+                            value.data_type
+                        )
+                    }
+
+                    return Ok(true)
+                }
+                _ => {}
+            }
+        }
+
+        return_type_error!(
+            self.location.to_owned(),
+            "Tried to use the 'not' operator on a non-boolean node: {:?}",
+            self.kind
+        );
+    }
+
     pub fn get_precedence(&self) -> u32 {
         match &self.kind {
             NodeKind::Operator(op) => match op {
                 // Special Operators with the highest precedence
                 Operator::Range => 6,
+                Operator::Not => 6,
 
                 // Highest precedence: exponentiation
                 Operator::Exponent => 5,
@@ -169,7 +207,6 @@ impl AstNode {
                 Operator::GreaterThan => 2,
                 Operator::GreaterThanOrEqual => 2,
                 Operator::Equality => 2,
-                Operator::NotEqual => 2,
 
                 // Logical AND
                 Operator::And => 1,

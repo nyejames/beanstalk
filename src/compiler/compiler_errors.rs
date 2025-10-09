@@ -258,7 +258,7 @@ macro_rules! return_type_error {
         return Err(CompileError {
             msg: format!($($msg)+),
             location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Type,
+            error_type: $crate::compiler::compiler_errors::ErrorType::Type,
             file_path: std::path::PathBuf::new(),
         })
     };

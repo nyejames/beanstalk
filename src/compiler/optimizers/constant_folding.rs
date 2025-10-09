@@ -55,14 +55,28 @@ pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileEr
     for node in output_stack {
         match &node.kind {
             NodeKind::Operator(op) => {
-                // Make sure there are at least 2 nodes on the stack
-                if stack.len() < 2 {
+                let required_values = op.required_values();
+                // Make sure there are at least 2 nodes on the stack if it's a binary operator
+                if stack.len() < required_values {
                     return_syntax_error!(
                         node.location.to_owned(),
-                        "Not enough nodes on the stack for binary operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}",
+                        "Not enough nodes on the stack for the {} operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:?}",
+                        op.to_str(),
                         output_stack,
                         stack
                     )
+                }
+
+                if matches!(op, Operator::Not) {
+                    let mut boolean = stack.pop().unwrap();
+                    if !boolean.flip()? {
+                        stack.push(boolean);
+                        stack.push(node.to_owned());
+                    } else {
+                        stack.push(boolean)
+                    }
+
+                    continue;
                 }
 
                 let rhs = stack.pop().unwrap();
@@ -92,8 +106,8 @@ pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileEr
                 } else {
                     // Not foldable at this compile time stage, push back to stack as runtime expression
                     stack.push(lhs);
-                    stack.push(node.to_owned());
                     stack.push(rhs);
+                    stack.push(node.to_owned());
                     continue;
                 }
             }
@@ -129,7 +143,6 @@ impl Expression {
 
                     // Logical operations with float operands
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                     Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
                     Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
                     Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
@@ -180,7 +193,6 @@ impl Expression {
 
                     // Logical operations with integer operands
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                    Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                     Operator::GreaterThan => ExpressionKind::Bool(lhs_val > rhs_val),
                     Operator::GreaterThanOrEqual => ExpressionKind::Bool(lhs_val >= rhs_val),
                     Operator::LessThan => ExpressionKind::Bool(lhs_val < rhs_val),
@@ -204,7 +216,6 @@ impl Expression {
                 Operator::And => ExpressionKind::Bool(*lhs_val && *rhs_val),
                 Operator::Or => ExpressionKind::Bool(*lhs_val || *rhs_val),
                 Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
 
                 _ => return_rule_error!(
                     self.location.to_owned(),
@@ -217,7 +228,6 @@ impl Expression {
             (ExpressionKind::String(lhs_val), ExpressionKind::String(rhs_val)) => match op {
                 Operator::Add => ExpressionKind::String(format!("{}{}", lhs_val, rhs_val)),
                 Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                Operator::NotEqual => ExpressionKind::Bool(lhs_val != rhs_val),
                 _ => return_rule_error!(
                     self.location.to_owned(),
                     "Can't perform operation {} on strings",
