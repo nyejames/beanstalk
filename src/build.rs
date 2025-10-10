@@ -5,13 +5,13 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
+use crate::compiler::parsers::tokens::TokenizeMode;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
 use crate::{Flag, return_file_errors, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, print_bold, print_ln_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use crate::compiler::parsers::tokens::TokenizeMode;
 
 pub struct InputModule {
     pub source_code: String,
@@ -92,8 +92,8 @@ pub fn build_project_files_with_target(
         Err(e) => return_file_errors!(entry_path, "Error getting current directory: {:?}", e),
     };
 
-    print_ln_bold!("Project Directory: ");
-    dark_yellow_ln!("{:?}", &entry_dir);
+    // print_ln_bold!("Project Directory: ");
+    // dark_yellow_ln!("{:?}", &entry_dir);
 
     let mut beanstalk_modules_to_parse: Vec<InputModule> = Vec::with_capacity(1);
     let mut project_config = Config::default();
@@ -145,8 +145,11 @@ pub fn build_project_files_with_target(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenizer::tokenize(&config_source_code, &config_path, TokenizeMode::Normal)
-            {
+            let mut tokenizer_output = match tokenizer::tokenize(
+                &config_source_code,
+                &config_path,
+                TokenizeMode::Normal,
+            ) {
                 Ok(tokens) => tokens,
                 Err(e) => return Err(vec![e.with_file_path(config_path)]),
             };
@@ -156,10 +159,10 @@ pub fn build_project_files_with_target(
                 Ok(registry) => registry,
                 Err(e) => return Err(vec![e.with_file_path(config_path.clone())]),
             };
-            
+
             let ast_context = ScopeContext::new_with_registry(
-                ContextKind::Module, 
-                config_path.to_owned(), 
+                ContextKind::Module,
+                config_path.to_owned(),
                 &[],
                 host_registry,
             );
@@ -193,7 +196,7 @@ pub fn build_project_files_with_target(
 
     let project_builder = create_project_builder(build_target);
 
-    print_bold!("\nCompiling with target: ");
+    print_bold!("Compiling with target: ");
     dark_yellow_ln!("{:?}", project_builder.target_type());
 
     // ----------------------------------

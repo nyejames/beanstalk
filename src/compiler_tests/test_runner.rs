@@ -30,6 +30,7 @@ pub fn run_all_test_cases() {
     // Test files that should succeed
     if success_dir.exists() {
         cyan_ln!("Testing files that should succeed:");
+        println!("------------------------------------------");
         if let Ok(entries) = fs::read_dir(&success_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -37,8 +38,8 @@ pub fn run_all_test_cases() {
                     total_tests += 1;
                     let file_name = path.file_name().unwrap().to_string_lossy();
 
-                    println!("\n------------------------------------------");
-                    print!("  {} ... ", file_name);
+                    // println!("\n------------------------------------------");
+                    println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
                     match build_project_files(&path, false, &flags) {
@@ -66,6 +67,7 @@ pub fn run_all_test_cases() {
     // Test files that should fail
     if failure_dir.exists() {
         cyan_ln!("Testing files that should fail:");
+        println!("------------------------------------------");
         if let Ok(entries) = fs::read_dir(&failure_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -73,8 +75,8 @@ pub fn run_all_test_cases() {
                     total_tests += 1;
                     let file_name = path.file_name().unwrap().to_string_lossy();
 
-                    println!("\n------------------------------------------");
-                    print!("  {} ... ", file_name);
+                    // println!("\n------------------------------------------");
+                    println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
                     match build_project_files(&path, false, &flags) {

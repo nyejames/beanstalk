@@ -1,31 +1,5 @@
--- Simple variable declaration test
--- Test file: Beanstalk implicit borrowing semantics
--- Tests that default assignments create shared borrows, not copies
-
--- Initialize data
-data = "hello world"
-
--- Implicit shared borrowing (default behavior)
-ref1 = data             -- Creates shared borrow, not copy
-ref2 = data             -- Another shared borrow - should be allowed
-ref3 = ref1             -- Borrow of a borrow
-
--- Multiple shared borrows should all be valid
-result1 = ref1
-result2 = ref2
-result3 = ref3
-
--- Test with different data types
-number_data = 42
-number_ref1 = number_data
-number_ref2 = number_data
-
--- Boolean data
-bool_data = true
-bool_ref = bool_data
-
-
-things = "ANYTHING I WANT"
-
--- Test print statement
-print([:I CAN PRINT [things] IN MY OWN LANGUAGE!])
+-- Test integer operations only
+a ~= 42
+b ~= 10.0
+result ~= a + b
+print("Integer result should be 52")
