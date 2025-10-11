@@ -6,19 +6,19 @@
 Errors are treated as values in Beanstalk, 
 any function that can return an error must have its error handled.
 
-The bang symbol ! is used for handling and creating new Error types.
+The bang symbol ! is used for handling errors and specifying which type is returned as an error.
 
 There is a special Error type provided by the language, 
 but any type that uses a ! can use the same syntax to bubble up or handle errors.
 
-
-[code:
+[#Code:
     func_call_that_can_return_an_error() !:
         -- Error handling code
     ;
 
     -- This function can return a String or an optional error
-    parent_func () -> String, Error!:
+    -- Here, a type called 'result' is used
+    parent_func || -> String, Result!:
         return func_call_that_can_return_an_error() !err:
             print("Error: ", err)
             return "", err
@@ -30,9 +30,9 @@ but any type that uses a ! can use the same syntax to bubble up or handle errors
 ]
 
 ## Using the ? operator
-[code:
+[#Code:
     getURL || -> String:
-        return getNetworkRequest() ? ""
+        return getNetworkRequest() ?("")
     ;
 
     -- Returns a string or None
@@ -55,10 +55,10 @@ Functions that can panic at runtime should only be used in cases where the progr
 Such as if there is a high risk of undefined behaviour in a critical and complex part of a program.
 Effectively creating a runtime assertion.
 
-[code:
+[#Code:
     -- stops the program if 1 is not equal to 1
     -- Runs the code in the block first
-    assert(1 is not 1, "1 is not 1 uh oh")
+    #assert(1 is not 1, "1 is not 1 .. uh oh")
     #panic
 ]
 

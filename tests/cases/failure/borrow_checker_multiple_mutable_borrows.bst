@@ -10,4 +10,4 @@ ref1 ~= data
 ref2 ~= data
 
 -- Use both references (this should trigger borrow checker error)
-result = ref1 + ref2
+result = [ref1, ref2]

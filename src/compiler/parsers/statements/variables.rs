@@ -17,6 +17,7 @@ pub fn create_reference(
     token_stream: &mut TokenContext,
     arg: &Arg,
     context: &ScopeContext,
+    data_type: &mut DataType,
 ) -> Result<AstNode, CompileError> {
     // Move past the name
     token_stream.advance();

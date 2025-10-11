@@ -5,7 +5,7 @@
 
 Beanstalk programs are comprised of functions inside of modules.
 
-[code:
+[Code:
 
     -- The simplest possible function
     -- The name of the function first,
@@ -20,7 +20,7 @@ The arrow symbol is used to define the signature of a function.
 Functions can return multiple values. If the function returns values, 
 it must use a type signature or the name of one of the arguments if it's returning that reference back to the caller.
 
-[code:
+[Code:
 
     get_doubled |value Int| -> Int:
         return value *= 2

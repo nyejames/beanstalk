@@ -1,18 +1,18 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast, AstBlock};
+use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::{ast_log, return_rule_error};
-use crate::compiler::parsers::expressions::expression::Expression;
 // IF STATEMENTS / MATCH STATEMENTS
 // Can also be expressions (todo)
 // Example:
 
 // if x < 5:
 //     print("x is less than 5")
-// else:
+// else
 //     print("x is greater than 5")
 // ;
 //
@@ -65,17 +65,6 @@ pub fn create_branch(
     // Check for else condition
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
         token_stream.advance();
-
-        // Make sure there is a colon after 'else'
-        if token_stream.current_token_kind() != &TokenKind::Colon {
-            return_rule_error!(
-                token_stream.current_location(),
-                "Expected ':' after the 'else' keyword to open a new scope, found '{:?}' instead",
-                token_stream.current_token_kind()
-            )
-        }
-
-        token_stream.advance(); // Consume ':'
         Some(new_ast(token_stream, if_context.to_owned(), false)?.ast)
     } else {
         None
@@ -88,12 +77,14 @@ pub fn create_branch(
         let mut flattened_statement = then_block.ast;
         if else_block.is_some() {
             flattened_statement.push(AstNode {
-                kind: NodeKind::Warning(String::from("This else block is never reached due to the if condition always being true.")),
+                kind: NodeKind::Warning(String::from(
+                    "This else block is never reached due to the if condition always being true.",
+                )),
                 location: token_stream.current_location(),
                 scope: if_context.scope_name,
             })
         }
-        return Ok(flattened_statement)
+        return Ok(flattened_statement);
     }
 
     Ok(vec![AstNode {
@@ -131,7 +122,6 @@ fn create_match_node(
     let mut arms: Vec<MatchArm> = Vec::new();
     let mut else_block = None;
     while token_stream.current_token_kind() != &TokenKind::End {
-
         // Check for else condition
         if token_stream.current_token_kind() == &TokenKind::Else {
             if arms.is_empty() {
@@ -182,11 +172,7 @@ fn create_match_node(
     }
 
     Ok(AstNode {
-        kind: NodeKind::Match(
-            subject,
-            arms,
-            else_block,
-        ),
+        kind: NodeKind::Match(subject, arms, else_block),
         location: token_stream.current_location(),
         scope: match_context.scope_name.clone(),
     })

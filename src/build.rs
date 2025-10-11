@@ -8,7 +8,7 @@ use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenizeMode;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
 use crate::{Flag, return_file_errors, settings};
-use colour::{dark_cyan_ln, dark_yellow_ln, print_bold, print_ln_bold};
+use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;

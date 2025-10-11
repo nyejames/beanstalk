@@ -6,14 +6,16 @@
 
 Beanstalk has unique, superpowered templating strings.
 
+These are the only way to create mutable strings, as double quotes are only used for string slices.
+
 Templates have two sections, the head and the body, separated with a colon. 
 
 Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling. 
 
 The main purpose of a template is to generate either text content, markdown, HTML, code or just formatted strings.
 
-They will also turn into regular strings at compile time if they identify that they can be folded and won't change at runtime.
-Otherwise, you can think of them in their most basic form as a function at runtime that returns a string.
+You can think of them in their most basic form as a function at runtime that returns a string, 
+but they turn into regular strings at compile time if they identify that they can be folded and won't change at runtime.
 
 In the future, templates **might** be extended to generate more than just strings, 
 and become a small macro system (not sure if this is the right direction for the language yet).
@@ -43,7 +45,7 @@ Beanstalk uses it's own flavour of markdown that can be used inside template bod
 Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
 Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
-[code:
+[#Code:
     [page:
 
     The open square bracket is used to start a new template. 
@@ -65,9 +67,9 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
     ]
 ]
 
-## Scene exmaple
+## Template exmaple
 
-[code:
+[#Code:
     [section:
 
     [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
@@ -85,7 +87,7 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
     ]
 
     [ loop text in text_array: 
-        [ text ]
+        [text]
     ]
 
     [table(2):
@@ -103,12 +105,6 @@ Beanstalk markdown supports the familiar heading, bold and italic syntax from mo
 
     ]
 ]
-
-### Units and sizes
-By default, beanstalk uses rem for all units by default. This will continue to be the case until later in the project when more specific units will be supported. This will come with the language supporing more complex styling and layout.
-
-
-
 
 # HTML Standard library
 
@@ -193,7 +189,7 @@ Variables and expressions are typecast into strings when put into a template. Th
 If statements in a templatehead will conditonally hide or show itself based on the value of the boolean. 
 If the boolean is true, the template and it's children will be shown, if false, it will be hidden.
 
-[Code:
+[#Code:
     logged_in = false
 
     -- Scene is hidden

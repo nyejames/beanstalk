@@ -22,7 +22,7 @@ mod tests {
         println!("Creating reference WASM function with wasm_encoder...");
 
         use wasm_encoder::{
-            CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module,
+            CodeSection, ExportKind, ExportSection, Function, FunctionSection, Module,
             TypeSection,
         };
 

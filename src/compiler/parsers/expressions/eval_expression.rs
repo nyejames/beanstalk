@@ -11,6 +11,73 @@ use crate::{
 };
 use std::path::PathBuf;
 
+/**
+ * Evaluates an abstract syntax tree (AST) expression using the shunting-yard algorithm
+ * and other utility functions to produce the final `Expression` output.
+ * This function also performs the bulk of the type checking in the compiler.
+ *
+ * # Parameters
+ *
+ * * `scope` - A `PathBuf` representing the current scope in which the evaluation is performed.
+ * * `nodes` - A vector of `AstNode` which represents the sequence of nodes in the expression.
+ * * `current_type` - A mutable reference to a `DataType`. Used to determine the data type of the evaluated result.
+ *
+ * # Returns
+ *
+ * If successful, returns an `Ok(Expression)` containing the resulting evaluated expression.
+ * This will also be type safe.
+ * If there is an error during evaluation, returns an `Err(CompileError)` with the appropriate error details.
+ * If the expression wasn't folded, it will return a `Runtime` expression (ExpressionKind::Runtime) that contains AST nodes representing the expression.
+ *
+ * # Algorithm Details
+ *
+ * - Implements the **Shunting-Yard Algorithm** for parsing expressions and converting them to Reverse Polish Notation (RPN).
+ * - Differentiates between handling strings, templates, function calls, and mathematical operators:
+ *   - When dealing with strings and templates, it aggregates or processes the string results directly.
+ *   - Mathematical operations are processed into RPN before evaluating.
+ * - It folds constants where possible for optimization.
+ * - Instead of handling parenthesis with shunting yard, every new set of parenthesis is parsed recursively using this function. The result of each nested expression is bubbled up to the first evaluate_expression call to be folded.
+ *
+ * # Error Handling
+ *
+ * - Ensures that unsupported AST nodes or invalid syntax result in a `CompileError`.
+ * - Returns syntax errors related to invalid operator usage when types like `String` or `Template` are used improperly.
+ * - Guards against inferred data types at runtime since they should already be resolved during type checking.
+ *
+ * # Workflow
+ *
+ * 1. Parse the AST `nodes` to create an `output_queue` and an `operators_stack`.
+ * 2. Evaluate simple cases like single-node expressions directly for efficiency.
+ * 3. For string and template expressions, handle concatenation or coercion to a string where necessary.
+ * 4. For mathematical operations:
+ *    - Convert to RPN via the shunting-yard algorithm.
+ *    - Fold constant expressions for optimization.
+ *    - Evaluate the resulting expression stack and return the final `Expression`.
+ * 5. If no valid result is found, return an appropriate syntax error.
+ *
+ * # Example
+ *
+ * ```rust
+ * use std::path::PathBuf;
+ *
+ * // Assume `nodes` is already parsed (parse_expression) and represents a valid AST expression
+ * let scope = PathBuf::from("path/to/scope");
+ * let mut current_type = DataType::Inferred;
+ *
+ * let result = evaluate_expression(scope, nodes, &mut current_type);
+ *
+ * match result {
+ *     Ok(expression) => println!("Evaluated Expression: {:?}", expression),
+ *     Err(e) => eprintln!("Compile Error: {:?}", e),
+ * }
+ * ```
+ *
+ * # Notes
+ *
+ * - The `eval_log!` macro is used throughout the function for debugging purposes.
+ * - The `constant_fold` utility function is called to simplify the constant expressions where possible.
+ * - Implements defensive checks for edge cases, such as invalid or unsupported AST nodes.
+ */
 pub fn evaluate_expression(
     scope: PathBuf,
     nodes: Vec<AstNode>,
@@ -19,6 +86,10 @@ pub fn evaluate_expression(
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
     eval_log!("Evaluating expression: {:#?}", nodes);
+
+    if nodes.is_empty() {
+        return_compiler_error!("No nodes found in expression. This should never happen.");
+    }
 
     // SHUNTING YARD ALGORITHM
     let mut output_queue: Vec<AstNode> = Vec::new();

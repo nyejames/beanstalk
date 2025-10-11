@@ -7,7 +7,7 @@
 If statements can be used as expressions or statements.
 They can also be used for pattern matching, all with a similar syntax.
 
-[code:
+[#Code:
     v = 1
 
     if v is not 1:
@@ -33,7 +33,7 @@ Only 1 keyword for loops "loop".
 
 Using the "in" keyword, you can specify an integer, float or collection to iterate through or define a new integer, float or collection. 
 
-[code:
+[#Code:
     loop thing in things:
         print(thing)
     ;
@@ -71,7 +71,7 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 ]
 
 # Pattern matching
-[code:
+[#Code:
     -- Pattern matching
     -- Must be exhaustive
     thing = 69
@@ -96,7 +96,7 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     loop c in collection_of_choices:
         if c is Thing::cool: 
             print(..)
-        else: 
+        else
             print(..)
         ;
     ;

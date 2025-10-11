@@ -200,7 +200,7 @@ pub fn create_expression(
             // Check if the name is a reference to another variable or function call
             TokenKind::Symbol(ref name, ..) => {
                 if let Some(arg) = context.get_reference(name) {
-                    expression.push(create_reference(token_stream, arg, context)?);
+                    expression.push(create_reference(token_stream, arg, context, data_type)?);
 
                     continue; // Will have moved onto the next token already
                 } else {

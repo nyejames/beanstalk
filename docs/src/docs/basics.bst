@@ -3,38 +3,39 @@
 [Header center: [title(1): BASIC BS SYNTAX]]
 [Page:
 
-Each Beanstalk file is a module.
-
+Each folder containing a config.bst file becomes a module. 
+Each .bst file inside this folder is combined together and their top level declarations are public to eachother.
 Each module is just a file that exports functions and fields.
 
-Projects are a collection of modules with a config file as an entry point.
+The config.bst file defines the entry point file.
+The main function of the module is just the top level of the entry point file.
 
-The config file will define how to split up projects into seperate wasm modules,
-but by default a project will turn into one big wasm module.
+Projects are a collection of one or more modules.
+
+Every Beanstalk file can also export functions, which exposes those functions to the host environment.
 
 # Quick Synax Overview
-The specifics are not fully decided on, but some of the key things are:
 - Colon opens a scope, semicolon closes it.
 - No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for templates.
-- Equality and other logical operators only use keywords (you can't use == or ! for logical expressions for example)
+- Equality and other logical operators use keywords like "is" and "not" (you can't use == or ! for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type.
 - Double dashes for single line comments (--)
 
 4 spaces are recommended for indentation. 
 
-- Types / Objects use Upper_Snake_Case.
+- Types use Upper_Snake_Case.
 - Everything else uses regular_snake_case
 
 # Comments
 Comments use a double minus sign '--'.
 
-Documentation comments will eventually be created via special scenes that use the #docs directive.
+Documentation comments will eventually be created via special templates.
 
-[Code: 
+[#Code: 
 
 -- normal comment
 
-[#docs:
+[#Docs:
     Multiline comment
 
     Woo
@@ -45,21 +46,20 @@ Documentation comments will eventually be created via special scenes that use th
 # Variables
 Equals means assign. Tilde ~ means this is a mutable and can change.
 
-Declarations with an explicit type are exported (public), 
-declarations with inferred types are private.
-
 ## Assignment
 
 ### Variables
-[Code:
+[#Code:
     int ~= 0
     float ~= 0.0
 
-    string ~= "boo!"
+    string_slice ~= "wow!"
     char ~= '😊'
-    raw_string ~= `hi`
+    raw_string_slice ~= `hi`
 
-    template ~= []
+    string_template ~= [:
+        This is the Beanstalk programming language
+    ]
 
     bool ~= true
 
@@ -68,7 +68,7 @@ declarations with inferred types are private.
 ]
 
 ## Static Assignment
-[Code:
+[#Code:
     -- 64 bit immutable float
     number = 420.69
 
@@ -90,7 +90,7 @@ declarations with inferred types are private.
 
 All copies of collections are explicit and must use the 'copy' keyword in place of a type.
 
-[Code:
+[#Code:
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -115,7 +115,7 @@ Expressions can span over multiple lines.
 
 But statements must start after a newline.
 
-[Code:
+[#Code:
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
@@ -128,7 +128,7 @@ But statements must start after a newline.
 ]
 
 # Imports
-[Code:
+[#Code:
     -- Importing everything inside an object
     import(/libs/math)
     root(2, 8)
@@ -156,33 +156,24 @@ These are all different ways to create strings.
 [table(3): 
     [: Type] [: Description] [: Zero Value]
 
-    [: string ] [: UTF-16 (For JS compatibility)] [: ""]
+    [: string slice ] [: UTF-16 (For JS compatibility)] [: ""]
 
-    [: scene ] [: The templating syntax of Beanstalk. See [link "./scenes": Scenes for more info!]] [: "`[]`" -  an empty scene]
+    [: template ] [: The string templating syntax of Beanstalk for creating strings. See [link "./scenes": Scenes for more info!]] [: "`[]`" -  an empty scene]
 ]
 
-## Collection Types
-[table(3):
-    [: Type ] [: Description] [: Zero Value]
+# Strings and String slices
+String is the keyword for string types in Beanstalk. 
+Double quotes are automatically string slices. 
 
-    [: Tuple ] [: Any number of immutable items seperated by commas. See [link "./collections": Collections] for more information.] [: ()]
-
-    [: Collection ] [: A blend between arrays and structs. See [link "./collections": Collections] for more information.] [: {}]
-    
-    [: Choice ] [: Rust style tagged unions (enums). To be implemented. ] [: error]
-]
-
-# Strings
-String is the keyword for string types in Beanstalk. Double quotes are automatically strings. 
-
-[Code: "Double quotes for a UTF-16 string literal"]
+[#Code: "Double quotes for a UTF-16 string slice"]
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 
 Scenes are used instead of format strings. See [link "./scenes": Scenes] for more information.
 
 # Logical Operators
-The 'is' keyword is used to check equality. Not ==. The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
+The 'is' keyword is used to check equality, not '==''. 
+The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
 [table(3):
     [: Operator] [: Description]          [: Precedence]

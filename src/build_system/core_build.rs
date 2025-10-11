@@ -13,7 +13,7 @@ use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::settings::{Config, EXPORTS_CAPACITY};
 use crate::{Compiler, Flag, InputModule, timer_log};
-use colour::{green_ln, red_ln};
+use colour::green_ln;
 use rayon::prelude::*;
 use std::time::Instant;
 

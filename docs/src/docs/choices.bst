@@ -10,7 +10,7 @@ Choices use a double colon for their declaration.
 
 You access one of the choices using double colon also.
 
-[Code:
+[#Code:
     Some_Options Choice:
         Option1 String,
         Option2 String,

@@ -20,55 +20,25 @@ Otherwise all the scenes are just passed directly into the slot one by one.
 
 - Runtime and reactive getters/setters for scene mutable variables. Figure out what properties scenes expose that can be manipulated at runtime.
 
-- Type checking and final folding stage after AST creation for imports (and probably all variables too)
-
 - Build out HTML standard library for styles once they can be folded at compile time and/or scenes have full runtime getting/setting working
 
-- Figure out some kind of 'standardised error' that allows differnet custom error types to be coersed into eachother,
+- Figure out some kind of 'standardised error' interface that allows differnet custom error types to be coersed into eachother,
 allowing for more compatiblity between libraries while also allowing custom error types
-
-- Dev output is very readable JS and HTML. Run release builds through a minifier.
 
 ## Current Bugs
 
-## Vscode plugin
-- Characters like strings inside scenes don't highlight like strings
-
 ## Core Features Being Implemented
-- Boolean expressions and operators
-- If statements
-- Loops
 - Finish implementing Style system for scenes (separate from core language into library of keywords)
-- Capitol letter constant enforced
+- Capitol letter type enforced
 - Importing HTML, CSS and JS libraries seemlessly into a BS project
 - Scoping and variable shadowing?
 - Folding (inlining) compile time functions (need to do step through eval in inline_function_call)
 
-## Future plans and ideas
-- Any type?
-- https://docs.orca-app.dev/ Orca for native UI? Or just Servo as optional depenancy? https://servo.org/
-- Documentation scenes (can be put anywhere in a module or scene and a special docs compile mode will generate docs using these scenes)
-There can also be additional features or searchable things added to these scene heads that make the documentation of the project really easy
-it will output an entire documentation webpage by default
-- Embedding on top of fast exciting general purpose languages
+# Future plans and ideas
 - Better Dev server with web sockets handling hot reloading (rather than the current janky system)
-- Server files and server side BS code (Using a Wasm runtime on the server)
 
 ### Function Context
 Function signatures must be given a context if they are not pure.
-
-### Colour type ideas
-Would be a function that creates an RGB value at the end.
-
-Arguments:
-- Would be able to mix colors in (like painting) e.g red(100) green(20) magenta(40).
-This will be converted to a relative hue value. This can approach white or black without a value.
-- Saturation
-- Lightness
-- Hue (becomes priority colour input when used - but other colours can still be mixed in, which will modify the hue/saturation)
-- Integer (or float) passed in to select a theme colour as a base (primary colour = 1, secondary = 2 etc) Maybe 0 is always black or white depending on lightmode/darkmode
-
-The colour theme selections will have a lightmode / darkmode
 
 
 ### Concurrency (channels/threads) syntax

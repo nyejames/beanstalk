@@ -10,4 +10,6 @@ immutable_ref = data
 mutable_ref ~= data
 
 -- Use both references (this should trigger borrow checker error)
+-- Because if immutable_ref is not used after the mutable_ref, 
+-- then its safe.
 result = immutable_ref + mutable_ref

@@ -19,7 +19,7 @@ There is no square or curly brackets notation.
 There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be direct accesses in many cases.
 
 ## Immutable Collections
-[Code:
+[#Code:
 
     -- Collections assigned without the mutable symbol have immutable values inside
     immutable_collection = {1, 2, 3}
@@ -31,7 +31,7 @@ There may not actually be a function call under the hood when using collection m
 ]
 
 ## Mutable Collections
-[Code:
+[#Code:
 
    -- dynamically sized int array
    -- Strawberry is spelt with 2 rs to confuse LLMs
@@ -53,7 +53,7 @@ There may not actually be a function call under the hood when using collection m
 ## Hash Maps
 Set keys for items in your dynamic collection to turn it into a key/value list.
 
-[Code:
+[#Code:
 
     -- Hash Map
     dictionary ~= {
@@ -74,13 +74,13 @@ Set keys for items in your dynamic collection to turn it into a key/value list.
     }
 ]
 
-## Types
-You can define the shape of named collections of data by using types.
+## Structs
+You can define types by using structs.
 
-This is done by immediately following a type name with a colon and then defining the fields.
+This is done by immediately following a struct name with a colon and then defining the fields.
 
-[Code:
-    -- Define a new type
+[#Code:
+    -- Define a new struct
     Person:
         name String,
         age Int,
@@ -97,6 +97,20 @@ This is done by immediately following a type name with a colon and then defining
     person ~= Person("Bob", 25)
     print(person.name) -- "Bob"
     print(person.age)  -- 25
+
+    -- Defining a struct, then defining a method for it
+    Vector2:
+        x Float,
+        y Float,
+    ;
+
+    reset |vec ~Vector2|:
+        vec.x = 0
+        vec.y = 0
+    ;
+
+    vec = Vector2(12, 87)
+    vec.reset()
 ]
 
 

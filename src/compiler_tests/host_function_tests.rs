@@ -5,7 +5,7 @@ use crate::compiler::host_functions::registry::{
     HostFunctionDef, HostFunctionRegistry, ErrorHandling, create_builtin_registry
 };
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::{NodeKind, Arg};
+use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::compiler::compiler_errors::CompileError;
