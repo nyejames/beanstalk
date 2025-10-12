@@ -1,11 +1,11 @@
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use colour::green_ln;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };
 use crate::{return_syntax_error, settings, token_log};
+use colour::green_ln;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -552,8 +552,10 @@ fn keyword_or_variable(
             "async" => return_token!(TokenKind::Async, stream),
 
             // Data Types
-            "true" | "True" => return_token!(TokenKind::BoolLiteral(true), stream),
-            "false" | "False" => return_token!(TokenKind::BoolLiteral(false), stream),
+            "true" => return_token!(TokenKind::BoolLiteral(true), stream),
+            "True" => return_token!(TokenKind::DatatypeTrue, stream),
+            "false" => return_token!(TokenKind::BoolLiteral(false), stream),
+            "False" => return_token!(TokenKind::DatatypeFalse, stream),
 
             "Float" => return_token!(TokenKind::DatatypeFloat, stream),
             "Int" => return_token!(TokenKind::DatatypeInt, stream),
@@ -561,8 +563,6 @@ fn keyword_or_variable(
             "Bool" => return_token!(TokenKind::DatatypeBool, stream),
 
             "None" => return_token!(TokenKind::DatatypeNone, stream),
-
-            "Template" => return_token!(TokenKind::DatatypeStyle, stream),
 
             _ => {}
         }
@@ -710,13 +710,13 @@ fn tokenize_string(stream: &mut TokenStream) -> Result<Token, CompileError> {
                 token_value.push(next_char);
             }
         } else if ch == '"' {
-            return_token!(TokenKind::StringLiteral(token_value), stream);
+            return_token!(TokenKind::StringSliceLiteral(token_value), stream);
         }
 
         token_value.push(ch);
     }
 
-    return_token!(TokenKind::StringLiteral(token_value), stream);
+    return_token!(TokenKind::StringSliceLiteral(token_value), stream);
 }
 
 fn tokenize_template_body(
@@ -735,14 +735,14 @@ fn tokenize_template_body(
                 token_value.push(next_char);
             }
         } else if ch == &'[' || ch == &']' {
-            return_token!(TokenKind::StringLiteral(token_value), stream);
+            return_token!(TokenKind::StringSliceLiteral(token_value), stream);
         }
 
         // Should always be a valid char
         token_value.push(stream.next().unwrap());
     }
 
-    return_token!(TokenKind::StringLiteral(token_value), stream);
+    return_token!(TokenKind::StringSliceLiteral(token_value), stream);
 }
 
 fn tokenize_import(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {

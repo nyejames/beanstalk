@@ -25,6 +25,7 @@
 //! - **Optimization**: Enables dead code elimination and further optimizations
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::{return_rule_error, return_syntax_error};
@@ -199,8 +200,16 @@ impl Expression {
                     Operator::LessThanOrEqual => ExpressionKind::Bool(lhs_val <= rhs_val),
 
                     Operator::Range => ExpressionKind::Range(
-                        Box::new(Expression::int(lhs_val.clone(), self.location.to_owned())),
-                        Box::new(Expression::int(rhs_val.clone(), self.location.to_owned())),
+                        Box::new(Expression::int(
+                            lhs_val.clone(),
+                            self.location.to_owned(),
+                            Ownership::ImmutableOwned,
+                        )),
+                        Box::new(Expression::int(
+                            rhs_val.clone(),
+                            self.location.to_owned(),
+                            Ownership::ImmutableOwned,
+                        )),
                     ),
 
                     _ => return_rule_error!(
@@ -225,15 +234,17 @@ impl Expression {
             },
 
             // String operations
-            (ExpressionKind::String(lhs_val), ExpressionKind::String(rhs_val)) => match op {
-                Operator::Add => ExpressionKind::String(format!("{}{}", lhs_val, rhs_val)),
-                Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
-                _ => return_rule_error!(
-                    self.location.to_owned(),
-                    "Can't perform operation {} on strings",
-                    op.to_str()
-                ),
-            },
+            (ExpressionKind::StringSlice(lhs_val), ExpressionKind::StringSlice(rhs_val)) => {
+                match op {
+                    Operator::Add => ExpressionKind::StringSlice(format!("{}{}", lhs_val, rhs_val)),
+                    Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
+                    _ => return_rule_error!(
+                        self.location.to_owned(),
+                        "Can't perform operation {} on strings",
+                        op.to_str()
+                    ),
+                }
+            }
 
             // Any other combination of types
             _ => return Ok(None),
@@ -243,6 +254,7 @@ impl Expression {
             kind,
             self.location.to_owned(),
             self.data_type.to_owned(),
+            Ownership::MutableOwned,
         )))
     }
 }

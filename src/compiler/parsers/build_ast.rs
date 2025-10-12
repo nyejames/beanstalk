@@ -8,9 +8,7 @@ use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
-use crate::compiler::parsers::expressions::parse_expression::{
-    create_args_from_types, create_multiple_expressions,
-};
+use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::{
     parse_function_call, parse_function_call_with_registry,
@@ -61,7 +59,7 @@ pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope_name: PathBuf,
     pub declarations: Vec<Arg>,
-    pub returns: Vec<DataType>,
+    pub returns: Vec<Arg>,
     pub host_registry: HostFunctionRegistry,
 }
 #[derive(PartialEq, Clone)]
@@ -116,7 +114,7 @@ impl ScopeContext {
     pub fn new_child_function(
         &self,
         name: &str,
-        returns: &[DataType],
+        returns: &[Arg],
         arguments: Vec<Arg>,
     ) -> ScopeContext {
         let mut new_context = self.to_owned();
@@ -136,7 +134,7 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_expression(&self, returns: Vec<DataType>) -> ScopeContext {
+    pub fn new_child_expression(&self, returns: Vec<Arg>) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
@@ -307,9 +305,7 @@ pub fn new_ast(
                         {
                             let members = match &arg.value.data_type {
                                 DataType::Args(inner_args) => inner_args,
-                                DataType::Function(_, returned_args) => {
-                                    &create_args_from_types(&returned_args)
-                                }
+                                DataType::Function(_, returned_args) => &returned_args,
                                 _ => &get_builtin_methods(&arg.value.data_type),
                             };
 
@@ -380,17 +376,10 @@ pub fn new_ast(
                         | TokenKind::DatatypeFloat
                         | TokenKind::DatatypeBool
                         | TokenKind::DatatypeString
-                        | TokenKind::DatatypeStyle => {
-                            return_rule_error!(
-                                token_stream.current_location(),
-                                "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
-                                name
-                            );
-                        }
 
                         // Mutable token after variable reference - this is invalid (shadowing attempt)
-                        TokenKind::Mutable => {
-                            // Look ahead to see if this is ~= (invalid reassignment attempt)
+                        | TokenKind::Mutable => {
+                            // Look ahead to see if this is ~= (an invalid reassignment attempt)
                             if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
                                 return_rule_error!(
                                     token_stream.current_location(),

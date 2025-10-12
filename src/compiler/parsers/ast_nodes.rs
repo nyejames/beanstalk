@@ -1,5 +1,5 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
@@ -56,8 +56,8 @@ pub enum NodeKind {
     // Basics
     FunctionCall(
         String,
-        Vec<Expression>, // Arguments passed in
-        Vec<DataType>,
+        Vec<Arg>, // Arguments passed in (can be named - so using an Arg rather than expression)
+        Vec<Arg>, // Returns (can be named so using an Arg rather than just data type)
         TextLocation,
         // bool, // Function is pure
     ),
@@ -66,7 +66,7 @@ pub enum NodeKind {
     // Uses the same structure as regular function calls but includes binding info
     HostFunctionCall(
         String,          // Function name
-        Vec<Expression>, // Arguments passed in
+        Vec<Expression>, // Arguments passed in - Can't be named for host functions
         Vec<DataType>,   // Return types
         String,          // WASM module name (e.g., "beanstalk_io")
         String,          // WASM import name (e.g., "print")
@@ -108,32 +108,35 @@ impl AstNode {
             NodeKind::Declaration(_, value, ..)
             | NodeKind::Expression(value, ..)
             | NodeKind::Mutation(_, value) => Ok(value.to_owned()),
-            NodeKind::FunctionCall(_, _, return_types, location) => {
-                let data_type = if return_types.len() == 1 {
-                    return_types[0].to_owned()
-                } else {
-                    DataType::Choices(return_types.to_owned())
-                };
-
-                Ok(Expression::runtime(
-                    vec![self.to_owned()],
-                    data_type,
+            NodeKind::FunctionCall(name, arguments, returns, location) => {
+                Ok(Expression::function_call(
+                    name.to_owned(),
+                    arguments.to_owned(),
+                    returns.to_owned(),
                     location.to_owned(),
                 ))
             }
-            NodeKind::HostFunctionCall(_, _, return_types, _, _, location) => {
-                let data_type = if return_types.len() == 1 {
-                    return_types[0].to_owned()
-                } else if return_types.is_empty() {
-                    // Void function - use None type or a special void type
-                    DataType::None
-                } else {
-                    DataType::Choices(return_types.to_owned())
-                };
+            NodeKind::HostFunctionCall(name, arguments, return_types, _, _, location) => {
+                let mut args_from_expr = Vec::new();
+                for (idx, arg) in arguments.iter().enumerate() {
+                    args_from_expr.push(Arg {
+                        name: idx.to_string(),
+                        value: arg.to_owned(),
+                    })
+                }
 
-                Ok(Expression::runtime(
-                    vec![self.to_owned()],
-                    data_type,
+                let mut return_types_from_expr = Vec::new();
+                for (idx, return_type) in return_types.iter().enumerate() {
+                    return_types_from_expr.push(Arg {
+                        name: idx.to_string(),
+                        value: Expression::int(0, TextLocation::default(), Ownership::default()),
+                    })
+                }
+
+                Ok(Expression::function_call(
+                    name.to_owned(),
+                    args_from_expr,
+                    return_types_from_expr,
                     location.to_owned(),
                 ))
             }
@@ -150,16 +153,14 @@ impl AstNode {
             match value.kind {
                 ExpressionKind::Bool(val) => {
                     value.kind = ExpressionKind::Bool(!val);
-                    return Ok(true)
+                    return Ok(true);
                 }
                 ExpressionKind::Runtime(_) => {
-                    if let DataType::Bool(ref ownership) = value.data_type {
-                        if !ownership.is_mutable() {
-                            return_type_error!(
-                                self.location.to_owned(),
-                                "Tried to use the 'not' operator on a non-mutable value"
-                            )
-                        }
+                    if !value.ownership.is_mutable() {
+                        return_type_error!(
+                            self.location.to_owned(),
+                            "Tried to use the 'not' operator on a non-mutable value"
+                        )
                     } else {
                         return_type_error!(
                             self.location.to_owned(),
@@ -168,7 +169,7 @@ impl AstNode {
                         )
                     }
 
-                    return Ok(true)
+                    return Ok(true);
                 }
                 _ => {}
             }

@@ -3,45 +3,50 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::statements::functions::{
-    create_function_signature, parse_function_call,
-};
+use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
 use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
     expressions::parse_expression::create_expression,
 };
-use crate::return_syntax_error;
+use crate::{return_rule_error, return_syntax_error};
 
 pub fn create_reference(
     token_stream: &mut TokenContext,
-    arg: &Arg,
+    reference_arg: &Arg,
     context: &ScopeContext,
-    data_type: &mut DataType,
 ) -> Result<AstNode, CompileError> {
     // Move past the name
     token_stream.advance();
 
-    match arg.value.data_type {
+    match reference_arg.value.data_type {
         // Function Call
         DataType::Function(ref argument_refs, ref return_types) => parse_function_call(
             token_stream,
-            &arg.name,
+            &reference_arg.name,
             context,
             argument_refs,
             return_types,
         ),
 
-        _ => Ok(AstNode {
-            // TODO: Can we actually know if this is a move or a mutable reference here?
-            // Maybe it's possible to do some spooky action at a distance in the variable declarations.
-            // We could just always say it's a move, then if we encounter another reference, edit the previous instance of the reference.
-            // While doing this we would have to check if there was already a mutable reference (and throw an error if so)
-            // If its immutable or being copied that's fine, but need to get the reference syntax working here.
-            kind: NodeKind::Expression(arg.value.to_owned()),
-            location: token_stream.current_location(),
-            scope: context.scope_name.to_owned(),
-        }),
+        _ => {
+            let ownership = if reference_arg.value.ownership.is_mutable() {
+                Ownership::MutableReference
+            } else {
+                Ownership::ImmutableReference
+            };
+
+            Ok(AstNode {
+                kind: NodeKind::Expression(Expression::reference(
+                    reference_arg.name.to_owned(),
+                    reference_arg.value.data_type.clone(),
+                    token_stream.current_location(),
+                    ownership,
+                )),
+                location: token_stream.current_location(),
+                scope: context.scope_name.to_owned(),
+            })
+        }
     }
 }
 
@@ -56,33 +61,20 @@ pub fn new_arg(
     // Move past the name
     token_stream.advance();
 
-    let ownership = match token_stream.current_token_kind() {
-        TokenKind::Mutable => {
-            token_stream.advance();
-            Ownership::MutableOwned(false)
-        }
-        _ => Ownership::ImmutableOwned(false),
-    };
-
-    let mut data_type: DataType;
+    let mut ownership = Ownership::ImmutableOwned;
 
     match token_stream.current_token_kind() {
-        // Go straight to the assignment
-        TokenKind::Assign => {
-            // Cringe Code
-            // This whole function can be reworked to avoid this go_back() later.
-            // For now, it's easy to read and parse this way while working on the specifics of the syntax
-            token_stream.go_back();
-            data_type = DataType::Inferred(ownership);
+        TokenKind::Mutable => {
+            token_stream.advance();
+            ownership = Ownership::MutableOwned;
         }
 
         // New Function
         TokenKind::FuncParameterBracket => {
-            let (constructor_args, return_types) =
-                create_function_signature(token_stream, &mut true, context)?;
+            let func_sig = FunctionSignature::new(token_stream, &mut true, context)?;
 
             let context =
-                context.new_child_function(name, &return_types, constructor_args.to_owned());
+                context.new_child_function(name, &func_sig.returns, func_sig.args.to_owned());
 
             // TODO: fast check for function without signature
             // let context = context.new_child_function(name, &[]);
@@ -99,12 +91,31 @@ pub fn new_arg(
             return Ok(Arg {
                 name: name.to_owned(),
                 value: Expression::function(
-                    constructor_args,
+                    func_sig.args,
                     function_body,
-                    return_types,
+                    func_sig.returns,
                     token_stream.current_location(),
                 ),
             });
+        }
+
+        // New struct definition
+        // TODO
+        TokenKind::Colon => {}
+
+        _ => {}
+    };
+
+    let mut data_type: DataType;
+
+    match token_stream.current_token_kind() {
+        // Go straight to the assignment
+        TokenKind::Assign => {
+            // Cringe Code
+            // This whole function can be reworked to avoid this go_back() later.
+            // For now, it's easy to read and parse this way while working on the specifics of the syntax
+            token_stream.go_back();
+            data_type = DataType::Inferred;
         }
 
         // TODO Class / Object / Struct
@@ -113,35 +124,19 @@ pub fn new_arg(
         // }
 
         // Has a type declaration
-        TokenKind::DatatypeInt => data_type = DataType::Int(ownership),
-        TokenKind::DatatypeFloat => data_type = DataType::Float(ownership),
-        TokenKind::DatatypeBool => data_type = DataType::Bool(ownership),
-        TokenKind::DatatypeString => data_type = DataType::String(ownership),
-        TokenKind::DatatypeStyle => data_type = DataType::Template(ownership),
+        TokenKind::DatatypeInt => data_type = DataType::Int,
+        TokenKind::DatatypeFloat => data_type = DataType::Float,
+        TokenKind::DatatypeBool => data_type = DataType::Bool,
+        TokenKind::DatatypeString => data_type = DataType::String,
 
         // Collection Type Declaration
         TokenKind::OpenCurly => {
             token_stream.advance();
 
-            // Check if the datatype inside the curly braces is mutable
-            let inner_ownership = match token_stream.current_token_kind() {
-                TokenKind::Mutable => {
-                    token_stream.advance();
-                    Ownership::MutableOwned(false)
-                }
-                _ => Ownership::ImmutableOwned(false),
-            };
-
             // Check if there is a type inside the curly braces
-            data_type = match token_stream
-                .current_token_kind()
-                .to_datatype(inner_ownership)
-            {
-                Some(data_type) => DataType::Collection(Box::new(data_type), ownership),
-                _ => DataType::Collection(
-                    Box::new(DataType::Inferred(ownership)),
-                    Ownership::MutableOwned(false),
-                ),
+            data_type = match token_stream.current_token_kind().to_datatype() {
+                Some(data_type) => DataType::Collection(Box::new(data_type), ownership.to_owned()),
+                _ => DataType::Collection(Box::new(DataType::Inferred), Ownership::MutableOwned),
             };
 
             // Make sure there is a closing curly brace
@@ -154,7 +149,7 @@ pub fn new_arg(
         }
 
         TokenKind::Newline => {
-            data_type = DataType::Inferred(ownership);
+            data_type = DataType::Inferred;
             // Ignore
         }
 
@@ -177,7 +172,11 @@ pub fn new_arg(
             token_stream.advance();
         }
 
-        // If end of statement, then it's a zero-value variable
+        // If end of statement, then it's unassigned.
+        // For the time being, this is a syntax error.
+        // When the compiler becomes more sophisticated,
+        // it will be possible to statically ensure there is an assignment on all future branches.
+
         // Struct bracket should only be hit here in the context of the end of some parameters
         TokenKind::Comma
         | TokenKind::Eof
@@ -191,10 +190,10 @@ pub fn new_arg(
                 });
             }
 
-            return Ok(Arg {
-                name: name.to_owned(),
-                value: data_type.get_zero_value(token_stream.current_location()),
-            });
+            return_rule_error!(
+                token_stream.current_location(),
+                "All variables must be initialized with an assignment operator."
+            )
         }
 
         _ => {
@@ -213,9 +212,9 @@ pub fn new_arg(
     let parsed_expr = match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {
             token_stream.advance();
-            create_expression(token_stream, context, &mut data_type, true)?
+            create_expression(token_stream, context, &mut data_type, &ownership, true)?
         }
-        _ => create_expression(token_stream, context, &mut data_type, false)?,
+        _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
     };
 
     Ok(Arg {

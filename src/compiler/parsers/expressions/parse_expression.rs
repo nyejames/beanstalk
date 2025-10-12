@@ -3,10 +3,10 @@ use crate::compiler::parsers::build_ast::ContextKind;
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::collections::new_collection;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
+use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::template::TemplateType;
@@ -28,14 +28,14 @@ pub fn create_multiple_expressions(
     let mut type_index = 0;
 
     while token_stream.index < token_stream.length && type_index < context.returns.len() {
-        let expected_type = context.returns[type_index].to_owned();
-        let mut expression_type = expected_type;
+        let mut expected_arg = context.returns[type_index].to_owned();
 
         // This should type check here
         let expression = create_expression(
             token_stream,
             context,
-            &mut expression_type,
+            &mut expected_arg.value.data_type,
+            &expected_arg.value.ownership,
             consume_closing_parenthesis,
         )?;
 
@@ -80,6 +80,7 @@ pub fn create_expression(
     token_stream: &mut TokenContext,
     context: &ScopeContext,
     data_type: &mut DataType,
+    ownership: &Ownership,
     consume_closing_parenthesis: bool,
 ) -> Result<Expression, CompileError> {
     let mut expression: Vec<AstNode> = Vec::new();
@@ -116,7 +117,7 @@ pub fn create_expression(
                 // Removed this at one point for a test caused a wonderful infinite loop
                 token_stream.advance();
 
-                let value = create_expression(token_stream, context, data_type, true)?;
+                let value = create_expression(token_stream, context, data_type, ownership, true)?;
 
                 expression.push(AstNode {
                     kind: NodeKind::Expression(value),
@@ -134,18 +135,20 @@ pub fn create_expression(
                                 token_stream,
                                 inner_type,
                                 context,
+                                ownership
                             )?),
                             location: token_stream.current_location(),
                             scope: context.scope_name.to_owned(),
                         });
                     }
 
-                    DataType::Inferred(mutable) => {
+                    DataType::Inferred => {
                         expression.push(AstNode {
                             kind: NodeKind::Expression(new_collection(
                                 token_stream,
-                                &DataType::Inferred(mutable.to_owned()),
+                                &DataType::Inferred,
                                 context,
+                                ownership,
                             )?),
                             location: token_stream.current_location(),
                             scope: context.scope_name.to_owned(),
@@ -200,7 +203,7 @@ pub fn create_expression(
             // Check if the name is a reference to another variable or function call
             TokenKind::Symbol(ref name, ..) => {
                 if let Some(arg) = context.get_reference(name) {
-                    expression.push(create_reference(token_stream, arg, context, data_type)?);
+                    expression.push(create_reference(token_stream, arg, context)?);
 
                     continue; // Will have moved onto the next token already
                 } else {
@@ -221,17 +224,10 @@ pub fn create_expression(
 
                 let location = token_stream.current_location();
 
-                // Use the expected data type's ownership if it's a Float type, otherwise use default
-                let ownership = match data_type {
-                    DataType::Float(ownership) => ownership.clone(),
-                    DataType::Inferred(ownership) => ownership.clone(),
-                    _ => Ownership::ImmutableOwned(false),
-                };
-
-                let float_expr = Expression::new(
-                    ExpressionKind::Float(float),
+                let float_expr = Expression::float(
+                    float,
                     location.to_owned(),
-                    DataType::Float(ownership),
+                    Ownership::MutableOwned,
                 );
 
                 expression.push(AstNode {
@@ -241,27 +237,18 @@ pub fn create_expression(
                 });
             }
 
-            TokenKind::IntLiteral(int) => {
-                let int_value = if next_number_negative {
+            TokenKind::IntLiteral(mut int) => {
+                if next_number_negative {
                     next_number_negative = false;
-                    -int
-                } else {
-                    int
+                    int = -int;
                 };
 
                 let location = token_stream.current_location();
 
-                // Use the expected data type's ownership if it's an Int type, otherwise use default
-                let ownership = match data_type {
-                    DataType::Int(ownership) => ownership.clone(),
-                    DataType::Inferred(ownership) => ownership.clone(),
-                    _ => Ownership::ImmutableOwned(false), // Use explicit immutable instead of default
-                };
-
-                let int_expr = Expression::new(
-                    ExpressionKind::Int(int_value),
+                let int_expr = Expression::int(
+                    int,
                     location.to_owned(),
-                    DataType::Int(ownership),
+                    Ownership::MutableOwned,
                 );
 
                 expression.push(AstNode {
@@ -271,20 +258,13 @@ pub fn create_expression(
                 });
             }
 
-            TokenKind::StringLiteral(ref string) => {
+            TokenKind::StringSliceLiteral(ref string) => {
                 let location = token_stream.current_location();
 
-                // Use the expected data type's ownership if it's a String type, otherwise use default
-                let ownership = match data_type {
-                    DataType::String(ownership) => ownership.clone(),
-                    DataType::Inferred(ownership) => ownership.clone(),
-                    _ => Ownership::ImmutableOwned(false),
-                };
-
-                let string_expr = Expression::new(
-                    ExpressionKind::String(string.to_owned()),
+                let string_expr = Expression::string(
+                    string.to_owned(),
                     location.to_owned(),
-                    DataType::String(ownership),
+                    Ownership::ImmutableReference,
                 );
 
                 expression.push(AstNode {
@@ -300,13 +280,14 @@ pub fn create_expression(
 
                 match template.kind {
                     TemplateType::StringFunction => {
-                        return Ok(Expression::template(template));
+                        return Ok(Expression::template(template, ownership.to_owned()));
                     }
 
                     TemplateType::CompileTimeString => {
                         return Ok(Expression::string(
                             template.fold(&None)?,
                             token_stream.current_location(),
+                            ownership.get_owned(),
                         ));
                     }
 
@@ -325,17 +306,10 @@ pub fn create_expression(
             TokenKind::BoolLiteral(value) => {
                 let location = token_stream.current_location();
 
-                // Use the expected data type's ownership if it's a Bool type, otherwise use default
-                let ownership = match data_type {
-                    DataType::Bool(ownership) => ownership.clone(),
-                    DataType::Inferred(ownership) => ownership.clone(),
-                    _ => Ownership::ImmutableOwned(false),
-                };
-
-                let bool_expr = Expression::new(
-                    ExpressionKind::Bool(value.to_owned()),
+                let bool_expr = Expression::bool(
+                    value,
                     location.to_owned(),
-                    DataType::Bool(ownership),
+                    Ownership::MutableOwned,
                 );
 
                 expression.push(AstNode {
@@ -359,6 +333,7 @@ pub fn create_expression(
                     context.scope_name.to_owned(),
                     expression,
                     &mut DataType::Range,
+                    ownership.get_reference()
                 );
             }
 
@@ -437,7 +412,7 @@ pub fn create_expression(
                             )
                         }
 
-                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type);
+                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type, ownership.to_owned());
                     }
 
                     // IS
@@ -522,18 +497,22 @@ pub fn create_expression(
         token_stream.advance();
     }
 
-    evaluate_expression(context.scope_name.to_owned(), expression, data_type)
+    evaluate_expression(
+        context.scope_name.to_owned(),
+        expression,
+        data_type,
+        ownership.to_owned(),
+    )
 }
 
-// This is used to unpack all the 'self' values of a block into multiple arguments
-pub fn create_args_from_types(data_types: &[DataType]) -> Vec<Arg> {
-    let mut arguments = Vec::new();
-
-    for data_type in data_types {
-        if let DataType::Args(inner_args) = data_type {
-            arguments.extend(inner_args.to_owned());
-        }
-    }
-
-    arguments
-}
+// pub fn create_args_from_types(data_types: &[DataType]) -> Vec<Arg> {
+//     let mut arguments = Vec::new();
+//
+//     for data_type in data_types {
+//         if let DataType::Args(inner_args) = data_type {
+//             arguments.extend(inner_args.to_owned());
+//         }
+//     }
+//
+//     arguments
+// }

@@ -134,7 +134,7 @@ pub fn get_config_from_ast(
         match arg.name.as_str() {
             "project" => {
                 project_config.project_type = match &arg.value.kind {
-                    ExpressionKind::String(value) => match value.as_str() {
+                    ExpressionKind::StringSlice(value) => match value.as_str() {
                         "" => ProjectType::default(),
                         _ => return_type_error!(
                             TextLocation::default(),
@@ -149,7 +149,7 @@ pub fn get_config_from_ast(
 
             "runtime_backend" => {
                 project_config.runtime = match &arg.value.kind {
-                    ExpressionKind::String(value) => match value.as_str() {
+                    ExpressionKind::StringSlice(value) => match value.as_str() {
                         "web" => RuntimeConfig::for_html_release(),
                         "" => {
                             // Default backend for the project type
@@ -173,7 +173,7 @@ pub fn get_config_from_ast(
 
             "entry_point" => {
                 project_config.entry_point = match &arg.value.kind {
-                    ExpressionKind::String(value) => PathBuf::from(value),
+                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
                     _ => {
                         return_type_error!(TextLocation::default(), "Entry point must be a string")
                     }
@@ -182,7 +182,7 @@ pub fn get_config_from_ast(
 
             "src" => {
                 project_config.src = match &arg.value.kind {
-                    ExpressionKind::String(value) => PathBuf::from(value),
+                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
                     _ => return_type_error!(
                         TextLocation::default(),
                         "Source folder must be a string"
@@ -192,14 +192,14 @@ pub fn get_config_from_ast(
 
             "dev" => {
                 project_config.dev_folder = match &arg.value.kind {
-                    ExpressionKind::String(value) => PathBuf::from(value),
+                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
                     _ => return_type_error!(TextLocation::default(), "Dev folder must be a string"),
                 };
             }
 
             "release" => {
                 project_config.release_folder = match &arg.value.kind {
-                    ExpressionKind::String(value) => PathBuf::from(value),
+                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
                     _ => return_type_error!(
                         TextLocation::default(),
                         "Release folder must be a string"
@@ -209,7 +209,7 @@ pub fn get_config_from_ast(
 
             "name" => {
                 project_config.name = match &arg.value.kind {
-                    ExpressionKind::String(value) => value.to_owned(),
+                    ExpressionKind::StringSlice(value) => value.to_owned(),
                     _ => {
                         return_type_error!(TextLocation::default(), "Name must be a string")
                     }
@@ -218,7 +218,7 @@ pub fn get_config_from_ast(
 
             "version" => {
                 project_config.version = match &arg.value.kind {
-                    ExpressionKind::String(value) => value.to_owned(),
+                    ExpressionKind::StringSlice(value) => value.to_owned(),
                     _ => {
                         return_type_error!(TextLocation::default(), "Version must be a string")
                     }
@@ -227,14 +227,14 @@ pub fn get_config_from_ast(
 
             "author" => {
                 project_config.author = match &arg.value.kind {
-                    ExpressionKind::String(value) => value.to_owned(),
+                    ExpressionKind::StringSlice(value) => value.to_owned(),
                     _ => return_type_error!(TextLocation::default(), "Author must be a string"),
                 };
             }
 
             "license" => {
                 project_config.license = match &arg.value.kind {
-                    ExpressionKind::String(value) => value.to_owned(),
+                    ExpressionKind::StringSlice(value) => value.to_owned(),
                     _ => {
                         return_type_error!(TextLocation::default(), "License must be a string")
                     }
@@ -248,7 +248,7 @@ pub fn get_config_from_ast(
                             match arg.name.as_str() {
                                 "site_title" => {
                                     project_config.html_meta.site_title = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Site title must be a string"
@@ -259,7 +259,7 @@ pub fn get_config_from_ast(
                                 "page_description" => {
                                     project_config.html_meta.page_description =
                                         match &arg.value.kind {
-                                            ExpressionKind::String(value) => value.to_owned(),
+                                            ExpressionKind::StringSlice(value) => value.to_owned(),
                                             _ => return_type_error!(
                                                 TextLocation::default(),
                                                 "Page description must be a string"
@@ -269,7 +269,7 @@ pub fn get_config_from_ast(
 
                                 "site_url" => {
                                     project_config.html_meta.site_url = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Site url must be a string"
@@ -279,7 +279,7 @@ pub fn get_config_from_ast(
 
                                 "page_url" => {
                                     project_config.html_meta.page_url = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page url must be a string"
@@ -289,7 +289,7 @@ pub fn get_config_from_ast(
 
                                 "page_og_title" => {
                                     project_config.html_meta.page_og_title = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page og title must be a string"
@@ -300,7 +300,7 @@ pub fn get_config_from_ast(
                                 "page_og_description" => {
                                     project_config.html_meta.page_og_description =
                                         match &arg.value.kind {
-                                            ExpressionKind::String(value) => value.to_owned(),
+                                            ExpressionKind::StringSlice(value) => value.to_owned(),
                                             _ => return_type_error!(
                                                 TextLocation::default(),
                                                 "Page og description must be a string"
@@ -311,7 +311,7 @@ pub fn get_config_from_ast(
                                 "page_image_url" => {
                                     project_config.html_meta.page_image_url = match &arg.value.kind
                                     {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page image url must be a string"
@@ -322,7 +322,7 @@ pub fn get_config_from_ast(
                                 "page_image_alt" => {
                                     project_config.html_meta.page_image_alt = match &arg.value.kind
                                     {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page image alt must be a string"
@@ -332,7 +332,7 @@ pub fn get_config_from_ast(
 
                                 "page_locale" => {
                                     project_config.html_meta.page_locale = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page locale must be a string"
@@ -342,7 +342,7 @@ pub fn get_config_from_ast(
 
                                 "page_type" => {
                                     project_config.html_meta.page_type = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page type must be a string"
@@ -353,7 +353,7 @@ pub fn get_config_from_ast(
                                 "page_twitter_large_image" => {
                                     project_config.html_meta.page_twitter_large_image =
                                         match &arg.value.kind {
-                                            ExpressionKind::String(value) => value.to_owned(),
+                                            ExpressionKind::StringSlice(value) => value.to_owned(),
                                             _ => return_type_error!(
                                                 TextLocation::default(),
                                                 "Page twitter large image must be a string"
@@ -364,7 +364,7 @@ pub fn get_config_from_ast(
                                 "page_canonical_url" => {
                                     project_config.html_meta.page_canonical_url =
                                         match &arg.value.kind {
-                                            ExpressionKind::String(value) => value.to_owned(),
+                                            ExpressionKind::StringSlice(value) => value.to_owned(),
                                             _ => return_type_error!(
                                                 TextLocation::default(),
                                                 "Page canonical url must be a string"
@@ -374,7 +374,7 @@ pub fn get_config_from_ast(
 
                                 "page_root_url" => {
                                     project_config.html_meta.page_root_url = match &arg.value.kind {
-                                        ExpressionKind::String(value) => value.to_owned(),
+                                        ExpressionKind::StringSlice(value) => value.to_owned(),
                                         _ => return_type_error!(
                                             TextLocation::default(),
                                             "Page root url must be a string"
@@ -385,7 +385,7 @@ pub fn get_config_from_ast(
                                 "image_folder_url" => {
                                     project_config.html_meta.image_folder_url =
                                         match &arg.value.kind {
-                                            ExpressionKind::String(value) => value.to_owned(),
+                                            ExpressionKind::StringSlice(value) => value.to_owned(),
                                             _ => return_type_error!(
                                                 TextLocation::default(),
                                                 "Image folder url must be a string"

@@ -4,6 +4,7 @@ use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
 
+use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
@@ -82,6 +83,7 @@ pub fn evaluate_expression(
     scope: PathBuf,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
+    ownership: Ownership,
 ) -> Result<Expression, CompileError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
@@ -101,11 +103,11 @@ pub fn evaluate_expression(
     'outer: for node in nodes {
         match node.kind {
             NodeKind::Expression(ref expr, ..) => {
-                if let DataType::Inferred(..) = current_type {
-                    *current_type = expr.data_type.to_compiler_owned();
+                if let DataType::Inferred = current_type {
+                    *current_type = expr.data_type;
                 }
 
-                if let DataType::CoerceToString(_) | DataType::String(_) = current_type {
+                if let DataType::CoerceToString | DataType::String = current_type {
                     simplified_expression.push(node.to_owned());
                     continue 'outer;
                 }
@@ -119,7 +121,7 @@ pub fn evaluate_expression(
 
             NodeKind::Operator(ref op) => {
                 match current_type {
-                    DataType::String(_) | DataType::Template(_) => {
+                    DataType::String | DataType::Template => {
                         return_syntax_error!(
                             node.location,
                             "You can't use the '{:?}' operator with strings or templates",
@@ -127,7 +129,7 @@ pub fn evaluate_expression(
                         )
                     }
 
-                    DataType::CoerceToString(_) => {
+                    DataType::CoerceToString => {
                         simplified_expression.push(node);
                         continue 'outer;
                     }
@@ -154,15 +156,27 @@ pub fn evaluate_expression(
         }
     }
 
-    // If nothing to evaluate at compile time, just one value, return that value
+    // If nothing to evaluate at compile time, just one value, return that value.
+    // If the value is a reference, then the data type needs to indicate this is a mutable / immutable reference to something else,
+    // or a copy of the value if explicitly copied.
     if simplified_expression.len() == 1 {
-        return simplified_expression[0].get_expr();
+        let only_expression = simplified_expression[0].get_expr()?;
+
+        if let ExpressionKind::Reference(..) = only_expression.kind {
+            // The current type now becomes a reference (basically a safe pointer rather than a value)
+            *current_type = DataType::Reference(
+                Box::from(only_expression.data_type),
+                ownership,
+            );
+        }
+
+        return Ok(only_expression);
     }
 
     match current_type {
-        DataType::Template(_) | DataType::String(_) => concat_template(&mut simplified_expression),
+        DataType::Template | DataType::String => concat_template(&mut simplified_expression),
 
-        DataType::CoerceToString(_) => {
+        DataType::CoerceToString => {
             let mut new_string = String::new();
 
             // red_ln!("Treating this as simplified exp: {:#?}", simplified_expression);
@@ -174,7 +188,7 @@ pub fn evaluate_expression(
             Ok(Expression::string(new_string, location))
         }
 
-        DataType::Inferred(..) => {
+        DataType::Inferred => {
             return_compiler_error!(
                 "Inferred data type made it into eval_expression! Everything should be type checked by now"
             )

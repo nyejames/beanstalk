@@ -1,5 +1,4 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -17,51 +16,7 @@ pub fn handle_mutation(
     let location = token_stream.current_location();
 
     // Check if the variable is mutable
-    let is_mutable = match &variable_arg.value.data_type {
-        DataType::Int(ownership)
-        | DataType::Float(ownership)
-        | DataType::Bool(ownership)
-        | DataType::String(ownership)
-        | DataType::Template(ownership)
-        | DataType::Collection(_, ownership) => {
-            matches!(
-                ownership,
-                Ownership::MutableOwned(_) | Ownership::MutableReference(_)
-            )
-        }
-        DataType::Function(_, _) => {
-            return_rule_error!(
-                location,
-                "Cannot mutate function '{}'. Functions are immutable once declared",
-                variable_arg.name
-            );
-        }
-        DataType::Args(_) => {
-            return_rule_error!(
-                location,
-                "Cannot mutate struct '{}'. Struct mutation is not yet supported",
-                variable_arg.name
-            );
-        }
-        DataType::Inferred(ownership) => {
-            matches!(
-                ownership,
-                Ownership::MutableOwned(_) | Ownership::MutableReference(_)
-            )
-        }
-        DataType::None => {
-            return_rule_error!(
-                location,
-                "Cannot mutate variable '{}' with None type",
-                variable_arg.name
-            );
-        }
-        _ => {
-            // For other types (Range, True, False, CoerceToString, Decimal, etc.)
-            // assume they are immutable for now
-            false
-        }
-    };
+    let is_mutable = &variable_arg.value.ownership.is_mutable();
 
     if !is_mutable {
         return_rule_error!(
@@ -78,7 +33,8 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let new_value = create_expression(token_stream, context, &mut expected_type, false)?;
+            let new_value =
+                create_expression(token_stream, context, &mut expected_type, true, false)?;
 
             Ok(AstNode {
                 kind: NodeKind::Mutation(variable_arg.name.to_owned(), new_value),
@@ -92,7 +48,8 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let add_value = create_expression(token_stream, context, &mut expected_type, false)?;
+            let add_value =
+                create_expression(token_stream, context, &mut expected_type, true, false)?;
 
             // Create an addition expression in RPN order: variable, add_value, +
             let variable_ref = AstNode {
@@ -116,7 +73,8 @@ pub fn handle_mutation(
             let addition_expr = Expression::runtime(
                 vec![variable_ref, add_value_node, add_op],
                 expected_type,
-                location.clone(),
+                location.to_owned(),
+                variable_arg.value.ownership.to_owned(),
             );
 
             Ok(AstNode {
@@ -132,7 +90,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let subtract_value =
-                create_expression(token_stream, context, &mut expected_type, false)?;
+                create_expression(token_stream, context, &mut expected_type, true, false)?;
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
             let variable_ref = AstNode {
@@ -142,26 +100,27 @@ pub fn handle_mutation(
             };
             let subtract_value_node = AstNode {
                 kind: NodeKind::Expression(subtract_value),
-                location: location.clone(),
+                location: location.to_owned(),
                 scope: context.scope_name.to_owned(),
             };
             let subtract_op = AstNode {
                 kind: NodeKind::Operator(
                     crate::compiler::parsers::expressions::expression::Operator::Subtract,
                 ),
-                location: location.clone(),
+                location: location.to_owned(),
                 scope: context.scope_name.to_owned(),
             };
 
             let subtraction_expr = Expression::runtime(
                 vec![variable_ref, subtract_value_node, subtract_op],
                 expected_type,
-                location.clone(),
+                location.to_owned(),
+                variable_arg.value.ownership.to_owned(),
             );
 
             Ok(AstNode {
                 kind: NodeKind::Mutation(variable_arg.name.to_owned(), subtraction_expr),
-                location: location.clone(),
+                location: location.to_owned(),
                 scope: context.scope_name.to_owned(),
             })
         }
@@ -172,7 +131,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let multiply_value =
-                create_expression(token_stream, context, &mut expected_type, false)?;
+                create_expression(token_stream, context, &mut expected_type, true, false)?;
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
             let variable_ref = AstNode {
@@ -197,6 +156,7 @@ pub fn handle_mutation(
                 vec![variable_ref, multiply_value_node, multiply_op],
                 expected_type,
                 location.clone(),
+                variable_arg.value.ownership.to_owned(),
             );
 
             Ok(AstNode {
@@ -211,7 +171,8 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let divide_value = create_expression(token_stream, context, &mut expected_type, false)?;
+            let divide_value =
+                create_expression(token_stream, context, &mut expected_type, true, false)?;
 
             // Create a division expression in RPN order: variable, divide_value, /
             let variable_ref = AstNode {
@@ -236,6 +197,7 @@ pub fn handle_mutation(
                 vec![variable_ref, divide_value_node, divide_op],
                 expected_type,
                 location.clone(),
+                variable_arg.value.ownership.to_owned(),
             );
 
             Ok(AstNode {

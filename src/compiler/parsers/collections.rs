@@ -1,5 +1,6 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::Ownership::MutableOwned;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
@@ -13,6 +14,7 @@ pub fn new_collection(
     token_stream: &mut TokenContext,
     collection_type: &DataType,
     context: &ScopeContext,
+    ownership: &Ownership,
 ) -> Result<Expression, CompileError> {
     let mut items: Vec<Expression> = Vec::new();
 
@@ -53,8 +55,13 @@ pub fn new_collection(
                 }
 
                 let mut collection_inner_type = collection_type.to_owned();
-                let item =
-                    create_expression(token_stream, context, &mut collection_inner_type, false)?;
+                let item = create_expression(
+                    token_stream,
+                    context,
+                    &mut collection_inner_type,
+                    &MutableOwned,
+                    false,
+                )?;
 
                 items.push(item);
 
@@ -66,5 +73,6 @@ pub fn new_collection(
     Ok(Expression::collection(
         items,
         token_stream.current_location(),
+        ownership.to_owned(),
     ))
 }

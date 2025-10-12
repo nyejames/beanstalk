@@ -32,11 +32,13 @@ pub fn create_loop(
 
             if let Some(arg) = context.get_reference(&name) {
                 let mut data_type = arg.value.data_type.to_owned();
-                let condition = create_expression(token_stream, &context, &mut data_type, false)?;
+                let is_mutable = arg.value.ownership.is_mutable();
+                let condition =
+                    create_expression(token_stream, &context, &mut data_type, is_mutable, false)?;
 
                 // Make sure this condition is a boolean expression
                 return match data_type {
-                    DataType::Bool(..) => {
+                    DataType::Bool => {
                         // Make sure there is a colon after the condition
                         if token_stream.current_token_kind() != &TokenKind::Colon {
                             return_syntax_error!(
@@ -88,9 +90,10 @@ pub fn create_loop(
             token_stream.advance();
 
             // TODO: need to check for mutable reference syntax
-            let mut iterable_type = DataType::Inferred(Ownership::ImmutableReference(false));
+            // Is just defaulting to immutable reference for now
+            let mut iterable_type = DataType::Inferred;
             let iterated_item =
-                create_expression(token_stream, &context, &mut iterable_type, false)?;
+                create_expression(token_stream, &context, &mut iterable_type, &Ownership::ImmutableReference, false)?;
 
             // Make sure this type can be iterated over
             if !iterable_type.is_iterable() {
@@ -118,6 +121,7 @@ pub fn create_loop(
                     iterated_item.kind.to_owned(),
                     token_stream.current_location(),
                     iterated_item.data_type.to_owned(),
+                    iterated_item.ownership.to_owned(),
                 ),
             };
 

@@ -46,6 +46,8 @@ Documentation comments will eventually be created via special templates.
 # Variables
 Equals means assign. Tilde ~ means this is a mutable and can change.
 
+All variables must be assigned a value when they are declared.
+
 ## Assignment
 
 ### Variables
@@ -73,7 +75,7 @@ Equals means assign. Tilde ~ means this is a mutable and can change.
     number = 420.69
 
     -- Becomes an immutable reference to the value
-    -- For primatives this is actually just an immutable copy,
+    -- For primitives this is actually just an immutable copy,
     -- But the behaviour is consistent for all datatypes, including heap allocated ones
     another_number = number
 
@@ -127,38 +129,27 @@ But statements must start after a newline.
         + 8 + 9 + 10
 ]
 
-# Imports
-[#Code:
-    -- Importing everything inside an object
-    import(/libs/math)
-    root(2, 8)
-
-    -- Renaming the import
-    encryption = import("libs/encrypt")
-]
-
 # Data Types
-All data type keywords contain methods from the standard library for common manipulation of types. 
-The zero value is the value a variable will be assigned if it is not assigned a value when being initialized.
+All data type keywords contain methods from the standard library for common manipulation of types.
 
 ## Numerical Types
 [table(3):
-    [: Type] [: Description] [: Zero Value]
+    [: Type] [: Description]
 
-    [: float ] [: 64 bit floating point number] [: 0.0]
+    [: float ] [: 64 bit floating point number]
 
-    [: int ] [:  32 bit signed integer (may become 64 bit in the future or in certain contexts) ] [: 0]
+    [: int ] [:  32 bit signed integer (may become 64 bit in the future or in certain contexts) ]
 ]
 
 ## String based Types
 These are all different ways to create strings.
 
 [table(3): 
-    [: Type] [: Description] [: Zero Value]
+    [: Type] [: Description]
 
-    [: string slice ] [: UTF-16 (For JS compatibility)] [: ""]
+    [: string slice ] [: UTF-16 (For JS compatibility)]
 
-    [: template ] [: The string templating syntax of Beanstalk for creating strings. See [link "./scenes": Scenes for more info!]] [: "`[]`" -  an empty scene]
+    [: template ] [: The string templating syntax of Beanstalk for creating strings. See [link "./scenes": Scenes for more info!]]
 ]
 
 # Strings and String slices

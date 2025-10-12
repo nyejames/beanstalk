@@ -1,11 +1,11 @@
 use crate::compiler::datatypes::{DataType, Ownership};
 
+use colour::red_ln;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
-use colour::red_ln;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
@@ -317,14 +317,9 @@ pub enum TokenKind {
     // Special compiler directives
     /// The only way to manually force a panic in the compiler in release mode
     Panic,
-
-    /// Only compiled into debug/dev mode
     Assert,
-
-    Wat(String), // WAT codeblock (for testing WASM)
-
-    /// Scene Style properties
-    Ignore, // for commenting the out an entire scene
+    Wat(String),
+    Ignore,
 
     /// Function Signatures
     Arrow,
@@ -333,7 +328,7 @@ pub enum TokenKind {
     Symbol(String),
 
     // Literals
-    StringLiteral(String),
+    StringSliceLiteral(String),
     PathLiteral(PathBuf),
     FloatLiteral(f64),
     IntLiteral(i64),
@@ -372,10 +367,9 @@ pub enum TokenKind {
     DatatypeInt,
     DatatypeFloat,
     DatatypeBool,
+    DatatypeTrue,
+    DatatypeFalse,
     DatatypeString,
-    /// For templates, the style of the template, not the template itself
-    /// This is built into the compiler for optimization and isn't a primitive
-    DatatypeStyle,
 
     /// Not yet implemented,
     /// Design of async and concurrency is still being considered
@@ -455,19 +449,18 @@ impl TokenKind {
         match self {
             TokenKind::Symbol(name, ..) => name.clone(),
             TokenKind::RawStringLiteral(value) => value.clone(),
-            TokenKind::StringLiteral(string) => string.clone(),
+            TokenKind::StringSliceLiteral(string) => string.clone(),
             TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }
     }
 
-    pub fn to_datatype(&self, ownership: Ownership) -> Option<DataType> {
+    pub fn to_datatype(&self) -> Option<DataType> {
         match self {
-            TokenKind::DatatypeInt => Some(DataType::Int(ownership)),
-            TokenKind::DatatypeFloat => Some(DataType::Float(ownership)),
-            TokenKind::DatatypeBool => Some(DataType::Bool(ownership)),
-            TokenKind::DatatypeString => Some(DataType::String(ownership)),
-            TokenKind::DatatypeStyle => Some(DataType::Template(ownership)),
+            TokenKind::DatatypeInt => Some(DataType::Int),
+            TokenKind::DatatypeFloat => Some(DataType::Float),
+            TokenKind::DatatypeBool => Some(DataType::Bool),
+            TokenKind::DatatypeString => Some(DataType::String),
             _ => None,
         }
     }

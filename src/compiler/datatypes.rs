@@ -1,36 +1,67 @@
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::statements::create_template_node::Template;
-
-use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {
-    // Bool = is last use?
-    MutableOwned(bool),
-    MutableReference(bool),
-    ImmutableOwned(bool),
-    ImmutableReference(bool),
+    MutableOwned,
+    MutableReference,
+    ImmutableOwned,
+    ImmutableReference,
 }
 
 impl Ownership {
     pub fn default() -> Ownership {
-        Ownership::ImmutableOwned(false)
+        Ownership::ImmutableOwned
     }
     pub fn is_mutable(&self) -> bool {
         match &self {
-            Ownership::MutableOwned(..) => true,
-            Ownership::MutableReference(..) => true,
+            Ownership::MutableOwned => true,
+            Ownership::MutableReference => true,
             _ => false,
         }
     }
+    pub fn is_reference(&self) -> bool {
+        match &self {
+            Ownership::MutableReference => true,
+            Ownership::ImmutableReference => true,
+            _ => false,
+        }
+    }
+
+    pub fn to_reference(&mut self) {
+        match self {
+            Ownership::MutableOwned => {
+                *self = Ownership::MutableReference;
+            }
+            Ownership::ImmutableOwned => {
+                *self = Ownership::ImmutableReference;
+            }
+            _ => {}
+        }
+    }
+
+    pub fn get_owned(&self) -> Ownership {
+        match self {
+            Ownership::MutableReference => Ownership::MutableOwned,
+            Ownership::ImmutableReference => Ownership::ImmutableOwned,
+            _ => self.to_owned(),
+        }
+    }
+
+    pub fn get_reference(&self) -> Ownership {
+        match self {
+            Ownership::MutableOwned => Ownership::MutableReference,
+            Ownership::ImmutableOwned => Ownership::ImmutableReference,
+            _ => self.to_owned(),
+        }
+    }
+
     pub fn as_string(&self) -> String {
         match &self {
-            Ownership::MutableOwned(..) => String::from("mutable"),
-            Ownership::MutableReference(..) => String::from("mutable reference"),
-            Ownership::ImmutableOwned(..) => String::from("immutable"),
-            Ownership::ImmutableReference(..) => String::from("immutable reference"),
+            Ownership::MutableOwned => String::from("mutable"),
+            Ownership::MutableReference => String::from("mutable reference"),
+            Ownership::ImmutableOwned => String::from("immutable"),
+            Ownership::ImmutableReference => String::from("immutable reference"),
         }
     }
 }
@@ -42,9 +73,11 @@ pub enum DataType {
 
     // Type is inferred, This only exists before the type checking stage
     // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile
-    Inferred(Ownership),
+    Inferred,
 
-    Bool(Ownership),
+    Reference(Box<DataType>, Ownership),
+
+    Bool,
     Range, // Iterable that must always be owned.
 
     // Immutable Data Types
@@ -54,40 +87,40 @@ pub enum DataType {
     False,
 
     // Strings
-    String(Ownership), // UTF-8
+    String, // UTF-8
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
     // All types will finally be coerced to strings after everything is evaluated.
-    CoerceToString(Ownership),
+    CoerceToString,
 
     // Numbers
-    Float(Ownership),
-    Int(Ownership),
-    Decimal(Ownership),
+    Float,
+    Int,
+    Decimal,
 
     // Collections.
     // A collection of single types, dynamically sized
     Collection(Box<DataType>, Ownership),
 
     // Structs
-    Args(Vec<Arg>),              // Type
+    Args(Vec<Arg>),              // Struct definitions and parameters
     Struct(Vec<Arg>, Ownership), // Struct instance
 
     // Special Beanstalk Types
     // Template types may have more static structure to them in the future
     // They are basically functions that accept a style and return a string
-    Template(Ownership), // is_mutable
+    Template, // is_mutable
 
-    Function(Vec<Arg>, Vec<DataType>), // Arg constructor, Returned args
+    Function(Vec<Arg>, Vec<Arg>), // Arg constructor, Returned args
 
     // Type Types
     // Unions allow types such as option and result
 
-    // TODO: IS THIS JUST MULITPLE TYPES FOR FUNCTION RETURNS?
+    // TODO: IS THIS JUST MULTIPLE TYPES FOR FUNCTION RETURNS?
     // Choices should actually just be enums for now
-    Choices(Vec<DataType>), // Union of types
-    Option(Box<DataType>),  // Shorthand for a choice of a type or None
+    Choices(Vec<Arg>),     // Union of types
+    Option(Box<DataType>), // Shorthand for a choice of a type or None
 }
 
 impl DataType {
@@ -97,59 +130,54 @@ impl DataType {
         // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
 
         match self {
-            DataType::Bool(_) => {
+            DataType::Bool => {
                 matches!(
                     accepted_type,
-                    DataType::Bool(_) | DataType::Int(_) | DataType::Float(_)
+                    DataType::Bool | DataType::Int | DataType::Float
                 )
             }
-
-            DataType::Choices(types) => {
-                for t in types {
-                    if !t.is_valid_type(accepted_type) {
-                        return false;
-                    }
-                }
-                true
-            }
-
+            //
+            // DataType::Choices(types) => {
+            //     for t in types {
+            //         if !t.value.data_type.is_valid_type(accepted_type) {
+            //             return false;
+            //         }
+            //     }
+            //     true
+            // }
             DataType::Range => {
                 matches!(
                     accepted_type,
                     DataType::Collection(..)
                         | DataType::Args(_)
-                        | DataType::Float(_)
-                        | DataType::Int(_)
-                        | DataType::Decimal(_)
-                        | DataType::String(_)
+                        | DataType::Float
+                        | DataType::Int
+                        | DataType::Decimal
+                        | DataType::String
                 )
             }
 
             _ => {
-                // For other self types, check the accepted_type
+                // For other 'self' types, check the accepted_type
                 match accepted_type {
                     // Might be needed here later?
                     // DataType::Pointer => true,
-                    DataType::Inferred(_) => {
+                    DataType::Inferred => {
                         *accepted_type = self.to_owned();
                         true
                     }
-                    DataType::CoerceToString(_) => true,
+                    DataType::CoerceToString => true,
 
-                    DataType::Choices(types) => {
-                        for t in types {
-                            if !self.is_valid_type(t) {
-                                return false;
-                            }
-                        }
-                        true
-                    }
-
-                    DataType::Bool(_) => {
-                        matches!(
-                            self,
-                            &DataType::Bool(_) | &DataType::Int(_) | &DataType::Float(_)
-                        )
+                    // DataType::Choices(types) => {
+                    //     for t in types {
+                    //         if !self.is_valid_type(t.value.data_type) {
+                    //             return false;
+                    //         }
+                    //     }
+                    //     true
+                    // }
+                    DataType::Bool => {
+                        matches!(self, &DataType::Bool | &DataType::Int | &DataType::Float)
                     }
 
                     _ => false,
@@ -161,11 +189,11 @@ impl DataType {
     // Special Types that might change (basically the same as rust with more syntax sugar)
     pub fn to_option(self) -> DataType {
         match self {
-            DataType::Bool(mutable) => DataType::Option(Box::new(DataType::Bool(mutable))),
-            DataType::Float(mutable) => DataType::Option(Box::new(DataType::Float(mutable))),
-            DataType::Int(mutable) => DataType::Option(Box::new(DataType::Int(mutable))),
-            DataType::Decimal(mutable) => DataType::Option(Box::new(DataType::Decimal(mutable))),
-            DataType::String(mutable) => DataType::Option(Box::new(DataType::String(mutable))),
+            DataType::Bool => DataType::Option(Box::new(DataType::Bool)),
+            DataType::Float => DataType::Option(Box::new(DataType::Float)),
+            DataType::Int => DataType::Option(Box::new(DataType::Int)),
+            DataType::Decimal => DataType::Option(Box::new(DataType::Decimal)),
+            DataType::String => DataType::Option(Box::new(DataType::String)),
             DataType::Collection(inner_type, ownership) => {
                 DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
             }
@@ -176,15 +204,17 @@ impl DataType {
             DataType::Function(args, return_type) => {
                 DataType::Option(Box::new(DataType::Function(args, return_type)))
             }
-            DataType::Template(mutable) => DataType::Option(Box::new(DataType::Template(mutable))),
-            DataType::Inferred(mutable) => DataType::Option(Box::new(DataType::Inferred(mutable))),
-            DataType::CoerceToString(mutable) => {
-                DataType::Option(Box::new(DataType::CoerceToString(mutable)))
-            }
+            DataType::Template => DataType::Option(Box::new(DataType::Template)),
+            DataType::Inferred => DataType::Option(Box::new(DataType::Inferred)),
+            DataType::CoerceToString => DataType::Option(Box::new(DataType::CoerceToString)),
             DataType::True => DataType::Option(Box::new(DataType::True)),
             DataType::False => DataType::Option(Box::new(DataType::False)),
             DataType::Choices(inner_types) => {
                 DataType::Option(Box::new(DataType::Choices(inner_types)))
+            }
+
+            DataType::Reference(inner_type, ownership) => {
+                DataType::Option(Box::new(DataType::Reference(inner_type, ownership)))
             }
 
             // TODO: Probably should error for these
@@ -194,40 +224,16 @@ impl DataType {
         }
     }
 
-    pub fn is_mutable(&self) -> bool {
-        match self {
-            DataType::Inferred(ownership) => ownership.is_mutable(),
-            DataType::CoerceToString(ownership) => ownership.is_mutable(),
-            DataType::Bool(ownership) => ownership.is_mutable(),
-            DataType::True => false,
-            DataType::False => false,
-            DataType::String(ownership) => ownership.is_mutable(),
-            DataType::Float(ownership) => ownership.is_mutable(),
-            DataType::Int(ownership) => ownership.is_mutable(),
-            DataType::Decimal(ownership) => ownership.is_mutable(),
-            DataType::Collection(_, ownership) => ownership.is_mutable(),
-            DataType::Args(args) => {
-                for arg in args {
-                    if arg.value.data_type.is_mutable() {
-                        return true;
-                    }
-                }
-                false
-            }
-            _ => false,
-        }
-    }
-
     pub fn is_iterable(&self) -> bool {
         match self {
             DataType::Range => true,
             DataType::Collection(..) => true,
             DataType::Args(_) => true,
-            DataType::String(_) => true,
-            DataType::Float(_) => true,
-            DataType::Int(_) => true,
-            DataType::Decimal(_) => true,
-            DataType::Inferred(_) => true, // Will need to be type checked later
+            DataType::String => true,
+            DataType::Float => true,
+            DataType::Int => true,
+            DataType::Decimal => true,
+            DataType::Inferred => true, // Will need to be type checked later
             _ => false,
         }
     }
@@ -238,71 +244,34 @@ impl DataType {
             _ => self.to_owned(),
         }
     }
-
-    pub fn to_compiler_owned(&self) -> DataType {
-        match self {
-            DataType::Inferred(_) => DataType::Inferred(Ownership::MutableOwned(false)),
-            DataType::CoerceToString(_) => DataType::CoerceToString(Ownership::MutableOwned(false)),
-            DataType::Bool(_) => DataType::Bool(Ownership::MutableOwned(false)),
-            DataType::String(_) => DataType::String(Ownership::MutableOwned(false)),
-            DataType::Float(_) => DataType::Float(Ownership::MutableOwned(false)),
-            DataType::Int(_) => DataType::Int(Ownership::MutableOwned(false)),
-            DataType::Decimal(_) => DataType::Decimal(Ownership::MutableOwned(false)),
-            DataType::Collection(inner_type, ..) => DataType::Collection(
-                Box::new(inner_type.to_compiler_owned()),
-                Ownership::MutableOwned(false),
-            ),
-            DataType::Args(args) => {
-                let mut new_args = Vec::new();
-                for arg in args {
-                    new_args.push(Arg {
-                        name: arg.name.to_owned(),
-                        value: arg.value.to_owned(),
-                    });
-                }
-
-                DataType::Args(new_args)
-            }
-            _ => self.to_owned(),
-        }
-    }
-
-    pub fn get_zero_value(&self, location: TextLocation) -> Expression {
-        match self {
-            DataType::Float(_) => Expression::float(0.0, location),
-            DataType::Int(_) => Expression::int(0, location),
-            DataType::Bool(_) => Expression::bool(false, location),
-            DataType::String(_) | DataType::CoerceToString(_) => {
-                Expression::string(String::new(), location)
-            }
-            DataType::Template(_) => Expression::template(Template::create_default(None)),
-            _ => Expression::none(),
-        }
-    }
 }
 
 impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DataType::Inferred(mutable) => {
-                write!(f, "Inferred {} ", mutable.as_string())
+            DataType::Reference(inner_type, ownership) => {
+                let ownership = ownership.as_string();
+                write!(f, "{inner_type} {ownership} Reference")
             }
-            DataType::CoerceToString(mutable) => {
-                write!(f, "CoerceToString {} ", mutable.as_string())
+            DataType::Inferred => {
+                write!(f, "Inferred")
             }
-            DataType::Bool(mutable) => write!(f, "Bool {} ", mutable.as_string()),
-            DataType::String(mutable) => {
-                write!(f, "String {} ", mutable.as_string())
+            DataType::CoerceToString => {
+                write!(f, "CoerceToString")
             }
-            DataType::Float(mutable) => {
-                write!(f, "Float {} ", mutable.as_string())
+            DataType::Bool => write!(f, "Bool"),
+            DataType::String => {
+                write!(f, "String")
             }
-            DataType::Int(mutable) => write!(f, "{} Int", mutable.as_string()),
-            DataType::Decimal(mutable) => {
-                write!(f, "Decimal {} ", mutable.as_string())
+            DataType::Float => {
+                write!(f, "Float")
             }
-            DataType::Collection(inner_type, mutable) => {
-                write!(f, "{inner_type} {} Collection", mutable.as_string())
+            DataType::Int => write!(f, "Int"),
+            DataType::Decimal => {
+                write!(f, "Decimal")
+            }
+            DataType::Collection(inner_type, _mutable) => {
+                write!(f, "{inner_type} Collection")
             }
             DataType::Args(args) => {
                 let mut arg_str = String::new();
@@ -326,13 +295,13 @@ impl Display for DataType {
                     arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
                 }
                 for return_type in return_types {
-                    returns_string.push_str(&format!("{return_type}, "));
+                    returns_string.push_str(&format!("{}, ", return_type.name));
                 }
 
                 write!(f, "Function({arg_str} -> {returns_string})")
             }
-            DataType::Template(mutable) => {
-                write!(f, "Template {} ", mutable.as_string())
+            DataType::Template => {
+                write!(f, "Template")
             }
             DataType::None => write!(f, "None"),
             DataType::True => write!(f, "True"),
@@ -342,6 +311,7 @@ impl Display for DataType {
             DataType::Choices(inner_types) => {
                 let mut inner_types_str = String::new();
                 for inner_type in inner_types {
+                    let inner_type = inner_type.value.data_type.to_owned();
                     inner_types_str.push_str(&format!("{inner_type}"));
                 }
                 write!(f, "Choices({inner_types_str})")

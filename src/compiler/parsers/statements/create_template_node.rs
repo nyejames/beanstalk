@@ -1,5 +1,3 @@
-
-
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::build_ast::ScopeContext;
@@ -136,7 +134,7 @@ impl Template {
                     }
                 }
 
-                TokenKind::RawStringLiteral(content) | TokenKind::StringLiteral(content) => {
+                TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
                     template.content.add(
                         Expression::string(content.to_string(), token_stream.current_location()),
                         is_after_slot,
@@ -298,7 +296,7 @@ impl Template {
         // template content
         for value in self.content.flatten() {
             match &value.kind {
-                ExpressionKind::String(string) => {
+                ExpressionKind::StringSlice(string) => {
                     final_string.push_str(string);
                 }
 
@@ -443,7 +441,7 @@ pub fn parse_template_head(
                     }
 
                     // Constant inherited
-                    Some(ExpressionKind::String(string)) => {
+                    Some(ExpressionKind::StringSlice(string)) => {
                         template.content.before.push(Expression::string(
                             string.to_owned(),
                             token_stream.current_location(),
@@ -499,7 +497,7 @@ pub fn parse_template_head(
             TokenKind::FloatLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::IntLiteral(_)
-            | TokenKind::StringLiteral(_)
+            | TokenKind::StringSliceLiteral(_)
             | TokenKind::RawStringLiteral(_) => {
                 let expr = create_expression(
                     token_stream,

@@ -1,11 +1,13 @@
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::{HostFunctionDef, HostFunctionRegistry};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler::parsers::statements::structs::parse_multiple_args;
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
@@ -13,170 +15,191 @@ use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 // Arg names and types are required
 // Can have default values
-pub fn create_function_signature(
-    token_stream: &mut TokenContext,
-    pure: &mut bool,
-    context: &ScopeContext,
-) -> Result<(Vec<Arg>, Vec<DataType>), CompileError> {
-    let args = create_arg_constructor(token_stream, &context.new_parameters(), pure)?;
+pub struct FunctionSignature {
+    pub args: Vec<Arg>,
+    pub returns: Vec<Arg>,
+}
 
-    match token_stream.current_token_kind() {
-        TokenKind::Arrow => {}
-
-        // Function does not return anything
-        TokenKind::Colon => {
-            token_stream.advance();
-            return Ok((args, Vec::new()));
-        }
-
-        _ => {
-            return_syntax_error!(
-                token_stream.current_location(),
-                "Expected an arrow operator or colon after function arguments",
-            )
-        }
-    }
-
-    // Parse return types
-    let mut return_types: Vec<DataType> = Vec::new();
-    let mut next_in_list: bool = true;
-    let mut mutable: bool = false;
-
-    while token_stream.index < token_stream.length {
-        token_stream.advance();
+impl FunctionSignature {
+    pub fn new(
+        token_stream: &mut TokenContext,
+        pure: &mut bool,
+        context: &ScopeContext,
+    ) -> Result<Self, CompileError> {
+        let args = create_arg_constructor(token_stream, context.new_parameters(), pure)?;
 
         match token_stream.current_token_kind() {
-            TokenKind::Mutable => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
+            TokenKind::Arrow => {}
 
-                mutable = true;
-            }
-
-            TokenKind::DatatypeInt => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
-                return_types.push(DataType::Int(if mutable {
-                    Ownership::MutableOwned(false)
-                } else {
-                    Ownership::ImmutableOwned(false)
-                }));
-            }
-            TokenKind::DatatypeFloat => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
-                return_types.push(DataType::Float(if mutable {
-                    Ownership::MutableOwned(false)
-                } else {
-                    Ownership::ImmutableOwned(false)
-                }));
-            }
-            TokenKind::DatatypeBool => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
-                return_types.push(DataType::Bool(if mutable {
-                    Ownership::MutableOwned(false)
-                } else {
-                    Ownership::ImmutableOwned(false)
-                }));
-            }
-            TokenKind::DatatypeString => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
-                return_types.push(DataType::String(if mutable {
-                    Ownership::MutableOwned(false)
-                } else {
-                    Ownership::ImmutableOwned(false)
-                }));
-            }
-            TokenKind::DatatypeStyle => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
-                return_types.push(DataType::Template(if mutable {
-                    Ownership::MutableOwned(false)
-                } else {
-                    Ownership::ImmutableOwned(false)
-                }));
-            }
-
-            TokenKind::Symbol(name) => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate return types",
-                    )
-                }
-
-                // Search through declarations for any data types
-                // Also search through the function parameters,
-                // as the function can return references to those parameters.
-                if let Some(possible_type) = context.get_reference(name) {
-                    // Make sure this is actually a type (Args)
-                    if matches!(possible_type.value.data_type, DataType::Args(..)) {
-                        return_types.push(possible_type.value.data_type.to_owned());
-                    }
-                } else if let Some(possible_type) = args.get_reference(name) {
-                    // TODO:
-                    // Function return signature may need to be completely refactors to
-                    // A Vec<Arg> or a unique struct. This is so it can return references to specific parameters
-                    // And also accommodate the syntax sugar for returning Errors and Options
-                    return_types.push(possible_type.value.data_type.to_owned());
-                }
-            }
-
+            // Function does not return anything
             TokenKind::Colon => {
                 token_stream.advance();
-                return Ok((args, return_types));
-            }
-
-            TokenKind::Comma => {
-                if next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should not have a comma at the end of the return types",
-                    )
-                }
-
-                next_in_list = true;
+                return Ok(FunctionSignature {
+                    args,
+                    returns: Vec::new(),
+                });
             }
 
             _ => {
                 return_syntax_error!(
                     token_stream.current_location(),
-                    "Expected a type keyword after the arrow operator",
+                    "Expected an arrow operator or colon after function arguments",
                 )
             }
         }
-    }
 
-    return_syntax_error!(
-        token_stream.current_location(),
-        "Expected a colon after the return types",
-    )
+        // Parse return types
+        let mut returns: Vec<Arg> = Vec::new();
+        let mut next_in_list: bool = true;
+        let mut mutable: bool = false;
+
+        while token_stream.index < token_stream.length {
+            token_stream.advance();
+
+            match token_stream.current_token_kind() {
+                TokenKind::Mutable => {
+                    if !next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should have a comma to separate return types",
+                        )
+                    }
+
+                    mutable = true;
+                }
+
+                TokenKind::DatatypeInt => {
+                    if !next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should have a comma to separate return types",
+                        )
+                    }
+                    returns.push(Arg {
+                        name: returns.len().to_string(),
+                        value: Expression::int(
+                            0,
+                            token_stream.current_location(),
+                            if mutable {
+                                Ownership::MutableOwned
+                            } else {
+                                ImmutableOwned
+                            },
+                        ),
+                    });
+                }
+                TokenKind::DatatypeFloat => {
+                    if !next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should have a comma to separate return types",
+                        )
+                    }
+                    returns.push(Arg {
+                        name: returns.len().to_string(),
+                        value: Expression::float(
+                            0.0,
+                            token_stream.current_location(),
+                            if mutable {
+                                Ownership::MutableOwned
+                            } else {
+                                ImmutableOwned
+                            },
+                        ),
+                    });
+                }
+                TokenKind::DatatypeBool => {
+                    if !next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should have a comma to separate return types",
+                        )
+                    }
+                    returns.push(Arg {
+                        name: returns.len().to_string(),
+                        value: Expression::bool(
+                            false,
+                            token_stream.current_location(),
+                            if mutable {
+                                Ownership::MutableOwned
+                            } else {
+                                ImmutableOwned
+                            },
+                        ),
+                    });
+                }
+                TokenKind::DatatypeString => {
+                    if !next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should have a comma to separate return types",
+                        )
+                    }
+                    returns.push(Arg {
+                        name: returns.len().to_string(),
+                        value: Expression::string(
+                            "".to_string(),
+                            token_stream.current_location(),
+                            if mutable {
+                                Ownership::MutableOwned
+                            } else {
+                                ImmutableOwned
+                            },
+                        ),
+                    });
+                }
+
+                TokenKind::Symbol(name) => {
+                    if !next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should have a comma to separate return types",
+                        )
+                    }
+
+                    // Search through declarations for any data types
+                    // Also search through the function parameters,
+                    // as the function can return references to those parameters.
+                    if let Some(possible_type) = context.get_reference(name) {
+                        // Make sure this is actually a struct (Args)
+                        if matches!(possible_type.value.data_type, DataType::Args(..)) {
+                            returns.push(possible_type.to_owned());
+                        }
+                    } else if let Some(reference_return) = args.get_reference(name) {
+                        returns.push(reference_return.to_owned());
+                    }
+                }
+
+                TokenKind::Colon => {
+                    token_stream.advance();
+                    return Ok(FunctionSignature { args, returns });
+                }
+
+                TokenKind::Comma => {
+                    if next_in_list {
+                        return_syntax_error!(
+                            token_stream.current_location(),
+                            "Should not have a comma at the end of the return types",
+                        )
+                    }
+
+                    next_in_list = true;
+                }
+
+                _ => {
+                    return_syntax_error!(
+                        token_stream.current_location(),
+                        "Expected a type keyword after the arrow operator",
+                    )
+                }
+            }
+        }
+
+        return_syntax_error!(
+            token_stream.current_location(),
+            "Expected a colon after the return types",
+        )
+    }
 }
 
 // For Function Calls or new instances of a predefined struct type (basically like a struct)
@@ -454,7 +477,7 @@ pub fn validate_host_function_call(
         }
 
         // Check mutability requirements
-        if param.value.data_type.is_mutable() && !arg.data_type.is_mutable() {
+        if param.value.ownership.is_mutable() && !arg.ownership.is_mutable() {
             return_type_error!(
                 location.clone(),
                 "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
@@ -472,43 +495,53 @@ pub fn validate_host_function_call(
 /// Format a DataType for user-friendly error messages
 fn format_type_for_error(data_type: &DataType) -> String {
     match data_type {
-        DataType::String(_) => "String".to_string(),
-        DataType::Int(_) => "Int".to_string(),
-        DataType::Float(_) => "Float".to_string(),
-        DataType::Bool(_) => "Bool".to_string(),
-        DataType::Template(_) => "Template".to_string(),
-        DataType::Function(_, _) => "Function".to_string(),
-        DataType::Args(_) => "Args".to_string(),
+        DataType::String => "String".to_string(),
+        DataType::Int => "Int".to_string(),
+        DataType::Float => "Float".to_string(),
+        DataType::Bool => "Bool".to_string(),
+        DataType::Template => "Template".to_string(),
+        DataType::Function(..) => "Function".to_string(),
+        DataType::Args(..) => "Args".to_string(),
         DataType::Choices(types) => {
-            let type_names: Vec<String> = types.iter().map(format_type_for_error).collect();
+            let type_names: Vec<String> = types
+                .iter()
+                .map(|t| format_type_for_error(&t.value.data_type))
+                .collect();
             format!("({})", type_names.join(" | "))
         }
-        DataType::Inferred(_) => "Inferred".to_string(),
+        DataType::Inferred => "Inferred".to_string(),
         DataType::Range => "Range".to_string(),
         DataType::None => "None".to_string(),
         DataType::True => "True".to_string(),
         DataType::False => "False".to_string(),
-        DataType::CoerceToString(_) => "String".to_string(),
-        DataType::Decimal(_) => "Decimal".to_string(),
+        DataType::CoerceToString => "String".to_string(),
+        DataType::Decimal => "Decimal".to_string(),
         DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
-        DataType::Struct(_, _) => "Struct".to_string(),
+        DataType::Struct(..) => "Struct".to_string(),
         DataType::Option(inner) => format!("Option<{}>", format_type_for_error(inner)),
+        DataType::Reference(data_type, ownership) => {
+            format!(
+                "{} {} Reference",
+                format_type_for_error(data_type),
+                ownership.as_string()
+            )
+        }
     }
 }
 
 /// Provide helpful hints for type conversion
 fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String {
     match (from_type, to_type) {
-        (DataType::Int(_), DataType::String(_)) => {
+        (DataType::Int, DataType::String) => {
             "Try converting the integer to a string first".to_string()
         }
-        (DataType::Float(_), DataType::String(_)) => {
+        (DataType::Float, DataType::String) => {
             "Try converting the float to a string first".to_string()
         }
-        (DataType::Bool(_), DataType::String(_)) => {
+        (DataType::Bool, DataType::String) => {
             "Try converting the boolean to a string first".to_string()
         }
-        (DataType::String(_), DataType::Int(_)) => {
+        (DataType::String, DataType::Int) => {
             "Try parsing the string as an integer first".to_string()
         }
         _ => "Check the function documentation for the expected argument types".to_string(),
@@ -522,29 +555,21 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
     // more complex type relationships, ownership, mutability, etc.
     match (arg_type, param_type) {
         // Exact type matches
-        (DataType::String(_), DataType::String(_)) => true,
-        (DataType::Int(_), DataType::Int(_)) => true,
-        (DataType::Float(_), DataType::Float(_)) => true,
-        (DataType::Bool(_), DataType::Bool(_)) => true,
-        (DataType::Template(_), DataType::Template(_)) => true,
+        (DataType::String, DataType::String) => true,
+        (DataType::Int, DataType::Int) => true,
+        (DataType::Float, DataType::Float) => true,
+        (DataType::Bool, DataType::Bool) => true,
+        (DataType::Template, DataType::Template) => true,
 
         // Handle inferred types - they should be compatible with their target
-        (DataType::Inferred(_), _target) | (_target, DataType::Inferred(_)) => {
+        (DataType::Inferred, _target) | (_target, DataType::Inferred) => {
             // For now, assume inferred types are compatible
-            // In a full implementation, this would check the inferred type
+            // In a full implementation; this would check the inferred type
             true
         }
 
-        // Handle choice types - check if any choice matches
-        (DataType::Choices(choices), target) => choices
-            .iter()
-            .any(|choice| types_compatible(choice, target)),
-        (source, DataType::Choices(choices)) => choices
-            .iter()
-            .any(|choice| types_compatible(source, choice)),
-
         // Numeric type promotions (if we want to allow them)
-        // (DataType::Int(_), DataType::Float(_)) => true,  // Int can be promoted to Float
+        // (DataType::Int, DataType::Float) => true,  // Int can be promoted to Float
 
         // All other combinations are incompatible
         _ => false,
@@ -588,12 +613,7 @@ pub fn parse_host_function_arguments(
         token_stream.advance();
         Ok(Vec::new())
     } else {
-        let required_argument_types = host_func
-            .parameters
-            .iter()
-            .map(|param| param.value.data_type.clone())
-            .collect::<Vec<DataType>>();
-
+        let required_argument_types = host_func.parameters.to_owned();
         let call_context = context.new_child_expression(required_argument_types);
 
         let args = create_multiple_expressions(token_stream, &call_context, false)?;
@@ -619,7 +639,7 @@ pub fn parse_function_call(
     name: &str,
     context: &ScopeContext,
     required_arguments: &[Arg],
-    returned_types: &[DataType],
+    returned_types: &[Arg],
 ) -> Result<AstNode, CompileError> {
     // Assumes starting at the first token after the name of the function call
 
@@ -672,7 +692,7 @@ pub fn create_function_call_arguments<'a>(
     token_stream: &mut TokenContext,
     required_arguments: &[Arg],
     context: &ScopeContext,
-) -> Result<Vec<Expression>, CompileError> {
+) -> Result<Vec<Arg>, CompileError> {
     // Starts at the first token after the function name
     ast_log!("Creating function call arguments");
 
@@ -699,25 +719,23 @@ pub fn create_function_call_arguments<'a>(
 
         Ok(Vec::new())
     } else {
-        let required_argument_types = required_arguments
-            .iter()
-            .map(|arg| arg.value.data_type.to_owned())
-            .collect::<Vec<DataType>>();
-
+        let required_argument_types = required_arguments.to_owned();
         let call_context = context.new_child_expression(required_argument_types.to_owned());
 
-        create_multiple_expressions(token_stream, &call_context, false)
+        parse_multiple_args(
+            token_stream,
+            call_context,
+            &TokenKind::CloseParenthesis,
+            &mut false,
+        )
     }
 }
 
 fn create_arg_constructor(
     token_stream: &mut TokenContext,
-    context: &ScopeContext,
+    context: ScopeContext,
     pure: &mut bool,
 ) -> Result<Vec<Arg>, CompileError> {
-    let mut args = Vec::<Arg>::new();
-    let mut next_in_list: bool = true;
-
     if token_stream.current_token_kind() != &TokenKind::FuncParameterBracket {
         return_syntax_error!(
             token_stream.current_location(),
@@ -727,47 +745,10 @@ fn create_arg_constructor(
 
     token_stream.advance();
 
-    while token_stream.index < token_stream.tokens.len() {
-        match token_stream.current_token_kind().to_owned() {
-            TokenKind::FuncParameterBracket => {
-                token_stream.advance();
-                return Ok(args);
-            }
-
-            TokenKind::Symbol(arg_name, ..) => {
-                if !next_in_list {
-                    return_syntax_error!(
-                        token_stream.current_location(),
-                        "Should have a comma to separate arguments",
-                    )
-                }
-
-                // Create a new variable
-                let argument = new_arg(token_stream, &arg_name, context)?;
-
-                if argument.value.data_type.is_mutable() {
-                    *pure = false;
-                }
-
-                args.push(argument);
-
-                next_in_list = false;
-            }
-
-            TokenKind::Comma => {
-                token_stream.advance();
-                next_in_list = true;
-            }
-
-            _ => {
-                return_syntax_error!(
-                    token_stream.current_location(),
-                    "Unexpected token used in function arguments: {:?}",
-                    token_stream.current_token_kind()
-                )
-            }
-        }
-    }
-
-    Ok(args)
+    parse_multiple_args(
+        token_stream,
+        context,
+        &TokenKind::FuncParameterBracket,
+        pure,
+    )
 }
