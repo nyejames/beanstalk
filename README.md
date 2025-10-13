@@ -6,10 +6,6 @@
     <strong>A simple, safe, statically typed programming language for building WebAssembly modules and web apps.</strong>
   </p>
 
-  <p><em>
-    A free and open source project
-  </em></p>
-
   <br>
 
   ---
@@ -51,11 +47,9 @@
 # Overview / Goals
 Beanstalk is a statically typed, borrow checker language that compiles to Wasm and aims to provide all the glue code, runtimes and scaffolding for your Wasm project.
 
-The build system provides easy project structures and bindings to Wasmer to run this Wasm natively or just use the modules directly on static web pages.
-
 It is inspired by Go, Rust, Lua and bits of many other languages. You can think of some of its core design like a much simpler Rust with its own minimal syntax.
 
-The goal is to also be lightweight, purpose built Wasm language. This means each project will be specifically tailored to producing all the files and glue code you need. 
+The goal is to also be lightweight, purpose built Wasm language. This means each project will be specifically tailored to producing all the files and glue code you need for creating an app or web page.
 
 **Design Goals**
 - Minimal, clean syntax with very powerful string templates that are perfect for generating text content / HTML / typesetting or other tree based string structures.
