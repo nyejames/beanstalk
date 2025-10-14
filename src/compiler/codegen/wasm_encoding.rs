@@ -27,6 +27,7 @@
 //! ```
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::datatypes::DataType;
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::host_functions::wasix_registry::{
     WasixFunctionDef, WasixFunctionRegistry, create_wasix_registry,
@@ -299,29 +300,7 @@ impl EnhancedFunctionBuilder {
         } else {
             // Function with return types - add default values and return
             for result_type in &self.result_types {
-                match result_type {
-                    ValType::I32 => {
-                        self.function.instruction(&Instruction::I32Const(0));
-                    }
-                    ValType::I64 => {
-                        self.function.instruction(&Instruction::I64Const(0));
-                    }
-                    ValType::F32 => {
-                        self.function
-                            .instruction(&Instruction::F32Const(0.0.into()));
-                    }
-                    ValType::F64 => {
-                        self.function
-                            .instruction(&Instruction::F64Const(0.0.into()));
-                    }
-                    _ => {
-                        return_compiler_error!(
-                            "Unsupported return type for automatic termination in function '{}': {:?}",
-                            self.function_name,
-                            result_type
-                        );
-                    }
-                }
+                WasmModule::emit_default_value_for_type(&mut self.function, *result_type);
             }
             self.function.instruction(&Instruction::Return);
         }
@@ -824,16 +803,9 @@ impl LocalAnalyzer {
         local_map
     }
 
-    /// Convert WasmType to ValType for wasm_encoder
+    /// Convert WasmType to ValType for wasm_encoder - uses unified conversion
     fn wasm_type_to_val_type(&self, wasm_type: &WasmType) -> ValType {
-        match wasm_type {
-            WasmType::I32 => ValType::I32,
-            WasmType::I64 => ValType::I64,
-            WasmType::F32 => ValType::F32,
-            WasmType::F64 => ValType::F64,
-            WasmType::ExternRef => ValType::Ref(RefType::EXTERNREF),
-            WasmType::FuncRef => ValType::Ref(RefType::FUNCREF),
-        }
+        WasmModule::unified_wasm_type_to_val_type(wasm_type)
     }
 
     /// Get statistics about local variable usage
@@ -896,6 +868,9 @@ pub struct WasmModule {
 
     // Source location tracking for error reporting
     function_source_map: HashMap<u32, FunctionSourceInfo>,
+    
+    // Enhanced function metadata for named returns and references
+    function_metadata: HashMap<String, FunctionMetadata>,
 
     // Internal state
     pub function_count: u32,
@@ -918,9 +893,226 @@ pub struct FunctionSourceInfo {
     pub instruction_locations: Vec<SourceLocationInfo>,
 }
 
+/// Enhanced function metadata for named returns and references
+#[derive(Debug, Clone)]
+pub struct FunctionMetadata {
+    /// Function name
+    pub name: String,
+    /// Information about return parameters
+    pub return_parameters: Vec<ReturnParameterInfo>,
+}
+
+/// Information about a return parameter
+#[derive(Debug, Clone)]
+pub struct ReturnParameterInfo {
+    /// Index in the return tuple
+    pub index: usize,
+    /// Parameter name (if named)
+    pub name: String,
+    /// Original data type
+    pub data_type: DataType,
+    /// Whether this is a reference type
+    pub is_reference: bool,
+}
+
 impl Default for WasmModule {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+// Unified type conversion utilities
+impl WasmModule {
+    /// Unified DataType to WasmType conversion - consolidates duplicate conversion logic
+    pub fn unified_datatype_to_wasm_type(data_type: &DataType) -> Result<WasmType, CompileError> {
+        match data_type {
+            DataType::Int => Ok(WasmType::I32),
+            DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
+            DataType::Bool => Ok(WasmType::I32),
+            DataType::String => Ok(WasmType::I32), // String pointer
+            DataType::Collection(_, _) => Ok(WasmType::I32), // Collection pointer
+            DataType::Function(_, _) => Ok(WasmType::FuncRef),
+            DataType::Inferred => Ok(WasmType::I32), // Default to i32 for unresolved types
+            DataType::None => Ok(WasmType::I32),
+            DataType::True | DataType::False => Ok(WasmType::I32), // Booleans as i32
+            DataType::Decimal => Ok(WasmType::F64), // Decimals as f64
+            DataType::Template => Ok(WasmType::I32), // Template pointer
+            DataType::Range => Ok(WasmType::I32), // Range pointer
+            DataType::CoerceToString => Ok(WasmType::I32), // String pointer
+            DataType::Args(_) | DataType::Struct(_, _) => Ok(WasmType::I32), // Struct pointer
+            DataType::Choices(_) => Ok(WasmType::I32), // Union pointer
+            DataType::Option(_) => Ok(WasmType::I32), // Option pointer
+            DataType::Reference(inner_type, _) => {
+                // References have the same WASM type as their inner type
+                Self::unified_datatype_to_wasm_type(inner_type)
+            }
+        }
+    }
+
+    /// Unified WasmType to ValType conversion - consolidates duplicate conversion logic
+    pub fn unified_wasm_type_to_val_type(wasm_type: &WasmType) -> ValType {
+        match wasm_type {
+            WasmType::I32 => ValType::I32,
+            WasmType::I64 => ValType::I64,
+            WasmType::F32 => ValType::F32,
+            WasmType::F64 => ValType::F64,
+            WasmType::ExternRef => ValType::Ref(RefType::EXTERNREF),
+            WasmType::FuncRef => ValType::Ref(RefType::FUNCREF),
+        }
+    }
+
+    /// Get WASM type size in bytes - consolidates size calculation logic
+    pub fn get_wasm_type_size(wasm_type: &WasmType) -> u32 {
+        match wasm_type {
+            WasmType::I32 | WasmType::F32 => 4,
+            WasmType::I64 | WasmType::F64 => 8,
+            WasmType::ExternRef | WasmType::FuncRef => 4, // Pointer size
+        }
+    }
+
+    /// Get WASM type alignment - consolidates alignment calculation logic
+    pub fn get_wasm_type_alignment(wasm_type: &WasmType) -> u32 {
+        match wasm_type {
+            WasmType::I32 | WasmType::F32 => 4,
+            WasmType::I64 | WasmType::F64 => 8,
+            WasmType::ExternRef | WasmType::FuncRef => 4, // Pointer alignment
+        }
+    }
+
+    /// Check if WASM type is a numeric type - consolidates type checking logic
+    pub fn is_numeric_type(wasm_type: &WasmType) -> bool {
+        matches!(wasm_type, WasmType::I32 | WasmType::I64 | WasmType::F32 | WasmType::F64)
+    }
+
+    /// Check if WASM type is a reference type - consolidates type checking logic
+    pub fn is_reference_type(wasm_type: &WasmType) -> bool {
+        matches!(wasm_type, WasmType::ExternRef | WasmType::FuncRef)
+    }
+}
+
+// Helper functions for common WASM instruction generation patterns
+impl WasmModule {
+    /// Generate I32 constant instruction - consolidates duplicate I32Const patterns
+    fn emit_i32_const(function: &mut Function, value: i32) {
+        function.instruction(&Instruction::I32Const(value));
+    }
+
+    /// Generate I64 constant instruction
+    fn emit_i64_const(function: &mut Function, value: i64) {
+        function.instruction(&Instruction::I64Const(value));
+    }
+
+    /// Generate F32 constant instruction
+    fn emit_f32_const(function: &mut Function, value: f32) {
+        function.instruction(&Instruction::F32Const(value.into()));
+    }
+
+    /// Generate F64 constant instruction
+    fn emit_f64_const(function: &mut Function, value: f64) {
+        function.instruction(&Instruction::F64Const(value.into()));
+    }
+
+    /// Generate memory offset calculation - consolidates duplicate offset + add patterns
+    fn emit_memory_offset(function: &mut Function, offset: u32) {
+        if offset > 0 {
+            Self::emit_i32_const(function, offset as i32);
+            function.instruction(&Instruction::I32Add);
+        }
+    }
+
+    /// Generate array index calculation - consolidates duplicate index * element_size patterns
+    fn emit_array_index_calculation(
+        &mut self,
+        function: &mut Function,
+        index_place: &Place,
+        element_size: u32,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Load index value
+        self.lower_place_access(index_place, function, local_map)?;
+        // Multiply by element size
+        Self::emit_i32_const(function, element_size as i32);
+        function.instruction(&Instruction::I32Mul);
+        // Add to base address (base should already be on stack)
+        function.instruction(&Instruction::I32Add);
+        Ok(())
+    }
+
+    /// Generate default value for WASM type - consolidates duplicate default value patterns
+    fn emit_default_value_for_type(function: &mut Function, val_type: ValType) {
+        match val_type {
+            ValType::I32 => Self::emit_i32_const(function, 0),
+            ValType::I64 => Self::emit_i64_const(function, 0),
+            ValType::F32 => Self::emit_f32_const(function, 0.0),
+            ValType::F64 => Self::emit_f64_const(function, 0.0),
+            _ => Self::emit_i32_const(function, 0), // Default to i32 for other types
+        }
+    }
+
+    /// Generate memory load instruction with proper alignment
+    fn emit_memory_load(function: &mut Function, wasm_type: &WasmType, offset: u32) {
+        let mem_arg = MemArg {
+            offset: offset.into(),
+            align: Self::get_alignment_for_type(wasm_type),
+            memory_index: 0,
+        };
+
+        match wasm_type {
+            WasmType::I32 => {
+                function.instruction(&Instruction::I32Load(mem_arg));
+            }
+            WasmType::I64 => {
+                function.instruction(&Instruction::I64Load(mem_arg));
+            }
+            WasmType::F32 => {
+                function.instruction(&Instruction::F32Load(mem_arg));
+            }
+            WasmType::F64 => {
+                function.instruction(&Instruction::F64Load(mem_arg));
+            }
+            WasmType::ExternRef | WasmType::FuncRef => {
+                // References are stored as i32 pointers
+                function.instruction(&Instruction::I32Load(mem_arg));
+            }
+        }
+    }
+
+    /// Generate memory store instruction with proper alignment
+    fn emit_memory_store(function: &mut Function, wasm_type: &WasmType, offset: u32) {
+        let mem_arg = MemArg {
+            offset: offset.into(),
+            align: Self::get_alignment_for_type(wasm_type),
+            memory_index: 0,
+        };
+
+        match wasm_type {
+            WasmType::I32 => {
+                function.instruction(&Instruction::I32Store(mem_arg));
+            }
+            WasmType::I64 => {
+                function.instruction(&Instruction::I64Store(mem_arg));
+            }
+            WasmType::F32 => {
+                function.instruction(&Instruction::F32Store(mem_arg));
+            }
+            WasmType::F64 => {
+                function.instruction(&Instruction::F64Store(mem_arg));
+            }
+            WasmType::ExternRef | WasmType::FuncRef => {
+                // References are stored as i32 pointers
+                function.instruction(&Instruction::I32Store(mem_arg));
+            }
+        }
+    }
+
+    /// Get proper alignment for WASM type - uses unified alignment calculation
+    fn get_alignment_for_type(wasm_type: &WasmType) -> u32 {
+        // Convert byte alignment to power-of-2 for WASM MemArg
+        match Self::get_wasm_type_alignment(wasm_type) {
+            4 => 2, // 4-byte alignment (2^2)
+            8 => 3, // 8-byte alignment (2^3)
+            _ => 0, // 1-byte alignment (2^0)
+        }
     }
 }
 
@@ -942,6 +1134,7 @@ impl WasmModule {
             wasix_memory_manager:
                 crate::compiler::host_functions::wasix_registry::WasixMemoryManager::new(),
             function_source_map: HashMap::new(),
+            function_metadata: HashMap::new(),
             function_count: 0,
             type_count: 0,
             global_count: 0,
@@ -1278,8 +1471,43 @@ impl WasmModule {
         function_builder.finalize()
     }
 
+    /// Generate enhanced function metadata for named returns and references
+    fn generate_function_metadata(&self, wir_function: &WirFunction) -> FunctionMetadata {
+        let mut return_info = Vec::new();
+        
+        for (i, return_arg) in wir_function.return_args.iter().enumerate() {
+            return_info.push(ReturnParameterInfo {
+                index: i,
+                name: return_arg.name.clone(),
+                data_type: return_arg.value.data_type.clone(),
+                is_reference: self.is_datatype_reference(&return_arg.value.data_type),
+            });
+        }
+        
+        FunctionMetadata {
+            name: wir_function.name.clone(),
+            return_parameters: return_info,
+        }
+    }
+    
+    /// Check if a DataType represents a reference for WASM generation
+    fn is_datatype_reference(&self, data_type: &DataType) -> bool {
+        // For now, return false as reference types aren't fully implemented
+        // This would be enhanced when reference types are properly implemented
+        match data_type {
+            // Add reference type detection logic here
+            _ => false,
+        }
+    }
+
     /// Finalize function registration and add to module
     fn finalize_function_registration(&mut self, wir_function: &WirFunction, function: Function) {
+        // Generate enhanced metadata for named returns and references
+        let metadata = self.generate_function_metadata(wir_function);
+        
+        // Store metadata for debugging and error reporting
+        self.function_metadata.insert(wir_function.name.clone(), metadata);
+        
         // Store source information for error reporting
         let source_info = FunctionSourceInfo {
             function_name: wir_function.name.clone(),
@@ -2098,30 +2326,30 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         match constant {
             Constant::I32(value) => {
-                function.instruction(&Instruction::I32Const(*value));
+                Self::emit_i32_const(function, *value);
                 Ok(())
             }
             Constant::I64(value) => {
-                function.instruction(&Instruction::I64Const(*value));
+                Self::emit_i64_const(function, *value);
                 Ok(())
             }
             Constant::F32(value) => {
-                function.instruction(&Instruction::F32Const((*value).into()));
+                Self::emit_f32_const(function, *value);
                 Ok(())
             }
             Constant::F64(value) => {
-                function.instruction(&Instruction::F64Const((*value).into()));
+                Self::emit_f64_const(function, *value);
                 Ok(())
             }
             Constant::Bool(value) => {
                 // Booleans are represented as i32 in WASM (0 = false, 1 = true)
-                function.instruction(&Instruction::I32Const(if *value { 1 } else { 0 }));
+                Self::emit_i32_const(function, if *value { 1 } else { 0 });
                 Ok(())
             }
             Constant::String(value) => {
                 // String constants: pointer to string data in linear memory
                 let offset = self.string_manager.add_string_constant(value);
-                function.instruction(&Instruction::I32Const(offset as i32));
+                Self::emit_i32_const(function, offset as i32);
 
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!("WASM: string constant '{}' at offset {}", value, offset);
@@ -2130,22 +2358,22 @@ impl WasmModule {
             }
             Constant::Null => {
                 // Null pointer is 0 in linear memory
-                function.instruction(&Instruction::I32Const(0));
+                Self::emit_i32_const(function, 0);
                 Ok(())
             }
             Constant::Function(func_index) => {
                 // Function constant as WASM function index
-                function.instruction(&Instruction::I32Const(*func_index as i32));
+                Self::emit_i32_const(function, *func_index as i32);
                 Ok(())
             }
             Constant::MemoryOffset(offset) => {
                 // Memory offset constant for address calculations
-                function.instruction(&Instruction::I32Const(*offset as i32));
+                Self::emit_i32_const(function, *offset as i32);
                 Ok(())
             }
             Constant::TypeSize(size) => {
                 // Type size constant for memory operations
-                function.instruction(&Instruction::I32Const(*size as i32));
+                Self::emit_i32_const(function, *size as i32);
                 Ok(())
             }
         }
@@ -2255,10 +2483,7 @@ impl WasmModule {
                 self.lower_memory_base_address(base, function)?;
 
                 // Add offset if non-zero (1 instruction)
-                if offset.0 > 0 {
-                    function.instruction(&Instruction::I32Const(offset.0 as i32));
-                    function.instruction(&Instruction::I32Add);
-                }
+                Self::emit_memory_offset(function, offset.0);
 
                 // Generate type-appropriate load instruction (1 instruction)
                 self.generate_memory_load_instruction(size, function)?;
@@ -2352,7 +2577,7 @@ impl WasmModule {
         match base {
             MemoryBase::LinearMemory => {
                 // Linear memory starts at offset 0
-                function.instruction(&Instruction::I32Const(0));
+                Self::emit_i32_const(function, 0);
                 Ok(())
             }
             MemoryBase::Stack => {
@@ -2364,7 +2589,7 @@ impl WasmModule {
             MemoryBase::Heap { alloc_id, size: _ } => {
                 // Heap allocation - for now, use linear memory with allocation ID as offset
                 // Future enhancement: proper heap management with allocation tracking
-                function.instruction(&Instruction::I32Const(*alloc_id as i32 * 1024)); // Simple allocation strategy
+                Self::emit_i32_const(function, *alloc_id as i32 * 1024); // Simple allocation strategy
                 Ok(())
             }
         }
@@ -2384,8 +2609,7 @@ impl WasmModule {
                 size: _,
             } => {
                 // Field access: add field offset to base address
-                function.instruction(&Instruction::I32Const(offset.0 as i32));
-                function.instruction(&Instruction::I32Add);
+                Self::emit_memory_offset(function, offset.0);
                 Ok(())
             }
             ProjectionElem::Index {
@@ -2393,10 +2617,7 @@ impl WasmModule {
                 element_size,
             } => {
                 // Array indexing: base + (index * element_size)
-                self.lower_place_access(index, function, local_map)?;
-                function.instruction(&Instruction::I32Const(*element_size as i32));
-                function.instruction(&Instruction::I32Mul);
-                function.instruction(&Instruction::I32Add);
+                self.emit_array_index_calculation(function, index, *element_size, local_map)?;
                 Ok(())
             }
             ProjectionElem::Length => {
@@ -2410,8 +2631,7 @@ impl WasmModule {
             }
             ProjectionElem::Data => {
                 // Data pointer access - typically after length field
-                function.instruction(&Instruction::I32Const(4)); // Skip length field (4 bytes)
-                function.instruction(&Instruction::I32Add);
+                Self::emit_memory_offset(function, 4); // Skip length field (4 bytes)
                 Ok(())
             }
             ProjectionElem::Deref => {
@@ -2502,10 +2722,7 @@ impl WasmModule {
                 self.lower_memory_base_address(base, function)?;
 
                 // Add offset if non-zero (1 instruction)
-                if offset.0 > 0 {
-                    function.instruction(&Instruction::I32Const(offset.0 as i32));
-                    function.instruction(&Instruction::I32Add);
-                }
+                Self::emit_memory_offset(function, offset.0);
 
                 // Generate type-appropriate store instruction (1 instruction)
                 self.generate_memory_store_instruction(value_type, size, function)?;
@@ -3081,16 +3298,9 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Convert WasmType to wasm_encoder ValType
+    /// Convert WasmType to wasm_encoder ValType - uses unified conversion
     fn wasm_type_to_val_type(&self, wasm_type: &WasmType) -> ValType {
-        match wasm_type {
-            WasmType::I32 => ValType::I32,
-            WasmType::I64 => ValType::I64,
-            WasmType::F32 => ValType::F32,
-            WasmType::F64 => ValType::F64,
-            WasmType::ExternRef => ValType::Ref(RefType::EXTERNREF),
-            WasmType::FuncRef => ValType::Ref(RefType::FUNCREF),
-        }
+        Self::unified_wasm_type_to_val_type(wasm_type)
     }
 
     /// Compile a WIR function (alias for compile_function)
@@ -3192,7 +3402,7 @@ impl WasmModule {
         let mut param_types = Vec::new();
 
         for param in parameters {
-            let wasm_type = self.datatype_to_wasm_type(&param.value.data_type)?;
+            let wasm_type = Self::unified_datatype_to_wasm_type(&param.value.data_type)?;
             param_types.push(self.wasm_type_to_val_type(&wasm_type));
         }
 
@@ -3207,7 +3417,7 @@ impl WasmModule {
         let mut result_types = Vec::new();
 
         for return_type in return_types {
-            let wasm_type = self.datatype_to_wasm_type(return_type)?;
+            let wasm_type = Self::unified_datatype_to_wasm_type(return_type)?;
             result_types.push(self.wasm_type_to_val_type(&wasm_type));
         }
 
@@ -3483,23 +3693,23 @@ impl WasmModule {
         self.host_function_indices.len()
     }
 
-    /// Convert Beanstalk DataType to WasmType for host function signatures
+    /// Convert Beanstalk DataType to WasmType for host function signatures - uses unified conversion
     fn datatype_to_wasm_type(
         &self,
         data_type: &crate::compiler::datatypes::DataType,
     ) -> Result<WasmType, CompileError> {
         use crate::compiler::datatypes::DataType;
 
+        // Use unified conversion for most types
         match data_type {
-            DataType::Int => Ok(WasmType::I32),
-            DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
-            DataType::Bool => Ok(WasmType::I32),  // Booleans are represented as i32 in WASM
-            DataType::String => Ok(WasmType::I32), // Strings are pointers to linear memory
             DataType::None => {
                 // None types don't contribute to WASM signature
                 return_compiler_error!(
                     "None type should not appear in host function signatures. This indicates a problem with host function definition."
                 );
+            }
+            DataType::Int | DataType::Float | DataType::Bool | DataType::String => {
+                Self::unified_datatype_to_wasm_type(data_type)
             }
             _ => {
                 return_unimplemented_feature_error!(

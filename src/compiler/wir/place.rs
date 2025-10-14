@@ -459,28 +459,18 @@ impl Place {
 }
 
 impl WasmType {
-    /// Convert from Beanstalk DataType to WASM type
+    /// Convert from Beanstalk DataType to WASM type - uses unified conversion from codegen
     pub fn from_data_type(data_type: &DataType) -> Self {
-        match data_type {
-            DataType::Int => WasmType::I32,
-            DataType::Float => WasmType::F64, // Use f64 for Beanstalk floats
-            DataType::Bool => WasmType::I32,
-            DataType::String | DataType::Collection(_, _) => WasmType::I32, // Pointer to linear memory
-            DataType::Function(_, _) => WasmType::FuncRef,
-            DataType::Inferred => WasmType::I32, // Default to i32 for unresolved types
-            DataType::None => WasmType::I32,
-            // Handle all other DataType variants
-            _ => WasmType::I32, // Default to i32 for other types
+        // Use the unified conversion from WasmModule, but handle the Result
+        match crate::compiler::codegen::wasm_encoding::WasmModule::unified_datatype_to_wasm_type(data_type) {
+            Ok(wasm_type) => wasm_type,
+            Err(_) => WasmType::I32, // Default fallback for error cases
         }
     }
 
-    /// Get the byte size of this WASM type
+    /// Get the byte size of this WASM type - uses unified size calculation
     pub fn byte_size(&self) -> u32 {
-        match self {
-            WasmType::I32 | WasmType::F32 => 4,
-            WasmType::I64 | WasmType::F64 => 8,
-            WasmType::ExternRef | WasmType::FuncRef => 4, // Pointer size
-        }
+        crate::compiler::codegen::wasm_encoding::WasmModule::get_wasm_type_size(self)
     }
 
     /// Check if this type can be stored in WASM locals

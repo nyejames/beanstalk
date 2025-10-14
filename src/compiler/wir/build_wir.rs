@@ -754,7 +754,7 @@ impl WirTransformContext {
         &mut self,
         name: &str,
         parameters: &[crate::compiler::parsers::ast_nodes::Arg],
-        return_types: &[DataType],
+        return_types: &[crate::compiler::parsers::ast_nodes::Arg],
         body: &[AstNode],
     ) -> Result<FunctionInfo, CompileError> {
         let function_index = self.allocate_function_id();
@@ -785,7 +785,7 @@ impl WirTransformContext {
         // Convert return types to WASM types
         let wasm_return_types: Vec<crate::compiler::wir::place::WasmType> = return_types
             .iter()
-            .map(|dt| self.datatype_to_wasm_type(dt))
+            .map(|arg| self.datatype_to_wasm_type(&arg.value.data_type))
             .collect::<Result<Vec<_>, _>>()?;
 
         // Create WIR function
@@ -794,6 +794,7 @@ impl WirTransformContext {
             name.to_string(),
             wir_parameters.clone(),
             wasm_return_types,
+            return_types.to_vec(),
         );
 
         // Transform function body
@@ -840,7 +841,7 @@ impl WirTransformContext {
         Ok(FunctionInfo {
             name: name.to_string(),
             parameters: param_info,
-            return_type: return_types.first().cloned(), // For now, support single return type
+            return_type: return_types.first().map(|arg| arg.value.data_type.clone()), // For now, support single return type
             wasm_function_index: Some(function_index),
             wir_function,
         })
@@ -851,7 +852,7 @@ impl WirTransformContext {
         &mut self,
         name: &str,
         parameters: &[crate::compiler::parsers::ast_nodes::Arg],
-        return_types: &[DataType],
+        return_types: &[crate::compiler::parsers::ast_nodes::Arg],
         body: &crate::compiler::parsers::build_ast::AstBlock,
     ) -> Result<FunctionInfo, CompileError> {
         let function_index = self.allocate_function_id();
@@ -882,7 +883,7 @@ impl WirTransformContext {
         // Convert return types to WASM types
         let wasm_return_types: Vec<crate::compiler::wir::place::WasmType> = return_types
             .iter()
-            .map(|dt| self.datatype_to_wasm_type(dt))
+            .map(|arg| self.datatype_to_wasm_type(&arg.value.data_type))
             .collect::<Result<Vec<_>, _>>()?;
 
         // Create WIR function
@@ -891,6 +892,7 @@ impl WirTransformContext {
             name.to_string(),
             wir_parameters.clone(),
             wasm_return_types,
+            return_types.to_vec(),
         );
 
         // Transform function body
@@ -937,10 +939,52 @@ impl WirTransformContext {
         Ok(FunctionInfo {
             name: name.to_string(),
             parameters: param_info,
-            return_type: return_types.first().cloned(), // For now, support single return type
+            return_type: return_types.first().map(|arg| arg.value.data_type.clone()), // For now, support single return type
             wasm_function_index: Some(function_index),
             wir_function,
         })
+    }
+
+    /// Check if a DataType represents a reference type
+    fn is_reference_type(&self, data_type: &DataType) -> bool {
+        // For now, we'll implement basic reference detection
+        // This can be expanded based on how references are represented in the type system
+        match data_type {
+            // Add reference type detection logic here
+            // For now, return false as reference types aren't fully implemented yet
+            _ => false,
+        }
+    }
+
+    /// Track reference return lifetime for borrow checking
+    fn track_reference_return(
+        &mut self,
+        operand: &Operand,
+        return_arg: &crate::compiler::parsers::ast_nodes::Arg,
+        return_index: usize,
+    ) -> Result<(), CompileError> {
+        // For reference returns, we need to ensure the referenced data outlives the function call
+        // This is a placeholder implementation - full reference return tracking would involve:
+        // 1. Analyzing the operand to determine what it references
+        // 2. Ensuring the referenced data has appropriate lifetime
+        // 3. Creating proper loan tracking for the returned reference
+        
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => {
+                // For now, just validate that we're returning a valid place
+                // In a full implementation, we'd check lifetime constraints
+                println!("Tracking reference return {} for place: {:?}", return_index, place);
+            }
+            _ => {
+                // Constants and function references can't be returned as references
+                return_compiler_error!(
+                    "Cannot return constant or function reference as reference type for return parameter '{}'",
+                    return_arg.name
+                );
+            }
+        }
+        
+        Ok(())
     }
 
     /// Convert DataType to WasmType
@@ -948,20 +992,8 @@ impl WirTransformContext {
         &self,
         data_type: &DataType,
     ) -> Result<crate::compiler::wir::place::WasmType, CompileError> {
-        use crate::compiler::wir::place::WasmType;
-
-        match data_type {
-            DataType::Int => Ok(WasmType::I32),
-            DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
-            DataType::Bool => Ok(WasmType::I32),
-            DataType::String => Ok(WasmType::I32), // String pointer
-            _ => {
-                return_compiler_error!(
-                    "DataType {:?} not yet supported for WASM type conversion",
-                    data_type
-                );
-            }
-        }
+        // Use unified conversion from WasmModule
+        crate::compiler::codegen::wasm_encoding::WasmModule::unified_datatype_to_wasm_type(data_type)
     }
 }
 
@@ -1014,15 +1046,11 @@ pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
                 return_types,
             ) = &expression.kind
             {
-                // Extract DataTypes from return_types Args
-                let return_data_types: Vec<DataType> = return_types.iter()
-                    .map(|arg| arg.value.data_type.clone())
-                    .collect();
-                
+                // Pass Vec<Arg> directly for return types to support named returns
                 let function_info = context.transform_function_definition_from_expression(
                     name,
                     parameters,
-                    &return_data_types,
+                    return_types,
                     body,
                 )?;
                 defined_functions.push(function_info);
@@ -1047,6 +1075,7 @@ pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
             "main".to_string(),
             vec![], // No parameters
             vec![], // No return values for main
+            vec![], // No return args for main
         );
 
         wir.add_function(main_function);
@@ -1204,15 +1233,11 @@ fn ast_declaration_to_wir(
     ) = &expression.kind
     {
         // Transform function declaration
-        // Extract DataTypes from return_types Args
-        let return_data_types: Vec<DataType> = return_types.iter()
-            .map(|arg| arg.value.data_type.clone())
-            .collect();
-        
+        // Pass Vec<Arg> directly for return types to support named returns
         let _function_info = context.transform_function_definition_from_expression(
             name,
             parameters,
-            &return_data_types,
+            return_types,
             body,
         )?;
         // Function declarations don't generate statements in the current block

@@ -77,6 +77,7 @@ mod tests {
             "main".to_string(),
             vec![], // No parameters
             vec![], // No return values
+            vec![], // No return args
         );
 
         // Create a single block with just a return terminator
@@ -141,6 +142,7 @@ mod tests {
             "main".to_string(),
             vec![], // No parameters
             vec![], // No return values
+            vec![], // No return args
         );
 
         // Add a local variable
@@ -230,6 +232,7 @@ pub fn create_test_wir_function(name: &str) -> WirFunction {
         name.to_string(),
         vec![], // No parameters
         vec![], // No return values
+            vec![], // No return args
     );
 
     // Create a single block with just a return terminator

@@ -160,8 +160,10 @@ pub struct WirFunction {
     pub name: String,
     /// Parameter places
     pub parameters: Vec<Place>,
-    /// Return type information
+    /// Return type information (WASM types for code generation)
     pub return_types: Vec<WasmType>,
+    /// Return argument information (full Arg info for named returns and references)
+    pub return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>,
     /// Basic blocks
     pub blocks: Vec<WirBlock>,
     /// Local variable places
@@ -178,12 +180,13 @@ pub struct WirFunction {
 
 impl WirFunction {
     /// Create a new simplified WIR function
-    pub fn new(id: u32, name: String, parameters: Vec<Place>, return_types: Vec<WasmType>) -> Self {
+    pub fn new(id: u32, name: String, parameters: Vec<Place>, return_types: Vec<WasmType>, return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>) -> Self {
         Self {
             id,
             name,
             parameters: parameters.clone(),
             return_types: return_types.clone(),
+            return_args,
             blocks: Vec::new(),
             locals: HashMap::new(),
             signature: FunctionSignature {
