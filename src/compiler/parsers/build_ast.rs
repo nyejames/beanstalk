@@ -10,9 +10,7 @@ use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::branching::create_branch;
-use crate::compiler::parsers::statements::functions::{
-    parse_function_call, parse_function_call_with_registry,
-};
+use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
@@ -267,17 +265,6 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             TokenKind::Symbol(ref name) => {
-                // Check if this is a host function
-                if context.host_registry.has_function(name) {
-                    ast.push(parse_function_call_with_registry(
-                        token_stream,
-                        name,
-                        &context,
-                        &context.host_registry,
-                    )?);
-                    continue;
-                }
-
                 // Check if this has already been declared (is a reference)
                 if let Some(arg) = context.get_reference(name) {
                     // Then the associated mutation afterward.

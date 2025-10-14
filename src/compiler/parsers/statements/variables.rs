@@ -9,7 +9,7 @@ use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
     expressions::parse_expression::create_expression,
 };
-use crate::{return_rule_error, return_syntax_error};
+use crate::{ast_log, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
     token_stream: &mut TokenContext,
@@ -165,6 +165,7 @@ pub fn new_arg(
     };
 
     // Check for the assignment operator next
+    // If this is parameters or a struct, then we can instead break out with a comma or struct close bracket
     token_stream.advance();
 
     match token_stream.current_token_kind() {
@@ -184,6 +185,7 @@ pub fn new_arg(
         | TokenKind::FuncParameterBracket => {
             // If this is Parameters, then instead of a zero-value, we want to return None
             if context.kind == ContextKind::Parameters {
+                ast_log!("Created new parameter: '{}' of type: {}", name, data_type);
                 return Ok(Arg {
                     name: name.to_owned(),
                     value: Expression::none(),
@@ -217,6 +219,7 @@ pub fn new_arg(
         _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
     };
 
+    ast_log!("Created new variable: '{}' of type: {}", name, data_type);
     Ok(Arg {
         name: name.to_owned(),
         value: parsed_expr,

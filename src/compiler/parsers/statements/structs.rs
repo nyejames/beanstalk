@@ -37,7 +37,6 @@ pub fn parse_multiple_args(
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {
             token_kind if &token_kind == closing_token => {
-                token_stream.advance();
                 return Ok(args);
             }
 

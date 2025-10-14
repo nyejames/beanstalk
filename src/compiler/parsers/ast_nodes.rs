@@ -56,8 +56,8 @@ pub enum NodeKind {
     // Basics
     FunctionCall(
         String,
-        Vec<Arg>, // Arguments passed in (can be named - so using an Arg rather than expression)
-        Vec<Arg>, // Returns (can be named so using an Arg rather than just data type)
+        Vec<Expression>, // Arguments passed in (eventually will have a syntax for named arguments)
+        Vec<Arg>,        // Returns (can be named so using an Arg rather than just data type)
         TextLocation,
         // bool, // Function is pure
     ),
@@ -117,25 +117,17 @@ impl AstNode {
                 ))
             }
             NodeKind::HostFunctionCall(name, arguments, return_types, _, _, location) => {
-                let mut args_from_expr = Vec::new();
-                for (idx, arg) in arguments.iter().enumerate() {
-                    args_from_expr.push(Arg {
-                        name: idx.to_string(),
-                        value: arg.to_owned(),
-                    })
-                }
-
                 let mut return_types_from_expr = Vec::new();
-                for (idx, return_type) in return_types.iter().enumerate() {
+                for (idx, _return_type) in return_types.iter().enumerate() {
                     return_types_from_expr.push(Arg {
                         name: idx.to_string(),
-                        value: Expression::int(0, TextLocation::default(), Ownership::default()),
+                        value: Expression::int(0, location.to_owned(), Ownership::default()),
                     })
                 }
 
                 Ok(Expression::function_call(
                     name.to_owned(),
-                    args_from_expr,
+                    arguments.to_owned(),
                     return_types_from_expr,
                     location.to_owned(),
                 ))

@@ -181,7 +181,7 @@ impl Expression {
     // Function calls
     pub fn function_call(
         name: String,
-        args: Vec<Arg>,
+        args: Vec<Expression>,
         returns: Vec<Arg>,
         location: TextLocation,
     ) -> Self {
@@ -284,7 +284,7 @@ pub enum ExpressionKind {
 
     FunctionCall(
         String,   // Function name
-        Vec<Arg>, // Arguments
+        Vec<Expression>, // Arguments
     ),
 
     // Also equivalent to a String if it folds into a string

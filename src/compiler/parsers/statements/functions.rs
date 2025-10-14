@@ -2,16 +2,16 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::host_functions::registry::{HostFunctionDef, HostFunctionRegistry};
+use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::structs::parse_multiple_args;
 
+use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
+use crate::{ast_log, return_syntax_error, return_type_error};
 
 // Arg names and types are required
 // Can have default values
@@ -27,6 +27,9 @@ impl FunctionSignature {
         context: &ScopeContext,
     ) -> Result<Self, CompileError> {
         let args = create_arg_constructor(token_stream, context.new_parameters(), pure)?;
+
+        // Move past the closing struct bracket
+        token_stream.advance();
 
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}
@@ -355,143 +358,6 @@ impl FunctionSignature {
 //     Ok(sorted_values)
 // }
 
-/// Parse a function call, checking host function registry first
-pub fn parse_function_call_with_registry(
-    token_stream: &mut TokenContext,
-    name: &str,
-    context: &ScopeContext,
-    registry: &HostFunctionRegistry,
-) -> Result<AstNode, CompileError> {
-    // Check if it's a host function first
-    if let Some(host_func) = registry.get_function(name) {
-        return parse_host_function_call(token_stream, host_func, context);
-    }
-
-    // If not a host function, we need to look up the function in the context
-    if let Some(func_ref) = context.get_reference(name) {
-        if let DataType::Function(required_arguments, returned_types) = &func_ref.value.data_type {
-            return parse_function_call(
-                token_stream,
-                name,
-                context,
-                required_arguments,
-                returned_types,
-            );
-        }
-    }
-
-    return_rule_error!(
-        token_stream.current_location(),
-        "Function '{}' is not defined. Make sure the function is declared before calling it",
-        name
-    );
-}
-
-/// Parse a host function call
-pub fn parse_host_function_call(
-    token_stream: &mut TokenContext,
-    host_func: &HostFunctionDef,
-    context: &ScopeContext,
-) -> Result<AstNode, CompileError> {
-    let location = token_stream.current_location();
-
-    // Advance past the function name
-    token_stream.advance();
-
-    // Parse arguments using the same logic as regular function calls
-    let args = parse_host_function_arguments(token_stream, host_func, context)?;
-
-    // Validate the host function call
-    validate_host_function_call(host_func, &args, &location)?;
-
-    Ok(AstNode {
-        kind: NodeKind::HostFunctionCall(
-            host_func.name.clone(),
-            args,
-            host_func.return_types.clone(),
-            host_func.module.clone(),
-            host_func.import_name.clone(),
-            location.clone(),
-        ),
-        location,
-        scope: context.scope_name.to_owned(),
-    })
-}
-
-/// Validate a host function call against its signature
-pub fn validate_host_function_call(
-    function: &HostFunctionDef,
-    args: &[Expression],
-    location: &TextLocation,
-) -> Result<(), CompileError> {
-    // Check argument count
-    if args.len() != function.parameters.len() {
-        let expected = function.parameters.len();
-        let got = args.len();
-
-        if expected == 0 {
-            return_type_error!(
-                location.clone(),
-                "Function '{}' doesn't take any arguments, but {} {} provided. Did you mean to call it without parentheses?",
-                function.name,
-                got,
-                if got == 1 { "was" } else { "were" }
-            );
-        } else if got == 0 {
-            return_type_error!(
-                location.clone(),
-                "Function '{}' expects {} argument{}, but none were provided",
-                function.name,
-                expected,
-                if expected == 1 { "" } else { "s" }
-            );
-        } else {
-            return_type_error!(
-                location.clone(),
-                "Function '{}' expects {} argument{}, got {}. {}",
-                function.name,
-                expected,
-                if expected == 1 { "" } else { "s" },
-                got,
-                if got > expected {
-                    "Too many arguments provided"
-                } else {
-                    "Not enough arguments provided"
-                }
-            );
-        }
-    }
-
-    // Check argument types
-    for (i, (arg, param)) in args.iter().zip(&function.parameters).enumerate() {
-        if !types_compatible(&arg.data_type, &param.value.data_type) {
-            return_type_error!(
-                location.clone(),
-                "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
-                i + 1,
-                function.name,
-                format_type_for_error(&param.value.data_type),
-                format_type_for_error(&arg.data_type),
-                get_type_conversion_hint(&arg.data_type, &param.value.data_type)
-            );
-        }
-
-        // Check mutability requirements
-        if param.value.ownership.is_mutable() && !arg.ownership.is_mutable() {
-            return_type_error!(
-                location.clone(),
-                "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
-                i + 1,
-                function.name,
-                format_type_for_error(&arg.data_type),
-                format_type_for_error(&param.value.data_type).to_lowercase()
-            );
-        }
-    }
-
-    Ok(())
-}
-
 /// Format a DataType for user-friendly error messages
 fn format_type_for_error(data_type: &DataType) -> String {
     match data_type {
@@ -576,63 +442,6 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
     }
 }
 
-/// Parse arguments for a host function call
-pub fn parse_host_function_arguments(
-    token_stream: &mut TokenContext,
-    host_func: &HostFunctionDef,
-    context: &ScopeContext,
-) -> Result<Vec<Expression>, CompileError> {
-    ast_log!(
-        "Parsing host function call arguments for '{}'",
-        host_func.name
-    );
-
-    // Make sure there is an open parenthesis
-    if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
-        return_syntax_error!(
-            token_stream.current_location(),
-            "Expected a parenthesis after function call '{}'. Found '{:?}' instead.",
-            host_func.name,
-            token_stream.current_token_kind()
-        );
-    }
-
-    token_stream.advance();
-
-    if host_func.parameters.is_empty() {
-        // Make sure there is a closing parenthesis
-        if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-            return_syntax_error!(
-                token_stream.current_location(),
-                "Function '{}' does not accept any arguments, found '{:?}' instead",
-                host_func.name,
-                token_stream.current_token_kind()
-            );
-        }
-
-        token_stream.advance();
-        Ok(Vec::new())
-    } else {
-        let required_argument_types = host_func.parameters.to_owned();
-        let call_context = context.new_child_expression(required_argument_types);
-
-        let args = create_multiple_expressions(token_stream, &call_context, false)?;
-
-        // Make sure there is a closing parenthesis
-        if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-            return_syntax_error!(
-                token_stream.current_location(),
-                "Missing a closing parenthesis at the end of the function call '{}': found a '{:?}' instead",
-                host_func.name,
-                token_stream.current_token_kind()
-            );
-        }
-
-        token_stream.advance();
-        Ok(args)
-    }
-}
-
 // Built-in functions will do their own thing
 pub fn parse_function_call(
     token_stream: &mut TokenContext,
@@ -641,21 +450,14 @@ pub fn parse_function_call(
     required_arguments: &[Arg],
     returned_types: &[Arg],
 ) -> Result<AstNode, CompileError> {
-    // Assumes starting at the first token after the name of the function call
+    // Assumes we're starting at the first token after the name of the function call
+    // Check if it's a host function first
+    if let Some(host_func) = &context.host_registry.get_function(name) {
+        return parse_host_function_call(token_stream, host_func, context);
+    }
 
     // Create expressions until hitting a closed parenthesis
     let args = create_function_call_arguments(token_stream, required_arguments, context)?;
-
-    // Make sure there is a closing parenthesis
-    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-        return_syntax_error!(
-            token_stream.current_location(),
-            "Missing a closing parenthesis at the end of the function call: found a '{:?}' instead",
-            token_stream.current_token_kind()
-        )
-    }
-
-    token_stream.advance();
 
     // TODO
     // Makes sure the call value is correct for the function call
@@ -688,11 +490,11 @@ pub fn parse_function_call(
     })
 }
 
-pub fn create_function_call_arguments<'a>(
+pub fn create_function_call_arguments(
     token_stream: &mut TokenContext,
     required_arguments: &[Arg],
     context: &ScopeContext,
-) -> Result<Vec<Arg>, CompileError> {
+) -> Result<Vec<Expression>, CompileError> {
     // Starts at the first token after the function name
     ast_log!("Creating function call arguments");
 
@@ -722,12 +524,7 @@ pub fn create_function_call_arguments<'a>(
         let required_argument_types = required_arguments.to_owned();
         let call_context = context.new_child_expression(required_argument_types.to_owned());
 
-        parse_multiple_args(
-            token_stream,
-            call_context,
-            &TokenKind::CloseParenthesis,
-            &mut false,
-        )
+        create_multiple_expressions(token_stream, &call_context, true)
     }
 }
 
@@ -751,4 +548,106 @@ fn create_arg_constructor(
         &TokenKind::FuncParameterBracket,
         pure,
     )
+}
+
+/// Parse a host function call
+pub fn parse_host_function_call(
+    token_stream: &mut TokenContext,
+    host_func: &HostFunctionDef,
+    context: &ScopeContext,
+) -> Result<AstNode, CompileError> {
+    let location = token_stream.current_location();
+
+    // Parse arguments using the same logic as regular function calls
+    let args = create_function_call_arguments(token_stream, &host_func.parameters, context)?;
+
+    // Validate the host function call
+    validate_host_function_call(host_func, &args, &location)?;
+
+    Ok(AstNode {
+        kind: NodeKind::HostFunctionCall(
+            host_func.name.clone(),
+            args,
+            host_func.return_types.clone(),
+            host_func.module.clone(),
+            host_func.import_name.clone(),
+            location.clone(),
+        ),
+        location,
+        scope: context.scope_name.to_owned(),
+    })
+}
+
+/// Validate a host function call against its signature
+pub fn validate_host_function_call(
+    function: &HostFunctionDef,
+    args: &[Expression],
+    location: &TextLocation,
+) -> Result<(), CompileError> {
+    // Check argument count
+    if args.len() != function.parameters.len() {
+        let expected = function.parameters.len();
+        let got = args.len();
+
+        if expected == 0 {
+            return_type_error!(
+                location.clone(),
+                "Function '{}' doesn't take any arguments, but {} {} provided. Did you mean to call it without parentheses?",
+                function.name,
+                got,
+                if got == 1 { "was" } else { "were" }
+            );
+        } else if got == 0 {
+            return_type_error!(
+                location.clone(),
+                "Function '{}' expects {} argument{}, but none were provided",
+                function.name,
+                expected,
+                if expected == 1 { "" } else { "s" }
+            );
+        } else {
+            return_type_error!(
+                location.clone(),
+                "Function '{}' expects {} argument{}, got {}. {}",
+                function.name,
+                expected,
+                if expected == 1 { "" } else { "s" },
+                got,
+                if got > expected {
+                    "Too many arguments provided"
+                } else {
+                    "Not enough arguments provided"
+                }
+            );
+        }
+    }
+
+    // Check argument types
+    for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
+        if !types_compatible(&expression.data_type, &param.value.data_type) {
+            return_type_error!(
+                location.clone(),
+                "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
+                i + 1,
+                function.name,
+                format_type_for_error(&param.value.data_type),
+                format_type_for_error(&expression.data_type),
+                get_type_conversion_hint(&expression.data_type, &param.value.data_type)
+            );
+        }
+
+        // Check mutability requirements
+        if param.value.ownership.is_mutable() && !expression.ownership.is_mutable() {
+            return_type_error!(
+                location.clone(),
+                "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
+                i + 1,
+                function.name,
+                format_type_for_error(&expression.data_type),
+                format_type_for_error(&param.value.data_type).to_lowercase()
+            );
+        }
+    }
+
+    Ok(())
 }

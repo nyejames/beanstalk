@@ -310,23 +310,32 @@ impl StructInitializationTracker {
     }
 
     /// Register a struct instance with its type and required fields
-    pub fn register_struct(&mut self, place_id: String, struct_type: DataType) -> Result<(), String> {
+    pub fn register_struct(
+        &mut self,
+        place_id: String,
+        struct_type: DataType,
+    ) -> Result<(), String> {
         match &struct_type {
             DataType::Struct(fields, _) => {
                 let required_fields: Vec<String> = fields
                     .iter()
                     .filter(|field| {
                         // Fields with None values are optional, others are required
-                        !matches!(field.value.kind, crate::compiler::parsers::expressions::expression::ExpressionKind::None)
+                        !matches!(
+                            field.value.kind,
+                            crate::compiler::parsers::expressions::expression::ExpressionKind::None
+                        )
                     })
                     .map(|field| field.name.clone())
                     .collect();
 
-                self.struct_definitions.insert(place_id.clone(), (struct_type, required_fields));
-                self.initialized_fields.insert(place_id, std::collections::HashSet::new());
+                self.struct_definitions
+                    .insert(place_id.clone(), (struct_type, required_fields));
+                self.initialized_fields
+                    .insert(place_id, std::collections::HashSet::new());
                 Ok(())
             }
-            _ => Err(format!("Expected struct type, got {:?}", struct_type))
+            _ => Err(format!("Expected struct type, got {:?}", struct_type)),
         }
     }
 
@@ -368,7 +377,9 @@ impl StructInitializationTracker {
 
     /// Get struct type for a place
     pub fn get_struct_type(&self, place_id: &str) -> Option<&DataType> {
-        self.struct_definitions.get(place_id).map(|(struct_type, _)| struct_type)
+        self.struct_definitions
+            .get(place_id)
+            .map(|(struct_type, _)| struct_type)
     }
 
     /// Clear tracking for a struct (when it goes out of scope)
@@ -524,7 +535,12 @@ impl WirTransformContext {
     }
 
     /// Register a variable with mutability tracking
-    pub fn register_variable_with_mutability(&mut self, name: String, place: Place, is_mutable: bool) {
+    pub fn register_variable_with_mutability(
+        &mut self,
+        name: String,
+        place: Place,
+        is_mutable: bool,
+    ) {
         if let Some(current_scope) = self.variable_scopes.last_mut() {
             current_scope.insert(name.clone(), place);
             self.variable_mutability.insert(name, is_mutable);
@@ -771,7 +787,11 @@ impl WirTransformContext {
     }
 
     /// Register a struct instance for initialization tracking
-    pub fn register_struct_for_initialization(&mut self, place: &Place, struct_type: DataType) -> Result<(), CompileError> {
+    pub fn register_struct_for_initialization(
+        &mut self,
+        place: &Place,
+        struct_type: DataType,
+    ) -> Result<(), CompileError> {
         let place_id = self.get_place_identifier(place);
         self.struct_initialization_tracker
             .register_struct(place_id, struct_type)
@@ -781,25 +801,29 @@ impl WirTransformContext {
     /// Mark a struct field as initialized
     pub fn mark_struct_field_initialized(&mut self, place: &Place, field_name: &str) {
         let place_id = self.get_place_identifier(place);
-        self.struct_initialization_tracker.mark_field_initialized(&place_id, field_name);
+        self.struct_initialization_tracker
+            .mark_field_initialized(&place_id, field_name);
     }
 
     /// Check if a struct field is initialized
     pub fn is_struct_field_initialized(&self, place: &Place, field_name: &str) -> bool {
         let place_id = self.get_place_identifier(place);
-        self.struct_initialization_tracker.is_field_initialized(&place_id, field_name)
+        self.struct_initialization_tracker
+            .is_field_initialized(&place_id, field_name)
     }
 
     /// Get uninitialized required fields for a struct
     pub fn get_uninitialized_struct_fields(&self, place: &Place) -> Vec<String> {
         let place_id = self.get_place_identifier(place);
-        self.struct_initialization_tracker.get_uninitialized_required_fields(&place_id)
+        self.struct_initialization_tracker
+            .get_uninitialized_required_fields(&place_id)
     }
 
     /// Check if a struct is fully initialized
     pub fn is_struct_fully_initialized(&self, place: &Place) -> bool {
         let place_id = self.get_place_identifier(place);
-        self.struct_initialization_tracker.is_fully_initialized(&place_id)
+        self.struct_initialization_tracker
+            .is_fully_initialized(&place_id)
     }
 
     /// Get a unique identifier for a place (for tracking purposes)
@@ -920,7 +944,7 @@ impl WirTransformContext {
     ) -> Result<DataType, CompileError> {
         // Validate struct fields and create struct type
         let mut validated_fields = Vec::new();
-        
+
         for field in fields {
             // Ensure field has a name
             if field.name.is_empty() {
@@ -929,7 +953,7 @@ impl WirTransformContext {
                     location.clone(),
                 ));
             }
-            
+
             // Validate field type
             let field_type = &field.value.data_type;
             if matches!(field_type, DataType::Inferred) {
@@ -938,12 +962,15 @@ impl WirTransformContext {
                     location.clone(),
                 ));
             }
-            
+
             validated_fields.push(field.clone());
         }
-        
+
         // Create struct type with immutable ownership by default
-        Ok(DataType::Struct(validated_fields, crate::compiler::datatypes::Ownership::ImmutableOwned))
+        Ok(DataType::Struct(
+            validated_fields,
+            crate::compiler::datatypes::Ownership::ImmutableOwned,
+        ))
     }
 
     /// Create a struct instance place with proper memory layout
@@ -957,40 +984,44 @@ impl WirTransformContext {
                 // Calculate total struct size and field offsets
                 let mut total_size = 0u32;
                 let mut field_offsets = Vec::new();
-                
+
                 for field in fields {
                     // Align field to its natural alignment
                     let field_size = self.calculate_field_size(&field.value.data_type)?;
                     let field_alignment = self.calculate_field_alignment(&field.value.data_type);
-                    
+
                     // Align current offset
                     total_size = align_to_boundary(total_size, field_alignment);
                     field_offsets.push(total_size);
                     total_size += field_size;
                 }
-                
+
                 // Align total struct size to largest field alignment
-                let struct_alignment = fields.iter()
+                let struct_alignment = fields
+                    .iter()
                     .map(|f| self.calculate_field_alignment(&f.value.data_type))
                     .max()
                     .unwrap_or(4);
                 total_size = align_to_boundary(total_size, struct_alignment);
-                
+
                 // Allocate memory for the struct
-                let struct_place = self.place_manager.allocate_memory(total_size, struct_alignment);
-                
+                let struct_place = self
+                    .place_manager
+                    .allocate_memory(total_size, struct_alignment);
+
                 ir_log!(
                     "Created struct place with {} fields, total size: {} bytes, alignment: {}",
                     fields.len(),
                     total_size,
                     struct_alignment
                 );
-                
+
                 Ok(struct_place)
             }
-            _ => Err(CompileError::compiler_error(
-                &format!("Expected struct type, got {:?}", struct_type)
-            ))
+            _ => Err(CompileError::compiler_error(&format!(
+                "Expected struct type, got {:?}",
+                struct_type
+            ))),
         }
     }
 
@@ -1000,7 +1031,7 @@ impl WirTransformContext {
             DataType::Bool => Ok(1),
             DataType::Int => Ok(4),
             DataType::Float => Ok(4),
-            DataType::String => Ok(8), // Pointer + length
+            DataType::String => Ok(8),            // Pointer + length
             DataType::Collection(_, _) => Ok(12), // Pointer + length + capacity
             DataType::Struct(fields, _) => {
                 // Recursively calculate struct size
@@ -1011,9 +1042,10 @@ impl WirTransformContext {
                     total_size = align_to_boundary(total_size, field_alignment);
                     total_size += field_size;
                 }
-                
+
                 // Align to struct boundary
-                let struct_alignment = fields.iter()
+                let struct_alignment = fields
+                    .iter()
                     .map(|f| self.calculate_field_alignment(&f.value.data_type))
                     .max()
                     .unwrap_or(4);
@@ -1033,11 +1065,12 @@ impl WirTransformContext {
         match data_type {
             DataType::Bool => 1,
             DataType::Int | DataType::Float => 4,
-            DataType::String => 4, // Pointer alignment
+            DataType::String => 4,           // Pointer alignment
             DataType::Collection(_, _) => 4, // Pointer alignment
             DataType::Struct(fields, _) => {
                 // Struct alignment is the maximum field alignment
-                fields.iter()
+                fields
+                    .iter()
                     .map(|f| self.calculate_field_alignment(&f.value.data_type))
                     .max()
                     .unwrap_or(4)
@@ -1074,7 +1107,7 @@ impl WirTransformContext {
                 ));
             }
         }
-        
+
         self.create_struct_field_projection_unchecked(base_place, struct_type, field_name, location)
     }
 
@@ -1091,13 +1124,13 @@ impl WirTransformContext {
                 // Find the field and calculate its offset
                 let mut current_offset = 0u32;
                 let mut field_index = 0u32;
-                
+
                 for (idx, field) in fields.iter().enumerate() {
                     if field.name == field_name {
                         // Found the field, create projection
                         let field_size = self.calculate_field_size(&field.value.data_type)?;
                         let field_wasm_type = self.datatype_to_wasm_type(&field.value.data_type)?;
-                        
+
                         let field_size_enum = match field_size {
                             1 => FieldSize::Fixed(1),
                             2 => FieldSize::Fixed(2),
@@ -1105,23 +1138,20 @@ impl WirTransformContext {
                             8 => FieldSize::Fixed(8),
                             _ => FieldSize::Fixed(field_size),
                         };
-                        
-                        let projected_place = base_place.project_field(
-                            field_index,
-                            current_offset,
-                            field_size_enum,
-                        );
-                        
+
+                        let projected_place =
+                            base_place.project_field(field_index, current_offset, field_size_enum);
+
                         ir_log!(
                             "Created field projection for '{}' at offset {} with size {}",
                             field_name,
                             current_offset,
                             field_size
                         );
-                        
+
                         return Ok(projected_place);
                     }
-                    
+
                     // Calculate offset for next field
                     let field_size = self.calculate_field_size(&field.value.data_type)?;
                     let field_alignment = self.calculate_field_alignment(&field.value.data_type);
@@ -1129,16 +1159,19 @@ impl WirTransformContext {
                     current_offset += field_size;
                     field_index += 1;
                 }
-                
+
                 Err(CompileError::new_rule_error(
                     format!("Field '{}' not found in struct", field_name),
                     location.clone(),
                 ))
             }
             _ => Err(CompileError::new_type_error(
-                format!("Cannot access field '{}' on non-struct type {:?}", field_name, struct_type),
+                format!(
+                    "Cannot access field '{}' on non-struct type {:?}",
+                    field_name, struct_type
+                ),
                 location.clone(),
-            ))
+            )),
         }
     }
 
@@ -1192,7 +1225,7 @@ impl WirTransformContext {
 
         // Transform function body
         let main_block_id = 0;
-        let mut current_block = crate::compiler::wir::wir_nodes::WirBlock::new(main_block_id);
+        let mut current_block = WirBlock::new(main_block_id);
 
         for node in body {
             let statements = transform_ast_node_to_wir(node, self)?;
@@ -1201,16 +1234,16 @@ impl WirTransformContext {
             }
         }
 
-        // Set terminator for the function block
+        // Set the terminator for the function block
         let terminator = if let Some(return_operands) = self.pending_return.take() {
-            crate::compiler::wir::wir_nodes::Terminator::Return {
+            Terminator::Return {
                 values: return_operands,
             }
         } else if return_types.is_empty() {
-            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
+            Terminator::Return { values: vec![] }
         } else {
             // For now, we'll use an empty return - proper return value handling will be added later
-            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
+            Terminator::Return { values: vec![] }
         };
         current_block.set_terminator(terminator);
 
@@ -1290,7 +1323,7 @@ impl WirTransformContext {
 
         // Transform function body
         let main_block_id = 0;
-        let mut current_block = crate::compiler::wir::wir_nodes::WirBlock::new(main_block_id);
+        let mut current_block = WirBlock::new(main_block_id);
 
         for node in &body.ast {
             let statements = transform_ast_node_to_wir(node, self)?;
@@ -1299,16 +1332,16 @@ impl WirTransformContext {
             }
         }
 
-        // Set terminator for the function block
+        // Set the terminator for the function block
         let terminator = if let Some(return_operands) = self.pending_return.take() {
-            crate::compiler::wir::wir_nodes::Terminator::Return {
+            Terminator::Return {
                 values: return_operands,
             }
         } else if return_types.is_empty() {
-            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
+            Terminator::Return { values: vec![] }
         } else {
             // For now, we'll use an empty return - proper return value handling will be added later
-            crate::compiler::wir::wir_nodes::Terminator::Return { values: vec![] }
+            Terminator::Return { values: vec![] }
         };
         current_block.set_terminator(terminator);
 
@@ -1353,20 +1386,23 @@ impl WirTransformContext {
     fn track_reference_return(
         &mut self,
         operand: &Operand,
-        return_arg: &crate::compiler::parsers::ast_nodes::Arg,
+        return_arg: &Arg,
         return_index: usize,
     ) -> Result<(), CompileError> {
         // For reference returns, we need to ensure the referenced data outlives the function call
         // This is a placeholder implementation - full reference return tracking would involve:
         // 1. Analyzing the operand to determine what it references
-        // 2. Ensuring the referenced data has appropriate lifetime
+        // 2. Ensuring the referenced data has the appropriate lifetime
         // 3. Creating proper loan tracking for the returned reference
-        
+
         match operand {
             Operand::Copy(place) | Operand::Move(place) => {
                 // For now, just validate that we're returning a valid place
                 // In a full implementation, we'd check lifetime constraints
-                println!("Tracking reference return {} for place: {:?}", return_index, place);
+                println!(
+                    "Tracking reference return {} for place: {:?}",
+                    return_index, place
+                );
             }
             _ => {
                 // Constants and function references can't be returned as references
@@ -1376,7 +1412,7 @@ impl WirTransformContext {
                 );
             }
         }
-        
+
         Ok(())
     }
 
@@ -1386,7 +1422,9 @@ impl WirTransformContext {
         data_type: &DataType,
     ) -> Result<crate::compiler::wir::place::WasmType, CompileError> {
         // Use unified conversion from WasmModule
-        crate::compiler::codegen::wasm_encoding::WasmModule::unified_datatype_to_wasm_type(data_type)
+        crate::compiler::codegen::wasm_encoding::WasmModule::unified_datatype_to_wasm_type(
+            data_type,
+        )
     }
 }
 
@@ -1554,17 +1592,13 @@ fn transform_ast_node_to_wir(
             ast_mutation_to_wir(name, expression, &node.location, context)
         }
         NodeKind::FunctionCall(name, params, return_types, ..) => {
-            // Extract Expressions from params Args
-            let param_expressions: Vec<Expression> = params.iter()
-                .map(|arg| arg.value.clone())
-                .collect();
-            
             // Extract DataTypes from return_types Args
-            let return_data_types: Vec<DataType> = return_types.iter()
+            let return_data_types: Vec<DataType> = return_types
+                .iter()
                 .map(|arg| arg.value.data_type.clone())
                 .collect();
-            
-            ast_function_call_to_wir(name, &param_expressions, &return_data_types, &node.location, context)
+
+            ast_function_call_to_wir(name, params, &return_data_types, &node.location, context)
         }
         NodeKind::HostFunctionCall(name, params, return_types, ..) => {
             ast_host_function_call_to_wir(name, params, return_types, &node.location, context)
@@ -1619,12 +1653,7 @@ fn ast_declaration_to_wir(
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Check if this is a function declaration
-    if let crate::compiler::parsers::expressions::expression::ExpressionKind::Function(
-        parameters,
-        body,
-        return_types,
-    ) = &expression.kind
-    {
+    if let ExpressionKind::Function(parameters, body, return_types) = &expression.kind {
         // Transform function declaration
         // Pass Vec<Arg> directly for return types to support named returns
         let _function_info = context.transform_function_definition_from_expression(
@@ -1678,7 +1707,7 @@ fn ast_declaration_to_wir(
                     .get_place_manager()
                     .allocate_local(&expression.data_type)
             };
-            
+
             // Register the variable in context with mutability tracking
             let is_mutable = expression.ownership.is_mutable();
             context.register_variable_with_mutability(name.to_string(), place.clone(), is_mutable);
@@ -1695,7 +1724,7 @@ fn ast_declaration_to_wir(
                 .get_place_manager()
                 .allocate_local(&expression.data_type)
         };
-        
+
         // Register the variable in context with mutability tracking
         let is_mutable = expression.ownership.is_mutable();
         context.register_variable_with_mutability(name.to_string(), place.clone(), is_mutable);
@@ -2434,20 +2463,23 @@ fn transform_struct_literal_to_statements_and_rvalue(
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     // Create struct type from fields
     let struct_type = context.transform_struct_definition(fields, location)?;
-    
+
     // Allocate place for the struct
     let struct_place = context.create_struct_place(&struct_type, location)?;
-    
+
     // Register struct for initialization tracking
     context.register_struct_for_initialization(&struct_place, struct_type.clone())?;
-    
+
     let mut statements = Vec::new();
-    
+
     // Initialize each field
     for (field_index, field) in fields.iter().enumerate() {
         // Check if field has a value (not None/optional)
-        let has_value = !matches!(field.value.kind, crate::compiler::parsers::expressions::expression::ExpressionKind::None);
-        
+        let has_value = !matches!(
+            field.value.kind,
+            crate::compiler::parsers::expressions::expression::ExpressionKind::None
+        );
+
         if has_value {
             // Transform field value expression
             let (field_statements, field_rvalue) = expression_to_rvalue_with_mutable_context(
@@ -2456,7 +2488,7 @@ fn transform_struct_literal_to_statements_and_rvalue(
                 context,
             )?;
             statements.extend(field_statements);
-            
+
             // Create field projection (unchecked since we're initializing)
             let field_place = context.create_struct_field_projection_unchecked(
                 struct_place.clone(),
@@ -2464,31 +2496,31 @@ fn transform_struct_literal_to_statements_and_rvalue(
                 &field.name,
                 location,
             )?;
-            
+
             // Assign field value
             statements.push(Statement::Assign {
                 place: field_place,
                 rvalue: field_rvalue,
             });
-            
+
             // Mark field as initialized
             statements.push(Statement::MarkFieldInitialized {
                 struct_place: struct_place.clone(),
                 field_name: field.name.clone(),
                 field_index: field_index as u32,
             });
-            
+
             // Update context tracking
             context.mark_struct_field_initialized(&struct_place, &field.name);
         }
     }
-    
+
     // Validate that all required fields are initialized
     statements.push(Statement::ValidateStructInitialization {
         struct_place: struct_place.clone(),
         struct_type: struct_type.clone(),
     });
-    
+
     // Return the struct as a use of its place
     Ok((statements, Rvalue::Use(Operand::Copy(struct_place))))
 }
@@ -2501,8 +2533,9 @@ fn transform_struct_literal_to_rvalue(
 ) -> Result<Rvalue, CompileError> {
     // For now, delegate to the full transformation and ignore statements
     // In a more optimized implementation, we could handle simple constant structs differently
-    let (statements, rvalue) = transform_struct_literal_to_statements_and_rvalue(fields, location, context)?;
-    
+    let (statements, rvalue) =
+        transform_struct_literal_to_statements_and_rvalue(fields, location, context)?;
+
     if !statements.is_empty() {
         return_compiler_error!(
             "Struct literal with complex field expressions not yet supported in rvalue-only context at line {}, column {}",
@@ -2510,7 +2543,7 @@ fn transform_struct_literal_to_rvalue(
             location.start_pos.char_column
         );
     }
-    
+
     Ok(rvalue)
 }
 
@@ -2967,11 +3000,10 @@ fn transform_variable_reference(
         context.mark_variable_as_moved(name);
         Ok(Rvalue::Use(Operand::Move(variable_place)))
     } else {
-        // Not the last use - create a shared borrow
-        Ok(Rvalue::Ref {
-            place: variable_place,
-            borrow_kind: BorrowKind::Shared,
-        })
+        // Not the last use - create a shared borrow (copy)
+        // In Beanstalk's memory model, shared borrows are represented as Copy operations
+        // The actual borrow tracking is handled by the borrow checker through events
+        Ok(Rvalue::Use(Operand::Copy(variable_place)))
     }
 }
 
@@ -2995,10 +3027,18 @@ fn transform_variable_reference_with_borrow_kind(
         }
     };
 
-    Ok(Rvalue::Ref {
-        place: variable_place,
-        borrow_kind,
-    })
+    // Convert borrow kind to appropriate operand type
+    match borrow_kind {
+        BorrowKind::Shared => {
+            // Shared borrows become Copy operations
+            Ok(Rvalue::Use(Operand::Copy(variable_place)))
+        }
+        BorrowKind::Mut => {
+            // Mutable borrows also become Copy operations in WIR
+            // The mutability is tracked through the borrow checker events
+            Ok(Rvalue::Use(Operand::Copy(variable_place)))
+        }
+    }
 }
 
 /// Transform variable reference to WIR rvalue with move semantics

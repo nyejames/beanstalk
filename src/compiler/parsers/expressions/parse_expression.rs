@@ -3,11 +3,12 @@ use crate::compiler::parsers::build_ast::ContextKind;
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::collections::new_collection;
-use crate::compiler::parsers::expressions::expression::{Expression, Operator};
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::create_template_node::Template;
+use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::template::TemplateType;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
@@ -135,7 +136,7 @@ pub fn create_expression(
                                 token_stream,
                                 inner_type,
                                 context,
-                                ownership
+                                ownership,
                             )?),
                             location: token_stream.current_location(),
                             scope: context.scope_name.to_owned(),
@@ -202,10 +203,89 @@ pub fn create_expression(
 
             // Check if the name is a reference to another variable or function call
             TokenKind::Symbol(ref name, ..) => {
-                if let Some(arg) = context.get_reference(name) {
-                    expression.push(create_reference(token_stream, arg, context)?);
 
-                    continue; // Will have moved onto the next token already
+                if let Some(arg) = context.get_reference(name) {
+
+                    match &arg.value.data_type {
+                        DataType::Function(required_args, returns) => {
+                            // Advance past the function name to position at the opening parenthesis
+                            token_stream.advance();
+
+                            // This is a function call - parse it using the function call parser
+                            let function_call_node = parse_function_call(
+                                token_stream,
+                                name,
+                                context,
+                                required_args,
+                                returns,
+                            )?;
+
+                            // -------------------------------
+                            // FUNCTION CALL INSIDE EXPRESSION
+                            // -------------------------------
+                            if let NodeKind::FunctionCall(func_name, args, returns, location) = function_call_node.kind {
+                                let func_call_expr = Expression::function_call(
+                                    func_name,
+                                    args,
+                                    returns,
+                                    location,
+                                );
+
+                                expression.push(AstNode {
+                                    kind: NodeKind::Expression(func_call_expr),
+                                    location: function_call_node.location,
+                                    scope: context.scope_name.to_owned(),
+                                });
+
+                                continue;
+
+
+                            // ------------------------------------
+                            // HOST FUNCTION CALL INSIDE EXPRESSION
+                            // ------------------------------------
+                            } else if let NodeKind::HostFunctionCall(func_name, args, returns, _module, _import_name, location) = function_call_node.kind {
+
+                                // Convert return types to Arg format
+                                let mut converted_returns = Vec::new();
+                                for return_type in returns {
+                                    converted_returns.push(Arg {
+                                        name: String::new(),
+                                        value: Expression::new(
+                                            ExpressionKind::None,
+                                            location.to_owned(),
+                                            return_type,
+                                            Ownership::MutableOwned,
+                                        ),
+                                    });
+                                }
+
+                                let func_call_expr = Expression::function_call(
+                                    func_name,
+                                    args.to_owned(),
+                                    converted_returns,
+                                    location,
+                                );
+
+                                expression.push(AstNode {
+                                    kind: NodeKind::Expression(func_call_expr),
+                                    location: function_call_node.location,
+                                    scope: context.scope_name.to_owned(),
+                                });
+
+                                continue;
+                            }
+                        }
+
+                        // --------------------------
+                        // VARIABLE INSIDE EXPRESSION
+                        // --------------------------
+                        _ => {
+                            expression.push(create_reference(token_stream, arg, context)?);
+
+                            continue; // Will have moved onto the next token already
+                        }
+                    }
+
                 } else {
                     return_rule_error!(
                         token_stream.current_location(),
@@ -333,7 +413,7 @@ pub fn create_expression(
                     context.scope_name.to_owned(),
                     expression,
                     &mut DataType::Range,
-                    ownership.get_reference()
+                    ownership.get_reference(),
                 );
             }
 
