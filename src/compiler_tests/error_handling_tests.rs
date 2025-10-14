@@ -299,7 +299,7 @@ mod error_handling_tests {
         // Test variable registration
         let place = context
             .get_place_manager()
-            .allocate_local(&DataType::Int(Ownership::ImmutableOwned(false)));
+            .allocate_local(&DataType::Int);
         context.register_variable("test_var".to_string(), place.clone());
 
         // Test that variable was registered

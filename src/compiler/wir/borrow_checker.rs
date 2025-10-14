@@ -562,13 +562,17 @@ impl UnifiedBorrowChecker {
                     if may_alias(used_place, moved_place) {
                         // Create use after move error
                         let error = BorrowError {
-                            point: program_point,
                             error_type: BorrowErrorType::UseAfterMove {
                                 place: used_place.clone(),
-                                move_point: program_point, // TODO: Track actual move point
+                                move_location: TextLocation::default(), // TODO: Track actual move location
+                                use_location: TextLocation::default(),
                             },
+                            primary_location: TextLocation::default(),
+                            secondary_location: None,
                             message: "Use of moved value".to_string(),
-                            location: TextLocation::default(),
+                            suggestion: None,
+                            current_state: Some(PlaceState::Moved),
+                            expected_state: Some(PlaceState::Owned),
                         };
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -674,14 +678,26 @@ impl UnifiedBorrowChecker {
         };
         
         BorrowError {
-            point,
-            error_type: BorrowErrorType::ConflictingBorrows {
-                existing_borrow: loan_a.kind.clone(),
-                new_borrow: loan_b.kind.clone(),
-                place: loan_a.owner.clone(),
+            error_type: match (&loan_a.kind, &loan_b.kind) {
+                (BorrowKind::Mut, BorrowKind::Mut) => BorrowErrorType::MultipleMutableBorrows {
+                    place: loan_a.owner.clone(),
+                    existing_borrow_location: TextLocation::default(),
+                    new_borrow_location: TextLocation::default(),
+                },
+                _ => BorrowErrorType::SharedMutableConflict {
+                    place: loan_a.owner.clone(),
+                    existing_borrow_kind: loan_a.kind.clone(),
+                    new_borrow_kind: loan_b.kind.clone(),
+                    existing_borrow_location: TextLocation::default(),
+                    new_borrow_location: TextLocation::default(),
+                },
             },
+            primary_location: TextLocation::default(), // TODO: Get actual location from function
+            secondary_location: None,
             message,
-            location: TextLocation::default(), // TODO: Get actual location from function
+            suggestion: None,
+            current_state: None,
+            expected_state: None,
         }
     }
 
@@ -696,15 +712,18 @@ impl UnifiedBorrowChecker {
         let message = "Cannot move out of borrowed value. Ensure all borrows are finished before moving the value, or consider using references instead of moving.".to_string();
         
         BorrowError {
-            point,
-            error_type: BorrowErrorType::BorrowAcrossOwnerInvalidation {
-                borrowed_place: loan.owner.clone(),
-                owner_place: moved_place.clone(),
-                invalidation_point: point,
-                invalidation_type: InvalidationType::Move,
+            error_type: BorrowErrorType::MoveWhileBorrowed {
+                place: moved_place.clone(),
+                borrow_kind: loan.kind.clone(),
+                borrow_location: TextLocation::default(),
+                move_location: TextLocation::default(),
             },
+            primary_location: TextLocation::default(),
+            secondary_location: None,
             message,
-            location: TextLocation::default(),
+            suggestion: Some("Ensure all borrows are finished before moving the value, or consider using references instead of moving.".to_string()),
+            current_state: Some(PlaceState::Referenced), // or Borrowed depending on loan.kind
+            expected_state: Some(PlaceState::Owned),
         }
     }
 
@@ -850,17 +869,20 @@ impl UnifiedBorrowChecker {
                     let current_state = state_mapping.get_place_state(&loan.owner);
                     if current_state == PlaceState::Borrowed {
                         let error = BorrowError {
-                            point,
-                            error_type: BorrowErrorType::ConflictingBorrows {
-                                existing_borrow: BorrowKind::Mut,
-                                new_borrow: BorrowKind::Mut,
+                            error_type: BorrowErrorType::MultipleMutableBorrows {
                                 place: loan.owner.clone(),
+                                existing_borrow_location: TextLocation::default(),
+                                new_borrow_location: TextLocation::default(),
                             },
+                            primary_location: TextLocation::default(),
+                            secondary_location: None,
                             message: format!(
                                 "Cannot mutably borrow `{}` because it is already mutably borrowed",
                                 self.place_to_string(&loan.owner)
                             ),
-                            location: TextLocation::default(),
+                            suggestion: Some("Ensure the first mutable borrow is no longer used before creating the second".to_string()),
+                            current_state: Some(PlaceState::Borrowed),
+                            expected_state: Some(PlaceState::Owned),
                         };
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -887,17 +909,22 @@ impl UnifiedBorrowChecker {
                     // Trying to create mutable borrow when place is already shared
                     (BorrowKind::Mut, PlaceState::Referenced) => {
                         let error = BorrowError {
-                            point,
-                            error_type: BorrowErrorType::ConflictingBorrows {
-                                existing_borrow: BorrowKind::Shared,
-                                new_borrow: BorrowKind::Mut,
+                            error_type: BorrowErrorType::SharedMutableConflict {
                                 place: loan.owner.clone(),
+                                existing_borrow_kind: BorrowKind::Shared,
+                                new_borrow_kind: BorrowKind::Mut,
+                                existing_borrow_location: TextLocation::default(),
+                                new_borrow_location: TextLocation::default(),
                             },
+                            primary_location: TextLocation::default(),
+                            secondary_location: None,
                             message: format!(
                                 "Cannot mutably borrow `{}` because it is already borrowed as shared",
                                 self.place_to_string(&loan.owner)
                             ),
-                            location: TextLocation::default(),
+                            suggestion: Some("Ensure all shared borrows are finished before creating a mutable borrow".to_string()),
+                            current_state: Some(PlaceState::Referenced),
+                            expected_state: Some(PlaceState::Owned),
                         };
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -905,17 +932,22 @@ impl UnifiedBorrowChecker {
                     // Trying to create shared borrow when place is already mutably borrowed
                     (BorrowKind::Shared, PlaceState::Borrowed) => {
                         let error = BorrowError {
-                            point,
-                            error_type: BorrowErrorType::ConflictingBorrows {
-                                existing_borrow: BorrowKind::Mut,
-                                new_borrow: BorrowKind::Shared,
+                            error_type: BorrowErrorType::SharedMutableConflict {
                                 place: loan.owner.clone(),
+                                existing_borrow_kind: BorrowKind::Mut,
+                                new_borrow_kind: BorrowKind::Shared,
+                                existing_borrow_location: TextLocation::default(),
+                                new_borrow_location: TextLocation::default(),
                             },
+                            primary_location: TextLocation::default(),
+                            secondary_location: None,
                             message: format!(
                                 "Cannot borrow `{}` as shared because it is already mutably borrowed",
                                 self.place_to_string(&loan.owner)
                             ),
-                            location: TextLocation::default(),
+                            suggestion: Some("Finish using the mutable borrow before creating shared borrows".to_string()),
+                            current_state: Some(PlaceState::Borrowed),
+                            expected_state: Some(PlaceState::Owned),
                         };
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -941,16 +973,20 @@ impl UnifiedBorrowChecker {
             let current_state = state_mapping.get_place_state(used_place);
             if current_state == PlaceState::Moved {
                 let error = BorrowError {
-                    point,
                     error_type: BorrowErrorType::UseAfterMove {
                         place: used_place.clone(),
-                        move_point: point, // TODO: Track actual move point
+                        move_location: TextLocation::default(), // TODO: Track actual move location
+                        use_location: TextLocation::default(),
                     },
+                    primary_location: TextLocation::default(),
+                    secondary_location: None,
                     message: format!(
                         "Use of moved value `{}`",
                         self.place_to_string(used_place)
                     ),
-                    location: TextLocation::default(),
+                    suggestion: Some("Consider using a reference instead of moving the value".to_string()),
+                    current_state: Some(PlaceState::Moved),
+                    expected_state: Some(PlaceState::Owned),
                 };
                 self.errors.push(error);
                 self.statistics.conflicts_detected += 1;
@@ -973,19 +1009,26 @@ impl UnifiedBorrowChecker {
             // Check if place has active loans (not in Owned state)
             if current_state != PlaceState::Owned {
                 let error = BorrowError {
-                    point,
-                    error_type: BorrowErrorType::BorrowAcrossOwnerInvalidation {
-                        borrowed_place: moved_place.clone(),
-                        owner_place: moved_place.clone(),
-                        invalidation_point: point,
-                        invalidation_type: InvalidationType::Move,
+                    error_type: BorrowErrorType::MoveWhileBorrowed {
+                        place: moved_place.clone(),
+                        borrow_kind: match current_state {
+                            PlaceState::Referenced => BorrowKind::Shared,
+                            PlaceState::Borrowed => BorrowKind::Mut,
+                            _ => BorrowKind::Shared, // Default fallback
+                        },
+                        borrow_location: TextLocation::default(),
+                        move_location: TextLocation::default(),
                     },
+                    primary_location: TextLocation::default(),
+                    secondary_location: None,
                     message: format!(
                         "Cannot move `{}` because it is borrowed (current state: {:?})",
                         self.place_to_string(moved_place),
                         current_state
                     ),
-                    location: TextLocation::default(),
+                    suggestion: Some("Ensure all borrows are finished before moving the value".to_string()),
+                    current_state: Some(current_state),
+                    expected_state: Some(PlaceState::Owned),
                 };
                 self.errors.push(error);
                 self.statistics.conflicts_detected += 1;

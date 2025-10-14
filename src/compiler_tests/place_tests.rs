@@ -10,7 +10,7 @@ mod place_creation_tests {
 
     #[test]
     fn test_local_place_creation() {
-        let data_type = DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false));
+        let data_type = DataType::Int;
         let place = Place::local(0, &data_type);
 
         match &place {
@@ -28,8 +28,7 @@ mod place_creation_tests {
 
     #[test]
     fn test_global_place_creation() {
-        let data_type =
-            DataType::Float(crate::compiler::datatypes::Ownership::ImmutableOwned(false));
+        let data_type = DataType::Float;
         let place = Place::global(5, &data_type);
 
         match &place {
@@ -106,7 +105,7 @@ mod place_projection_tests {
     fn test_field_projection() {
         let base = Place::local(
             0,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let projected = base.project_field(1, 8, FieldSize::WasmType(WasmType::F32));
 
@@ -140,7 +139,7 @@ mod place_projection_tests {
         let base = Place::memory(1024, TypeSize::Word);
         let index = Place::local(
             1,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let projected = base.project_index(index, 4);
 
@@ -166,13 +165,13 @@ mod place_projection_tests {
     fn test_nested_projections() {
         let base = Place::local(
             0,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let field_proj = base.project_field(0, 16, FieldSize::Fixed(32));
         let index_proj = field_proj.project_index(
             Place::local(
                 1,
-                &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+                &DataType::Int,
             ),
             8,
         );
@@ -189,27 +188,19 @@ mod wasm_type_tests {
     #[test]
     fn test_wasm_type_from_data_type() {
         assert_eq!(
-            WasmType::from_data_type(&DataType::Int(
-                crate::compiler::datatypes::Ownership::ImmutableOwned(false)
-            )),
+            WasmType::from_data_type(&DataType::Int),
             WasmType::I64
         );
         assert_eq!(
-            WasmType::from_data_type(&DataType::Float(
-                crate::compiler::datatypes::Ownership::ImmutableOwned(false)
-            )),
+            WasmType::from_data_type(&DataType::Float),
             WasmType::F64
         );
         assert_eq!(
-            WasmType::from_data_type(&DataType::Bool(
-                crate::compiler::datatypes::Ownership::ImmutableOwned(false)
-            )),
+            WasmType::from_data_type(&DataType::Bool),
             WasmType::I32
         );
         assert_eq!(
-            WasmType::from_data_type(&DataType::String(
-                crate::compiler::datatypes::Ownership::ImmutableOwned(false)
-            )),
+            WasmType::from_data_type(&DataType::String),
             WasmType::I32 // Pointer to linear memory
         );
     }
@@ -246,7 +237,7 @@ mod instruction_count_tests {
     fn test_local_instruction_counts() {
         let place = Place::local(
             0,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
 
         assert_eq!(place.load_instruction_count(), 1); // local.get
@@ -257,7 +248,7 @@ mod instruction_count_tests {
     fn test_global_instruction_counts() {
         let place = Place::global(
             0,
-            &DataType::Float(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Float,
         );
 
         assert_eq!(place.load_instruction_count(), 1); // global.get
@@ -276,7 +267,7 @@ mod instruction_count_tests {
     fn test_projection_instruction_counts() {
         let base = Place::local(
             0,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let projected = base.project_field(0, 8, FieldSize::WasmType(WasmType::I32));
 
@@ -291,7 +282,7 @@ mod instruction_count_tests {
         let base = Place::memory(1024, TypeSize::Word);
         let index = Place::local(
             1,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let projected = base.project_index(index, 4);
 
@@ -308,7 +299,7 @@ mod stack_operation_tests {
     fn test_local_load_operations() {
         let place = Place::local(
             0,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let ops = place.generate_load_operations();
 
@@ -322,7 +313,7 @@ mod stack_operation_tests {
     fn test_local_store_operations() {
         let place = Place::local(
             0,
-            &DataType::Float(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Float,
         );
         let ops = place.generate_store_operations();
 
@@ -352,7 +343,7 @@ mod stack_operation_tests {
     fn test_projection_operations() {
         let base = Place::local(
             0,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let projected = base.project_field(0, 8, FieldSize::WasmType(WasmType::I32));
         let ops = projected.generate_load_operations();
@@ -385,12 +376,8 @@ mod place_manager_tests {
     fn test_local_allocation() {
         let mut manager = PlaceManager::new();
 
-        let place1 = manager.allocate_local(&DataType::Int(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
-        let place2 = manager.allocate_local(&DataType::Float(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
+        let place1 = manager.allocate_local(&DataType::Int);
+        let place2 = manager.allocate_local(&DataType::Float);
 
         assert!(place1.is_wasm_local());
         assert!(place2.is_wasm_local());
@@ -405,12 +392,8 @@ mod place_manager_tests {
     fn test_global_allocation() {
         let mut manager = PlaceManager::new();
 
-        let place1 = manager.allocate_global(&DataType::Bool(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
-        let place2 = manager.allocate_global(&DataType::String(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
+        let place1 = manager.allocate_global(&DataType::Bool);
+        let place2 = manager.allocate_global(&DataType::String);
 
         assert!(place1.is_wasm_global());
         assert!(place2.is_wasm_global());
@@ -441,7 +424,7 @@ mod place_manager_tests {
         let mut manager = PlaceManager::new();
 
         let data_type =
-            DataType::String(crate::compiler::datatypes::Ownership::ImmutableOwned(false));
+            DataType::String;
         let place = manager.allocate_heap(&data_type, 64);
 
         assert!(place.requires_memory_access());
@@ -590,7 +573,7 @@ mod projection_elem_tests {
     fn test_index_projection_instruction_count() {
         let index_place = Place::local(
             1,
-            &DataType::Int(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::Int,
         );
         let index = ProjectionElem::Index {
             index: Box::new(index_place),
@@ -631,7 +614,7 @@ mod integration_tests {
 
         // Create a struct in heap memory
         let struct_place = manager.allocate_heap(
-            &DataType::String(crate::compiler::datatypes::Ownership::ImmutableOwned(false)),
+            &DataType::String,
             64,
         );
 
@@ -639,9 +622,7 @@ mod integration_tests {
         let field_place = struct_place.project_field(1, 16, FieldSize::WasmType(WasmType::I32));
 
         // Project to an array element within that field
-        let index_place = manager.allocate_local(&DataType::Int(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
+        let index_place = manager.allocate_local(&DataType::Int);
         let element_place = field_place.project_index(index_place, 4);
 
         // Verify the complex place works correctly
@@ -661,12 +642,8 @@ mod integration_tests {
         let mut manager = PlaceManager::new();
 
         // Test that all place types can be lowered to ≤3 WASM instructions
-        let local = manager.allocate_local(&DataType::Int(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
-        let global = manager.allocate_global(&DataType::Float(
-            crate::compiler::datatypes::Ownership::ImmutableOwned(false),
-        ));
+        let local = manager.allocate_local(&DataType::Int);
+        let global = manager.allocate_global(&DataType::Float);
         let memory = manager.allocate_memory(32, 4);
 
         assert!(local.load_instruction_count() <= 3);

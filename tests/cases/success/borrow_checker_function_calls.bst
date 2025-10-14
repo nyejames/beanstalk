@@ -2,21 +2,25 @@
 -- Tests requirement 7.3: borrow checker integration with function calls
 
 -- Simple function definition
-simple_function |value Int| -> Int:
+-- This takes a mutable integer and returns an immutable integer
+-- The immutable integer is a new copy
+simple_function |value ~Int| -> Int:
     result = value + 1
     return result
 ;
 
 -- Function that takes a string parameter
+-- String without the ~ symbol is a string slice or immutable string
+-- In this case a new owned immutable string is created by wrapping the string slice in a template
 string_function |text String| -> String:
-    return text
+    return [text]
 ;
 
 -- Test basic function calls
 number = 42
 result = simple_function(number)
 
--- Test function calls with strings
+-- Test function calls with immutable strings
 message = "hello"
 echo = string_function(message)
 

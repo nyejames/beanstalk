@@ -57,14 +57,15 @@ mod host_function_registry_tests {
             value: Expression::new(
                 ExpressionKind::None,
                 TextLocation::default(),
-                DataType::Int(Ownership::ImmutableReference(false)),
+                DataType::Int,
+                Ownership::ImmutableReference,
             ),
         };
 
         let test_function = HostFunctionDef::new(
             "test_func",
             vec![test_param],
-            vec![DataType::String(Ownership::ImmutableReference(false))],
+            vec![DataType::String],
             "beanstalk_io",
             "test_func",
             "Test function for unit testing",
@@ -129,7 +130,7 @@ mod host_function_registry_tests {
         let test_function = HostFunctionDef::new_with_error(
             "risky_func",
             vec![],
-            vec![DataType::String(Ownership::ImmutableReference(false))],
+            vec![DataType::String],
             "beanstalk_io",
             "risky_func",
             "Function that can fail",
@@ -145,14 +146,15 @@ mod host_function_registry_tests {
             value: Expression::new(
                 ExpressionKind::None,
                 TextLocation::default(),
-                DataType::Int(Ownership::ImmutableReference(false)),
+                DataType::Int,
+                Ownership::ImmutableReference,
             ),
         };
 
         let test_function = HostFunctionDef::new(
             "convert_test",
             vec![test_param],
-            vec![DataType::String(Ownership::ImmutableReference(false))],
+            vec![DataType::String],
             "beanstalk_io",
             "convert_test",
             "Test function type conversion",
@@ -263,7 +265,7 @@ mod host_function_ast_tests {
         // The parameter should have a string type (exact representation may vary)
         // This test verifies the structure is correct for type checking
         match &param.value.data_type {
-            DataType::String(_) => {
+            DataType::String => {
                 // Correct - print expects a string
             }
             other => {
@@ -410,7 +412,8 @@ mod host_function_error_tests {
             value: Expression::new(
                 ExpressionKind::None,
                 TextLocation::default(),
-                DataType::String(Ownership::ImmutableReference(false)),
+                DataType::String,
+                Ownership::ImmutableReference,
             ),
         };
 

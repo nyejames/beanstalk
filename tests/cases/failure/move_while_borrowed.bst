@@ -2,7 +2,7 @@
 -- Tests requirement 7.4: move-while-borrowed should be prevented
 
 -- Create a variable
-data ~= "important data"
+data ~= [:important data]
 
 -- Borrow the variable
 data_ref = data

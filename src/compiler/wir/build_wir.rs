@@ -82,13 +82,13 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
 
             // Create a more detailed error message
             let detailed_message = format!(
-                "Borrow checking error in function '{}': {}. This error occurred at program point {}.",
-                function.name, first_error.message, first_error.point
+                "Borrow checking error in function '{}': {}.",
+                function.name, first_error.message
             );
 
             // Use the error location if available, otherwise use a default location
-            let error_location = if first_error.location != TextLocation::default() {
-                first_error.location.clone()
+            let error_location = if first_error.primary_location != TextLocation::default() {
+                first_error.primary_location.clone()
             } else {
                 TextLocation::default() // TODO: Map program points to source locations
             };

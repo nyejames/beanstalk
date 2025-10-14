@@ -1,7 +1,7 @@
 -- Test file: Multiple mutable borrows (should fail borrow checker)
 
 -- Declare a mutable variable
-data ~= "shared data"
+data ~= ["shared data"]
 
 -- Create first mutable reference
 ref1 ~= data

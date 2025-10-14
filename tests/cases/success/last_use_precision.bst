@@ -1,5 +1,4 @@
 -- Test file: Last-use precision allows reborrow (should pass)
--- Tests requirement 7.3: last-use precision should allow reborrow after last use
 
 -- Create a mutable variable
 data ~= 10

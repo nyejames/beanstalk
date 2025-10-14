@@ -1,7 +1,7 @@
 -- Test file: Mutable and immutable borrow conflict (should fail borrow checker)
 
 -- Declare a mutable variable
-data ~= "conflicted data"
+data ~= ["conflicted data"]
 
 -- Create immutable reference
 immutable_ref = data

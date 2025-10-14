@@ -1,5 +1,4 @@
 -- Test file: Disjoint variable borrows (should pass)
--- Tests requirement 7.1: disjoint variable access should be allowed
 
 -- Create separate variables
 x_value ~= 10

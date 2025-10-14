@@ -10,7 +10,7 @@ mod place_system_tests {
 
     #[test]
     fn test_local_place_creation() {
-        let data_type = DataType::Int(Ownership::ImmutableOwned(false));
+        let data_type = DataType::Int;
         let place = Place::local(0, &data_type);
 
         assert!(place.is_wasm_local(), "Place should be a WASM local");
@@ -48,7 +48,7 @@ mod place_system_tests {
 
     #[test]
     fn test_field_projection() {
-        let data_type = DataType::String(Ownership::ImmutableOwned(false));
+        let data_type = DataType::String;
         let base = Place::local(0, &data_type);
         let field = base.project_field(
             0,
@@ -69,24 +69,15 @@ mod place_system_tests {
 
     #[test]
     fn test_wasm_type_mapping() {
-        assert_eq!(
-            WasmType::from_data_type(&DataType::Int(Ownership::ImmutableOwned(false))),
-            WasmType::I64
-        );
-        assert_eq!(
-            WasmType::from_data_type(&DataType::Float(Ownership::ImmutableOwned(false))),
-            WasmType::F64
-        );
-        assert_eq!(
-            WasmType::from_data_type(&DataType::Bool(Ownership::ImmutableOwned(false))),
-            WasmType::I32
-        );
+        assert_eq!(WasmType::from_data_type(&DataType::Int), WasmType::I64);
+        assert_eq!(WasmType::from_data_type(&DataType::Float), WasmType::F64);
+        assert_eq!(WasmType::from_data_type(&DataType::Bool), WasmType::I32);
     }
 
     #[test]
     fn test_wasm_instruction_efficiency() {
         // Test that places generate efficient WASM instruction sequences
-        let local_place = Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false)));
+        let local_place = Place::local(0, &DataType::Int);
         let memory_place = Place::memory(1024, crate::compiler::wir::place::TypeSize::Word);
 
         // Local operations should be very efficient
@@ -110,9 +101,9 @@ mod place_system_tests {
     fn test_stack_operation_balance() {
         // Test that stack operations are balanced (push/pop correctly)
         let places = vec![
-            Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))),
+            Place::local(0, &DataType::Int),
             Place::memory(1024, crate::compiler::wir::place::TypeSize::Word),
-            Place::local(0, &DataType::Int(Ownership::ImmutableOwned(false))).project_field(
+            Place::local(0, &DataType::Int).project_field(
                 0,
                 4,
                 crate::compiler::wir::place::FieldSize::WasmType(WasmType::I32),

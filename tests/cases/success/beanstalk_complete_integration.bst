@@ -2,7 +2,7 @@
 -- Tests implicit borrowing, mutability syntax, and scope semantics together
 
 -- Initialize variables with different semantics
-immutable_data = "constant value"
+immutable_data = "constant string slice value"
 mutable_counter ~= 0
 mutable_accumulator ~= 100
 

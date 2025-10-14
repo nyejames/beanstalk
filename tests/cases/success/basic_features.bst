@@ -3,7 +3,7 @@
 -- Variable declarations with different types
 int_var ~= 42
 float_var ~= 3.14159
-string_var ~= "Hello Beanstalk"
+string_slice_var ~= "Hello Beanstalk"
 bool_var ~= true
 immutable_int = 100
 
