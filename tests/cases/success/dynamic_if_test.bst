@@ -7,13 +7,13 @@ y ~= 5
 -- Dynamic if statement
 if x > y:
     result = 1
-else:
+else
     result = 0
 ;
 
 -- Another dynamic condition
 if y > 3:
     another_result = 42
-else:
+else
     another_result = 24
 ;

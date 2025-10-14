@@ -108,7 +108,11 @@ impl Template {
 
                             let folded_child = nested_template.fold(&inherited_style)?;
                             template.content.add(
-                                Expression::string(folded_child, token_stream.current_location()),
+                                Expression::string_slice(
+                                    folded_child,
+                                    token_stream.current_location(),
+                                    Ownership::ImmutableOwned,
+                                ),
                                 is_after_slot,
                             );
 
@@ -118,7 +122,8 @@ impl Template {
                         TemplateType::StringFunction => {
                             foldable = false;
                             // Insert it into the template
-                            let expr = Expression::template(nested_template);
+                            let expr =
+                                Expression::template(nested_template, Ownership::MutableOwned);
                             template.content.add(expr, is_after_slot);
                         }
 
@@ -136,7 +141,11 @@ impl Template {
 
                 TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
                     template.content.add(
-                        Expression::string(content.to_string(), token_stream.current_location()),
+                        Expression::string_slice(
+                            content.to_string(),
+                            token_stream.current_location(),
+                            Ownership::ImmutableOwned,
+                        ),
                         is_after_slot,
                     );
                 }
@@ -156,7 +165,11 @@ impl Template {
                 // }
                 TokenKind::Newline => {
                     template.content.add(
-                        Expression::string("\n".to_string(), token_stream.current_location()),
+                        Expression::string_slice(
+                            "\n".to_string(),
+                            token_stream.current_location(),
+                            Ownership::ImmutableOwned,
+                        ),
                         is_after_slot,
                     );
                 }
@@ -442,9 +455,10 @@ pub fn parse_template_head(
 
                     // Constant inherited
                     Some(ExpressionKind::StringSlice(string)) => {
-                        template.content.before.push(Expression::string(
+                        template.content.before.push(Expression::string_slice(
                             string.to_owned(),
                             token_stream.current_location(),
+                            Ownership::ImmutableOwned,
                         ));
                     }
 
@@ -462,6 +476,9 @@ pub fn parse_template_head(
 
                         // TODO: Special stuff for Types (structs)
                         // In the future, Types can implement a Style interface to do cool stuff
+                        ExpressionKind::Struct(args) => {
+                            
+                        }
 
                         // Otherwise this is a reference to some other variable
                         // String, Number, Bool, etc. References
@@ -469,7 +486,8 @@ pub fn parse_template_head(
                             let expr = create_expression(
                                 token_stream,
                                 context,
-                                &mut DataType::CoerceToString(Ownership::default()),
+                                &mut DataType::CoerceToString,
+                                &arg.value.ownership,
                                 false,
                             )?;
 
@@ -502,7 +520,8 @@ pub fn parse_template_head(
                 let expr = create_expression(
                     token_stream,
                     context,
-                    &mut DataType::Inferred(Ownership::default()),
+                    &mut DataType::Inferred,
+                    &Ownership::ImmutableOwned,
                     false,
                 )?;
 
@@ -517,7 +536,8 @@ pub fn parse_template_head(
                 let expr = create_expression(
                     token_stream,
                     context,
-                    &mut DataType::CoerceToString(Ownership::default()),
+                    &mut DataType::CoerceToString,
+                    &Ownership::MutableOwned,
                     true,
                 )?;
 

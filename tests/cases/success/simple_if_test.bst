@@ -4,7 +4,7 @@
 condition = true
 if condition:
     result = 42
-else:
+else
     result = 0
 ;
 
@@ -13,9 +13,9 @@ x = 10
 if x > 5:
     if x > 8:
         nested_result = 1
-    else:
+    else
         nested_result = 2
     ;
-else:
+else
     nested_result = 0
 ;

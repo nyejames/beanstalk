@@ -5,7 +5,7 @@
 condition = true
 if condition:
     result = 42
-else:
+else
     result = 0
 ;
 
@@ -17,11 +17,11 @@ if outer_condition:
     nested_result ~= 3
     if inner_condition:
         nested_result = 1
-    else:
+    else
         nested_result = 2
     ;
     final_result = nested_result
-else:
+else
     final_result = 0
 ;
 
@@ -29,7 +29,7 @@ else:
 -- test_function |x Int| -> Int:
 --     if x > 0:
 --         return x * 2
---     else:
+--     else
 --         return 0
 --     ;
 -- ;

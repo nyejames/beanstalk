@@ -37,7 +37,8 @@ pub fn create_branch(
     let then_condition = create_expression(
         token_stream,
         &context.new_child_control_flow(ContextKind::Condition),
-        &mut DataType::Bool(Ownership::default()),
+        &mut DataType::Bool,
+        &Ownership::ImmutableOwned,
         false,
     )?;
 
@@ -148,7 +149,8 @@ fn create_match_node(
         let condition = create_expression(
             token_stream,
             &match_context.new_child_control_flow(ContextKind::Condition),
-            &mut DataType::Int(Ownership::default()),
+            &mut DataType::Int,
+            &Ownership::ImmutableOwned,
             false,
         )?;
 

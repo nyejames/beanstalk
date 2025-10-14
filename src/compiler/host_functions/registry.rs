@@ -1,5 +1,5 @@
-use crate::compiler::datatypes::DataType;
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::return_compiler_error;
@@ -56,7 +56,7 @@ impl HostFunctionDef {
             error_handling: ErrorHandling::None, // Default to no error handling
         }
     }
-    
+
     /// Create a new host function definition that can fail
     pub fn new_with_error(
         name: &str,
@@ -76,10 +76,23 @@ impl HostFunctionDef {
             error_handling: ErrorHandling::ReturnsError,
         }
     }
-    
+
     /// Get the function signature as a DataType::Function for compatibility
     pub fn as_function_type(&self) -> DataType {
-        DataType::Function(self.parameters.clone(), self.return_types.clone())
+        // Convert return_types Vec<DataType> to Vec<Arg>
+        let return_args: Vec<Arg> = self.return_types.iter().enumerate()
+            .map(|(i, data_type)| Arg {
+                name: format!("return_{}", i),
+                value: Expression::new(
+                    crate::compiler::parsers::expressions::expression::ExpressionKind::None,
+                    crate::compiler::parsers::tokens::TextLocation::default(),
+                    data_type.clone(),
+                    crate::compiler::datatypes::Ownership::default(),
+                ),
+            })
+            .collect();
+        
+        DataType::Function(self.parameters.clone(), return_args)
     }
 }
 
@@ -97,38 +110,38 @@ impl HostFunctionRegistry {
             functions: HashMap::new(),
         }
     }
-    
+
     /// Get a host function definition by name
     pub fn get_function(&self, name: &str) -> Option<&HostFunctionDef> {
         self.functions.get(name)
     }
-    
+
     /// Register a new host function
     pub fn register_function(&mut self, function: HostFunctionDef) -> Result<(), CompileError> {
         // Validate the function definition first
         validate_host_function_def(&function)?;
-        
+
         if self.functions.contains_key(&function.name) {
             return_compiler_error!(
                 "Host function '{}' is already registered. This is a compiler bug - duplicate function registration.",
                 function.name
             );
         }
-        
+
         self.functions.insert(function.name.clone(), function);
         Ok(())
     }
-    
+
     /// List all registered host functions
     pub fn list_functions(&self) -> Vec<&HostFunctionDef> {
         self.functions.values().collect()
     }
-    
+
     /// Check if a function is registered
     pub fn has_function(&self, name: &str) -> bool {
         self.functions.contains_key(name)
     }
-    
+
     /// Get the number of registered functions
     pub fn count(&self) -> usize {
         self.functions.len()
@@ -144,7 +157,7 @@ impl Default for HostFunctionRegistry {
 /// Create a registry populated with built-in host functions
 pub fn create_builtin_registry() -> Result<HostFunctionRegistry, CompileError> {
     let mut registry = HostFunctionRegistry::new();
-    
+
     // Define the print function: print(message String)
     // Using the same Arg structure as regular Beanstalk functions
     let print_param = Arg {
@@ -152,24 +165,25 @@ pub fn create_builtin_registry() -> Result<HostFunctionRegistry, CompileError> {
         value: Expression::new(
             crate::compiler::parsers::expressions::expression::ExpressionKind::None,
             crate::compiler::parsers::tokens::TextLocation::default(),
-            DataType::String(crate::compiler::datatypes::Ownership::ImmutableReference(false))
+            DataType::String,
+            crate::compiler::datatypes::Ownership::ImmutableReference,
         ),
     };
-    
+
     let print_function = HostFunctionDef::new(
         "print",
         vec![print_param],
         vec![], // No return value (void function)
         "beanstalk_io",
         "print",
-        "Print a message to stdout followed by a newline"
+        "Print a message to stdout followed by a newline",
     );
-    
+
     registry.register_function(print_function)?;
-    
+
     // Validate all registered functions
     validate_registry(&registry)?;
-    
+
     Ok(registry)
 }
 
@@ -189,7 +203,7 @@ fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileE
             "Host function has empty name. Function definitions must have valid names."
         );
     }
-    
+
     // Validate module name follows WASM import conventions
     if function.module.is_empty() {
         return_compiler_error!(
@@ -197,7 +211,7 @@ fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileE
             function.name
         );
     }
-    
+
     // Validate import name is not empty
     if function.import_name.is_empty() {
         return_compiler_error!(
@@ -205,7 +219,7 @@ fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileE
             function.name
         );
     }
-    
+
     // Validate module name is one of the standard Beanstalk modules
     match function.module.as_str() {
         "beanstalk_io" | "beanstalk_env" | "beanstalk_sys" => {
@@ -219,7 +233,7 @@ fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileE
             );
         }
     }
-    
+
     // Validate parameter names are not empty
     for (i, param) in function.parameters.iter().enumerate() {
         if param.name.is_empty() {
@@ -230,14 +244,14 @@ fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileE
             );
         }
     }
-    
+
     Ok(())
 }
 
 impl PartialEq for HostFunctionDef {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name 
-            && self.module == other.module 
+        self.name == other.name
+            && self.module == other.module
             && self.import_name == other.import_name
             && self.description == other.description
             && self.error_handling == other.error_handling

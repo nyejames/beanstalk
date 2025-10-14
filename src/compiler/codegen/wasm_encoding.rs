@@ -766,7 +766,14 @@ impl LocalAnalyzer {
 
     /// Generate WASM local variable declarations as (count, ValType) pairs
     pub fn generate_wasm_locals(&self) -> Vec<(u32, ValType)> {
-        self.type_counts
+        // Use BTreeMap to ensure consistent ordering with build_local_mapping()
+        let mut ordered_counts: std::collections::BTreeMap<WasmType, u32> =
+            std::collections::BTreeMap::new();
+        for (wasm_type, count) in &self.type_counts {
+            ordered_counts.insert(wasm_type.clone(), *count);
+        }
+
+        ordered_counts
             .iter()
             .map(|(wasm_type, count)| (*count, self.wasm_type_to_val_type(wasm_type)))
             .collect()
@@ -777,10 +784,38 @@ impl LocalAnalyzer {
         let mut local_map = LocalMap::with_parameters(wir_function.parameters.len() as u32);
         let mut wasm_local_index = wir_function.parameters.len() as u32;
 
-        // Map each WIR local to a WASM local index
-        for mir_local_index in self.local_types.keys() {
-            local_map.map_local(*mir_local_index, wasm_local_index);
-            wasm_local_index += 1;
+        // Group WIR locals by type to match WASM local declaration order
+        let mut locals_by_type: std::collections::BTreeMap<WasmType, Vec<u32>> =
+            std::collections::BTreeMap::new();
+
+        for (wir_local_index, wasm_type) in &self.local_types {
+            locals_by_type
+                .entry(wasm_type.clone())
+                .or_insert_with(Vec::new)
+                .push(*wir_local_index);
+        }
+
+        // Map WIR locals to WASM locals in the same order as generate_wasm_locals()
+        // This ensures type consistency between declaration and usage
+        for (wasm_type, wir_locals) in locals_by_type {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "WASM: Mapping {} WIR locals of type {:?} starting at WASM local {}",
+                wir_locals.len(),
+                wasm_type,
+                wasm_local_index
+            );
+
+            for wir_local_index in wir_locals {
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!(
+                    "WASM: WIR local {} → WASM local {} (type {:?})",
+                    wir_local_index, wasm_local_index, wasm_type
+                );
+
+                local_map.map_local(wir_local_index, wasm_local_index);
+                wasm_local_index += 1;
+            }
         }
 
         // Also map any globals that might be referenced
@@ -1745,8 +1780,21 @@ impl WasmModule {
         // Step 1: Evaluate rvalue and put result on stack (≤2 instructions)
         self.lower_rvalue(rvalue, function, local_map)?;
 
-        // Step 2: Store stack value to place (≤1 instruction for locals/globals)
+        // Step 2: Validate type consistency between place and value
         let value_type = self.get_rvalue_wasm_type(rvalue)?;
+        let place_type = place.wasm_type();
+
+        if value_type != place_type {
+            return_compiler_error!(
+                "Type mismatch in assignment: place expects {:?} but rvalue provides {:?}. Place: {:?}, Rvalue: {:?}",
+                place_type,
+                value_type,
+                place,
+                rvalue
+            );
+        }
+
+        // Step 3: Store stack value to place (≤1 instruction for locals/globals)
         self.lower_place_assignment_with_type(place, &value_type, function, local_map)?;
 
         Ok(())
@@ -2405,11 +2453,21 @@ impl WasmModule {
                     ))
                 })?;
 
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!(
+                    "WASM: About to generate local.set {} (WIR local {} → WASM local {}, value_type: {:?}, place_type: {:?})",
+                    wasm_local,
+                    index,
+                    wasm_local,
+                    value_type,
+                    place.wasm_type()
+                );
+
                 function.instruction(&Instruction::LocalSet(wasm_local));
 
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!(
-                    "WASM: local.set {} (WIR local {} → WASM local {})",
+                    "WASM: Generated local.set {} (WIR local {} → WASM local {})",
                     wasm_local, index, wasm_local
                 );
 
@@ -3433,10 +3491,10 @@ impl WasmModule {
         use crate::compiler::datatypes::DataType;
 
         match data_type {
-            DataType::Int(_) => Ok(WasmType::I32),
-            DataType::Float(_) => Ok(WasmType::F32),
-            DataType::Bool(_) => Ok(WasmType::I32), // Booleans are represented as i32 in WASM
-            DataType::String(_) => Ok(WasmType::I32), // Strings are pointers to linear memory
+            DataType::Int => Ok(WasmType::I32),
+            DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
+            DataType::Bool => Ok(WasmType::I32),  // Booleans are represented as i32 in WASM
+            DataType::String => Ok(WasmType::I32), // Strings are pointers to linear memory
             DataType::None => {
                 // None types don't contribute to WASM signature
                 return_compiler_error!(

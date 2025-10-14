@@ -16,9 +16,9 @@ pub fn handle_mutation(
     let location = token_stream.current_location();
 
     // Check if the variable is mutable
-    let is_mutable = &variable_arg.value.ownership.is_mutable();
+    let ownership = &variable_arg.value.ownership;
 
-    if !is_mutable {
+    if !ownership.is_mutable() {
         return_rule_error!(
             location,
             "Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable",
@@ -34,7 +34,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let new_value =
-                create_expression(token_stream, context, &mut expected_type, true, false)?;
+                create_expression(token_stream, context, &mut expected_type, ownership, false)?;
 
             Ok(AstNode {
                 kind: NodeKind::Mutation(variable_arg.name.to_owned(), new_value),
@@ -49,7 +49,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let add_value =
-                create_expression(token_stream, context, &mut expected_type, true, false)?;
+                create_expression(token_stream, context, &mut expected_type, ownership, false)?;
 
             // Create an addition expression in RPN order: variable, add_value, +
             let variable_ref = AstNode {
@@ -90,7 +90,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let subtract_value =
-                create_expression(token_stream, context, &mut expected_type, true, false)?;
+                create_expression(token_stream, context, &mut expected_type, ownership, false)?;
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
             let variable_ref = AstNode {
@@ -131,7 +131,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let multiply_value =
-                create_expression(token_stream, context, &mut expected_type, true, false)?;
+                create_expression(token_stream, context, &mut expected_type, ownership, false)?;
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
             let variable_ref = AstNode {
@@ -172,7 +172,7 @@ pub fn handle_mutation(
 
             let mut expected_type = variable_arg.value.data_type.clone();
             let divide_value =
-                create_expression(token_stream, context, &mut expected_type, true, false)?;
+                create_expression(token_stream, context, &mut expected_type, ownership, false)?;
 
             // Create a division expression in RPN order: variable, divide_value, /
             let variable_ref = AstNode {

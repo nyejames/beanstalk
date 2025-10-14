@@ -1,9 +1,9 @@
 use crate::compiler::compiler_errors::CompileError;
 
 use std::collections::HashMap;
-use wasm_encoder::ValType;
 
-use super::wasix_registry::{WasixFunctionDef, WasixFunctionRegistry, WasixError};
+
+use super::wasix_registry::{WasixFunctionRegistry, WasixError};
 
 /// WASI compatibility layer for automatic migration to WASIX
 #[derive(Debug, Clone)]
@@ -91,64 +91,9 @@ impl WasiCompatibilityLayer {
         }
     }
 
-    /// Create a WASIX function definition from a WASI import
-    pub fn create_wasix_from_wasi(
-        &self,
-        wasi_module: &str,
-        wasi_function: &str,
-        parameters: Vec<ValType>,
-        returns: Vec<ValType>,
-    ) -> Result<WasixFunctionDef, WasixError> {
-        // Migrate module and function names
-        let wasix_module = self.migrate_module_name(wasi_module)?;
-        let wasix_function = self.migrate_function_name(wasi_function)?;
 
-        // Create WASIX function definition
-        let wasix_def = WasixFunctionDef::new(
-            &wasix_module,
-            &wasix_function,
-            parameters,
-            returns,
-            &format!("Migrated from WASI function {}:{}", wasi_module, wasi_function),
-        );
 
-        Ok(wasix_def)
-    }
 
-    /// Check if a WASI function signature is compatible with its WASIX equivalent
-    pub fn check_signature_compatibility(
-        &self,
-        wasi_function: &str,
-        wasi_params: &[ValType],
-        wasi_returns: &[ValType],
-    ) -> Result<bool, WasixError> {
-        // Get the WASIX equivalent function name
-        let wasix_function = self.migrate_function_name(wasi_function)?;
-
-        // Check if we have this function in our WASIX registry
-        if let Some(wasix_def) = self.wasix_registry.get_function(&wasix_function) {
-            // Compare signatures
-            let params_match = wasi_params == wasix_def.parameters.as_slice();
-            let returns_match = wasi_returns == wasix_def.returns.as_slice();
-
-            if !params_match || !returns_match {
-                return Err(WasixError::configuration_error(
-                    "function_signature",
-                    &format!("WASI {}({:?}) -> {:?}", wasi_function, wasi_params, wasi_returns),
-                    &format!("WASIX {}({:?}) -> {:?}", wasix_function, wasix_def.parameters, wasix_def.returns),
-                    &format!("Update function call to match WASIX signature for '{}'", wasix_function),
-                ));
-            }
-
-            Ok(true)
-        } else {
-            // Function not available in WASIX registry
-            Err(WasixError::function_not_found_with_context(
-                &wasix_function,
-                self.wasix_registry.list_functions().iter().map(|(name, _)| (*name).clone()).collect(),
-            ))
-        }
-    }
 
     /// Generate migration guidance for a WASI import
     pub fn generate_migration_guidance(
@@ -165,42 +110,21 @@ impl WasiCompatibilityLayer {
             target_module: wasix_module.clone(),
             target_function: wasix_function.clone(),
             migration_type: MigrationType::DirectMapping,
-            warnings: vec![
-                format!("WASI function '{}:{}' is deprecated", wasi_module, wasi_function),
-                "Consider using native Beanstalk functions instead of low-level WASI/WASIX calls".to_string(),
-            ],
-            suggestions: vec![
-                format!("Replace '{}:{}' with '{}:{}'", wasi_module, wasi_function, wasix_module, wasix_function),
-                "Update runtime to support WASIX for enhanced functionality".to_string(),
-            ],
-            compatibility_notes: vec![
-                "WASIX provides backward compatibility with WASI functions".to_string(),
-                "Enhanced error reporting and additional features available in WASIX".to_string(),
-            ],
         };
 
         Ok(guidance)
     }
 
-    /// Enable or disable migration warnings
-    pub fn set_emit_warnings(&mut self, emit: bool) {
-        self.emit_warnings = emit;
-    }
+
 
     /// Check if warnings are enabled
     pub fn should_emit_warnings(&self) -> bool {
         self.emit_warnings
     }
 
-    /// Get all supported WASI functions that can be migrated
-    pub fn get_supported_wasi_functions(&self) -> Vec<&String> {
-        self.wasi_to_wasix_mapping.keys().collect()
-    }
 
-    /// Get all supported WASI modules that can be migrated
-    pub fn get_supported_wasi_modules(&self) -> Vec<&String> {
-        self.wasi_module_mapping.keys().collect()
-    }
+
+
 
     /// Validate that the WASIX registry has all required functions for WASI compatibility
     pub fn validate_wasix_compatibility(&self) -> Result<(), WasixError> {
@@ -239,12 +163,7 @@ pub struct MigrationGuidance {
     pub target_function: String,
     /// Type of migration required
     pub migration_type: MigrationType,
-    /// Warnings about the migration
-    pub warnings: Vec<String>,
-    /// Suggestions for the migration
-    pub suggestions: Vec<String>,
-    /// Compatibility notes
-    pub compatibility_notes: Vec<String>,
+
 }
 
 impl MigrationGuidance {
@@ -258,26 +177,7 @@ impl MigrationGuidance {
             self.target_module, self.target_function
         ));
 
-        if !self.warnings.is_empty() {
-            message.push_str("\nWarnings:\n");
-            for warning in &self.warnings {
-                message.push_str(&format!("  - {}\n", warning));
-            }
-        }
 
-        if !self.suggestions.is_empty() {
-            message.push_str("\nSuggestions:\n");
-            for suggestion in &self.suggestions {
-                message.push_str(&format!("  - {}\n", suggestion));
-            }
-        }
-
-        if !self.compatibility_notes.is_empty() {
-            message.push_str("\nCompatibility Notes:\n");
-            for note in &self.compatibility_notes {
-                message.push_str(&format!("  - {}\n", note));
-            }
-        }
 
         message
     }
@@ -288,24 +188,15 @@ impl MigrationGuidance {
 pub enum MigrationType {
     /// Direct 1:1 mapping between WASI and WASIX functions
     DirectMapping,
-    /// Function signature changes required
-    SignatureChange,
     /// Function behavior changes or enhancements
     BehaviorChange,
-    /// Function not available in WASIX (use alternative)
-    NotAvailable,
-    /// Custom migration logic required
-    CustomMigration,
 }
 
 impl std::fmt::Display for MigrationType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MigrationType::DirectMapping => write!(f, "Direct Mapping"),
-            MigrationType::SignatureChange => write!(f, "Signature Change Required"),
             MigrationType::BehaviorChange => write!(f, "Behavior Change"),
-            MigrationType::NotAvailable => write!(f, "Not Available"),
-            MigrationType::CustomMigration => write!(f, "Custom Migration Required"),
         }
     }
 }

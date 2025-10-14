@@ -137,7 +137,7 @@ impl FunctionSignature {
                     }
                     returns.push(Arg {
                         name: returns.len().to_string(),
-                        value: Expression::string(
+                        value: Expression::string_slice(
                             "".to_string(),
                             token_stream.current_location(),
                             if mutable {

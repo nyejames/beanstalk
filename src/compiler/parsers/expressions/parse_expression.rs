@@ -261,7 +261,7 @@ pub fn create_expression(
             TokenKind::StringSliceLiteral(ref string) => {
                 let location = token_stream.current_location();
 
-                let string_expr = Expression::string(
+                let string_expr = Expression::string_slice(
                     string.to_owned(),
                     location.to_owned(),
                     Ownership::ImmutableReference,
@@ -284,7 +284,7 @@ pub fn create_expression(
                     }
 
                     TemplateType::CompileTimeString => {
-                        return Ok(Expression::string(
+                        return Ok(Expression::string_slice(
                             template.fold(&None)?,
                             token_stream.current_location(),
                             ownership.get_owned(),

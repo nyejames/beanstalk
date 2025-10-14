@@ -100,7 +100,7 @@ impl Expression {
             ownership,
         }
     }
-    pub fn string(value: String, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn string_slice(value: String, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::String,
             kind: ExpressionKind::StringSlice(value),

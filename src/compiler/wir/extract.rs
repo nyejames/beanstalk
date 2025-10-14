@@ -1,14 +1,151 @@
-use crate::compiler::wir::wir_nodes::{Loan, LoanId, WirFunction, ProgramPoint};
+use crate::compiler::wir::wir_nodes::{Loan, LoanId, WirFunction, ProgramPoint, PlaceState, StateTransition, BorrowKind};
 use crate::compiler::wir::place::Place;
 use std::collections::HashMap;
 
-/// Borrow fact extraction for gen/kill set construction
+/// State mapping for loan-to-state relationships in Beanstalk's memory model
 ///
-/// This module builds gen/kill sets for forward loan-liveness dataflow analysis.
+/// This structure tracks the mapping between loans and place states, enabling
+/// state-aware borrow checking that understands Beanstalk's implicit borrowing semantics.
+#[derive(Debug, Clone)]
+pub struct StateMapping {
+    /// Mapping from loan ID to the state it represents
+    pub loan_to_state: HashMap<LoanId, PlaceState>,
+    /// Mapping from place to all loans that affect it
+    pub place_to_loans: HashMap<Place, Vec<LoanId>>,
+    /// History of state transitions for debugging and error reporting
+    pub state_history: Vec<StateTransition>,
+}
+
+impl StateMapping {
+    /// Create a new empty state mapping
+    pub fn new() -> Self {
+        Self {
+            loan_to_state: HashMap::new(),
+            place_to_loans: HashMap::new(),
+            state_history: Vec::new(),
+        }
+    }
+
+    /// Map a loan to a specific state
+    pub fn map_loan_to_state(&mut self, loan_id: LoanId, place: Place, state: PlaceState) {
+        self.loan_to_state.insert(loan_id, state);
+        self.place_to_loans.entry(place).or_default().push(loan_id);
+    }
+
+    /// Get the current state of a place based on its active loans
+    pub fn get_place_state(&self, place: &Place) -> PlaceState {
+        // Get all loans affecting this place
+        let loans = match self.place_to_loans.get(place) {
+            Some(loans) => loans,
+            None => return PlaceState::Owned,
+        };
+        
+        if loans.is_empty() {
+            return PlaceState::Owned;
+        }
+
+        // Check for mutable loans first (exclusive)
+        for loan_id in loans {
+            if let Some(state) = self.loan_to_state.get(loan_id) {
+                if *state == PlaceState::Borrowed {
+                    return PlaceState::Borrowed;
+                }
+            }
+        }
+
+        // If no mutable loans, check for shared loans
+        for loan_id in loans {
+            if let Some(state) = self.loan_to_state.get(loan_id) {
+                if *state == PlaceState::Referenced {
+                    return PlaceState::Referenced;
+                }
+            }
+        }
+
+        // Default to owned if no active loans
+        PlaceState::Owned
+    }
+
+    /// Record a state transition
+    pub fn record_state_transition(&mut self, transition: StateTransition) {
+        self.state_history.push(transition);
+    }
+
+    /// Get all state transitions for a place
+    pub fn get_state_transitions_for_place(&self, place: &Place) -> Vec<&StateTransition> {
+        self.state_history
+            .iter()
+            .filter(|t| &t.place == place)
+            .collect()
+    }
+
+    /// Get loans affecting a specific place
+    pub fn get_loans_for_place(&self, place: &Place) -> Option<&[LoanId]> {
+        self.place_to_loans.get(place).map(|v| v.as_slice())
+    }
+
+    /// Check if a place has any mutable loans
+    pub fn has_mutable_loans(&self, place: &Place) -> bool {
+        if let Some(loan_ids) = self.place_to_loans.get(place) {
+            loan_ids.iter().any(|loan_id| {
+                self.loan_to_state.get(loan_id) == Some(&PlaceState::Borrowed)
+            })
+        } else {
+            false
+        }
+    }
+
+    /// Check if a place has any shared loans
+    pub fn has_shared_loans(&self, place: &Place) -> bool {
+        if let Some(loan_ids) = self.place_to_loans.get(place) {
+            loan_ids.iter().any(|loan_id| {
+                self.loan_to_state.get(loan_id) == Some(&PlaceState::Referenced)
+            })
+        } else {
+            false
+        }
+    }
+
+    /// Get all places that are currently in a specific state
+    pub fn get_places_in_state(&self, target_state: &PlaceState) -> Vec<Place> {
+        let mut places = Vec::new();
+        for (place, _) in &self.place_to_loans {
+            if self.get_place_state(place) == *target_state {
+                places.push(place.clone());
+            }
+        }
+        places
+    }
+
+    /// Update the state mapping when a loan ends
+    pub fn end_loan(&mut self, loan_id: LoanId) {
+        self.loan_to_state.remove(&loan_id);
+        
+        // Remove the loan from place-to-loans mapping
+        self.place_to_loans.retain(|_, loan_ids| {
+            loan_ids.retain(|id| *id != loan_id);
+            !loan_ids.is_empty()
+        });
+    }
+
+    /// Clear all loans for a place (when it's reassigned)
+    pub fn clear_loans_for_place(&mut self, place: &Place) {
+        if let Some(loan_ids) = self.place_to_loans.remove(place) {
+            for loan_id in loan_ids {
+                self.loan_to_state.remove(&loan_id);
+            }
+        }
+    }
+}
+
+/// Borrow fact extraction for gen/kill set construction with state mapping
+///
+/// This module builds gen/kill sets for forward loan-liveness dataflow analysis
+/// and maps loans to Beanstalk states for state-aware borrow checking.
 /// Gen sets contain loans starting at each statement, kill sets contain loans
 /// whose owners may alias places that are moved or reassigned.
 ///
-/// This is a simplified implementation focused on correctness over optimization.
+/// Enhanced with state mapping to support Beanstalk's implicit borrowing semantics.
 #[derive(Debug)]
 pub struct BorrowFactExtractor {
     /// Gen sets: loans starting at each program point
@@ -407,6 +544,40 @@ impl BorrowFactExtractor {
         }
     }
 
+    /// Extract borrow facts from a function with state mapping
+    ///
+    /// This method processes events from all program points and maps loans to states,
+    /// building both gen/kill sets (existing) and state mappings (new) for hybrid
+    /// state-loan borrow checking.
+    pub fn from_function_with_states(function: &WirFunction) -> Result<(Self, StateMapping), String> {
+        let mut extractor = Self::new();
+        let mut state_mapping = StateMapping::new();
+
+        // Step 1: Extract loans and build gen/kill sets using existing infrastructure
+        extractor.extract_function(function)?;
+
+        // Step 2: Map each loan to its corresponding state
+        for loan in &extractor.loans {
+            let state = match loan.kind {
+                BorrowKind::Shared => PlaceState::Referenced,
+                BorrowKind::Mut => PlaceState::Borrowed,
+            };
+            state_mapping.map_loan_to_state(loan.id, loan.owner.clone(), state);
+        }
+
+        // Step 3: Process events from all program points to build state transitions
+        for program_point in function.get_program_points_in_order() {
+            if let Some(events) = function.get_events(&program_point) {
+                // Record state transitions from events
+                for transition in &events.state_transitions {
+                    state_mapping.record_state_transition(transition.clone());
+                }
+            }
+        }
+
+        Ok((extractor, state_mapping))
+    }
+
     /// Extract gen/kill sets for a function with place interning optimization
     pub fn extract_function(&mut self, function: &WirFunction) -> Result<(), String> {
         // First, collect all loans from events
@@ -652,6 +823,191 @@ impl BorrowFactExtractor {
     /// Get loans that borrow a specific place - for tests
     pub fn get_loans_for_place(&self, place: &Place) -> Option<&[LoanId]> {
         self.place_to_loans.get(place).map(|v| v.as_slice())
+    }
+
+    /// Get the state of a place using hybrid loan-state analysis
+    ///
+    /// This method provides efficient state queries on top of loan tracking,
+    /// combining the performance of bitset operations with the semantics of
+    /// state-based analysis for Beanstalk's memory model.
+    pub fn get_place_state_with_loans(&self, place: &Place, live_loans: &BitSet, state_mapping: &StateMapping) -> PlaceState {
+        // Fast path: check state mapping first
+        let base_state = state_mapping.get_place_state(place);
+        
+        // If no loans are affecting this place, return the base state
+        if let Some(loan_ids) = self.place_to_loans.get(place) {
+            // Check if any of the loans affecting this place are currently live
+            let mut has_live_mutable = false;
+            let mut has_live_shared = false;
+            
+            for loan_id in loan_ids {
+                // Find the loan index in our loans vector
+                if let Some(loan_index) = self.loans.iter().position(|l| l.id == *loan_id) {
+                    // Check if this loan is currently live
+                    if live_loans.get(loan_index) {
+                        // Check the loan kind to determine state
+                        match self.loans[loan_index].kind {
+                            BorrowKind::Mut => has_live_mutable = true,
+                            BorrowKind::Shared => has_live_shared = true,
+                        }
+                    }
+                }
+            }
+            
+            // Determine state based on live loans
+            if has_live_mutable {
+                PlaceState::Borrowed
+            } else if has_live_shared {
+                PlaceState::Referenced
+            } else {
+                PlaceState::Owned
+            }
+        } else {
+            base_state
+        }
+    }
+
+    /// Efficient state query method using loan information
+    ///
+    /// This method implements the hybrid approach: use existing bitset operations
+    /// for loan liveness tracking (performance) and add state-based queries on top
+    /// of loan tracking (semantics).
+    pub fn get_place_state_efficient(&self, place: &Place, live_loans: &BitSet) -> PlaceState {
+        // Fast path: if no loans affect this place, it's owned
+        if let Some(loan_ids) = self.place_to_loans.get(place) {
+            // Use bitset operations for efficient loan liveness checking
+            let mut has_live_mutable = false;
+            let mut has_live_shared = false;
+            
+            // Iterate through loans affecting this place
+            for loan_id in loan_ids {
+                // Find the loan index for bitset lookup
+                if let Some(loan_index) = self.loans.iter().position(|l| l.id == *loan_id) {
+                    // Use efficient bitset get operation
+                    if live_loans.get(loan_index) {
+                        // Determine state based on loan kind
+                        match self.loans[loan_index].kind {
+                            BorrowKind::Mut => {
+                                has_live_mutable = true;
+                                break; // Mutable is exclusive, no need to check further
+                            }
+                            BorrowKind::Shared => has_live_shared = true,
+                        }
+                    }
+                }
+            }
+            
+            // Return state based on live loans
+            if has_live_mutable {
+                PlaceState::Borrowed
+            } else if has_live_shared {
+                PlaceState::Referenced
+            } else {
+                PlaceState::Owned
+            }
+        } else {
+            PlaceState::Owned
+        }
+    }
+
+    /// Check for state-based conflicts using hybrid analysis
+    ///
+    /// This method combines bitset operations for performance with state-based
+    /// conflict detection for Beanstalk's memory model semantics.
+    pub fn check_state_conflicts(&self, place: &Place, new_borrow_kind: &BorrowKind, live_loans: &BitSet) -> Option<PlaceState> {
+        let current_state = self.get_place_state_efficient(place, live_loans);
+        
+        // Apply Beanstalk conflict rules
+        match (current_state, new_borrow_kind) {
+            // Multiple shared borrows are allowed
+            (PlaceState::Referenced, BorrowKind::Shared) => None,
+            
+            // Mutable borrows conflict with any existing borrows
+            (PlaceState::Referenced, BorrowKind::Mut) => Some(PlaceState::Referenced),
+            (PlaceState::Borrowed, BorrowKind::Shared) => Some(PlaceState::Borrowed),
+            (PlaceState::Borrowed, BorrowKind::Mut) => Some(PlaceState::Borrowed),
+            
+            // No conflict with owned places
+            (PlaceState::Owned, _) => None,
+            
+            // Can't borrow moved or killed places
+            (PlaceState::Moved, _) => Some(PlaceState::Moved),
+            (PlaceState::Killed, _) => Some(PlaceState::Killed),
+        }
+    }
+
+    /// Get all places with live loans using efficient bitset operations
+    ///
+    /// This method demonstrates the hybrid approach by using bitset operations
+    /// for performance while providing state-based results.
+    pub fn get_places_with_live_loans(&self, live_loans: &BitSet) -> Vec<(Place, PlaceState)> {
+        let mut result = Vec::new();
+        
+        // Iterate through all places that have loans
+        for (place, loan_ids) in &self.place_to_loans {
+            // Check if any loans for this place are live
+            let mut has_live_loans = false;
+            for loan_id in loan_ids {
+                if let Some(loan_index) = self.loans.iter().position(|l| l.id == *loan_id) {
+                    if live_loans.get(loan_index) {
+                        has_live_loans = true;
+                        break;
+                    }
+                }
+            }
+            
+            if has_live_loans {
+                let state = self.get_place_state_efficient(place, live_loans);
+                result.push((place.clone(), state));
+            }
+        }
+        
+        result
+    }
+
+    /// Compute state transitions using hybrid analysis
+    ///
+    /// This method uses bitset operations to efficiently track which loans
+    /// are starting/ending and maps them to state transitions.
+    pub fn compute_state_transitions(&self, gen_set: &BitSet, kill_set: &BitSet, state_mapping: &StateMapping) -> Vec<StateTransition> {
+        let mut transitions = Vec::new();
+        
+        // Process loans being generated (starting)
+        gen_set.for_each_set_bit(|loan_index| {
+            if loan_index < self.loans.len() {
+                let loan = &self.loans[loan_index];
+                let new_state = match loan.kind {
+                    BorrowKind::Shared => PlaceState::Referenced,
+                    BorrowKind::Mut => PlaceState::Borrowed,
+                };
+                
+                transitions.push(StateTransition {
+                    place: loan.owner.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: new_state,
+                    program_point: loan.origin_stmt,
+                    reason: crate::compiler::wir::wir_nodes::TransitionReason::BorrowCreated,
+                });
+            }
+        });
+        
+        // Process loans being killed (ending)
+        kill_set.for_each_set_bit(|loan_index| {
+            if loan_index < self.loans.len() {
+                let loan = &self.loans[loan_index];
+                let current_state = state_mapping.get_place_state(&loan.owner);
+                
+                transitions.push(StateTransition {
+                    place: loan.owner.clone(),
+                    from_state: current_state,
+                    to_state: PlaceState::Owned, // Return to owned when loan ends
+                    program_point: loan.origin_stmt,
+                    reason: crate::compiler::wir::wir_nodes::TransitionReason::LoanEnded,
+                });
+            }
+        });
+        
+        transitions
     }
 
     /// Update function events with the loans that were created

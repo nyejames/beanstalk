@@ -104,7 +104,7 @@ pub fn evaluate_expression(
         match node.kind {
             NodeKind::Expression(ref expr, ..) => {
                 if let DataType::Inferred = current_type {
-                    *current_type = expr.data_type;
+                    *current_type = expr.data_type.to_owned();
                 }
 
                 if let DataType::CoerceToString | DataType::String = current_type {
@@ -164,17 +164,17 @@ pub fn evaluate_expression(
 
         if let ExpressionKind::Reference(..) = only_expression.kind {
             // The current type now becomes a reference (basically a safe pointer rather than a value)
-            *current_type = DataType::Reference(
-                Box::from(only_expression.data_type),
-                ownership,
-            );
+            *current_type =
+                DataType::Reference(Box::from(only_expression.data_type.to_owned()), ownership);
         }
 
         return Ok(only_expression);
     }
 
     match current_type {
-        DataType::Template | DataType::String => concat_template(&mut simplified_expression),
+        DataType::Template | DataType::String => {
+            concat_template(&mut simplified_expression, ownership.get_owned())
+        }
 
         DataType::CoerceToString => {
             let mut new_string = String::new();
@@ -185,7 +185,11 @@ pub fn evaluate_expression(
                 new_string += &node.get_expr()?.as_string();
             }
 
-            Ok(Expression::string(new_string, location))
+            Ok(Expression::string_slice(
+                new_string,
+                location,
+                Ownership::MutableOwned,
+            ))
         }
 
         DataType::Inferred => {
@@ -227,6 +231,7 @@ pub fn evaluate_expression(
                 stack,
                 current_type.to_owned(),
                 TextLocation::new(scope, first_node_start, last_node_end),
+                Ownership::MutableOwned,
             ))
         }
     }
@@ -257,7 +262,10 @@ fn pop_higher_precedence(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expression, CompileError> {
+fn concat_template(
+    simplified_expression: &mut Vec<AstNode>,
+    ownership: Ownership,
+) -> Result<Expression, CompileError> {
     let mut template: Template = Template::create_default(None);
     let _location = extract_location(simplified_expression)?;
 
@@ -303,7 +311,7 @@ fn concat_template(simplified_expression: &mut Vec<AstNode>) -> Result<Expressio
         }
     }
 
-    Ok(Expression::template(template))
+    Ok(Expression::template(template, ownership))
 }
 
 fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompileError> {

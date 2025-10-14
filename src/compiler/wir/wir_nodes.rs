@@ -381,11 +381,11 @@ pub enum Statement {
 }
 
 impl Statement {
-    /// Generate events for this statement on-demand
+    /// Generate state-aware events for this statement on-demand
     ///
     /// This method computes events dynamically from the statement structure,
-    /// eliminating the need to store events in WirFunction. Events are computed
-    /// based on the statement type and operands.
+    /// including state transition information for Beanstalk's memory model.
+    /// Events are computed based on the statement type and operands.
     ///
     /// ## Performance Benefits
     /// - Reduces WIR memory footprint by ~30%
@@ -393,15 +393,23 @@ impl Statement {
     /// - Enables efficient event caching for repeated access patterns
     ///
     /// ## Event Generation Rules
-    /// - `Assign`: Generates reassign event for place, use/move events for rvalue operands
+    /// - `Assign`: Generates reassign event for place, use/move events for rvalue operands, state transitions
     /// - `Call`: Generates use events for arguments, reassign event for destination
     /// - `InterfaceCall`: Generates use events for receiver and arguments, reassign for destination
-    /// - `Drop`: Generates use event for the dropped place
+    /// - `Drop`: Generates use event for the dropped place, transition to Killed state
     /// - `Store`: Generates reassign event for place, use event for value
-    /// - `Alloc`: Generates reassign event for place, use event for size
-    /// - `Dealloc`: Generates use event for place
+    /// - `Alloc`: Generates reassign event for place, use event for size, transition to Owned
+    /// - `Dealloc`: Generates use event for place, transition to Killed
     /// - `Nop`, `MemoryOp`: Generate no events for basic borrow checking
     pub fn generate_events(&self) -> Events {
+        self.generate_events_at_program_point(ProgramPoint::new(0))
+    }
+
+    /// Generate state-aware events for this statement at a specific program point
+    ///
+    /// This method includes state transition tracking for precise borrow checking
+    /// with Beanstalk's implicit borrowing semantics.
+    pub fn generate_events_at_program_point(&self, program_point: ProgramPoint) -> Events {
         let mut events = Events::default();
 
         match self {
@@ -409,8 +417,8 @@ impl Statement {
                 // The assignment itself generates a reassign event for the place
                 events.reassigns.push(place.clone());
                 
-                // Generate events for the rvalue
-                self.generate_rvalue_events(rvalue, &mut events);
+                // Generate events for the rvalue with state transitions
+                self.generate_rvalue_events_with_states(rvalue, &mut events, program_point, place);
             }
             Statement::Call { args, destination, .. } => {
                 // Generate use events for all arguments
@@ -418,9 +426,16 @@ impl Statement {
                     self.generate_operand_events(arg, &mut events);
                 }
 
-                // If there's a destination, it gets reassigned
+                // If there's a destination, it gets reassigned with state transition to Owned
                 if let Some(dest_place) = destination {
                     events.reassigns.push(dest_place.clone());
+                    events.state_transitions.push(StateTransition {
+                        place: dest_place.clone(),
+                        from_state: PlaceState::Owned, // Assume previous state
+                        to_state: PlaceState::Owned,   // Function result is owned
+                        program_point,
+                        reason: TransitionReason::Assignment,
+                    });
                 }
             }
             Statement::InterfaceCall {
@@ -437,29 +452,71 @@ impl Statement {
                     self.generate_operand_events(arg, &mut events);
                 }
 
-                // If there's a destination, it gets reassigned
+                // If there's a destination, it gets reassigned with state transition to Owned
                 if let Some(dest_place) = destination {
                     events.reassigns.push(dest_place.clone());
+                    events.state_transitions.push(StateTransition {
+                        place: dest_place.clone(),
+                        from_state: PlaceState::Owned, // Assume previous state
+                        to_state: PlaceState::Owned,   // Interface result is owned
+                        program_point,
+                        reason: TransitionReason::Assignment,
+                    });
                 }
             }
             Statement::Drop { place } => {
                 // Generate drop event - this is an end-of-lifetime point
-                // For now, we'll track this as a use (the place is being accessed to drop it)
                 events.uses.push(place.clone());
+                
+                // Transition to Killed state
+                events.state_transitions.push(StateTransition {
+                    place: place.clone(),
+                    from_state: PlaceState::Owned, // Assume it was owned before drop
+                    to_state: PlaceState::Killed,
+                    program_point,
+                    reason: TransitionReason::LastUse,
+                });
             }
             Statement::Store { place, value, .. } => {
                 // Store operations reassign the place and use the value
                 events.reassigns.push(place.clone());
                 self.generate_operand_events(value, &mut events);
+                
+                // Store creates owned value at the place
+                events.state_transitions.push(StateTransition {
+                    place: place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // Store creates owned value
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
             }
             Statement::Alloc { place, size, .. } => {
                 // Allocation reassigns the place and uses the size operand
                 events.reassigns.push(place.clone());
                 self.generate_operand_events(size, &mut events);
+                
+                // Allocation creates owned value
+                events.state_transitions.push(StateTransition {
+                    place: place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // Allocation creates owned value
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
             }
             Statement::Dealloc { place } => {
                 // Deallocation uses the place (to free it)
                 events.uses.push(place.clone());
+                
+                // Transition to Killed state
+                events.state_transitions.push(StateTransition {
+                    place: place.clone(),
+                    from_state: PlaceState::Owned, // Must be owned to deallocate
+                    to_state: PlaceState::Killed,
+                    program_point,
+                    reason: TransitionReason::LastUse,
+                });
             }
             Statement::HostCall { args, destination, .. } => {
                 // Generate use events for all arguments
@@ -467,9 +524,16 @@ impl Statement {
                     self.generate_operand_events(arg, &mut events);
                 }
 
-                // If there's a destination, it gets reassigned
+                // If there's a destination, it gets reassigned with state transition to Owned
                 if let Some(dest_place) = destination {
                     events.reassigns.push(dest_place.clone());
+                    events.state_transitions.push(StateTransition {
+                        place: dest_place.clone(),
+                        from_state: PlaceState::Owned, // Assume previous state
+                        to_state: PlaceState::Owned,   // Host function result is owned
+                        program_point,
+                        reason: TransitionReason::Assignment,
+                    });
                 }
             }
             Statement::WasixCall { args, destination, .. } => {
@@ -478,9 +542,16 @@ impl Statement {
                     self.generate_operand_events(arg, &mut events);
                 }
 
-                // If there's a destination, it gets reassigned
+                // If there's a destination, it gets reassigned with state transition to Owned
                 if let Some(dest_place) = destination {
                     events.reassigns.push(dest_place.clone());
+                    events.state_transitions.push(StateTransition {
+                        place: dest_place.clone(),
+                        from_state: PlaceState::Owned, // Assume previous state
+                        to_state: PlaceState::Owned,   // WASIX function result is owned
+                        program_point,
+                        reason: TransitionReason::Assignment,
+                    });
                 }
             }
             Statement::Nop | Statement::MemoryOp { .. } => {
@@ -491,22 +562,63 @@ impl Statement {
         events
     }
 
-    /// Generate events for rvalue operations
-    fn generate_rvalue_events(&self, rvalue: &Rvalue, events: &mut Events) {
+    /// Generate events for rvalue operations with state transitions
+    fn generate_rvalue_events_with_states(&self, rvalue: &Rvalue, events: &mut Events, program_point: ProgramPoint, target_place: &Place) {
         match rvalue {
             Rvalue::Use(operand) => {
                 self.generate_operand_events(operand, events);
+                
+                // Use operations typically create owned values at the target
+                events.state_transitions.push(StateTransition {
+                    place: target_place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // Use creates owned value
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
             }
             Rvalue::BinaryOp(_, left, right) => {
                 self.generate_operand_events(left, events);
                 self.generate_operand_events(right, events);
+                
+                // Binary operations create owned results
+                events.state_transitions.push(StateTransition {
+                    place: target_place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // Binary op creates owned value
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
             }
             Rvalue::UnaryOp(_, operand) => {
                 self.generate_operand_events(operand, events);
+                
+                // Unary operations create owned results
+                events.state_transitions.push(StateTransition {
+                    place: target_place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // Unary op creates owned value
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
             }
-            Rvalue::Ref { place, .. } => {
+            Rvalue::Ref { place, borrow_kind } => {
                 // The place being borrowed is also used (read access)
                 events.uses.push(place.clone());
+                
+                // Create state transition based on borrow kind
+                let target_state = match borrow_kind {
+                    BorrowKind::Shared => PlaceState::Referenced,
+                    BorrowKind::Mut => PlaceState::Borrowed,
+                };
+                
+                events.state_transitions.push(StateTransition {
+                    place: target_place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: target_state,
+                    program_point,
+                    reason: TransitionReason::BorrowCreated,
+                });
                 
                 // Note: Loan creation is handled by the borrow fact extractor
                 // which scans WIR statements for Rvalue::Ref operations
@@ -691,15 +803,20 @@ pub enum Terminator {
 impl Terminator {
     /// Generate events for this terminator
     pub fn generate_events(&self) -> Events {
+        self.generate_events_at_program_point(ProgramPoint::new(0))
+    }
+
+    /// Generate state-aware events for this terminator at a specific program point
+    pub fn generate_events_at_program_point(&self, program_point: ProgramPoint) -> Events {
         let mut events = Events::default();
 
         match self {
             Terminator::If { condition, .. } => {
-                self.generate_operand_events(condition, &mut events);
+                self.generate_operand_events_with_states(condition, &mut events, program_point);
             }
             Terminator::Return { values } => {
                 for value in values {
-                    self.generate_operand_events(value, &mut events);
+                    self.generate_operand_events_with_states(value, &mut events, program_point);
                 }
             }
             _ => {
@@ -710,14 +827,23 @@ impl Terminator {
         events
     }
 
-    /// Generate events for operands in terminators
-    fn generate_operand_events(&self, operand: &Operand, events: &mut Events) {
+    /// Generate events for operands in terminators with state transitions
+    fn generate_operand_events_with_states(&self, operand: &Operand, events: &mut Events, program_point: ProgramPoint) {
         match operand {
             Operand::Copy(place) => {
                 events.uses.push(place.clone());
+                // Copy operations don't change the source place state
             }
             Operand::Move(place) => {
                 events.moves.push(place.clone());
+                // Move operations transition the source place to Moved state
+                events.state_transitions.push(StateTransition {
+                    place: place.clone(),
+                    from_state: PlaceState::Owned, // Must be owned to move
+                    to_state: PlaceState::Moved,
+                    program_point,
+                    reason: TransitionReason::MoveOccurred,
+                });
             }
             Operand::Constant(_) => {
                 // Constants don't generate events
@@ -726,6 +852,11 @@ impl Terminator {
                 // References don't generate events
             }
         }
+    }
+
+    /// Generate events for operands in terminators (legacy method for compatibility)
+    fn generate_operand_events(&self, operand: &Operand, events: &mut Events) {
+        self.generate_operand_events_with_states(operand, events, ProgramPoint::new(0));
     }
 }
 
@@ -744,6 +875,57 @@ pub enum BorrowKind {
 }
 
 
+
+/// Place state in Beanstalk's memory model
+///
+/// Represents the current state of a place in Beanstalk's implicit borrowing system.
+/// States track ownership and borrowing relationships without explicit lifetime annotations.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum PlaceState {
+    /// Place owns the value (no active loans)
+    Owned,
+    /// Place has shared loans (x = y creates shared loan)
+    Referenced,
+    /// Place has mutable loan (x ~= y creates mutable loan)
+    Borrowed,
+    /// Last use completed, loans can be released
+    Killed,
+    /// Value has been moved out (place invalidated)
+    Moved,
+}
+
+/// State transition for a place at a program point
+///
+/// Tracks how places change state during program execution, enabling
+/// state-aware borrow checking with Beanstalk's implicit borrowing semantics.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StateTransition {
+    /// Place undergoing state transition
+    pub place: Place,
+    /// State before this program point
+    pub from_state: PlaceState,
+    /// State after this program point
+    pub to_state: PlaceState,
+    /// Program point where transition occurs
+    pub program_point: ProgramPoint,
+    /// Reason for the state transition
+    pub reason: TransitionReason,
+}
+
+/// Reason for a state transition
+#[derive(Debug, Clone, PartialEq)]
+pub enum TransitionReason {
+    /// Borrow created (x = y or x ~= y)
+    BorrowCreated,
+    /// Move occurred (ownership transfer)
+    MoveOccurred,
+    /// Last use detected (can transition to Killed)
+    LastUse,
+    /// Assignment/reassignment
+    Assignment,
+    /// Loan ended (return to Owned)
+    LoanEnded,
+}
 
 /// Program point identifier (one per WIR statement)
 ///
@@ -799,11 +981,12 @@ impl std::fmt::Display for ProgramPoint {
 
 
 
-/// Simple events for dataflow analysis
+/// State-aware events for dataflow analysis with Beanstalk memory model
 ///
-/// Events provide straightforward borrow tracking for each program point.
+/// Events provide straightforward borrow tracking for each program point with
+/// enhanced state transition tracking for Beanstalk's implicit borrowing system.
 /// Each program point has associated events that describe what happens at that
-/// statement in terms of borrows, uses, moves, and assignments.
+/// statement in terms of borrows, uses, moves, assignments, and state changes.
 ///
 /// ## Event Types
 ///
@@ -811,16 +994,24 @@ impl std::fmt::Display for ProgramPoint {
 /// - `uses`: Places being read (non-consuming access)
 /// - `moves`: Places being moved (consuming access)  
 /// - `reassigns`: Places being written/assigned
+/// - `state_transitions`: State changes for places (Owned/Referenced/Borrowed/Moved)
 ///
 /// ## Example
 ///
 /// ```rust
-/// // For statement: a = &x
+/// // For statement: a = x (shared borrow in Beanstalk)
 /// Events {
-///     start_loans: vec![LoanId(0)],           // New borrow
+///     start_loans: vec![LoanId(0)],           // New shared loan
 ///     uses: vec![Place::Local(x)],            // Read x for borrowing
 ///     reassigns: vec![Place::Local(a)],       // Assign to a
 ///     moves: vec![],                          // No moves
+///     state_transitions: vec![StateTransition {
+///         place: Place::Local(a),
+///         from_state: PlaceState::Owned,
+///         to_state: PlaceState::Referenced,
+///         program_point: ProgramPoint(1),
+///         reason: TransitionReason::BorrowCreated,
+///     }],
 /// }
 /// ```
 #[derive(Debug, Clone, Default)]
@@ -833,6 +1024,8 @@ pub struct Events {
     pub moves: Vec<Place>,
     /// Places being reassigned (write access)
     pub reassigns: Vec<Place>,
+    /// State transitions for places at this program point
+    pub state_transitions: Vec<StateTransition>,
 }
 
 /// Loan identifier for tracking borrows
@@ -901,44 +1094,215 @@ pub struct Loan {
 /// Borrow checking error
 #[derive(Debug, Clone)]
 pub struct BorrowError {
-    /// Program point where error occurs
-    pub point: ProgramPoint,
-    /// Type of borrow error
+    /// Type of borrow error with state information
     pub error_type: BorrowErrorType,
-    /// Error message
+    /// Primary source location where error occurs
+    pub primary_location: TextLocation,
+    /// Secondary source location (e.g., where conflicting borrow was created)
+    pub secondary_location: Option<TextLocation>,
+    /// Main error message
     pub message: String,
-    /// Source location for error reporting
-    pub location: TextLocation,
+    /// Helpful suggestion for fixing the error
+    pub suggestion: Option<String>,
+    /// Current state of the place involved in the error
+    pub current_state: Option<PlaceState>,
+    /// Expected state for the operation to succeed
+    pub expected_state: Option<PlaceState>,
 }
 
-/// Types of borrow checking errors
+/// Types of borrow checking errors with Beanstalk-specific semantics
 #[derive(Debug, Clone, PartialEq)]
 pub enum BorrowErrorType {
-    /// Conflicting borrows (shared vs mutable)
-    ConflictingBorrows {
-        existing_borrow: BorrowKind,
-        new_borrow: BorrowKind,
+    /// Multiple mutable borrows (x ~= y when y is already mutably borrowed)
+    MultipleMutableBorrows {
         place: Place,
+        existing_borrow_location: TextLocation,
+        new_borrow_location: TextLocation,
     },
-    /// Use after move
+    /// Shared/mutable conflict (x ~= y when y has shared references, or x = y when y is mutably borrowed)
+    SharedMutableConflict {
+        place: Place,
+        existing_borrow_kind: BorrowKind,
+        new_borrow_kind: BorrowKind,
+        existing_borrow_location: TextLocation,
+        new_borrow_location: TextLocation,
+    },
+    /// Use after move (using a place that has been moved)
     UseAfterMove {
         place: Place,
-        move_point: ProgramPoint,
+        move_location: TextLocation,
+        use_location: TextLocation,
     },
-    /// Borrow live across owner move/drop
-    BorrowAcrossOwnerInvalidation {
-        borrowed_place: Place,
-        owner_place: Place,
-        invalidation_point: ProgramPoint,
-        invalidation_type: InvalidationType,
+    /// Move while borrowed (attempting to move a place that has active borrows)
+    MoveWhileBorrowed {
+        place: Place,
+        borrow_kind: BorrowKind,
+        borrow_location: TextLocation,
+        move_location: TextLocation,
     },
 }
 
-/// Types of owner invalidation
-#[derive(Debug, Clone, PartialEq)]
-pub enum InvalidationType {
-    /// Owner was moved
-    Move,
+impl BorrowError {
+    /// Create a multiple mutable borrows error
+    pub fn multiple_mutable_borrows(
+        place: Place,
+        existing_location: TextLocation,
+        new_location: TextLocation,
+    ) -> Self {
+        Self {
+            error_type: BorrowErrorType::MultipleMutableBorrows {
+                place: place.clone(),
+                existing_borrow_location: existing_location.clone(),
+                new_borrow_location: new_location.clone(),
+            },
+            primary_location: new_location,
+            secondary_location: Some(existing_location),
+            message: format!("cannot mutably borrow `{:?}` because it is already mutably borrowed", place),
+            suggestion: Some("ensure the first mutable borrow is no longer used before creating the second".to_string()),
+            current_state: Some(PlaceState::Borrowed),
+            expected_state: Some(PlaceState::Owned),
+        }
+    }
+
+    /// Create a shared/mutable conflict error
+    pub fn shared_mutable_conflict(
+        place: Place,
+        existing_kind: BorrowKind,
+        new_kind: BorrowKind,
+        existing_location: TextLocation,
+        new_location: TextLocation,
+    ) -> Self {
+        let (message, current_state, expected_state) = match (&existing_kind, &new_kind) {
+            (BorrowKind::Shared, BorrowKind::Mut) => (
+                format!("cannot mutably borrow `{:?}` because it is already referenced", place),
+                PlaceState::Referenced,
+                PlaceState::Owned,
+            ),
+            (BorrowKind::Mut, BorrowKind::Shared) => (
+                format!("cannot reference `{:?}` because it is already mutably borrowed", place),
+                PlaceState::Borrowed,
+                PlaceState::Owned,
+            ),
+            _ => (
+                format!("conflicting borrows of `{:?}`", place),
+                PlaceState::Owned, // Default
+                PlaceState::Owned,
+            ),
+        };
+
+        Self {
+            error_type: BorrowErrorType::SharedMutableConflict {
+                place: place.clone(),
+                existing_borrow_kind: existing_kind,
+                new_borrow_kind: new_kind,
+                existing_borrow_location: existing_location.clone(),
+                new_borrow_location: new_location.clone(),
+            },
+            primary_location: new_location,
+            secondary_location: Some(existing_location),
+            message,
+            suggestion: Some("ensure all shared references are finished before creating mutable access".to_string()),
+            current_state: Some(current_state),
+            expected_state: Some(expected_state),
+        }
+    }
+
+    /// Create a use after move error
+    pub fn use_after_move(
+        place: Place,
+        move_location: TextLocation,
+        use_location: TextLocation,
+    ) -> Self {
+        Self {
+            error_type: BorrowErrorType::UseAfterMove {
+                place: place.clone(),
+                move_location: move_location.clone(),
+                use_location: use_location.clone(),
+            },
+            primary_location: use_location,
+            secondary_location: Some(move_location),
+            message: format!("borrow of moved value: `{:?}`", place),
+            suggestion: Some("consider cloning the value before the move, or restructure your code to avoid the move".to_string()),
+            current_state: Some(PlaceState::Moved),
+            expected_state: Some(PlaceState::Owned),
+        }
+    }
+
+    /// Create a move while borrowed error
+    pub fn move_while_borrowed(
+        place: Place,
+        borrow_kind: BorrowKind,
+        borrow_location: TextLocation,
+        move_location: TextLocation,
+    ) -> Self {
+        let borrow_type = match borrow_kind {
+            BorrowKind::Shared => "referenced",
+            BorrowKind::Mut => "mutably borrowed",
+        };
+
+        let current_state = match borrow_kind {
+            BorrowKind::Shared => PlaceState::Referenced,
+            BorrowKind::Mut => PlaceState::Borrowed,
+        };
+
+        Self {
+            error_type: BorrowErrorType::MoveWhileBorrowed {
+                place: place.clone(),
+                borrow_kind,
+                borrow_location: borrow_location.clone(),
+                move_location: move_location.clone(),
+            },
+            primary_location: move_location,
+            secondary_location: Some(borrow_location),
+            message: format!("cannot move out of `{:?}` because it is {}", place, borrow_type),
+            suggestion: Some("ensure all borrows are finished before moving the value".to_string()),
+            current_state: Some(current_state),
+            expected_state: Some(PlaceState::Owned),
+        }
+    }
+
+    /// Convert this borrow error to a compile error for the main pipeline
+    pub fn to_compile_error(&self) -> crate::compiler::compiler_errors::CompileError {
+        use crate::compiler::compiler_errors::{CompileError, ErrorType};
+        
+        // Format the main error message with state information
+        let mut formatted_message = self.message.clone();
+        
+        // Add state information if available
+        if let (Some(current), Some(expected)) = (&self.current_state, &self.expected_state) {
+            formatted_message.push_str(&format!(
+                "\n  current state: {:?}, expected state: {:?}",
+                current, expected
+            ));
+        }
+        
+        // Add secondary location information if available
+        if let Some(secondary_loc) = &self.secondary_location {
+            formatted_message.push_str(&format!(
+                "\n  note: conflicting operation occurred at {}:{}",
+                secondary_loc.start_pos.line_number, secondary_loc.start_pos.char_column
+            ));
+        }
+        
+        // Add suggestion if available
+        if let Some(suggestion) = &self.suggestion {
+            formatted_message.push_str(&format!("\n  help: {}", suggestion));
+        }
+        
+        CompileError {
+            msg: formatted_message,
+            location: self.primary_location.clone(),
+            error_type: ErrorType::Rule, // Borrow checker errors are rule violations
+            file_path: std::path::PathBuf::new(),
+        }
+    }
+}
+
+/// Convert a list of borrow errors to compile errors
+pub fn convert_borrow_errors_to_compile_errors(
+    borrow_errors: &[BorrowError]
+) -> Vec<crate::compiler::compiler_errors::CompileError> {
+    borrow_errors.iter().map(|err| err.to_compile_error()).collect()
 }
 
 

@@ -32,9 +32,9 @@ pub fn create_loop(
 
             if let Some(arg) = context.get_reference(&name) {
                 let mut data_type = arg.value.data_type.to_owned();
-                let is_mutable = arg.value.ownership.is_mutable();
+                let ownership = &arg.value.ownership;
                 let condition =
-                    create_expression(token_stream, &context, &mut data_type, is_mutable, false)?;
+                    create_expression(token_stream, &context, &mut data_type, ownership, false)?;
 
                 // Make sure this condition is a boolean expression
                 return match data_type {
@@ -92,8 +92,13 @@ pub fn create_loop(
             // TODO: need to check for mutable reference syntax
             // Is just defaulting to immutable reference for now
             let mut iterable_type = DataType::Inferred;
-            let iterated_item =
-                create_expression(token_stream, &context, &mut iterable_type, &Ownership::ImmutableReference, false)?;
+            let iterated_item = create_expression(
+                token_stream,
+                &context,
+                &mut iterable_type,
+                &Ownership::ImmutableReference,
+                false,
+            )?;
 
             // Make sure this type can be iterated over
             if !iterable_type.is_iterable() {

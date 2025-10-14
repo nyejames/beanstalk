@@ -1,7 +1,7 @@
-use crate::compiler::wir::extract::{BitSet, BorrowFactExtractor, may_alias};
+use crate::compiler::wir::extract::{BitSet, BorrowFactExtractor, StateMapping, may_alias};
 use crate::compiler::wir::wir_nodes::{
-    BorrowError, BorrowErrorType, InvalidationType, WirFunction, ProgramPoint, 
-    Loan, LoanId, BorrowKind
+    BorrowError, BorrowErrorType, WirFunction, ProgramPoint, 
+    Loan, LoanId, BorrowKind, PlaceState
 };
 use crate::compiler::wir::place::Place;
 
@@ -121,6 +121,53 @@ impl UnifiedBorrowChecker {
             warnings: Vec::new(),
             statistics: UnifiedStatistics::default(),
         }
+    }
+
+    /// Run state-aware unified borrow checking analysis on a function
+    pub fn check_function_with_states(
+        &mut self,
+        function: &WirFunction,
+        facts: &BorrowFactExtractor,
+        state_mapping: &StateMapping,
+    ) -> Result<UnifiedBorrowCheckResults, String> {
+        let _start_time = std::time::Instant::now();
+
+        // Phase 1: Initialize data structures
+        self.initialize_from_function_and_extractor(function, facts)?;
+
+        // Phase 2: Run existing forward dataflow analysis for loan liveness
+        let liveness_start = std::time::Instant::now();
+        self.compute_liveness_analysis(function)?;
+        self.statistics.liveness_time_ns = liveness_start.elapsed().as_nanos() as u64;
+
+        // Phase 3: Run unified forward analysis with state awareness
+        let unified_start = std::time::Instant::now();
+        self.run_unified_forward_analysis(function)?;
+        let unified_time = unified_start.elapsed().as_nanos() as u64;
+        
+        // Split unified time proportionally
+        self.statistics.loan_tracking_time_ns = unified_time / 4;
+        self.statistics.conflict_detection_time_ns = unified_time / 4;
+        self.statistics.refinement_time_ns = unified_time / 4;
+
+        // Phase 4: Add reverse pass analysis for last-use detection and state refinement
+        let reverse_start = std::time::Instant::now();
+        self.run_reverse_pass_analysis(function, state_mapping)?;
+        self.statistics.refinement_time_ns += reverse_start.elapsed().as_nanos() as u64;
+
+        // Phase 5: Detect state-based conflicts
+        let conflict_start = std::time::Instant::now();
+        self.detect_state_based_conflicts(function, state_mapping)?;
+        self.statistics.conflict_detection_time_ns += conflict_start.elapsed().as_nanos() as u64;
+
+        // Phase 6: Generate results
+        let results = UnifiedBorrowCheckResults {
+            errors: self.errors.clone(),
+            warnings: self.warnings.clone(),
+            statistics: self.statistics.clone(),
+        };
+
+        Ok(results)
     }
 
     /// Run unified borrow checking analysis on a function
@@ -557,8 +604,10 @@ impl UnifiedBorrowChecker {
     }
 
     /// Check if two loans conflict using improved Polonius-style analysis
+    /// This leverages field-sensitive aliasing analysis for precise conflict detection
     fn loans_conflict(&self, loan_a: &Loan, loan_b: &Loan) -> bool {
-        // Loans don't conflict if they don't alias
+        // Loans don't conflict if they don't alias (field-sensitive)
+        // This allows borrowing different fields of the same struct
         if !may_alias(&loan_a.owner, &loan_b.owner) {
             return false;
         }
@@ -658,6 +707,301 @@ impl UnifiedBorrowChecker {
             location: TextLocation::default(),
         }
     }
+
+    /// Run reverse pass analysis for last-use detection and state refinement
+    fn run_reverse_pass_analysis(
+        &mut self,
+        function: &WirFunction,
+        state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        // Traverse program points in reverse order
+        let program_points = function.get_program_points_in_order();
+        
+        for point in program_points.iter().rev() {
+            let events = function.generate_events(point).unwrap_or_default();
+            
+            // Check for last uses and refine states
+            for used_place in &events.uses {
+                if self.is_last_use_at_point(used_place, *point, function) {
+                    self.handle_last_use(used_place, *point, state_mapping)?;
+                }
+            }
+            
+            // Check for moves
+            for moved_place in &events.moves {
+                self.handle_move(moved_place, *point, state_mapping)?;
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Check if this is the last use of a place at a program point
+    fn is_last_use_at_point(
+        &self,
+        place: &Place,
+        point: ProgramPoint,
+        function: &WirFunction,
+    ) -> bool {
+        // Get all program points after this one
+        let program_points = function.get_program_points_in_order();
+        let current_index = program_points.iter().position(|&p| p == point);
+        
+        if let Some(index) = current_index {
+            // Check if place is used in any subsequent program point
+            for &later_point in &program_points[index + 1..] {
+                if let Some(events) = function.generate_events(&later_point) {
+                    // Check if place is used or reassigned later
+                    for used_place in &events.uses {
+                        if may_alias(place, used_place) {
+                            return false; // Not last use
+                        }
+                    }
+                    for reassigned_place in &events.reassigns {
+                        if may_alias(place, reassigned_place) {
+                            return false; // Not last use (reassigned)
+                        }
+                    }
+                }
+            }
+            true // No later uses found
+        } else {
+            false // Point not found
+        }
+    }
+
+    /// Handle last use of a place for state refinement
+    fn handle_last_use(
+        &mut self,
+        _place: &Place,
+        _point: ProgramPoint,
+        _state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        // Record that this place can transition to Killed state after last use
+        // This enables more precise state tracking and can help with optimization
+        
+        // For now, we just record the refinement for statistics
+        self.statistics.refinements_made += 1;
+        
+        // In a full implementation, this would:
+        // 1. Update the state mapping to mark the place as Killed
+        // 2. Release any loans associated with this place
+        // 3. Enable more aggressive optimization opportunities
+        
+        Ok(())
+    }
+
+    /// Handle move of a place for state tracking
+    fn handle_move(
+        &mut self,
+        _place: &Place,
+        _point: ProgramPoint,
+        _state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        // Record that this place transitions to Moved state
+        // This is important for use-after-move detection
+        
+        // For now, we just record the move for statistics
+        self.statistics.refinements_made += 1;
+        
+        // In a full implementation, this would:
+        // 1. Update the state mapping to mark the place as Moved
+        // 2. Invalidate any loans associated with this place
+        // 3. Enable use-after-move error detection
+        
+        Ok(())
+    }
+
+    /// Detect state-based conflicts using state mapping
+    fn detect_state_based_conflicts(
+        &mut self,
+        function: &WirFunction,
+        state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        for (point, events) in function.get_all_events() {
+            // Check for multiple mutable borrows
+            self.check_multiple_mutable_borrows_at_point(*point, events, state_mapping)?;
+            
+            // Check for shared/mutable conflicts
+            self.check_shared_mutable_conflicts_at_point(*point, events, state_mapping)?;
+            
+            // Check for use after move
+            self.check_use_after_move_state_aware(*point, events, state_mapping)?;
+            
+            // Check for move while borrowed
+            self.check_move_while_borrowed_at_point_state_aware(*point, events, state_mapping)?;
+        }
+        
+        Ok(())
+    }
+
+    /// Check for multiple mutable borrows using state mapping
+    fn check_multiple_mutable_borrows_at_point(
+        &mut self,
+        point: ProgramPoint,
+        events: &crate::compiler::wir::wir_nodes::Events,
+        state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        // Check if any new mutable loans conflict with existing ones
+        for loan_id in &events.start_loans {
+            if let Some(loan) = self.loans.iter().find(|l| l.id == *loan_id) {
+                if loan.kind == BorrowKind::Mut {
+                    // Check if owner already has mutable borrows
+                    let current_state = state_mapping.get_place_state(&loan.owner);
+                    if current_state == PlaceState::Borrowed {
+                        let error = BorrowError {
+                            point,
+                            error_type: BorrowErrorType::ConflictingBorrows {
+                                existing_borrow: BorrowKind::Mut,
+                                new_borrow: BorrowKind::Mut,
+                                place: loan.owner.clone(),
+                            },
+                            message: format!(
+                                "Cannot mutably borrow `{}` because it is already mutably borrowed",
+                                self.place_to_string(&loan.owner)
+                            ),
+                            location: TextLocation::default(),
+                        };
+                        self.errors.push(error);
+                        self.statistics.conflicts_detected += 1;
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Check for shared/mutable conflicts using state mapping
+    fn check_shared_mutable_conflicts_at_point(
+        &mut self,
+        point: ProgramPoint,
+        events: &crate::compiler::wir::wir_nodes::Events,
+        state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        for loan_id in &events.start_loans {
+            if let Some(loan) = self.loans.iter().find(|l| l.id == *loan_id) {
+                let current_state = state_mapping.get_place_state(&loan.owner);
+                
+                match (&loan.kind, current_state) {
+                    // Trying to create mutable borrow when place is already shared
+                    (BorrowKind::Mut, PlaceState::Referenced) => {
+                        let error = BorrowError {
+                            point,
+                            error_type: BorrowErrorType::ConflictingBorrows {
+                                existing_borrow: BorrowKind::Shared,
+                                new_borrow: BorrowKind::Mut,
+                                place: loan.owner.clone(),
+                            },
+                            message: format!(
+                                "Cannot mutably borrow `{}` because it is already borrowed as shared",
+                                self.place_to_string(&loan.owner)
+                            ),
+                            location: TextLocation::default(),
+                        };
+                        self.errors.push(error);
+                        self.statistics.conflicts_detected += 1;
+                    }
+                    // Trying to create shared borrow when place is already mutably borrowed
+                    (BorrowKind::Shared, PlaceState::Borrowed) => {
+                        let error = BorrowError {
+                            point,
+                            error_type: BorrowErrorType::ConflictingBorrows {
+                                existing_borrow: BorrowKind::Mut,
+                                new_borrow: BorrowKind::Shared,
+                                place: loan.owner.clone(),
+                            },
+                            message: format!(
+                                "Cannot borrow `{}` as shared because it is already mutably borrowed",
+                                self.place_to_string(&loan.owner)
+                            ),
+                            location: TextLocation::default(),
+                        };
+                        self.errors.push(error);
+                        self.statistics.conflicts_detected += 1;
+                    }
+                    _ => {} // No conflict
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+
+
+    /// Check for use after move using state mapping
+    fn check_use_after_move_state_aware(
+        &mut self,
+        point: ProgramPoint,
+        events: &crate::compiler::wir::wir_nodes::Events,
+        state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        for used_place in &events.uses {
+            let current_state = state_mapping.get_place_state(used_place);
+            if current_state == PlaceState::Moved {
+                let error = BorrowError {
+                    point,
+                    error_type: BorrowErrorType::UseAfterMove {
+                        place: used_place.clone(),
+                        move_point: point, // TODO: Track actual move point
+                    },
+                    message: format!(
+                        "Use of moved value `{}`",
+                        self.place_to_string(used_place)
+                    ),
+                    location: TextLocation::default(),
+                };
+                self.errors.push(error);
+                self.statistics.conflicts_detected += 1;
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Check for move while borrowed using state mapping
+    fn check_move_while_borrowed_at_point_state_aware(
+        &mut self,
+        point: ProgramPoint,
+        events: &crate::compiler::wir::wir_nodes::Events,
+        state_mapping: &StateMapping,
+    ) -> Result<(), String> {
+        for moved_place in &events.moves {
+            let current_state = state_mapping.get_place_state(moved_place);
+            
+            // Check if place has active loans (not in Owned state)
+            if current_state != PlaceState::Owned {
+                let error = BorrowError {
+                    point,
+                    error_type: BorrowErrorType::BorrowAcrossOwnerInvalidation {
+                        borrowed_place: moved_place.clone(),
+                        owner_place: moved_place.clone(),
+                        invalidation_point: point,
+                        invalidation_type: InvalidationType::Move,
+                    },
+                    message: format!(
+                        "Cannot move `{}` because it is borrowed (current state: {:?})",
+                        self.place_to_string(moved_place),
+                        current_state
+                    ),
+                    location: TextLocation::default(),
+                };
+                self.errors.push(error);
+                self.statistics.conflicts_detected += 1;
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Convert a place to a string for error messages
+    fn place_to_string(&self, place: &Place) -> String {
+        // Simple string representation for now
+        // In a full implementation, this would use proper place formatting
+        format!("{:?}", place)
+    }
+
 
 
 }

@@ -135,36 +135,40 @@ fn regenerate_events_for_function(function: &mut WirFunction) {
     let mut all_events = Vec::new();
 
     for block in &function.blocks {
-        // Generate events for statements
+        // Generate state-aware events for statements
         for (stmt_index, statement) in block.statements.iter().enumerate() {
             let program_point = ProgramPoint::new(block.id * 1000 + stmt_index as u32);
-            let events = statement.generate_events();
+            let events = statement.generate_events_at_program_point(program_point);
 
             // Log event generation for debugging
             ir_log!(
-                "Generated events for statement at {}: uses={:?}, moves={:?}, reassigns={:?}, start_loans={:?}",
+                "Generated state-aware events for statement at {}: uses={:?}, moves={:?}, reassigns={:?}, start_loans={:?}, state_transitions={:?}",
                 program_point,
                 events.uses,
                 events.moves,
                 events.reassigns,
-                events.start_loans
+                events.start_loans,
+                events.state_transitions
             );
 
             all_events.push((program_point, events));
         }
 
-        // Generate events for terminator
+        // Generate state-aware events for terminator
         let terminator_point = ProgramPoint::new(block.id * 1000 + 999);
-        let terminator_events = block.terminator.generate_events();
+        let terminator_events = block
+            .terminator
+            .generate_events_at_program_point(terminator_point);
 
         // Log terminator event generation for debugging
         ir_log!(
-            "Generated events for terminator at {}: uses={:?}, moves={:?}, reassigns={:?}, start_loans={:?}",
+            "Generated state-aware events for terminator at {}: uses={:?}, moves={:?}, reassigns={:?}, start_loans={:?}, state_transitions={:?}",
             terminator_point,
             terminator_events.uses,
             terminator_events.moves,
             terminator_events.reassigns,
-            terminator_events.start_loans
+            terminator_events.start_loans,
+            terminator_events.state_transitions
         );
 
         all_events.push((terminator_point, terminator_events));
@@ -192,6 +196,99 @@ pub struct FunctionInfo {
     pub wir_function: WirFunction,
 }
 
+/// Stack entry for RPN expression evaluation
+#[derive(Debug, Clone)]
+pub struct ExpressionStackEntry {
+    /// Operand for this stack entry
+    pub operand: Operand,
+    /// Whether this operand uses a temporary variable that can be cleaned up
+    pub is_temporary: bool,
+}
+
+/// Temporary variable tracking for cleanup and conflict avoidance
+#[derive(Debug, Clone)]
+pub struct TemporaryVariable {
+    /// Unique temporary variable name
+    pub name: String,
+    /// Place allocated for this temporary
+    pub place: Place,
+    /// Data type of the temporary
+    pub data_type: DataType,
+    /// Whether this temporary is currently in use
+    pub is_active: bool,
+    /// Expression depth where this temporary was created
+    pub creation_depth: usize,
+}
+
+/// Variable usage tracking for move detection and last-use analysis
+#[derive(Debug, Clone)]
+pub struct VariableUsageTracker {
+    /// Track how many times each variable is used
+    usage_counts: HashMap<String, usize>,
+    /// Track the current usage index for each variable
+    current_usage: HashMap<String, usize>,
+    /// Variables that have been marked as moved
+    moved_variables: std::collections::HashSet<String>,
+}
+
+impl VariableUsageTracker {
+    /// Create a new usage tracker
+    pub fn new() -> Self {
+        Self {
+            usage_counts: HashMap::new(),
+            current_usage: HashMap::new(),
+            moved_variables: std::collections::HashSet::new(),
+        }
+    }
+
+    /// Record a variable usage
+    pub fn record_usage(&mut self, variable_name: &str) {
+        let current = self
+            .current_usage
+            .entry(variable_name.to_string())
+            .or_insert(0);
+        *current += 1;
+    }
+
+    /// Set the total expected usage count for a variable
+    pub fn set_total_usage_count(&mut self, variable_name: &str, count: usize) {
+        self.usage_counts.insert(variable_name.to_string(), count);
+    }
+
+    /// Check if this is the last use of a variable
+    pub fn is_last_use(&self, variable_name: &str) -> bool {
+        if let (Some(&current), Some(&total)) = (
+            self.current_usage.get(variable_name),
+            self.usage_counts.get(variable_name),
+        ) {
+            current >= total
+        } else {
+            false
+        }
+    }
+
+    /// Mark a variable as moved
+    pub fn mark_as_moved(&mut self, variable_name: &str) {
+        self.moved_variables.insert(variable_name.to_string());
+    }
+
+    /// Check if a variable has been moved
+    pub fn is_moved(&self, variable_name: &str) -> bool {
+        self.moved_variables.contains(variable_name)
+    }
+
+    /// Reset tracking for a new scope
+    pub fn enter_scope(&mut self) {
+        // For now, we don't need to do anything special for scopes
+        // In a more sophisticated implementation, we might track scope-specific usage
+    }
+
+    /// Exit current scope
+    pub fn exit_scope(&mut self) {
+        // For now, we don't need to do anything special for scopes
+    }
+}
+
 /// Context for AST-to-WIR transformation with place-based memory management
 ///
 /// The `WirTransformContext` orchestrates the conversion from AST to WIR by maintaining:
@@ -199,6 +296,7 @@ pub struct FunctionInfo {
 /// - **Scope Tracking**: Manages variable visibility and lifetime scopes
 /// - **Function Registry**: Maps function names to WIR function IDs
 /// - **Program Points**: Generates unique points for borrow checking analysis
+/// - **Runtime Expression Support**: Handles complex expressions with temporary variables
 ///
 /// ## Memory Model
 ///
@@ -214,6 +312,13 @@ pub struct FunctionInfo {
 /// - Function parameter scoping
 /// - Block-level variable declarations
 /// - Variable shadowing and lifetime tracking
+///
+/// ## Runtime Expression Handling
+///
+/// Enhanced support for complex runtime expressions includes:
+/// - Temporary variable creation and management
+/// - Expression stack for RPN evaluation
+/// - Type inference context for expression type checking
 #[derive(Debug)]
 pub struct WirTransformContext {
     /// Place manager for memory layout
@@ -241,6 +346,18 @@ pub struct WirTransformContext {
     fallback_mechanisms: crate::compiler::host_functions::fallback_mechanisms::FallbackMechanisms,
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
+
+    // Enhanced fields for runtime expression handling
+    /// Counter for generating unique temporary variable names
+    temporary_counter: u32,
+    /// Expression stack for RPN evaluation
+    expression_stack: Vec<ExpressionStackEntry>,
+    /// Active temporary variables for tracking and cleanup
+    temporary_variables: Vec<TemporaryVariable>,
+    /// Current expression evaluation depth for cleanup scoping
+    expression_depth: usize,
+    /// Variable usage tracking for move detection
+    variable_usage_tracker: VariableUsageTracker,
 }
 
 impl WirTransformContext {
@@ -282,6 +399,13 @@ impl WirTransformContext {
             migration_diagnostics,
             fallback_mechanisms,
             pending_return: None,
+
+            // Initialize runtime expression handling fields
+            temporary_counter: 0,
+            expression_stack: Vec::new(),
+            temporary_variables: Vec::new(),
+            expression_depth: 0,
+            variable_usage_tracker: VariableUsageTracker::new(),
         }
     }
 
@@ -366,10 +490,8 @@ impl WirTransformContext {
 
     /// Generate and print migration report if there are any WASI detections
     pub fn print_migration_report(&self) {
-        let report = self.migration_diagnostics.generate_migration_report();
-        if report.total_wasi_detections > 0 {
-            println!("\n{}", report.format_report());
-        }
+        // Migration reporting functionality removed as part of cleanup
+        // This method is kept for API compatibility but does nothing
     }
 
     /// Get mutable access to fallback mechanisms
@@ -388,8 +510,156 @@ impl WirTransformContext {
 
     /// Generate and print compatibility report
     pub fn print_compatibility_report(&self) {
-        let report = self.fallback_mechanisms.generate_compatibility_report();
-        println!("\n{}", report.format_report());
+        // Compatibility reporting functionality removed as part of cleanup
+        // This method is kept for API compatibility but does nothing
+    }
+
+    // Runtime expression handling methods
+
+    /// Create a unique temporary place for intermediate expression results
+    ///
+    /// This function generates unique temporary variables that are tracked for cleanup
+    /// and conflict avoidance. Temporary variables are scoped to expression evaluation
+    /// depth to ensure proper cleanup after complex expressions complete.
+    pub fn create_temporary_place(&mut self, data_type: &DataType) -> Place {
+        let temp_name = format!("__temp_{}", self.temporary_counter);
+        self.temporary_counter += 1;
+
+        let temp_place = self.place_manager.allocate_local(data_type);
+
+        // Create temporary variable tracking entry
+        let temp_var = TemporaryVariable {
+            name: temp_name.clone(),
+            place: temp_place.clone(),
+            data_type: data_type.clone(),
+            is_active: true,
+            creation_depth: self.expression_depth,
+        };
+
+        self.temporary_variables.push(temp_var);
+
+        // Register the temporary variable in current scope for lookup
+        if let Some(current_scope) = self.variable_scopes.last_mut() {
+            current_scope.insert(temp_name, temp_place.clone());
+        }
+
+        temp_place
+    }
+
+    /// Enter a new expression evaluation depth
+    pub fn enter_expression_depth(&mut self) {
+        self.expression_depth += 1;
+    }
+
+    /// Exit current expression evaluation depth and cleanup temporaries
+    pub fn exit_expression_depth(&mut self) {
+        if self.expression_depth > 0 {
+            self.expression_depth -= 1;
+
+            // Mark temporaries created at this depth as inactive
+            for temp_var in &mut self.temporary_variables {
+                if temp_var.creation_depth > self.expression_depth && temp_var.is_active {
+                    temp_var.is_active = false;
+                }
+            }
+        }
+    }
+
+    /// Cleanup inactive temporary variables
+    pub fn cleanup_temporary_variables(&mut self) {
+        // Remove inactive temporaries from tracking
+        self.temporary_variables
+            .retain(|temp_var| temp_var.is_active);
+
+        // Remove inactive temporaries from current scope
+        if let Some(current_scope) = self.variable_scopes.last_mut() {
+            let inactive_names: Vec<String> = self
+                .temporary_variables
+                .iter()
+                .filter(|temp_var| !temp_var.is_active)
+                .map(|temp_var| temp_var.name.clone())
+                .collect();
+
+            for name in inactive_names {
+                current_scope.remove(&name);
+            }
+        }
+    }
+
+    /// Get all active temporary variables
+    pub fn get_active_temporaries(&self) -> Vec<&TemporaryVariable> {
+        self.temporary_variables
+            .iter()
+            .filter(|temp_var| temp_var.is_active)
+            .collect()
+    }
+
+    /// Check if a place is a temporary variable
+    pub fn is_temporary_place(&self, place: &Place) -> bool {
+        self.temporary_variables
+            .iter()
+            .any(|temp_var| temp_var.is_active && temp_var.place == *place)
+    }
+
+    /// Get temporary variable by place
+    pub fn get_temporary_by_place(&self, place: &Place) -> Option<&TemporaryVariable> {
+        self.temporary_variables
+            .iter()
+            .find(|temp_var| temp_var.is_active && temp_var.place == *place)
+    }
+
+    /// Record variable usage for move detection
+    pub fn record_variable_usage(&mut self, variable_name: &str) {
+        self.variable_usage_tracker.record_usage(variable_name);
+    }
+
+    /// Check if this is the last use of a variable (for move detection)
+    pub fn is_last_use(&self, variable_name: &str) -> bool {
+        self.variable_usage_tracker.is_last_use(variable_name)
+    }
+
+    /// Mark a variable as moved
+    pub fn mark_variable_as_moved(&mut self, variable_name: &str) {
+        self.variable_usage_tracker.mark_as_moved(variable_name);
+    }
+
+    /// Check if a variable has been moved
+    pub fn is_variable_moved(&self, variable_name: &str) -> bool {
+        self.variable_usage_tracker.is_moved(variable_name)
+    }
+
+    /// Set expected usage count for a variable (for last-use analysis)
+    pub fn set_variable_usage_count(&mut self, variable_name: &str, count: usize) {
+        self.variable_usage_tracker
+            .set_total_usage_count(variable_name, count);
+    }
+
+    /// Push an operand onto the expression stack
+    pub fn push_expression_stack(&mut self, operand: Operand, is_temporary: bool) {
+        self.expression_stack.push(ExpressionStackEntry {
+            operand,
+            is_temporary,
+        });
+    }
+
+    /// Pop an operand from the expression stack
+    pub fn pop_expression_stack(&mut self) -> Option<ExpressionStackEntry> {
+        self.expression_stack.pop()
+    }
+
+    /// Peek at the top of the expression stack without removing it
+    pub fn peek_expression_stack(&self) -> Option<&ExpressionStackEntry> {
+        self.expression_stack.last()
+    }
+
+    /// Get the current expression stack depth
+    pub fn expression_stack_depth(&self) -> usize {
+        self.expression_stack.len()
+    }
+
+    /// Clear the expression stack (used after expression evaluation)
+    pub fn clear_expression_stack(&mut self) {
+        self.expression_stack.clear();
     }
 
     /// Get similar variable names for error suggestions
@@ -681,10 +951,10 @@ impl WirTransformContext {
         use crate::compiler::wir::place::WasmType;
 
         match data_type {
-            DataType::Int(_) => Ok(WasmType::I32),
-            DataType::Float(_) => Ok(WasmType::F32),
-            DataType::Bool(_) => Ok(WasmType::I32),
-            DataType::String(_) => Ok(WasmType::I32), // String pointer
+            DataType::Int => Ok(WasmType::I32),
+            DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
+            DataType::Bool => Ok(WasmType::I32),
+            DataType::String => Ok(WasmType::I32), // String pointer
             _ => {
                 return_compiler_error!(
                     "DataType {:?} not yet supported for WASM type conversion",
@@ -744,10 +1014,15 @@ pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
                 return_types,
             ) = &expression.kind
             {
+                // Extract DataTypes from return_types Args
+                let return_data_types: Vec<DataType> = return_types.iter()
+                    .map(|arg| arg.value.data_type.clone())
+                    .collect();
+                
                 let function_info = context.transform_function_definition_from_expression(
                     name,
                     parameters,
-                    return_types,
+                    &return_data_types,
                     body,
                 )?;
                 defined_functions.push(function_info);
@@ -857,7 +1132,17 @@ fn transform_ast_node_to_wir(
             ast_mutation_to_wir(name, expression, &node.location, context)
         }
         NodeKind::FunctionCall(name, params, return_types, ..) => {
-            ast_function_call_to_wir(name, params, return_types, &node.location, context)
+            // Extract Expressions from params Args
+            let param_expressions: Vec<Expression> = params.iter()
+                .map(|arg| arg.value.clone())
+                .collect();
+            
+            // Extract DataTypes from return_types Args
+            let return_data_types: Vec<DataType> = return_types.iter()
+                .map(|arg| arg.value.data_type.clone())
+                .collect();
+            
+            ast_function_call_to_wir(name, &param_expressions, &return_data_types, &node.location, context)
         }
         NodeKind::HostFunctionCall(name, params, return_types, ..) => {
             ast_host_function_call_to_wir(name, params, return_types, &node.location, context)
@@ -919,10 +1204,15 @@ fn ast_declaration_to_wir(
     ) = &expression.kind
     {
         // Transform function declaration
+        // Extract DataTypes from return_types Args
+        let return_data_types: Vec<DataType> = return_types.iter()
+            .map(|arg| arg.value.data_type.clone())
+            .collect();
+        
         let _function_info = context.transform_function_definition_from_expression(
             name,
             parameters,
-            return_types,
+            &return_data_types,
             body,
         )?;
         // Function declarations don't generate statements in the current block
@@ -963,7 +1253,11 @@ fn ast_declaration_to_wir(
     context.register_variable(name.to_string(), variable_place.clone());
 
     // Convert expression to rvalue with context for variable references
-    let rvalue = expression_to_rvalue_with_context(expression, &expression.location, context)?;
+    let (additional_statements, rvalue) =
+        expression_to_rvalue_with_mutable_context(expression, &expression.location, context)?;
+
+    // Add any additional statements from runtime expression evaluation
+    statements.extend(additional_statements);
 
     // Create assignment statement
     let assign_statement = Statement::Assign {
@@ -1002,8 +1296,10 @@ fn ast_mutation_to_wir(
         }
     };
 
-    // Convert expression to rvalue with context for variable references
-    let rvalue = expression_to_rvalue_with_context(expression, location, context)?;
+    // Convert expression to rvalue with mutable context for mutations
+    // In Beanstalk, mutations (x ~= y) should create mutable borrows
+    let (additional_statements, rvalue) =
+        expression_to_rvalue_with_mutable_borrow_context(expression, location, context)?;
 
     // Create assignment statement for the mutation
     let assign_statement = Statement::Assign {
@@ -1011,7 +1307,11 @@ fn ast_mutation_to_wir(
         rvalue,
     };
 
-    Ok(vec![assign_statement])
+    // Combine additional statements with the assignment
+    let mut statements = additional_statements;
+    statements.push(assign_statement);
+
+    Ok(statements)
 }
 
 /// Transform function call to WIR
@@ -1090,6 +1390,7 @@ fn ast_host_function_call_to_wir(
                 crate::compiler::parsers::expressions::expression::ExpressionKind::None,
                 param.location.clone(),
                 param.data_type.clone(),
+                crate::compiler::datatypes::Ownership::default(),
             ),
         };
         host_params.push(param_arg);
@@ -1125,10 +1426,7 @@ fn ast_host_function_call_to_wir(
                         FunctionFallback, FunctionFallbackType,
                     };
                     FunctionFallback {
-                        function_name: name.to_string(),
                         fallback_type: FunctionFallbackType::Unknown,
-                        fallback_module: "beanstalk_io".to_string(),
-                        fallback_function: name.to_string(),
                         warning_message: Some(format!("Unknown fallback for function '{}'", name)),
                         error_message: None,
                     }
@@ -1317,7 +1615,7 @@ fn ast_if_statement_to_wir(
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     // Validate that condition is boolean type
-    if !matches!(condition.data_type, DataType::Bool(_)) {
+    if !matches!(condition.data_type, DataType::Bool) {
         return_type_mismatch_error!(
             condition.location.clone(),
             "Bool",
@@ -1370,11 +1668,9 @@ fn expression_to_rvalue(
         ExpressionKind::Int(value) => {
             Ok(Rvalue::Use(Operand::Constant(Constant::I32(*value as i32))))
         }
-        ExpressionKind::Float(value) => {
-            Ok(Rvalue::Use(Operand::Constant(Constant::F32(*value as f32))))
-        }
+        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
         ExpressionKind::Bool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
-        ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
+        ExpressionKind::StringSlice(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
             value.clone(),
         )))),
         ExpressionKind::Reference(name) => {
@@ -1411,21 +1707,168 @@ fn expression_to_rvalue(
     }
 }
 
-/// Convert expression to rvalue with context for variable references
+/// Convert expression to rvalue with mutable context for runtime expressions
+///
+/// This function handles all expression types and returns both additional statements
+/// (for runtime expressions) and the final rvalue.
+fn expression_to_rvalue_with_mutable_context(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::I32(*value as i32))),
+        )),
+        ExpressionKind::Float(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::F64(*value))),
+        )),
+        ExpressionKind::Bool(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::Bool(*value))),
+        )),
+        ExpressionKind::StringSlice(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::String(value.clone()))),
+        )),
+        ExpressionKind::Reference(name) => {
+            // Transform variable reference using context (shared borrow for declarations)
+            let rvalue = transform_variable_reference(name, location, context)?;
+            Ok((vec![], rvalue))
+        }
+        ExpressionKind::Runtime(runtime_nodes) => {
+            // Transform runtime expressions (RPN order) to WIR statements
+            let (statements, result_operand) =
+                transform_runtime_expression_enhanced(runtime_nodes, location, context)?;
+            Ok((statements, Rvalue::Use(result_operand)))
+        }
+        ExpressionKind::Template(template) => {
+            // Transform template to WIR statements for string creation
+            let rvalue = transform_template_to_rvalue(template, location, context)?;
+            Ok((vec![], rvalue))
+        }
+        ExpressionKind::None => {
+            // None expressions represent parameters without default arguments
+            return_compiler_error!(
+                "None expression encountered in rvalue context at line {}, column {}. This typically indicates a function parameter without a default argument being used in an invalid context.",
+                location.start_pos.line_number,
+                location.start_pos.char_column
+            );
+        }
+        _ => {
+            return_compiler_error!(
+                "Expression type '{:?}' not yet implemented for rvalue context at line {}, column {}. This expression type needs to be added to the WIR generator.",
+                expression.kind,
+                location.start_pos.line_number,
+                location.start_pos.char_column
+            )
+        }
+    }
+}
+
+/// Convert expression to rvalue with mutable borrow context for mutations
+///
+/// This function is used for mutations (x ~= y) and creates mutable borrows
+/// when variable references are encountered, following Beanstalk's memory model.
+fn expression_to_rvalue_with_mutable_borrow_context(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::I32(*value as i32))),
+        )),
+        ExpressionKind::Float(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::F64(*value))),
+        )),
+        ExpressionKind::Bool(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::Bool(*value))),
+        )),
+        ExpressionKind::StringSlice(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::String(value.clone()))),
+        )),
+        ExpressionKind::Reference(name) => {
+            // Check if variable has already been moved
+            if context.is_variable_moved(name) {
+                return_rule_error!(
+                    location.clone(),
+                    "Cannot use variable '{}' because it has been moved. In Beanstalk, once a value is moved, the original variable cannot be used again.",
+                    name
+                );
+            }
+
+            // Record variable usage for move tracking
+            context.record_variable_usage(name);
+
+            // Check if this is the last use (move detection)
+            if context.is_last_use(name) {
+                // This is the last use - create a move instead of a mutable borrow
+                let rvalue = transform_variable_reference_with_move(name, location, context)?;
+                // Mark variable as moved
+                context.mark_variable_as_moved(name);
+                Ok((vec![], rvalue))
+            } else {
+                // Not the last use - create a mutable borrow for mutations (x ~= y)
+                let rvalue = transform_variable_reference_with_borrow_kind(
+                    name,
+                    location,
+                    context,
+                    BorrowKind::Mut,
+                )?;
+                Ok((vec![], rvalue))
+            }
+        }
+        ExpressionKind::Runtime(runtime_nodes) => {
+            // Transform runtime expressions (RPN order) to WIR statements
+            let (statements, result_operand) =
+                transform_runtime_expression_enhanced(runtime_nodes, location, context)?;
+            Ok((statements, Rvalue::Use(result_operand)))
+        }
+        ExpressionKind::Template(template) => {
+            // Templates in mutations should generate uses events, not loans
+            // This follows Beanstalk's rule that templates copy rather than borrow
+            let rvalue = transform_template_to_rvalue(template, location, context)?;
+            Ok((vec![], rvalue))
+        }
+        ExpressionKind::None => {
+            // None expressions represent parameters without default arguments
+            return_compiler_error!(
+                "None expression encountered in rvalue context at line {}, column {}. This typically indicates a function parameter without a default argument being used in an invalid context.",
+                location.start_pos.line_number,
+                location.start_pos.char_column
+            );
+        }
+        _ => {
+            return_compiler_error!(
+                "Expression type '{:?}' not yet implemented for mutable rvalue context at line {}, column {}. This expression type needs to be added to the WIR generator.",
+                expression.kind,
+                location.start_pos.line_number,
+                location.start_pos.char_column
+            )
+        }
+    }
+}
+
+/// Convert expression to rvalue with context for variable references (immutable context version)
 fn expression_to_rvalue_with_context(
     expression: &Expression,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => {
             Ok(Rvalue::Use(Operand::Constant(Constant::I32(*value as i32))))
         }
-        ExpressionKind::Float(value) => {
-            Ok(Rvalue::Use(Operand::Constant(Constant::F32(*value as f32))))
-        }
+        ExpressionKind::Float(value) => Ok(Rvalue::Use(Operand::Constant(Constant::F64(*value)))),
         ExpressionKind::Bool(value) => Ok(Rvalue::Use(Operand::Constant(Constant::Bool(*value)))),
-        ExpressionKind::String(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
+        ExpressionKind::StringSlice(value) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
             value.clone(),
         )))),
         ExpressionKind::Reference(name) => {
@@ -1464,7 +1907,7 @@ fn expression_to_rvalue_with_context(
 fn transform_template_to_rvalue(
     template: &Template,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     use crate::compiler::parsers::template::TemplateType;
 
@@ -1508,7 +1951,7 @@ fn transform_template_to_rvalue(
 fn transform_runtime_template_to_rvalue(
     template: &Template,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Check if template has any variable references that need runtime evaluation
     let has_variable_references = template
@@ -1523,7 +1966,7 @@ fn transform_runtime_template_to_rvalue(
 
         for expr in template.content.flatten() {
             match &expr.kind {
-                ExpressionKind::String(s) => {
+                ExpressionKind::StringSlice(s) => {
                     result_parts.push(s.clone());
                 }
                 ExpressionKind::Int(i) => {
@@ -1560,7 +2003,7 @@ fn transform_runtime_template_to_rvalue(
 fn transform_template_with_variable_interpolation(
     template: &Template,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Process both before (head variables) and after (body content) vectors
     let before_parts = &template.content.before;
@@ -1665,7 +2108,7 @@ fn can_coerce_place_to_string_at_compile_time(place: &Place) -> bool {
 fn generate_string_coercion_rvalue(
     place: Place,
     location: &TextLocation,
-    _context: &WirTransformContext,
+    _context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Generate appropriate string coercion based on the place's WASM type
     // This creates the proper WIR operations for runtime string conversion
@@ -1727,10 +2170,10 @@ fn extract_string_from_operand(operand: &Operand) -> Result<String, CompileError
 fn convert_template_expression_to_string_rvalue(
     expr: &Expression,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     match &expr.kind {
-        ExpressionKind::String(s) => {
+        ExpressionKind::StringSlice(s) => {
             Ok(Rvalue::Use(Operand::Constant(Constant::String(s.clone()))))
         }
         ExpressionKind::Int(i) => Ok(Rvalue::Use(Operand::Constant(Constant::String(
@@ -1788,10 +2231,10 @@ fn convert_template_expression_to_string_rvalue(
 fn convert_template_expression_to_string_operand(
     expr: &Expression,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Option<Operand>, CompileError> {
     match &expr.kind {
-        ExpressionKind::String(s) => Ok(Some(Operand::Constant(Constant::String(s.clone())))),
+        ExpressionKind::StringSlice(s) => Ok(Some(Operand::Constant(Constant::String(s.clone())))),
         ExpressionKind::Int(i) => Ok(Some(Operand::Constant(Constant::String(i.to_string())))),
         ExpressionKind::Float(f) => Ok(Some(Operand::Constant(Constant::String(f.to_string())))),
         ExpressionKind::Bool(b) => Ok(Some(Operand::Constant(Constant::String(b.to_string())))),
@@ -1838,13 +2281,15 @@ fn convert_template_expression_to_string_operand(
 fn expression_to_operand_with_context(
     expression: &Expression,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Operand, CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok(Operand::Constant(Constant::I32(*value as i32))),
-        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F32(*value as f32))),
+        ExpressionKind::Float(value) => Ok(Operand::Constant(Constant::F64(*value))),
         ExpressionKind::Bool(value) => Ok(Operand::Constant(Constant::Bool(*value))),
-        ExpressionKind::String(value) => Ok(Operand::Constant(Constant::String(value.clone()))),
+        ExpressionKind::StringSlice(value) => {
+            Ok(Operand::Constant(Constant::String(value.clone())))
+        }
         ExpressionKind::Reference(name) => {
             // Transform variable reference to operand
             let rvalue = transform_variable_reference(name, location, context)?;
@@ -1913,12 +2358,12 @@ fn expression_to_operand_with_context(
 
 /// Transform variable reference to WIR rvalue with proper usage context
 ///
-/// This method handles variable references by looking up the variable in the context
-/// and generating appropriate WIR operands based on usage patterns.
+/// This method handles variable references with Beanstalk's implicit borrowing semantics.
+/// Variable references create implicit borrows by default in Beanstalk's memory model.
 fn transform_variable_reference(
     name: &str,
     location: &TextLocation,
-    context: &WirTransformContext,
+    context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     // Look up the variable's place in the context
     let variable_place = match context.lookup_variable(name) {
@@ -1930,28 +2375,99 @@ fn transform_variable_reference(
         }
     };
 
-    // TODO: Implement Beanstalk's implicit borrowing semantics
-    //
-    // BEANSTALK SEMANTICS:
-    // - `x = y` should create Rvalue::Ref { place: y, borrow_kind: BorrowKind::Shared }
-    // - `x ~= y` should create Rvalue::Ref { place: y, borrow_kind: BorrowKind::Mut }
-    // - `x ~= ~y` should create Rvalue::Use(Operand::Move(y))
-    //
-    // CURRENT STATUS: Using Copy as placeholder until AST supports ~ syntax
-    let operand = Operand::Copy(variable_place);
+    // Check if variable has already been moved
+    if context.is_variable_moved(name) {
+        return_rule_error!(
+            location.clone(),
+            "Cannot use variable '{}' because it has been moved. In Beanstalk, once a value is moved, the original variable cannot be used again.",
+            name
+        );
+    }
 
-    Ok(Rvalue::Use(operand))
+    // BEANSTALK IMPLICIT BORROWING SEMANTICS:
+    // In Beanstalk, variable references create implicit borrows by default
+    // - `x = y` creates a shared borrow (multiple readers allowed)
+    // - `x ~= y` creates a mutable borrow (exclusive access)
+    // - Move semantics are determined by compiler analysis (last-use detection)
+    //
+    // Record variable usage for move tracking
+    context.record_variable_usage(name);
+
+    // Check if this is the last use of the variable (move detection)
+    if context.is_last_use(name) {
+        // This is the last use - create a move instead of a borrow
+        context.mark_variable_as_moved(name);
+        Ok(Rvalue::Use(Operand::Move(variable_place)))
+    } else {
+        // Not the last use - create a shared borrow
+        Ok(Rvalue::Ref {
+            place: variable_place,
+            borrow_kind: BorrowKind::Shared,
+        })
+    }
+}
+
+/// Transform variable reference to WIR rvalue with explicit borrow kind
+///
+/// This method allows specifying the borrow kind explicitly for cases where
+/// we can determine from context whether a shared or mutable borrow is needed.
+fn transform_variable_reference_with_borrow_kind(
+    name: &str,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+    borrow_kind: BorrowKind,
+) -> Result<Rvalue, CompileError> {
+    // Look up the variable's place in the context
+    let variable_place = match context.lookup_variable(name) {
+        Some(place) => place.clone(),
+        None => {
+            // Get similar variable names for suggestions
+            let suggestions = context.get_similar_variable_names(name);
+            return_undefined_variable_error!(location.clone(), name, suggestions);
+        }
+    };
+
+    Ok(Rvalue::Ref {
+        place: variable_place,
+        borrow_kind,
+    })
+}
+
+/// Transform variable reference to WIR rvalue with move semantics
+///
+/// This method creates a move operation for cases where last-use analysis
+/// or explicit move syntax indicates ownership transfer should occur.
+fn transform_variable_reference_with_move(
+    name: &str,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    // Look up the variable's place in the context
+    let variable_place = match context.lookup_variable(name) {
+        Some(place) => place.clone(),
+        None => {
+            // Get similar variable names for suggestions
+            let suggestions = context.get_similar_variable_names(name);
+            return_undefined_variable_error!(location.clone(), name, suggestions);
+        }
+    };
+
+    // Create move operand for ownership transfer
+    Ok(Rvalue::Use(Operand::Move(variable_place)))
 }
 
 /// Transform runtime expressions (RPN order) to WIR rvalue
 ///
-/// Runtime expressions contain AST nodes in Reverse Polish Notation order.
-/// This function processes them using a stack-based approach to build WIR binary operations.
-fn transform_runtime_expression(
+/// Enhanced runtime expression transformation with proper WIR statement generation
+///
+/// This function processes RPN expressions and generates a sequence of WIR statements
+/// that evaluate the expression using temporary variables for intermediate results.
+/// The final result is returned as an operand that can be used in assignments.
+fn transform_runtime_expression_enhanced(
     runtime_nodes: &[AstNode],
     location: &TextLocation,
-    context: &WirTransformContext,
-) -> Result<Rvalue, CompileError> {
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Operand), CompileError> {
     if runtime_nodes.is_empty() {
         return_compiler_error!(
             "Empty runtime expression at line {}, column {}",
@@ -1960,51 +2476,63 @@ fn transform_runtime_expression(
         );
     }
 
-    // Use a stack to process RPN expression
-    let mut operand_stack: Vec<Operand> = Vec::new();
+    // Enter expression evaluation depth for temporary variable tracking
+    context.enter_expression_depth();
+
+    // Clear expression stack for this evaluation
+    context.clear_expression_stack();
+
+    // Generate WIR statements for the RPN expression
+    let statements = evaluate_rpn_to_wir_statements(runtime_nodes, context)?;
+
+    // The final result should be on top of the expression stack
+    let final_result = context.pop_expression_stack()
+        .ok_or_else(|| CompileError::compiler_error(
+            "No result operand after RPN evaluation - this indicates a bug in expression processing"
+        ))?;
+
+    // Exit expression depth and cleanup temporaries
+    context.exit_expression_depth();
+
+    Ok((statements, final_result.operand))
+}
+
+/// Evaluate RPN expression nodes to WIR statements using stack-based processing
+///
+/// This function implements the core RPN evaluation engine that processes expression
+/// nodes and operators in RPN order, creating temporary assignments for intermediate
+/// results and managing the operand stack for complex expressions.
+fn evaluate_rpn_to_wir_statements(
+    runtime_nodes: &[AstNode],
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    let mut statements = Vec::new();
 
     for node in runtime_nodes {
         match &node.kind {
             NodeKind::Expression(expr) => {
-                // Convert expression to operand and push to stack
+                // Process expression nodes (constants, variables) and push to stack
                 let operand = expression_to_operand_with_context(expr, &node.location, context)?;
-                operand_stack.push(operand);
+
+                // Determine if this operand uses a temporary variable
+                let is_temporary = match &operand {
+                    Operand::Copy(place) | Operand::Move(place) => {
+                        context.is_temporary_place(place)
+                    }
+                    _ => false,
+                };
+
+                context.push_expression_stack(operand, is_temporary);
             }
             NodeKind::Operator(ast_op) => {
-                // Pop two operands for binary operation
-                if operand_stack.len() < 2 {
-                    return_compiler_error!(
-                        "Not enough operands for binary operator {:?} in runtime expression at line {}, column {}",
-                        ast_op,
-                        node.location.start_pos.line_number,
-                        node.location.start_pos.char_column
-                    );
-                }
-
-                let right = operand_stack.pop().unwrap();
-                let left = operand_stack.pop().unwrap();
-
-                // Convert AST operator to WIR BinOp
-                let wir_op = ast_operator_to_wir_binop(ast_op, &node.location)?;
-
-                // For now, we'll return the binary operation directly
-                // In a more complex implementation, we might need to handle chained operations
-                if operand_stack.is_empty() {
-                    // This is the final operation
-                    return Ok(Rvalue::BinaryOp(wir_op, left, right));
-                } else {
-                    // This is an intermediate operation - we would need to create temporary assignments
-                    // For now, we'll simplify and only handle single binary operations
-                    return_compiler_error!(
-                        "Complex chained arithmetic expressions not yet implemented. Please break down the expression into simpler assignments at line {}, column {}",
-                        node.location.start_pos.line_number,
-                        node.location.start_pos.char_column
-                    );
-                }
+                // Process operator nodes by popping operands and creating binary operations
+                let operator_statements =
+                    process_binary_operator_in_rpn(ast_op, &node.location, context)?;
+                statements.extend(operator_statements);
             }
             _ => {
                 return_compiler_error!(
-                    "Unsupported node type in runtime expression: {:?} at line {}, column {}",
+                    "Unsupported node type in runtime expression: {:?} at line {}, column {}. Only Expression and Operator nodes are supported in RPN expressions.",
                     node.kind,
                     node.location.start_pos.line_number,
                     node.location.start_pos.char_column
@@ -2013,17 +2541,208 @@ fn transform_runtime_expression(
         }
     }
 
-    // If we have exactly one operand left, it's a simple value
-    if operand_stack.len() == 1 {
-        Ok(Rvalue::Use(operand_stack.pop().unwrap()))
-    } else {
+    // Verify that we have exactly one result on the stack
+    if context.expression_stack_depth() != 1 {
         return_compiler_error!(
-            "Invalid runtime expression - expected single result but got {} operands at line {}, column {}",
-            operand_stack.len(),
-            location.start_pos.line_number,
-            location.start_pos.char_column
+            "Invalid RPN expression evaluation - expected 1 result operand but got {}. This indicates malformed RPN expression or operator arity mismatch.",
+            context.expression_stack_depth()
         );
     }
+
+    Ok(statements)
+}
+
+/// Process a binary operator in RPN evaluation by popping operands and creating WIR assignment
+///
+/// This function handles binary operations by:
+/// 1. Popping two operands from the expression stack
+/// 2. Creating a temporary variable for the result
+/// 3. Generating a WIR assignment statement for the operation
+/// 4. Pushing the result operand back onto the stack
+fn process_binary_operator_in_rpn(
+    ast_op: &crate::compiler::parsers::expressions::expression::Operator,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Ensure we have at least two operands for binary operation
+    if context.expression_stack_depth() < 2 {
+        return_compiler_error!(
+            "Not enough operands for binary operator {:?} in runtime expression at line {}, column {}. Binary operators require exactly 2 operands but only {} available.",
+            ast_op,
+            location.start_pos.line_number,
+            location.start_pos.char_column,
+            context.expression_stack_depth()
+        );
+    }
+
+    // Pop right operand (top of stack)
+    let right_entry = context.pop_expression_stack().unwrap();
+    // Pop left operand (second from top)
+    let left_entry = context.pop_expression_stack().unwrap();
+
+    // Convert AST operator to WIR BinOp
+    let wir_op = ast_operator_to_wir_binop(ast_op, location)?;
+
+    // Infer result type from operands (simplified type inference)
+    let result_type = infer_binary_operation_result_type(
+        &left_entry.operand,
+        &right_entry.operand,
+        &wir_op,
+        location,
+    )?;
+
+    // Create temporary place for the result
+    let result_place = context.create_temporary_place(&result_type);
+
+    // Create WIR assignment statement for the binary operation
+    let assignment = Statement::Assign {
+        place: result_place.clone(),
+        rvalue: Rvalue::BinaryOp(wir_op, left_entry.operand, right_entry.operand),
+    };
+
+    // Push result operand onto stack (marked as temporary)
+    let result_operand = Operand::Copy(result_place);
+    context.push_expression_stack(result_operand, true);
+
+    Ok(vec![assignment])
+}
+
+/// Infer the result type of a binary operation based on operand types
+///
+/// This function implements simplified type inference for binary operations,
+/// ensuring type consistency and proper WASM type mapping.
+fn infer_binary_operation_result_type(
+    left_operand: &Operand,
+    right_operand: &Operand,
+    wir_op: &BinOp,
+    location: &TextLocation,
+) -> Result<DataType, CompileError> {
+    // Extract types from operands (simplified approach)
+    let left_type = operand_to_datatype(left_operand);
+    let right_type = operand_to_datatype(right_operand);
+
+    // For arithmetic operations, both operands should have the same base type
+    match wir_op {
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem => {
+            if datatypes_match_base_type(&left_type, &right_type) {
+                Ok(left_type)
+            } else {
+                return_type_error!(
+                    location.clone(),
+                    "Type mismatch in arithmetic operation: cannot perform {:?} on {} and {}. Both operands must have the same type.",
+                    wir_op,
+                    datatype_to_string(&left_type),
+                    datatype_to_string(&right_type)
+                );
+            }
+        }
+        BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
+            // Comparison operations return boolean
+            if datatypes_match_base_type(&left_type, &right_type) {
+                Ok(DataType::Bool)
+            } else {
+                return_type_error!(
+                    location.clone(),
+                    "Type mismatch in comparison operation: cannot compare {} and {}. Both operands must have the same type.",
+                    datatype_to_string(&left_type),
+                    datatype_to_string(&right_type)
+                );
+            }
+        }
+        BinOp::And | BinOp::Or => {
+            // Logical operations require boolean operands and return boolean
+            if is_bool_type(&left_type) && is_bool_type(&right_type) {
+                Ok(DataType::Bool)
+            } else {
+                return_type_error!(
+                    location.clone(),
+                    "Type mismatch in logical operation: {:?} requires boolean operands but got {} and {}.",
+                    wir_op,
+                    datatype_to_string(&left_type),
+                    datatype_to_string(&right_type)
+                );
+            }
+        }
+        _ => {
+            return_compiler_error!(
+                "Binary operation {:?} not yet implemented in type inference at line {}, column {}",
+                wir_op,
+                location.start_pos.line_number,
+                location.start_pos.char_column
+            );
+        }
+    }
+}
+
+/// Extract DataType from an operand (simplified approach)
+fn operand_to_datatype(operand: &Operand) -> DataType {
+    use crate::compiler::datatypes::Ownership;
+
+    match operand {
+        Operand::Constant(constant) => {
+            match constant {
+                Constant::I32(_) | Constant::I64(_) => DataType::Int,
+                Constant::F32(_) | Constant::F64(_) => DataType::Float,
+                Constant::Bool(_) => DataType::Bool,
+                Constant::String(_) => DataType::String,
+                Constant::Function(_) => DataType::Function(vec![], vec![]),
+                Constant::Null => DataType::Int, // Null is represented as integer 0
+                Constant::MemoryOffset(_) => DataType::Int, // Memory offsets are integers
+                Constant::TypeSize(_) => DataType::Int, // Type sizes are integers
+            }
+        }
+        // For places, we'd need to look up the type in the place manager
+        // For now, assume Int as default (this should be enhanced)
+        Operand::Copy(_) | Operand::Move(_) => DataType::Int,
+        Operand::FunctionRef(_) => DataType::Function(vec![], vec![]),
+        Operand::GlobalRef(_) => DataType::Int,
+    }
+}
+
+/// Check if two DataTypes have the same base type (ignoring ownership)
+fn datatypes_match_base_type(left: &DataType, right: &DataType) -> bool {
+    use crate::compiler::datatypes::DataType as DT;
+
+    match (left, right) {
+        (DT::Int, DT::Int) => true,
+        (DT::Float, DT::Float) => true,
+        (DT::Bool, DT::Bool) => true,
+        (DT::String, DT::String) => true,
+        _ => false,
+    }
+}
+
+/// Check if a DataType is a boolean type
+fn is_bool_type(data_type: &DataType) -> bool {
+    matches!(data_type, DataType::Bool)
+}
+
+/// Convert DataType to string for error messages
+fn datatype_to_string(data_type: &DataType) -> &'static str {
+    match data_type {
+        DataType::Int => "Int",
+        DataType::Float => "Float",
+        DataType::Bool => "Bool",
+        DataType::String => "String",
+        _ => "Unknown",
+    }
+}
+
+/// Legacy runtime expression transformation (kept for compatibility)
+///
+/// This function maintains compatibility with existing code while the enhanced
+/// version is being integrated throughout the codebase.
+fn transform_runtime_expression(
+    _runtime_nodes: &[AstNode],
+    location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    // For now, return an error directing users to use the enhanced version
+    return_compiler_error!(
+        "Legacy runtime expression transformation called at line {}, column {}. Complex runtime expressions require enhanced processing with temporary variable support.",
+        location.start_pos.line_number,
+        location.start_pos.char_column
+    );
 }
 
 /// Convert AST Operator to WIR BinOp
@@ -2157,6 +2876,7 @@ fn ast_print_to_wir(
             crate::compiler::parsers::expressions::expression::ExpressionKind::None,
             location.clone(),
             expression.data_type.clone(),
+            crate::compiler::datatypes::Ownership::default(),
         ),
     };
 
