@@ -231,6 +231,17 @@ pub struct VariableUsageTracker {
     moved_variables: std::collections::HashSet<String>,
 }
 
+/// Struct field initialization tracking for optional defaults
+#[derive(Debug, Clone)]
+pub struct StructInitializationTracker {
+    /// Track which fields have been initialized for each struct instance
+    /// Key: struct place identifier, Value: set of initialized field names
+    initialized_fields: HashMap<String, std::collections::HashSet<String>>,
+    /// Track struct types and their required fields
+    /// Key: struct place identifier, Value: (struct type, required field names)
+    struct_definitions: HashMap<String, (DataType, Vec<String>)>,
+}
+
 impl VariableUsageTracker {
     /// Create a new usage tracker
     pub fn new() -> Self {
@@ -289,6 +300,84 @@ impl VariableUsageTracker {
     }
 }
 
+impl StructInitializationTracker {
+    /// Create a new struct initialization tracker
+    pub fn new() -> Self {
+        Self {
+            initialized_fields: HashMap::new(),
+            struct_definitions: HashMap::new(),
+        }
+    }
+
+    /// Register a struct instance with its type and required fields
+    pub fn register_struct(&mut self, place_id: String, struct_type: DataType) -> Result<(), String> {
+        match &struct_type {
+            DataType::Struct(fields, _) => {
+                let required_fields: Vec<String> = fields
+                    .iter()
+                    .filter(|field| {
+                        // Fields with None values are optional, others are required
+                        !matches!(field.value.kind, crate::compiler::parsers::expressions::expression::ExpressionKind::None)
+                    })
+                    .map(|field| field.name.clone())
+                    .collect();
+
+                self.struct_definitions.insert(place_id.clone(), (struct_type, required_fields));
+                self.initialized_fields.insert(place_id, std::collections::HashSet::new());
+                Ok(())
+            }
+            _ => Err(format!("Expected struct type, got {:?}", struct_type))
+        }
+    }
+
+    /// Mark a field as initialized
+    pub fn mark_field_initialized(&mut self, place_id: &str, field_name: &str) {
+        if let Some(initialized_set) = self.initialized_fields.get_mut(place_id) {
+            initialized_set.insert(field_name.to_string());
+        }
+    }
+
+    /// Check if a field is initialized
+    pub fn is_field_initialized(&self, place_id: &str, field_name: &str) -> bool {
+        self.initialized_fields
+            .get(place_id)
+            .map(|set| set.contains(field_name))
+            .unwrap_or(false)
+    }
+
+    /// Get uninitialized required fields for a struct
+    pub fn get_uninitialized_required_fields(&self, place_id: &str) -> Vec<String> {
+        if let (Some((_, required_fields)), Some(initialized_fields)) = (
+            self.struct_definitions.get(place_id),
+            self.initialized_fields.get(place_id),
+        ) {
+            required_fields
+                .iter()
+                .filter(|field_name| !initialized_fields.contains(*field_name))
+                .cloned()
+                .collect()
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Check if all required fields are initialized
+    pub fn is_fully_initialized(&self, place_id: &str) -> bool {
+        self.get_uninitialized_required_fields(place_id).is_empty()
+    }
+
+    /// Get struct type for a place
+    pub fn get_struct_type(&self, place_id: &str) -> Option<&DataType> {
+        self.struct_definitions.get(place_id).map(|(struct_type, _)| struct_type)
+    }
+
+    /// Clear tracking for a struct (when it goes out of scope)
+    pub fn clear_struct(&mut self, place_id: &str) {
+        self.initialized_fields.remove(place_id);
+        self.struct_definitions.remove(place_id);
+    }
+}
+
 /// Context for AST-to-WIR transformation with place-based memory management
 ///
 /// The `WirTransformContext` orchestrates the conversion from AST to WIR by maintaining:
@@ -325,6 +414,8 @@ pub struct WirTransformContext {
     place_manager: PlaceManager,
     /// Variable name to place mapping (scoped)
     variable_scopes: Vec<HashMap<String, Place>>,
+    /// Variable mutability tracking (for string slice reassignment)
+    variable_mutability: HashMap<String, bool>,
     /// Function name to ID mapping
     function_names: HashMap<String, u32>,
     /// Next function ID to allocate
@@ -358,6 +449,8 @@ pub struct WirTransformContext {
     expression_depth: usize,
     /// Variable usage tracking for move detection
     variable_usage_tracker: VariableUsageTracker,
+    /// Struct field initialization tracking
+    struct_initialization_tracker: StructInitializationTracker,
 }
 
 impl WirTransformContext {
@@ -389,6 +482,7 @@ impl WirTransformContext {
         Self {
             place_manager: PlaceManager::new(),
             variable_scopes: vec![HashMap::new()], // Start with global scope
+            variable_mutability: HashMap::new(),
             function_names: HashMap::new(),
             next_function_id: 0,
             next_block_id: 0,
@@ -406,6 +500,7 @@ impl WirTransformContext {
             temporary_variables: Vec::new(),
             expression_depth: 0,
             variable_usage_tracker: VariableUsageTracker::new(),
+            struct_initialization_tracker: StructInitializationTracker::new(),
         }
     }
 
@@ -426,6 +521,19 @@ impl WirTransformContext {
         if let Some(current_scope) = self.variable_scopes.last_mut() {
             current_scope.insert(name, place);
         }
+    }
+
+    /// Register a variable with mutability tracking
+    pub fn register_variable_with_mutability(&mut self, name: String, place: Place, is_mutable: bool) {
+        if let Some(current_scope) = self.variable_scopes.last_mut() {
+            current_scope.insert(name.clone(), place);
+            self.variable_mutability.insert(name, is_mutable);
+        }
+    }
+
+    /// Check if a variable was declared as mutable
+    pub fn is_variable_mutable(&self, name: &str) -> bool {
+        self.variable_mutability.get(name).copied().unwrap_or(false)
     }
 
     /// Look up a variable's place
@@ -662,6 +770,61 @@ impl WirTransformContext {
         self.expression_stack.clear();
     }
 
+    /// Register a struct instance for initialization tracking
+    pub fn register_struct_for_initialization(&mut self, place: &Place, struct_type: DataType) -> Result<(), CompileError> {
+        let place_id = self.get_place_identifier(place);
+        self.struct_initialization_tracker
+            .register_struct(place_id, struct_type)
+            .map_err(|e| CompileError::compiler_error(&e))
+    }
+
+    /// Mark a struct field as initialized
+    pub fn mark_struct_field_initialized(&mut self, place: &Place, field_name: &str) {
+        let place_id = self.get_place_identifier(place);
+        self.struct_initialization_tracker.mark_field_initialized(&place_id, field_name);
+    }
+
+    /// Check if a struct field is initialized
+    pub fn is_struct_field_initialized(&self, place: &Place, field_name: &str) -> bool {
+        let place_id = self.get_place_identifier(place);
+        self.struct_initialization_tracker.is_field_initialized(&place_id, field_name)
+    }
+
+    /// Get uninitialized required fields for a struct
+    pub fn get_uninitialized_struct_fields(&self, place: &Place) -> Vec<String> {
+        let place_id = self.get_place_identifier(place);
+        self.struct_initialization_tracker.get_uninitialized_required_fields(&place_id)
+    }
+
+    /// Check if a struct is fully initialized
+    pub fn is_struct_fully_initialized(&self, place: &Place) -> bool {
+        let place_id = self.get_place_identifier(place);
+        self.struct_initialization_tracker.is_fully_initialized(&place_id)
+    }
+
+    /// Get a unique identifier for a place (for tracking purposes)
+    fn get_place_identifier(&self, place: &Place) -> String {
+        match place {
+            Place::Local { index, .. } => format!("local_{}", index),
+            Place::Global { index, .. } => format!("global_{}", index),
+            Place::Memory { base, offset, .. } => match base {
+                MemoryBase::LinearMemory => format!("memory_{}", offset.0),
+                MemoryBase::Stack => format!("stack_{}", offset.0),
+                MemoryBase::Heap { alloc_id, .. } => format!("heap_{}_{}", alloc_id, offset.0),
+            },
+            Place::Projection { base, elem } => {
+                let base_id = self.get_place_identifier(base);
+                match elem {
+                    ProjectionElem::Field { index, .. } => format!("{}_field_{}", base_id, index),
+                    ProjectionElem::Index { .. } => format!("{}_index", base_id),
+                    ProjectionElem::Length => format!("{}_length", base_id),
+                    ProjectionElem::Data => format!("{}_data", base_id),
+                    ProjectionElem::Deref => format!("{}_deref", base_id),
+                }
+            }
+        }
+    }
+
     /// Get similar variable names for error suggestions
     pub fn get_similar_variable_names(&self, target: &str) -> Vec<String> {
         let mut suggestions = Vec::new();
@@ -747,6 +910,236 @@ impl WirTransformContext {
     ) {
         let events = statement.generate_events();
         function.store_events(program_point, events);
+    }
+
+    /// Transform struct definition to WIR type information
+    pub fn transform_struct_definition(
+        &mut self,
+        fields: &[crate::compiler::parsers::ast_nodes::Arg],
+        location: &TextLocation,
+    ) -> Result<DataType, CompileError> {
+        // Validate struct fields and create struct type
+        let mut validated_fields = Vec::new();
+        
+        for field in fields {
+            // Ensure field has a name
+            if field.name.is_empty() {
+                return Err(CompileError::new_syntax_error(
+                    "Struct fields must have names".to_string(),
+                    location.clone(),
+                ));
+            }
+            
+            // Validate field type
+            let field_type = &field.value.data_type;
+            if matches!(field_type, DataType::Inferred) {
+                return Err(CompileError::new_type_error(
+                    format!("Struct field '{}' must have an explicit type", field.name),
+                    location.clone(),
+                ));
+            }
+            
+            validated_fields.push(field.clone());
+        }
+        
+        // Create struct type with immutable ownership by default
+        Ok(DataType::Struct(validated_fields, crate::compiler::datatypes::Ownership::ImmutableOwned))
+    }
+
+    /// Create a struct instance place with proper memory layout
+    pub fn create_struct_place(
+        &mut self,
+        struct_type: &DataType,
+        location: &TextLocation,
+    ) -> Result<Place, CompileError> {
+        match struct_type {
+            DataType::Struct(fields, _) => {
+                // Calculate total struct size and field offsets
+                let mut total_size = 0u32;
+                let mut field_offsets = Vec::new();
+                
+                for field in fields {
+                    // Align field to its natural alignment
+                    let field_size = self.calculate_field_size(&field.value.data_type)?;
+                    let field_alignment = self.calculate_field_alignment(&field.value.data_type);
+                    
+                    // Align current offset
+                    total_size = align_to_boundary(total_size, field_alignment);
+                    field_offsets.push(total_size);
+                    total_size += field_size;
+                }
+                
+                // Align total struct size to largest field alignment
+                let struct_alignment = fields.iter()
+                    .map(|f| self.calculate_field_alignment(&f.value.data_type))
+                    .max()
+                    .unwrap_or(4);
+                total_size = align_to_boundary(total_size, struct_alignment);
+                
+                // Allocate memory for the struct
+                let struct_place = self.place_manager.allocate_memory(total_size, struct_alignment);
+                
+                ir_log!(
+                    "Created struct place with {} fields, total size: {} bytes, alignment: {}",
+                    fields.len(),
+                    total_size,
+                    struct_alignment
+                );
+                
+                Ok(struct_place)
+            }
+            _ => Err(CompileError::compiler_error(
+                &format!("Expected struct type, got {:?}", struct_type)
+            ))
+        }
+    }
+
+    /// Calculate the size in bytes for a field type
+    fn calculate_field_size(&self, data_type: &DataType) -> Result<u32, CompileError> {
+        match data_type {
+            DataType::Bool => Ok(1),
+            DataType::Int => Ok(4),
+            DataType::Float => Ok(4),
+            DataType::String => Ok(8), // Pointer + length
+            DataType::Collection(_, _) => Ok(12), // Pointer + length + capacity
+            DataType::Struct(fields, _) => {
+                // Recursively calculate struct size
+                let mut total_size = 0u32;
+                for field in fields {
+                    let field_size = self.calculate_field_size(&field.value.data_type)?;
+                    let field_alignment = self.calculate_field_alignment(&field.value.data_type);
+                    total_size = align_to_boundary(total_size, field_alignment);
+                    total_size += field_size;
+                }
+                
+                // Align to struct boundary
+                let struct_alignment = fields.iter()
+                    .map(|f| self.calculate_field_alignment(&f.value.data_type))
+                    .max()
+                    .unwrap_or(4);
+                Ok(align_to_boundary(total_size, struct_alignment))
+            }
+            DataType::Option(inner) => {
+                // Option is tag + value
+                let inner_size = self.calculate_field_size(inner)?;
+                Ok(4 + inner_size) // 4 bytes for discriminant + inner size
+            }
+            _ => Ok(4), // Default to pointer size for complex types
+        }
+    }
+
+    /// Calculate the alignment requirement for a field type
+    fn calculate_field_alignment(&self, data_type: &DataType) -> u32 {
+        match data_type {
+            DataType::Bool => 1,
+            DataType::Int | DataType::Float => 4,
+            DataType::String => 4, // Pointer alignment
+            DataType::Collection(_, _) => 4, // Pointer alignment
+            DataType::Struct(fields, _) => {
+                // Struct alignment is the maximum field alignment
+                fields.iter()
+                    .map(|f| self.calculate_field_alignment(&f.value.data_type))
+                    .max()
+                    .unwrap_or(4)
+            }
+            DataType::Option(inner) => {
+                // Option alignment is max of discriminant and inner type
+                let inner_alignment = self.calculate_field_alignment(inner);
+                4.max(inner_alignment)
+            }
+            _ => 4, // Default to 4-byte alignment
+        }
+    }
+
+    /// Validate struct field access and create projection
+    pub fn create_struct_field_projection(
+        &mut self,
+        base_place: Place,
+        struct_type: &DataType,
+        field_name: &str,
+        location: &TextLocation,
+    ) -> Result<Place, CompileError> {
+        // Check if field is initialized before access
+        if !self.is_struct_field_initialized(&base_place, field_name) {
+            // Check if this is a required field
+            let uninitialized_fields = self.get_uninitialized_struct_fields(&base_place);
+            if uninitialized_fields.contains(&field_name.to_string()) {
+                return Err(CompileError::new_rule_error(
+                    format!(
+                        "Cannot access uninitialized field '{}'. Field must be initialized before use. Uninitialized fields: {}",
+                        field_name,
+                        uninitialized_fields.join(", ")
+                    ),
+                    location.clone(),
+                ));
+            }
+        }
+        
+        self.create_struct_field_projection_unchecked(base_place, struct_type, field_name, location)
+    }
+
+    /// Get field offset and create projection for struct field access (without initialization check)
+    fn create_struct_field_projection_unchecked(
+        &mut self,
+        base_place: Place,
+        struct_type: &DataType,
+        field_name: &str,
+        location: &TextLocation,
+    ) -> Result<Place, CompileError> {
+        match struct_type {
+            DataType::Struct(fields, _) => {
+                // Find the field and calculate its offset
+                let mut current_offset = 0u32;
+                let mut field_index = 0u32;
+                
+                for (idx, field) in fields.iter().enumerate() {
+                    if field.name == field_name {
+                        // Found the field, create projection
+                        let field_size = self.calculate_field_size(&field.value.data_type)?;
+                        let field_wasm_type = self.datatype_to_wasm_type(&field.value.data_type)?;
+                        
+                        let field_size_enum = match field_size {
+                            1 => FieldSize::Fixed(1),
+                            2 => FieldSize::Fixed(2),
+                            4 => FieldSize::WasmType(field_wasm_type),
+                            8 => FieldSize::Fixed(8),
+                            _ => FieldSize::Fixed(field_size),
+                        };
+                        
+                        let projected_place = base_place.project_field(
+                            field_index,
+                            current_offset,
+                            field_size_enum,
+                        );
+                        
+                        ir_log!(
+                            "Created field projection for '{}' at offset {} with size {}",
+                            field_name,
+                            current_offset,
+                            field_size
+                        );
+                        
+                        return Ok(projected_place);
+                    }
+                    
+                    // Calculate offset for next field
+                    let field_size = self.calculate_field_size(&field.value.data_type)?;
+                    let field_alignment = self.calculate_field_alignment(&field.value.data_type);
+                    current_offset = align_to_boundary(current_offset, field_alignment);
+                    current_offset += field_size;
+                    field_index += 1;
+                }
+                
+                Err(CompileError::new_rule_error(
+                    format!("Field '{}' not found in struct", field_name),
+                    location.clone(),
+                ))
+            }
+            _ => Err(CompileError::new_type_error(
+                format!("Cannot access field '{}' on non-struct type {:?}", field_name, struct_type),
+                location.clone(),
+            ))
+        }
     }
 
     /// Transform function definition from expression to WIR
@@ -1249,33 +1642,65 @@ fn ast_declaration_to_wir(
     // Check if variable is already declared in current scope
     if let Some(current_scope) = context.variable_scopes.last() {
         if current_scope.contains_key(name) {
-            return_rule_error!(
-                expression.location.clone(),
-                "Variable '{}' is already declared in this scope. Shadowing is not supported in Beanstalk - each variable name can only be used once per scope. Try using a different name like '{}_2' or '{}_{}'.",
-                name,
-                name,
-                name,
-                "new"
-            );
+            // Special case: Allow shadowing for string slices (immutable string reassignment)
+            if matches!(expression.data_type, DataType::String) {
+                // This is string slice shadowing - allow reassignment to a different slice
+                // The original slice remains immutable, but the variable can point to a new slice
+            } else {
+                return_rule_error!(
+                    expression.location.clone(),
+                    "Variable '{}' is already declared in this scope. Shadowing is not supported in Beanstalk except for string slices - each variable name can only be used once per scope. Try using a different name like '{}_2' or '{}_{}'.",
+                    name,
+                    name,
+                    name,
+                    "new"
+                );
+            }
         }
     }
 
     // Determine if this should be a global or local variable
     let is_global = matches!(visibility, VarVisibility::Exported);
 
-    // Allocate the appropriate place for the variable
-    let variable_place = if is_global {
-        context
-            .get_place_manager()
-            .allocate_global(&expression.data_type)
+    // Check if this is string slice shadowing
+    let variable_place = if let Some(current_scope) = context.variable_scopes.last() {
+        if current_scope.contains_key(name) && matches!(expression.data_type, DataType::String) {
+            // String slice shadowing - reuse existing place
+            context.lookup_variable(name).unwrap().clone()
+        } else {
+            // Normal variable declaration - allocate new place
+            let place = if is_global {
+                context
+                    .get_place_manager()
+                    .allocate_global(&expression.data_type)
+            } else {
+                context
+                    .get_place_manager()
+                    .allocate_local(&expression.data_type)
+            };
+            
+            // Register the variable in context with mutability tracking
+            let is_mutable = expression.ownership.is_mutable();
+            context.register_variable_with_mutability(name.to_string(), place.clone(), is_mutable);
+            place
+        }
     } else {
-        context
-            .get_place_manager()
-            .allocate_local(&expression.data_type)
+        // No current scope - allocate new place
+        let place = if is_global {
+            context
+                .get_place_manager()
+                .allocate_global(&expression.data_type)
+        } else {
+            context
+                .get_place_manager()
+                .allocate_local(&expression.data_type)
+        };
+        
+        // Register the variable in context with mutability tracking
+        let is_mutable = expression.ownership.is_mutable();
+        context.register_variable_with_mutability(name.to_string(), place.clone(), is_mutable);
+        place
     };
-
-    // Register the variable in context
-    context.register_variable(name.to_string(), variable_place.clone());
 
     // Convert expression to rvalue with context for variable references
     let (additional_statements, rvalue) =
@@ -1320,6 +1745,23 @@ fn ast_mutation_to_wir(
             }
         }
     };
+
+    // Special handling for string slice reassignment
+    // String slices can be reassigned if the variable was declared as mutable
+    if matches!(expression.data_type, DataType::String) {
+        if !context.is_variable_mutable(name) {
+            return_rule_error!(
+                location.clone(),
+                "Cannot reassign immutable string slice variable '{}'. String slice variables must be declared as mutable (~=) to allow reassignment to different slices",
+                name
+            );
+        }
+        // For mutable string slice variables, allow reassignment
+        // This is reassignment to a different slice, not mutation of the slice content
+    } else {
+        // For non-string types, check normal mutability rules
+        // This would be handled by the existing borrow checker logic
+    }
 
     // Convert expression to rvalue with mutable context for mutations
     // In Beanstalk, mutations (x ~= y) should create mutable borrows
@@ -1774,6 +2216,10 @@ fn expression_to_rvalue_with_mutable_context(
             let rvalue = transform_template_to_rvalue(template, location, context)?;
             Ok((vec![], rvalue))
         }
+        ExpressionKind::Struct(fields) => {
+            // Transform struct literal to WIR
+            transform_struct_literal_to_statements_and_rvalue(fields, location, context)
+        }
         ExpressionKind::None => {
             // None expressions represent parameters without default arguments
             return_compiler_error!(
@@ -1862,6 +2308,10 @@ fn expression_to_rvalue_with_mutable_borrow_context(
             let rvalue = transform_template_to_rvalue(template, location, context)?;
             Ok((vec![], rvalue))
         }
+        ExpressionKind::Struct(fields) => {
+            // Transform struct literal to WIR for mutations
+            transform_struct_literal_to_statements_and_rvalue(fields, location, context)
+        }
         ExpressionKind::None => {
             // None expressions represent parameters without default arguments
             return_compiler_error!(
@@ -1908,6 +2358,10 @@ fn expression_to_rvalue_with_context(
             // Transform template to WIR statements for string creation
             transform_template_to_rvalue(template, location, context)
         }
+        ExpressionKind::Struct(fields) => {
+            // Transform struct literal to WIR rvalue
+            transform_struct_literal_to_rvalue(fields, location, context)
+        }
         ExpressionKind::None => {
             // None expressions represent parameters without default arguments
             // In the context of function parameters, this indicates the parameter must be provided
@@ -1947,7 +2401,7 @@ fn transform_template_to_rvalue(
                 ))
             })?;
 
-            Ok(Rvalue::Use(Operand::Constant(Constant::String(
+            Ok(Rvalue::Use(Operand::Constant(Constant::MutableString(
                 folded_string,
             ))))
         }
@@ -1956,8 +2410,8 @@ fn transform_template_to_rvalue(
             transform_runtime_template_to_rvalue(template, location, context)
         }
         TemplateType::Comment => {
-            // Comments become empty strings
-            Ok(Rvalue::Use(Operand::Constant(Constant::String(
+            // Comments become empty mutable strings (since they're templates)
+            Ok(Rvalue::Use(Operand::Constant(Constant::MutableString(
                 String::new(),
             ))))
         }
@@ -1970,6 +2424,94 @@ fn transform_template_to_rvalue(
             );
         }
     }
+}
+
+/// Transform struct literal to WIR statements and rvalue
+fn transform_struct_literal_to_statements_and_rvalue(
+    fields: &[crate::compiler::parsers::ast_nodes::Arg],
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    // Create struct type from fields
+    let struct_type = context.transform_struct_definition(fields, location)?;
+    
+    // Allocate place for the struct
+    let struct_place = context.create_struct_place(&struct_type, location)?;
+    
+    // Register struct for initialization tracking
+    context.register_struct_for_initialization(&struct_place, struct_type.clone())?;
+    
+    let mut statements = Vec::new();
+    
+    // Initialize each field
+    for (field_index, field) in fields.iter().enumerate() {
+        // Check if field has a value (not None/optional)
+        let has_value = !matches!(field.value.kind, crate::compiler::parsers::expressions::expression::ExpressionKind::None);
+        
+        if has_value {
+            // Transform field value expression
+            let (field_statements, field_rvalue) = expression_to_rvalue_with_mutable_context(
+                &field.value,
+                &field.value.location,
+                context,
+            )?;
+            statements.extend(field_statements);
+            
+            // Create field projection (unchecked since we're initializing)
+            let field_place = context.create_struct_field_projection_unchecked(
+                struct_place.clone(),
+                &struct_type,
+                &field.name,
+                location,
+            )?;
+            
+            // Assign field value
+            statements.push(Statement::Assign {
+                place: field_place,
+                rvalue: field_rvalue,
+            });
+            
+            // Mark field as initialized
+            statements.push(Statement::MarkFieldInitialized {
+                struct_place: struct_place.clone(),
+                field_name: field.name.clone(),
+                field_index: field_index as u32,
+            });
+            
+            // Update context tracking
+            context.mark_struct_field_initialized(&struct_place, &field.name);
+        }
+    }
+    
+    // Validate that all required fields are initialized
+    statements.push(Statement::ValidateStructInitialization {
+        struct_place: struct_place.clone(),
+        struct_type: struct_type.clone(),
+    });
+    
+    // Return the struct as a use of its place
+    Ok((statements, Rvalue::Use(Operand::Copy(struct_place))))
+}
+
+/// Transform struct literal to WIR rvalue (for simple cases)
+fn transform_struct_literal_to_rvalue(
+    fields: &[crate::compiler::parsers::ast_nodes::Arg],
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Rvalue, CompileError> {
+    // For now, delegate to the full transformation and ignore statements
+    // In a more optimized implementation, we could handle simple constant structs differently
+    let (statements, rvalue) = transform_struct_literal_to_statements_and_rvalue(fields, location, context)?;
+    
+    if !statements.is_empty() {
+        return_compiler_error!(
+            "Struct literal with complex field expressions not yet supported in rvalue-only context at line {}, column {}",
+            location.start_pos.line_number,
+            location.start_pos.char_column
+        );
+    }
+    
+    Ok(rvalue)
 }
 
 /// Transform runtime template to rvalue with string concatenation
@@ -2177,6 +2719,7 @@ fn generate_string_coercion_rvalue(
 fn extract_string_from_operand(operand: &Operand) -> Result<String, CompileError> {
     match operand {
         Operand::Constant(Constant::String(s)) => Ok(s.clone()),
+        Operand::Constant(Constant::MutableString(s)) => Ok(s.clone()),
         Operand::Constant(Constant::I32(i)) => Ok(i.to_string()),
         Operand::Constant(Constant::I64(i)) => Ok(i.to_string()),
         Operand::Constant(Constant::F32(f)) => Ok(f.to_string()),
@@ -2710,6 +3253,7 @@ fn operand_to_datatype(operand: &Operand) -> DataType {
                 Constant::F32(_) | Constant::F64(_) => DataType::Float,
                 Constant::Bool(_) => DataType::Bool,
                 Constant::String(_) => DataType::String,
+                Constant::MutableString(_) => DataType::Template,
                 Constant::Function(_) => DataType::Function(vec![], vec![]),
                 Constant::Null => DataType::Int, // Null is represented as integer 0
                 Constant::MemoryOffset(_) => DataType::Int, // Memory offsets are integers

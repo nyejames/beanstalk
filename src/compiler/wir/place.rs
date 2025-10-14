@@ -806,3 +806,8 @@ impl MemoryLayout {
 fn align_up(value: u32, alignment: u32) -> u32 {
     (value + alignment - 1) & !(alignment - 1)
 }
+
+/// Align a value to a boundary (public version for WIR usage)
+pub fn align_to_boundary(value: u32, alignment: u32) -> u32 {
+    align_up(value, alignment)
+}

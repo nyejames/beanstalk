@@ -381,6 +381,19 @@ pub enum Statement {
         args: Vec<Operand>,
         destination: Option<Place>,
     },
+
+    /// Mark a struct field as initialized (for tracking optional defaults)
+    MarkFieldInitialized {
+        struct_place: Place,
+        field_name: String,
+        field_index: u32,
+    },
+
+    /// Check that all required struct fields are initialized before use
+    ValidateStructInitialization {
+        struct_place: Place,
+        struct_type: crate::compiler::datatypes::DataType,
+    },
 }
 
 impl Statement {
@@ -557,6 +570,23 @@ impl Statement {
                     });
                 }
             }
+            Statement::MarkFieldInitialized { struct_place, .. } => {
+                // Mark field initialization - this is a reassign event for the struct
+                events.reassigns.push(struct_place.clone());
+                
+                // Transition struct to partially initialized state
+                events.state_transitions.push(StateTransition {
+                    place: struct_place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // Still owned, but more initialized
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
+            }
+            Statement::ValidateStructInitialization { struct_place, .. } => {
+                // Validation uses the struct place to check initialization
+                events.uses.push(struct_place.clone());
+            }
             Statement::Nop | Statement::MemoryOp { .. } => {
                 // These don't generate events for basic borrow checking
             }
@@ -724,8 +754,10 @@ pub enum Constant {
     F64(f64),
     /// Boolean (as i32)
     Bool(bool),
-    /// String literal (pointer to linear memory)
+    /// String slice literal (immutable pointer to data section)
     String(String),
+    /// Mutable string (heap-allocated with capacity)
+    MutableString(String),
     /// Function reference
     Function(u32),
     /// Null pointer (0 in linear memory)

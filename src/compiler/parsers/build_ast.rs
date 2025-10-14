@@ -267,20 +267,18 @@ pub fn new_ast(
 
             // New Function or Variable declaration
             TokenKind::Symbol(ref name) => {
-                // Check if this might be a host function call first
-                if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
-                    // This looks like a function call - check if it's a host function
-                    if context.host_registry.has_function(name) {
-                        ast.push(parse_function_call_with_registry(
-                            token_stream,
-                            name,
-                            &context,
-                            &context.host_registry,
-                        )?);
-                        continue;
-                    }
+                // Check if this is a host function
+                if context.host_registry.has_function(name) {
+                    ast.push(parse_function_call_with_registry(
+                        token_stream,
+                        name,
+                        &context,
+                        &context.host_registry,
+                    )?);
+                    continue;
                 }
 
+                // Check if this has already been declared (is a reference)
                 if let Some(arg) = context.get_reference(name) {
                     // Then the associated mutation afterward.
                     // Or error if trying to mutate an immutable reference
@@ -335,6 +333,9 @@ pub fn new_ast(
                             // Move past the name
                             token_stream.advance();
 
+                            // ----------------------------
+                            //        METHOD CALLS
+                            // ----------------------------
                             if let DataType::Function(required_arguments, returned_types) =
                                 &access.value.data_type
                             {
@@ -357,10 +358,11 @@ pub fn new_ast(
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
-                        // Assignment operators
+
                         // ---------------------------
                         //          MUTATION
                         // ---------------------------
+                        // Assignment operators
                         TokenKind::Assign
                         | TokenKind::AddAssign
                         | TokenKind::SubtractAssign
@@ -392,6 +394,23 @@ pub fn new_ast(
                                     "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
                                     name
                                 );
+                            }
+                        }
+
+                        // ----------------------------
+                        //        FUNCTION CALLS
+                        // ----------------------------
+                        TokenKind::OpenParenthesis => {
+                            if let DataType::Function(required_arguments, returned_types) =
+                                &arg.value.data_type
+                            {
+                                ast.push(parse_function_call(
+                                    token_stream,
+                                    name,
+                                    &context,
+                                    required_arguments,
+                                    returned_types,
+                                )?)
                             }
                         }
 

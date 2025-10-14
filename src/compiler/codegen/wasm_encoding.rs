@@ -32,7 +32,7 @@ use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::host_functions::wasix_registry::{
     WasixFunctionDef, WasixFunctionRegistry, create_wasix_registry,
 };
-use crate::compiler::wir::place::{MemoryBase, Place, ProjectionElem, TypeSize, WasmType};
+use crate::compiler::wir::place::{MemoryBase, Place, ProjectionElem, TypeSize, WasmType, FieldSize};
 use crate::compiler::wir::wir_nodes::{
     BinOp, BorrowKind, Constant, MemoryOpKind, Operand, Rvalue, Statement, Terminator, UnOp, WIR,
     WirFunction,
@@ -363,17 +363,16 @@ impl StringManager {
         }
     }
 
-    /// Add a string constant and return its offset in linear memory
+    /// Add a string slice constant and return its offset in linear memory
     ///
-    /// Strings are stored with a 4-byte length prefix followed by UTF-8 data.
-    /// Identical strings are deduplicated and return the same offset.
+    /// String slices are immutable references stored with a 4-byte length prefix 
+    /// followed by UTF-8 data. Identical strings are deduplicated and return the same offset.
     ///
     /// ## Memory Management
-    /// String constants have static lifetime and are stored in the WASM data section.
+    /// String slice constants have static lifetime and are stored in the WASM data section.
     /// No drop semantics are needed since they persist for the entire program execution.
-    /// This is appropriate for basic string literals - dynamic string allocation
-    /// would require more complex lifetime tracking.
-    pub fn add_string_constant(&mut self, value: &str) -> u32 {
+    /// This is appropriate for immutable string literals created with "" syntax.
+    pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
         // Check if we already have this string
         if let Some(&offset) = self.string_constants.get(value) {
             return offset;
@@ -393,6 +392,46 @@ impl StringManager {
         // Store mapping for deduplication
         self.string_constants.insert(value.to_string(), offset);
 
+        offset
+    }
+
+    /// Add a string constant and return its offset in linear memory (legacy method)
+    /// 
+    /// This method is kept for backward compatibility and delegates to add_string_slice_constant
+    pub fn add_string_constant(&mut self, value: &str) -> u32 {
+        self.add_string_slice_constant(value)
+    }
+
+    /// Allocate space for a mutable string in linear memory
+    ///
+    /// Mutable strings (templates) are heap-allocated with a header containing:
+    /// - 4 bytes: current length
+    /// - 4 bytes: capacity 
+    /// - N bytes: UTF-8 string data
+    ///
+    /// ## Memory Management
+    /// Mutable strings require explicit memory management and should be freed
+    /// when no longer needed. The borrow checker ensures safe access patterns.
+    pub fn allocate_mutable_string(&mut self, initial_value: &str, capacity: u32) -> u32 {
+        let offset = self.next_offset;
+        let bytes = initial_value.as_bytes();
+        let current_length = bytes.len() as u32;
+        
+        // Ensure capacity is at least as large as initial content
+        let actual_capacity = capacity.max(current_length);
+        
+        // Store mutable string header: [length][capacity][data...]
+        self.data_section.extend_from_slice(&current_length.to_le_bytes());
+        self.data_section.extend_from_slice(&actual_capacity.to_le_bytes());
+        self.data_section.extend_from_slice(bytes);
+        
+        // Pad to capacity if needed
+        let padding_needed = actual_capacity - current_length;
+        self.data_section.extend(vec![0; padding_needed as usize]);
+        
+        // Update next offset (8 bytes for header + capacity for data)
+        self.next_offset += 8 + actual_capacity;
+        
         offset
     }
 
@@ -667,6 +706,14 @@ impl LocalAnalyzer {
                     self.collect_from_place(dest);
                 }
             }
+            Statement::MarkFieldInitialized { struct_place, .. } => {
+                // Field initialization tracking - collect struct place
+                self.collect_from_place(struct_place);
+            }
+            Statement::ValidateStructInitialization { struct_place, .. } => {
+                // Struct validation - collect struct place
+                self.collect_from_place(struct_place);
+            }
             Statement::Nop => {
                 // No places to collect
             }
@@ -929,14 +976,14 @@ impl WasmModule {
             DataType::Int => Ok(WasmType::I32),
             DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
             DataType::Bool => Ok(WasmType::I32),
-            DataType::String => Ok(WasmType::I32), // String pointer
+            DataType::String => Ok(WasmType::I32), // String slice pointer (immutable reference to data section)
             DataType::Collection(_, _) => Ok(WasmType::I32), // Collection pointer
             DataType::Function(_, _) => Ok(WasmType::FuncRef),
             DataType::Inferred => Ok(WasmType::I32), // Default to i32 for unresolved types
             DataType::None => Ok(WasmType::I32),
             DataType::True | DataType::False => Ok(WasmType::I32), // Booleans as i32
             DataType::Decimal => Ok(WasmType::F64), // Decimals as f64
-            DataType::Template => Ok(WasmType::I32), // Template pointer
+            DataType::Template => Ok(WasmType::I32), // Mutable string pointer (heap-allocated)
             DataType::Range => Ok(WasmType::I32), // Range pointer
             DataType::CoerceToString => Ok(WasmType::I32), // String pointer
             DataType::Args(_) | DataType::Struct(_, _) => Ok(WasmType::I32), // Struct pointer
@@ -1652,6 +1699,15 @@ impl WasmModule {
                     local_map,
                 )
             }
+            Statement::MarkFieldInitialized { .. } => {
+                // Field initialization tracking - no WASM instructions needed
+                // This is handled at compile time for validation
+                Ok(())
+            }
+            Statement::ValidateStructInitialization { struct_place, struct_type } => {
+                // Struct validation - generate runtime check if needed
+                self.lower_struct_validation(struct_place, struct_type, function_builder, &mut local_map.clone())
+            }
             Statement::Nop => {
                 // No-op generates no instructions (0 instructions)
                 Ok(())
@@ -1819,6 +1875,15 @@ impl WasmModule {
                     function,
                     local_map,
                 )
+            }
+            Statement::MarkFieldInitialized { .. } => {
+                // Field initialization tracking - no WASM instructions needed
+                // This is handled at compile time for validation
+                Ok(())
+            }
+            Statement::ValidateStructInitialization { struct_place, struct_type } => {
+                // Struct validation - generate runtime check if needed
+                self.lower_struct_validation_simple(struct_place, struct_type, function, &mut local_map.clone())
             }
             Statement::Nop => {
                 // No-op generates no instructions (0 instructions)
@@ -2347,12 +2412,23 @@ impl WasmModule {
                 Ok(())
             }
             Constant::String(value) => {
-                // String constants: pointer to string data in linear memory
-                let offset = self.string_manager.add_string_constant(value);
+                // String slice constants: immutable pointer to string data in data section
+                let offset = self.string_manager.add_string_slice_constant(value);
                 Self::emit_i32_const(function, offset as i32);
 
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASM: string constant '{}' at offset {}", value, offset);
+                println!("WASM: string slice constant '{}' at offset {}", value, offset);
+
+                Ok(())
+            }
+            Constant::MutableString(value) => {
+                // Mutable string constants: heap-allocated with default capacity
+                let default_capacity = (value.len() as u32).max(32); // At least 32 bytes capacity
+                let offset = self.string_manager.allocate_mutable_string(value, default_capacity);
+                Self::emit_i32_const(function, offset as i32);
+
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WASM: mutable string '{}' allocated at offset {} with capacity {}", value, offset, default_capacity);
 
                 Ok(())
             }
@@ -2606,10 +2682,109 @@ impl WasmModule {
             ProjectionElem::Field {
                 index: _,
                 offset,
-                size: _,
+                size,
             } => {
                 // Field access: add field offset to base address
-                Self::emit_memory_offset(function, offset.0);
+                if offset.0 > 0 {
+                    function.instruction(&Instruction::I32Const(offset.0 as i32));
+                    function.instruction(&Instruction::I32Add);
+                }
+                
+                // Generate appropriate load instruction based on field size
+                match size {
+                    FieldSize::Fixed(1) => {
+                        function.instruction(&Instruction::I32Load8U(MemArg {
+                            offset: 0,
+                            align: 0, // 1-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    FieldSize::Fixed(2) => {
+                        function.instruction(&Instruction::I32Load16U(MemArg {
+                            offset: 0,
+                            align: 1, // 2-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    FieldSize::Fixed(4) => {
+                        function.instruction(&Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2, // 4-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    FieldSize::Fixed(8) => {
+                        function.instruction(&Instruction::I64Load(MemArg {
+                            offset: 0,
+                            align: 3, // 8-byte alignment
+                            memory_index: 0,
+                        }));
+                    }
+                    FieldSize::WasmType(wasm_type) => {
+                        match wasm_type {
+                            WasmType::I32 => {
+                                function.instruction(&Instruction::I32Load(MemArg {
+                                    offset: 0,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            }
+                            WasmType::I64 => {
+                                function.instruction(&Instruction::I64Load(MemArg {
+                                    offset: 0,
+                                    align: 3,
+                                    memory_index: 0,
+                                }));
+                            }
+                            WasmType::F32 => {
+                                function.instruction(&Instruction::F32Load(MemArg {
+                                    offset: 0,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            }
+                            WasmType::F64 => {
+                                function.instruction(&Instruction::F64Load(MemArg {
+                                    offset: 0,
+                                    align: 3,
+                                    memory_index: 0,
+                                }));
+                            }
+                            WasmType::ExternRef | WasmType::FuncRef => {
+                                // References are stored as i32 pointers
+                                function.instruction(&Instruction::I32Load(MemArg {
+                                    offset: 0,
+                                    align: 2,
+                                    memory_index: 0,
+                                }));
+                            }
+                        }
+                    }
+                    FieldSize::Variable => {
+                        // Variable size fields are typically pointers to the actual data
+                        function.instruction(&Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                    FieldSize::Fixed(size) => {
+                        // Handle other fixed sizes by defaulting to appropriate instruction
+                        if *size <= 4 {
+                            function.instruction(&Instruction::I32Load(MemArg {
+                                offset: 0,
+                                align: 2,
+                                memory_index: 0,
+                            }));
+                        } else {
+                            function.instruction(&Instruction::I64Load(MemArg {
+                                offset: 0,
+                                align: 3,
+                                memory_index: 0,
+                            }));
+                        }
+                    }
+                }
                 Ok(())
             }
             ProjectionElem::Index {
@@ -4500,7 +4675,13 @@ impl WasmModule {
                 Ok(())
             }
             Constant::String(value) => {
-                let offset = self.string_manager.add_string_constant(value);
+                let offset = self.string_manager.add_string_slice_constant(value);
+                function_builder.instruction(&Instruction::I32Const(offset as i32))?;
+                Ok(())
+            }
+            Constant::MutableString(value) => {
+                let default_capacity = (value.len() as u32).max(32);
+                let offset = self.string_manager.allocate_mutable_string(value, default_capacity);
                 function_builder.instruction(&Instruction::I32Const(offset as i32))?;
                 Ok(())
             }
@@ -4996,6 +5177,272 @@ impl WasmModule {
         // Generate return instruction
         function_builder.instruction(&Instruction::Return)?;
 
+        Ok(())
+    }
+
+    /// Lower struct validation to WASM instructions
+    fn lower_struct_validation(
+        &mut self,
+        _struct_place: &Place,
+        _struct_type: &DataType,
+        _function_builder: &mut EnhancedFunctionBuilder,
+        _local_map: &mut LocalMap,
+    ) -> Result<(), CompileError> {
+        // For now, struct validation is handled at compile time
+        // In a more complete implementation, this could generate runtime checks
+        // for uninitialized fields if needed
+        Ok(())
+    }
+
+    /// Lower struct validation to WASM instructions (simple version)
+    fn lower_struct_validation_simple(
+        &mut self,
+        _struct_place: &Place,
+        _struct_type: &DataType,
+        _function: &mut Function,
+        _local_map: &mut LocalMap,
+    ) -> Result<(), CompileError> {
+        // For now, struct validation is handled at compile time
+        // In a more complete implementation, this could generate runtime checks
+        // for uninitialized fields if needed
+        Ok(())
+    }
+
+    /// Generate WASM instructions for struct field access with proper memory layout
+    fn lower_struct_field_access(
+        &mut self,
+        base_place: &Place,
+        field_offset: u32,
+        field_size: &FieldSize,
+        function: &mut Function,
+        local_map: &mut LocalMap,
+    ) -> Result<(), CompileError> {
+        // Load base address of the struct
+        self.lower_place_access(base_place, function, local_map)?;
+        
+        // Add field offset if non-zero
+        if field_offset > 0 {
+            function.instruction(&Instruction::I32Const(field_offset as i32));
+            function.instruction(&Instruction::I32Add);
+        }
+        
+        // Generate appropriate load instruction based on field size
+        match field_size {
+            FieldSize::Fixed(1) => {
+                function.instruction(&Instruction::I32Load8U(MemArg {
+                    offset: 0,
+                    align: 0, // 1-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(2) => {
+                function.instruction(&Instruction::I32Load16U(MemArg {
+                    offset: 0,
+                    align: 1, // 2-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(4) => {
+                function.instruction(&Instruction::I32Load(MemArg {
+                    offset: 0,
+                    align: 2, // 4-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(8) => {
+                function.instruction(&Instruction::I64Load(MemArg {
+                    offset: 0,
+                    align: 3, // 8-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::WasmType(wasm_type) => {
+                match wasm_type {
+                    WasmType::I32 => {
+                        function.instruction(&Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::I64 => {
+                        function.instruction(&Instruction::I64Load(MemArg {
+                            offset: 0,
+                            align: 3,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::F32 => {
+                        function.instruction(&Instruction::F32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::F64 => {
+                        function.instruction(&Instruction::F64Load(MemArg {
+                            offset: 0,
+                            align: 3,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::ExternRef | WasmType::FuncRef => {
+                        // References are stored as i32 pointers
+                        function.instruction(&Instruction::I32Load(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                }
+            }
+            FieldSize::Variable => {
+                // Variable size fields are typically pointers to the actual data
+                function.instruction(&Instruction::I32Load(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(size) => {
+                // Handle other fixed sizes by defaulting to appropriate instruction
+                if *size <= 4 {
+                    function.instruction(&Instruction::I32Load(MemArg {
+                        offset: 0,
+                        align: 2,
+                        memory_index: 0,
+                    }));
+                } else {
+                    function.instruction(&Instruction::I64Load(MemArg {
+                        offset: 0,
+                        align: 3,
+                        memory_index: 0,
+                    }));
+                }
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Generate WASM instructions for struct field assignment with proper memory layout
+    fn lower_struct_field_assignment(
+        &mut self,
+        base_place: &Place,
+        field_offset: u32,
+        field_size: &FieldSize,
+        value_operand: &Operand,
+        function: &mut Function,
+        local_map: &mut LocalMap,
+    ) -> Result<(), CompileError> {
+        // Load base address of the struct
+        self.lower_place_access(base_place, function, local_map)?;
+        
+        // Add field offset if non-zero
+        if field_offset > 0 {
+            function.instruction(&Instruction::I32Const(field_offset as i32));
+            function.instruction(&Instruction::I32Add);
+        }
+        
+        // Load the value to store
+        self.lower_operand(value_operand, function, local_map)?;
+        
+        // Generate appropriate store instruction based on field size
+        match field_size {
+            FieldSize::Fixed(1) => {
+                function.instruction(&Instruction::I32Store8(MemArg {
+                    offset: 0,
+                    align: 0, // 1-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(2) => {
+                function.instruction(&Instruction::I32Store16(MemArg {
+                    offset: 0,
+                    align: 1, // 2-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(4) => {
+                function.instruction(&Instruction::I32Store(MemArg {
+                    offset: 0,
+                    align: 2, // 4-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(8) => {
+                function.instruction(&Instruction::I64Store(MemArg {
+                    offset: 0,
+                    align: 3, // 8-byte alignment
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::WasmType(wasm_type) => {
+                match wasm_type {
+                    WasmType::I32 => {
+                        function.instruction(&Instruction::I32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::I64 => {
+                        function.instruction(&Instruction::I64Store(MemArg {
+                            offset: 0,
+                            align: 3,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::F32 => {
+                        function.instruction(&Instruction::F32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::F64 => {
+                        function.instruction(&Instruction::F64Store(MemArg {
+                            offset: 0,
+                            align: 3,
+                            memory_index: 0,
+                        }));
+                    }
+                    WasmType::ExternRef | WasmType::FuncRef => {
+                        // References are stored as i32 pointers
+                        function.instruction(&Instruction::I32Store(MemArg {
+                            offset: 0,
+                            align: 2,
+                            memory_index: 0,
+                        }));
+                    }
+                }
+            }
+            FieldSize::Variable => {
+                // Variable size fields are typically pointers to the actual data
+                function.instruction(&Instruction::I32Store(MemArg {
+                    offset: 0,
+                    align: 2,
+                    memory_index: 0,
+                }));
+            }
+            FieldSize::Fixed(size) => {
+                // Handle other fixed sizes by defaulting to appropriate instruction
+                if *size <= 4 {
+                    function.instruction(&Instruction::I32Store(MemArg {
+                        offset: 0,
+                        align: 2,
+                        memory_index: 0,
+                    }));
+                } else {
+                    function.instruction(&Instruction::I64Store(MemArg {
+                        offset: 0,
+                        align: 3,
+                        memory_index: 0,
+                    }));
+                }
+            }
+        }
+        
         Ok(())
     }
 }
