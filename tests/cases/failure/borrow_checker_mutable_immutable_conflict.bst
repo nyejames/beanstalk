@@ -6,10 +6,10 @@ data ~= ["conflicted data"]
 -- Create immutable reference
 immutable_ref = data
 
--- INVALID: Try to create mutable reference while immutable reference exists
+-- Try to create mutable reference while immutable reference exists
 mutable_ref ~= data
 
 -- Use both references (this should trigger borrow checker error)
 -- Because if immutable_ref is not used after the mutable_ref, 
--- then its safe.
+-- then its safe. But since both are used, an error should occur
 result = immutable_ref + mutable_ref

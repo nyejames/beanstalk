@@ -4,7 +4,7 @@
 // DOM manipulation, and web-specific functionality.
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::runtime::io::io::{IoInterface, IoConfig};
+use crate::runtime::io::io::{IoConfig, IoInterface};
 
 pub struct JsBindingsIoBackend {
     _config: IoConfig,
@@ -22,22 +22,27 @@ impl IoInterface for JsBindingsIoBackend {
         println!("JS Console: {}", message);
         Ok(())
     }
-    
+
     fn read_input(&self) -> Result<String, CompileError> {
         // In a web environment, this might use prompt() or read from DOM elements
-        Err(CompileError::compiler_error("Input reading not implemented for JS bindings"))
+        Err(CompileError::compiler_error(
+            "Input reading not implemented for JS bindings",
+        ))
     }
-    
+
     fn write_file(&self, _path: &str, _content: &str) -> Result<(), CompileError> {
         // Web environments typically can't write arbitrary files
-        Err(CompileError::compiler_error("File writing not supported in web environment"))
+        Err(CompileError::compiler_error(
+            "File writing not supported in web environment",
+        ))
     }
-    
+
     fn read_file(&self, _path: &str) -> Result<String, CompileError> {
         // Web environments might fetch files via HTTP
-        Err(CompileError::compiler_error("File reading not implemented for JS bindings"))
+        Err(CompileError::compiler_error(
+            "File reading not implemented for JS bindings",
+        ))
     }
-    
 }
 
 /// Generates comprehensive JavaScript code for WASM integration and DOM manipulation

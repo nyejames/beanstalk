@@ -2,8 +2,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_rule_error;
 
-
-use super::wasi_compatibility::{WasiCompatibilityLayer, MigrationGuidance};
+use super::wasi_compatibility::{MigrationGuidance, WasiCompatibilityLayer};
 use super::wasix_registry::WasixError;
 
 /// Migration diagnostics system for detecting and guiding WASI to WASIX transitions
@@ -51,8 +50,10 @@ impl MigrationDiagnostics {
 
             // Generate migration guidance
             let module = module_name.unwrap_or("wasi_snapshot_preview1");
-            let guidance = self.compatibility_layer.generate_migration_guidance(module, function_name)?;
-            
+            let guidance = self
+                .compatibility_layer
+                .generate_migration_guidance(module, function_name)?;
+
             // Create migration warning
             let warning = MigrationWarning {
                 message: format!("WASI function '{}' detected", function_name),
@@ -69,10 +70,6 @@ impl MigrationDiagnostics {
         }
     }
 
-
-
-
-
     /// Check if a function is supported and provide error if not
     pub fn check_function_support(
         &self,
@@ -81,7 +78,10 @@ impl MigrationDiagnostics {
     ) -> Result<(), CompileError> {
         // Check if it's a WASI function that we can't migrate
         if self.compatibility_layer.is_wasi_function(function_name) {
-            match self.compatibility_layer.migrate_function_name(function_name) {
+            match self
+                .compatibility_layer
+                .migrate_function_name(function_name)
+            {
                 Ok(_) => Ok(()), // Migration available
                 Err(e) if self.error_on_unsupported => {
                     return_rule_error!(
@@ -98,12 +98,6 @@ impl MigrationDiagnostics {
             Ok(())
         }
     }
-
-
-
-
-
-
 }
 
 /// Detected WASI usage in the code
@@ -139,8 +133,6 @@ pub struct MigrationWarning {
     pub severity: WarningSeverity,
 }
 
-
-
 /// Warning severity levels
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WarningSeverity {
@@ -156,8 +148,6 @@ impl std::fmt::Display for WarningSeverity {
     }
 }
 
-
-
 /// Create a migration diagnostics system with the given compatibility layer
 pub fn create_migration_diagnostics(
     compatibility_layer: WasiCompatibilityLayer,
@@ -168,8 +158,8 @@ pub fn create_migration_diagnostics(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
     use crate::compiler::host_functions::wasi_compatibility::WasiCompatibilityLayer;
+    use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
 
     fn create_test_diagnostics() -> MigrationDiagnostics {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
@@ -179,27 +169,28 @@ mod tests {
 
     #[test]
     fn test_wasi_function_detection() {
-        use std::path::PathBuf;
         use crate::compiler::parsers::tokens::CharPosition;
-        
+        use std::path::PathBuf;
+
         let mut diagnostics = create_test_diagnostics();
         let location = TextLocation::new(
             PathBuf::from("test.bs"),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 }
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         );
 
-        let guidance = diagnostics.detect_wasi_usage("fd_write", Some("wasi_snapshot_preview1"), &location)
+        let guidance = diagnostics
+            .detect_wasi_usage("fd_write", Some("wasi_snapshot_preview1"), &location)
             .expect("Failed to detect WASI usage");
 
         assert!(guidance.is_some());
         assert_eq!(diagnostics.detected_wasi_usage.len(), 1);
         assert_eq!(diagnostics.migration_warnings.len(), 1);
     }
-
-
-
-
-
-
 }

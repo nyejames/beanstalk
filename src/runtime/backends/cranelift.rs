@@ -40,7 +40,12 @@ pub fn execute_with_cranelift(
     })?;
 
     // Set up imports based on IO backend
-    let import_object = crate::runtime::jit::create_import_object(&mut store, &module, wasm_bytes, &config.io_backend)?;
+    let import_object = crate::runtime::jit::create_import_object(
+        &mut store,
+        &module,
+        wasm_bytes,
+        &config.io_backend,
+    )?;
 
     // Instantiate and execute
     let instance = Instance::new(&mut store, &module, &import_object).map_err(|e| {

@@ -2,8 +2,7 @@ use crate::compiler::compiler_errors::CompileError;
 
 use std::collections::HashMap;
 
-
-use super::wasix_registry::{WasixFunctionRegistry, WasixError};
+use super::wasix_registry::{WasixError, WasixFunctionRegistry};
 
 /// WASI compatibility layer for automatic migration to WASIX
 #[derive(Debug, Clone)]
@@ -36,23 +35,41 @@ impl WasiCompatibilityLayer {
     /// Initialize standard WASI to WASIX function and module mappings
     fn initialize_standard_mappings(&mut self) {
         // Module mappings - WASI modules to WASIX equivalents
-        self.wasi_module_mapping.insert("wasi_snapshot_preview1".to_string(), "wasix_32v1".to_string());
-        self.wasi_module_mapping.insert("wasi_unstable".to_string(), "wasix_32v1".to_string());
+        self.wasi_module_mapping.insert(
+            "wasi_snapshot_preview1".to_string(),
+            "wasix_32v1".to_string(),
+        );
+        self.wasi_module_mapping
+            .insert("wasi_unstable".to_string(), "wasix_32v1".to_string());
 
         // Function mappings - WASI functions to WASIX equivalents
         // Most WASI functions have direct WASIX equivalents with same names
-        self.wasi_to_wasix_mapping.insert("fd_write".to_string(), "fd_write".to_string());
-        self.wasi_to_wasix_mapping.insert("fd_read".to_string(), "fd_read".to_string());
-        self.wasi_to_wasix_mapping.insert("fd_close".to_string(), "fd_close".to_string());
-        self.wasi_to_wasix_mapping.insert("fd_seek".to_string(), "fd_seek".to_string());
-        self.wasi_to_wasix_mapping.insert("path_open".to_string(), "path_open".to_string());
-        self.wasi_to_wasix_mapping.insert("environ_get".to_string(), "environ_get".to_string());
-        self.wasi_to_wasix_mapping.insert("environ_sizes_get".to_string(), "environ_sizes_get".to_string());
-        self.wasi_to_wasix_mapping.insert("args_get".to_string(), "args_get".to_string());
-        self.wasi_to_wasix_mapping.insert("args_sizes_get".to_string(), "args_sizes_get".to_string());
-        self.wasi_to_wasix_mapping.insert("proc_exit".to_string(), "proc_exit".to_string());
-        self.wasi_to_wasix_mapping.insert("random_get".to_string(), "random_get".to_string());
-        self.wasi_to_wasix_mapping.insert("clock_time_get".to_string(), "clock_time_get".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("fd_write".to_string(), "fd_write".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("fd_read".to_string(), "fd_read".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("fd_close".to_string(), "fd_close".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("fd_seek".to_string(), "fd_seek".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("path_open".to_string(), "path_open".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("environ_get".to_string(), "environ_get".to_string());
+        self.wasi_to_wasix_mapping.insert(
+            "environ_sizes_get".to_string(),
+            "environ_sizes_get".to_string(),
+        );
+        self.wasi_to_wasix_mapping
+            .insert("args_get".to_string(), "args_get".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("args_sizes_get".to_string(), "args_sizes_get".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("proc_exit".to_string(), "proc_exit".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("random_get".to_string(), "random_get".to_string());
+        self.wasi_to_wasix_mapping
+            .insert("clock_time_get".to_string(), "clock_time_get".to_string());
     }
 
     /// Check if a module name is a WASI module that needs migration
@@ -86,14 +103,13 @@ impl WasiCompatibilityLayer {
                 "wasi_snapshot_preview1",
                 wasi_function,
                 &format!("WASI function '{}' is not supported", wasi_function),
-                &format!("Check if '{}' has a WASIX equivalent or use native Beanstalk functions", wasi_function),
+                &format!(
+                    "Check if '{}' has a WASIX equivalent or use native Beanstalk functions",
+                    wasi_function
+                ),
             )),
         }
     }
-
-
-
-
 
     /// Generate migration guidance for a WASI import
     pub fn generate_migration_guidance(
@@ -115,16 +131,10 @@ impl WasiCompatibilityLayer {
         Ok(guidance)
     }
 
-
-
     /// Check if warnings are enabled
     pub fn should_emit_warnings(&self) -> bool {
         self.emit_warnings
     }
-
-
-
-
 
     /// Validate that the WASIX registry has all required functions for WASI compatibility
     pub fn validate_wasix_compatibility(&self) -> Result<(), WasixError> {
@@ -142,7 +152,10 @@ impl WasiCompatibilityLayer {
                 "wasix_registry_completeness",
                 &format!("Missing {} WASIX functions", missing_functions.len()),
                 "Complete WASIX registry with all mapped functions",
-                &format!("Add missing WASIX functions: {}", missing_functions.join(", ")),
+                &format!(
+                    "Add missing WASIX functions: {}",
+                    missing_functions.join(", ")
+                ),
             ));
         }
 
@@ -163,21 +176,17 @@ pub struct MigrationGuidance {
     pub target_function: String,
     /// Type of migration required
     pub migration_type: MigrationType,
-
 }
 
 impl MigrationGuidance {
     /// Format the migration guidance as a user-friendly message
     pub fn format_message(&self) -> String {
         let mut message = String::new();
-        
+
         message.push_str(&format!(
             "Migration from WASI to WASIX:\n  {}:{} -> {}:{}\n",
-            self.original_module, self.original_function,
-            self.target_module, self.target_function
+            self.original_module, self.original_function, self.target_module, self.target_function
         ));
-
-
 
         message
     }
@@ -206,14 +215,15 @@ pub fn create_wasi_compatibility_layer(
     wasix_registry: WasixFunctionRegistry,
 ) -> Result<WasiCompatibilityLayer, CompileError> {
     let layer = WasiCompatibilityLayer::new(wasix_registry);
-    
+
     // Validate that the compatibility layer is properly configured
-    layer.validate_wasix_compatibility()
-        .map_err(|e| CompileError::new_rule_error(
+    layer.validate_wasix_compatibility().map_err(|e| {
+        CompileError::new_rule_error(
             format!("WASI compatibility validation failed: {}", e),
-            crate::compiler::parsers::tokens::TextLocation::default()
-        ))?;
-    
+            crate::compiler::parsers::tokens::TextLocation::default(),
+        )
+    })?;
+
     Ok(layer)
 }
 
@@ -226,7 +236,7 @@ mod tests {
     fn test_wasi_compatibility_layer_creation() {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
         let compatibility_layer = WasiCompatibilityLayer::new(wasix_registry);
-        
+
         assert!(compatibility_layer.is_wasi_module("wasi_snapshot_preview1"));
         assert!(compatibility_layer.is_wasi_function("fd_write"));
         assert!(!compatibility_layer.is_wasi_module("wasix_32v1"));
@@ -236,8 +246,9 @@ mod tests {
     fn test_module_migration() {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
         let compatibility_layer = WasiCompatibilityLayer::new(wasix_registry);
-        
-        let migrated = compatibility_layer.migrate_module_name("wasi_snapshot_preview1")
+
+        let migrated = compatibility_layer
+            .migrate_module_name("wasi_snapshot_preview1")
             .expect("Failed to migrate module name");
         assert_eq!(migrated, "wasix_32v1");
     }
@@ -246,8 +257,9 @@ mod tests {
     fn test_function_migration() {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
         let compatibility_layer = WasiCompatibilityLayer::new(wasix_registry);
-        
-        let migrated = compatibility_layer.migrate_function_name("fd_write")
+
+        let migrated = compatibility_layer
+            .migrate_function_name("fd_write")
             .expect("Failed to migrate function name");
         assert_eq!(migrated, "fd_write");
     }
@@ -256,10 +268,11 @@ mod tests {
     fn test_migration_guidance() {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
         let compatibility_layer = WasiCompatibilityLayer::new(wasix_registry);
-        
-        let guidance = compatibility_layer.generate_migration_guidance("wasi_snapshot_preview1", "fd_write")
+
+        let guidance = compatibility_layer
+            .generate_migration_guidance("wasi_snapshot_preview1", "fd_write")
             .expect("Failed to generate migration guidance");
-        
+
         assert_eq!(guidance.original_module, "wasi_snapshot_preview1");
         assert_eq!(guidance.original_function, "fd_write");
         assert_eq!(guidance.target_module, "wasix_32v1");
@@ -271,7 +284,7 @@ mod tests {
     fn test_unsupported_wasi_function() {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
         let compatibility_layer = WasiCompatibilityLayer::new(wasix_registry);
-        
+
         let result = compatibility_layer.migrate_function_name("unsupported_function");
         assert!(result.is_err());
     }

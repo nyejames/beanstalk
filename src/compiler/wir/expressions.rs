@@ -1,0 +1,451 @@
+//! # Expression Transformation Module
+//!
+//! This module contains functions for converting AST expressions to WIR rvalues
+//! and operands. It handles runtime expression evaluation with RPN, manages
+//! expression stack and temporary variables, and performs type inference for
+//! binary operations.
+
+// Import context types from context module
+use crate::compiler::wir::context::WirTransformContext;
+
+// Import WIR types
+use crate::compiler::wir::place::Place;
+use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue, Statement};
+
+// Core compiler imports
+use crate::compiler::{
+    compiler_errors::CompileError,
+    datatypes::DataType,
+    parsers::{
+        ast_nodes::{AstNode, NodeKind},
+        expressions::expression::{Expression, ExpressionKind},
+        tokens::TextLocation,
+    },
+};
+
+// Error handling macros
+use crate::return_compiler_error;
+
+/// Transform an expression statement to WIR statements
+///
+/// Converts an AST expression used as a statement (e.g., function calls, assignments)
+/// into WIR statements. The expression is evaluated for its side effects, but the
+/// result value is not assigned to any place.
+///
+/// # Parameters
+///
+/// - `expression`: AST expression to transform
+/// - `location`: Source location for error reporting
+/// - `context`: Transformation context for variable lookup and place allocation
+///
+/// # Returns
+///
+/// - `Ok(Vec<Statement>)`: WIR statements that evaluate the expression
+/// - `Err(CompileError)`: Transformation error with source location
+///
+/// # Examples
+///
+/// ```beanstalk
+/// print("hello")  // Expression statement - evaluated for side effects
+/// ```
+pub fn ast_expression_to_wir(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // For expression statements, we evaluate the expression but don't assign the result
+    let (statements, _rvalue) = expression_to_rvalue_with_context(expression, location, context)?;
+    Ok(statements)
+}
+
+/// Convert an AST expression to a WIR rvalue with supporting statements
+///
+/// This is the core expression transformation function that handles all expression
+/// types and converts them to WIR rvalues. It may generate supporting statements
+/// for complex expressions that require temporary variables or multiple operations.
+///
+/// # Parameters
+///
+/// - `expression`: AST expression to convert
+/// - `location`: Source location for error reporting
+/// - `context`: Transformation context for variable lookup and temporary allocation
+///
+/// # Returns
+///
+/// - `Ok((statements, rvalue))`: Supporting statements and the resulting rvalue
+/// - `Err(CompileError)`: Transformation error with source location
+///
+/// # Expression Types Handled
+///
+/// - **Literals**: Int, Float, Bool, String constants
+/// - **Variables**: Variable references with proper place lookup
+/// - **Templates**: Beanstalk template expressions
+/// - **Runtime Expressions**: Complex expressions requiring RPN evaluation
+///
+/// # Note
+///
+/// The returned statements must be executed before using the rvalue to ensure
+/// all temporary variables and intermediate results are properly computed.
+pub fn expression_to_rvalue_with_context(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::I32(*value as i32))),
+        )),
+        ExpressionKind::Float(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::F32(*value as f32))),
+        )),
+        ExpressionKind::Bool(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::Bool(*value))),
+        )),
+        ExpressionKind::StringSlice(value) => Ok((
+            vec![],
+            Rvalue::Use(Operand::Constant(Constant::String(value.clone()))),
+        )),
+        ExpressionKind::Reference(name) => {
+            let variable_place = context
+                .lookup_variable(name)
+                .ok_or_else(|| {
+                    CompileError::new_rule_error(
+                        format!("Undefined variable '{}'", name),
+                        location.clone(),
+                    )
+                })?
+                .clone();
+            Ok((vec![], Rvalue::Use(Operand::Copy(variable_place))))
+        }
+        ExpressionKind::Template(template) => {
+            // Use template transformation functions from templates module
+            crate::compiler::wir::templates::transform_template_to_rvalue(
+                template, location, context,
+            )
+        }
+        ExpressionKind::Runtime(rpn_nodes) => {
+            // Handle runtime expressions (RPN evaluation)
+            evaluate_rpn_to_wir_statements(rpn_nodes, location, context)
+        }
+        _ => {
+            return_compiler_error!(
+                "Expression kind {:?} not yet implemented in WIR transformation at {}:{}",
+                expression.kind,
+                location.start_pos.line_number,
+                location.start_pos.char_column
+            );
+        }
+    }
+}
+
+/// Convert an AST expression to a WIR operand with supporting statements
+///
+/// Similar to `expression_to_rvalue_with_context` but ensures the result is an
+/// operand that can be used directly in other WIR constructs. For complex rvalues
+/// that cannot be used as operands, this creates a temporary variable.
+///
+/// # Parameters
+///
+/// - `expression`: AST expression to convert
+/// - `location`: Source location for error reporting  
+/// - `context`: Transformation context for variable lookup and temporary allocation
+///
+/// # Returns
+///
+/// - `Ok((statements, operand))`: Supporting statements and the resulting operand
+/// - `Err(CompileError)`: Transformation error with source location
+///
+/// # Operand Creation
+///
+/// - **Simple rvalues**: `Rvalue::Use(operand)` returns the operand directly
+/// - **Complex rvalues**: Creates a temporary variable, assigns the rvalue to it,
+///   and returns an operand that copies from the temporary
+///
+/// This ensures all results can be used as operands in function calls, binary
+/// operations, and other contexts that require operands rather than rvalues.
+pub fn expression_to_operand_with_context(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Operand), CompileError> {
+    let (statements, rvalue) = expression_to_rvalue_with_context(expression, location, context)?;
+
+    match rvalue {
+        Rvalue::Use(operand) => Ok((statements, operand)),
+        _ => {
+            // For complex rvalues, create a temporary and return its operand
+            let temp_place = context.create_temporary_place(&expression.data_type);
+            let assign_statement = Statement::Assign {
+                place: temp_place.clone(),
+                rvalue,
+            };
+            let mut all_statements = statements;
+            all_statements.push(assign_statement);
+            Ok((all_statements, Operand::Copy(temp_place)))
+        }
+    }
+}
+
+// Placeholder functions for future implementation
+// These functions are mentioned in the task requirements but don't exist yet
+
+/// Convert expression to rvalue (variant function)
+/// This is a placeholder for the expression_to_rvalue variants mentioned in the task
+pub fn expression_to_rvalue(
+    expression: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    // For now, delegate to the existing function
+    expression_to_rvalue_with_context(expression, location, context)
+}
+
+/// Transform runtime expression with enhanced processing
+/// This is a placeholder for future implementation
+pub fn transform_runtime_expression_enhanced(
+    _expression: &Expression,
+    _location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    return_compiler_error!("transform_runtime_expression_enhanced not yet implemented");
+}
+
+/// Evaluate RPN expressions to WIR statements
+// Removed duplicate function - implementation is below
+
+/// Process binary operator in RPN evaluation
+/// This is a placeholder for future implementation
+pub fn process_binary_operator_in_rpn(
+    _operator: &str,
+    _lhs: Operand,
+    _rhs: Operand,
+    _location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    return_compiler_error!("process_binary_operator_in_rpn not yet implemented");
+}
+
+// Variable reference transformation functions
+// These are placeholders for future implementation
+
+/// Transform variable reference to operand
+/// This is a placeholder for future implementation
+pub fn transform_variable_reference(
+    _name: &str,
+    _location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Operand, CompileError> {
+    return_compiler_error!("transform_variable_reference not yet implemented");
+}
+
+/// Transform mutable variable reference
+/// This is a placeholder for future implementation  
+pub fn transform_mutable_variable_reference(
+    _name: &str,
+    _location: &TextLocation,
+    _context: &mut WirTransformContext,
+) -> Result<Operand, CompileError> {
+    return_compiler_error!("transform_mutable_variable_reference not yet implemented");
+}
+/// Evaluate RPN (Reverse Polish Notation) expression to WIR statements
+///
+/// Processes a runtime expression that has been converted to RPN form during AST
+/// construction. Uses a stack-based evaluation approach to handle complex expressions
+/// with proper operator precedence and associativity.
+///
+/// # Parameters
+///
+/// - `rpn_nodes`: AST nodes in RPN order (operands followed by operators)
+/// - `location`: Source location for error reporting
+/// - `context`: Transformation context for temporary allocation
+///
+/// # Returns
+///
+/// - `Ok((statements, rvalue))`: Statements to evaluate the expression and final result
+/// - `Err(CompileError)`: Evaluation error with source location
+///
+/// # RPN Evaluation Process
+///
+/// 1. **Operands**: Pushed onto evaluation stack
+/// 2. **Operators**: Pop required operands, create binary operation, push result
+/// 3. **Final Result**: Single operand remaining on stack becomes the rvalue
+///
+/// # Example
+///
+/// ```beanstalk
+/// x + 2 * y  // Becomes RPN: [x, 2, y, *, +]
+/// ```
+///
+/// Evaluation:
+/// 1. Push x, push 2, push y
+/// 2. Pop y and 2, multiply, push result
+/// 3. Pop result and x, add, push final result
+pub fn evaluate_rpn_to_wir_statements(
+    rpn_nodes: &[AstNode],
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
+    let mut statements = Vec::new();
+    let mut operand_stack: Vec<Operand> = Vec::new();
+
+    for node in rpn_nodes {
+        match &node.kind {
+            NodeKind::Expression(expr) => {
+                // Convert expression to operand and push to stack
+                let (expr_statements, operand) =
+                    expression_to_operand_with_context(expr, &node.location, context)?;
+                statements.extend(expr_statements);
+                operand_stack.push(operand);
+            }
+            NodeKind::Operator(op) => {
+                // Process binary operator
+                if operand_stack.len() < 2 {
+                    return_compiler_error!(
+                        "Insufficient operands for binary operator at {}:{}",
+                        node.location.start_pos.line_number,
+                        node.location.start_pos.char_column
+                    );
+                }
+
+                let rhs = operand_stack.pop().unwrap();
+                let lhs = operand_stack.pop().unwrap();
+
+                // Convert AST operator to WIR binary operation
+                let wir_op = ast_operator_to_wir_binop(op)?;
+
+                // Infer result type
+                let lhs_type = operand_to_datatype(&lhs, context)?;
+                let rhs_type = operand_to_datatype(&rhs, context)?;
+                let result_type = infer_binary_operation_result_type(&lhs_type, &rhs_type, op)?;
+
+                // Create temporary for result
+                let result_place = context.create_temporary_place(&result_type);
+
+                // Create binary operation statement
+                statements.push(Statement::Assign {
+                    place: result_place.clone(),
+                    rvalue: Rvalue::BinaryOp(wir_op, lhs, rhs),
+                });
+
+                // Push result operand to stack
+                operand_stack.push(Operand::Copy(result_place));
+            }
+            _ => {
+                return_compiler_error!("Unexpected node type in RPN expression: {:?}", node.kind);
+            }
+        }
+    }
+
+    // The final result should be the only operand left on the stack
+    if operand_stack.len() != 1 {
+        return_compiler_error!(
+            "Invalid RPN expression: expected 1 result, got {}",
+            operand_stack.len()
+        );
+    }
+
+    let result_operand = operand_stack.pop().unwrap();
+    Ok((statements, Rvalue::Use(result_operand)))
+}
+
+/// Convert operand to its data type
+fn operand_to_datatype(
+    operand: &Operand,
+    _context: &WirTransformContext,
+) -> Result<DataType, CompileError> {
+    match operand {
+        Operand::Copy(place) | Operand::Move(place) => {
+            // Extract type from place - this is a simplified implementation
+            match place {
+                Place::Local { wasm_type, .. } => {
+                    // Convert WasmType to DataType
+                    match wasm_type {
+                        crate::compiler::wir::place::WasmType::I32 => Ok(DataType::Int),
+                        crate::compiler::wir::place::WasmType::F32 => Ok(DataType::Float),
+                        crate::compiler::wir::place::WasmType::I64 => Ok(DataType::Int),
+                        crate::compiler::wir::place::WasmType::F64 => Ok(DataType::Float),
+                        crate::compiler::wir::place::WasmType::ExternRef => Ok(DataType::String), // External references default to string
+                        crate::compiler::wir::place::WasmType::FuncRef => Ok(DataType::Int), // Function references default to int
+                    }
+                }
+                Place::Global { wasm_type, .. } => {
+                    // Convert WasmType to DataType
+                    match wasm_type {
+                        crate::compiler::wir::place::WasmType::I32 => Ok(DataType::Int),
+                        crate::compiler::wir::place::WasmType::F32 => Ok(DataType::Float),
+                        crate::compiler::wir::place::WasmType::I64 => Ok(DataType::Int),
+                        crate::compiler::wir::place::WasmType::F64 => Ok(DataType::Float),
+                        crate::compiler::wir::place::WasmType::ExternRef => Ok(DataType::String), // External references default to string
+                        crate::compiler::wir::place::WasmType::FuncRef => Ok(DataType::Int), // Function references default to int
+                    }
+                }
+                _ => Ok(DataType::Int), // Default fallback
+            }
+        }
+        Operand::Constant(constant) => {
+            match constant {
+                Constant::I32(_) => Ok(DataType::Int),
+                Constant::F32(_) => Ok(DataType::Float),
+                Constant::Bool(_) => Ok(DataType::Bool),
+                Constant::String(_) => Ok(DataType::String),
+                _ => Ok(DataType::Int), // Default fallback
+            }
+        }
+        Operand::FunctionRef(_) => Ok(DataType::Int), // Function references default to int
+        Operand::GlobalRef(_) => Ok(DataType::Int),   // Global references default to int
+    }
+}
+
+/// Convert AST operator to WIR binary operation
+fn ast_operator_to_wir_binop(
+    op: &crate::compiler::parsers::expressions::expression::Operator,
+) -> Result<BinOp, CompileError> {
+    use crate::compiler::parsers::expressions::expression::Operator;
+
+    match op {
+        Operator::Add => Ok(BinOp::Add),
+        Operator::Subtract => Ok(BinOp::Sub),
+        Operator::Multiply => Ok(BinOp::Mul),
+        Operator::Divide => Ok(BinOp::Div),
+        Operator::Equality => Ok(BinOp::Eq),
+        Operator::Not => Ok(BinOp::Ne), // Map Not to Ne for now
+        Operator::LessThan => Ok(BinOp::Lt),
+        Operator::LessThanOrEqual => Ok(BinOp::Le),
+        Operator::GreaterThan => Ok(BinOp::Gt),
+        Operator::GreaterThanOrEqual => Ok(BinOp::Ge),
+        _ => return_compiler_error!("Unsupported operator: {:?}", op),
+    }
+}
+
+/// Infer the result type of a binary operation
+fn infer_binary_operation_result_type(
+    lhs_type: &DataType,
+    rhs_type: &DataType,
+    op: &crate::compiler::parsers::expressions::expression::Operator,
+) -> Result<DataType, CompileError> {
+    use crate::compiler::parsers::expressions::expression::Operator;
+
+    match op {
+        Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide => {
+            // Arithmetic operations preserve the operand type (assuming they match)
+            if lhs_type == rhs_type {
+                Ok(lhs_type.clone())
+            } else {
+                Ok(DataType::Int) // Default fallback
+            }
+        }
+        Operator::Equality
+        | Operator::Not
+        | Operator::LessThan
+        | Operator::LessThanOrEqual
+        | Operator::GreaterThan
+        | Operator::GreaterThanOrEqual => {
+            // Comparison operations always return boolean
+            Ok(DataType::Bool)
+        }
+        _ => return_compiler_error!("Unsupported operator for type inference: {:?}", op),
+    }
+}

@@ -2379,66 +2379,69 @@ impl From<WasixError> for CompileError {
     fn from(error: WasixError) -> Self {
         match error {
             // Legacy error formats (for compatibility)
-            WasixError::InvalidFileDescriptor(fd) => {
-                CompileError::compiler_error(&format!(
-                    "WASIX operation failed: Invalid file descriptor {}. WASIX supports stdout (1), stderr (2), and stdin (0). This may indicate a bug in WASIX function call generation.",
-                    fd
-                ))
-            },
-            WasixError::MemoryOutOfBounds => {
-                CompileError::compiler_error(
-                    "WASIX operation failed: Memory access out of bounds. This indicates a bug in WASM memory management or pointer arithmetic in WASIX operations."
-                )
-            },
-            WasixError::InvalidArgumentCount => {
-                CompileError::compiler_error(
-                    "WASIX operation failed: Invalid argument count for WASIX function call. This indicates a bug in WASIX function signature handling."
-                )
-            },
-            WasixError::EnvironmentError(msg) => {
-                CompileError::compiler_error(&format!(
-                    "WASIX environment error: {}. This may indicate missing WASIX runtime support or configuration issues.",
-                    msg
-                ))
-            },
-            WasixError::NativeFunctionNotFound(name) => {
-                CompileError::compiler_error(&format!(
-                    "Native WASIX function '{}' not found in registry. This indicates a bug in WASIX function registration or lookup.",
-                    name
-                ))
-            },
+            WasixError::InvalidFileDescriptor(fd) => CompileError::compiler_error(&format!(
+                "WASIX operation failed: Invalid file descriptor {}. WASIX supports stdout (1), stderr (2), and stdin (0). This may indicate a bug in WASIX function call generation.",
+                fd
+            )),
+            WasixError::MemoryOutOfBounds => CompileError::compiler_error(
+                "WASIX operation failed: Memory access out of bounds. This indicates a bug in WASM memory management or pointer arithmetic in WASIX operations.",
+            ),
+            WasixError::InvalidArgumentCount => CompileError::compiler_error(
+                "WASIX operation failed: Invalid argument count for WASIX function call. This indicates a bug in WASIX function signature handling.",
+            ),
+            WasixError::EnvironmentError(msg) => CompileError::compiler_error(&format!(
+                "WASIX environment error: {}. This may indicate missing WASIX runtime support or configuration issues.",
+                msg
+            )),
+            WasixError::NativeFunctionNotFound(name) => CompileError::compiler_error(&format!(
+                "Native WASIX function '{}' not found in registry. This indicates a bug in WASIX function registration or lookup.",
+                name
+            )),
 
             // Enhanced error formats with detailed context
-            WasixError::InvalidFileDescriptorWithContext { fd, function, context } => {
-                CompileError::compiler_error(&format!(
-                    "WASIX function '{}' failed: Invalid file descriptor {} ({}). WASIX supports stdout (1), stderr (2), and stdin (0). Check WASIX function call generation.",
-                    function, fd, context
-                ))
-            },
-            WasixError::MemoryOutOfBoundsWithContext { address, size, function, context } => {
-                CompileError::compiler_error(&format!(
-                    "WASIX function '{}' failed: Memory access out of bounds at address 0x{:x} (size: {} bytes). Context: {}. This indicates a bug in WASM memory layout or pointer handling.",
-                    function, address, size, context
-                ))
-            },
-            WasixError::InvalidArgumentCountWithContext { expected, actual, function } => {
-                CompileError::compiler_error(&format!(
-                    "WASIX function '{}' called with wrong argument count: expected {}, got {}. This indicates a bug in WASIX function call generation.",
-                    function, expected, actual
-                ))
-            },
-            WasixError::EnvironmentErrorWithContext { message, function, suggestion } => {
-                let mut error_msg = format!(
-                    "WASIX function '{}' failed: {}",
-                    function, message
-                );
+            WasixError::InvalidFileDescriptorWithContext {
+                fd,
+                function,
+                context,
+            } => CompileError::compiler_error(&format!(
+                "WASIX function '{}' failed: Invalid file descriptor {} ({}). WASIX supports stdout (1), stderr (2), and stdin (0). Check WASIX function call generation.",
+                function, fd, context
+            )),
+            WasixError::MemoryOutOfBoundsWithContext {
+                address,
+                size,
+                function,
+                context,
+            } => CompileError::compiler_error(&format!(
+                "WASIX function '{}' failed: Memory access out of bounds at address 0x{:x} (size: {} bytes). Context: {}. This indicates a bug in WASM memory layout or pointer handling.",
+                function, address, size, context
+            )),
+            WasixError::InvalidArgumentCountWithContext {
+                expected,
+                actual,
+                function,
+            } => CompileError::compiler_error(&format!(
+                "WASIX function '{}' called with wrong argument count: expected {}, got {}. This indicates a bug in WASIX function call generation.",
+                function, expected, actual
+            )),
+            WasixError::EnvironmentErrorWithContext {
+                message,
+                function,
+                suggestion,
+            } => {
+                let mut error_msg = format!("WASIX function '{}' failed: {}", function, message);
                 if let Some(hint) = suggestion {
                     error_msg.push_str(&format!(" Suggestion: {}", hint));
                 }
-                error_msg.push_str(" This may indicate missing WASIX runtime support or configuration issues.");
+                error_msg.push_str(
+                    " This may indicate missing WASIX runtime support or configuration issues.",
+                );
                 CompileError::compiler_error(&error_msg)
-            },
-            WasixError::NativeFunctionNotFoundWithContext { function, available_functions } => {
+            }
+            WasixError::NativeFunctionNotFoundWithContext {
+                function,
+                available_functions,
+            } => {
                 let mut error_msg = format!(
                     "Native WASIX function '{}' not found in registry.",
                     function
@@ -2453,39 +2456,53 @@ impl From<WasixError> for CompileError {
                 }
                 error_msg.push_str(" This indicates a bug in WASIX function registration.");
                 CompileError::compiler_error(&error_msg)
-            },
+            }
 
             // Import resolution and runtime errors
-            WasixError::ImportResolutionError { module, function, reason, suggestion } => {
-                CompileError::compiler_error(&format!(
-                    "Failed to resolve WASIX import '{}:{}': {}. Suggestion: {}. This indicates missing WASIX runtime support or incorrect import generation.",
-                    module, function, reason, suggestion
-                ))
-            },
-            WasixError::AllocationError { requested_size, available_size, function, suggestion } => {
-                CompileError::compiler_error(&format!(
-                    "Memory allocation failed in WASIX function '{}': requested {} bytes, only {} bytes available. Suggestion: {}. This may indicate insufficient WASM memory configuration.",
-                    function, requested_size, available_size, suggestion
-                ))
-            },
-            WasixError::IOVecError { iovec_index, ptr, len, reason } => {
-                CompileError::compiler_error(&format!(
-                    "IOVec validation failed at index {}: ptr=0x{:x}, len={}, reason: {}. This indicates a bug in IOVec handling or memory layout.",
-                    iovec_index, ptr, len, reason
-                ))
-            },
-            WasixError::StringEncodingError { position, encoding, context } => {
-                CompileError::compiler_error(&format!(
-                    "String encoding error at position {}: invalid {} encoding. Context: {}. This indicates a bug in string handling or memory management.",
-                    position, encoding, context
-                ))
-            },
-            WasixError::ConfigurationError { setting, value, expected, suggestion } => {
-                CompileError::compiler_error(&format!(
-                    "WASIX configuration error: setting '{}' has value '{}', expected '{}'. Suggestion: {}. This indicates incorrect WASIX runtime configuration.",
-                    setting, value, expected, suggestion
-                ))
-            },
+            WasixError::ImportResolutionError {
+                module,
+                function,
+                reason,
+                suggestion,
+            } => CompileError::compiler_error(&format!(
+                "Failed to resolve WASIX import '{}:{}': {}. Suggestion: {}. This indicates missing WASIX runtime support or incorrect import generation.",
+                module, function, reason, suggestion
+            )),
+            WasixError::AllocationError {
+                requested_size,
+                available_size,
+                function,
+                suggestion,
+            } => CompileError::compiler_error(&format!(
+                "Memory allocation failed in WASIX function '{}': requested {} bytes, only {} bytes available. Suggestion: {}. This may indicate insufficient WASM memory configuration.",
+                function, requested_size, available_size, suggestion
+            )),
+            WasixError::IOVecError {
+                iovec_index,
+                ptr,
+                len,
+                reason,
+            } => CompileError::compiler_error(&format!(
+                "IOVec validation failed at index {}: ptr=0x{:x}, len={}, reason: {}. This indicates a bug in IOVec handling or memory layout.",
+                iovec_index, ptr, len, reason
+            )),
+            WasixError::StringEncodingError {
+                position,
+                encoding,
+                context,
+            } => CompileError::compiler_error(&format!(
+                "String encoding error at position {}: invalid {} encoding. Context: {}. This indicates a bug in string handling or memory management.",
+                position, encoding, context
+            )),
+            WasixError::ConfigurationError {
+                setting,
+                value,
+                expected,
+                suggestion,
+            } => CompileError::compiler_error(&format!(
+                "WASIX configuration error: setting '{}' has value '{}', expected '{}'. Suggestion: {}. This indicates incorrect WASIX runtime configuration.",
+                setting, value, expected, suggestion
+            )),
         }
     }
 }
@@ -2496,7 +2513,10 @@ impl WasixFunctionRegistry {
     /// This function checks if WASIX imports can be resolved and provides helpful error messages
     pub fn validate_import_resolution(
         &self,
-        available_imports: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+        available_imports: &std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, String>,
+        >,
     ) -> Result<(), WasixError> {
         for (beanstalk_name, wasix_function) in &self.functions {
             let module_name = &wasix_function.module;
@@ -2556,25 +2576,34 @@ impl WasixFunctionRegistry {
     }
 
     /// Get suggestion for missing WASIX function
-    fn get_function_availability_suggestion(&self, function_name: &str, available_functions: &[String]) -> String {
+    fn get_function_availability_suggestion(
+        &self,
+        function_name: &str,
+        available_functions: &[String],
+    ) -> String {
         // Find similar function names
         let similar_functions: Vec<&String> = available_functions
             .iter()
             .filter(|f| {
                 // Simple similarity check: same prefix or contains the function name
-                f.starts_with(&function_name[..function_name.len().min(3)]) ||
-                f.contains(function_name) ||
-                function_name.contains(f.as_str())
+                f.starts_with(&function_name[..function_name.len().min(3)])
+                    || f.contains(function_name)
+                    || function_name.contains(f.as_str())
             })
             .collect();
 
         if !similar_functions.is_empty() {
             format!(
                 "Did you mean one of: {}? Check the WASIX specification for correct function names.",
-                similar_functions.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                similar_functions
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )
         } else if available_functions.is_empty() {
-            "No functions are available in this WASIX module. Check your runtime's WASIX support.".to_string()
+            "No functions are available in this WASIX module. Check your runtime's WASIX support."
+                .to_string()
         } else {
             format!(
                 "Available functions in this module: {}. Check the WASIX specification for correct function names.",
@@ -2587,25 +2616,30 @@ impl WasixFunctionRegistry {
     pub fn check_import_availability(
         &self,
         beanstalk_name: &str,
-        runtime_modules: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+        runtime_modules: &std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, String>,
+        >,
     ) -> Result<(), WasixError> {
-        let wasix_function = self.functions.get(beanstalk_name)
-            .ok_or_else(|| WasixError::function_not_found_with_context(
+        let wasix_function = self.functions.get(beanstalk_name).ok_or_else(|| {
+            WasixError::function_not_found_with_context(
                 beanstalk_name,
                 self.functions.keys().cloned().collect(),
-            ))?;
+            )
+        })?;
 
         let module_name = &wasix_function.module;
         let function_name = &wasix_function.name;
 
         // Check module availability
-        let module_functions = runtime_modules.get(module_name)
-            .ok_or_else(|| WasixError::import_resolution_error(
+        let module_functions = runtime_modules.get(module_name).ok_or_else(|| {
+            WasixError::import_resolution_error(
                 module_name,
                 function_name,
                 &format!("WASIX module '{}' not supported by runtime", module_name),
                 &self.get_module_availability_suggestion(module_name),
-            ))?;
+            )
+        })?;
 
         // Check function availability
         if !module_functions.contains_key(function_name) {
@@ -2613,7 +2647,10 @@ impl WasixFunctionRegistry {
             return Err(WasixError::import_resolution_error(
                 module_name,
                 function_name,
-                &format!("Function '{}' not available in WASIX module '{}'", function_name, module_name),
+                &format!(
+                    "Function '{}' not available in WASIX module '{}'",
+                    function_name, module_name
+                ),
                 &self.get_function_availability_suggestion(function_name, &available_functions),
             ));
         }
@@ -2624,7 +2661,10 @@ impl WasixFunctionRegistry {
     /// Generate comprehensive import resolution diagnostics
     pub fn generate_import_diagnostics(
         &self,
-        runtime_modules: &std::collections::HashMap<String, std::collections::HashMap<String, String>>,
+        runtime_modules: &std::collections::HashMap<
+            String,
+            std::collections::HashMap<String, String>,
+        >,
     ) -> ImportResolutionDiagnostics {
         let mut diagnostics = ImportResolutionDiagnostics::new();
 
@@ -2651,7 +2691,10 @@ impl WasixFunctionRegistry {
                     module_name.clone(),
                     function_name.clone(),
                     available_functions,
-                    self.get_function_availability_suggestion(function_name, &module_functions.keys().cloned().collect::<Vec<_>>()),
+                    self.get_function_availability_suggestion(
+                        function_name,
+                        &module_functions.keys().cloned().collect::<Vec<_>>(),
+                    ),
                 );
             } else {
                 diagnostics.add_available_function(
@@ -2725,7 +2768,12 @@ impl ImportResolutionDiagnostics {
     }
 
     /// Add an available import
-    pub fn add_available_function(&mut self, beanstalk_name: String, module_name: String, function_name: String) {
+    pub fn add_available_function(
+        &mut self,
+        beanstalk_name: String,
+        module_name: String,
+        function_name: String,
+    ) {
         self.available_imports.push(AvailableImport {
             beanstalk_name,
             module_name,
@@ -2734,7 +2782,12 @@ impl ImportResolutionDiagnostics {
     }
 
     /// Add a missing module
-    pub fn add_missing_module(&mut self, beanstalk_name: String, module_name: String, suggestion: String) {
+    pub fn add_missing_module(
+        &mut self,
+        beanstalk_name: String,
+        module_name: String,
+        suggestion: String,
+    ) {
         self.missing_modules.push(MissingModule {
             beanstalk_name,
             module_name,
@@ -2801,7 +2854,10 @@ impl ImportResolutionDiagnostics {
                 for missing in &self.missing_functions {
                     summary.push_str(&format!(
                         "  - {} needs '{}:{}': {}\n",
-                        missing.beanstalk_name, missing.module_name, missing.function_name, missing.suggestion
+                        missing.beanstalk_name,
+                        missing.module_name,
+                        missing.function_name,
+                        missing.suggestion
                     ));
                 }
             }
@@ -2943,28 +2999,24 @@ impl WasixMemoryManager {
         context: &str,
     ) -> WasixError {
         match original_error {
-            WasixError::MemoryOutOfBounds => {
-                WasixError::allocation_error(
-                    size,
-                    self.get_available_memory(),
-                    context,
-                    &format!(
-                        "Memory allocation failed due to insufficient space. {}",
-                        self.get_memory_increase_suggestion(size, self.get_available_memory())
-                    ),
-                )
-            }
-            WasixError::EnvironmentError(msg) => {
-                WasixError::allocation_error(
-                    size,
-                    self.get_available_memory(),
-                    context,
-                    &format!(
-                        "Memory allocation failed: {}. Check WASM memory configuration and limits.",
-                        msg
-                    ),
-                )
-            }
+            WasixError::MemoryOutOfBounds => WasixError::allocation_error(
+                size,
+                self.get_available_memory(),
+                context,
+                &format!(
+                    "Memory allocation failed due to insufficient space. {}",
+                    self.get_memory_increase_suggestion(size, self.get_available_memory())
+                ),
+            ),
+            WasixError::EnvironmentError(msg) => WasixError::allocation_error(
+                size,
+                self.get_available_memory(),
+                context,
+                &format!(
+                    "Memory allocation failed: {}. Check WASM memory configuration and limits.",
+                    msg
+                ),
+            ),
             _ => original_error,
         }
     }
@@ -3107,7 +3159,9 @@ impl WasixMemoryManager {
                     "Optimize memory alignment to reduce {} alignment adjustments.",
                     diagnostics.alignment_adjustments
                 ),
-                implementation: "Use consistent alignment requirements (8 or 16 bytes) for all allocations.".to_string(),
+                implementation:
+                    "Use consistent alignment requirements (8 or 16 bytes) for all allocations."
+                        .to_string(),
             });
         }
 
@@ -3159,7 +3213,9 @@ impl MemoryHealthReport {
 
     /// Check if there are any critical warnings
     pub fn has_critical_warnings(&self) -> bool {
-        self.warnings.iter().any(|w| w.level == MemoryWarningLevel::Critical)
+        self.warnings
+            .iter()
+            .any(|w| w.level == MemoryWarningLevel::Critical)
     }
 
     /// Get warnings by level

@@ -32,7 +32,9 @@ use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::host_functions::wasix_registry::{
     WasixFunctionDef, WasixFunctionRegistry, create_wasix_registry,
 };
-use crate::compiler::wir::place::{MemoryBase, Place, ProjectionElem, TypeSize, WasmType, FieldSize};
+use crate::compiler::wir::place::{
+    FieldSize, MemoryBase, Place, ProjectionElem, TypeSize, WasmType,
+};
 use crate::compiler::wir::wir_nodes::{
     BinOp, BorrowKind, Constant, MemoryOpKind, Operand, Rvalue, Statement, Terminator, UnOp, WIR,
     WirFunction,
@@ -365,7 +367,7 @@ impl StringManager {
 
     /// Add a string slice constant and return its offset in linear memory
     ///
-    /// String slices are immutable references stored with a 4-byte length prefix 
+    /// String slices are immutable references stored with a 4-byte length prefix
     /// followed by UTF-8 data. Identical strings are deduplicated and return the same offset.
     ///
     /// ## Memory Management
@@ -396,7 +398,7 @@ impl StringManager {
     }
 
     /// Add a string constant and return its offset in linear memory (legacy method)
-    /// 
+    ///
     /// This method is kept for backward compatibility and delegates to add_string_slice_constant
     pub fn add_string_constant(&mut self, value: &str) -> u32 {
         self.add_string_slice_constant(value)
@@ -406,7 +408,7 @@ impl StringManager {
     ///
     /// Mutable strings (templates) are heap-allocated with a header containing:
     /// - 4 bytes: current length
-    /// - 4 bytes: capacity 
+    /// - 4 bytes: capacity
     /// - N bytes: UTF-8 string data
     ///
     /// ## Memory Management
@@ -416,22 +418,24 @@ impl StringManager {
         let offset = self.next_offset;
         let bytes = initial_value.as_bytes();
         let current_length = bytes.len() as u32;
-        
+
         // Ensure capacity is at least as large as initial content
         let actual_capacity = capacity.max(current_length);
-        
+
         // Store mutable string header: [length][capacity][data...]
-        self.data_section.extend_from_slice(&current_length.to_le_bytes());
-        self.data_section.extend_from_slice(&actual_capacity.to_le_bytes());
+        self.data_section
+            .extend_from_slice(&current_length.to_le_bytes());
+        self.data_section
+            .extend_from_slice(&actual_capacity.to_le_bytes());
         self.data_section.extend_from_slice(bytes);
-        
+
         // Pad to capacity if needed
         let padding_needed = actual_capacity - current_length;
         self.data_section.extend(vec![0; padding_needed as usize]);
-        
+
         // Update next offset (8 bytes for header + capacity for data)
         self.next_offset += 8 + actual_capacity;
-        
+
         offset
     }
 
@@ -714,6 +718,21 @@ impl LocalAnalyzer {
                 // Struct validation - collect struct place
                 self.collect_from_place(struct_place);
             }
+            Statement::Conditional {
+                condition,
+                then_statements,
+                else_statements,
+            } => {
+                // Collect from condition operand
+                self.collect_from_operand(condition);
+                // Collect from all statements in both branches
+                for stmt in then_statements {
+                    self.collect_from_statement(stmt);
+                }
+                for stmt in else_statements {
+                    self.collect_from_statement(stmt);
+                }
+            }
             Statement::Nop => {
                 // No places to collect
             }
@@ -915,7 +934,7 @@ pub struct WasmModule {
 
     // Source location tracking for error reporting
     function_source_map: HashMap<u32, FunctionSourceInfo>,
-    
+
     // Enhanced function metadata for named returns and references
     function_metadata: HashMap<String, FunctionMetadata>,
 
@@ -982,9 +1001,9 @@ impl WasmModule {
             DataType::Inferred => Ok(WasmType::I32), // Default to i32 for unresolved types
             DataType::None => Ok(WasmType::I32),
             DataType::True | DataType::False => Ok(WasmType::I32), // Booleans as i32
-            DataType::Decimal => Ok(WasmType::F64), // Decimals as f64
+            DataType::Decimal => Ok(WasmType::F64),                // Decimals as f64
             DataType::Template => Ok(WasmType::I32), // Mutable string pointer (heap-allocated)
-            DataType::Range => Ok(WasmType::I32), // Range pointer
+            DataType::Range => Ok(WasmType::I32),    // Range pointer
             DataType::CoerceToString => Ok(WasmType::I32), // String pointer
             DataType::Args(_) | DataType::Struct(_, _) => Ok(WasmType::I32), // Struct pointer
             DataType::Choices(_) => Ok(WasmType::I32), // Union pointer
@@ -1028,7 +1047,10 @@ impl WasmModule {
 
     /// Check if WASM type is a numeric type - consolidates type checking logic
     pub fn is_numeric_type(wasm_type: &WasmType) -> bool {
-        matches!(wasm_type, WasmType::I32 | WasmType::I64 | WasmType::F32 | WasmType::F64)
+        matches!(
+            wasm_type,
+            WasmType::I32 | WasmType::I64 | WasmType::F32 | WasmType::F64
+        )
     }
 
     /// Check if WASM type is a reference type - consolidates type checking logic
@@ -1521,7 +1543,7 @@ impl WasmModule {
     /// Generate enhanced function metadata for named returns and references
     fn generate_function_metadata(&self, wir_function: &WirFunction) -> FunctionMetadata {
         let mut return_info = Vec::new();
-        
+
         for (i, return_arg) in wir_function.return_args.iter().enumerate() {
             return_info.push(ReturnParameterInfo {
                 index: i,
@@ -1530,13 +1552,13 @@ impl WasmModule {
                 is_reference: self.is_datatype_reference(&return_arg.value.data_type),
             });
         }
-        
+
         FunctionMetadata {
             name: wir_function.name.clone(),
             return_parameters: return_info,
         }
     }
-    
+
     /// Check if a DataType represents a reference for WASM generation
     fn is_datatype_reference(&self, data_type: &DataType) -> bool {
         // For now, return false as reference types aren't fully implemented
@@ -1551,10 +1573,11 @@ impl WasmModule {
     fn finalize_function_registration(&mut self, wir_function: &WirFunction, function: Function) {
         // Generate enhanced metadata for named returns and references
         let metadata = self.generate_function_metadata(wir_function);
-        
+
         // Store metadata for debugging and error reporting
-        self.function_metadata.insert(wir_function.name.clone(), metadata);
-        
+        self.function_metadata
+            .insert(wir_function.name.clone(), metadata);
+
         // Store source information for error reporting
         let source_info = FunctionSourceInfo {
             function_name: wir_function.name.clone(),
@@ -1704,9 +1727,39 @@ impl WasmModule {
                 // This is handled at compile time for validation
                 Ok(())
             }
-            Statement::ValidateStructInitialization { struct_place, struct_type } => {
+            Statement::ValidateStructInitialization {
+                struct_place,
+                struct_type,
+            } => {
                 // Struct validation - generate runtime check if needed
-                self.lower_struct_validation(struct_place, struct_type, function_builder, &mut local_map.clone())
+                self.lower_struct_validation(
+                    struct_place,
+                    struct_type,
+                    function_builder,
+                    &mut local_map.clone(),
+                )
+            }
+            Statement::Conditional {
+                condition,
+                then_statements,
+                else_statements,
+            } => {
+                // TODO: Implement proper conditional lowering with blocks
+                // For now, just lower the condition and statements sequentially
+                let _condition_local =
+                    self.lower_operand_enhanced(condition, function_builder, local_map)?;
+
+                // Lower then statements
+                for stmt in then_statements {
+                    self.lower_statement_enhanced(stmt, function_builder, local_map)?;
+                }
+
+                // Lower else statements
+                for stmt in else_statements {
+                    self.lower_statement_enhanced(stmt, function_builder, local_map)?;
+                }
+
+                Ok(())
             }
             Statement::Nop => {
                 // No-op generates no instructions (0 instructions)
@@ -1881,9 +1934,38 @@ impl WasmModule {
                 // This is handled at compile time for validation
                 Ok(())
             }
-            Statement::ValidateStructInitialization { struct_place, struct_type } => {
+            Statement::ValidateStructInitialization {
+                struct_place,
+                struct_type,
+            } => {
                 // Struct validation - generate runtime check if needed
-                self.lower_struct_validation_simple(struct_place, struct_type, function, &mut local_map.clone())
+                self.lower_struct_validation_simple(
+                    struct_place,
+                    struct_type,
+                    function,
+                    &mut local_map.clone(),
+                )
+            }
+            Statement::Conditional {
+                condition,
+                then_statements,
+                else_statements,
+            } => {
+                // TODO: Implement proper conditional lowering with blocks
+                // For now, just lower the condition and statements sequentially
+                let _condition_local = self.lower_operand(condition, function, local_map)?;
+
+                // Lower then statements
+                for stmt in then_statements {
+                    self.lower_statement(stmt, function, local_map)?;
+                }
+
+                // Lower else statements
+                for stmt in else_statements {
+                    self.lower_statement(stmt, function, local_map)?;
+                }
+
+                Ok(())
             }
             Statement::Nop => {
                 // No-op generates no instructions (0 instructions)
@@ -2417,18 +2499,26 @@ impl WasmModule {
                 Self::emit_i32_const(function, offset as i32);
 
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASM: string slice constant '{}' at offset {}", value, offset);
+                println!(
+                    "WASM: string slice constant '{}' at offset {}",
+                    value, offset
+                );
 
                 Ok(())
             }
             Constant::MutableString(value) => {
                 // Mutable string constants: heap-allocated with default capacity
                 let default_capacity = (value.len() as u32).max(32); // At least 32 bytes capacity
-                let offset = self.string_manager.allocate_mutable_string(value, default_capacity);
+                let offset = self
+                    .string_manager
+                    .allocate_mutable_string(value, default_capacity);
                 Self::emit_i32_const(function, offset as i32);
 
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASM: mutable string '{}' allocated at offset {} with capacity {}", value, offset, default_capacity);
+                println!(
+                    "WASM: mutable string '{}' allocated at offset {} with capacity {}",
+                    value, offset, default_capacity
+                );
 
                 Ok(())
             }
@@ -2689,7 +2779,7 @@ impl WasmModule {
                     function.instruction(&Instruction::I32Const(offset.0 as i32));
                     function.instruction(&Instruction::I32Add);
                 }
-                
+
                 // Generate appropriate load instruction based on field size
                 match size {
                     FieldSize::Fixed(1) => {
@@ -4425,27 +4515,112 @@ impl WasmModule {
                 self.lower_operand_enhanced(left, function_builder, local_map)?;
                 self.lower_operand_enhanced(right, function_builder, local_map)?;
 
-                let instruction = match op {
-                    BinOp::Add => Instruction::I32Add,
-                    BinOp::Sub => Instruction::I32Sub,
-                    BinOp::Mul => Instruction::I32Mul,
-                    BinOp::Div => Instruction::I32DivS,
-                    BinOp::Rem => Instruction::I32RemS,
-                    BinOp::BitAnd => Instruction::I32And,
-                    BinOp::BitOr => Instruction::I32Or,
-                    BinOp::BitXor => Instruction::I32Xor,
-                    BinOp::Shl => Instruction::I32Shl,
-                    BinOp::Shr => Instruction::I32ShrS,
-                    BinOp::Eq => Instruction::I32Eq,
-                    BinOp::Ne => Instruction::I32Ne,
-                    BinOp::Lt => Instruction::I32LtS,
-                    BinOp::Le => Instruction::I32LeS,
-                    BinOp::Gt => Instruction::I32GtS,
-                    BinOp::Ge => Instruction::I32GeS,
-                    BinOp::And | BinOp::Or => {
+                // Determine the correct WASM instruction based on operand types
+                let left_type = self.get_operand_wasm_type_enhanced(left, local_map)?;
+                let right_type = self.get_operand_wasm_type_enhanced(right, local_map)?;
+
+                // For now, assume both operands have the same type (type checking should ensure this)
+                let operand_type = if left_type == right_type {
+                    left_type
+                } else {
+                    // Type mismatch - this should be caught by type checking
+                    return_compiler_error!(
+                        "Type mismatch in binary operation: left operand is {:?}, right operand is {:?}. Both operands must have the same type.",
+                        left_type,
+                        right_type
+                    );
+                };
+
+                let instruction = match (op, &operand_type) {
+                    // Integer operations
+                    (BinOp::Add, &WasmType::I32) => Instruction::I32Add,
+                    (BinOp::Sub, &WasmType::I32) => Instruction::I32Sub,
+                    (BinOp::Mul, &WasmType::I32) => Instruction::I32Mul,
+                    (BinOp::Div, &WasmType::I32) => Instruction::I32DivS,
+                    (BinOp::Rem, &WasmType::I32) => Instruction::I32RemS,
+                    (BinOp::BitAnd, &WasmType::I32) => Instruction::I32And,
+                    (BinOp::BitOr, &WasmType::I32) => Instruction::I32Or,
+                    (BinOp::BitXor, &WasmType::I32) => Instruction::I32Xor,
+                    (BinOp::Shl, &WasmType::I32) => Instruction::I32Shl,
+                    (BinOp::Shr, &WasmType::I32) => Instruction::I32ShrS,
+                    (BinOp::Eq, &WasmType::I32) => Instruction::I32Eq,
+                    (BinOp::Ne, &WasmType::I32) => Instruction::I32Ne,
+                    (BinOp::Lt, &WasmType::I32) => Instruction::I32LtS,
+                    (BinOp::Le, &WasmType::I32) => Instruction::I32LeS,
+                    (BinOp::Gt, &WasmType::I32) => Instruction::I32GtS,
+                    (BinOp::Ge, &WasmType::I32) => Instruction::I32GeS,
+
+                    // Float operations
+                    (BinOp::Add, &WasmType::F64) => Instruction::F64Add,
+                    (BinOp::Sub, &WasmType::F64) => Instruction::F64Sub,
+                    (BinOp::Mul, &WasmType::F64) => Instruction::F64Mul,
+                    (BinOp::Div, &WasmType::F64) => Instruction::F64Div,
+                    (BinOp::Eq, &WasmType::F64) => Instruction::F64Eq,
+                    (BinOp::Ne, &WasmType::F64) => Instruction::F64Ne,
+                    (BinOp::Lt, &WasmType::F64) => Instruction::F64Lt,
+                    (BinOp::Le, &WasmType::F64) => Instruction::F64Le,
+                    (BinOp::Gt, &WasmType::F64) => Instruction::F64Gt,
+                    (BinOp::Ge, &WasmType::F64) => Instruction::F64Ge,
+
+                    // I64 operations
+                    (BinOp::Add, &WasmType::I64) => Instruction::I64Add,
+                    (BinOp::Sub, &WasmType::I64) => Instruction::I64Sub,
+                    (BinOp::Mul, &WasmType::I64) => Instruction::I64Mul,
+                    (BinOp::Div, &WasmType::I64) => Instruction::I64DivS,
+                    (BinOp::Rem, &WasmType::I64) => Instruction::I64RemS,
+                    (BinOp::BitAnd, &WasmType::I64) => Instruction::I64And,
+                    (BinOp::BitOr, &WasmType::I64) => Instruction::I64Or,
+                    (BinOp::BitXor, &WasmType::I64) => Instruction::I64Xor,
+                    (BinOp::Shl, &WasmType::I64) => Instruction::I64Shl,
+                    (BinOp::Shr, &WasmType::I64) => Instruction::I64ShrS,
+                    (BinOp::Eq, &WasmType::I64) => Instruction::I64Eq,
+                    (BinOp::Ne, &WasmType::I64) => Instruction::I64Ne,
+                    (BinOp::Lt, &WasmType::I64) => Instruction::I64LtS,
+                    (BinOp::Le, &WasmType::I64) => Instruction::I64LeS,
+                    (BinOp::Gt, &WasmType::I64) => Instruction::I64GtS,
+                    (BinOp::Ge, &WasmType::I64) => Instruction::I64GeS,
+
+                    // F32 operations
+                    (BinOp::Add, &WasmType::F32) => Instruction::F32Add,
+                    (BinOp::Sub, &WasmType::F32) => Instruction::F32Sub,
+                    (BinOp::Mul, &WasmType::F32) => Instruction::F32Mul,
+                    (BinOp::Div, &WasmType::F32) => Instruction::F32Div,
+                    (BinOp::Eq, &WasmType::F32) => Instruction::F32Eq,
+                    (BinOp::Ne, &WasmType::F32) => Instruction::F32Ne,
+                    (BinOp::Lt, &WasmType::F32) => Instruction::F32Lt,
+                    (BinOp::Le, &WasmType::F32) => Instruction::F32Le,
+                    (BinOp::Gt, &WasmType::F32) => Instruction::F32Gt,
+                    (BinOp::Ge, &WasmType::F32) => Instruction::F32Ge,
+
+                    // Unsupported operations
+                    (BinOp::Rem, &WasmType::F64) | (BinOp::Rem, &WasmType::F32) => {
+                        return_compiler_error!(
+                            "Remainder operation is not supported for floating-point types"
+                        );
+                    }
+                    (
+                        BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr,
+                        &WasmType::F64,
+                    )
+                    | (
+                        BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor | BinOp::Shl | BinOp::Shr,
+                        &WasmType::F32,
+                    ) => {
+                        return_compiler_error!(
+                            "Bitwise operations are not supported for floating-point types"
+                        );
+                    }
+                    (BinOp::And | BinOp::Or, _) => {
                         // Logical operations require special handling with control flow
                         return_compiler_error!(
                             "Logical operations (And/Or) require control flow and are not yet implemented in enhanced mode"
+                        );
+                    }
+                    (_, wasm_type) => {
+                        return_compiler_error!(
+                            "Unsupported binary operation {:?} for WASM type {:?}",
+                            op,
+                            wasm_type
                         );
                     }
                 };
@@ -4456,17 +4631,45 @@ impl WasmModule {
             Rvalue::UnaryOp(op, operand) => {
                 self.lower_operand_enhanced(operand, function_builder, local_map)?;
 
-                let instruction = match op {
-                    UnOp::Not => Instruction::I32Eqz,
-                    UnOp::Neg => {
-                        // Negate by subtracting from 0
+                // Determine the correct WASM instruction based on operand type
+                let operand_type = self.get_operand_wasm_type_enhanced(operand, local_map)?;
+
+                match (op, &operand_type) {
+                    (UnOp::Not, &WasmType::I32) => {
+                        function_builder.instruction(&Instruction::I32Eqz)?;
+                    }
+                    (UnOp::Neg, &WasmType::I32) => {
+                        // Negate by subtracting from 0: 0 - x
                         function_builder.instruction(&Instruction::I32Const(0))?;
                         function_builder.instruction(&Instruction::I32Sub)?;
-                        return Ok(());
                     }
-                };
+                    (UnOp::Neg, &WasmType::F64) => {
+                        // Negate float using F64Neg instruction
+                        function_builder.instruction(&Instruction::F64Neg)?;
+                    }
+                    (UnOp::Neg, &WasmType::F32) => {
+                        // Negate float using F32Neg instruction
+                        function_builder.instruction(&Instruction::F32Neg)?;
+                    }
+                    (UnOp::Neg, &WasmType::I64) => {
+                        // Negate by subtracting from 0: 0 - x
+                        function_builder.instruction(&Instruction::I64Const(0))?;
+                        function_builder.instruction(&Instruction::I64Sub)?;
+                    }
+                    (UnOp::Not, wasm_type) => {
+                        return_compiler_error!(
+                            "Logical NOT operation is only supported for boolean (i32) types, found {:?}",
+                            wasm_type
+                        );
+                    }
+                    (UnOp::Neg, &WasmType::ExternRef) | (UnOp::Neg, &WasmType::FuncRef) => {
+                        return_compiler_error!(
+                            "Negation operation is not supported for reference types ({:?})",
+                            operand_type
+                        );
+                    }
+                }
 
-                function_builder.instruction(&instruction)?;
                 Ok(())
             }
             Rvalue::Ref { place, .. } => {
@@ -4647,6 +4850,41 @@ impl WasmModule {
         }
     }
 
+    /// Get the WASM type of an operand for enhanced type checking
+    fn get_operand_wasm_type_enhanced(
+        &self,
+        operand: &Operand,
+        local_map: &LocalMap,
+    ) -> Result<WasmType, CompileError> {
+        match operand {
+            Operand::Copy(place) | Operand::Move(place) => Ok(place.wasm_type()),
+            Operand::Constant(constant) => {
+                match constant {
+                    Constant::I32(_) => Ok(WasmType::I32),
+                    Constant::I64(_) => Ok(WasmType::I64),
+                    Constant::F32(_) => Ok(WasmType::F32),
+                    Constant::F64(_) => Ok(WasmType::F64),
+                    Constant::Bool(_) => Ok(WasmType::I32), // Booleans are i32 in WASM
+                    Constant::String(_) | Constant::MutableString(_) => Ok(WasmType::I32), // String pointers are i32
+                    Constant::Function(_) => Ok(WasmType::I32), // Function indices are i32
+                    Constant::Null => Ok(WasmType::I32),        // Null pointer is i32
+                    Constant::MemoryOffset(_) => Ok(WasmType::I32), // Memory offsets are i32
+                    Constant::TypeSize(_) => Ok(WasmType::I32), // Type sizes are i32
+                }
+            }
+            Operand::FunctionRef(_) => Ok(WasmType::I32), // Function references are i32 indices
+            Operand::GlobalRef(global_index) => {
+                // Look up the global's type from the local map or place manager
+                if let Some(_wasm_global) = local_map.get_global(*global_index) {
+                    // For now, assume globals are i32 - this could be enhanced to track actual types
+                    Ok(WasmType::I32)
+                } else {
+                    return_compiler_error!("Global reference not found: {}", global_index);
+                }
+            }
+        }
+    }
+
     /// Enhanced constant lowering with validation
     fn lower_constant_enhanced(
         &mut self,
@@ -4681,7 +4919,9 @@ impl WasmModule {
             }
             Constant::MutableString(value) => {
                 let default_capacity = (value.len() as u32).max(32);
-                let offset = self.string_manager.allocate_mutable_string(value, default_capacity);
+                let offset = self
+                    .string_manager
+                    .allocate_mutable_string(value, default_capacity);
                 function_builder.instruction(&Instruction::I32Const(offset as i32))?;
                 Ok(())
             }
@@ -5219,13 +5459,13 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         // Load base address of the struct
         self.lower_place_access(base_place, function, local_map)?;
-        
+
         // Add field offset if non-zero
         if field_offset > 0 {
             function.instruction(&Instruction::I32Const(field_offset as i32));
             function.instruction(&Instruction::I32Add);
         }
-        
+
         // Generate appropriate load instruction based on field size
         match field_size {
             FieldSize::Fixed(1) => {
@@ -5321,7 +5561,7 @@ impl WasmModule {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -5337,16 +5577,16 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         // Load base address of the struct
         self.lower_place_access(base_place, function, local_map)?;
-        
+
         // Add field offset if non-zero
         if field_offset > 0 {
             function.instruction(&Instruction::I32Const(field_offset as i32));
             function.instruction(&Instruction::I32Add);
         }
-        
+
         // Load the value to store
         self.lower_operand(value_operand, function, local_map)?;
-        
+
         // Generate appropriate store instruction based on field size
         match field_size {
             FieldSize::Fixed(1) => {
@@ -5442,7 +5682,7 @@ impl WasmModule {
                 }
             }
         }
-        
+
         Ok(())
     }
 }

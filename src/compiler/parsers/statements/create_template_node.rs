@@ -476,9 +476,7 @@ pub fn parse_template_head(
 
                         // TODO: Special stuff for Types (structs)
                         // In the future, Types can implement a Style interface to do cool stuff
-                        ExpressionKind::Struct(args) => {
-                            
-                        }
+                        ExpressionKind::Struct(args) => {}
 
                         // Otherwise this is a reference to some other variable
                         // String, Number, Bool, etc. References

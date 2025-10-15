@@ -22,5 +22,5 @@ impl ContainsReferences for ScopeContext {
     }
     fn get_reference_mut(&mut self, name: &str) -> Option<&mut Arg> {
         self.declarations.iter_mut().rfind(|arg| arg.name == name)
-    }   
+    }
 }

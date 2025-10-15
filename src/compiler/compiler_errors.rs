@@ -87,14 +87,15 @@ impl CompileError {
         let location = source_location.unwrap_or_default();
         let msg = Self::map_wasm_error_to_message(wasm_error);
         let error_str = format!("{}", wasm_error);
-        
+
         // Determine error type based on error content
-        let error_type = if error_str.contains("type mismatch") || error_str.contains("TypeMismatch") {
-            ErrorType::Type
-        } else {
-            ErrorType::Compiler
-        };
-        
+        let error_type =
+            if error_str.contains("type mismatch") || error_str.contains("TypeMismatch") {
+                ErrorType::Type
+            } else {
+                ErrorType::Compiler
+            };
+
         CompileError {
             msg,
             location,
@@ -106,7 +107,7 @@ impl CompileError {
     /// Map WASM validation errors to helpful user messages
     fn map_wasm_error_to_message(wasm_error: &wasmparser::BinaryReaderError) -> String {
         let error_str = format!("{}", wasm_error);
-        
+
         // Check error message content to determine type
         if error_str.contains("type mismatch") || error_str.contains("TypeMismatch") {
             format!(
@@ -169,13 +170,13 @@ impl CompileError {
             "{} not yet implemented in the Beanstalk compiler.",
             feature_name
         );
-        
+
         if let Some(workaround_text) = workaround {
             msg.push_str(&format!(" Workaround: {}", workaround_text));
         }
-        
+
         msg.push_str(" This feature is planned for a future release.");
-        
+
         CompileError {
             msg,
             location: location.unwrap_or_default(),
@@ -187,29 +188,33 @@ impl CompileError {
     /// Validate error message quality
     pub fn validate_message_quality(&self) -> Vec<String> {
         let mut issues = Vec::new();
-        
+
         if self.msg.is_empty() {
             issues.push("Error message is empty".to_string());
         }
-        
+
         if self.msg.len() < 10 {
             issues.push("Error message is too short to be helpful".to_string());
         }
-        
+
         if self.msg.contains("panic") || self.msg.contains("unwrap") {
             issues.push("Error message contains internal implementation details".to_string());
         }
-        
+
         // Check for helpful patterns
-        let has_suggestion = self.msg.contains("Try") || 
-                           self.msg.contains("Consider") || 
-                           self.msg.contains("Make sure") ||
-                           self.msg.contains("Did you mean");
-        
-        if matches!(self.error_type, ErrorType::Rule | ErrorType::Type | ErrorType::Syntax) && !has_suggestion {
+        let has_suggestion = self.msg.contains("Try")
+            || self.msg.contains("Consider")
+            || self.msg.contains("Make sure")
+            || self.msg.contains("Did you mean");
+
+        if matches!(
+            self.error_type,
+            ErrorType::Rule | ErrorType::Type | ErrorType::Syntax
+        ) && !has_suggestion
+        {
             issues.push("User-facing error should include suggestions or guidance".to_string());
         }
-        
+
         issues
     }
 }
@@ -229,7 +234,7 @@ pub enum ErrorType {
 }
 
 /// Returns a new CompileError for syntax violations.
-/// 
+///
 /// Syntax errors indicate malformed code that doesn't follow Beanstalk language rules.
 /// These should include clear explanations and suggestions when possible.
 ///
@@ -247,7 +252,7 @@ macro_rules! return_syntax_error {
 }
 
 /// Returns a new CompileError for type system violations.
-/// 
+///
 /// Type errors indicate mismatched types or invalid type operations.
 /// Should mention both expected and actual types with suggestions.
 ///
@@ -265,7 +270,7 @@ macro_rules! return_type_error {
 }
 
 /// Returns a new CompileError for semantic rule violations.
-/// 
+///
 /// Rule errors indicate violations of language semantics like undefined variables,
 /// scope violations, or incorrect usage patterns. Should include specific names
 /// and helpful suggestions.
@@ -328,7 +333,7 @@ macro_rules! return_config_error {
 }
 
 /// Returns a new CompileError for internal compiler bugs.
-/// 
+///
 /// Compiler errors indicate bugs in the compiler itself, not user code issues.
 /// These are automatically prefixed with "COMPILER BUG" and should include
 /// context about what was being processed when the error occurred.
@@ -363,61 +368,74 @@ macro_rules! return_dev_server_error {
 }
 
 /// Returns a new CompileError for undefined variables with suggestions.
-/// 
+///
 /// Provides enhanced error messages for undefined variable access with
 /// suggestions for similar variable names or common fixes.
 ///
 /// Usage: `return_undefined_variable_error!(location, "my_var", vec!["my_variable", "my_val"])`;
 #[macro_export]
 macro_rules! return_undefined_variable_error {
-    ($location:expr, $var_name:expr, $suggestions:expr) => {
-        {
-            let mut msg = format!("Undefined variable '{}'. Variable must be declared before use.", $var_name);
-            let suggestions: Vec<String> = $suggestions;
-            if !suggestions.is_empty() {
-                msg.push_str(&format!(" Did you mean one of: {}?", suggestions.join(", ")));
-            } else {
-                msg.push_str(&format!(" Make sure '{}' is declared in this scope or a parent scope.", $var_name));
-            }
-            return Err(CompileError {
-                msg,
-                location: $location,
-                error_type: crate::compiler::compiler_errors::ErrorType::Rule,
-                file_path: std::path::PathBuf::new(),
-            })
+    ($location:expr, $var_name:expr, $suggestions:expr) => {{
+        let mut msg = format!(
+            "Undefined variable '{}'. Variable must be declared before use.",
+            $var_name
+        );
+        let suggestions: Vec<String> = $suggestions;
+        if !suggestions.is_empty() {
+            msg.push_str(&format!(
+                " Did you mean one of: {}?",
+                suggestions.join(", ")
+            ));
+        } else {
+            msg.push_str(&format!(
+                " Make sure '{}' is declared in this scope or a parent scope.",
+                $var_name
+            ));
         }
-    };
+        return Err(CompileError {
+            msg,
+            location: $location,
+            error_type: crate::compiler::compiler_errors::ErrorType::Rule,
+            file_path: std::path::PathBuf::new(),
+        });
+    }};
 }
 
 /// Returns a new CompileError for undefined functions with suggestions.
-/// 
+///
 /// Provides enhanced error messages for undefined function calls with
 /// suggestions for similar function names or import hints.
 ///
 /// Usage: `return_undefined_function_error!(location, "my_func", vec!["my_function"])`;
 #[macro_export]
 macro_rules! return_undefined_function_error {
-    ($location:expr, $func_name:expr, $suggestions:expr) => {
-        {
-            let mut msg = format!("Undefined function '{}'. Function must be declared before use.", $func_name);
-            let suggestions: Vec<String> = $suggestions;
-            if !suggestions.is_empty() {
-                msg.push_str(&format!(" Did you mean one of: {}?", suggestions.join(", ")));
-            } else {
-                msg.push_str(" Make sure the function is defined in this file or imported from another module.");
-            }
-            return Err(CompileError {
-                msg,
-                location: $location,
-                error_type: crate::compiler::compiler_errors::ErrorType::Rule,
-                file_path: std::path::PathBuf::new(),
-            })
+    ($location:expr, $func_name:expr, $suggestions:expr) => {{
+        let mut msg = format!(
+            "Undefined function '{}'. Function must be declared before use.",
+            $func_name
+        );
+        let suggestions: Vec<String> = $suggestions;
+        if !suggestions.is_empty() {
+            msg.push_str(&format!(
+                " Did you mean one of: {}?",
+                suggestions.join(", ")
+            ));
+        } else {
+            msg.push_str(
+                " Make sure the function is defined in this file or imported from another module.",
+            );
         }
-    };
+        return Err(CompileError {
+            msg,
+            location: $location,
+            error_type: crate::compiler::compiler_errors::ErrorType::Rule,
+            file_path: std::path::PathBuf::new(),
+        });
+    }};
 }
 
 /// Returns a new CompileError for type mismatches with detailed context.
-/// 
+///
 /// Provides enhanced type error messages with expected vs actual types
 /// and suggestions for fixing the mismatch.
 ///
@@ -438,33 +456,34 @@ macro_rules! return_type_mismatch_error {
 }
 
 /// Returns a new CompileError for unimplemented features with context.
-/// 
+///
 /// Provides helpful error messages for features not yet implemented,
 /// including workarounds when available.
 ///
 /// Usage: `return_unimplemented_feature_error!("Complex expressions", Some(location), Some("break into simpler parts"))`;
 #[macro_export]
 macro_rules! return_unimplemented_feature_error {
-    ($feature:expr, $location:expr, $workaround:expr) => {
-        {
-            let mut msg = format!("{} not yet implemented in the Beanstalk compiler.", $feature);
-            if let Some(workaround_text) = $workaround {
-                msg.push_str(&format!(" Workaround: {}", workaround_text));
-            }
-            msg.push_str(" This feature is planned for a future release.");
-            
-            return Err(CompileError {
-                msg,
-                location: $location.unwrap_or_default(),
-                error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-                file_path: std::path::PathBuf::new(),
-            })
+    ($feature:expr, $location:expr, $workaround:expr) => {{
+        let mut msg = format!(
+            "{} not yet implemented in the Beanstalk compiler.",
+            $feature
+        );
+        if let Some(workaround_text) = $workaround {
+            msg.push_str(&format!(" Workaround: {}", workaround_text));
         }
-    };
+        msg.push_str(" This feature is planned for a future release.");
+
+        return Err(CompileError {
+            msg,
+            location: $location.unwrap_or_default(),
+            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
+            file_path: std::path::PathBuf::new(),
+        });
+    }};
 }
 
 /// Returns a new CompileError for WASM validation failures.
-/// 
+///
 /// Maps WASM validation errors to appropriate compiler error types
 /// with helpful context about what went wrong.
 ///

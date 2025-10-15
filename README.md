@@ -19,8 +19,9 @@
     <li><strong>Type Checking</strong> - Basics complete, an eager AST approach</li>
     <li><strong>Mid Level Optimisation</strong> - Fast Constant folding in place, more powerful optimisation passes to be added in the IR</li>
     <li><strong>Compiler Error Messages and CLI</strong> - Basics Complete, need to add more detailed errors and coverage</li>
-    <li><strong>IR / Codegen</strong> - In progress. </li>
-    <li><strong>Build system</strong> - Basics in place, some scaffolding for dealing with different types of projects. To be expanded on greatly as the project grows
+    <li><strong>IR / Codegen</strong>Basics functioning - In progress. </li>
+        <li><strong>Borrow Checker</strong> - Not working yet, In progress. </li>
+    <li><strong>Build system</strong> - Basics in place, some scaffolding for dealing with different types of projects.
     </li>
   </ul>
 

@@ -462,7 +462,9 @@ impl WasmType {
     /// Convert from Beanstalk DataType to WASM type - uses unified conversion from codegen
     pub fn from_data_type(data_type: &DataType) -> Self {
         // Use the unified conversion from WasmModule, but handle the Result
-        match crate::compiler::codegen::wasm_encoding::WasmModule::unified_datatype_to_wasm_type(data_type) {
+        match crate::compiler::codegen::wasm_encoding::WasmModule::unified_datatype_to_wasm_type(
+            data_type,
+        ) {
             Ok(wasm_type) => wasm_type,
             Err(_) => WasmType::I32, // Default fallback for error cases
         }

@@ -1,5 +1,3 @@
-
-
 // TOKEN LOGGING MACROS
 #[macro_export]
 #[cfg(feature = "show_tokens")]
@@ -102,5 +100,3 @@ macro_rules! codegen_log {
         // Nothing
     };
 }
-
-

@@ -1,7 +1,7 @@
 use crate::compiler::parsers::ast_nodes::Arg;
-use std::fmt::Display;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokens::TextLocation;
+use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {
@@ -246,7 +246,7 @@ impl DataType {
             _ => self.to_owned(),
         }
     }
-    
+
     pub fn to_arg(&self) -> Arg {
         Arg {
             name: String::new(),
@@ -280,16 +280,37 @@ impl PartialEq for DataType {
             (DataType::Option(a), DataType::Option(b)) => a == b,
             // For Args, Struct, Function, and Choices, we compare by name/structure
             // but not by the actual Arg values since they contain Expressions
-            (DataType::Args(a), DataType::Args(b)) => a.len() == b.len() && 
-                a.iter().zip(b.iter()).all(|(arg_a, arg_b)| arg_a.name == arg_b.name),
-            (DataType::Struct(a, oa), DataType::Struct(b, ob)) => oa == ob && a.len() == b.len() && 
-                a.iter().zip(b.iter()).all(|(arg_a, arg_b)| arg_a.name == arg_b.name),
-            (DataType::Function(a1, a2), DataType::Function(b1, b2)) => 
-                a1.len() == b1.len() && a2.len() == b2.len() &&
-                a1.iter().zip(b1.iter()).all(|(arg_a, arg_b)| arg_a.name == arg_b.name) &&
-                a2.iter().zip(b2.iter()).all(|(arg_a, arg_b)| arg_a.name == arg_b.name),
-            (DataType::Choices(a), DataType::Choices(b)) => a.len() == b.len() && 
-                a.iter().zip(b.iter()).all(|(arg_a, arg_b)| arg_a.name == arg_b.name),
+            (DataType::Args(a), DataType::Args(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+            }
+            (DataType::Struct(a, oa), DataType::Struct(b, ob)) => {
+                oa == ob
+                    && a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+            }
+            (DataType::Function(a1, a2), DataType::Function(b1, b2)) => {
+                a1.len() == b1.len()
+                    && a2.len() == b2.len()
+                    && a1
+                        .iter()
+                        .zip(b1.iter())
+                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+                    && a2
+                        .iter()
+                        .zip(b2.iter())
+                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+            }
+            (DataType::Choices(a), DataType::Choices(b)) => {
+                a.len() == b.len()
+                    && a.iter()
+                        .zip(b.iter())
+                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+            }
             _ => false,
         }
     }

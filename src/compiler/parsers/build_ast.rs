@@ -418,13 +418,14 @@ pub fn new_ast(
                 } else if let Some(host_func_call) = context.host_registry.get_function(name) {
                     // Move past the name
                     token_stream.advance();
-                    
+
                     // Convert return types to Arg format
-                    let converted_returns = host_func_call.return_types
+                    let converted_returns = host_func_call
+                        .return_types
                         .iter()
                         .map(|x| x.to_arg())
                         .collect::<Vec<Arg>>();
-                    
+
                     ast.push(parse_function_call(
                         token_stream,
                         name,

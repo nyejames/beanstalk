@@ -1,7 +1,7 @@
 // Consolidated imports for better organization and maintainability
 use crate::compiler::wir::{
     place::Place,
-    wir_nodes::{Loan, LoanId, WirFunction, ProgramPoint, PlaceState, StateTransition, BorrowKind},
+    wir_nodes::{BorrowKind, Loan, LoanId, PlaceState, ProgramPoint, StateTransition, WirFunction},
 };
 use std::collections::HashMap;
 
@@ -42,26 +42,26 @@ impl StateMapping {
             Some(loans) => loans,
             None => return PlaceState::Owned,
         };
-        
+
         if loans.is_empty() {
             return PlaceState::Owned;
         }
 
         // Check for mutable loans first (exclusive)
         for loan_id in loans {
-            if let Some(state) = self.loan_to_state.get(loan_id) {
-                if *state == PlaceState::Borrowed {
-                    return PlaceState::Borrowed;
-                }
+            if let Some(state) = self.loan_to_state.get(loan_id)
+                && *state == PlaceState::Borrowed
+            {
+                return PlaceState::Borrowed;
             }
         }
 
         // If no mutable loans, check for shared loans
         for loan_id in loans {
-            if let Some(state) = self.loan_to_state.get(loan_id) {
-                if *state == PlaceState::Referenced {
-                    return PlaceState::Referenced;
-                }
+            if let Some(state) = self.loan_to_state.get(loan_id)
+                && *state == PlaceState::Referenced
+            {
+                return PlaceState::Referenced;
             }
         }
 
@@ -90,9 +90,9 @@ impl StateMapping {
     /// Check if a place has any mutable loans
     pub fn has_mutable_loans(&self, place: &Place) -> bool {
         if let Some(loan_ids) = self.place_to_loans.get(place) {
-            loan_ids.iter().any(|loan_id| {
-                self.loan_to_state.get(loan_id) == Some(&PlaceState::Borrowed)
-            })
+            loan_ids
+                .iter()
+                .any(|loan_id| self.loan_to_state.get(loan_id) == Some(&PlaceState::Borrowed))
         } else {
             false
         }
@@ -101,9 +101,9 @@ impl StateMapping {
     /// Check if a place has any shared loans
     pub fn has_shared_loans(&self, place: &Place) -> bool {
         if let Some(loan_ids) = self.place_to_loans.get(place) {
-            loan_ids.iter().any(|loan_id| {
-                self.loan_to_state.get(loan_id) == Some(&PlaceState::Referenced)
-            })
+            loan_ids
+                .iter()
+                .any(|loan_id| self.loan_to_state.get(loan_id) == Some(&PlaceState::Referenced))
         } else {
             false
         }
@@ -112,7 +112,7 @@ impl StateMapping {
     /// Get all places that are currently in a specific state
     pub fn get_places_in_state(&self, target_state: &PlaceState) -> Vec<Place> {
         let mut places = Vec::new();
-        for (place, _) in &self.place_to_loans {
+        for place in self.place_to_loans.keys() {
             if self.get_place_state(place) == *target_state {
                 places.push(place.clone());
             }
@@ -123,7 +123,7 @@ impl StateMapping {
     /// Update the state mapping when a loan ends
     pub fn end_loan(&mut self, loan_id: LoanId) {
         self.loan_to_state.remove(&loan_id);
-        
+
         // Remove the loan from place-to-loans mapping
         self.place_to_loans.retain(|_, loan_ids| {
             loan_ids.retain(|id| *id != loan_id);
@@ -180,7 +180,7 @@ pub struct BitSet {
 impl BitSet {
     /// Create a new bitset with the given capacity
     pub fn new(capacity: usize) -> Self {
-        let word_count = (capacity + 63) / 64; // Round up to nearest 64
+        let word_count = capacity.div_ceil(64); // Round up to nearest 64
         Self {
             words: vec![0; word_count],
             capacity,
@@ -552,7 +552,9 @@ impl BorrowFactExtractor {
     /// This method processes events from all program points and maps loans to states,
     /// building both gen/kill sets (existing) and state mappings (new) for hybrid
     /// state-loan borrow checking.
-    pub fn from_function_with_states(function: &WirFunction) -> Result<(Self, StateMapping), String> {
+    pub fn from_function_with_states(
+        function: &WirFunction,
+    ) -> Result<(Self, StateMapping), String> {
         let mut extractor = Self::new();
         let mut state_mapping = StateMapping::new();
 
@@ -615,54 +617,72 @@ impl BorrowFactExtractor {
     }
 
     /// Generate loans from WIR statements that create borrows
-    fn generate_loans_from_wir(&mut self, function: &WirFunction, loan_id_counter: &mut u32) -> Result<(), String> {
+    fn generate_loans_from_wir(
+        &mut self,
+        function: &WirFunction,
+        loan_id_counter: &mut u32,
+    ) -> Result<(), String> {
         // Scan all blocks and statements for borrow operations
         for block in &function.blocks {
             for (stmt_index, statement) in block.statements.iter().enumerate() {
                 // Create program point for this statement
                 let program_point = ProgramPoint::new(block.id * 1000 + stmt_index as u32);
-                
+
                 // Check if this statement creates a borrow
-                if let Some(loan) = self.extract_loan_from_statement(statement, program_point, loan_id_counter) {
+                if let Some(loan) =
+                    self.extract_loan_from_statement(statement, program_point, loan_id_counter)
+                {
                     self.loans.push(loan);
                 }
             }
-            
+
             // Check terminator for borrows
             let terminator_point = ProgramPoint::new(block.id * 1000 + 999);
-            if let Some(loan) = self.extract_loan_from_terminator(&block.terminator, terminator_point, loan_id_counter) {
+            if let Some(loan) = self.extract_loan_from_terminator(
+                &block.terminator,
+                terminator_point,
+                loan_id_counter,
+            ) {
                 self.loans.push(loan);
             }
         }
-        
+
         self.loan_count = self.loans.len();
-        
+
         // Log loan generation for debugging
         if self.loan_count > 0 {
-            println!("Generated {} loans for function '{}'", self.loan_count, function.name);
+            println!(
+                "Generated {} loans for function '{}'",
+                self.loan_count, function.name
+            );
             for (i, loan) in self.loans.iter().enumerate() {
-                println!("  Loan {}: {:?} borrow of {:?} at {:?}", 
-                        i, loan.kind, loan.owner, loan.origin_stmt);
+                println!(
+                    "  Loan {}: {:?} borrow of {:?} at {:?}",
+                    i, loan.kind, loan.owner, loan.origin_stmt
+                );
             }
         }
-        
+
         Ok(())
     }
 
     /// Extract loan from a statement if it creates a borrow
     fn extract_loan_from_statement(
-        &self, 
-        statement: &crate::compiler::wir::wir_nodes::Statement, 
-        program_point: ProgramPoint, 
-        loan_id_counter: &mut u32
+        &self,
+        statement: &crate::compiler::wir::wir_nodes::Statement,
+        program_point: ProgramPoint,
+        loan_id_counter: &mut u32,
     ) -> Option<Loan> {
-        use crate::compiler::wir::wir_nodes::{Statement, Rvalue};
-        
+        use crate::compiler::wir::wir_nodes::{Rvalue, Statement};
+
         match statement {
-            Statement::Assign { rvalue: Rvalue::Ref { place, borrow_kind }, .. } => {
+            Statement::Assign {
+                rvalue: Rvalue::Ref { place, borrow_kind },
+                ..
+            } => {
                 let loan_id = LoanId::new(*loan_id_counter);
                 *loan_id_counter += 1;
-                
+
                 Some(Loan {
                     id: loan_id,
                     owner: place.clone(),
@@ -679,7 +699,7 @@ impl BorrowFactExtractor {
         &self,
         _terminator: &crate::compiler::wir::wir_nodes::Terminator,
         _program_point: ProgramPoint,
-        _loan_id_counter: &mut u32
+        _loan_id_counter: &mut u32,
     ) -> Option<Loan> {
         // Terminators don't typically create borrows in the simplified WIR
         None
@@ -690,10 +710,7 @@ impl BorrowFactExtractor {
         self.place_to_loans.clear();
 
         for loan in &self.loans {
-            let entry = self
-                .place_to_loans
-                .entry(loan.owner.clone())
-                .or_insert_with(Vec::new);
+            let entry = self.place_to_loans.entry(loan.owner.clone()).or_default();
             entry.push(loan.id);
         }
     }
@@ -711,9 +728,10 @@ impl BorrowFactExtractor {
         // Build gen sets based on loans we created, not from events
         // Since we generate loans from WIR statements, we know exactly where they start
         for loan in &self.loans {
-            let gen_set = self.gen_sets.get_mut(&loan.origin_stmt)
-                .ok_or_else(|| format!("Gen set not found for program point {:?}", loan.origin_stmt))?;
-            
+            let gen_set = self.gen_sets.get_mut(&loan.origin_stmt).ok_or_else(|| {
+                format!("Gen set not found for program point {:?}", loan.origin_stmt)
+            })?;
+
             // Find the loan index and set it in the gen set
             if let Some(loan_index) = self.loans.iter().position(|l| l.id == loan.id) {
                 gen_set.set(loan_index);
@@ -729,7 +747,7 @@ impl BorrowFactExtractor {
                 println!("Gen set at {}: {} loans starting", program_point, count);
             }
         }
-        
+
         if total_gen_bits > 0 {
             println!("Total gen set bits: {}", total_gen_bits);
         }
@@ -762,8 +780,9 @@ impl BorrowFactExtractor {
                 places_to_kill.extend(events.reassigns.iter());
 
                 // Process all places that need to be killed
-                let kill_set = self.kill_sets.get_mut(&program_point)
-                    .ok_or_else(|| format!("Kill set not found for program point {:?}", program_point))?;
+                let kill_set = self.kill_sets.get_mut(&program_point).ok_or_else(|| {
+                    format!("Kill set not found for program point {:?}", program_point)
+                })?;
 
                 // Fast path: single place (common case)
                 if places_to_kill.len() == 1 {
@@ -833,16 +852,21 @@ impl BorrowFactExtractor {
     /// This method provides efficient state queries on top of loan tracking,
     /// combining the performance of bitset operations with the semantics of
     /// state-based analysis for Beanstalk's memory model.
-    pub fn get_place_state_with_loans(&self, place: &Place, live_loans: &BitSet, state_mapping: &StateMapping) -> PlaceState {
+    pub fn get_place_state_with_loans(
+        &self,
+        place: &Place,
+        live_loans: &BitSet,
+        state_mapping: &StateMapping,
+    ) -> PlaceState {
         // Fast path: check state mapping first
         let base_state = state_mapping.get_place_state(place);
-        
+
         // If no loans are affecting this place, return the base state
         if let Some(loan_ids) = self.place_to_loans.get(place) {
             // Check if any of the loans affecting this place are currently live
             let mut has_live_mutable = false;
             let mut has_live_shared = false;
-            
+
             for loan_id in loan_ids {
                 // Find the loan index in our loans vector
                 if let Some(loan_index) = self.loans.iter().position(|l| l.id == *loan_id) {
@@ -856,7 +880,7 @@ impl BorrowFactExtractor {
                     }
                 }
             }
-            
+
             // Determine state based on live loans
             if has_live_mutable {
                 PlaceState::Borrowed
@@ -881,7 +905,7 @@ impl BorrowFactExtractor {
             // Use bitset operations for efficient loan liveness checking
             let mut has_live_mutable = false;
             let mut has_live_shared = false;
-            
+
             // Iterate through loans affecting this place
             for loan_id in loan_ids {
                 // Find the loan index for bitset lookup
@@ -899,7 +923,7 @@ impl BorrowFactExtractor {
                     }
                 }
             }
-            
+
             // Return state based on live loans
             if has_live_mutable {
                 PlaceState::Borrowed
@@ -917,22 +941,27 @@ impl BorrowFactExtractor {
     ///
     /// This method combines bitset operations for performance with state-based
     /// conflict detection for Beanstalk's memory model semantics.
-    pub fn check_state_conflicts(&self, place: &Place, new_borrow_kind: &BorrowKind, live_loans: &BitSet) -> Option<PlaceState> {
+    pub fn check_state_conflicts(
+        &self,
+        place: &Place,
+        new_borrow_kind: &BorrowKind,
+        live_loans: &BitSet,
+    ) -> Option<PlaceState> {
         let current_state = self.get_place_state_efficient(place, live_loans);
-        
+
         // Apply Beanstalk conflict rules
         match (current_state, new_borrow_kind) {
             // Multiple shared borrows are allowed
             (PlaceState::Referenced, BorrowKind::Shared) => None,
-            
+
             // Mutable borrows conflict with any existing borrows
             (PlaceState::Referenced, BorrowKind::Mut) => Some(PlaceState::Referenced),
             (PlaceState::Borrowed, BorrowKind::Shared) => Some(PlaceState::Borrowed),
             (PlaceState::Borrowed, BorrowKind::Mut) => Some(PlaceState::Borrowed),
-            
+
             // No conflict with owned places
             (PlaceState::Owned, _) => None,
-            
+
             // Can't borrow moved or killed places
             (PlaceState::Moved, _) => Some(PlaceState::Moved),
             (PlaceState::Killed, _) => Some(PlaceState::Killed),
@@ -945,26 +974,26 @@ impl BorrowFactExtractor {
     /// for performance while providing state-based results.
     pub fn get_places_with_live_loans(&self, live_loans: &BitSet) -> Vec<(Place, PlaceState)> {
         let mut result = Vec::new();
-        
+
         // Iterate through all places that have loans
         for (place, loan_ids) in &self.place_to_loans {
             // Check if any loans for this place are live
             let mut has_live_loans = false;
             for loan_id in loan_ids {
-                if let Some(loan_index) = self.loans.iter().position(|l| l.id == *loan_id) {
-                    if live_loans.get(loan_index) {
-                        has_live_loans = true;
-                        break;
-                    }
+                if let Some(loan_index) = self.loans.iter().position(|l| l.id == *loan_id)
+                    && live_loans.get(loan_index)
+                {
+                    has_live_loans = true;
+                    break;
                 }
             }
-            
+
             if has_live_loans {
                 let state = self.get_place_state_efficient(place, live_loans);
                 result.push((place.clone(), state));
             }
         }
-        
+
         result
     }
 
@@ -972,9 +1001,14 @@ impl BorrowFactExtractor {
     ///
     /// This method uses bitset operations to efficiently track which loans
     /// are starting/ending and maps them to state transitions.
-    pub fn compute_state_transitions(&self, gen_set: &BitSet, kill_set: &BitSet, state_mapping: &StateMapping) -> Vec<StateTransition> {
+    pub fn compute_state_transitions(
+        &self,
+        gen_set: &BitSet,
+        kill_set: &BitSet,
+        state_mapping: &StateMapping,
+    ) -> Vec<StateTransition> {
         let mut transitions = Vec::new();
-        
+
         // Process loans being generated (starting)
         gen_set.for_each_set_bit(|loan_index| {
             if loan_index < self.loans.len() {
@@ -983,7 +1017,7 @@ impl BorrowFactExtractor {
                     BorrowKind::Shared => PlaceState::Referenced,
                     BorrowKind::Mut => PlaceState::Borrowed,
                 };
-                
+
                 transitions.push(StateTransition {
                     place: loan.owner.clone(),
                     from_state: PlaceState::Owned, // Assume previous state
@@ -993,13 +1027,13 @@ impl BorrowFactExtractor {
                 });
             }
         });
-        
+
         // Process loans being killed (ending)
         kill_set.for_each_set_bit(|loan_index| {
             if loan_index < self.loans.len() {
                 let loan = &self.loans[loan_index];
                 let current_state = state_mapping.get_place_state(&loan.owner);
-                
+
                 transitions.push(StateTransition {
                     place: loan.owner.clone(),
                     from_state: current_state,
@@ -1009,13 +1043,16 @@ impl BorrowFactExtractor {
                 });
             }
         });
-        
+
         transitions
     }
 
     /// Update function events with the loans that were created
     /// This ensures that the events contain the correct loan IDs for borrow checking
-    pub fn update_function_events(&self, function: &mut crate::compiler::wir::wir_nodes::WirFunction) {
+    pub fn update_function_events(
+        &self,
+        function: &mut crate::compiler::wir::wir_nodes::WirFunction,
+    ) {
         // Update events to include the loan IDs we created
         for loan in &self.loans {
             if let Some(events) = function.events.get_mut(&loan.origin_stmt) {
@@ -1025,7 +1062,7 @@ impl BorrowFactExtractor {
                 }
             }
         }
-        
+
         // Also store the loans in the function for reference
         function.loans = self.loans.clone();
     }

@@ -4,11 +4,13 @@
 // for rapid development iteration without additional compilation steps.
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::host_functions::wasix_registry::{WasixFunctionRegistry, create_wasix_registry};
+use crate::compiler::host_functions::wasix_registry::{
+    WasixFunctionRegistry, create_wasix_registry,
+};
 use crate::runtime::{IoBackend, RuntimeConfig};
-use wasmer::{Instance, Module, Store, imports, Function, Memory};
-use wasmer_wasix::WasiEnvBuilder;
 use std::cell::RefCell;
+use wasmer::{Function, Instance, Memory, Module, Store, imports};
+use wasmer_wasix::WasiEnvBuilder;
 
 /// Execute WASM bytecode directly using JIT compilation
 pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(), CompileError> {
@@ -21,11 +23,8 @@ pub fn execute_direct_jit_with_capture(
     config: &RuntimeConfig,
     capture_output: bool,
 ) -> Result<(), CompileError> {
-
-
     // Create Wasmer store for JIT execution
     let mut store = Store::default();
-
 
     // Compile WASM module
     let module = Module::new(&store, wasm_bytes).map_err(|e| {
@@ -49,7 +48,13 @@ pub fn execute_direct_jit_with_capture(
     })?;
 
     // Set up imports based on IO backend
-    let import_object = create_import_object_with_capture(&mut store, &module, wasm_bytes, &config.io_backend, capture_output)?;
+    let import_object = create_import_object_with_capture(
+        &mut store,
+        &module,
+        wasm_bytes,
+        &config.io_backend,
+        capture_output,
+    )?;
 
     // Instantiate the module
     let instance = Instance::new(&mut store, &module, &import_object).map_err(|e| {
@@ -59,7 +64,9 @@ pub fn execute_direct_jit_with_capture(
     // Set up WASIX memory access if using WASIX backend
     if matches!(config.io_backend, IoBackend::Wasix) {
         // Try different memory export names
-        let memory_result = instance.exports.get_memory("memory")
+        let memory_result = instance
+            .exports
+            .get_memory("memory")
             .or_else(|_| instance.exports.get_memory("mem"))
             .or_else(|_| instance.exports.get_memory("0"));
 
@@ -95,7 +102,10 @@ pub fn execute_direct_jit_with_capture(
         match main_func.call(&mut store, &[]) {
             Ok(values) => {
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("JIT: Main function completed successfully with values: {:?}", values);
+                println!(
+                    "JIT: Main function completed successfully with values: {:?}",
+                    values
+                );
                 if !values.is_empty() {
                     println!("Program returned: {:?}", values);
                 }
@@ -189,7 +199,6 @@ pub fn create_import_object_with_wasix_native(
     }
 }
 
-
 /// Implement fd_write functionality with WASM memory access
 /// This is the core implementation that reads IOVec structures from memory and outputs data
 fn implement_fd_write_with_memory(
@@ -202,7 +211,10 @@ fn implement_fd_write_with_memory(
 ) -> Result<u32, String> {
     // Validate file descriptor
     if fd != 1 && fd != 2 {
-        return Err(format!("Invalid file descriptor: {}. Only stdout (1) and stderr (2) are supported", fd));
+        return Err(format!(
+            "Invalid file descriptor: {}. Only stdout (1) and stderr (2) are supported",
+            fd
+        ));
     }
 
     // Handle empty write
@@ -225,12 +237,14 @@ fn implement_fd_write_with_memory(
 
             // Write to stdout or stderr
             match fd {
-                1 => { // stdout
+                1 => {
+                    // stdout
                     print!("{}", string_data);
                     std::io::Write::flush(&mut std::io::stdout())
                         .map_err(|e| format!("Failed to flush stdout: {}", e))?;
                 }
-                2 => { // stderr
+                2 => {
+                    // stderr
                     eprint!("{}", string_data);
                     std::io::Write::flush(&mut std::io::stderr())
                         .map_err(|e| format!("Failed to flush stderr: {}", e))?;
@@ -260,8 +274,7 @@ fn read_iovecs_from_memory(
     }
 
     // Each IOVec is 8 bytes: 4 bytes ptr + 4 bytes len
-    let total_size = iovs_len.checked_mul(8)
-        .ok_or("IOVec array size overflow")?;
+    let total_size = iovs_len.checked_mul(8).ok_or("IOVec array size overflow")?;
 
     // Read the entire IOVec array from memory
     let iovec_bytes = read_bytes_from_memory(memory, store, iovs_ptr, total_size)?;
@@ -305,25 +318,29 @@ fn read_bytes_from_memory(
         return Ok(Vec::new());
     }
 
-    let end_ptr = ptr.checked_add(len)
-        .ok_or("Memory address overflow")?;
+    let end_ptr = ptr.checked_add(len).ok_or("Memory address overflow")?;
 
     // Get memory view and check bounds
     let memory_view = memory.view(store);
     let memory_size = memory_view.data_size() as u32;
 
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("WASIX: Memory bounds check - ptr: 0x{:x}, len: {}, end_ptr: 0x{:x}, memory_size: {}",
-             ptr, len, end_ptr, memory_size);
+    println!(
+        "WASIX: Memory bounds check - ptr: 0x{:x}, len: {}, end_ptr: 0x{:x}, memory_size: {}",
+        ptr, len, end_ptr, memory_size
+    );
 
     if end_ptr > memory_size {
-        return Err(format!("Memory out of bounds: trying to read {}..{} but memory size is {}",
-                           ptr, end_ptr, memory_size));
+        return Err(format!(
+            "Memory out of bounds: trying to read {}..{} but memory size is {}",
+            ptr, end_ptr, memory_size
+        ));
     }
 
     // Read bytes from memory
     let mut bytes = vec![0u8; len as usize];
-    memory_view.read(ptr as u64, &mut bytes)
+    memory_view
+        .read(ptr as u64, &mut bytes)
         .map_err(|e| format!("Failed to read from memory: {}", e))?;
 
     Ok(bytes)
@@ -345,7 +362,12 @@ fn read_string_from_memory(
 
     // Debug: Print the raw bytes to see what we're reading
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("WASIX: Reading {} bytes from 0x{:x}: {:?}", len, ptr, &bytes[..std::cmp::min(bytes.len(), 50)]);
+    println!(
+        "WASIX: Reading {} bytes from 0x{:x}: {:?}",
+        len,
+        ptr,
+        &bytes[..std::cmp::min(bytes.len(), 50)]
+    );
 
     // Validate and convert UTF-8
     let result = String::from_utf8(bytes)
@@ -353,7 +375,10 @@ fn read_string_from_memory(
 
     #[cfg(feature = "verbose_codegen_logging")]
     if let Ok(ref s) = result {
-        println!("WASIX: Decoded string: {:?}", &s[..std::cmp::min(s.len(), 50)]);
+        println!(
+            "WASIX: Decoded string: {:?}",
+            &s[..std::cmp::min(s.len(), 50)]
+        );
     }
 
     result
@@ -373,17 +398,19 @@ fn write_u32_to_memory(
     let memory_size = memory_view.data_size() as u32;
 
     if ptr + 4 > memory_size {
-        return Err(format!("Memory out of bounds: trying to write u32 at 0x{:x} but memory size is {}",
-                           ptr, memory_size));
+        return Err(format!(
+            "Memory out of bounds: trying to write u32 at 0x{:x} but memory size is {}",
+            ptr, memory_size
+        ));
     }
 
     // Write bytes to memory
-    memory_view.write(ptr as u64, &bytes)
+    memory_view
+        .write(ptr as u64, &bytes)
         .map_err(|e| format!("Failed to write to memory: {}", e))?;
 
     Ok(())
 }
-
 
 /// IOVec structure matching WASIX specification
 #[derive(Debug, Clone)]
@@ -427,8 +454,6 @@ fn setup_wasix_imports_with_io(
     wasm_bytes: &[u8],
     _capture_output: bool,
 ) -> Result<wasmer::Imports, CompileError> {
-
-
     // For now, provide a simple fd_write implementation instead of full WASIX
     // This avoids the Tokio runtime requirement while still providing the functionality
 
@@ -440,43 +465,62 @@ fn setup_wasix_imports_with_io(
     }
 
     // Create fd_write function that uses shared memory state with enhanced error handling
-    let fd_write_func = Function::new_typed(store, |fd: i32, iovs_ptr: i32, iovs_len: i32, nwritten_ptr: i32| -> i32 {
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASIX fd_write called with fd={}, iovs_ptr=0x{:x}, iovs_len={}, nwritten_ptr=0x{:x}",
-                 fd, iovs_ptr, iovs_len, nwritten_ptr);
+    let fd_write_func = Function::new_typed(
+        store,
+        |fd: i32, iovs_ptr: i32, iovs_len: i32, nwritten_ptr: i32| -> i32 {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "WASIX fd_write called with fd={}, iovs_ptr=0x{:x}, iovs_len={}, nwritten_ptr=0x{:x}",
+                fd, iovs_ptr, iovs_len, nwritten_ptr
+            );
 
-        // Get memory and store from shared state with detailed error reporting
-        let memory = match get_wasix_memory() {
-            Some(mem) => mem,
-            None => {
-                eprintln!("WASIX import resolution error: Memory not available - WASM instance not properly initialized. Suggestion: Ensure the WASM module is instantiated before calling WASIX functions");
-                return 8; // ENOEXEC
-            }
-        };
+            // Get memory and store from shared state with detailed error reporting
+            let memory = match get_wasix_memory() {
+                Some(mem) => mem,
+                None => {
+                    eprintln!(
+                        "WASIX import resolution error: Memory not available - WASM instance not properly initialized. Suggestion: Ensure the WASM module is instantiated before calling WASIX functions"
+                    );
+                    return 8; // ENOEXEC
+                }
+            };
 
-        let store_ptr = match get_wasix_store() {
-            Some(ptr) => ptr,
-            None => {
-                eprintln!("WASIX import resolution error: Store not available - WASM instance not properly initialized. Suggestion: Ensure the WASM runtime is properly configured");
-                return 8; // ENOEXEC
-            }
-        };
+            let store_ptr = match get_wasix_store() {
+                Some(ptr) => ptr,
+                None => {
+                    eprintln!(
+                        "WASIX import resolution error: Store not available - WASM instance not properly initialized. Suggestion: Ensure the WASM runtime is properly configured"
+                    );
+                    return 8; // ENOEXEC
+                }
+            };
 
-        // Implement the actual fd_write functionality with memory access
-        let store_ref = unsafe { &*store_ptr };
-        match implement_fd_write_with_memory(&memory, store_ref, fd, iovs_ptr as u32, iovs_len as u32, nwritten_ptr as u32) {
-            Ok(errno) => errno as i32,
-            Err(e) => {
-                eprintln!("WASIX fd_write execution error: {}. Suggestion: Check memory layout and ensure IOVec structures are properly formatted", e);
-                match e.as_str() {
-                    s if s.contains("Invalid file descriptor") => 9,  // EBADF
-                    s if s.contains("Memory") => 14, // EFAULT
-                    s if s.contains("IOVec") => 22,  // EINVAL
-                    _ => 8 // ENOEXEC
+            // Implement the actual fd_write functionality with memory access
+            let store_ref = unsafe { &*store_ptr };
+            match implement_fd_write_with_memory(
+                &memory,
+                store_ref,
+                fd,
+                iovs_ptr as u32,
+                iovs_len as u32,
+                nwritten_ptr as u32,
+            ) {
+                Ok(errno) => errno as i32,
+                Err(e) => {
+                    eprintln!(
+                        "WASIX fd_write execution error: {}. Suggestion: Check memory layout and ensure IOVec structures are properly formatted",
+                        e
+                    );
+                    match e.as_str() {
+                        s if s.contains("Invalid file descriptor") => 9, // EBADF
+                        s if s.contains("Memory") => 14,                 // EFAULT
+                        s if s.contains("IOVec") => 22,                  // EINVAL
+                        _ => 8,                                          // ENOEXEC
+                    }
                 }
             }
-        }
-    });
+        },
+    );
 
     // Validate that we can create the imports object
     let imports = match create_wasix_imports_object(fd_write_func) {
@@ -512,7 +556,8 @@ fn create_wasix_imports_object(fd_write_func: Function) -> Result<wasmer::Import
         return Err("Failed to create wasix_32v1 namespace in imports object".to_string());
     }
 
-    let wasix_namespace = imports.get_namespace_exports("wasix_32v1")
+    let wasix_namespace = imports
+        .get_namespace_exports("wasix_32v1")
         .ok_or("Failed to access wasix_32v1 namespace exports")?;
 
     if !wasix_namespace.iter().any(|(name, _)| name == "fd_write") {
@@ -528,8 +573,6 @@ fn setup_wasix_imports_with_native_support(
     module: &Module,
     wasm_bytes: &[u8],
 ) -> Result<wasmer::Imports, CompileError> {
-
-
     // Create WASIX environment using wasmer-wasix
     let wasi_env_builder = WasiEnvBuilder::new("beanstalk-program");
 
@@ -543,18 +586,22 @@ fn setup_wasix_imports_with_native_support(
         })?;
 
     // Generate WASIX import object with comprehensive error handling
-    let wasix_imports = wasi_env
-        .import_object(store, module)
-        .map_err(|e| {
-            let error_msg = format!("Failed to create WASIX imports: {}", e);
-            let suggestion = match e.to_string().as_str() {
-                s if s.contains("memory") => "Increase WASM memory limits or check memory configuration",
-                s if s.contains("function") => "Verify that all required WASIX functions are available in the runtime",
-                s if s.contains("module") => "Check that the WASM module has correct WASIX import declarations",
-                _ => "Verify WASIX runtime configuration and ensure all dependencies are available"
-            };
-            CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
-        })?;
+    let wasix_imports = wasi_env.import_object(store, module).map_err(|e| {
+        let error_msg = format!("Failed to create WASIX imports: {}", e);
+        let suggestion = match e.to_string().as_str() {
+            s if s.contains("memory") => {
+                "Increase WASM memory limits or check memory configuration"
+            }
+            s if s.contains("function") => {
+                "Verify that all required WASIX functions are available in the runtime"
+            }
+            s if s.contains("module") => {
+                "Check that the WASM module has correct WASIX import declarations"
+            }
+            _ => "Verify WASIX runtime configuration and ensure all dependencies are available",
+        };
+        CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
+    })?;
 
     // Validate that required WASIX imports are available
     validate_wasix_imports(wasm_bytes, &wasix_imports)?;
@@ -569,9 +616,11 @@ fn setup_wasix_imports_with_native_support(
     Ok(wasix_imports)
 }
 
-
 /// Validate that required WASIX imports are properly resolved
-fn validate_wasix_imports(wasm_bytes: &[u8], imports: &wasmer::Imports) -> Result<(), CompileError> {
+fn validate_wasix_imports(
+    wasm_bytes: &[u8],
+    imports: &wasmer::Imports,
+) -> Result<(), CompileError> {
     use wasmparser::{Parser, Payload};
 
     let mut required_wasix_imports = Vec::new();
@@ -579,13 +628,19 @@ fn validate_wasix_imports(wasm_bytes: &[u8], imports: &wasmer::Imports) -> Resul
 
     // Parse the WASM module to find required imports
     for payload in parser.parse_all(&wasm_bytes) {
-        if let Payload::ImportSection(import_reader) = payload.map_err(|e| CompileError::compiler_error(&format!("Failed to parse WASM module: {}", e)))? {
+        if let Payload::ImportSection(import_reader) = payload.map_err(|e| {
+            CompileError::compiler_error(&format!("Failed to parse WASM module: {}", e))
+        })? {
             for import in import_reader {
-                let import = import.map_err(|e| CompileError::compiler_error(&format!("Failed to read import: {}", e)))?;
+                let import = import.map_err(|e| {
+                    CompileError::compiler_error(&format!("Failed to read import: {}", e))
+                })?;
 
                 // Check for WASIX imports
-                if import.module.starts_with("wasix_") || import.module == "wasi_snapshot_preview1" {
-                    required_wasix_imports.push((import.module.to_string(), import.name.to_string()));
+                if import.module.starts_with("wasix_") || import.module == "wasi_snapshot_preview1"
+                {
+                    required_wasix_imports
+                        .push((import.module.to_string(), import.name.to_string()));
                 }
             }
         }
@@ -607,20 +662,25 @@ fn validate_wasix_imports(wasm_bytes: &[u8], imports: &wasmer::Imports) -> Resul
             )))?;
 
         if !namespace.iter().any(|(name, _)| name == function_name) {
-            let available_functions: Vec<String> = namespace.iter().map(|(name, _)| name.clone()).collect();
+            let available_functions: Vec<String> =
+                namespace.iter().map(|(name, _)| name.clone()).collect();
             return Err(CompileError::compiler_error(&format!(
                 "WASIX import resolution failed: function '{}' not found in module '{}'. Available functions: {}. Suggestion: Update WASIX runtime or check function name spelling",
-                function_name, module_name, available_functions.join(", ")
+                function_name,
+                module_name,
+                available_functions.join(", ")
             )));
         }
     }
 
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("✓ All {} WASIX imports validated successfully", required_wasix_imports.len());
+    println!(
+        "✓ All {} WASIX imports validated successfully",
+        required_wasix_imports.len()
+    );
 
     Ok(())
 }
-
 
 /// Set up custom IO imports for embedded scenarios
 #[allow(unused_variables)]
@@ -671,8 +731,9 @@ impl JitRuntime {
     /// Create a new JIT runtime with WASIX support
     pub fn new() -> Result<Self, CompileError> {
         let store = Store::default();
-        let wasix_registry = create_wasix_registry()
-            .map_err(|e| CompileError::compiler_error(&format!("Failed to create WASIX registry: {:?}", e)))?;
+        let wasix_registry = create_wasix_registry().map_err(|e| {
+            CompileError::compiler_error(&format!("Failed to create WASIX registry: {:?}", e))
+        })?;
 
         Ok(Self {
             wasix_registry,
@@ -689,7 +750,10 @@ impl JitRuntime {
     }
 
     /// Initialize WASIX context with memory integration (simplified)
-    pub fn initialize_wasix_context_with_memory(&mut self, _memory: wasmer::Memory) -> Result<(), CompileError> {
+    pub fn initialize_wasix_context_with_memory(
+        &mut self,
+        _memory: wasmer::Memory,
+    ) -> Result<(), CompileError> {
         #[cfg(feature = "verbose_codegen_logging")]
         println!("WASIX memory integration - using import-based calls");
 
@@ -714,7 +778,9 @@ impl JitRuntime {
         // The fd_write method now requires memory and store parameters which will be available in JIT context
 
         #[cfg(feature = "verbose_codegen_logging")]
-        println!("Native WASIX function registration - placeholder (requires task 4 implementation)");
+        println!(
+            "Native WASIX function registration - placeholder (requires task 4 implementation)"
+        );
 
         Ok(())
     }
@@ -752,7 +818,13 @@ impl JitRuntime {
         })?;
 
         // Set up imports based on IO backend
-        let import_object = create_import_object_with_wasix_native(&mut self.store, &module, wasm_bytes, &config.io_backend, &mut self.wasix_registry)?;
+        let import_object = create_import_object_with_wasix_native(
+            &mut self.store,
+            &module,
+            wasm_bytes,
+            &config.io_backend,
+            &mut self.wasix_registry,
+        )?;
 
         // Instantiate the module
         let instance = Instance::new(&mut self.store, &module, &import_object).map_err(|e| {
@@ -767,7 +839,9 @@ impl JitRuntime {
             println!("WASM memory integrated with WASIX context");
         } else {
             #[cfg(feature = "verbose_codegen_logging")]
-            println!("No WASM memory export found - WASIX context will use default memory management");
+            println!(
+                "No WASM memory export found - WASIX context will use default memory management"
+            );
         }
 
         // Execute the module (similar to existing execute_direct_jit logic)

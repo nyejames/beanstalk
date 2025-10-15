@@ -39,6 +39,7 @@ use std::collections::HashMap;
 ///
 /// See `docs/dataflow-analysis-guide.md` for detailed algorithm documentation.
 #[derive(Debug)]
+#[allow(clippy::upper_case_acronyms)] // WIR is a well-established acronym in this codebase
 pub struct WIR {
     /// Functions in the module
     pub functions: Vec<WirFunction>,
@@ -49,7 +50,14 @@ pub struct WIR {
     /// Type information for WASM module generation
     pub type_info: TypeInfo,
     /// Host function imports for WASM generation
-    pub host_imports: std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
+    pub host_imports:
+        std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
+}
+
+impl Default for WIR {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl WIR {
@@ -83,7 +91,12 @@ impl WIR {
     }
 
     /// Add host function imports to the WIR
-    pub fn add_host_imports(&mut self, imports: &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>) {
+    pub fn add_host_imports(
+        &mut self,
+        imports: &std::collections::HashSet<
+            crate::compiler::host_functions::registry::HostFunctionDef,
+        >,
+    ) {
         self.host_imports.extend(imports.iter().cloned());
     }
 
@@ -107,9 +120,7 @@ impl WIR {
 
     /// Iterate over all program points
     pub fn iter_program_points(&self) -> impl Iterator<Item = ProgramPoint> + '_ {
-        self.functions
-            .iter()
-            .flat_map(|f| f.iter_program_points())
+        self.functions.iter().flat_map(|f| f.iter_program_points())
     }
 
     /// Get program points for dataflow analysis in execution order
@@ -123,9 +134,7 @@ impl WIR {
 
     /// Find the function containing a given program point
     pub fn find_function_for_program_point(&self, point: &ProgramPoint) -> Option<&WirFunction> {
-        self.functions
-            .iter()
-            .find(|f| f.events.contains_key(point))
+        self.functions.iter().find(|f| f.events.contains_key(point))
     }
 
     /// Get a mutable reference to a function by ID
@@ -146,10 +155,8 @@ impl WIR {
     }
 }
 
-
-
 /// Simplified WIR function representation
-/// 
+///
 /// This simplified design removes complex optimizations in favor of correctness:
 /// - No arena allocation - uses standard Vec and HashMap
 /// - No place interning - uses direct Place references
@@ -179,11 +186,15 @@ pub struct WirFunction {
     pub loans: Vec<Loan>,
 }
 
-
-
 impl WirFunction {
     /// Create a new simplified WIR function
-    pub fn new(id: u32, name: String, parameters: Vec<Place>, return_types: Vec<WasmType>, return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>) -> Self {
+    pub fn new(
+        id: u32,
+        name: String,
+        parameters: Vec<Place>,
+        return_types: Vec<WasmType>,
+        return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>,
+    ) -> Self {
         Self {
             id,
             name,
@@ -235,8 +246,6 @@ impl WirFunction {
         self.events.keys().copied()
     }
 
-
-
     /// Get all events for this function
     pub fn get_all_events(&self) -> impl Iterator<Item = (&ProgramPoint, &Events)> + '_ {
         self.events.iter()
@@ -246,8 +255,6 @@ impl WirFunction {
     pub fn generate_events(&self, program_point: &ProgramPoint) -> Option<Events> {
         self.get_events(program_point).cloned()
     }
-
-
 
     /// Add a loan to this function
     pub fn add_loan(&mut self, loan: Loan) {
@@ -263,7 +270,6 @@ impl WirFunction {
     pub fn get_loan_count(&self) -> usize {
         self.loans.len()
     }
-
 }
 
 // Tests will be added in a separate testing task to maintain focus on core functionality
@@ -278,7 +284,7 @@ pub struct FunctionSignature {
 }
 
 /// Basic WIR block
-/// 
+///
 /// Simplified design with essential fields only:
 /// - No complex program point tracking
 /// - No WASM-specific control flow information
@@ -313,8 +319,6 @@ impl WirBlock {
     pub fn set_terminator(&mut self, terminator: Terminator) {
         self.terminator = terminator;
     }
-
-
 }
 
 /// WIR statement that maps efficiently to WASM instructions
@@ -385,6 +389,13 @@ pub enum Statement {
         destination: Option<Place>,
     },
 
+    /// Conditional execution (simplified control flow)
+    Conditional {
+        condition: Operand,
+        then_statements: Vec<Statement>,
+        else_statements: Vec<Statement>,
+    },
+
     /// Mark a struct field as initialized (for tracking optional defaults)
     MarkFieldInitialized {
         struct_place: Place,
@@ -435,11 +446,13 @@ impl Statement {
             Statement::Assign { place, rvalue } => {
                 // The assignment itself generates a reassign event for the place
                 events.reassigns.push(place.clone());
-                
+
                 // Generate events for the rvalue with state transitions
                 self.generate_rvalue_events_with_states(rvalue, &mut events, program_point, place);
             }
-            Statement::Call { args, destination, .. } => {
+            Statement::Call {
+                args, destination, ..
+            } => {
                 // Generate use events for all arguments
                 for arg in args {
                     self.generate_operand_events(arg, &mut events);
@@ -486,7 +499,7 @@ impl Statement {
             Statement::Drop { place } => {
                 // Generate drop event - this is an end-of-lifetime point
                 events.uses.push(place.clone());
-                
+
                 // Transition to Killed state
                 events.state_transitions.push(StateTransition {
                     place: place.clone(),
@@ -500,7 +513,7 @@ impl Statement {
                 // Store operations reassign the place and use the value
                 events.reassigns.push(place.clone());
                 self.generate_operand_events(value, &mut events);
-                
+
                 // Store creates owned value at the place
                 events.state_transitions.push(StateTransition {
                     place: place.clone(),
@@ -514,7 +527,7 @@ impl Statement {
                 // Allocation reassigns the place and uses the size operand
                 events.reassigns.push(place.clone());
                 self.generate_operand_events(size, &mut events);
-                
+
                 // Allocation creates owned value
                 events.state_transitions.push(StateTransition {
                     place: place.clone(),
@@ -527,7 +540,7 @@ impl Statement {
             Statement::Dealloc { place } => {
                 // Deallocation uses the place (to free it)
                 events.uses.push(place.clone());
-                
+
                 // Transition to Killed state
                 events.state_transitions.push(StateTransition {
                     place: place.clone(),
@@ -537,7 +550,9 @@ impl Statement {
                     reason: TransitionReason::LastUse,
                 });
             }
-            Statement::HostCall { args, destination, .. } => {
+            Statement::HostCall {
+                args, destination, ..
+            } => {
                 // Generate use events for all arguments
                 for arg in args {
                     self.generate_operand_events(arg, &mut events);
@@ -555,7 +570,9 @@ impl Statement {
                     });
                 }
             }
-            Statement::WasixCall { args, destination, .. } => {
+            Statement::WasixCall {
+                args, destination, ..
+            } => {
                 // Generate use events for all arguments (same as HostCall)
                 for arg in args {
                     self.generate_operand_events(arg, &mut events);
@@ -576,7 +593,7 @@ impl Statement {
             Statement::MarkFieldInitialized { struct_place, .. } => {
                 // Mark field initialization - this is a reassign event for the struct
                 events.reassigns.push(struct_place.clone());
-                
+
                 // Transition struct to partially initialized state
                 events.state_transitions.push(StateTransition {
                     place: struct_place.clone(),
@@ -590,6 +607,37 @@ impl Statement {
                 // Validation uses the struct place to check initialization
                 events.uses.push(struct_place.clone());
             }
+            Statement::Conditional {
+                condition,
+                then_statements,
+                else_statements,
+            } => {
+                // Generate use event for the condition
+                self.generate_operand_events(condition, &mut events);
+
+                // For now, generate events for all statements in both branches
+                // TODO: Implement proper control flow analysis
+                for stmt in then_statements {
+                    let stmt_events = stmt.generate_events_at_program_point(program_point);
+                    events.uses.extend(stmt_events.uses);
+                    events.moves.extend(stmt_events.moves);
+                    events.reassigns.extend(stmt_events.reassigns);
+                    events.start_loans.extend(stmt_events.start_loans);
+                    events
+                        .state_transitions
+                        .extend(stmt_events.state_transitions);
+                }
+                for stmt in else_statements {
+                    let stmt_events = stmt.generate_events_at_program_point(program_point);
+                    events.uses.extend(stmt_events.uses);
+                    events.moves.extend(stmt_events.moves);
+                    events.reassigns.extend(stmt_events.reassigns);
+                    events.start_loans.extend(stmt_events.start_loans);
+                    events
+                        .state_transitions
+                        .extend(stmt_events.state_transitions);
+                }
+            }
             Statement::Nop | Statement::MemoryOp { .. } => {
                 // These don't generate events for basic borrow checking
             }
@@ -599,11 +647,17 @@ impl Statement {
     }
 
     /// Generate events for rvalue operations with state transitions
-    fn generate_rvalue_events_with_states(&self, rvalue: &Rvalue, events: &mut Events, program_point: ProgramPoint, target_place: &Place) {
+    fn generate_rvalue_events_with_states(
+        &self,
+        rvalue: &Rvalue,
+        events: &mut Events,
+        program_point: ProgramPoint,
+        target_place: &Place,
+    ) {
         match rvalue {
             Rvalue::Use(operand) => {
                 self.generate_operand_events(operand, events);
-                
+
                 // Use operations typically create owned values at the target
                 events.state_transitions.push(StateTransition {
                     place: target_place.clone(),
@@ -616,7 +670,7 @@ impl Statement {
             Rvalue::BinaryOp(_, left, right) => {
                 self.generate_operand_events(left, events);
                 self.generate_operand_events(right, events);
-                
+
                 // Binary operations create owned results
                 events.state_transitions.push(StateTransition {
                     place: target_place.clone(),
@@ -628,7 +682,7 @@ impl Statement {
             }
             Rvalue::UnaryOp(_, operand) => {
                 self.generate_operand_events(operand, events);
-                
+
                 // Unary operations create owned results
                 events.state_transitions.push(StateTransition {
                     place: target_place.clone(),
@@ -641,13 +695,13 @@ impl Statement {
             Rvalue::Ref { place, borrow_kind } => {
                 // The place being borrowed is also used (read access)
                 events.uses.push(place.clone());
-                
+
                 // Create state transition based on borrow kind
                 let target_state = match borrow_kind {
                     BorrowKind::Shared => PlaceState::Referenced,
                     BorrowKind::Mut => PlaceState::Borrowed,
                 };
-                
+
                 events.state_transitions.push(StateTransition {
                     place: target_place.clone(),
                     from_state: PlaceState::Owned, // Assume previous state
@@ -655,7 +709,7 @@ impl Statement {
                     program_point,
                     reason: TransitionReason::BorrowCreated,
                 });
-                
+
                 // Note: Loan creation is handled by the borrow fact extractor
                 // which scans WIR statements for Rvalue::Ref operations
                 // and creates appropriate loans with unique IDs
@@ -682,12 +736,10 @@ impl Statement {
             }
         }
     }
-
-
 }
 
 /// Right-hand side values for Beanstalk's implicit borrowing system
-/// 
+///
 /// These represent the different ways values can be used in assignments:
 /// - Use: Direct use of operands (constants, copies, moves)
 /// - BinaryOp/UnaryOp: Arithmetic and logical operations
@@ -811,7 +863,7 @@ pub enum UnOp {
 }
 
 /// Essential block terminators
-/// 
+///
 /// Simplified to contain only essential variants:
 /// - Removed complex WASM-specific optimization information
 /// - Removed redundant compatibility variants
@@ -832,10 +884,8 @@ pub enum Terminator {
     },
 
     // Pattern matching terminator will be added when match expressions are implemented
-
     /// Unreachable code
     Unreachable,
-
 }
 
 impl Terminator {
@@ -866,7 +916,12 @@ impl Terminator {
     }
 
     /// Generate events for operands in terminators with state transitions
-    fn generate_operand_events_with_states(&self, operand: &Operand, events: &mut Events, program_point: ProgramPoint) {
+    fn generate_operand_events_with_states(
+        &self,
+        operand: &Operand,
+        events: &mut Events,
+        program_point: ProgramPoint,
+    ) {
         match operand {
             Operand::Copy(place) => {
                 events.uses.push(place.clone());
@@ -899,7 +954,7 @@ impl Terminator {
 }
 
 /// Borrow kinds for Beanstalk's implicit borrowing system
-/// 
+///
 /// In Beanstalk, borrowing is the default semantics:
 /// - `x = y` creates a shared borrow (multiple allowed)
 /// - `x ~= y` creates a mutable borrow (exclusive)
@@ -911,8 +966,6 @@ pub enum BorrowKind {
     /// Mutable borrow: `x ~= y` (exclusive, conflicts with any other borrow)
     Mut,
 }
-
-
 
 /// Place state in Beanstalk's memory model
 ///
@@ -1016,8 +1069,6 @@ impl std::fmt::Display for ProgramPoint {
         write!(f, "pp{}", self.0)
     }
 }
-
-
 
 /// State-aware events for dataflow analysis with Beanstalk memory model
 ///
@@ -1195,8 +1246,14 @@ impl BorrowError {
             },
             primary_location: new_location,
             secondary_location: Some(existing_location),
-            message: format!("cannot mutably borrow `{:?}` because it is already mutably borrowed", place),
-            suggestion: Some("ensure the first mutable borrow is no longer used before creating the second".to_string()),
+            message: format!(
+                "cannot mutably borrow `{:?}` because it is already mutably borrowed",
+                place
+            ),
+            suggestion: Some(
+                "ensure the first mutable borrow is no longer used before creating the second"
+                    .to_string(),
+            ),
             current_state: Some(PlaceState::Borrowed),
             expected_state: Some(PlaceState::Owned),
         }
@@ -1212,12 +1269,18 @@ impl BorrowError {
     ) -> Self {
         let (message, current_state, expected_state) = match (&existing_kind, &new_kind) {
             (BorrowKind::Shared, BorrowKind::Mut) => (
-                format!("cannot mutably borrow `{:?}` because it is already referenced", place),
+                format!(
+                    "cannot mutably borrow `{:?}` because it is already referenced",
+                    place
+                ),
                 PlaceState::Referenced,
                 PlaceState::Owned,
             ),
             (BorrowKind::Mut, BorrowKind::Shared) => (
-                format!("cannot reference `{:?}` because it is already mutably borrowed", place),
+                format!(
+                    "cannot reference `{:?}` because it is already mutably borrowed",
+                    place
+                ),
                 PlaceState::Borrowed,
                 PlaceState::Owned,
             ),
@@ -1239,7 +1302,10 @@ impl BorrowError {
             primary_location: new_location,
             secondary_location: Some(existing_location),
             message,
-            suggestion: Some("ensure all shared references are finished before creating mutable access".to_string()),
+            suggestion: Some(
+                "ensure all shared references are finished before creating mutable access"
+                    .to_string(),
+            ),
             current_state: Some(current_state),
             expected_state: Some(expected_state),
         }
@@ -1292,7 +1358,10 @@ impl BorrowError {
             },
             primary_location: move_location,
             secondary_location: Some(borrow_location),
-            message: format!("cannot move out of `{:?}` because it is {}", place, borrow_type),
+            message: format!(
+                "cannot move out of `{:?}` because it is {}",
+                place, borrow_type
+            ),
             suggestion: Some("ensure all borrows are finished before moving the value".to_string()),
             current_state: Some(current_state),
             expected_state: Some(PlaceState::Owned),
@@ -1302,10 +1371,10 @@ impl BorrowError {
     /// Convert this borrow error to a compile error for the main pipeline
     pub fn to_compile_error(&self) -> crate::compiler::compiler_errors::CompileError {
         use crate::compiler::compiler_errors::{CompileError, ErrorType};
-        
+
         // Format the main error message with state information
         let mut formatted_message = self.message.clone();
-        
+
         // Add state information if available
         if let (Some(current), Some(expected)) = (&self.current_state, &self.expected_state) {
             formatted_message.push_str(&format!(
@@ -1313,7 +1382,7 @@ impl BorrowError {
                 current, expected
             ));
         }
-        
+
         // Add secondary location information if available
         if let Some(secondary_loc) = &self.secondary_location {
             formatted_message.push_str(&format!(
@@ -1321,12 +1390,12 @@ impl BorrowError {
                 secondary_loc.start_pos.line_number, secondary_loc.start_pos.char_column
             ));
         }
-        
+
         // Add suggestion if available
         if let Some(suggestion) = &self.suggestion {
             formatted_message.push_str(&format!("\n  help: {}", suggestion));
         }
-        
+
         CompileError {
             msg: formatted_message,
             location: self.primary_location.clone(),
@@ -1338,16 +1407,13 @@ impl BorrowError {
 
 /// Convert a list of borrow errors to compile errors
 pub fn convert_borrow_errors_to_compile_errors(
-    borrow_errors: &[BorrowError]
+    borrow_errors: &[BorrowError],
 ) -> Vec<crate::compiler::compiler_errors::CompileError> {
-    borrow_errors.iter().map(|err| err.to_compile_error()).collect()
+    borrow_errors
+        .iter()
+        .map(|err| err.to_compile_error())
+        .collect()
 }
-
-
-
-
-
-
 
 /// Export information for WASM module
 #[derive(Debug, Clone)]

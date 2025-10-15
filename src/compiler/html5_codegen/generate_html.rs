@@ -56,33 +56,32 @@ pub fn create_html_with_js_bindings(
     let generator = JsBindingsGenerator::new(wasm_module_name.to_string())
         .with_dom_functions(true)
         .with_dev_features(!release_build);
-    
+
     let js_bindings = generator.generate_js_bindings();
-    
+
     // Get the base HTML boilerplate
     let base_html = create_html_boilerplate(meta_tags, release_build)?;
-    
+
     // Replace the JS modules placeholder with our comprehensive JS bindings
     let html_with_js = base_html
-        .replace("<!--//js-modules-->", &format!("<script type=\"module\">\n{}\n</script>", js_bindings))
+        .replace(
+            "<!--//js-modules-->",
+            &format!("<script type=\"module\">\n{}\n</script>", js_bindings),
+        )
         .replace("wasm-module-name", wasm_module_name);
-    
+
     Ok(html_with_js)
 }
 
 /// Create a standalone HTML file with embedded JS bindings (for simple projects)
 #[allow(dead_code)]
-pub fn create_standalone_html(
-    title: &str,
-    wasm_module_name: &str,
-    release_build: bool,
-) -> String {
+pub fn create_standalone_html(title: &str, wasm_module_name: &str, release_build: bool) -> String {
     let generator = JsBindingsGenerator::new(wasm_module_name.to_string())
         .with_dom_functions(true)
         .with_dev_features(!release_build);
-    
+
     let js_bindings = generator.generate_js_bindings();
-    
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">

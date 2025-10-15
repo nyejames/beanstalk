@@ -18,29 +18,33 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
 }
 
 /// Simplified WIR-to-WASM compilation entry point
-/// 
+///
 /// This function provides direct WIR → WASM lowering with minimal overhead.
 /// Complex validation and performance tracking have been removed to focus
 /// on core functionality until borrow checking is complete.
 pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir)?;
-    
+
     // Create WASM module from WIR (this already compiles all functions)
     let mut module = WasmModule::from_wir(&wir)?;
-    
+
     // Handle exports (functions are already compiled in from_wir)
     for wir_function in &wir.functions {
         // Export the function if it's marked for export
         if let Some(export) = wir.exports.get(&wir_function.name) {
             if export.kind == ExportKind::Function {
                 // Function index is the same as the order in wir.functions since from_wir processes them in order
-                let function_index = wir.functions.iter().position(|f| f.name == wir_function.name).unwrap() as u32;
+                let function_index = wir
+                    .functions
+                    .iter()
+                    .position(|f| f.name == wir_function.name)
+                    .unwrap() as u32;
                 let _ = module.add_function_export(&export.name, function_index);
             }
         }
     }
-    
+
     // Handle other exports
     for (export_name, export) in &wir.exports {
         match export.kind {
@@ -56,13 +60,13 @@ pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
             _ => {} // Function exports handled above
         }
     }
-    
+
     // Generate final WASM bytecode
     let compiled_wasm = module.finish();
-    
+
     // Basic WASM validation
     validate_wasm_module(&compiled_wasm)?;
-    
+
     Ok(compiled_wasm)
 }
 
@@ -70,7 +74,7 @@ pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
 fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
     // Empty WIR is allowed - it creates a minimal WASM module
     // This is useful for testing and incremental compilation
-    
+
     // Validate function names are unique (if any functions exist)
     if !wir.functions.is_empty() {
         let mut function_names = std::collections::HashSet::new();
@@ -83,7 +87,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
             }
         }
     }
-    
+
     // Validate memory configuration is reasonable
     let memory_info = &wir.type_info.memory_info;
     if memory_info.initial_pages > 65536 {
@@ -92,7 +96,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
             memory_info.initial_pages
         );
     }
-    
+
     if let Some(max_pages) = memory_info.max_pages {
         if max_pages > 65536 {
             return_compiler_error!(
@@ -100,7 +104,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
                 max_pages
             );
         }
-        
+
         // Check that max pages is not less than initial pages
         if max_pages < memory_info.initial_pages {
             return_compiler_error!(
@@ -111,7 +115,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
             );
         }
     }
-    
+
     // Validate interface consistency
     if !wir.type_info.interface_info.interfaces.is_empty() {
         for (interface_id, interface_def) in &wir.type_info.interface_info.interfaces {
@@ -123,6 +127,6 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
             }
         }
     }
-    
+
     Ok(())
 }

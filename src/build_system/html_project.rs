@@ -91,7 +91,6 @@ impl ProjectBuilder for HtmlProjectBuilder {
         _release_build: bool,
         _flags: &[Flag],
     ) -> Result<Project, Vec<CompileError>> {
-
         // Validate configuration
         if let Err(e) = self.validate_config(config) {
             return Err(vec![e]);

@@ -52,14 +52,7 @@ mod compiler {
         pub mod constant_folding;
     }
 
-    pub mod wir {
-        pub mod build_wir;
-        pub mod extract;
-        pub mod wir;
-        pub mod wir_nodes;
-        pub mod place;
-        pub mod borrow_checker;
-    }
+    pub mod wir;
 
     mod html5_codegen {
         pub mod code_block_highlighting;
@@ -84,24 +77,24 @@ mod compiler {
     }
 
     pub mod host_functions {
-        pub mod registry;
-        pub mod wasix_registry;
-        pub mod wasi_compatibility;
-        pub mod migration_diagnostics;
         pub mod fallback_mechanisms;
+        pub mod migration_diagnostics;
+        pub mod registry;
+        pub mod wasi_compatibility;
+        pub mod wasix_registry;
     }
 }
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::create_builtin_registry;
-use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{
     AstBlock, ContextKind, ParserOutput, ScopeContext, new_ast,
 };
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::{TokenContext, TokenizeMode};
+use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -179,7 +172,7 @@ impl<'a> Compiler<'a> {
         // Create the host function registry
         let host_registry = create_builtin_registry()
             .map_err(|e| e.with_file_path(module_tokens.src_path.clone()))?;
-        
+
         let ast_context = ScopeContext::new_with_registry(
             ContextKind::Module,
             module_tokens.src_path.to_owned(),

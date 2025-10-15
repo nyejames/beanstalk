@@ -1,9 +1,7 @@
-
-
 use std::collections::HashMap;
 
-use super::wasix_registry::WasixError;
 use super::wasi_compatibility::WasiCompatibilityLayer;
+use super::wasix_registry::WasixError;
 
 /// Fallback mechanisms for WASI-only environments and runtime compatibility
 #[derive(Debug, Clone)]
@@ -50,8 +48,14 @@ impl FallbackMechanisms {
                     "thread_spawn".to_string(),
                 ],
                 error_messages: HashMap::from([
-                    ("socket_create".to_string(), "Networking not available in WASI-only environment".to_string()),
-                    ("thread_spawn".to_string(), "Threading not available in WASI-only environment".to_string()),
+                    (
+                        "socket_create".to_string(),
+                        "Networking not available in WASI-only environment".to_string(),
+                    ),
+                    (
+                        "thread_spawn".to_string(),
+                        "Threading not available in WASI-only environment".to_string(),
+                    ),
                 ]),
             },
         );
@@ -90,9 +94,7 @@ impl FallbackMechanisms {
         self.fallback_strategies.insert(
             RuntimeEnvironment::Unknown,
             FallbackStrategy {
-                supported_functions: vec![
-                    "fd_write".to_string(),
-                ],
+                supported_functions: vec!["fd_write".to_string()],
                 unsupported_functions: vec![
                     "fd_read".to_string(),
                     "proc_exit".to_string(),
@@ -100,16 +102,26 @@ impl FallbackMechanisms {
                     "thread_spawn".to_string(),
                 ],
                 error_messages: HashMap::from([
-                    ("fd_read".to_string(), "File reading may not be available".to_string()),
-                    ("proc_exit".to_string(), "Process exit may not be available".to_string()),
-                    ("socket_create".to_string(), "Networking not available".to_string()),
-                    ("thread_spawn".to_string(), "Threading not available".to_string()),
+                    (
+                        "fd_read".to_string(),
+                        "File reading may not be available".to_string(),
+                    ),
+                    (
+                        "proc_exit".to_string(),
+                        "Process exit may not be available".to_string(),
+                    ),
+                    (
+                        "socket_create".to_string(),
+                        "Networking not available".to_string(),
+                    ),
+                    (
+                        "thread_spawn".to_string(),
+                        "Threading not available".to_string(),
+                    ),
                 ]),
             },
         );
     }
-
-
 
     /// Get fallback strategy for a function in the current environment
     pub fn get_fallback_for_function(
@@ -117,23 +129,30 @@ impl FallbackMechanisms {
         function_name: &str,
         environment: &RuntimeEnvironment,
     ) -> Result<FunctionFallback, WasixError> {
-        let strategy = self.fallback_strategies.get(environment)
-            .ok_or_else(|| WasixError::configuration_error(
+        let strategy = self.fallback_strategies.get(environment).ok_or_else(|| {
+            WasixError::configuration_error(
                 "fallback_strategy",
                 &format!("No strategy for environment: {:?}", environment),
                 "Supported environment strategy",
                 "Configure fallback strategy for this runtime environment",
-            ))?;
+            )
+        })?;
 
-        if strategy.supported_functions.contains(&function_name.to_string()) {
+        if strategy
+            .supported_functions
+            .contains(&function_name.to_string())
+        {
             Ok(FunctionFallback {
                 fallback_type: FunctionFallbackType::Supported,
                 warning_message: None,
                 error_message: None,
             })
-        } else if strategy.unsupported_functions.contains(&function_name.to_string()) {
+        } else if strategy
+            .unsupported_functions
+            .contains(&function_name.to_string())
+        {
             let error_msg = strategy.error_messages.get(function_name);
-            
+
             if self.enable_graceful_degradation {
                 Ok(FunctionFallback {
                     fallback_type: FunctionFallbackType::GracefulDegradation,
@@ -147,16 +166,21 @@ impl FallbackMechanisms {
                 Ok(FunctionFallback {
                     fallback_type: FunctionFallbackType::Error,
                     warning_message: None,
-                    error_message: error_msg.cloned().or_else(|| Some(format!(
-                        "Function '{}' not supported in {:?} environment",
-                        function_name, environment
-                    ))),
+                    error_message: error_msg.cloned().or_else(|| {
+                        Some(format!(
+                            "Function '{}' not supported in {:?} environment",
+                            function_name, environment
+                        ))
+                    }),
                 })
             }
         } else {
             // Try WASI compatibility migration
             if self.compatibility_layer.is_wasi_function(function_name) {
-                match self.compatibility_layer.migrate_function_name(function_name) {
+                match self
+                    .compatibility_layer
+                    .migrate_function_name(function_name)
+                {
                     Ok(_wasix_name) => Ok(FunctionFallback {
                         fallback_type: FunctionFallbackType::WasiMigration,
                         warning_message: Some(format!(
@@ -210,26 +234,10 @@ impl FallbackMechanisms {
         }
     }
 
-
-
-
-
-
-
-
-
-
-
     /// Get the detected runtime environment
     pub fn get_detected_environment(&self) -> Option<&RuntimeEnvironment> {
         self.detected_environment.as_ref()
     }
-
-
-
-
-
-
 }
 
 /// Runtime environment types
@@ -306,8 +314,6 @@ pub enum FunctionFallbackType {
     Unknown,
 }
 
-
-
 /// Create fallback mechanisms with the given compatibility layer
 pub fn create_fallback_mechanisms(
     compatibility_layer: WasiCompatibilityLayer,
@@ -318,8 +324,8 @@ pub fn create_fallback_mechanisms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
     use crate::compiler::host_functions::wasi_compatibility::WasiCompatibilityLayer;
+    use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
 
     fn create_test_fallback() -> FallbackMechanisms {
         let wasix_registry = create_wasix_registry().expect("Failed to create WASIX registry");
@@ -327,22 +333,20 @@ mod tests {
         FallbackMechanisms::new(compatibility_layer)
     }
 
-
-
     #[test]
     fn test_function_fallback() {
         let fallback = create_test_fallback();
-        
+
         // Test supported function in WASIX
-        let fb = fallback.get_fallback_for_function("fd_write", &RuntimeEnvironment::Wasix)
+        let fb = fallback
+            .get_fallback_for_function("fd_write", &RuntimeEnvironment::Wasix)
             .expect("Failed to get fallback");
         assert_eq!(fb.fallback_type, FunctionFallbackType::Supported);
-        
+
         // Test unsupported function in WASI-only with graceful degradation
-        let fb = fallback.get_fallback_for_function("socket_create", &RuntimeEnvironment::WasiOnly)
+        let fb = fallback
+            .get_fallback_for_function("socket_create", &RuntimeEnvironment::WasiOnly)
             .expect("Failed to get fallback");
         assert_eq!(fb.fallback_type, FunctionFallbackType::GracefulDegradation);
     }
-
-
 }
