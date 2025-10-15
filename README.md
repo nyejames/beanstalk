@@ -19,7 +19,7 @@
     <li><strong>Type Checking</strong> - Basics complete, an eager AST approach</li>
     <li><strong>Mid Level Optimisation</strong> - Fast Constant folding in place, more powerful optimisation passes to be added in the IR</li>
     <li><strong>Compiler Error Messages and CLI</strong> - Basics Complete, need to add more detailed errors and coverage</li>
-    <li><strong>IR / Codegen</strong> - In progress. Basic Wasm optimised WIR structure and borrow checker in place, to be refactored and simplified later.</li>
+    <li><strong>IR / Codegen</strong> - In progress. </li>
     <li><strong>Build system</strong> - Basics in place, some scaffolding for dealing with different types of projects. To be expanded on greatly as the project grows
     </li>
   </ul>
@@ -59,7 +59,5 @@ The goal is to also be lightweight, purpose built Wasm language. This means each
 - Backend designed around only producing high-quality Wasm efficiently and integrating with that ecosystem
 - Secure and fast. No 'unsafe' but with simpler move semantics and lifetimes than Rust
 - Uses a borrow checker with a simpler ownership model than Rust to trade some raw performance for consistency and ease of use
-
-The compiler itself is written in Rust.
 
 <br>
