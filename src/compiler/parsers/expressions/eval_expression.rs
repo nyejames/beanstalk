@@ -83,7 +83,7 @@ pub fn evaluate_expression(
     scope: PathBuf,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
-    ownership: Ownership,
+    mut ownership: Ownership,
 ) -> Result<Expression, CompileError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
@@ -171,6 +171,14 @@ pub fn evaluate_expression(
         return Ok(only_expression);
     }
 
+    // Since there is more than one value in this expression,
+    // it will copy the values and become Owned if not already.
+    ownership = if ownership.is_mutable() {
+        Ownership::MutableOwned
+    } else {
+        Ownership::ImmutableOwned
+    };
+
     match current_type {
         DataType::Template | DataType::String => {
             concat_template(&mut simplified_expression, ownership.get_owned())
@@ -188,7 +196,7 @@ pub fn evaluate_expression(
             Ok(Expression::string_slice(
                 new_string,
                 location,
-                Ownership::MutableOwned,
+                ownership,
             ))
         }
 
@@ -231,7 +239,7 @@ pub fn evaluate_expression(
                 stack,
                 current_type.to_owned(),
                 TextLocation::new(scope, first_node_start, last_node_end),
-                Ownership::MutableOwned,
+                ownership,
             ))
         }
     }

@@ -273,75 +273,7 @@ pub fn new_ast(
                     // Move past the name
                     token_stream.advance();
 
-                    // Name of variable, with any accesses added to the path
-                    let mut scope = context.scope_name.to_owned();
-
-                    // We will need to keep pushing nodes if there are accesses after method calls
-                    while token_stream.current_token_kind() == &TokenKind::Dot {
-                        // Move past the dot
-                        token_stream.advance();
-
-                        // Currently, there is no just integer access.
-                        // Only properties or methods are accessed on structs and collections.
-                        // Collections have a .get() method for accessing elements, no [] syntax.
-
-                        if let TokenKind::Symbol(name, ..) =
-                            token_stream.current_token_kind().to_owned()
-                        {
-                            let members = match &arg.value.data_type {
-                                DataType::Args(inner_args) => inner_args,
-                                DataType::Function(_, returned_args) => returned_args,
-                                _ => &get_builtin_methods(&arg.value.data_type),
-                            };
-
-                            // Nothing to access error
-                            if members.is_empty() {
-                                return_rule_error!(
-                                    token_stream.current_location(),
-                                    "'{}' has No methods or properties to access 😞",
-                                    name
-                                )
-                            }
-
-                            // No access with that name exists error
-                            let access = match members.iter().find(|member| member.name == *name) {
-                                Some(access) => access,
-                                None => return_rule_error!(
-                                    token_stream.current_location(),
-                                    "Can't find property or method '{}' inside '{}'",
-                                    name,
-                                    arg.name
-                                ),
-                            };
-
-                            // Add the name to the scope
-                            scope.push(&access.name);
-
-                            // Move past the name
-                            token_stream.advance();
-
-                            // ----------------------------
-                            //        METHOD CALLS
-                            // ----------------------------
-                            if let DataType::Function(required_arguments, returned_types) =
-                                &access.value.data_type
-                            {
-                                ast.push(parse_function_call(
-                                    token_stream,
-                                    &name,
-                                    &context,
-                                    required_arguments,
-                                    returned_types,
-                                )?)
-                            }
-                        } else {
-                            return_rule_error!(
-                                token_stream.current_location(),
-                                "Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.",
-                                token_stream.current_token_kind()
-                            )
-                        }
-                    }
+                    check_for_dot_access(token_stream, &arg, &context, &mut ast)?;
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
@@ -453,13 +385,13 @@ pub fn new_ast(
                         public.push(arg.to_owned());
                     }
 
-                    context.add_var(arg.to_owned());
-
                     ast.push(AstNode {
-                        kind: NodeKind::Declaration(name.to_owned(), arg.value, visibility),
+                        kind: NodeKind::Declaration(name.to_owned(), arg.value.to_owned(), visibility),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
                     });
+
+                    context.add_var(arg);
                 }
             }
 
@@ -587,4 +519,77 @@ pub fn new_ast(
         external_exports,
         warnings,
     ))
+}
+
+fn check_for_dot_access(token_stream: &mut TokenContext, arg: &Arg, context: &ScopeContext, ast: &mut Vec<AstNode>) -> Result<(), CompileError> {
+    // Name of variable, with any accesses added to the path
+    let mut scope = context.scope_name.to_owned();
+
+    // We will need to keep pushing nodes if there are accesses after method calls
+    while token_stream.current_token_kind() == &TokenKind::Dot {
+        // Move past the dot
+        token_stream.advance();
+
+        // Currently, there is no just integer access.
+        // Only properties or methods are accessed on structs and collections.
+        // Collections have a .get() method for accessing elements, no [] syntax.
+        if let TokenKind::Symbol(name, ..) =
+            token_stream.current_token_kind().to_owned()
+        {
+            let members = match &arg.value.data_type {
+                DataType::Args(inner_args) => inner_args,
+                DataType::Function(_, returned_args) => returned_args,
+                _ => &get_builtin_methods(&arg.value.data_type),
+            };
+
+            // Nothing to access error
+            if members.is_empty() {
+                return_rule_error!(
+                    token_stream.current_location(),
+                    "'{}' has No methods or properties to access 😞",
+                    name
+                )
+            }
+
+            // No access with that name exists error
+            let access = match members.iter().find(|member| member.name == *name) {
+                Some(access) => access,
+                None => return_rule_error!(
+                                    token_stream.current_location(),
+                                    "Can't find property or method '{}' inside '{}'",
+                                    name,
+                                    arg.name
+                                ),
+            };
+
+            // Add the name to the scope
+            scope.push(&access.name);
+
+            // Move past the name
+            token_stream.advance();
+
+            // ----------------------------
+            //        METHOD CALLS
+            // ----------------------------
+            if let DataType::Function(required_arguments, returned_types) =
+                &access.value.data_type
+            {
+                ast.push(parse_function_call(
+                    token_stream,
+                    &name,
+                    &context,
+                    required_arguments,
+                    returned_types,
+                )?)
+            }
+        } else {
+            return_rule_error!(
+                                token_stream.current_location(),
+                                "Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.",
+                                token_stream.current_token_kind()
+                            )
+        }
+    }
+
+    Ok(())
 }

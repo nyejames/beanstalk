@@ -309,7 +309,7 @@ pub fn create_expression(
                 let float_expr = Expression::float(
                     float,
                     location.to_owned(),
-                    Ownership::MutableOwned,
+                    ownership.to_owned(),
                 );
 
                 expression.push(AstNode {
@@ -330,7 +330,7 @@ pub fn create_expression(
                 let int_expr = Expression::int(
                     int,
                     location.to_owned(),
-                    Ownership::MutableOwned,
+                    ownership.to_owned(),
                 );
 
                 expression.push(AstNode {
@@ -346,7 +346,7 @@ pub fn create_expression(
                 let string_expr = Expression::string_slice(
                     string.to_owned(),
                     location.to_owned(),
-                    Ownership::ImmutableReference,
+                    ownership.to_owned(),
                 );
 
                 expression.push(AstNode {
@@ -391,7 +391,7 @@ pub fn create_expression(
                 let bool_expr = Expression::bool(
                     value,
                     location.to_owned(),
-                    Ownership::MutableOwned,
+                    ownership.to_owned(),
                 );
 
                 expression.push(AstNode {

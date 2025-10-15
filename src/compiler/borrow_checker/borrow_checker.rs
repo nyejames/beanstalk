@@ -2,7 +2,6 @@
 use crate::compiler::{
     parsers::tokens::TextLocation,
     wir::{
-        extract::{BitSet, BorrowFactExtractor, StateMapping, may_alias},
         place::Place,
         wir_nodes::{
             BorrowError, BorrowErrorType, WirFunction, ProgramPoint, 
@@ -11,6 +10,7 @@ use crate::compiler::{
     },
 };
 use std::collections::{HashMap, HashSet};
+use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtractor, StateMapping};
 
 /// Unified borrow checker that combines liveness, loan tracking, and conflict detection
 /// into a single forward traversal for ~40% performance improvement
@@ -106,7 +106,7 @@ impl UnifiedBorrowChecker {
         Self::new_with_function_name(loan_count, "unknown".to_string())
     }
 
-    /// Create a new unified borrow checker with function name for diagnostics
+    /// Create a new unified borrow checker with the function name for diagnostics
     pub fn new_with_function_name(loan_count: usize, _function_name: String) -> Self {
         Self {
             live_vars_in: HashMap::new(),

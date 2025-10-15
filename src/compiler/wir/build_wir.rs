@@ -19,7 +19,8 @@ use crate::compiler::{
     compiler_errors::CompileError,
     parsers::{build_ast::AstBlock, tokens::TextLocation},
 };
-
+use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking;
+use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 // Error handling macros - grouped for maintainability
 use crate::ir_log;
 
@@ -114,9 +115,6 @@ pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
 /// - Move vs. copy decisions for value transfers
 /// - Memory layout optimization based on lifetime analysis
 fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
-    use crate::compiler::wir::borrow_checker::run_unified_borrow_checking;
-    use crate::compiler::wir::extract::BorrowFactExtractor;
-
     for function in &mut wir.functions {
         // Ensure events are generated for all statements and terminators
         regenerate_events_for_function(function);

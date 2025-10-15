@@ -53,6 +53,10 @@ mod compiler {
     }
 
     pub mod wir;
+    pub mod borrow_checker {
+        pub mod borrow_checker;
+        pub mod extract;
+    }
 
     mod html5_codegen {
         pub mod code_block_highlighting;

@@ -3,11 +3,11 @@ use crate::compiler::{
     parsers::build_ast::AstBlock,
     wir::build_wir::{WIR, ast_to_wir},
     wir::{
-        borrow_checker::UnifiedBorrowChecker,
-        extract::BorrowFactExtractor,
         wir_nodes::{BorrowError, WirFunction},
     },
 };
+use crate::compiler::borrow_checker::borrow_checker::UnifiedBorrowChecker;
+use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 
 /// WASM Intermediate Representation (WIR) with simplified borrow checking
 ///

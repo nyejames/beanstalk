@@ -71,9 +71,7 @@
 //! - **Field-sensitive borrowing**: Disjoint field access allowed while maintaining safety
 
 // Core WIR modules
-pub mod borrow_checker;
 pub mod build_wir;
-pub mod extract;
 pub mod place;
 pub mod wir;
 pub mod wir_nodes;

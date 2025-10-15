@@ -219,7 +219,7 @@ pub fn new_arg(
         _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
     };
 
-    ast_log!("Created new variable: '{}' of type: {}", name, data_type);
+    ast_log!("Created new {:?} variable: '{}' of type: {}", ownership, name, data_type);
     Ok(Arg {
         name: name.to_owned(),
         value: parsed_expr,

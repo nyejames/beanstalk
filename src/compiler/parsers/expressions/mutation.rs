@@ -4,7 +4,7 @@ use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
-use crate::{return_rule_error, return_syntax_error};
+use crate::{ast_log, return_rule_error, return_syntax_error};
 
 /// Handle mutation of existing mutable variables
 /// Called when we encounter a variable reference followed by an assignment operator
@@ -17,6 +17,7 @@ pub fn handle_mutation(
 
     // Check if the variable is mutable
     let ownership = &variable_arg.value.ownership;
+    ast_log!("Handling mutation for {:?}: '{}'", ownership, variable_arg.name);
 
     if !ownership.is_mutable() {
         return_rule_error!(
