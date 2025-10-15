@@ -1,5 +1,7 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use std::fmt::Display;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::tokens::TextLocation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {
@@ -242,6 +244,18 @@ impl DataType {
         match self {
             DataType::Collection(inner_type, ..) => *inner_type.to_owned(),
             _ => self.to_owned(),
+        }
+    }
+    
+    pub fn to_arg(&self) -> Arg {
+        Arg {
+            name: String::new(),
+            value: Expression::new(
+                ExpressionKind::None,
+                TextLocation::default(),
+                self.to_owned(),
+                Ownership::MutableOwned,
+            ),
         }
     }
 }

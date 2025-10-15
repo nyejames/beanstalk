@@ -290,7 +290,7 @@ pub fn new_ast(
                         {
                             let members = match &arg.value.data_type {
                                 DataType::Args(inner_args) => inner_args,
-                                DataType::Function(_, returned_args) => &returned_args,
+                                DataType::Function(_, returned_args) => returned_args,
                                 _ => &get_builtin_methods(&arg.value.data_type),
                             };
 
@@ -412,7 +412,30 @@ pub fn new_ast(
                         }
                     }
 
-                // NEW VARIABLE DECLARATION
+                // ----------------------------
+                //     HOST FUNCTION CALLS
+                // ----------------------------
+                } else if let Some(host_func_call) = context.host_registry.get_function(name) {
+                    // Move past the name
+                    token_stream.advance();
+                    
+                    // Convert return types to Arg format
+                    let converted_returns = host_func_call.return_types
+                        .iter()
+                        .map(|x| x.to_arg())
+                        .collect::<Vec<Arg>>();
+                    
+                    ast.push(parse_function_call(
+                        token_stream,
+                        name,
+                        &context,
+                        &host_func_call.parameters,
+                        &converted_returns,
+                    )?)
+
+                // -----------------------------
+                //   NEW VARIABLE DECLARATIONS
+                // -----------------------------
                 } else {
                     let arg = new_arg(token_stream, name, &context)?;
 

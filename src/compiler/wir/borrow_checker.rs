@@ -1,11 +1,15 @@
-use crate::compiler::wir::extract::{BitSet, BorrowFactExtractor, StateMapping, may_alias};
-use crate::compiler::wir::wir_nodes::{
-    BorrowError, BorrowErrorType, WirFunction, ProgramPoint, 
-    Loan, LoanId, BorrowKind, PlaceState
+// Optimized imports - consolidated for better maintainability and reduced compilation overhead
+use crate::compiler::{
+    parsers::tokens::TextLocation,
+    wir::{
+        extract::{BitSet, BorrowFactExtractor, StateMapping, may_alias},
+        place::Place,
+        wir_nodes::{
+            BorrowError, BorrowErrorType, WirFunction, ProgramPoint, 
+            Loan, LoanId, BorrowKind, PlaceState
+        },
+    },
 };
-use crate::compiler::wir::place::Place;
-
-use crate::compiler::parsers::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 
 /// Unified borrow checker that combines liveness, loan tracking, and conflict detection
@@ -659,7 +663,7 @@ impl UnifiedBorrowChecker {
     /// Create a conflicting borrows error with helpful context
     fn create_conflicting_borrows_error_streamlined(
         &self,
-        point: ProgramPoint,
+        _point: ProgramPoint,
         loan_a: &Loan,
         loan_b: &Loan,
     ) -> BorrowError {
@@ -704,7 +708,7 @@ impl UnifiedBorrowChecker {
     /// Create a move-while-borrowed error with helpful context
     fn create_move_while_borrowed_error_streamlined(
         &self,
-        point: ProgramPoint,
+        _point: ProgramPoint,
         moved_place: Place,
         loan: &Loan,
     ) -> BorrowError {
@@ -857,7 +861,7 @@ impl UnifiedBorrowChecker {
     /// Check for multiple mutable borrows using state mapping
     fn check_multiple_mutable_borrows_at_point(
         &mut self,
-        point: ProgramPoint,
+        _point: ProgramPoint,
         events: &crate::compiler::wir::wir_nodes::Events,
         state_mapping: &StateMapping,
     ) -> Result<(), String> {
@@ -897,7 +901,7 @@ impl UnifiedBorrowChecker {
     /// Check for shared/mutable conflicts using state mapping
     fn check_shared_mutable_conflicts_at_point(
         &mut self,
-        point: ProgramPoint,
+        _point: ProgramPoint,
         events: &crate::compiler::wir::wir_nodes::Events,
         state_mapping: &StateMapping,
     ) -> Result<(), String> {
@@ -965,7 +969,7 @@ impl UnifiedBorrowChecker {
     /// Check for use after move using state mapping
     fn check_use_after_move_state_aware(
         &mut self,
-        point: ProgramPoint,
+        _point: ProgramPoint,
         events: &crate::compiler::wir::wir_nodes::Events,
         state_mapping: &StateMapping,
     ) -> Result<(), String> {
@@ -999,7 +1003,7 @@ impl UnifiedBorrowChecker {
     /// Check for move while borrowed using state mapping
     fn check_move_while_borrowed_at_point_state_aware(
         &mut self,
-        point: ProgramPoint,
+        _point: ProgramPoint,
         events: &crate::compiler::wir::wir_nodes::Events,
         state_mapping: &StateMapping,
     ) -> Result<(), String> {

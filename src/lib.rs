@@ -5,7 +5,9 @@ pub mod cli;
 mod create_new_project;
 mod dev_server;
 
-pub mod compiler_tests;
+pub mod compiler_tests {
+    pub mod test_runner;
+}
 
 // New runtime and build system modules
 pub mod runtime;

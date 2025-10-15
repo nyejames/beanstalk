@@ -1,5 +1,8 @@
-use crate::compiler::wir::wir_nodes::{Loan, LoanId, WirFunction, ProgramPoint, PlaceState, StateTransition, BorrowKind};
-use crate::compiler::wir::place::Place;
+// Consolidated imports for better organization and maintainability
+use crate::compiler::wir::{
+    place::Place,
+    wir_nodes::{Loan, LoanId, WirFunction, ProgramPoint, PlaceState, StateTransition, BorrowKind},
+};
 use std::collections::HashMap;
 
 /// State mapping for loan-to-state relationships in Beanstalk's memory model

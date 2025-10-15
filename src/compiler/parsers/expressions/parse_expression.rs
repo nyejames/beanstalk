@@ -11,7 +11,7 @@ use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::template::TemplateType;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
@@ -201,11 +201,11 @@ pub fn create_expression(
                 break;
             }
 
-            // Check if the name is a reference to another variable or function call
+            // --------------------------------------------
+            // REFERENCE OR FUNCTION CALL INSIDE EXPRESSION
+            // --------------------------------------------
             TokenKind::Symbol(ref name, ..) => {
-
                 if let Some(arg) = context.get_reference(name) {
-
                     match &arg.value.data_type {
                         DataType::Function(required_args, returns) => {
                             // Advance past the function name to position at the opening parenthesis
@@ -238,41 +238,6 @@ pub fn create_expression(
                                 });
 
                                 continue;
-
-
-                            // ------------------------------------
-                            // HOST FUNCTION CALL INSIDE EXPRESSION
-                            // ------------------------------------
-                            } else if let NodeKind::HostFunctionCall(func_name, args, returns, _module, _import_name, location) = function_call_node.kind {
-
-                                // Convert return types to Arg format
-                                let mut converted_returns = Vec::new();
-                                for return_type in returns {
-                                    converted_returns.push(Arg {
-                                        name: String::new(),
-                                        value: Expression::new(
-                                            ExpressionKind::None,
-                                            location.to_owned(),
-                                            return_type,
-                                            Ownership::MutableOwned,
-                                        ),
-                                    });
-                                }
-
-                                let func_call_expr = Expression::function_call(
-                                    func_name,
-                                    args.to_owned(),
-                                    converted_returns,
-                                    location,
-                                );
-
-                                expression.push(AstNode {
-                                    kind: NodeKind::Expression(func_call_expr),
-                                    location: function_call_node.location,
-                                    scope: context.scope_name.to_owned(),
-                                });
-
-                                continue;
                             }
                         }
 
@@ -285,14 +250,51 @@ pub fn create_expression(
                             continue; // Will have moved onto the next token already
                         }
                     }
-
-                } else {
-                    return_rule_error!(
-                        token_stream.current_location(),
-                        "Undefined variable '{}'. Variable must be declared before use.",
-                        name,
-                    )
                 }
+
+                // ------------------------------------
+                // HOST FUNCTION CALL INSIDE EXPRESSION
+                // ------------------------------------
+                if let Some(host_func_def) = context.host_registry.get_function(name) {
+
+                    // Convert return types to Arg format
+                    let converted_returns = host_func_def.return_types
+                        .iter()
+                        .map(|x| x.to_arg())
+                        .collect::<Vec<Arg>>();
+
+                    // This is a function call - parse it using the function call parser
+                    let function_call_node = parse_function_call(
+                        token_stream,
+                        name,
+                        context,
+                        &host_func_def.parameters,
+                        &converted_returns,
+                    )?;
+
+                    if let NodeKind::HostFunctionCall(func_name, expressions, _returns, _module_name, _wasm_import_name, location) = function_call_node.kind {
+                        let func_call_expr = Expression::function_call(
+                            func_name.to_owned(),
+                            expressions.to_owned(),
+                            converted_returns,
+                            location,
+                        );
+
+                        expression.push(AstNode {
+                            kind: NodeKind::Expression(func_call_expr),
+                            location: TextLocation::default(),
+                            scope: context.scope_name.to_owned(),
+                        });
+
+                        continue;
+                    }
+                }
+
+                return_rule_error!(
+                    token_stream.current_location(),
+                    "Undefined variable '{}'. Variable must be declared before use.",
+                    name,
+                )
             }
 
             // Check if is a literal

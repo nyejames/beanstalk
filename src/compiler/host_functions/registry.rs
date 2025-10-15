@@ -80,7 +80,10 @@ impl HostFunctionDef {
     /// Get the function signature as a DataType::Function for compatibility
     pub fn as_function_type(&self) -> DataType {
         // Convert return_types Vec<DataType> to Vec<Arg>
-        let return_args: Vec<Arg> = self.return_types.iter().enumerate()
+        let return_args: Vec<Arg> = self
+            .return_types
+            .iter()
+            .enumerate()
             .map(|(i, data_type)| Arg {
                 name: format!("return_{}", i),
                 value: Expression::new(
@@ -91,7 +94,7 @@ impl HostFunctionDef {
                 ),
             })
             .collect();
-        
+
         DataType::Function(self.parameters.clone(), return_args)
     }
 }

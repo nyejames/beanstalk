@@ -157,8 +157,8 @@ pub fn new_arg(
         _ => {
             return_syntax_error!(
                 token_stream.current_location(),
-                "Invalid operator: {:?} after variable: {}",
-                token_stream.tokens[token_stream.index],
+                "Invalid operator: {:?} after new variable declaration: '{}'. Expect a type or assignment operator.",
+                token_stream.tokens[token_stream.index].kind,
                 name
             )
         }

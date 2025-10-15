@@ -20,30 +20,47 @@
 //! - **Function Calls**: AST calls → WIR call statements with argument lowering
 //! - **Control Flow**: AST if/else → WIR blocks with structured terminators
 //!
+//! ## Code Organization
+//!
+//! This module has been optimized for maintainability:
+//! - **Consolidated Imports**: Related imports are grouped together for clarity
+//! - **Optimized Dependencies**: Unused imports have been removed to reduce compilation overhead
+//! - **Clean Structure**: Import statements follow a consistent pattern for better readability
+//!
 //! ## Usage
 //!
 //! ```rust
-//! let mut context = WirTransformContext::new();
-//! let wir = context.transform_ast_to_wir(&ast)?;
+//! let wir = ast_to_wir(ast)?;
 //! ```
 
 // Re-export all WIR components from sibling modules
 pub use crate::compiler::wir::place::*;
 pub use crate::compiler::wir::wir_nodes::*;
 
-use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler::parsers::statements::branching::MatchArm;
-use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
+// Core compiler imports - consolidated for clarity
+use crate::compiler::{
+    compiler_errors::CompileError,
+    datatypes::DataType,
+    parsers::{
+        ast_nodes::{Arg, AstNode, NodeKind},
+        build_ast::AstBlock,
+        expressions::expression::{Expression, ExpressionKind},
+        statements::{
+            branching::MatchArm,
+            create_template_node::Template,
+        },
+        tokens::{TextLocation, VarVisibility},
+    },
+};
+
+// Error handling macros - grouped for maintainability
 use crate::{
     ir_log, return_compiler_error, return_rule_error, return_type_error,
     return_type_mismatch_error, return_undefined_function_error, return_undefined_variable_error,
     return_unimplemented_feature_error,
 };
+
+// Standard library imports
 use std::collections::HashMap;
 
 /// Run borrow checking on all functions in the WIR
@@ -977,7 +994,7 @@ impl WirTransformContext {
     pub fn create_struct_place(
         &mut self,
         struct_type: &DataType,
-        location: &TextLocation,
+        _location: &TextLocation,
     ) -> Result<Place, CompileError> {
         match struct_type {
             DataType::Struct(fields, _) => {
@@ -1125,7 +1142,7 @@ impl WirTransformContext {
                 let mut current_offset = 0u32;
                 let mut field_index = 0u32;
 
-                for (idx, field) in fields.iter().enumerate() {
+                for (_idx, field) in fields.iter().enumerate() {
                     if field.name == field_name {
                         // Found the field, create projection
                         let field_size = self.calculate_field_size(&field.value.data_type)?;
@@ -3284,7 +3301,6 @@ fn infer_binary_operation_result_type(
 
 /// Extract DataType from an operand (simplified approach)
 fn operand_to_datatype(operand: &Operand) -> DataType {
-    use crate::compiler::datatypes::Ownership;
 
     match operand {
         Operand::Constant(constant) => {
