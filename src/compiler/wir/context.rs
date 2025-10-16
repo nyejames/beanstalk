@@ -167,6 +167,35 @@ pub struct WirTransformContext {
 }
 
 impl WirTransformContext {
+    /// Create a place for a variable and register it in the current scope
+    pub fn create_place_for_variable(&mut self, name: String) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
+        use crate::compiler::datatypes::DataType;
+        
+        // Create a new place for the variable (default to String type for now)
+        let place = self.place_manager.allocate_local(&DataType::String);
+        
+        // Register the variable in the current scope
+        self.register_variable(name, place.clone());
+        
+        Ok(place)
+    }
+    
+    /// Get the place for an existing variable
+    pub fn get_place_for_variable(&self, name: &str) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
+        match self.lookup_variable(name) {
+            Some(place) => Ok(place.clone()),
+            None => {
+                use crate::compiler::compiler_errors::CompileError;
+                use crate::compiler::parsers::tokens::TextLocation;
+                Err(CompileError::new_rule_error(
+                    format!("Undefined variable '{}'", name),
+                    TextLocation::default()
+                ))
+            }
+        }
+    }
+    
+
     /// Create a new transformation context with default settings
     ///
     /// Initializes all tracking structures and sets up the host function compatibility

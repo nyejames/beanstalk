@@ -29,6 +29,8 @@ pub fn borrow_check_pipeline(ast: AstBlock) -> Result<WIR, Vec<CompileError>> {
 
     // Step 2: Run state-aware borrow checking on all functions
     let mut all_errors = Vec::new();
+    
+    println!("DEBUG: WIR has {} functions", wir.functions.len());
 
     for function in &wir.functions {
         match run_state_aware_borrow_checker(function) {
@@ -52,6 +54,11 @@ pub fn borrow_check_pipeline(ast: AstBlock) -> Result<WIR, Vec<CompileError>> {
 /// 3. Run unified analysis with state-based conflict detection
 /// 4. Convert borrow errors to compile errors with source locations
 fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<CompileError>> {
+    // Debug: Log that borrow checking is being called
+    println!("DEBUG: Running borrow checker on function '{}'", function.name);
+    println!("DEBUG: Function has {} blocks", function.blocks.len());
+    println!("DEBUG: Function has {} events", function.events.len());
+    println!("DEBUG: Function has {} loans", function.loans.len());
     // Step 1: Extract loans and build gen/kill sets with state mapping
     let (fact_extractor, state_mapping) = BorrowFactExtractor::from_function_with_states(function)
         .map_err(|e| {

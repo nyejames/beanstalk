@@ -12,12 +12,12 @@ pub use crate::compiler::wir::wir_nodes::*;
 use crate::compiler::wir::context::WirTransformContext;
 
 // Import statement functions from statements module
-use crate::compiler::wir::statements::transform_ast_node_to_wir;
+
 
 // Core compiler imports - consolidated for clarity
 use crate::compiler::{
     compiler_errors::CompileError,
-    parsers::{build_ast::AstBlock, tokens::TextLocation},
+    parsers::{build_ast::AstBlock, tokens::TextLocation, ast_nodes::AstNode},
 };
 use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking;
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
@@ -63,19 +63,143 @@ pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
     let mut context = WirTransformContext::new();
     let mut wir = WIR::new();
 
-    // Transform each AST node to WIR
-    for node in &ast.ast {
-        // For now, just transform all nodes as statements
-        let _statements = transform_ast_node_to_wir(node, &mut context)?;
-        // TODO: Handle function definitions and other top-level constructs properly
-        // This is a placeholder implementation - full AST to WIR transformation
-        // will be implemented when the AST structure is better understood
-    }
+    // Create a main function to contain all top-level statements
+    let main_function = create_main_function_from_ast(&ast, &mut context)?;
+    wir.add_function(main_function);
 
     // Run borrow checking on the WIR
     run_borrow_checking_on_wir(&mut wir)?;
 
     Ok(wir)
+}
+
+/// Create a main function containing all top-level AST statements
+fn create_main_function_from_ast(ast: &AstBlock, context: &mut WirTransformContext) -> Result<WirFunction, CompileError> {
+    use crate::compiler::wir::wir_nodes::{WirFunction, WirBlock, Terminator};
+    use crate::compiler::wir::place::WasmType;
+    
+    // Create the main function
+    let mut main_function = WirFunction::new(
+        0, // function ID
+        "main".to_string(),
+        vec![], // no parameters
+        vec![], // no return types for now
+        vec![], // no return args for now
+    );
+    
+    // Create a single basic block for all statements
+    let mut main_block = WirBlock::new(0);
+    let mut statements = Vec::new();
+    
+    // Transform each AST node to WIR statements
+    for node in &ast.ast {
+        let node_statements = transform_ast_node_to_wir(node, context)?;
+        statements.extend(node_statements);
+    }
+    
+    // Add all statements to the block
+    main_block.statements = statements;
+    
+    // Add a return terminator
+    main_block.terminator = Terminator::Return { 
+        values: vec![] 
+    };
+    
+    // Add the block to the function
+    main_function.blocks = vec![main_block];
+    
+    Ok(main_function)
+}
+
+/// Transform a single AST node to WIR statements
+fn transform_ast_node_to_wir(node: &AstNode, context: &mut WirTransformContext) -> Result<Vec<Statement>, CompileError> {
+    use crate::compiler::parsers::ast_nodes::NodeKind;
+    use crate::compiler::wir::wir_nodes::{Statement, Rvalue, Operand, BorrowKind, Constant};
+    use crate::compiler::wir::place::Place;
+    
+    match &node.kind {
+        NodeKind::Declaration(var_name, expression, _visibility) => {
+            // Create a place for the variable
+            let var_place = context.create_place_for_variable(var_name.clone())?;
+            
+            // For now, create a simple assignment
+            // This is a minimal implementation - full expression handling will be added later
+            let rvalue = match &expression.kind {
+                crate::compiler::parsers::expressions::expression::ExpressionKind::StringSlice(s) => {
+                    // Create a string constant
+                    Rvalue::Use(Operand::Constant(Constant::String(s.clone())))
+                },
+                crate::compiler::parsers::expressions::expression::ExpressionKind::Int(i) => {
+                    Rvalue::Use(Operand::Constant(Constant::I32(*i as i32)))
+                },
+                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_ref) => {
+                    // This is a reference to another variable - create a borrow
+                    let source_place = context.get_place_for_variable(var_ref)?;
+                    Rvalue::Ref { 
+                        place: source_place, 
+                        borrow_kind: BorrowKind::Shared // Default to shared borrow
+                    }
+                },
+                _ => {
+                    // For other expression types, create a placeholder
+                    Rvalue::Use(Operand::Constant(Constant::I32(0)))
+                }
+            };
+            
+            Ok(vec![Statement::Assign { 
+                place: var_place, 
+                rvalue 
+            }])
+        },
+        
+        NodeKind::Mutation(var_name, expression) => {
+            // Get the existing place for the variable
+            let var_place = context.get_place_for_variable(var_name)?;
+            
+            // Handle mutable assignment
+            let rvalue = match &expression.kind {
+                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_ref) => {
+                    let source_place = context.get_place_for_variable(var_ref)?;
+                    // Check if this is a mutable assignment (x ~= y)
+                    // For now, assume mutable if it's a mutation
+                    Rvalue::Ref { 
+                        place: source_place, 
+                        borrow_kind: BorrowKind::Mut 
+                    }
+                },
+                _ => {
+                    // For other types, create a simple use
+                    Rvalue::Use(Operand::Constant(Constant::I32(0)))
+                }
+            };
+            
+            Ok(vec![Statement::Assign { 
+                place: var_place, 
+                rvalue 
+            }])
+        },
+        
+        NodeKind::Expression(expr) => {
+            // Handle standalone expressions
+            match &expr.kind {
+                crate::compiler::parsers::expressions::expression::ExpressionKind::Template(_template) => {
+                    // For templates, we might need to create temporary variables
+                    // For now, just create a no-op
+                    Ok(vec![])
+                },
+                _ => {
+                    // For other expressions, create a no-op for now
+                    Ok(vec![])
+                }
+            }
+        },
+        
+        _ => {
+            // For other node types, return empty statements for now
+            // This allows the transformation to proceed without failing
+            Ok(vec![])
+        }
+    }
 }
 
 /// Run borrow checking on all functions in the WIR
