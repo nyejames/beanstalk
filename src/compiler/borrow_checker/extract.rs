@@ -3,6 +3,7 @@ use crate::compiler::wir::{
     place::Place,
     wir_nodes::{BorrowKind, Loan, LoanId, PlaceState, ProgramPoint, StateTransition, WirFunction},
 };
+use crate::borrow_log;
 use std::collections::HashMap;
 
 /// State mapping for loan-to-state relationships in Beanstalk's memory model
@@ -651,12 +652,12 @@ impl BorrowFactExtractor {
 
         // Log loan generation for debugging
         if self.loan_count > 0 {
-            println!(
+            borrow_log!(
                 "Generated {} loans for function '{}'",
                 self.loan_count, function.name
             );
             for (i, loan) in self.loans.iter().enumerate() {
-                println!(
+                borrow_log!(
                     "  Loan {}: {:?} borrow of {:?} at {:?}",
                     i, loan.kind, loan.owner, loan.origin_stmt
                 );
@@ -744,12 +745,12 @@ impl BorrowFactExtractor {
             let count = gen_set.count_ones();
             if count > 0 {
                 total_gen_bits += count;
-                println!("Gen set at {}: {} loans starting", program_point, count);
+                borrow_log!("Gen set at {}: {} loans starting", program_point, count);
             }
         }
 
         if total_gen_bits > 0 {
-            println!("Total gen set bits: {}", total_gen_bits);
+            borrow_log!("Total gen set bits: {}", total_gen_bits);
         }
 
         Ok(())

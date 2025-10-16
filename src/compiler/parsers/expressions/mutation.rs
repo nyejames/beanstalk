@@ -38,7 +38,7 @@ pub fn handle_mutation(
                 create_expression(token_stream, context, &mut expected_type, ownership, false)?;
 
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.name.to_owned(), new_value),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), new_value, false),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
@@ -79,7 +79,7 @@ pub fn handle_mutation(
             );
 
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.name.to_owned(), addition_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), addition_expr, false),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
@@ -120,7 +120,7 @@ pub fn handle_mutation(
             );
 
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.name.to_owned(), subtraction_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), subtraction_expr, false),
                 location: location.to_owned(),
                 scope: context.scope_name.to_owned(),
             })
@@ -161,7 +161,7 @@ pub fn handle_mutation(
             );
 
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.name.to_owned(), multiplication_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), multiplication_expr, false),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })
@@ -202,7 +202,7 @@ pub fn handle_mutation(
             );
 
             Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.name.to_owned(), division_expr),
+                kind: NodeKind::Mutation(variable_arg.name.to_owned(), division_expr, false),
                 location: location.clone(),
                 scope: context.scope_name.to_owned(),
             })

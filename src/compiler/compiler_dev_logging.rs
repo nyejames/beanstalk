@@ -35,7 +35,7 @@ macro_rules! timer_log {
 
 // AST LOGGING MACROS
 #[macro_export]
-#[cfg(feature = "verbose_ast_logging")]
+#[cfg(feature = "show_ast")]
 macro_rules! ast_log {
     ($($arg:tt)*) => {
         eprintln!($($arg)*);
@@ -43,7 +43,7 @@ macro_rules! ast_log {
 }
 
 #[macro_export]
-#[cfg(not(feature = "verbose_ast_logging"))]
+#[cfg(not(feature = "show_ast"))]
 macro_rules! ast_log {
     ($($arg:tt)*) => {
         // Nothing
@@ -52,7 +52,7 @@ macro_rules! ast_log {
 
 // EVAL LOGGING MACROS
 #[macro_export]
-#[cfg(feature = "verbose_eval_logging")]
+#[cfg(feature = "show_eval")]
 macro_rules! eval_log {
     ($($arg:tt)*) => {
         eprintln!($($arg)*);
@@ -60,7 +60,7 @@ macro_rules! eval_log {
 }
 
 #[macro_export]
-#[cfg(not(feature = "verbose_eval_logging"))]
+#[cfg(not(feature = "show_eval"))]
 macro_rules! eval_log {
     ($($arg:tt)*) => {
         // Nothing
@@ -69,7 +69,7 @@ macro_rules! eval_log {
 
 // IR LOGGING MACROS
 #[macro_export]
-#[cfg(feature = "verbose_ir_logging")]
+#[cfg(feature = "show_ir")]
 macro_rules! ir_log {
     ($($arg:tt)*) => {
         eprintln!($($arg)*);
@@ -77,7 +77,7 @@ macro_rules! ir_log {
 }
 
 #[macro_export]
-#[cfg(not(feature = "verbose_ir_logging"))]
+#[cfg(not(feature = "show_ir"))]
 macro_rules! ir_log {
     ($($arg:tt)*) => {
         // Nothing
@@ -86,7 +86,7 @@ macro_rules! ir_log {
 
 // CODEGEN LOGGING MACROS
 #[macro_export]
-#[cfg(feature = "verbose_codegen_logging")]
+#[cfg(feature = "show_codegen")]
 macro_rules! codegen_log {
     ($($arg:tt)*) => {
         eprintln!($($arg)*);
@@ -94,8 +94,42 @@ macro_rules! codegen_log {
 }
 
 #[macro_export]
-#[cfg(not(feature = "verbose_codegen_logging"))]
+#[cfg(not(feature = "show_codegen"))]
 macro_rules! codegen_log {
+    ($($arg:tt)*) => {
+        // Nothing
+    };
+}
+
+// WIR LOGGING MACROS
+#[macro_export]
+#[cfg(feature = "show_wir")]
+macro_rules! wir_log {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "show_wir"))]
+macro_rules! wir_log {
+    ($($arg:tt)*) => {
+        // Nothing
+    };
+}
+
+// BORROW CHECKER LOGGING MACROS
+#[macro_export]
+#[cfg(feature = "show_borrow_checker")]
+macro_rules! borrow_log {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "show_borrow_checker"))]
+macro_rules! borrow_log {
     ($($arg:tt)*) => {
         // Nothing
     };

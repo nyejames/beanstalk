@@ -11,7 +11,7 @@ use crate::compiler::wir::context::WirTransformContext;
 use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
 
 // Import WIR types
-use crate::compiler::wir::wir_nodes::{Operand, Statement};
+use crate::compiler::wir::wir_nodes::{BorrowKind, Operand, Rvalue, Statement};
 
 // Core compiler imports
 use crate::compiler::{
@@ -64,8 +64,8 @@ pub fn transform_ast_node_to_wir(
         NodeKind::Declaration(name, value, _) => {
             ast_declaration_to_wir(name, value, &node.location, context)
         }
-        NodeKind::Mutation(name, value) => {
-            ast_mutation_to_wir(name, value, &node.location, context)
+        NodeKind::Mutation(name, value, is_mutable) => {
+            ast_mutation_to_wir(name, value, *is_mutable, &node.location, context)
         }
         NodeKind::FunctionCall(name, args, _, _) => {
             ast_function_call_to_wir(name, args, &node.location, context)
@@ -142,6 +142,7 @@ fn ast_declaration_to_wir(
 fn ast_mutation_to_wir(
     name: &str,
     value: &Expression,
+    is_mutable: bool,
     location: &TextLocation,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
@@ -155,9 +156,64 @@ fn ast_mutation_to_wir(
         })?
         .clone();
 
-    // Convert the value expression to an rvalue
-    let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context)?;
-    statements.extend(expr_statements);
+    // Handle mutable assignments (~=) vs regular assignments (=)
+    let rvalue = if is_mutable {
+        // For mutable assignments (~=), check if the value is a variable reference
+        // If so, create a mutable borrow; otherwise, use the expression value
+        match &value.kind {
+            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_name) => {
+                // This is a mutable borrow: x ~= y
+                let source_place = context
+                    .lookup_variable(var_name)
+                    .ok_or_else(|| {
+                        CompileError::new_rule_error(
+                            format!("Undefined variable '{}'", var_name),
+                            location.clone(),
+                        )
+                    })?
+                    .clone();
+                
+                Rvalue::Ref {
+                    place: source_place,
+                    borrow_kind: BorrowKind::Mut,
+                }
+            }
+            _ => {
+                // For non-reference expressions, convert normally
+                let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context)?;
+                statements.extend(expr_statements);
+                rvalue
+            }
+        }
+    } else {
+        // For regular assignments (=), check if the value is a variable reference
+        // If so, create a shared borrow; otherwise, use the expression value
+        match &value.kind {
+            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_name) => {
+                // This is a shared borrow: x = y
+                let source_place = context
+                    .lookup_variable(var_name)
+                    .ok_or_else(|| {
+                        CompileError::new_rule_error(
+                            format!("Undefined variable '{}'", var_name),
+                            location.clone(),
+                        )
+                    })?
+                    .clone();
+                
+                Rvalue::Ref {
+                    place: source_place,
+                    borrow_kind: BorrowKind::Shared,
+                }
+            }
+            _ => {
+                // For non-reference expressions, convert normally
+                let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context)?;
+                statements.extend(expr_statements);
+                rvalue
+            }
+        }
+    };
 
     // Create assignment statement
     statements.push(Statement::Assign { place, rvalue });

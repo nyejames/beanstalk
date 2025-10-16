@@ -22,7 +22,7 @@ use crate::compiler::{
 use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking;
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 // Error handling macros - grouped for maintainability
-use crate::ir_log;
+use crate::{ir_log, wir_log};
 
 /// Main entry point: Transform AST to WIR with borrow checking
 ///
@@ -78,6 +78,8 @@ fn create_main_function_from_ast(ast: &AstBlock, context: &mut WirTransformConte
     use crate::compiler::wir::wir_nodes::{WirFunction, WirBlock, Terminator};
     use crate::compiler::wir::place::WasmType;
     
+    wir_log!("create_main_function_from_ast called with {} AST nodes", ast.ast.len());
+    
     // Create the main function
     let mut main_function = WirFunction::new(
         0, // function ID
@@ -92,8 +94,10 @@ fn create_main_function_from_ast(ast: &AstBlock, context: &mut WirTransformConte
     let mut statements = Vec::new();
     
     // Transform each AST node to WIR statements
-    for node in &ast.ast {
+    for (i, node) in ast.ast.iter().enumerate() {
+        wir_log!("Processing AST node {}: {:?}", i, node.kind);
         let node_statements = transform_ast_node_to_wir(node, context)?;
+        wir_log!("Generated {} WIR statements for node {}", node_statements.len(), i);
         statements.extend(node_statements);
     }
     
@@ -135,9 +139,22 @@ fn transform_ast_node_to_wir(node: &AstNode, context: &mut WirTransformContext) 
                 crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_ref) => {
                     // This is a reference to another variable - create a borrow
                     let source_place = context.get_place_for_variable(var_ref)?;
+                    
+                    // Check the ownership to determine borrow kind
+                    let borrow_kind = match &expression.ownership {
+                        crate::compiler::datatypes::Ownership::MutableReference => {
+                            wir_log!("Creating mutable borrow for declaration '{}' with MutableReference ownership", var_name);
+                            BorrowKind::Mut
+                        },
+                        _ => {
+            wir_log!("Creating shared borrow for declaration '{}' with {:?} ownership", var_name, expression.ownership);
+                            BorrowKind::Shared
+                        }
+                    };
+                    
                     Rvalue::Ref { 
                         place: source_place, 
-                        borrow_kind: BorrowKind::Shared // Default to shared borrow
+                        borrow_kind
                     }
                 },
                 _ => {
@@ -152,22 +169,34 @@ fn transform_ast_node_to_wir(node: &AstNode, context: &mut WirTransformContext) 
             }])
         },
         
-        NodeKind::Mutation(var_name, expression) => {
+        NodeKind::Mutation(var_name, expression, is_mutable) => {
             // Get the existing place for the variable
             let var_place = context.get_place_for_variable(var_name)?;
             
-            // Handle mutable assignment
+            // Debug logging
+            wir_log!("Processing mutation for '{}', is_mutable: {}", var_name, is_mutable);
+            wir_log!("Expression kind: {:?}", expression.kind);
+            
+            // Handle assignment based on mutability flag
             let rvalue = match &expression.kind {
                 crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_ref) => {
                     let source_place = context.get_place_for_variable(var_ref)?;
-                    // Check if this is a mutable assignment (x ~= y)
-                    // For now, assume mutable if it's a mutation
+                    // Use the is_mutable flag to determine borrow kind
+                    let borrow_kind = if *is_mutable {
+                        wir_log!("Creating mutable borrow for '{}' ~= '{}'", var_name, var_ref);
+                        BorrowKind::Mut  // x ~= y (mutable assignment)
+                    } else {
+                        wir_log!("Creating shared borrow for '{}' = '{}'", var_name, var_ref);
+                        BorrowKind::Shared  // x = y (shared assignment)
+                    };
+                    
                     Rvalue::Ref { 
                         place: source_place, 
-                        borrow_kind: BorrowKind::Mut 
+                        borrow_kind 
                     }
                 },
                 _ => {
+                    wir_log!("Non-reference expression for '{}', expression kind: {:?}", var_name, expression.kind);
                     // For other types, create a simple use
                     Rvalue::Use(Operand::Constant(Constant::I32(0)))
                 }

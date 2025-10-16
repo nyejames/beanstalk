@@ -8,7 +8,9 @@ use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
-use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler::parsers::expressions::parse_expression::{
+    create_expression, create_multiple_expressions,
+};
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
@@ -298,13 +300,15 @@ pub fn new_ast(
                         | TokenKind::DatatypeBool
                         | TokenKind::DatatypeString
 
-                        // Mutable token after variable reference - this is invalid (shadowing attempt)
+                        // Mutable token after variable reference - this is an error for reassignment
                         | TokenKind::Mutable => {
-                            // Look ahead to see if this is ~= (an invalid reassignment attempt)
+                            // Look ahead to see if this is ~= (mutable assignment)
                             if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
-                                return_rule_error!(
+                                // This is invalid: var ~= value where var already exists
+                                // ~= should only be used for initial declarations, not reassignments
+                                return_syntax_error!(
                                     token_stream.current_location(),
-                                    "Cannot use '~=' for reassignment of variable '{}'. Use '~=' only for initial mutable variable declarations. To mutate this variable, use '=' instead",
+                                    "Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.",
                                     name
                                 );
                             } else {
@@ -386,7 +390,11 @@ pub fn new_ast(
                     }
 
                     ast.push(AstNode {
-                        kind: NodeKind::Declaration(name.to_owned(), arg.value.to_owned(), visibility),
+                        kind: NodeKind::Declaration(
+                            name.to_owned(),
+                            arg.value.to_owned(),
+                            visibility,
+                        ),
                         location: token_stream.current_location(),
                         scope: context.scope_name.to_owned(),
                     });
@@ -521,7 +529,12 @@ pub fn new_ast(
     ))
 }
 
-fn check_for_dot_access(token_stream: &mut TokenContext, arg: &Arg, context: &ScopeContext, ast: &mut Vec<AstNode>) -> Result<(), CompileError> {
+fn check_for_dot_access(
+    token_stream: &mut TokenContext,
+    arg: &Arg,
+    context: &ScopeContext,
+    ast: &mut Vec<AstNode>,
+) -> Result<(), CompileError> {
     // Name of variable, with any accesses added to the path
     let mut scope = context.scope_name.to_owned();
 
@@ -533,9 +546,7 @@ fn check_for_dot_access(token_stream: &mut TokenContext, arg: &Arg, context: &Sc
         // Currently, there is no just integer access.
         // Only properties or methods are accessed on structs and collections.
         // Collections have a .get() method for accessing elements, no [] syntax.
-        if let TokenKind::Symbol(name, ..) =
-            token_stream.current_token_kind().to_owned()
-        {
+        if let TokenKind::Symbol(name, ..) = token_stream.current_token_kind().to_owned() {
             let members = match &arg.value.data_type {
                 DataType::Args(inner_args) => inner_args,
                 DataType::Function(_, returned_args) => returned_args,
@@ -555,11 +566,11 @@ fn check_for_dot_access(token_stream: &mut TokenContext, arg: &Arg, context: &Sc
             let access = match members.iter().find(|member| member.name == *name) {
                 Some(access) => access,
                 None => return_rule_error!(
-                                    token_stream.current_location(),
-                                    "Can't find property or method '{}' inside '{}'",
-                                    name,
-                                    arg.name
-                                ),
+                    token_stream.current_location(),
+                    "Can't find property or method '{}' inside '{}'",
+                    name,
+                    arg.name
+                ),
             };
 
             // Add the name to the scope
@@ -571,8 +582,7 @@ fn check_for_dot_access(token_stream: &mut TokenContext, arg: &Arg, context: &Sc
             // ----------------------------
             //        METHOD CALLS
             // ----------------------------
-            if let DataType::Function(required_arguments, returned_types) =
-                &access.value.data_type
+            if let DataType::Function(required_arguments, returned_types) = &access.value.data_type
             {
                 ast.push(parse_function_call(
                     token_stream,
@@ -584,10 +594,10 @@ fn check_for_dot_access(token_stream: &mut TokenContext, arg: &Arg, context: &Sc
             }
         } else {
             return_rule_error!(
-                                token_stream.current_location(),
-                                "Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.",
-                                token_stream.current_token_kind()
-                            )
+                token_stream.current_location(),
+                "Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.",
+                token_stream.current_token_kind()
+            )
         }
     }
 

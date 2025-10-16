@@ -868,9 +868,32 @@ impl UnifiedBorrowChecker {
         for loan_id in &events.start_loans {
             if let Some(loan) = self.loans.iter().find(|l| l.id == *loan_id) {
                 if loan.kind == BorrowKind::Mut {
-                    // Check if owner already has mutable borrows
-                    let current_state = state_mapping.get_place_state(&loan.owner);
-                    if current_state == PlaceState::Borrowed {
+                    // Check if there are already other mutable loans on the same place
+                    // We need to check for existing loans that alias with this place
+                    let mut has_conflicting_mutable_borrow = false;
+                    
+                    for other_loan in &self.loans {
+                        // Skip the current loan
+                        if other_loan.id == loan.id {
+                            continue;
+                        }
+                        
+                        // Check if the other loan is mutable and aliases with this place
+                        if other_loan.kind == BorrowKind::Mut && may_alias(&loan.owner, &other_loan.owner) {
+                            // Check if the other loan is still active
+                            if let Some(other_loan_ids) = state_mapping.place_to_loans.get(&other_loan.owner) {
+                                if other_loan_ids.contains(&other_loan.id) {
+                                    let other_state = state_mapping.loan_to_state.get(&other_loan.id);
+                                    if other_state == Some(&PlaceState::Borrowed) {
+                                        has_conflicting_mutable_borrow = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if has_conflicting_mutable_borrow {
                         let error = BorrowError {
                             error_type: BorrowErrorType::MultipleMutableBorrows {
                                 place: loan.owner.clone(),

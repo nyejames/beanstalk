@@ -77,7 +77,7 @@ pub enum NodeKind {
     Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
 
     // Mutation of existing mutable variables
-    Mutation(String, Expression), // Variable name, New value
+    Mutation(String, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
 
     // An actual value
     Expression(Expression),
@@ -107,7 +107,7 @@ impl AstNode {
         match &self.kind {
             NodeKind::Declaration(_, value, ..)
             | NodeKind::Expression(value, ..)
-            | NodeKind::Mutation(_, value) => Ok(value.to_owned()),
+            | NodeKind::Mutation(_, value, _) => Ok(value.to_owned()),
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(
                     name.to_owned(),
