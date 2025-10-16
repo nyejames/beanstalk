@@ -415,7 +415,7 @@ pub fn create_expression(
                     context.scope_name.to_owned(),
                     expression,
                     &mut DataType::Range,
-                    ownership.get_reference(),
+                    &ownership.get_reference(),
                 );
             }
 
@@ -494,7 +494,7 @@ pub fn create_expression(
                             )
                         }
 
-                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type, ownership.to_owned());
+                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type, ownership);
                     }
 
                     // IS
@@ -583,7 +583,7 @@ pub fn create_expression(
         context.scope_name.to_owned(),
         expression,
         data_type,
-        ownership.to_owned(),
+        ownership,
     )
 }
 

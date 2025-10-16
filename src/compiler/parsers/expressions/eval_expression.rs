@@ -83,7 +83,7 @@ pub fn evaluate_expression(
     scope: PathBuf,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
-    mut ownership: Ownership,
+    ownership: &Ownership,
 ) -> Result<Expression, CompileError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
@@ -164,8 +164,10 @@ pub fn evaluate_expression(
 
         if let ExpressionKind::Reference(..) = only_expression.kind {
             // The current type now becomes a reference (basically a safe pointer rather than a value)
-            *current_type =
-                DataType::Reference(Box::from(only_expression.data_type.to_owned()), ownership);
+            *current_type = DataType::Reference(
+                Box::from(only_expression.data_type.to_owned()),
+                ownership.to_owned(),
+            );
         }
 
         return Ok(only_expression);
@@ -173,11 +175,7 @@ pub fn evaluate_expression(
 
     // Since there is more than one value in this expression,
     // it will copy the values and become Owned if not already.
-    ownership = if ownership.is_mutable() {
-        Ownership::MutableOwned
-    } else {
-        Ownership::ImmutableOwned
-    };
+    let ownership = ownership.get_owned();
 
     match current_type {
         DataType::Template | DataType::String => {
@@ -193,11 +191,7 @@ pub fn evaluate_expression(
                 new_string += &node.get_expr()?.as_string();
             }
 
-            Ok(Expression::string_slice(
-                new_string,
-                location,
-                ownership,
-            ))
+            Ok(Expression::string_slice(new_string, location, ownership))
         }
 
         DataType::Inferred => {

@@ -12,8 +12,7 @@ use crate::compiler::{
 use std::collections::{HashMap, HashSet};
 use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtractor, StateMapping};
 
-/// Unified borrow checker that combines liveness, loan tracking, and conflict detection
-/// into a single forward traversal for ~40% performance improvement
+/// Unified borrow checker that combines liveness, loan tracking, and conflict detection.
 ///
 /// This unified approach eliminates redundant program point iteration and data structure
 /// traversal by computing all analyses in one pass:
