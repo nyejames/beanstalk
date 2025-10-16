@@ -71,7 +71,6 @@ mod compiler {
     pub mod compiler_errors;
     pub mod compiler_warnings;
     pub mod datatypes;
-    pub mod module_dependencies;
     pub mod traits;
 
     pub mod codegen {
@@ -87,7 +86,7 @@ mod compiler {
 }
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::{

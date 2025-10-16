@@ -1,6 +1,6 @@
 use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
-use crate::compiler::compiler_errors::{print_errors, print_formatted_error};
+use crate::compiler::compiler_errors::{print_compiler_messages, print_formatted_error};
 use crate::compiler_tests::test_runner::run_all_test_cases;
 use crate::{Flag, build, create_new_project, dev_server, timer_log};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
@@ -98,7 +98,7 @@ pub fn start_cli() {
                 }
                 Err(e) => {
                     e_red_ln!("Errors while building project: \n");
-                    print_errors(e);
+                    print_compiler_messages(e);
                 }
             }
         }
@@ -224,7 +224,7 @@ fn build_project(path: &Path, release_build: bool, flags: &[Flag]) {
         }
         Err(e) => {
             e_red_ln!("Errors while building project: \n");
-            print_errors(e);
+            print_compiler_messages(e);
         }
     }
 }
@@ -239,7 +239,7 @@ fn jit_project(path: &Path, flags: &[Flag]) {
         }
         Err(e) => {
             e_red_ln!("Errors while running project: \n");
-            print_errors(e);
+            print_compiler_messages(e);
         }
     }
 }
@@ -295,17 +295,17 @@ fn prompt_user_for_input(msg: &str) -> Vec<String> {
 fn print_help(commands_only: bool) {
     if !commands_only {
         grey_ln!("------------------------------------");
-        green_ln_bold!("The Beanstalk compiler!");
-        println!("Usage: cargo run <command> <args>");
+        green_ln_bold!("The Beanstalk compiler and build system!");
+        println!("Usage: <command> <args>");
     }
     green_ln_bold!("Commands:");
-    println!("  new <project name>   - Creates a new project");
-    println!(
-        "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
-    );
-    println!("  build <path>         - Builds a file");
+    //println!("  new <project name>   - Creates a new project");
+    //println!(
+    //   // "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
+    //);
+    //println!("  build <path>         - Builds a file");
     println!("  run <path>           - JITs a file");
-    println!("  release <path>       - Builds a project in release mode");
+    //println!("  release <path>       - Builds a project in release mode");
     println!(
         "  tests                - Runs the test suite"
     );

@@ -5,7 +5,7 @@
 
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
@@ -27,10 +27,13 @@ impl ProjectBuilder for NativeProjectBuilder {
         config: &Config,
         _release_build: bool,
         flags: &[Flag],
-    ) -> Result<Project, Vec<CompileError>> {
+    ) -> Result<Project, CompilerMessages> {
         // Validate configuration
         if let Err(e) = self.validate_config(config) {
-            return Err(vec![e]);
+            return Err(CompilerMessages {
+                errors: vec![e],
+                warnings: Vec::new(),
+            });
         }
 
         // Use the core build pipeline

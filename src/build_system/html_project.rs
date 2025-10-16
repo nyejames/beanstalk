@@ -4,7 +4,7 @@
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::runtime::io::js_bindings::JsBindingsGenerator;
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project};
@@ -90,10 +90,13 @@ impl ProjectBuilder for HtmlProjectBuilder {
         config: &Config,
         _release_build: bool,
         _flags: &[Flag],
-    ) -> Result<Project, Vec<CompileError>> {
+    ) -> Result<Project, CompilerMessages> {
         // Validate configuration
         if let Err(e) = self.validate_config(config) {
-            return Err(vec![e]);
+            return Err(CompilerMessages {
+                errors: vec![e],
+                warnings: Vec::new(),
+            });
         }
 
         // TODO

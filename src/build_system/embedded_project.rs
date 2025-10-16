@@ -5,7 +5,7 @@
 
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project};
 
@@ -129,10 +129,13 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
         config: &Config,
         _release_build: bool,
         flags: &[Flag],
-    ) -> Result<Project, Vec<CompileError>> {
+    ) -> Result<Project, CompilerMessages> {
         // Validate configuration
         if let Err(e) = self.validate_config(config) {
-            return Err(vec![e]);
+            return Err(CompilerMessages {
+                errors: vec![e],
+                warnings: vec![],
+            });
         }
 
         let compilation_result = core_build::compile_modules(modules, config, flags)?;

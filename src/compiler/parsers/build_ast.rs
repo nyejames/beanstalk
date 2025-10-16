@@ -9,7 +9,7 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::{
-    create_expression, create_multiple_expressions,
+    create_multiple_expressions,
 };
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::parse_function_call;

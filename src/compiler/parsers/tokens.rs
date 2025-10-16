@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
+use crate::compiler::compiler_warnings::CompilerWarning;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
@@ -158,6 +159,7 @@ pub struct TokenContext {
     pub src_path: PathBuf,
     pub index: usize,
     pub length: usize,
+    pub warnings: Vec<CompilerWarning>,
 }
 
 impl TokenContext {
@@ -168,6 +170,7 @@ impl TokenContext {
             tokens,
             index: 0,
             imports,
+            warnings: Vec::new(),
         }
     }
 

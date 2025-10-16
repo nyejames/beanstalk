@@ -5,7 +5,7 @@
 
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project};
@@ -27,10 +27,13 @@ impl ProjectBuilder for JitProjectBuilder {
         config: &Config,
         _release_build: bool,
         flags: &[Flag],
-    ) -> Result<Project, Vec<CompileError>> {
+    ) -> Result<Project, CompilerMessages> {
         // Validate configuration
         if let Err(e) = self.validate_config(config) {
-            return Err(vec![e]);
+            return Err(CompilerMessages {
+                errors: vec![e],
+                warnings: vec![],
+            });
         }
 
         // Use the core build pipeline to compile to WASM
@@ -38,16 +41,19 @@ impl ProjectBuilder for JitProjectBuilder {
 
         // Execute the WASM directly using JIT
         match execute_direct_jit(&compilation_result.wasm_bytes, &config.runtime) {
-            Ok(_) => Ok(()),
-            Err(e) => Err(vec![e]),
-        }?;
-
-        // For JIT mode, we don't create any output files
-        // Return an empty project to satisfy the interface
-        Ok(Project {
-            config: config.clone(),
-            output_files: vec![],
-        })
+            Ok(_) => {
+                // For JIT mode, we don't create any output files
+                // Return an empty project to satisfy the interface
+                Ok(Project {
+                    config: config.clone(),
+                    output_files: vec![],
+                })
+            },
+            Err(e) => Err(CompilerMessages {
+                errors: vec![e],
+                warnings: vec![],
+            }),
+        }
     }
 
     fn target_type(&self) -> &BuildTarget {

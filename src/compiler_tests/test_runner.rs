@@ -47,10 +47,10 @@ pub fn run_all_test_cases() {
                             green_ln!("✓ PASS");
                             passed_tests += 1;
                         }
-                        Err(errors) => {
+                        Err(messages) => {
                             red_ln!("✗ FAIL");
                             failed_tests += 1;
-                            for error in errors {
+                            for error in messages.errors {
                                 print_formatted_error(error);
                             }
                         }

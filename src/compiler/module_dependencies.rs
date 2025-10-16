@@ -1,8 +1,13 @@
-use crate::compiler::compiler_errors::CompileError;
+// CURRENTLY REMOVED FROM COMPILER
+// Dependency resolution will have to happen at the module level.
+// Declarations will be parsed first in the tokenizer now.
+
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
 use crate::return_rule_error;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use crate::compiler::compiler_warnings::CompilerWarning;
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
 /// and which have been permanently visited.
@@ -23,24 +28,22 @@ impl DependencyTracker {
 /// Given a list of (possibly errored) `TokenContext`
 /// builds a graph of successful ones and topologically sorts them.
 pub fn resolve_module_dependencies(
-    modules: Vec<Result<TokenContext, CompileError>>,
-) -> Result<Vec<TokenContext>, Vec<CompileError>> {
+    modules: Vec<TokenContext>,
+) -> Result<Vec<TokenContext>, CompilerMessages> {
     let mut graph: HashMap<PathBuf, TokenContext> = HashMap::with_capacity(modules.len());
     let mut errs: Vec<CompileError> = Vec::new();
+    let mut warnings: Vec<CompilerWarning> = Vec::new();
 
     // Build graph or collect errors
     for m in modules {
-        match m {
-            Ok(ctx) => {
-                graph.insert(ctx.src_path.clone(), ctx);
-            }
-            Err(e) => {
-                errs.push(e);
-            }
-        }
+        graph.insert(m.src_path.clone(), m);
     }
+
     if !errs.is_empty() {
-        return Err(errs);
+        return Err(CompilerMessages {
+            errors: errs,
+            warnings,
+        });
     }
 
     // Perform topological sort

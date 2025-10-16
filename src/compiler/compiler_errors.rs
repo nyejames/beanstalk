@@ -4,6 +4,22 @@ use colour::{
 };
 use std::path::PathBuf;
 use std::{env, fs};
+use crate::compiler::compiler_warnings::CompilerWarning;
+
+#[derive(Debug)]
+pub struct CompilerMessages {
+    pub errors: Vec<CompileError>,
+    pub warnings: Vec<CompilerWarning>,
+}
+
+impl CompilerMessages {
+    pub fn new() -> Self {
+        CompilerMessages {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct CompileError {
@@ -287,21 +303,6 @@ macro_rules! return_rule_error {
         })
     };
 }
-
-/// Returns a new CompileError INSIDE A VEC ALREADY.
-///
-/// Usage: `bail!(Path, "message", message format args)`;
-#[macro_export]
-macro_rules! return_file_errors {
-    ($path:expr, $($msg:tt)+) => {
-        return Err(vec![CompileError {
-            msg: format!($($msg)+),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::File,
-            file_path: $path.to_owned(),
-        }])
-    };
-}
 /// Returns a new CompileError
 ///
 /// Usage: `bail!(Path, "message", message format args)`;
@@ -358,12 +359,15 @@ macro_rules! return_compiler_error {
 #[macro_export]
 macro_rules! return_dev_server_error {
     ($path:expr, $($msg:tt)+) => {
-        return Err(vec![CompileError {
-            msg: format!($($msg)+),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::DevServer,
-            file_path: $path.to_owned(),
-        }])
+        return Err(CompilerMessages {
+            errors: vec![CompileError {
+                msg: format!($($msg)+),
+                location: crate::compiler::parsers::tokens::TextLocation::default(),
+                error_type: crate::compiler::compiler_errors::ErrorType::DevServer,
+                file_path: $path.to_owned(),
+            }],
+            warnings: Vec::new()
+        })
     };
 }
 
@@ -541,10 +545,19 @@ macro_rules! return_wat_err {
     };
 }
 
-pub fn print_errors(errors: Vec<CompileError>) {
-    for e in errors {
-        print_formatted_error(e);
+pub fn print_compiler_messages(messages: CompilerMessages) {
+
+    // Format and print out the messages:
+    for err in messages.errors {
+        print_formatted_error(err);
     }
+
+    // TODO
+    // Format and print out the warnings:
+    for warning in messages.warnings {
+
+    }
+
 }
 
 pub fn print_formatted_error(e: CompileError) {
@@ -578,25 +591,7 @@ pub fn print_formatted_error(e: CompileError) {
     // e_dark_yellow!("Error: ");
 
     match e.error_type {
-        // This probably won't be used for the compiler
-        // ErrorType::Suggestion => {
-        //     print!("\n( ͡° ͜ʖ ͡°) ");
-        //     dark_red_ln!("{}", relative_dir);
-        //     println!(" ( ._. ) ");
-        //     e_dark_blue_ln!("Suggestion");
-        //     e_dark_magenta!("Line ");
-        //     e_magenta_ln!("{}\n", line_number + 1);
-        // }
-        //
-        // ErrorType::Caution => {
-        //     print!("\n(ಠ_ಠ)☞  ⚠ ");
-        //     dark_red!("{}", relative_dir);
-        //     println!("⚠  ☜(■_■¬ ) ");
-        //
-        //     e_yellow_ln!("Caution");
-        //     e_dark_magenta!("Line ");
-        //     e_magenta_ln!("{}\n", line_number + 1);
-        // }
+
         ErrorType::Syntax => {
             eprint!("\n(╯°□°)╯  🔥🔥 ");
             e_dark_magenta!("{}", relative_dir);
@@ -675,3 +670,4 @@ pub fn print_formatted_error(e: CompileError) {
         (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
     red_ln!("{}", "^".repeat(length_of_underline));
 }
+

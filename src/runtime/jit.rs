@@ -23,12 +23,11 @@ pub fn execute_direct_jit_with_capture(
     config: &RuntimeConfig,
     capture_output: bool,
 ) -> Result<(), CompileError> {
-    // Create Wasmer store for JIT execution
+    // Create a Wasmer store for JIT execution
     let mut store = Store::default();
 
     // Compile WASM module
     let module = Module::new(&store, wasm_bytes).map_err(|e| {
-
 
         // Check for the specific magic header bug in Wasmer RC version
         let error_str = e.to_string();

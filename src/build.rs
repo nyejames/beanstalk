@@ -1,13 +1,13 @@
 use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenizeMode;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
-use crate::{Flag, return_file_errors, settings};
+use crate::{Flag, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -54,7 +54,7 @@ pub fn build_project_files(
     entry_path: &Path,
     release_build: bool,
     flags: &[Flag],
-) -> Result<Project, Vec<CompileError>> {
+) -> Result<Project, CompilerMessages> {
     build_project_files_with_target(entry_path, release_build, flags, None)
 }
 
@@ -84,12 +84,25 @@ pub fn build_project_files_with_target(
     release_build: bool,
     flags: &[Flag],
     target_override: Option<BuildTarget>,
-) -> Result<Project, Vec<CompileError>> {
+) -> Result<Project, CompilerMessages> {
     let _time = Instant::now();
 
     let entry_dir = match std::env::current_dir() {
         Ok(dir) => dir.join(entry_path),
-        Err(e) => return_file_errors!(entry_path, "Error getting current directory: {:?}", e),
+        Err(e) => {
+            return Err(
+                CompilerMessages {
+                    errors: vec![
+                        CompileError::file_error(
+                            &entry_path,
+                            &format!(
+                            "Error finding current directory: {:?}",
+                            e),
+                        )
+                    ],
+                warnings: Vec::new(),
+            })
+        }
     };
 
     // print_ln_bold!("Project Directory: ");
@@ -111,7 +124,10 @@ pub fn build_project_files_with_target(
         let source_code = fs::read_to_string(&entry_dir);
         match source_code {
             Ok(content) => CompileType::SingleBeanstalkFile(content),
-            Err(e) => return_file_errors!(entry_dir, "Error reading file: {:?}", e),
+            Err(e) => return Err(CompilerMessages {
+                errors: vec![CompileError::file_error(&entry_dir, &format!("Error reading file: {:?}", e))],
+                warnings: Vec::new(),
+            }),
         }
     } else {
         // Full project with a config file
@@ -121,7 +137,10 @@ pub fn build_project_files_with_target(
         let source_code = fs::read_to_string(&config_path);
         match source_code {
             Ok(content) => CompileType::MultiFile(content),
-            Err(_) => return_file_errors!(config_path, "No config file found in project directory"),
+            Err(_) => return Err(CompilerMessages {
+                errors: vec![CompileError::file_error(&config_path, "Error reading config file")],
+                warnings: Vec::new(),
+            })
         }
     };
 
@@ -136,9 +155,10 @@ pub fn build_project_files_with_target(
 
         CompileType::SingleMarkthroughFile(_code) => {
             // TODO: Handle Markthrough files in the future
-            return Err(vec![CompileError::compiler_error(
-                "Markthrough files not yet supported",
-            )]);
+            return Err(CompilerMessages {
+                errors: vec![CompileError::compiler_error("Markthrough files not yet supported")],
+                warnings: Vec::new()
+            });
         }
 
         CompileType::MultiFile(config_source_code) => {
@@ -151,13 +171,19 @@ pub fn build_project_files_with_target(
                 TokenizeMode::Normal,
             ) {
                 Ok(tokens) => tokens,
-                Err(e) => return Err(vec![e.with_file_path(config_path)]),
+                Err(e) => return Err(CompilerMessages {
+                    errors: vec![e.with_file_path(config_path.clone())],
+                    warnings: Vec::new(),
+                }),
             };
 
             // Create the host function registry
             let host_registry = match create_builtin_registry() {
                 Ok(registry) => registry,
-                Err(e) => return Err(vec![e.with_file_path(config_path.clone())]),
+                Err(e) => return Err(CompilerMessages {
+                    errors: vec![e.with_file_path(config_path.clone())],
+                    warnings: Vec::new(),
+                }),
             };
 
             let ast_context = ScopeContext::new_with_registry(
@@ -169,12 +195,18 @@ pub fn build_project_files_with_target(
 
             let config_public_vars = match new_ast(&mut tokenizer_output, ast_context, true) {
                 Ok(module) => module.public,
-                Err(e) => return Err(vec![e.with_file_path(config_path)]),
+                Err(e) => return Err(CompilerMessages {
+                    errors: vec![e.with_file_path(config_path.clone())],
+                    warnings: Vec::new(),
+                }),
             };
 
             // Parse configuration from AST
             if let Err(e) = get_config_from_ast(config_public_vars, &mut project_config) {
-                return Err(vec![e.with_file_path(config_path)]);
+                return Err(CompilerMessages {
+                    errors: vec![e.with_file_path(config_path.clone())],
+                    warnings: Vec::new(),
+                });
             }
 
             let src_dir = entry_dir.join(&project_config.src);
@@ -214,17 +246,19 @@ pub fn build_project_files_with_target(
 fn add_bst_files_to_parse(
     source_code_to_parse: &mut Vec<InputModule>,
     project_root_dir: &Path,
-) -> Result<(), Vec<CompileError>> {
+) -> Result<(), CompilerMessages> {
     // Can't just use the src_dir from config, because this might be recursively called for new subdirectories
 
     // Read all files in the src directory
     let all_dir_entries: fs::ReadDir = match fs::read_dir(project_root_dir) {
         Ok(dir) => dir,
-        Err(e) => return_file_errors!(
-            project_root_dir,
-            "Can't find any files to parse inside this directory. Might be empty? \nError: {:?}",
-            e
-        ),
+        Err(e) => return Err(CompilerMessages {
+            errors: vec![CompileError::file_error(
+                &project_root_dir,
+                &format!("Can't find any files to parse inside this directory. Might be empty? \nError: {:?}", e)
+            )],
+            warnings: Vec::new(),
+        })
     };
 
     for file in all_dir_entries {
@@ -236,11 +270,13 @@ fn add_bst_files_to_parse(
                 if file_path.extension() == Some(BEANSTALK_FILE_EXTENSION.as_ref()) {
                     let code = match fs::read_to_string(&file_path) {
                         Ok(content) => content,
-                        Err(e) => return_file_errors!(
-                            file_path,
-                            "Error reading file when adding new bst files to parse: {:?}",
-                            e
-                        ),
+                        Err(e) => return Err(CompilerMessages {
+                            errors: vec![CompileError::file_error(
+                                &file_path,
+                                &format!("Error reading file when adding new bst files to parse: {:?}", e)
+                            )],
+                            warnings: Vec::new(),
+                        })
                     };
 
                     // If code is empty, skip compiling this module
@@ -262,7 +298,13 @@ fn add_bst_files_to_parse(
                             }
                         }
                         None => {
-                            return_file_errors!(file_path, "Error getting file stem")
+                            return Err(CompilerMessages {
+                                errors: vec![CompileError::file_error(
+                                    &file_path,
+                                    "Error getting file stem"
+                                )],
+                                warnings: Vec::new(),
+                            })
                         }
                     };
 
@@ -300,11 +342,13 @@ fn add_bst_files_to_parse(
             }
 
             Err(e) => {
-                return_file_errors!(
-                    project_root_dir,
-                    "Error reading file when adding new bst files to parse: {:?}",
-                    e
-                )
+                return Err(CompilerMessages {
+                    errors: vec![CompileError::file_error(
+                        &project_root_dir,
+                        &format!("Error reading file when adding new bst files to parse: {:?}", e)
+                    )],
+                    warnings: Vec::new(),
+                })
             }
         }
     }

@@ -6,7 +6,7 @@
 // - Development vs release build configurations
 
 use crate::build_system::{embedded_project, html_project, jit, native_project};
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::{Config, ProjectType};
 use crate::{Flag, InputModule, Project};
 use std::path::Path;
@@ -46,7 +46,7 @@ pub trait ProjectBuilder {
         config: &Config,
         release_build: bool,
         flags: &[Flag],
-    ) -> Result<Project, Vec<CompileError>>;
+    ) -> Result<Project, CompilerMessages>;
 
     /// Get the build target type
     fn target_type(&self) -> &BuildTarget;

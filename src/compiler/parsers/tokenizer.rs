@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::parsers::tokens::{
     TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
 };

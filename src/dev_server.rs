@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, build, return_dev_server_error, settings};
@@ -11,7 +11,7 @@ use std::{
     net::{TcpListener, TcpStream},
 };
 
-pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), Vec<CompileError>> {
+pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), CompilerMessages> {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
@@ -47,7 +47,7 @@ fn handle_connection(
     last_modified: &mut SystemTime,
     project_config: &Config,
     flags: &[Flag],
-) -> Result<(), Vec<CompileError>> {
+) -> Result<(), CompilerMessages> {
     let buf_reader = BufReader::new(&mut stream);
 
     let dir_404 = &path
@@ -192,7 +192,7 @@ fn handle_connection(
     }
 }
 
-fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, Vec<CompileError>> {
+fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, CompilerMessages> {
     // Check if it's a file or directory
     let path_metadata = match metadata(path) {
         Ok(m) => m,
@@ -253,7 +253,7 @@ fn get_home_page_path(
     path: &Path,
     source_folder: bool,
     project_config: &Config,
-) -> Result<PathBuf, Vec<CompileError>> {
+) -> Result<PathBuf, CompilerMessages> {
     let root_src_path = if source_folder {
         PathBuf::from(&path).join(&project_config.src)
     } else {
@@ -316,7 +316,7 @@ fn get_home_page_path(
     }
 }
 
-fn get_current_dir() -> Result<PathBuf, Vec<CompileError>> {
+fn get_current_dir() -> Result<PathBuf, CompilerMessages> {
     match std::env::current_dir() {
         Ok(dir) => Ok(dir),
         Err(e) => return_dev_server_error!(
