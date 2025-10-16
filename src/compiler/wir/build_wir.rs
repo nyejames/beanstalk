@@ -224,9 +224,9 @@ fn transform_ast_node_to_wir(node: &AstNode, context: &mut WirTransformContext) 
         },
         
         _ => {
-            // For other node types, return empty statements for now
-            // This allows the transformation to proceed without failing
-            Ok(vec![])
+            // For other node types, delegate to the statements module
+            // This ensures all node types are properly handled
+            crate::compiler::wir::statements::transform_ast_node_to_wir(node, context)
         }
     }
 }

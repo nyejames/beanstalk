@@ -105,7 +105,7 @@ pub struct StructInitializationTracker {
 ///
 /// This is the central context structure that maintains all state during AST-to-WIR
 /// transformation. It manages variable scoping, place allocation, temporary variables,
-/// and integrates with the host function system for WASI/WASIX compatibility.
+/// and integrates with the WASIX host function system.
 ///
 /// ## Key Responsibilities
 ///
@@ -141,13 +141,7 @@ pub struct WirTransformContext {
         std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
     /// WASIX function registry for WASIX import mapping
     wasix_registry: crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry,
-    /// WASI compatibility layer for automatic migration
-    wasi_compatibility: crate::compiler::host_functions::wasi_compatibility::WasiCompatibilityLayer,
-    /// Migration diagnostics for WASI usage detection and guidance
-    migration_diagnostics:
-        crate::compiler::host_functions::migration_diagnostics::MigrationDiagnostics,
-    /// Fallback mechanisms for runtime compatibility
-    fallback_mechanisms: crate::compiler::host_functions::fallback_mechanisms::FallbackMechanisms,
+
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
 
@@ -198,32 +192,21 @@ impl WirTransformContext {
 
     /// Create a new transformation context with default settings
     ///
-    /// Initializes all tracking structures and sets up the host function compatibility
-    /// layers for WASI/WASIX integration. The context starts with a single global scope
-    /// and is ready to begin AST-to-WIR transformation.
+    /// Initializes all tracking structures and sets up the WASIX host function registry.
+    /// The context starts with a single global scope and is ready to begin AST-to-WIR
+    /// transformation.
     ///
     /// # Returns
     ///
     /// A new `WirTransformContext` ready for transformation with:
     /// - Empty variable scopes (with one global scope)
     /// - Initialized place manager for memory allocation
-    /// - WASIX registry and WASI compatibility layer configured
+    /// - WASIX registry configured for host function imports
     /// - All tracking structures reset to initial state
     pub fn new() -> Self {
-        use crate::compiler::host_functions::fallback_mechanisms::create_fallback_mechanisms;
-        use crate::compiler::host_functions::migration_diagnostics::create_migration_diagnostics;
-        use crate::compiler::host_functions::wasi_compatibility::create_wasi_compatibility_layer;
         use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
 
         let wasix_registry = create_wasix_registry().unwrap_or_default();
-        let wasi_compatibility = create_wasi_compatibility_layer(wasix_registry.clone())
-            .unwrap_or_else(|_| {
-                crate::compiler::host_functions::wasi_compatibility::WasiCompatibilityLayer::new(
-                    wasix_registry.clone(),
-                )
-            });
-        let migration_diagnostics = create_migration_diagnostics(wasi_compatibility.clone());
-        let fallback_mechanisms = create_fallback_mechanisms(wasi_compatibility.clone());
 
         Self {
             place_manager: PlaceManager::new(),
@@ -234,9 +217,6 @@ impl WirTransformContext {
             next_block_id: 0,
             host_imports: std::collections::HashSet::new(),
             wasix_registry,
-            wasi_compatibility,
-            migration_diagnostics,
-            fallback_mechanisms,
             pending_return: None,
             temporary_counter: 0,
             expression_stack: Vec::new(),

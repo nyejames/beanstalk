@@ -11,7 +11,7 @@ use crate::compiler::wir::context::WirTransformContext;
 use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
 
 // Import WIR types
-use crate::compiler::wir::wir_nodes::{BorrowKind, Operand, Rvalue, Statement};
+use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
 
 // Core compiler imports
 use crate::compiler::{
@@ -19,7 +19,7 @@ use crate::compiler::{
     parsers::{
         ast_nodes::{Arg, AstNode, NodeKind},
         build_ast::AstBlock,
-        expressions::expression::{Expression, ExpressionKind},
+        expressions::expression::Expression,
         tokens::TextLocation,
     },
 };
@@ -273,27 +273,59 @@ fn ast_host_function_call_to_wir(
     // Convert arguments to operands
     let mut arg_operands = Vec::new();
     for arg in args {
-        let (arg_statements, rvalue) = expression_to_rvalue_with_context(arg, location, context)?;
-        statements.extend(arg_statements);
+        // Handle string literals as constants for WASIX fd_write calls
+        match &arg.kind {
+            crate::compiler::parsers::expressions::expression::ExpressionKind::StringSlice(s) => {
+                // Create a constant operand directly for string literals
+                arg_operands.push(Operand::Constant(Constant::String(s.clone())));
+            }
+            _ => {
+                // For other expression types, use the general approach
+                let (arg_statements, rvalue) = expression_to_rvalue_with_context(arg, location, context)?;
+                statements.extend(arg_statements);
 
-        // Create temporary for the argument result
-        let temp_place = context.create_temporary_place(&arg.data_type);
-        statements.push(Statement::Assign {
-            place: temp_place.clone(),
-            rvalue,
-        });
-        arg_operands.push(Operand::Copy(temp_place));
+                // Create temporary for the argument result
+                let temp_place = context.create_temporary_place(&arg.data_type);
+                statements.push(Statement::Assign {
+                    place: temp_place.clone(),
+                    rvalue,
+                });
+                arg_operands.push(Operand::Copy(temp_place));
+            }
+        }
     }
 
-    // Create host function definition
-    let host_function = crate::compiler::host_functions::registry::HostFunctionDef::new(
-        name,
-        vec![], // TODO: Convert args to proper Arg structures
-        vec![], // TODO: Handle return types
-        module,
-        function,
-        "Host function call", // Description
-    );
+    // Look up the host function definition from the builtin registry
+    let host_function = match crate::compiler::host_functions::registry::create_builtin_registry() {
+        Ok(registry) => {
+            match registry.get_function(name) {
+                Some(func_def) => func_def.clone(),
+                None => {
+                    // If not found in builtin registry, create a basic definition
+                    // This maintains backward compatibility for functions not yet in the registry
+                    crate::compiler::host_functions::registry::HostFunctionDef::new(
+                        name,
+                        vec![], // Empty parameters for now
+                        vec![], // Empty return types for now
+                        module,
+                        function,
+                        &format!("Host function call to {}.{}", module, function),
+                    )
+                }
+            }
+        }
+        Err(_) => {
+            // If registry creation fails, create a basic definition
+            crate::compiler::host_functions::registry::HostFunctionDef::new(
+                name,
+                vec![], // Empty parameters for now
+                vec![], // Empty return types for now
+                module,
+                function,
+                &format!("Host function call to {}.{}", module, function),
+            )
+        }
+    };
 
     // Add to context imports
     context.add_host_import(host_function.clone());
@@ -365,7 +397,7 @@ fn ast_if_statement_to_wir(
 fn ast_function_definition_to_wir(
     args: &[Arg],
     body: &[AstNode],
-    location: &TextLocation,
+    _location: &TextLocation,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();

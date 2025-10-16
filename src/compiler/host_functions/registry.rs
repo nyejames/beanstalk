@@ -177,9 +177,9 @@ pub fn create_builtin_registry() -> Result<HostFunctionRegistry, CompileError> {
         "print",
         vec![print_param],
         vec![], // No return value (void function)
-        "beanstalk_io",
-        "print",
-        "Print a message to stdout followed by a newline",
+        "wasix_32v1",
+        "fd_write",
+        "Print a message to stdout using WASIX fd_write",
     );
 
     registry.register_function(print_function)?;
@@ -225,12 +225,12 @@ fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileE
 
     // Validate module name is one of the standard Beanstalk modules
     match function.module.as_str() {
-        "beanstalk_io" | "beanstalk_env" | "beanstalk_sys" => {
+        "beanstalk_io" | "beanstalk_env" | "beanstalk_sys" | "wasix_32v1" => {
             // Valid module names
         }
         _ => {
             return_compiler_error!(
-                "Host function '{}' uses invalid module '{}'. Valid modules are: beanstalk_io, beanstalk_env, beanstalk_sys",
+                "Host function '{}' uses invalid module '{}'. Valid modules are: beanstalk_io, beanstalk_env, beanstalk_sys, wasix_32v1",
                 function.name,
                 function.module
             );

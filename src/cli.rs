@@ -304,9 +304,10 @@ fn print_help(commands_only: bool) {
         "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
     );
     println!("  build <path>         - Builds a file");
+    println!("  run <path>           - JITs a file");
     println!("  release <path>       - Builds a project in release mode");
     println!(
-        "  test                 - Runs the test suite (currently just for testing the compiler)"
+        "  tests                - Runs the test suite"
     );
     println!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }

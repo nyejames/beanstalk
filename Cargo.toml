@@ -10,6 +10,7 @@ show_wir = []
 show_borrow_checker = []
 wasix_native_functions = []
 wasix_enhanced_io = []
+verbose_codegen_logging = []
 
 [package]
 name = "beanstalk"
