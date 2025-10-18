@@ -24,6 +24,7 @@ pub mod build_system {
 mod compiler {
     pub mod parsers {
         pub mod ast_nodes;
+        pub mod parse_headers;
         pub mod build_ast;
         pub mod collections;
         // pub mod markdown; // Commented out to silence unused warnings - will be used by frontend later
