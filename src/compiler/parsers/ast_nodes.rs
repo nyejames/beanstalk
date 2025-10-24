@@ -57,7 +57,7 @@ pub enum NodeKind {
     FunctionCall(
         String,
         Vec<Expression>, // Arguments passed in (eventually will have a syntax for named arguments)
-        Vec<Arg>,        // Returns (can be named so using an Arg rather than just data type)
+        Vec<Arg>,        // Returns (can be named so using an Arg rather than just the data type)
         TextLocation,
         // bool, // Function is pure
     ),
@@ -74,15 +74,15 @@ pub enum NodeKind {
     ),
 
     // Variable names should be the full namespace (module path + variable name)
-    Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
-    
+    VariableDeclaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
+
     StructDefinition(String, Vec<Arg>),
 
     // Mutation of existing mutable variables
     Mutation(String, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
 
     // An actual r-value
-    Expression(Expression),
+    // Expression(Expression),
 
     // Built-in Functions (Would probably be standard lib in other languages)
     // Print can accept multiple arguments and will coerce them to strings
@@ -107,8 +107,8 @@ pub enum NodeKind {
 impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::Declaration(_, value, ..)
-            | NodeKind::Expression(value, ..)
+            NodeKind::VariableDeclaration(_, value, ..)
+            // | NodeKind::Expression(value, ..)
             | NodeKind::Mutation(_, value, _) => Ok(value.to_owned()),
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(

@@ -61,7 +61,7 @@ pub fn transform_ast_node_to_wir(
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
-        NodeKind::Declaration(name, value, _) => {
+        NodeKind::VariableDeclaration(name, value, _) => {
             ast_declaration_to_wir(name, value, &node.location, context)
         }
         NodeKind::Mutation(name, value, is_mutable) => {
@@ -161,7 +161,9 @@ fn ast_mutation_to_wir(
         // For mutable assignments (~=), check if the value is a variable reference
         // If so, create a mutable borrow; otherwise, use the expression value
         match &value.kind {
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_name) => {
+            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
+                var_name,
+            ) => {
                 // This is a mutable borrow: x ~= y
                 let source_place = context
                     .lookup_variable(var_name)
@@ -172,7 +174,7 @@ fn ast_mutation_to_wir(
                         )
                     })?
                     .clone();
-                
+
                 Rvalue::Ref {
                     place: source_place,
                     borrow_kind: BorrowKind::Mut,
@@ -180,7 +182,8 @@ fn ast_mutation_to_wir(
             }
             _ => {
                 // For non-reference expressions, convert normally
-                let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context)?;
+                let (expr_statements, rvalue) =
+                    expression_to_rvalue_with_context(value, location, context)?;
                 statements.extend(expr_statements);
                 rvalue
             }
@@ -189,7 +192,9 @@ fn ast_mutation_to_wir(
         // For regular assignments (=), check if the value is a variable reference
         // If so, create a shared borrow; otherwise, use the expression value
         match &value.kind {
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(var_name) => {
+            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
+                var_name,
+            ) => {
                 // This is a shared borrow: x = y
                 let source_place = context
                     .lookup_variable(var_name)
@@ -200,7 +205,7 @@ fn ast_mutation_to_wir(
                         )
                     })?
                     .clone();
-                
+
                 Rvalue::Ref {
                     place: source_place,
                     borrow_kind: BorrowKind::Shared,
@@ -208,7 +213,8 @@ fn ast_mutation_to_wir(
             }
             _ => {
                 // For non-reference expressions, convert normally
-                let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context)?;
+                let (expr_statements, rvalue) =
+                    expression_to_rvalue_with_context(value, location, context)?;
                 statements.extend(expr_statements);
                 rvalue
             }
@@ -281,7 +287,8 @@ fn ast_host_function_call_to_wir(
             }
             _ => {
                 // For other expression types, use the general approach
-                let (arg_statements, rvalue) = expression_to_rvalue_with_context(arg, location, context)?;
+                let (arg_statements, rvalue) =
+                    expression_to_rvalue_with_context(arg, location, context)?;
                 statements.extend(arg_statements);
 
                 // Create temporary for the argument result

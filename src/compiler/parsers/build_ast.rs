@@ -7,10 +7,11 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::statements::branching::create_branch;
-use crate::compiler::parsers::statements::functions::parse_function_call;
+use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::statements::variables::new_arg;
@@ -206,6 +207,7 @@ pub fn new_ast(
 
     let mut public = Vec::new();
     let mut external_exports = Vec::new();
+    let mut next_statement_exported = false;
 
     // TODO: Start adding warnings where possible
     let warnings = Vec::new();
@@ -327,54 +329,103 @@ pub fn new_ast(
                         &converted_returns,
                     )?)
                 } else {
-                    // -----------------------------
-                    //    NEW STRUCT DECLARATIONS
-                    // -----------------------------
-                    if let Some(TokenKind::Colon) = token_stream.peek_next_token() {
-                        // Advance to the colon
-                        token_stream.advance();
-
-                        ast.push(AstNode {
-                            kind: NodeKind::StructDefinition(
-                                name.to_owned(),
-                                // this skips the closing token
-                                create_struct_definition(name, token_stream, &context)?,
-                            ),
-                            location: token_stream.current_location(),
-                            scope: context.scope_name.to_owned(),
-                        });
-                        continue;
-                    }
-
-                    // -----------------------------
-                    //   NEW VARIABLE DECLARATIONS
-                    // -----------------------------
-                    let arg = new_arg(token_stream, name, &context)?;
-
-                    let visibility = match token_stream.previous_token() {
-                        TokenKind::Export => {
-                            external_exports.push(arg.to_owned());
-                            VarVisibility::Exported
-                        }
-                        _ => VarVisibility::Private,
+                    let visibility = if next_statement_exported {
+                        VarVisibility::Exported
+                    } else {
+                        VarVisibility::Private
                     };
 
-                    // If this at the top of the module, this is public
-                    if context.kind == ContextKind::TopLevel {
-                        public.push(arg.to_owned());
+                    match token_stream.peek_next_token() {
+                        // -----------------------------
+                        //    NEW STRUCT DECLARATIONS
+                        // -----------------------------
+                        Some(TokenKind::Colon) => {
+                            // Advance to the colon
+                            token_stream.advance();
+
+                            ast.push(AstNode {
+                                kind: NodeKind::StructDefinition(
+                                    name.to_owned(),
+                                    // this skips the closing token
+                                    create_struct_definition(name, token_stream, &context)?,
+                                ),
+                                location: token_stream.current_location(),
+                                scope: context.scope_name.to_owned(),
+                            });
+                        }
+
+                        // -----------------------------
+                        //   NEW FUNCTION DECLARATION
+                        // -----------------------------
+                        Some(TokenKind::FuncParameterBracket) => {
+                            let func_sig =
+                                FunctionSignature::new(token_stream, &mut true, &context)?;
+
+                            let func_context = context.new_child_function(
+                                name,
+                                &func_sig.returns,
+                                func_sig.args.to_owned(),
+                            );
+
+                            // TODO: fast check for function without signature
+                            // let context = context.new_child_function(name, &[]);
+                            // return Ok(Arg {
+                            //     name: name.to_owned(),
+                            //     value: Expression::function_without_signature(
+                            //         new_ast(token_stream, context, false)?.ast,
+                            //         token_stream.current_location(),
+                            //     ),
+                            // });
+
+                            let function_body = new_ast(token_stream, func_context, false)?.ast;
+
+                            let arg = Arg {
+                                name: name.to_owned(),
+                                value: Expression::function(
+                                    func_sig.args,
+                                    function_body,
+                                    func_sig.returns,
+                                    token_stream.current_location(),
+                                ),
+                            };
+
+                            // If this at the top of the module, this is public
+                            if context.kind == ContextKind::TopLevel {
+                                public.push(arg.to_owned());
+                            }
+
+                            ast.push(AstNode {
+                                kind: NodeKind::VariableDeclaration(
+                                    name.to_owned(),
+                                    arg.value.to_owned(),
+                                    visibility,
+                                ),
+                                location: token_stream.current_location(),
+                                scope: context.scope_name.to_owned(),
+                            });
+
+                            context.add_var(arg);
+                        }
+
+                        // -----------------------------
+                        //   NEW VARIABLE DECLARATIONS
+                        // -----------------------------
+                        _ => {
+                            let arg = new_arg(token_stream, name, &context)?;
+
+                            ast.push(AstNode {
+                                kind: NodeKind::VariableDeclaration(
+                                    name.to_owned(),
+                                    arg.value.to_owned(),
+                                    visibility,
+                                ),
+                                location: token_stream.current_location(),
+                                scope: context.scope_name.to_owned(),
+                            });
+
+                            context.add_var(arg);
+                        }
                     }
-
-                    ast.push(AstNode {
-                        kind: NodeKind::Declaration(
-                            name.to_owned(),
-                            arg.value.to_owned(),
-                            visibility,
-                        ),
-                        location: token_stream.current_location(),
-                        scope: context.scope_name.to_owned(),
-                    });
-
-                    context.add_var(arg);
                 }
             }
 
@@ -474,6 +525,7 @@ pub fn new_ast(
             TokenKind::Export => {
                 // TODO: elaborate all the error cases where the next token is not a symbol
                 // And tell the user you can only export newly declared functions or variables
+                next_statement_exported = true;
                 token_stream.advance();
             }
 
@@ -561,7 +613,7 @@ fn check_for_dot_access(
                 ast.push(parse_function_call(
                     token_stream,
                     &name,
-                    &context,
+                    context,
                     required_arguments,
                     returned_types,
                 )?)

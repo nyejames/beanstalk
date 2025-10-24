@@ -63,43 +63,9 @@ pub fn new_arg(
 
     let mut ownership = Ownership::ImmutableOwned;
 
-    match token_stream.current_token_kind() {
-        TokenKind::Mutable => {
-            token_stream.advance();
-            ownership = Ownership::MutableOwned;
-        }
-
-        // New Function
-        TokenKind::FuncParameterBracket => {
-            let func_sig = FunctionSignature::new(token_stream, &mut true, context)?;
-
-            let context =
-                context.new_child_function(name, &func_sig.returns, func_sig.args.to_owned());
-
-            // TODO: fast check for function without signature
-            // let context = context.new_child_function(name, &[]);
-            // return Ok(Arg {
-            //     name: name.to_owned(),
-            //     value: Expression::function_without_signature(
-            //         new_ast(token_stream, context, false)?.ast,
-            //         token_stream.current_location(),
-            //     ),
-            // });
-
-            let function_body = new_ast(token_stream, context, false)?.ast;
-
-            return Ok(Arg {
-                name: name.to_owned(),
-                value: Expression::function(
-                    func_sig.args,
-                    function_body,
-                    func_sig.returns,
-                    token_stream.current_location(),
-                ),
-            });
-        }
-
-        _ => {}
+    if token_stream.current_token_kind() == &TokenKind::Mutable {
+        token_stream.advance();
+        ownership = Ownership::MutableOwned;
     };
 
     let mut data_type: DataType;
@@ -210,7 +176,12 @@ pub fn new_arg(
         _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
     };
 
-    ast_log!("Created new {:?} variable: '{}' of type: {}", ownership, name, data_type);
+    ast_log!(
+        "Created new {:?} variable: '{}' of type: {}",
+        ownership,
+        name,
+        data_type
+    );
     Ok(Arg {
         name: name.to_owned(),
         value: parsed_expr,
