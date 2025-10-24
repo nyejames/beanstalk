@@ -24,8 +24,8 @@ pub mod build_system {
 mod compiler {
     pub mod parsers {
         pub mod ast_nodes;
-        pub mod parse_headers;
         pub mod build_ast;
+        pub mod build_top_level;
         pub mod collections;
         // pub mod markdown; // Commented out to silence unused warnings - will be used by frontend later
         pub mod expressions {
@@ -175,7 +175,7 @@ impl<'a> Compiler<'a> {
             .map_err(|e| e.with_file_path(module_tokens.src_path.clone()))?;
 
         let ast_context = ScopeContext::new_with_registry(
-            ContextKind::Module,
+            ContextKind::TopLevel,
             module_tokens.src_path.to_owned(),
             public_declarations,
             host_registry,

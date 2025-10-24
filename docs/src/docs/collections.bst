@@ -74,45 +74,4 @@ Set keys for items in your dynamic collection to turn it into a key/value list.
     }
 ]
 
-## Structs
-You can define types by using structs.
-
-This is done by immediately following a struct name with a colon and then defining the fields.
-
-[#Code:
-    -- Define a new struct
-    Person:
-        name String,
-        age Int,
-    ;
-
-    -- Create a new instance of the type
-    person ~= Person("Alice", 30)
-
-    -- Access fields using dot notation
-    print(person.name) -- "Alice"
-    print(person.age)  -- 30
-
-    -- Mutate fields if the instance is mutable
-    person ~= Person("Bob", 25)
-    print(person.name) -- "Bob"
-    print(person.age)  -- 25
-
-    -- Defining a struct, then defining a method for it
-    Vector2:
-        x Float,
-        y Float,
-    ;
-
-    reset |vec ~Vector2|:
-        vec.x = 0
-        vec.y = 0
-    ;
-
-    vec = Vector2(12, 87)
-    vec.reset()
-]
-
-
-
 [Footer]

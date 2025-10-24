@@ -99,10 +99,6 @@ pub fn new_arg(
             });
         }
 
-        // New struct definition
-        // TODO
-        TokenKind::Colon => {}
-
         _ => {}
     };
 
@@ -117,11 +113,6 @@ pub fn new_arg(
             token_stream.go_back();
             data_type = DataType::Inferred;
         }
-
-        // TODO Class / Object / Struct
-        // TokenKind::Colon => {
-        //     token_stream.advance();
-        // }
 
         // Has a type declaration
         TokenKind::DatatypeInt => data_type = DataType::Int,

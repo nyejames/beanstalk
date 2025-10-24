@@ -3,22 +3,23 @@
 [Header center: [title(1): BASIC BS SYNTAX]]
 [Page:
 
-Each folder containing a config.bst file becomes a module. 
-Each .bst file inside this folder is combined together and their top level declarations are public to eachother.
-Each module is just a file that exports functions and fields.
+Every project needing to be split into multiple Wasm modules must have a config.bst file.
 
-The config.bst file defines the entry point file.
-The main function of the module is just the top level of the entry point file.
+If instead, you build or run a specific Beanstalk file,
+it will create a single Wasm module from that entry point.
 
-Projects are a collection of one or more modules.
+From the config file you can define another Beanstalk file as the entry point of a program.
 
-Every Beanstalk file can also export functions, which exposes those functions to the host environment.
+Web projects can be configured to have a directory based structure for each module.
 
 # Quick Synax Overview
 - Colon opens a scope, semicolon closes it.
-- No use of square brackets for arrays, curly braces are used instead. Square brackets are only used for templates.
-- Equality and other logical operators use keywords like "is" and "not" (you can't use == or ! for example)
-- ~ tilde symbol to indicate mutability (mutability must be explicit). This comes before the type.
+- No use of square brackets for arrays, curly braces are used instead. 
+Square brackets are only used for templates.
+- Equality and other logical operators use keywords like "is" and "not" 
+(you can't use == or ! for example)
+- ~ tilde symbol to indicate mutability (mutability must be explicit). 
+This comes before the type.
 - Double dashes for single line comments (--)
 
 4 spaces are recommended for indentation. 
@@ -67,6 +68,11 @@ All variables must be assigned a value when they are declared.
 
     mutable_collection ~= {}
     immutable_collection = {}
+
+    Struct:
+        value Float,
+        another_value String,
+    ;
 ]
 
 ## Static Assignment

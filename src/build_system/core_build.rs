@@ -8,15 +8,15 @@
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::build_ast::AstBlock;
+use crate::compiler::parsers::tokens::TokenContext;
 use crate::settings::{Config, EXPORTS_CAPACITY};
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
 use rayon::prelude::*;
 use std::time::Instant;
-use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::parsers::tokens::TokenContext;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -96,11 +96,10 @@ pub fn compile_modules(
     // ----------------------------------
     //         Token generation
     // ----------------------------------
-    let project_tokens: Vec<Result<TokenContext, CompileError>> =
-        modules
-            .par_iter()
-            .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
-            .collect();
+    let project_tokens: Vec<Result<TokenContext, CompileError>> = modules
+        .par_iter()
+        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
+        .collect();
     timer_log!(time, "Tokenized in: ");
 
     // ----------------------------------
@@ -117,7 +116,14 @@ pub fn compile_modules(
     //    }
     //}
     //timer_log!(time, "Dependency graph created in: ");
-//
+
+    // ----------------------------------
+    //           Parse Headers
+    // ----------------------------------
+    // This will parse all the top level declarations across the tokenstream
+    // This is to split up the AST generation into discreet blocks and make all the public declarations known during AST generation.
+    // All #included files are known at this stage
+
     // ----------------------------------
     //          AST generation
     // ----------------------------------
@@ -179,8 +185,8 @@ pub fn compile_modules(
         }
         Err(e) => {
             messages.errors.extend(e);
-            return Err(messages)
-        },
+            return Err(messages);
+        }
     };
 
     // ----------------------------------
@@ -190,8 +196,8 @@ pub fn compile_modules(
         Ok(w) => w,
         Err(e) => {
             messages.errors.push(e);
-            return Err(messages)
-        },
+            return Err(messages);
+        }
     };
 
     if !flags.contains(&Flag::DisableTimers) {
@@ -209,7 +215,7 @@ pub fn compile_modules(
         wasm_bytes,
         required_imports,
         exported_functions,
-        warnings: messages.warnings
+        warnings: messages.warnings,
     })
 }
 

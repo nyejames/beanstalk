@@ -212,7 +212,7 @@ impl Expression {
             ownership,
         }
     }
-    pub fn structure(args: Vec<Arg>, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn struct_instance(args: Vec<Arg>, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::Inferred,
             kind: ExpressionKind::Struct(args),

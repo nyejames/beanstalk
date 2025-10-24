@@ -75,11 +75,13 @@ pub enum NodeKind {
 
     // Variable names should be the full namespace (module path + variable name)
     Declaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
+    
+    StructDefinition(String, Vec<Arg>),
 
     // Mutation of existing mutable variables
     Mutation(String, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
 
-    // An actual value
+    // An actual r-value
     Expression(Expression),
 
     // Built-in Functions (Would probably be standard lib in other languages)

@@ -1,11 +1,19 @@
-use crate::tokenizer::END_SCOPE_CHAR;
+// This function takes in a TokenContext from the tokenizer for every file in the module.
+// It sorts each type of declaration in the top level scope into:
+// - Functions
+// - Structs
+// - Choices (not yet implemented)
+// - Constants
+// - Globals (static mutable variables)
+// - Implicit Main Function (any other logic in the top level scope implicitly becomes an init function)
 
-use super::ast_nodes::NodeKind;
+// Everything at the top level of a file is visible to the whole module.
+// Imports are already parsed in the tokenizer.
+
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::DataType;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ParserOutput, ScopeContext};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
@@ -16,187 +24,16 @@ use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::statements::variables::new_arg;
 use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
 use crate::compiler::traits::ContainsReferences;
+use crate::tokenizer::END_SCOPE_CHAR;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
-use std::path::PathBuf;
 
-#[derive(Clone, Debug)]
-pub struct AstBlock {
-    pub scope: PathBuf,
-    pub ast: Vec<AstNode>, // Body
-    pub is_entry_point: bool,
-}
-pub struct ParserOutput {
-    pub ast: AstBlock,
-
-    // Top level declarations in the module
-    // that can be seen by other Beanstalk files
-    pub public: Vec<Arg>,
-
-    // Exported out of the final compiled wasm module
-    // Must use explicit 'export' syntax Token::Export
-    pub external_exports: Vec<Arg>,
-    pub warnings: Vec<CompilerWarning>,
-}
-impl ParserOutput {
-    fn new(
-        ast: AstBlock,
-        public: Vec<Arg>,
-        exports: Vec<Arg>,
-        warnings: Vec<CompilerWarning>,
-    ) -> ParserOutput {
-        ParserOutput {
-            ast,
-            public,
-            external_exports: exports,
-            warnings,
-        }
-    }
+pub struct Sections {
+    body: TokenContext,
+    context: ScopeContext,
 }
 
-#[derive(Clone)]
-pub struct ScopeContext {
-    pub kind: ContextKind,
-    pub scope_name: PathBuf,
-    pub declarations: Vec<Arg>,
-    pub returns: Vec<Arg>,
-    pub host_registry: HostFunctionRegistry,
-}
-#[derive(PartialEq, Clone)]
-pub enum ContextKind {
-    TopLevel, // Global scope
-    Expression,
-    Function,
-    Parameters, // Inside a function signature
-    Condition,  // For loops and if statements
-    Loop,
-    Branch,
-    Template,
-}
-
-impl ScopeContext {
-    pub fn new(kind: ContextKind, scope: PathBuf, declarations: &[Arg]) -> ScopeContext {
-        // Create a default registry - this will be replaced with the actual registry
-        let host_registry = HostFunctionRegistry::new();
-
-        ScopeContext {
-            kind,
-            scope_name: scope,
-            declarations: declarations.to_owned(),
-            returns: Vec::new(),
-            host_registry,
-        }
-    }
-
-    pub fn new_with_registry(
-        kind: ContextKind,
-        scope: PathBuf,
-        declarations: &[Arg],
-        host_registry: HostFunctionRegistry,
-    ) -> ScopeContext {
-        ScopeContext {
-            kind,
-            scope_name: scope,
-            declarations: declarations.to_owned(),
-            returns: Vec::new(),
-            host_registry,
-        }
-    }
-
-    pub fn new_child_control_flow(&self, kind: ContextKind) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = kind;
-
-        // For now, add the lifetime ID to the scope.
-        new_context
-    }
-
-    pub fn new_child_function(
-        &self,
-        name: &str,
-        returns: &[Arg],
-        arguments: Vec<Arg>,
-    ) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Function;
-        new_context.returns = returns.to_owned();
-        new_context.scope_name.push(name);
-        new_context.declarations = arguments;
-
-        new_context
-    }
-
-    pub fn new_parameters(&self) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Parameters;
-        new_context.scope_name.push("parameters");
-
-        new_context
-    }
-
-    pub fn new_child_expression(&self, returns: Vec<Arg>) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Expression;
-        new_context.returns = returns;
-        new_context.scope_name.push("expression");
-        new_context
-    }
-
-    pub fn add_var(&mut self, arg: Arg) {
-        self.declarations.push(arg);
-    }
-}
-
-/// A new AstContext for scenes
-///
-/// Usage:
-/// name (for the scope), args (declarations it can access)
-#[macro_export]
-macro_rules! new_template_context {
-    ($context:expr) => {
-        &ScopeContext {
-            kind: ContextKind::Template,
-            scope_name: $context.scope_name.to_owned(),
-            declarations: $context.declarations.to_owned(),
-            returns: vec![],
-            host_registry: $context.host_registry.clone(),
-        }
-    };
-}
-
-/// New Config AstContext
-///
-/// name (for scope), args (declarations it can reference)
-#[macro_export]
-macro_rules! new_config_context {
-    ($name:expr, $args:expr, $registry:expr) => {
-        ScopeContext {
-            kind: ContextKind::Template,
-            scope_name: PathBuf::from($name),
-            declarations: $args,
-            returns: vec![],
-            host_registry: $registry,
-        }
-    };
-}
-
-/// New Condition AstContext
-///
-/// name (for scope), args (declarations it can reference)
-#[macro_export]
-macro_rules! new_condition_context {
-    ($name:expr, $args:expr, $registry:expr) => {
-        ScopeContext {
-            kind: ContextKind::Condition,
-            scope_name: PathBuf::from($name),
-            declarations: $args,
-            returns: vec![], //Empty because conditions are always booleans
-            host_registry: $registry,
-        }
-    };
-}
-
-// This is a new scope
-pub fn new_ast(
+// It provides the shape and signature of structs and functions for the AST parser to use for type checking.
+pub fn parse_top_level_statements(
     token_stream: &mut TokenContext,
     mut context: ScopeContext,
     is_entry_point: bool,

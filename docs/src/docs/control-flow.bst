@@ -16,15 +16,6 @@ They can also be used for pattern matching, all with a similar syntax.
         print("yep")
     ;
 
-    -- Using if like a match expression
-    -- Parenthesis are used instead of colons for if expressions
-    x = 5
-    msg = if x is 0 (
-        "nope"
-    ) else (
-        "defintely nope"
-    )
-
     print(msg) -- prints "defintely nope"
 ]
 
@@ -82,16 +73,6 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         not 5: print("not 5")
         else: print("only one")
     ;
-
-    -- Pattern matching as an expression
-    name = "Bob"
-    msg = if name is (
-        "Sam": 
-            "yo, whats up"
-        ;
-        "Priya": "hey!"
-        else: "go away"
-    )
 
     loop c in collection_of_choices:
         if c is Thing::cool: 
