@@ -2,6 +2,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::return_compiler_error;
 use std::collections::HashMap;
 
@@ -95,7 +96,12 @@ impl HostFunctionDef {
             })
             .collect();
 
-        DataType::Function(self.parameters.clone(), return_args)
+        let signature = FunctionSignature {
+            parameters: self.parameters.to_owned(),
+            returns: return_args,
+        };
+
+        DataType::Function(signature)
     }
 }
 

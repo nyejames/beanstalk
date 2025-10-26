@@ -1,5 +1,6 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
 
@@ -73,8 +74,9 @@ pub enum DataType {
     // Mutability is part of the type
     // This helps with compile time constant folding
 
-    // Type is inferred, This only exists before the type checking stage
-    // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile
+    // Type is inferred, This only exists before the type checking stage.
+    // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile.
+    // At the header parsing stage, 'inferred' is used where a symbol type is not yet known (as the type might be another header).
     Inferred,
 
     Reference(Box<DataType>, Ownership),
@@ -106,7 +108,7 @@ pub enum DataType {
     Collection(Box<DataType>, Ownership),
 
     // Structs
-    Args(Vec<Arg>),              // Struct definitions and parameters
+    Parameters(Vec<Arg>),        // Struct definitions and parameters
     Struct(Vec<Arg>, Ownership), // Struct instance
 
     // Special Beanstalk Types
@@ -114,7 +116,9 @@ pub enum DataType {
     // They are basically functions that accept a style and return a string
     Template, // is_mutable
 
-    Function(Vec<Arg>, Vec<Arg>), // Arg constructor, Returned args
+    Function(FunctionSignature), // Arg constructor, Returned args
+
+    Main, // Entry point for the module
 
     // Type Types
     // Unions allow types such as option and result
@@ -151,7 +155,7 @@ impl DataType {
                 matches!(
                     accepted_type,
                     DataType::Collection(..)
-                        | DataType::Args(_)
+                        | DataType::Parameters(_)
                         | DataType::Float
                         | DataType::Int
                         | DataType::Decimal
@@ -199,12 +203,12 @@ impl DataType {
             DataType::Collection(inner_type, ownership) => {
                 DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
             }
-            DataType::Args(args) => DataType::Option(Box::new(DataType::Args(args))),
+            DataType::Parameters(args) => DataType::Option(Box::new(DataType::Parameters(args))),
             DataType::Struct(args, ownership) => {
                 DataType::Option(Box::new(DataType::Struct(args, ownership)))
             }
-            DataType::Function(args, return_type) => {
-                DataType::Option(Box::new(DataType::Function(args, return_type)))
+            DataType::Function(signature) => {
+                DataType::Option(Box::new(DataType::Function(signature)))
             }
             DataType::Template => DataType::Option(Box::new(DataType::Template)),
             DataType::Inferred => DataType::Option(Box::new(DataType::Inferred)),
@@ -223,6 +227,7 @@ impl DataType {
             DataType::None => DataType::Option(Box::new(DataType::None)),
             DataType::Range => DataType::Option(Box::new(DataType::Range)),
             DataType::Option(_) => DataType::Option(Box::new(DataType::Option(Box::new(self)))),
+            DataType::Main => DataType::Option(Box::new(DataType::Main)),
         }
     }
 
@@ -230,7 +235,7 @@ impl DataType {
         match self {
             DataType::Range => true,
             DataType::Collection(..) => true,
-            DataType::Args(_) => true,
+            DataType::Parameters(_) => true,
             DataType::String => true,
             DataType::Float => true,
             DataType::Int => true,
@@ -280,7 +285,7 @@ impl PartialEq for DataType {
             (DataType::Option(a), DataType::Option(b)) => a == b,
             // For Args, Struct, Function, and Choices, we compare by name/structure
             // but not by the actual Arg values since they contain Expressions
-            (DataType::Args(a), DataType::Args(b)) => {
+            (DataType::Parameters(a), DataType::Parameters(b)) => {
                 a.len() == b.len()
                     && a.iter()
                         .zip(b.iter())
@@ -293,17 +298,17 @@ impl PartialEq for DataType {
                         .zip(b.iter())
                         .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
             }
-            (DataType::Function(a1, a2), DataType::Function(b1, b2)) => {
-                a1.len() == b1.len()
-                    && a2.len() == b2.len()
-                    && a1
+            (DataType::Function(signature1), DataType::Function(signature2)) => {
+                // If both functions have the same signature.returns types,
+                // then they are equal
+                signature1.returns.len() == signature2.returns.len()
+                    && signature1
+                        .returns
                         .iter()
-                        .zip(b1.iter())
-                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
-                    && a2
-                        .iter()
-                        .zip(b2.iter())
-                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+                        .zip(signature2.returns.iter())
+                        .all(|(return1, return2)| {
+                            return1.value.data_type == return2.value.data_type
+                        })
             }
             (DataType::Choices(a), DataType::Choices(b)) => {
                 a.len() == b.len()
@@ -343,7 +348,7 @@ impl Display for DataType {
             DataType::Collection(inner_type, _mutable) => {
                 write!(f, "{inner_type} Collection")
             }
-            DataType::Args(args) => {
+            DataType::Parameters(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
                     arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
@@ -358,13 +363,13 @@ impl Display for DataType {
                 write!(f, "{self:?} Arguments({arg_str})")
             }
 
-            DataType::Function(args, return_types) => {
+            DataType::Function(signature) => {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
-                for arg in args {
+                for arg in &signature.parameters {
                     arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
                 }
-                for return_type in return_types {
+                for return_type in &signature.returns {
                     returns_string.push_str(&format!("{}, ", return_type.name));
                 }
 
@@ -386,6 +391,7 @@ impl Display for DataType {
                 }
                 write!(f, "Choices({inner_types_str})")
             }
+            DataType::Main => write!(f, "Main"),
         }
     }
 }

@@ -1,11 +1,13 @@
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{AstBlock, ContextKind, ScopeContext, new_ast};
+use crate::compiler::parsers::build_ast::{new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error};
+use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 // IF STATEMENTS / MATCH STATEMENTS
 // Can also be expressions (todo)
 // Example:
@@ -27,12 +29,13 @@ use crate::{ast_log, return_rule_error};
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub condition: Expression,
-    pub body: AstBlock,
+    pub body: Vec<AstNode>,
 }
 
 pub fn create_branch(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
 ) -> Result<Vec<AstNode>, CompileError> {
     let then_condition = create_expression(
         token_stream,
@@ -46,7 +49,7 @@ pub fn create_branch(
     if token_stream.current_token_kind() == &TokenKind::Is {
         // create_expression will only NOT consume the 'is' token if it's a match statement
         token_stream.advance(); // Consume 'is'
-        let match_statement = create_match_node(then_condition, token_stream, context)?;
+        let match_statement = create_match_node(then_condition, token_stream, context, warnings)?;
         return Ok(vec![match_statement]);
     }
 
@@ -61,12 +64,12 @@ pub fn create_branch(
 
     token_stream.advance(); // Consume ':'
     let if_context = context.new_child_control_flow(ContextKind::Branch);
-    let then_block = new_ast(token_stream, if_context.to_owned(), false)?.ast;
+    let then_block = new_ast(token_stream, if_context.to_owned(), warnings)?;
 
     // Check for else condition
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
         token_stream.advance();
-        Some(new_ast(token_stream, if_context.to_owned(), false)?.ast)
+        Some(new_ast(token_stream, if_context.to_owned(), warnings)?)
     } else {
         None
     };
@@ -75,7 +78,7 @@ pub fn create_branch(
     // If the "then" condition isn't runtime,
     // The statement can be removed completely.
     if then_condition.kind.is_foldable() {
-        let mut flattened_statement = then_block.ast;
+        let mut flattened_statement = then_block;
         if else_block.is_some() {
             flattened_statement.push(AstNode {
                 kind: NodeKind::Warning(String::from(
@@ -97,8 +100,9 @@ pub fn create_branch(
 
 fn create_match_node(
     subject: Expression,
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     context: &mut ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
 ) -> Result<AstNode, CompileError> {
     ast_log!("Creating Match Statement");
 
@@ -143,7 +147,7 @@ fn create_match_node(
             // Move past the colon
             token_stream.advance();
 
-            else_block = Some(new_ast(token_stream, match_context.to_owned(), false)?.ast);
+            else_block = Some(new_ast(token_stream, match_context.to_owned(), warnings)?);
         }
 
         let condition = create_expression(
@@ -165,7 +169,7 @@ fn create_match_node(
         // Move past the colon
         token_stream.advance();
 
-        let block = new_ast(token_stream, match_context.to_owned(), false)?.ast;
+        let block = new_ast(token_stream, match_context.to_owned(), warnings)?;
 
         arms.push(MatchArm {
             condition,

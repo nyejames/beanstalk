@@ -2,8 +2,7 @@ use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
-use crate::compiler::host_functions::registry::create_builtin_registry;
-use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
+use crate::compiler::host_functions::registry::{create_builtin_registry, HostFunctionRegistry};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokens::TokenizeMode;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
@@ -12,6 +11,7 @@ use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use crate::compiler::parsers::ast::{Ast, ContextKind, ScopeContext};
 
 pub struct InputModule {
     pub source_code: String,
@@ -198,24 +198,22 @@ pub fn build_project_files_with_target(
             };
 
             let ast_context = ScopeContext::new_with_registry(
-                ContextKind::TopLevel,
+                ContextKind::Function,
                 config_path.to_owned(),
                 &[],
                 host_registry,
             );
 
-            let config_public_vars = match new_ast(&mut tokenizer_output, ast_context, true) {
-                Ok(module) => module.public,
+            let config_tokens = vec![tokenizer_output];
+            let config_ast = match Ast::new(config_tokens, &HostFunctionRegistry::new()) {
+                Ok(config_ast) => config_ast,
                 Err(e) => {
-                    return Err(CompilerMessages {
-                        errors: vec![e.with_file_path(config_path.clone())],
-                        warnings: Vec::new(),
-                    });
+                    return Err(e);
                 }
             };
 
             // Parse configuration from AST
-            if let Err(e) = get_config_from_ast(config_public_vars, &mut project_config) {
+            if let Err(e) = get_config_from_ast(config_ast, &mut project_config) {
                 return Err(CompilerMessages {
                     errors: vec![e.with_file_path(config_path.clone())],
                     warnings: Vec::new(),

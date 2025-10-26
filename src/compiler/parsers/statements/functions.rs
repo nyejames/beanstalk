@@ -4,29 +4,29 @@ use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::statements::structs::parse_multiple_args;
+use crate::compiler::parsers::statements::structs::create_struct_definition;
 
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
-use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error, return_type_error};
 
 // Arg names and types are required
 // Can have default values
+#[derive(Clone, Debug)]
 pub struct FunctionSignature {
-    pub args: Vec<Arg>,
+    pub parameters: Vec<Arg>,
     pub returns: Vec<Arg>,
 }
 
 impl FunctionSignature {
     pub fn new(
-        token_stream: &mut TokenContext,
-        pure: &mut bool,
+        token_stream: &mut FileTokens,
         context: &ScopeContext,
     ) -> Result<Self, CompileError> {
-        let args = create_arg_constructor(token_stream, context.new_parameters(), pure)?;
+        let parameters: Vec<Arg> = create_struct_definition(token_stream, context)?;
 
         // Move past the closing struct bracket
         token_stream.advance();
@@ -38,7 +38,7 @@ impl FunctionSignature {
             TokenKind::Colon => {
                 token_stream.advance();
                 return Ok(FunctionSignature {
-                    args,
+                    parameters,
                     returns: Vec::new(),
                 });
             }
@@ -165,17 +165,20 @@ impl FunctionSignature {
                     // as the function can return references to those parameters.
                     if let Some(possible_type) = context.get_reference(name) {
                         // Make sure this is actually a struct (Args)
-                        if matches!(possible_type.value.data_type, DataType::Args(..)) {
+                        if matches!(possible_type.value.data_type, DataType::Parameters(..)) {
                             returns.push(possible_type.to_owned());
                         }
-                    } else if let Some(reference_return) = args.get_reference(name) {
+                    } else if let Some(reference_return) = parameters.get_reference(name) {
                         returns.push(reference_return.to_owned());
                     }
                 }
 
                 TokenKind::Colon => {
                     token_stream.advance();
-                    return Ok(FunctionSignature { args, returns });
+                    return Ok(FunctionSignature {
+                        parameters: parameters,
+                        returns,
+                    });
                 }
 
                 TokenKind::Comma => {
@@ -367,7 +370,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Bool => "Bool".to_string(),
         DataType::Template => "Template".to_string(),
         DataType::Function(..) => "Function".to_string(),
-        DataType::Args(..) => "Args".to_string(),
+        DataType::Parameters(..) => "Args".to_string(),
         DataType::Choices(types) => {
             let type_names: Vec<String> = types
                 .iter()
@@ -392,6 +395,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
                 ownership.as_string()
             )
         }
+        DataType::Main => "Main".to_string(),
     }
 }
 
@@ -444,11 +448,10 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
 
 // Built-in functions will do their own thing
 pub fn parse_function_call(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     name: &str,
     context: &ScopeContext,
-    required_arguments: &[Arg],
-    returned_types: &[Arg],
+    signature: &FunctionSignature,
 ) -> Result<AstNode, CompileError> {
     // Assumes we're starting at the first token after the name of the function call
     // Check if it's a host function first
@@ -457,7 +460,7 @@ pub fn parse_function_call(
     }
 
     // Create expressions until hitting a closed parenthesis
-    let args = create_function_call_arguments(token_stream, required_arguments, context)?;
+    let args = create_function_call_arguments(token_stream, &signature.parameters, context)?;
 
     // TODO
     // Makes sure the call value is correct for the function call
@@ -482,7 +485,7 @@ pub fn parse_function_call(
         kind: NodeKind::FunctionCall(
             name.to_owned(),
             args,
-            returned_types.to_owned(),
+            signature.returns.to_owned(),
             token_stream.current_location(),
         ),
         location: token_stream.current_location(),
@@ -491,7 +494,7 @@ pub fn parse_function_call(
 }
 
 pub fn create_function_call_arguments(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     required_arguments: &[Arg],
     context: &ScopeContext,
 ) -> Result<Vec<Expression>, CompileError> {
@@ -528,31 +531,9 @@ pub fn create_function_call_arguments(
     }
 }
 
-fn create_arg_constructor(
-    token_stream: &mut TokenContext,
-    context: ScopeContext,
-    pure: &mut bool,
-) -> Result<Vec<Arg>, CompileError> {
-    if token_stream.current_token_kind() != &TokenKind::FuncParameterBracket {
-        return_syntax_error!(
-            token_stream.current_location(),
-            "Expected a | after the function name",
-        )
-    }
-
-    token_stream.advance();
-
-    parse_multiple_args(
-        token_stream,
-        context,
-        &TokenKind::FuncParameterBracket,
-        pure,
-    )
-}
-
 /// Parse a host function call
 pub fn parse_host_function_call(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     host_func: &HostFunctionDef,
     context: &ScopeContext,
 ) -> Result<AstNode, CompileError> {

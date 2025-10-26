@@ -14,16 +14,15 @@ use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
 use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
 
 // Core compiler imports
+use crate::compiler::parsers::build_ast::Ast;
 use crate::compiler::{
     compiler_errors::CompileError,
     parsers::{
         ast_nodes::{Arg, AstNode, NodeKind},
-        build_ast::AstBlock,
         expressions::expression::Expression,
         tokens::TextLocation,
     },
 };
-
 // Error handling macros
 use crate::return_compiler_error;
 
@@ -61,7 +60,7 @@ pub fn transform_ast_node_to_wir(
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
-        NodeKind::VariableDeclaration(name, value, _) => {
+        NodeKind::VariableDeclaration(name, value) => {
             ast_declaration_to_wir(name, value, &node.location, context)
         }
         NodeKind::Mutation(name, value, is_mutable) => {
@@ -350,8 +349,8 @@ fn ast_host_function_call_to_wir(
 /// Transform AST if statement to WIR statements
 fn ast_if_statement_to_wir(
     condition: &Expression,
-    then_block: &AstBlock,
-    else_block: &Option<AstBlock>,
+    then_block: &Vec<AstNode>,
+    else_block: &Option<Vec<AstNode>>,
     location: &TextLocation,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
@@ -362,7 +361,7 @@ fn ast_if_statement_to_wir(
         expression_to_rvalue_with_context(condition, location, context)?;
     statements.extend(cond_statements);
 
-    // Create temporary for condition result
+    // Create temporary for the condition result
     let cond_place = context.create_temporary_place(&condition.data_type);
     statements.push(Statement::Assign {
         place: cond_place.clone(),
@@ -375,7 +374,7 @@ fn ast_if_statement_to_wir(
 
     // Transform then block
     let mut then_statements = Vec::new();
-    for node in &then_block.ast {
+    for node in then_block {
         let node_statements = transform_ast_node_to_wir(node, context)?;
         then_statements.extend(node_statements);
     }
@@ -383,7 +382,7 @@ fn ast_if_statement_to_wir(
     // Transform else block if present
     let mut else_statements = Vec::new();
     if let Some(else_block) = else_block {
-        for node in &else_block.ast {
+        for node in else_block {
             let node_statements = transform_ast_node_to_wir(node, context)?;
             else_statements.extend(node_statements);
         }

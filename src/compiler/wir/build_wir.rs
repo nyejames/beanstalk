@@ -18,9 +18,11 @@ use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 use crate::compiler::{
     compiler_errors::CompileError,
-    parsers::{ast_nodes::AstNode, build_ast::AstBlock, tokens::TextLocation},
+    parsers::{ast_nodes::AstNode, tokens::TextLocation},
 };
 // Error handling macros - grouped for maintainability
+use crate::compiler::datatypes::Ownership;
+use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::{ir_log, wir_log};
 
 /// Main entry point: Transform AST to WIR with borrow checking
@@ -58,7 +60,7 @@ use crate::{ir_log, wir_log};
 /// - All places map to WASM locals or linear memory locations
 /// - All operations correspond to WASM instruction sequences
 /// - Function calls are prepared for WASM function tables
-pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
+pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
     let mut context = WirTransformContext::new();
     let mut wir = WIR::new();
 
@@ -74,10 +76,9 @@ pub fn ast_to_wir(ast: AstBlock) -> Result<WIR, CompileError> {
 
 /// Create a main function containing all top-level AST statements
 fn create_main_function_from_ast(
-    ast: &AstBlock,
+    ast: &Vec<AstNode>,
     context: &mut WirTransformContext,
 ) -> Result<WirFunction, CompileError> {
-    use crate::compiler::wir::place::WasmType;
     use crate::compiler::wir::wir_nodes::{Terminator, WirBlock, WirFunction};
 
     wir_log!(
@@ -99,13 +100,13 @@ fn create_main_function_from_ast(
     let mut statements = Vec::new();
 
     // Transform each AST node to WIR statements
-    for (i, node) in ast.ast.iter().enumerate() {
+    for node in ast {
         wir_log!("Processing AST node {}: {:?}", i, node.kind);
         let node_statements = transform_ast_node_to_wir(node, context)?;
         wir_log!(
             "Generated {} WIR statements for node {}",
             node_statements.len(),
-            i
+            node.kind
         );
         statements.extend(node_statements);
     }
@@ -132,31 +133,25 @@ fn transform_ast_node_to_wir(
     use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
 
     match &node.kind {
-        NodeKind::VariableDeclaration(var_name, expression, _visibility) => {
+        NodeKind::VariableDeclaration(arg) => {
             // Create a place for the variable
-            let var_place = context.create_place_for_variable(var_name.clone())?;
+            let var_place = context.create_place_for_variable(arg.name.clone())?;
 
             // For now, create a simple assignment
             // This is a minimal implementation - full expression handling will be added later
-            let rvalue = match &expression.kind {
-                crate::compiler::parsers::expressions::expression::ExpressionKind::StringSlice(
-                    s,
-                ) => {
+            let rvalue = match &arg.value.kind {
+                ExpressionKind::StringSlice(s) => {
                     // Create a string constant
                     Rvalue::Use(Operand::Constant(Constant::String(s.clone())))
                 }
-                crate::compiler::parsers::expressions::expression::ExpressionKind::Int(i) => {
-                    Rvalue::Use(Operand::Constant(Constant::I32(*i as i32)))
-                }
-                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
-                    var_ref,
-                ) => {
+                ExpressionKind::Int(i) => Rvalue::Use(Operand::Constant(Constant::I32(*i as i32))),
+                ExpressionKind::Reference(var_ref) => {
                     // This is a reference to another variable - create a borrow
                     let source_place = context.get_place_for_variable(var_ref)?;
 
                     // Check the ownership to determine borrow kind
-                    let borrow_kind = match &expression.ownership {
-                        crate::compiler::datatypes::Ownership::MutableReference => {
+                    let borrow_kind = match &arg.value.ownership {
+                        Ownership::MutableReference => {
                             wir_log!(
                                 "Creating mutable borrow for declaration '{}' with MutableReference ownership",
                                 var_name
@@ -204,9 +199,7 @@ fn transform_ast_node_to_wir(
 
             // Handle assignment based on mutability flag
             let rvalue = match &expression.kind {
-                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
-                    var_ref,
-                ) => {
+                ExpressionKind::Reference(var_ref) => {
                     let source_place = context.get_place_for_variable(var_ref)?;
                     // Use the is_mutable flag to determine borrow kind
                     let borrow_kind = if *is_mutable {
@@ -246,9 +239,7 @@ fn transform_ast_node_to_wir(
         NodeKind::Expression(expr) => {
             // Handle standalone expressions
             match &expr.kind {
-                crate::compiler::parsers::expressions::expression::ExpressionKind::Template(
-                    _template,
-                ) => {
+                ExpressionKind::Template(_template) => {
                     // For templates, we might need to create temporary variables
                     // For now, just create a no-op
                     Ok(vec![])

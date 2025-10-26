@@ -1,14 +1,12 @@
-use crate::compiler::{
-    compiler_errors::CompileError,
-    parsers::build_ast::AstBlock,
-    wir::build_wir::{WIR, ast_to_wir},
-    wir::{
-        wir_nodes::{BorrowError, WirFunction},
-    },
-};
 use crate::compiler::borrow_checker::borrow_checker::UnifiedBorrowChecker;
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
-use crate::{wir_log, borrow_log};
+use crate::compiler::parsers::ast_nodes::AstNode;
+use crate::compiler::{
+    compiler_errors::CompileError,
+    wir::build_wir::{WIR, ast_to_wir},
+    wir::wir_nodes::{BorrowError, WirFunction},
+};
+use crate::{borrow_log, wir_log};
 
 /// WASM Intermediate Representation (WIR) with simplified borrow checking
 ///
@@ -21,7 +19,7 @@ use crate::{wir_log, borrow_log};
 /// 1. AST-to-WIR lowering with event generation
 /// 2. State-aware borrow checking with hybrid loan-state mapping
 /// 3. Error reporting and conversion to compile errors
-pub fn borrow_check_pipeline(ast: AstBlock) -> Result<WIR, Vec<CompileError>> {
+pub fn borrow_check_pipeline(ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
     // Step 1: Lower AST to simplified WIR
     let wir = match ast_to_wir(ast) {
         Ok(wir) => wir,
@@ -30,7 +28,7 @@ pub fn borrow_check_pipeline(ast: AstBlock) -> Result<WIR, Vec<CompileError>> {
 
     // Step 2: Run state-aware borrow checking on all functions
     let mut all_errors = Vec::new();
-    
+
     wir_log!("WIR has {} functions", wir.functions.len());
 
     for function in &wir.functions {

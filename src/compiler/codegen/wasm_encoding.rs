@@ -1005,7 +1005,7 @@ impl WasmModule {
             DataType::Template => Ok(WasmType::I32), // Mutable string pointer (heap-allocated)
             DataType::Range => Ok(WasmType::I32),    // Range pointer
             DataType::CoerceToString => Ok(WasmType::I32), // String pointer
-            DataType::Args(_) | DataType::Struct(_, _) => Ok(WasmType::I32), // Struct pointer
+            DataType::Parameters(_) | DataType::Struct(_, _) => Ok(WasmType::I32), // Struct pointer
             DataType::Choices(_) => Ok(WasmType::I32), // Union pointer
             DataType::Option(_) => Ok(WasmType::I32), // Option pointer
             DataType::Reference(inner_type, _) => {

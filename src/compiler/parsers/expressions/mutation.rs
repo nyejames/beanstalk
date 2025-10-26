@@ -1,15 +1,15 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error};
+use crate::compiler::parsers::ast::ScopeContext;
 
 /// Handle mutation of existing mutable variables
 /// Called when we encounter a variable reference followed by an assignment operator
 pub fn handle_mutation(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     variable_arg: &Arg,
     context: &ScopeContext,
 ) -> Result<AstNode, CompileError> {
@@ -17,7 +17,11 @@ pub fn handle_mutation(
 
     // Check if the variable is mutable
     let ownership = &variable_arg.value.ownership;
-    ast_log!("Handling mutation for {:?}: '{}'", ownership, variable_arg.name);
+    ast_log!(
+        "Handling mutation for {:?}: '{}'",
+        ownership,
+        variable_arg.name
+    );
 
     if !ownership.is_mutable() {
         return_rule_error!(

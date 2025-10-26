@@ -1,5 +1,5 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::runtime::RuntimeConfig;
@@ -21,6 +21,7 @@ pub const BS_VAR_PREFIX: &str = "bst_";
 pub const SRC_TO_TOKEN_RATIO: usize = 5; // (Maybe) About 1/6 source code to tokens observed
 pub const IMPORTS_CAPACITY: usize = 6; // (No Idea atm)
 pub const EXPORTS_CAPACITY: usize = 6; // (No Idea atm)
+pub const TOKEN_TO_HEADER_RATIO: usize = 35; // (Maybe) About 1/35 tokens to AstNode ratio
 pub const TOKEN_TO_NODE_RATIO: usize = 10; // (Maybe) About 1/10 tokens to AstNode ratio
 pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols the smallest common Ast blocks will likely have
 
@@ -127,10 +128,11 @@ impl Default for HTMLMeta {
 }
 
 pub fn get_config_from_ast(
-    config_exports: Vec<Arg>,
+    config_ast: Ast,
     project_config: &mut Config,
 ) -> Result<(), CompileError> {
-    for arg in config_exports {
+    // TODO: Maybe these should be compiler directives again instead of explicit exports with determined names?
+    for arg in config_ast.external_exports {
         match arg.name.as_str() {
             "project" => {
                 project_config.project_type = match &arg.value.kind {
@@ -243,7 +245,7 @@ pub fn get_config_from_ast(
 
             "html_settings" => {
                 match &arg.value.kind {
-                    ExpressionKind::Struct(args) => {
+                    ExpressionKind::StructInstance(args) => {
                         for arg in args {
                             match arg.name.as_str() {
                                 "site_title" => {

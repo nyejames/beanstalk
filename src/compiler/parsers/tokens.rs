@@ -1,12 +1,12 @@
 use crate::compiler::datatypes::{DataType, Ownership};
 
+use crate::compiler::compiler_warnings::CompilerWarning;
 use colour::red_ln;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
-use crate::compiler::compiler_warnings::CompilerWarning;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
@@ -152,25 +152,21 @@ impl Token {
     }
 }
 
-#[derive(Clone)]
-pub struct TokenContext {
+#[derive(Clone, Debug)]
+pub struct FileTokens {
     pub tokens: Vec<Token>,
-    pub imports: HashSet<PathBuf>,
     pub src_path: PathBuf,
     pub index: usize,
     pub length: usize,
-    pub warnings: Vec<CompilerWarning>,
 }
 
-impl TokenContext {
-    pub fn new(src_path: PathBuf, tokens: Vec<Token>, imports: HashSet<PathBuf>) -> TokenContext {
-        TokenContext {
+impl FileTokens {
+    pub fn new(src_path: PathBuf, tokens: Vec<Token>) -> FileTokens {
+        FileTokens {
             length: tokens.len(),
             src_path,
             tokens,
             index: 0,
-            imports,
-            warnings: Vec::new(),
         }
     }
 
@@ -197,7 +193,7 @@ impl TokenContext {
             // without breaking a statement or expression
             &TokenKind::Colon
             | &TokenKind::OpenParenthesis
-            | &TokenKind::FuncParameterBracket
+            | &TokenKind::TypeParameterBracket
             | &TokenKind::Comma
             | &TokenKind::End
             | &TokenKind::Assign
@@ -244,6 +240,23 @@ impl TokenContext {
 
     pub fn go_back(&mut self) {
         self.index -= 1;
+    }
+
+    // Used for header parsing
+    // Or can be used for skipping an unused block of code
+    // Assumes already inside a scope (have passed the first colon)
+    pub fn skip_to_end_of_scope(&mut self) {
+        let mut scopes_opened = 1;
+        let mut scopes_closed = 0;
+
+        while scopes_opened > scopes_closed {
+            match self.current_token_kind() {
+                TokenKind::End => scopes_closed += 1,
+                TokenKind::Colon => scopes_opened += 1,
+                _ => {}
+            }
+            self.advance();
+        }
     }
 }
 
@@ -343,11 +356,12 @@ pub enum TokenKind {
     OpenCurly,  // {
     CloseCurly, // }
 
-    FuncParameterBracket, // |
+    TypeParameterBracket, // |
 
     // Structure of Syntax
     Newline,
     End,
+    EndTemplateHead,
 
     // Basic Grammar
     Comma,
@@ -360,6 +374,10 @@ pub enum TokenKind {
     CloseParenthesis, // )
 
     As, // Type casting
+
+    // Can modify types to become variadic parameters.
+    // So any number of values can be passed in
+    Variadic, // ..
 
     // Type Declarations
     Mutable,
@@ -430,7 +448,7 @@ pub enum TokenKind {
 
     // Pattern matching
     Wildcard, // _
-    Range,    // ..
+    Range,    // to
 
     // Memory Management
     Copy,

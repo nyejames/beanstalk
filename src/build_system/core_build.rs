@@ -9,9 +9,9 @@
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::AstBlock;
-use crate::compiler::parsers::tokens::TokenContext;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::parsers::tokens::FileTokens;
 use crate::settings::{Config, EXPORTS_CAPACITY};
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
@@ -91,12 +91,14 @@ pub fn compile_modules(
     flags: &[Flag],
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
-    let compiler = Compiler::new(config);
+
+    // TODO: define the host function registry based on the config
+    let compiler = Compiler::new(config, HostFunctionRegistry::new());
 
     // ----------------------------------
     //         Token generation
     // ----------------------------------
-    let project_tokens: Vec<Result<TokenContext, CompileError>> = modules
+    let project_tokens: Vec<Result<FileTokens, CompileError>> = modules
         .par_iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
@@ -130,17 +132,17 @@ pub fn compile_modules(
     let time = Instant::now();
     let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
     let mut messages: CompilerMessages = CompilerMessages::new();
-    let mut ast_blocks: Vec<AstBlock> = Vec::with_capacity(project_tokens.len());
+    let mut ast_blocks: Vec<AstNode> = Vec::with_capacity(project_tokens.len());
 
     for declaration in project_tokens {
         match declaration {
             Err(e) => messages.errors.push(e),
             Ok(declaration) => {
                 // Extends the compiler messages with warnings and errors from the parser
-                match compiler.tokens_to_ast(declaration, &exported_declarations) {
+                match compiler.headers_to_ast(declaration, &exported_declarations) {
                     Ok(parser_output) => {
                         exported_declarations.extend(parser_output.public);
-                        ast_blocks.push(parser_output.ast);
+                        ast_blocks.push(parser_output);
                         messages.warnings.extend(parser_output.warnings);
                     }
                     Err(e) => {
@@ -163,7 +165,7 @@ pub fn compile_modules(
     // ----------------------------------
     //       Link ASTs into module
     // ----------------------------------
-    let mut combined_module: Vec<crate::compiler::parsers::ast_nodes::AstNode> = Vec::new();
+    let mut combined_module: Vec<AstNode> = Vec::new();
     for block in &ast_blocks {
         combined_module.extend(block.ast.clone());
     }
@@ -171,11 +173,7 @@ pub fn compile_modules(
     // ----------------------------------
     //          WIR generation
     // ----------------------------------
-    let wir = match compiler.ast_to_ir(AstBlock {
-        ast: combined_module,
-        is_entry_point: true,
-        scope: config.entry_point.to_owned(),
-    }) {
+    let wir = match compiler.ast_to_ir(combined_module) {
         Ok(wir) => {
             if !flags.contains(&Flag::DisableTimers) {
                 print!("Wasm Intermediate Representation generated in: ");

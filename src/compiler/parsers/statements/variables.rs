@@ -1,10 +1,13 @@
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::AstNode;
-use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext, new_ast};
+use crate::compiler::parsers::build_ast::new_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::statements::structs::create_struct_definition;
+use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
     expressions::parse_expression::create_expression,
@@ -12,7 +15,7 @@ use crate::compiler::parsers::{
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     reference_arg: &Arg,
     context: &ScopeContext,
 ) -> Result<AstNode, CompileError> {
@@ -21,13 +24,9 @@ pub fn create_reference(
 
     match reference_arg.value.data_type {
         // Function Call
-        DataType::Function(ref argument_refs, ref return_types) => parse_function_call(
-            token_stream,
-            &reference_arg.name,
-            context,
-            argument_refs,
-            return_types,
-        ),
+        DataType::Function(ref signature) => {
+            parse_function_call(token_stream, &reference_arg.name, context, signature)
+        }
 
         _ => {
             let ownership = if reference_arg.value.ownership.is_mutable() {
@@ -54,9 +53,10 @@ pub fn create_reference(
 // Parses any new variable, function, type or struct argument must be structured.
 // [name] [optional mutability '~'] [optional type] [assignment operator '='] [value]
 pub fn new_arg(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     name: &str,
     context: &ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
 ) -> Result<Arg, CompileError> {
     // Move past the name
     token_stream.advance();
@@ -78,6 +78,33 @@ pub fn new_arg(
             // For now, it's easy to read and parse this way while working on the specifics of the syntax
             token_stream.go_back();
             data_type = DataType::Inferred;
+        }
+
+        TokenKind::TypeParameterBracket => {
+            let func_sig = FunctionSignature::new(token_stream, &context)?;
+
+            let func_context = context.new_child_function(name, func_sig.to_owned());
+
+            // TODO: fast check for function without signature
+            // let context = context.new_child_function(name, &[]);
+            // return Ok(Arg {
+            //     name: name.to_owned(),
+            //     value: Expression::function_without_signature(
+            //         new_ast(token_stream, context, false)?.ast,
+            //         token_stream.current_location(),
+            //     ),
+            // });
+
+            let function_body = new_ast(token_stream, func_context.to_owned(), warnings)?;
+
+            return Ok(Arg {
+                name: name.to_owned(),
+                value: Expression::function(
+                    func_sig,
+                    function_body,
+                    token_stream.current_location(),
+                ),
+            });
         }
 
         // Has a type declaration
@@ -139,16 +166,7 @@ pub fn new_arg(
         TokenKind::Comma
         | TokenKind::Eof
         | TokenKind::Newline
-        | TokenKind::FuncParameterBracket => {
-            // If this is Parameters, then instead of a zero-value, we want to return None
-            if context.kind == ContextKind::Parameters {
-                ast_log!("Created new parameter: '{}' of type: {}", name, data_type);
-                return Ok(Arg {
-                    name: name.to_owned(),
-                    value: Expression::none(),
-                });
-            }
-
+        | TokenKind::TypeParameterBracket => {
             return_rule_error!(
                 token_stream.current_location(),
                 "All variables must be initialized with an assignment operator."
@@ -169,6 +187,11 @@ pub fn new_arg(
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
     let parsed_expr = match token_stream.current_token_kind() {
+        // Check if this is a struct definition (type)
+        TokenKind::TypeParameterBracket => {
+            let struct_def = create_struct_definition(token_stream, context)?;
+            Expression::struct_definition(struct_def, token_stream.current_location(), ownership)
+        }
         TokenKind::OpenParenthesis => {
             token_stream.advance();
             create_expression(token_stream, context, &mut data_type, &ownership, true)?
@@ -182,6 +205,7 @@ pub fn new_arg(
         name,
         data_type
     );
+
     Ok(Arg {
         name: name.to_owned(),
         value: parsed_expr,

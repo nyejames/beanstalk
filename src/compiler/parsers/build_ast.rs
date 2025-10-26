@@ -1,216 +1,32 @@
-use crate::tokenizer::END_SCOPE_CHAR;
-
 use super::ast_nodes::NodeKind;
-use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::compiler_errors::{CompileError};
+use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::datatypes::DataType;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
-use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::expressions::expression::{ExpressionKind};
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+
+use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::loops::create_loop;
-use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind, VarVisibility};
+use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
-use std::path::PathBuf;
+use crate::tokenizer::END_SCOPE_CHAR;
+use crate::{
+    ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings, timer_log,
+};
 
-#[derive(Clone, Debug)]
-pub struct AstBlock {
-    pub scope: PathBuf,
-    pub ast: Vec<AstNode>, // Body
-    pub is_entry_point: bool,
-}
-pub struct ParserOutput {
-    pub ast: AstBlock,
-
-    // Top level declarations in the module
-    // that can be seen by other Beanstalk files
-    pub public: Vec<Arg>,
-
-    // Exported out of the final compiled wasm module
-    // Must use explicit 'export' syntax Token::Export
-    pub external_exports: Vec<Arg>,
-    pub warnings: Vec<CompilerWarning>,
-}
-impl ParserOutput {
-    fn new(
-        ast: AstBlock,
-        public: Vec<Arg>,
-        exports: Vec<Arg>,
-        warnings: Vec<CompilerWarning>,
-    ) -> ParserOutput {
-        ParserOutput {
-            ast,
-            public,
-            external_exports: exports,
-            warnings,
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct ScopeContext {
-    pub kind: ContextKind,
-    pub scope_name: PathBuf,
-    pub declarations: Vec<Arg>,
-    pub returns: Vec<Arg>,
-    pub host_registry: HostFunctionRegistry,
-}
-#[derive(PartialEq, Clone)]
-pub enum ContextKind {
-    TopLevel, // Global scope
-    Expression,
-    Function,
-    Parameters, // Inside a function signature
-    Condition,  // For loops and if statements
-    Loop,
-    Branch,
-    Template,
-}
-
-impl ScopeContext {
-    pub fn new(kind: ContextKind, scope: PathBuf, declarations: &[Arg]) -> ScopeContext {
-        // Create a default registry - this will be replaced with the actual registry
-        let host_registry = HostFunctionRegistry::new();
-
-        ScopeContext {
-            kind,
-            scope_name: scope,
-            declarations: declarations.to_owned(),
-            returns: Vec::new(),
-            host_registry,
-        }
-    }
-
-    pub fn new_with_registry(
-        kind: ContextKind,
-        scope: PathBuf,
-        declarations: &[Arg],
-        host_registry: HostFunctionRegistry,
-    ) -> ScopeContext {
-        ScopeContext {
-            kind,
-            scope_name: scope,
-            declarations: declarations.to_owned(),
-            returns: Vec::new(),
-            host_registry,
-        }
-    }
-
-    pub fn new_child_control_flow(&self, kind: ContextKind) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = kind;
-
-        // For now, add the lifetime ID to the scope.
-        new_context
-    }
-
-    pub fn new_child_function(
-        &self,
-        name: &str,
-        returns: &[Arg],
-        arguments: Vec<Arg>,
-    ) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Function;
-        new_context.returns = returns.to_owned();
-        new_context.scope_name.push(name);
-        new_context.declarations = arguments;
-
-        new_context
-    }
-
-    pub fn new_parameters(&self) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Parameters;
-        new_context.scope_name.push("parameters");
-
-        new_context
-    }
-
-    pub fn new_child_expression(&self, returns: Vec<Arg>) -> ScopeContext {
-        let mut new_context = self.to_owned();
-        new_context.kind = ContextKind::Expression;
-        new_context.returns = returns;
-        new_context.scope_name.push("expression");
-        new_context
-    }
-
-    pub fn add_var(&mut self, arg: Arg) {
-        self.declarations.push(arg);
-    }
-}
-
-/// A new AstContext for scenes
-///
-/// Usage:
-/// name (for the scope), args (declarations it can access)
-#[macro_export]
-macro_rules! new_template_context {
-    ($context:expr) => {
-        &ScopeContext {
-            kind: ContextKind::Template,
-            scope_name: $context.scope_name.to_owned(),
-            declarations: $context.declarations.to_owned(),
-            returns: vec![],
-            host_registry: $context.host_registry.clone(),
-        }
-    };
-}
-
-/// New Config AstContext
-///
-/// name (for scope), args (declarations it can reference)
-#[macro_export]
-macro_rules! new_config_context {
-    ($name:expr, $args:expr, $registry:expr) => {
-        ScopeContext {
-            kind: ContextKind::Template,
-            scope_name: PathBuf::from($name),
-            declarations: $args,
-            returns: vec![],
-            host_registry: $registry,
-        }
-    };
-}
-
-/// New Condition AstContext
-///
-/// name (for scope), args (declarations it can reference)
-#[macro_export]
-macro_rules! new_condition_context {
-    ($name:expr, $args:expr, $registry:expr) => {
-        ScopeContext {
-            kind: ContextKind::Condition,
-            scope_name: PathBuf::from($name),
-            declarations: $args,
-            returns: vec![], //Empty because conditions are always booleans
-            host_registry: $registry,
-        }
-    };
-}
-
-// This is a new scope
 pub fn new_ast(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     mut context: ScopeContext,
-    is_entry_point: bool,
-) -> Result<ParserOutput, CompileError> {
+    warnings: &mut Vec<CompilerWarning>,
+) -> Result<Vec<AstNode>, CompileError> {
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
-
-    let mut public = Vec::new();
-    let mut external_exports = Vec::new();
-    let mut next_statement_exported = false;
-
-    // TODO: Start adding warnings where possible
-    let warnings = Vec::new();
 
     while token_stream.index < token_stream.length {
         // This should be starting after the imports
@@ -283,15 +99,14 @@ pub fn new_ast(
                         //        FUNCTION CALLS
                         // ----------------------------
                         TokenKind::OpenParenthesis => {
-                            if let DataType::Function(required_arguments, returned_types) =
+                            if let DataType::Function(signature) =
                                 &arg.value.data_type
                             {
                                 ast.push(parse_function_call(
                                     token_stream,
                                     name,
                                     &context,
-                                    required_arguments,
-                                    returned_types,
+                                    signature,
                                 )?)
                             }
                         }
@@ -321,33 +136,29 @@ pub fn new_ast(
                         .map(|x| x.to_arg())
                         .collect::<Vec<Arg>>();
 
+                    let signature = FunctionSignature {
+                        parameters: host_func_call.parameters.to_owned(),
+                        returns: converted_returns.to_owned(),
+                    };
+
                     ast.push(parse_function_call(
                         token_stream,
                         name,
                         &context,
-                        &host_func_call.parameters,
-                        &converted_returns,
+                        &signature,
                     )?)
                 } else {
-                    let visibility = if next_statement_exported {
-                        VarVisibility::Exported
-                    } else {
-                        VarVisibility::Private
-                    };
+                    let arg = new_arg(token_stream, name, &context, warnings)?;
 
-                    match token_stream.peek_next_token() {
-                        // -----------------------------
-                        //    NEW STRUCT DECLARATIONS
-                        // -----------------------------
-                        Some(TokenKind::Colon) => {
-                            // Advance to the colon
-                            token_stream.advance();
-
+                    // -----------------------------
+                    //    NEW STRUCT DECLARATIONS
+                    // -----------------------------
+                    match arg.value.kind {
+                        ExpressionKind::StructDefinition(ref params) => {
                             ast.push(AstNode {
                                 kind: NodeKind::StructDefinition(
                                     name.to_owned(),
-                                    // this skips the closing token
-                                    create_struct_definition(name, token_stream, &context)?,
+                                    params.to_owned(),
                                 ),
                                 location: token_stream.current_location(),
                                 scope: context.scope_name.to_owned(),
@@ -357,75 +168,33 @@ pub fn new_ast(
                         // -----------------------------
                         //   NEW FUNCTION DECLARATION
                         // -----------------------------
-                        Some(TokenKind::FuncParameterBracket) => {
-                            let func_sig =
-                                FunctionSignature::new(token_stream, &mut true, &context)?;
-
-                            let func_context = context.new_child_function(
-                                name,
-                                &func_sig.returns,
-                                func_sig.args.to_owned(),
-                            );
-
-                            // TODO: fast check for function without signature
-                            // let context = context.new_child_function(name, &[]);
-                            // return Ok(Arg {
-                            //     name: name.to_owned(),
-                            //     value: Expression::function_without_signature(
-                            //         new_ast(token_stream, context, false)?.ast,
-                            //         token_stream.current_location(),
-                            //     ),
-                            // });
-
-                            let function_body = new_ast(token_stream, func_context, false)?.ast;
-
-                            let arg = Arg {
-                                name: name.to_owned(),
-                                value: Expression::function(
-                                    func_sig.args,
-                                    function_body,
-                                    func_sig.returns,
-                                    token_stream.current_location(),
-                                ),
-                            };
-
-                            // If this at the top of the module, this is public
-                            if context.kind == ContextKind::TopLevel {
-                                public.push(arg.to_owned());
-                            }
-
+                        ExpressionKind::Function(ref signature, ref body) => {
                             ast.push(AstNode {
-                                kind: NodeKind::VariableDeclaration(
+                                kind: NodeKind::Function(
                                     name.to_owned(),
-                                    arg.value.to_owned(),
-                                    visibility,
+                                    signature.to_owned(),
+                                    body.to_owned(),
                                 ),
                                 location: token_stream.current_location(),
                                 scope: context.scope_name.to_owned(),
                             });
-
-                            context.add_var(arg);
                         }
 
                         // -----------------------------
                         //   NEW VARIABLE DECLARATIONS
                         // -----------------------------
                         _ => {
-                            let arg = new_arg(token_stream, name, &context)?;
-
                             ast.push(AstNode {
                                 kind: NodeKind::VariableDeclaration(
-                                    name.to_owned(),
-                                    arg.value.to_owned(),
-                                    visibility,
+                                    arg.to_owned(),
                                 ),
                                 location: token_stream.current_location(),
                                 scope: context.scope_name.to_owned(),
                             });
-
-                            context.add_var(arg);
                         }
                     }
+
+                    context.add_var(arg);
                 }
             }
 
@@ -436,6 +205,7 @@ pub fn new_ast(
                 ast.push(create_loop(
                     token_stream,
                     context.new_child_control_flow(ContextKind::Loop),
+                    warnings,
                 )?);
             }
 
@@ -446,6 +216,7 @@ pub fn new_ast(
                 ast.extend(create_branch(
                     token_stream,
                     &mut context.new_child_control_flow(ContextKind::Branch),
+                    warnings,
                 )?);
             }
 
@@ -501,13 +272,6 @@ pub fn new_ast(
                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug."
                         );
                     }
-                    ContextKind::TopLevel => {
-                        return_syntax_error!(
-                            token_stream.current_location(),
-                            "Unexpected scope close with '{END_SCOPE_CHAR}'. You have probably used too many '{END_SCOPE_CHAR}'\
-                            as this scope close is in the global scope."
-                        )
-                    }
                     ContextKind::Template => {
                         return_syntax_error!(
                             token_stream.current_location(),
@@ -523,9 +287,14 @@ pub fn new_ast(
             }
 
             TokenKind::Export => {
-                // TODO: elaborate all the error cases where the next token is not a symbol
-                // And tell the user you can only export newly declared functions or variables
-                next_statement_exported = true;
+                // You can only export functions and variables at the top level
+                // Push it as a warning
+                warnings.push(CompilerWarning::new(
+                    "You can only export functions and variables from the top level of a file",
+                    token_stream.current_location(),
+                    WarningKind::PointlessExport,
+                    context.scope_name.to_owned(),
+                ));
                 token_stream.advance();
             }
 
@@ -543,20 +312,11 @@ pub fn new_ast(
         }
     }
 
-    Ok(ParserOutput::new(
-        AstBlock {
-            ast,
-            scope: context.scope_name,
-            is_entry_point,
-        },
-        public,
-        external_exports,
-        warnings,
-    ))
+    Ok(ast)
 }
 
 fn check_for_dot_access(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     arg: &Arg,
     context: &ScopeContext,
     ast: &mut Vec<AstNode>,
@@ -574,8 +334,8 @@ fn check_for_dot_access(
         // Collections have a .get() method for accessing elements, no [] syntax.
         if let TokenKind::Symbol(name, ..) = token_stream.current_token_kind().to_owned() {
             let members = match &arg.value.data_type {
-                DataType::Args(inner_args) => inner_args,
-                DataType::Function(_, returned_args) => returned_args,
+                DataType::Parameters(inner_args) => inner_args,
+                DataType::Function(sig) => &sig.returns,
                 _ => &get_builtin_methods(&arg.value.data_type),
             };
 
@@ -608,14 +368,12 @@ fn check_for_dot_access(
             // ----------------------------
             //        METHOD CALLS
             // ----------------------------
-            if let DataType::Function(required_arguments, returned_types) = &access.value.data_type
-            {
+            if let DataType::Function(signature) = &access.value.data_type {
                 ast.push(parse_function_call(
                     token_stream,
                     &name,
                     context,
-                    required_arguments,
-                    returned_types,
+                    signature,
                 )?)
             }
         } else {

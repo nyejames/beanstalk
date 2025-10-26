@@ -1,17 +1,16 @@
-use crate::compiler::parsers::build_ast::ContextKind;
-
+use crate::compiler::parsers::ast::ContextKind;
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::collections::new_collection;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
+use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::statements::functions::parse_function_call;
+use crate::compiler::parsers::statements::functions::{parse_function_call, FunctionSignature};
 use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::template::TemplateType;
-use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
@@ -21,7 +20,7 @@ use crate::{
 // For multiple returns or function calls
 // MUST know all the types
 pub fn create_multiple_expressions(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     context: &ScopeContext,
     consume_closing_parenthesis: bool,
 ) -> Result<Vec<Expression>, CompileError> {
@@ -78,7 +77,7 @@ pub fn create_multiple_expressions(
 // the expression must only contain references to collections
 // or collection literals.
 pub fn create_expression(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     context: &ScopeContext,
     data_type: &mut DataType,
     ownership: &Ownership,
@@ -207,7 +206,7 @@ pub fn create_expression(
             TokenKind::Symbol(ref name, ..) => {
                 if let Some(arg) = context.get_reference(name) {
                     match &arg.value.data_type {
-                        DataType::Function(required_args, returns) => {
+                        DataType::Function(signature) => {
                             // Advance past the function name to position at the opening parenthesis
                             token_stream.advance();
 
@@ -216,8 +215,7 @@ pub fn create_expression(
                                 token_stream,
                                 name,
                                 context,
-                                required_args,
-                                returns,
+                                signature
                             )?;
 
                             // -------------------------------
@@ -262,14 +260,18 @@ pub fn create_expression(
                         .iter()
                         .map(|x| x.to_arg())
                         .collect::<Vec<Arg>>();
+                    
+                    let signature = FunctionSignature {
+                        parameters: host_func_def.parameters.clone(),
+                        returns: converted_returns.clone(),
+                    };
 
                     // This is a function call - parse it using the function call parser
                     let function_call_node = parse_function_call(
                         token_stream,
                         name,
                         context,
-                        &host_func_def.parameters,
-                        &converted_returns,
+                        &signature,
                     )?;
 
                     if let NodeKind::HostFunctionCall(func_name, expressions, _returns, _module_name, _wasm_import_name, location) = function_call_node.kind {

@@ -1,16 +1,16 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
-use crate::compiler::parsers::tokens::{TextLocation, VarVisibility};
+use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
+use crate::compiler::parsers::statements::functions::FunctionSignature;
 
 #[derive(Debug, Clone)]
 pub struct Arg {
-    pub name: String,      // Optional Name of the argument (empty string if unnamed)
-    pub value: Expression, // Optional Value of the argument - 'None' if no value
+    pub name: String,
+    pub value: Expression,
 }
 
 #[derive(Debug, Clone)]
@@ -29,29 +29,27 @@ pub enum NodeKind {
     // Config settings
     Config(Vec<Arg>), // Settings,
 
-    // Named an import path for the module
-    // Import(String, TokenPosition), // Path,
+    // Imports a function from the host environment
+    // This could be another Wasm file or a native function provided by the runtime
+    Import(PathBuf),
 
-    // Path to a module that will automatically import all styles and templates
-    // into the scope of the current module. Doesn't automatically import variables or functions into the scope
-    Use(PathBuf), // Path,
-
-    // Memory management (inserted by the compiler)
-    Free(PathBuf),
+    // Generic import path to another Beanstalk file
+    // Effectively means the file is included in the current file as a struct that can be accessed
+    Include(String, PathBuf), // Name of file import, Imported file object
 
     // Control Flow
     Access,
-    Return(Vec<Expression>),                    // Return value,
-    If(Expression, AstBlock, Option<AstBlock>), // Condition, If true, Else
+    Return(Vec<Expression>),                            // Return value,
+    If(Expression, Vec<AstNode>, Option<Vec<AstNode>>), // Condition, If true, Else
 
     Match(
-        Expression,       // Subject (condition)
-        Vec<MatchArm>,    // Arms
-        Option<AstBlock>, // for the wildcard/else case
+        Expression,           // Subject (condition)
+        Vec<MatchArm>,        // Arms
+        Option<Vec<AstNode>>, // for the wildcard/else case
     ),
 
-    ForLoop(Box<Arg>, Expression, AstBlock), // Item, Collection, Body,
-    WhileLoop(Expression, AstBlock),         // Condition, Body,
+    ForLoop(Box<Arg>, Expression, Vec<AstNode>), // Item, Collection, Body,
+    WhileLoop(Expression, Vec<AstNode>),         // Condition, Body,
 
     // Basics
     FunctionCall(
@@ -74,19 +72,28 @@ pub enum NodeKind {
     ),
 
     // Variable names should be the full namespace (module path + variable name)
-    VariableDeclaration(String, Expression, VarVisibility), // Variable name, Value, Visibility,
+    VariableDeclaration(Arg), // Variable name, Value, Visibility,
 
-    StructDefinition(String, Vec<Arg>),
+    // example: new_struct_instance = MyStructDefinition(arg1, arg2)
+    //          new_struct_instance(arg) -- Calls the main function of the struct
+    StructDefinition(
+        String,   // Name
+        Vec<Arg>, // Fields
+    ),
+    
+    Function(String, FunctionSignature, Vec<AstNode>),
 
     // Mutation of existing mutable variables
     Mutation(String, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
 
     // An actual r-value
-    // Expression(Expression),
+    Expression(Expression),
 
-    // Built-in Functions (Would probably be standard lib in other languages)
-    // Print can accept multiple arguments and will coerce them to strings
-    Print(Expression), // Value,
+    // Built-in, always expected host Functions.
+    // Print can accept multiple arguments and will coerce them to strings.
+    // This will eventually change to a Beanstalk import called "io"
+    // that will have a default init function that prints to the standard output
+    Print(Expression),
 
     // Other language code blocks
     JS(String),  // Code,
@@ -107,8 +114,8 @@ pub enum NodeKind {
 impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
-            NodeKind::VariableDeclaration(_, value, ..)
-            // | NodeKind::Expression(value, ..)
+            NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
+            NodeKind::Expression(value, ..)
             | NodeKind::Mutation(_, value, _) => Ok(value.to_owned()),
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(
@@ -162,8 +169,6 @@ impl AstNode {
                             value.data_type
                         )
                     }
-
-                    return Ok(true);
                 }
                 _ => {}
             }

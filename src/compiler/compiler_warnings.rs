@@ -1,13 +1,29 @@
-use std::path::PathBuf;
-use colour::yellow_ln_bold;
 use crate::compiler::parsers::tokens::TextLocation;
+use colour::yellow_ln_bold;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {
-    msg: String,
-    location: TextLocation,
-    warning_kind: WarningKind,
-    file_path: PathBuf,
+    pub msg: String,
+    pub location: TextLocation,
+    pub warning_kind: WarningKind,
+    pub file_path: PathBuf,
+}
+
+impl CompilerWarning {
+    pub fn new(
+        msg: &str,
+        location: TextLocation,
+        warning_kind: WarningKind,
+        file_path: PathBuf,
+    ) -> CompilerWarning {
+        CompilerWarning {
+            msg: msg.to_owned(),
+            location,
+            warning_kind,
+            file_path,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -21,6 +37,7 @@ pub enum WarningKind {
     UnusedFunctionReturnValue,
     UnusedFunctionParameter,
     UnusedFunctionParameterDefaultValue,
+    PointlessExport,
 }
 
 pub fn print_formatted_warning(w: CompilerWarning) {
@@ -52,6 +69,9 @@ pub fn print_formatted_warning(w: CompilerWarning) {
         }
         WarningKind::UnusedFunctionParameterDefaultValue => {
             println!("Unused function parameter default value '{}'", w.msg);
+        }
+        WarningKind::PointlessExport => {
+            println!("Pointless export '{}'", w.msg);
         }
     }
 }

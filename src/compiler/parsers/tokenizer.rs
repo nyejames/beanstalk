@@ -1,11 +1,11 @@
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokens::{
-    TextLocation, Token, TokenContext, TokenKind, TokenStream, TokenizeMode,
+    FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
 use crate::{return_syntax_error, settings, token_log};
 use colour::green_ln;
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -19,10 +19,9 @@ pub fn tokenize(
     source_code: &str,
     src_path: &Path,
     mode: TokenizeMode,
-) -> Result<TokenContext, CompileError> {
+) -> Result<FileTokens, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
-    let imports_initial_capacity = settings::IMPORTS_CAPACITY;
     let type_declarations_initial_capacity = settings::IMPORTS_CAPACITY;
 
     let mut template_nesting_level: i64 = if mode == TokenizeMode::Normal {
@@ -34,7 +33,6 @@ pub fn tokenize(
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode);
-    let mut imports = HashSet::with_capacity(imports_initial_capacity);
     let mut type_declarations = HashSet::with_capacity(type_declarations_initial_capacity);
 
     let mut token: Token = Token::new(
@@ -54,7 +52,6 @@ pub fn tokenize(
         token = get_token_kind(
             &mut stream,
             &mut template_nesting_level,
-            &mut imports,
             &mut type_declarations,
         )?;
     }
@@ -62,13 +59,12 @@ pub fn tokenize(
     tokens.push(token);
 
     // First creation of TokenContext
-    Ok(TokenContext::new(src_path.to_owned(), tokens, imports))
+    Ok(FileTokens::new(src_path.to_owned(), tokens))
 }
 
 pub fn get_token_kind(
     stream: &mut TokenStream,
     template_nesting_level: &mut i64,
-    imports: &mut HashSet<PathBuf>,
     type_declarations: &mut HashSet<String>,
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
@@ -182,7 +178,7 @@ pub fn get_token_kind(
         if stream.mode == TokenizeMode::TemplateHead {
             stream.mode = TokenizeMode::TemplateBody;
 
-            return_token!(TokenKind::Colon, stream);
+            return_token!(TokenKind::EndTemplateHead, stream);
         }
 
         // :: (not currently using)
@@ -242,10 +238,12 @@ pub fn get_token_kind(
     }
 
     if current_char == '.' {
-        // Check if range operator
-        if let Some(&peeked_char) = stream.peek() && peeked_char == '.' {
-                stream.next();
-                return_token!(TokenKind::Range, stream);
+        // Check if variadic
+        if let Some(&peeked_char) = stream.peek()
+            && peeked_char == '.'
+        {
+            stream.next();
+            return_token!(TokenKind::Variadic, stream);
         }
 
         return_token!(TokenKind::Dot, stream);
@@ -262,7 +260,7 @@ pub fn get_token_kind(
 
     // Structs
     if current_char == '|' {
-        return_token!(TokenKind::FuncParameterBracket, stream);
+        return_token!(TokenKind::TypeParameterBracket, stream);
     }
 
     // Currently not using bangs
@@ -291,7 +289,7 @@ pub fn get_token_kind(
                 }
 
                 // Do not add any token to the stream, call this function again
-                return get_token_kind(stream, template_nesting_level, imports, type_declarations);
+                return get_token_kind(stream, template_nesting_level, type_declarations);
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -416,7 +414,7 @@ pub fn get_token_kind(
 
     // Compiler Directives
     if current_char == '#' {
-        return compiler_directive(&mut token_value, stream, imports);
+        return compiler_directive(&mut token_value, stream);
     }
 
     // For ID's or labels? Or maybe paths too?
@@ -540,6 +538,7 @@ fn keyword_or_variable(
             "in" => return_token!(TokenKind::In, stream),
             "as" => return_token!(TokenKind::As, stream),
             "copy" => return_token!(TokenKind::Copy, stream),
+            "to" => return_token!(TokenKind::Range, stream),
 
             // Logical
             "is" => return_token!(TokenKind::Is, stream),
@@ -587,7 +586,6 @@ fn keyword_or_variable(
 fn compiler_directive(
     token_value: &mut String,
     stream: &mut TokenStream,
-    imports: &mut HashSet<PathBuf>,
 ) -> Result<Token, CompileError> {
     loop {
         if stream
@@ -601,7 +599,7 @@ fn compiler_directive(
         match token_value.as_str() {
             // Import Statement
             "import" => {
-                imports.insert(tokenize_import(stream)?);
+                // imports.insert(tokenize_import(stream)?);
                 return_token!(TokenKind::Import, stream)
             }
             // For exporting functions or constants out of the final Wasm module
@@ -743,38 +741,40 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringSliceLiteral(token_value), stream);
 }
 
-fn tokenize_import(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
-    // Skip starting whitespace
-    while let Some(c) = stream.peek() {
-        if c.is_whitespace() {
-            if c == &'\n' {
-                return_syntax_error!(
-                    stream.new_location(),
-                    "Unexpected newline in import statement. Import statements must be on a single line. e.g import path/to/file"
-                )
-            }
-
-            stream.next();
-            continue;
-        }
-
-        break;
-    }
-
-    // Parse the import path
-    // This assumes starting the path from the project root directory
-    let mut import_path = String::new();
-    while let Some(c) = stream.peek() {
-        if c.is_whitespace() {
-            break;
-        }
-
-        import_path.push(stream.next().unwrap());
-    }
-
-    if import_path.is_empty() {
-        return_syntax_error!(stream.new_location(), "Import path cannot be empty")
-    }
-
-    Ok(PathBuf::from(import_path))
-}
+// fn tokenize_import(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
+//     // Skip starting whitespace
+//     while let Some(c) = stream.peek() {
+//         if c.is_whitespace() {
+//             if c == &'\n' {
+//                 return_syntax_error!(
+//                     stream.new_location(),
+//                     "Unexpected newline in import statement. Import statements must be on a single line. e.g import path/to/file"
+//                 )
+//             }
+//
+//             stream.next();
+//             continue;
+//         }
+//
+//         break;
+//     }
+//
+//     // TODO: this should simply be a generic import
+//
+//     // Parse the import path
+//     // This assumes starting the path from the project root directory
+//     let mut import_path = String::new();
+//     while let Some(c) = stream.peek() {
+//         if c.is_whitespace() {
+//             break;
+//         }
+//
+//         import_path.push(stream.next().unwrap());
+//     }
+//
+//     if import_path.is_empty() {
+//         return_syntax_error!(stream.new_location(), "Import path cannot be empty")
+//     }
+//
+//     Ok(PathBuf::from(import_path))
+// }

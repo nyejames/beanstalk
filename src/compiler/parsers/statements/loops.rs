@@ -1,12 +1,14 @@
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{ScopeContext, new_ast};
+use crate::compiler::parsers::build_ast::{ new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
+use crate::compiler::parsers::ast::ScopeContext;
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 // TODO: Loop invariance analysis.
@@ -16,8 +18,9 @@ use crate::{ast_log, return_syntax_error};
 // If it does, then it can be left alone, otherwise it can be marked as invariant.
 // Anything marked as invariant when parsing the AST to a lower IR can be hoisted up to the loop header.
 pub fn create_loop(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     mut context: ScopeContext,
+    warnings: &mut Vec<CompilerWarning>,
 ) -> Result<AstNode, CompileError> {
     ast_log!("Creating a Loop");
 
@@ -54,7 +57,7 @@ pub fn create_loop(
                         Ok(AstNode {
                             kind: NodeKind::WhileLoop(
                                 condition,
-                                new_ast(token_stream, context, false)?.ast,
+                                new_ast(token_stream, context, warnings)?,
                             ),
                             location: token_stream.current_location(),
                             scope,
@@ -137,7 +140,7 @@ pub fn create_loop(
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,
-                    new_ast(token_stream, context, false)?.ast,
+                    new_ast(token_stream, context, warnings)?,
                 ),
                 location: token_stream.current_location(),
             })

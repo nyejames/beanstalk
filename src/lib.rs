@@ -1,115 +1,119 @@
-pub mod build;
+pub(crate) mod build;
 pub mod settings;
 
-pub mod cli;
+pub(crate) mod cli;
 mod create_new_project;
 mod dev_server;
 
-pub mod compiler_tests {
-    pub mod test_runner;
+pub(crate) mod compiler_tests {
+    pub(crate) mod test_runner;
 }
 
 // New runtime and build system modules
-pub mod runtime;
-pub mod build_system {
-    pub mod build_system;
-    pub mod core_build;
-    pub mod embedded_project;
-    pub mod html_project;
-    pub mod jit;
-    pub mod native_project;
-    pub mod repl;
+pub(crate) mod runtime;
+pub(crate) mod build_system {
+    pub(crate) mod build_system;
+    pub(crate) mod core_build;
+    pub(crate) mod embedded_project;
+    pub(crate) mod html_project;
+    pub(crate) mod jit;
+    pub(crate) mod native_project;
+    pub(crate) mod repl;
 }
 
 mod compiler {
-    pub mod parsers {
-        pub mod ast_nodes;
-        pub mod build_ast;
-        pub mod build_top_level;
-        pub mod collections;
-        // pub mod markdown; // Commented out to silence unused warnings - will be used by frontend later
-        pub mod expressions {
-            pub mod eval_expression;
-            pub mod expression;
-            pub mod function_call_inline;
-            pub mod mutation;
-            pub mod parse_expression;
-        }
-        pub mod statements {
-            pub mod branching;
-            pub mod create_template_node;
-            pub mod functions;
-            pub mod loops;
-            pub mod structs;
-            pub mod variables;
-        }
-        pub mod builtin_methods;
-        pub mod template;
+    pub(crate) mod parsers {
+        pub(crate) mod ast;
+        pub(crate) mod ast_nodes;
+        pub(crate) mod build_ast;
+        pub(crate) mod collections;
 
-        pub mod tokenizer;
-        pub mod tokens;
+        pub(crate) mod parse_file_headers;
+        // pub(crate) mod markdown; // Commented out to silence unused warnings - will be used by frontend later
+        pub(crate) mod expressions {
+            pub(crate) mod eval_expression;
+            pub(crate) mod expression;
+            pub(crate) mod function_call_inline;
+            pub(crate) mod mutation;
+            pub(crate) mod parse_expression;
+        }
+        pub(crate) mod statements {
+            pub(crate) mod branching;
+            pub(crate) mod create_template_node;
+            pub(crate) mod functions;
+            pub(crate) mod loops;
+            pub(crate) mod structs;
+            pub(crate) mod variables;
+        }
+        pub(crate) mod builtin_methods;
+        pub(crate) mod template;
+
+        pub(crate) mod tokenizer;
+        pub(crate) mod tokens;
     }
-    pub mod optimizers {
-        pub mod constant_folding;
+    pub(crate) mod optimizers {
+        pub(crate) mod constant_folding;
     }
 
-    pub mod wir;
-    pub mod borrow_checker {
-        pub mod borrow_checker;
-        pub mod extract;
+    pub(crate) mod module_dependencies;
+    pub(crate) mod wir;
+
+    pub(crate) mod borrow_checker {
+        pub(crate) mod borrow_checker;
+        pub(crate) mod extract;
     }
 
     mod html5_codegen {
-        pub mod code_block_highlighting;
-        pub mod dom_hooks;
-        pub mod generate_html;
-        pub mod html_styles;
+        pub(crate) mod code_block_highlighting;
+        pub(crate) mod dom_hooks;
+        pub(crate) mod generate_html;
+        pub(crate) mod html_styles;
     }
 
     #[allow(dead_code)]
-    pub mod basic_utility_functions;
-    pub mod compiler_dev_logging;
-    pub mod compiler_errors;
-    pub mod compiler_warnings;
-    pub mod datatypes;
-    pub mod traits;
+    pub(crate) mod basic_utility_functions;
+    pub(crate) mod compiler_dev_logging;
+    pub(crate) mod compiler_errors;
+    pub(crate) mod compiler_warnings;
+    pub(crate) mod datatypes;
+    pub(crate) mod traits;
 
-    pub mod codegen {
-        pub mod build_wasm;
-        pub mod wasm_encoding;
-        pub mod wat_to_wasm;
+    pub(crate) mod codegen {
+        pub(crate) mod build_wasm;
+        pub(crate) mod wasm_encoding;
+        pub(crate) mod wat_to_wasm;
     }
 
-    pub mod host_functions {
-        pub mod registry;
-        pub mod wasix_registry;
+    pub(crate) mod host_functions {
+        pub(crate) mod registry;
+        pub(crate) mod wasix_registry;
     }
 }
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
-use crate::compiler::host_functions::registry::create_builtin_registry;
-use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::{
-    AstBlock, ContextKind, ParserOutput, ScopeContext, new_ast,
-};
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer;
-use crate::compiler::parsers::tokens::{TokenContext, TokenizeMode};
+use crate::compiler::parsers::tokens::{FileTokens, TokenizeMode};
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 // Re-export types for the build system
-pub use build::*;
+use crate::compiler::module_dependencies::resolve_module_dependencies;
+use crate::compiler::parsers::ast::Ast;
+use crate::compiler::parsers::parse_file_headers::{Header, parse_headers, parse_headers_in_file};
+pub(crate) use build::*;
 
 pub struct OutputModule {
-    pub imports: HashSet<PathBuf>,
-    pub source_path: PathBuf,
+    pub(crate) imports: HashSet<PathBuf>,
+    pub(crate) source_path: PathBuf,
 }
 
 impl OutputModule {
-    pub fn new(source_path: PathBuf, imports: HashSet<PathBuf>) -> Self {
+    pub(crate) fn new(source_path: PathBuf, imports: HashSet<PathBuf>) -> Self {
         OutputModule {
             imports,
             source_path,
@@ -126,27 +130,25 @@ pub enum Flag {
 
 pub struct Compiler<'a> {
     project_config: &'a Config,
+    host_function_registry: HostFunctionRegistry,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(project_config: &'a Config) -> Self {
-        Self { project_config }
+    pub fn new(project_config: &'a Config, host_function_registry: HostFunctionRegistry) -> Self {
+        Self {
+            project_config,
+            host_function_registry,
+        }
     }
 
     /// -----------------------------
     ///          TOKENIZER
     /// -----------------------------
-    /// At this stage,
-    /// we are also collecting the list of imports for the module.
-    /// This is so a dependency graph can start being built before the AST stage
-    /// So modules are compiled to an AST in the correct order.
-    /// Can be parallelised for all files in a project,
-    /// as there is no need to check imports or types yet
     pub fn source_to_tokens(
         &self,
         source_code: &str,
         module_path: &Path,
-    ) -> Result<TokenContext, CompileError> {
+    ) -> Result<FileTokens, CompileError> {
         let tokenizer_mode = match self.project_config.project_type {
             ProjectType::Repl => TokenizeMode::TemplateHead,
             _ => TokenizeMode::Normal,
@@ -158,35 +160,44 @@ impl<'a> Compiler<'a> {
         }
     }
 
+    /// ---------------------------
+    ///       HEADER PARSING
+    /// ---------------------------
+    /// First, each file will be parsed into separate headers
+    /// so every symbol they use is known before parsing their bodies.
+    /// This section answers the following questions:
+    /// - What has been imported from other files?
+    /// - What symbols (functions, structs, consts, types, imports) exist in this file?
+    /// - What types and shapes do those symbols have?
+    /// - What imports do headers actually depend on?
+    pub fn tokens_to_headers(
+        &self,
+        files: Vec<FileTokens>,
+    ) -> Result<Vec<Header>, CompilerMessages> {
+        parse_headers(files, &self.host_function_registry)
+    }
+
+    /// Every dependency needed for each file should be known before its headers are parsed.
+    /// This is so structs that contain imported structs can know the shape of the imported structs first.
+    /// ---------------------------
+    ///     DEPENDENCY SORTING
+    /// ---------------------------
+    /// Now, as we parse the headers and combine the files,
+    /// the types of each dependency will be known.
+    /// This section answers the following question:
+    /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
+    pub fn sort_headers(&self, headers: Vec<Header>) -> Result<Vec<Header>, CompilerMessages> {
+        resolve_module_dependencies(headers)
+    }
+
     /// -----------------------------
     ///         AST CREATION
     /// -----------------------------
-    /// This assumes the modules are in the right order for compiling
-    /// Without any circular dependencies.
-    /// All imports for a module must already be in public_declarations.
-    /// So all the type-checking and folding can be performed correctly
-    pub fn tokens_to_ast(
-        &self,
-        mut module_tokens: TokenContext,
-        public_declarations: &[Arg],
-    ) -> Result<ParserOutput, CompileError> {
-        // Create the host function registry
-        let host_registry = create_builtin_registry()
-            .map_err(|e| e.with_file_path(module_tokens.src_path.clone()))?;
-
-        let ast_context = ScopeContext::new_with_registry(
-            ContextKind::TopLevel,
-            module_tokens.src_path.to_owned(),
-            public_declarations,
-            host_registry,
-        );
-
-        let is_entry_point = self.project_config.entry_point == module_tokens.src_path;
-
-        match new_ast(&mut module_tokens, ast_context, is_entry_point) {
-            Ok(block) => Ok(block),
-            Err(e) => Err(e.with_file_path(module_tokens.src_path.to_owned())),
-        }
+    /// This assumes that the vec of FileTokens contains all dependencies for each file.
+    /// The headers of each file will be parsed first, then each file will be combined into one module.
+    /// The AST also provides a list of exports from the module.
+    pub fn headers_to_ast(&self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
+        Ast::new(module_tokens, &self.host_function_registry)
     }
 
     /// -----------------------------
@@ -194,7 +205,7 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
-    pub fn ast_to_ir(&self, ast: AstBlock) -> Result<WIR, Vec<CompileError>> {
+    pub fn ast_to_ir(&self, ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
         // Use the new borrow checking pipeline
         compiler::wir::wir::borrow_check_pipeline(ast)
     }

@@ -1,5 +1,5 @@
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::build_ast::ScopeContext;
 
 pub trait ContainsReferences {
     fn get_reference(&self, name: &str) -> Option<&Arg>;

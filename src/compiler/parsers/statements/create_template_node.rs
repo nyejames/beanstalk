@@ -1,15 +1,15 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::build_ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::template::{
     Style, TemplateContent, TemplateControlFlow, TemplateType,
 };
-use crate::compiler::parsers::tokens::{TextLocation, TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
+use crate::compiler::parsers::ast::ScopeContext;
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 
@@ -25,7 +25,7 @@ pub struct Template {
 
 impl Template {
     pub fn new(
-        token_stream: &mut TokenContext,
+        token_stream: &mut FileTokens,
         context: &ScopeContext,
         inherited_style: Option<Box<Style>>,
     ) -> Result<Template, CompileError> {
@@ -174,7 +174,7 @@ impl Template {
                     );
                 }
 
-                TokenKind::Empty | TokenKind::Colon => {}
+                TokenKind::Empty => {}
 
                 _ => {
                     return_syntax_error!(
@@ -383,7 +383,7 @@ impl Template {
 // - Add to the list of inherited expressions
 // - Make the scene unfoldable
 pub fn parse_template_head(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     context: &ScopeContext,
     template: &mut Template,
     foldable: &mut bool,
@@ -414,7 +414,7 @@ pub fn parse_template_head(
             return Ok(());
         }
 
-        if token == TokenKind::Colon {
+        if token == TokenKind::EndTemplateHead {
             token_stream.advance();
             return Ok(());
         }
@@ -471,12 +471,12 @@ pub fn parse_template_head(
                     match &arg.value.kind {
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
-                            template.insert_template_into_head(inserted_template, foldable)?;
+                            template.insert_template_into_head(&*inserted_template, foldable)?;
                         }
 
                         // TODO: Special stuff for Types (structs)
                         // In the future, Types can implement a Style interface to do cool stuff
-                        ExpressionKind::Struct(args) => {}
+                        ExpressionKind::StructInstance(args) => {}
 
                         // Otherwise this is a reference to some other variable
                         // String, Number, Bool, etc. References

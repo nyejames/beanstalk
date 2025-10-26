@@ -1,17 +1,17 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::Ownership::MutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::build_ast::ScopeContext;
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{TokenContext, TokenKind};
+use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 
 // This is a dynamic array of one data type
 // TODO - look through and update / test this code as a lot has changed
 // TODO: string keys to make it a map
 pub fn new_collection(
-    token_stream: &mut TokenContext,
+    token_stream: &mut FileTokens,
     collection_type: &DataType,
     context: &ScopeContext,
     ownership: &Ownership,

@@ -1,7 +1,7 @@
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::parsers::build_ast::AstBlock;
 use crate::compiler::parsers::statements::create_template_node::Template;
+use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokens::TextLocation;
 
 // Expressions represent anything that will turn into a value
@@ -33,7 +33,7 @@ impl Expression {
                 }
                 all_items
             }
-            ExpressionKind::Struct(args) => {
+            ExpressionKind::StructInstance(args) | ExpressionKind::StructDefinition(args) => {
                 let mut all_items = String::new();
                 for arg in args {
                     all_items.push_str(&arg.value.as_string());
@@ -133,22 +133,24 @@ impl Expression {
 
     // Creating Functions
     pub fn function(
-        args: Vec<Arg>,
-        body: AstBlock,
-        return_types: Vec<Arg>,
+        signature: FunctionSignature,
+        body: Vec<AstNode>,
         location: TextLocation,
     ) -> Self {
         Self {
-            data_type: DataType::Function(args.to_owned(), return_types.to_owned()),
-            kind: ExpressionKind::Function(args.to_owned(), body.ast, vec![]),
+            data_type: DataType::Function(signature.to_owned()),
+            kind: ExpressionKind::Function(signature, body),
             location,
             ownership: Ownership::ImmutableReference,
         }
     }
-    pub fn function_without_signature(body: AstBlock, location: TextLocation) -> Self {
+    pub fn function_without_signature(body: Vec<AstNode>, location: TextLocation) -> Self {
         Self {
             data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(vec![], body.ast, vec![]),
+            kind: ExpressionKind::Function(FunctionSignature {
+                parameters: vec![],
+                returns: vec![],
+            }, body),
             location,
             ownership: Ownership::ImmutableReference,
         }
@@ -158,9 +160,13 @@ impl Expression {
         body: Vec<AstNode>,
         location: TextLocation,
     ) -> Self {
+        let signature = FunctionSignature {
+            parameters: args,
+            returns: vec![],
+        };
         Self {
             data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(args, body, vec![]),
+            kind: ExpressionKind::Function(signature, body),
             location,
             ownership: Ownership::ImmutableReference,
         }
@@ -170,9 +176,13 @@ impl Expression {
         returns: Vec<Arg>,
         location: TextLocation,
     ) -> Self {
+        let signature = FunctionSignature {
+            parameters: vec![],
+            returns,
+        };
         Self {
             data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(vec![], body, returns),
+            kind: ExpressionKind::Function(signature, body),
             location,
             ownership: Ownership::ImmutableReference,
         }
@@ -188,7 +198,7 @@ impl Expression {
         let data_type = if returns.len() == 1 {
             returns[0].value.data_type.to_owned()
         } else {
-            DataType::Args(returns)
+            DataType::Parameters(returns)
         };
 
         Self {
@@ -215,7 +225,15 @@ impl Expression {
     pub fn struct_instance(args: Vec<Arg>, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::Inferred,
-            kind: ExpressionKind::Struct(args),
+            kind: ExpressionKind::StructInstance(args),
+            location,
+            ownership,
+        }
+    }
+    pub fn struct_definition(args: Vec<Arg>, location: TextLocation, ownership: Ownership) -> Self {
+        Self {
+            data_type: DataType::Inferred,
+            kind: ExpressionKind::StructDefinition(args),
             location,
             ownership,
         }
@@ -277,9 +295,8 @@ pub enum ExpressionKind {
 
     // Because functions can all be values
     Function(
-        Vec<Arg>,     // arguments (can be named)
+        FunctionSignature,
         Vec<AstNode>, // body
-        Vec<Arg>,     // return args (can be named)
     ),
 
     FunctionCall(
@@ -292,7 +309,8 @@ pub enum ExpressionKind {
 
     Collection(Vec<Expression>),
 
-    Struct(Vec<Arg>),
+    StructDefinition(Vec<Arg>),
+    StructInstance(Vec<Arg>),
 
     // This is a special case for the range operator
     // This implementation will probably change in the future to be a more general operator

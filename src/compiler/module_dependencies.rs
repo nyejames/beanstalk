@@ -3,11 +3,11 @@
 // Declarations will be parsed first in the tokenizer now.
 
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
-use crate::compiler::parsers::tokens::{TextLocation, TokenContext};
+use crate::compiler::parsers::parse_file_headers::Header;
+use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_rule_error;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use crate::compiler::compiler_warnings::CompilerWarning;
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
 /// and which have been permanently visited.
@@ -27,40 +27,33 @@ impl DependencyTracker {
 
 /// Given a list of (possibly errored) `TokenContext`
 /// builds a graph of successful ones and topologically sorts them.
-pub fn resolve_module_dependencies(
-    modules: Vec<TokenContext>,
-) -> Result<Vec<TokenContext>, CompilerMessages> {
-    let mut graph: HashMap<PathBuf, TokenContext> = HashMap::with_capacity(modules.len());
-    let mut errs: Vec<CompileError> = Vec::new();
-    let mut warnings: Vec<CompilerWarning> = Vec::new();
+pub fn resolve_module_dependencies(headers: Vec<Header>) -> Result<Vec<Header>, CompilerMessages> {
+    let mut graph: HashMap<PathBuf, Header> = HashMap::with_capacity(headers.len());
+    let mut messages: CompilerMessages = CompilerMessages::new();
 
     // Build graph or collect errors
-    for m in modules {
-        graph.insert(m.src_path.clone(), m);
+    for header in headers {
+        graph.insert(header.path.to_owned(), header);
     }
 
-    if !errs.is_empty() {
-        return Err(CompilerMessages {
-            errors: errs,
-            warnings,
-        });
+    if !messages.errors.is_empty() {
+        return Err(messages);
     }
 
     // Perform topological sort
     let mut tracker = DependencyTracker::new(graph.len());
-    let mut sorted: Vec<TokenContext> = Vec::with_capacity(graph.len());
-    let mut cycle_errs: Vec<CompileError> = Vec::new();
+    let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
     for path in graph.keys() {
         if !tracker.visited.contains(path) {
             if let Err(e) = visit_node(path, &mut tracker, &graph, &mut sorted) {
-                cycle_errs.push(e);
+                messages.errors.push(e);
             }
         }
     }
 
-    if !cycle_errs.is_empty() {
-        Err(cycle_errs)
+    if !messages.errors.is_empty() {
+        Err(messages)
     } else {
         Ok(sorted)
     }
@@ -70,8 +63,8 @@ pub fn resolve_module_dependencies(
 fn visit_node(
     node_path: &Path,
     tracker: &mut DependencyTracker,
-    graph: &HashMap<PathBuf, TokenContext>,
-    sorted: &mut Vec<TokenContext>,
+    graph: &HashMap<PathBuf, Header>,
+    sorted: &mut Vec<Header>,
 ) -> Result<(), CompileError> {
     // cycle?
     if tracker.temp_mark.contains(node_path) {
@@ -88,12 +81,12 @@ fn visit_node(
         tracker.temp_mark.insert(node_path.to_path_buf());
 
         // recurse on all imports
-        if let Some(ctx) = graph.get(node_path) {
-            for import in &ctx.imports {
+        if let Some(header) = graph.get(node_path) {
+            for import in &header.dependencies {
                 visit_node(import, tracker, graph, sorted)?;
             }
             // when children are done, push this node (clone of context)
-            sorted.push(ctx.clone());
+            sorted.push(header.clone());
         }
 
         // un-mark temp, mark visited
