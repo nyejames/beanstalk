@@ -15,13 +15,12 @@
 
   <h2>Current Progress</h2>
   <ul>
-    <li><strong>Frontend</strong> - Core syntax implemented into an AST</li>
-    <li><strong>Type Checking</strong> - Basics complete, an eager AST approach</li>
+    <li><strong>Frontend</strong> - Core syntax implemented. Currently refactoring header parsing before AST for full dependency resolution</li>
+    <li><strong>Type Checking</strong> - Basics complete, full struct type checking todo</li>
     <li><strong>Mid Level Optimisation</strong> - Fast Constant folding in place, more powerful optimisation passes to be added in the IR</li>
-    <li><strong>Compiler Error Messages and CLI</strong> - Basics Complete, need to add more detailed errors and coverage</li>
-    <li><strong>IR / Codegen</strong>Basics functioning - In progress. </li>
-        <li><strong>Borrow Checker</strong> - Not working yet, In progress. </li>
-    <li><strong>Build system</strong> - Basics in place, some scaffolding for dealing with different types of projects.
+    <li><strong>IR / Codegen</strong>Basics functioning - Will become the focus when the frontend is stabilised. </li>
+    <li><strong>Borrow Checker</strong> - Not working yet, In progress. </li>
+    <li><strong>Build system</strong> - Basics in place, some scaffolding for dealing with different types of projects. Wasm JIT support via Wasmer is the focus.
     </li>
   </ul>
 
@@ -46,11 +45,9 @@
 <br>
 
 # Overview / Goals
-Beanstalk is a statically typed, borrow checker language that compiles to Wasm and aims to provide all the glue code, runtimes and scaffolding for your Wasm project.
+Beanstalk is statically typed, procedural and has a borrow checker. It compiles to Wasm and aims to provide all the glue code, runtimes and scaffolding for your Wasm project with the build system.
 
-It is inspired by Go, Rust, Lua and bits of many other languages. You can think of some of its core design like a much simpler Rust with its own minimal syntax.
-
-The goal is to also be lightweight, purpose built Wasm language. This means each project will be specifically tailored to producing all the files and glue code you need for creating an app or web page.
+The goal is to also be lightweight, purpose built Wasm language. This means each project will be specifically tailored to producing all the files and glue code you need for creating an app or web page. 
 
 **Design Goals**
 - Minimal, clean syntax with very powerful string templates that are perfect for generating text content / HTML / typesetting or other tree based string structures.
