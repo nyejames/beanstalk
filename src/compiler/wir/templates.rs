@@ -209,7 +209,7 @@ fn create_string_coercion(
 
 /// Transform template content
 fn transform_template_content(
-    content: &crate::compiler::parsers::template::TemplateContent,
+    content: &crate::compiler::parsers::statements::template::TemplateContent,
     location: &TextLocation,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {

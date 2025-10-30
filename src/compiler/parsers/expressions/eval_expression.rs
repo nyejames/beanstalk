@@ -5,12 +5,12 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::statements::create_template_node::Template;
 
 use crate::compiler::datatypes::Ownership;
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
     return_compiler_error, return_syntax_error,
 };
 use std::path::PathBuf;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /**
  * Evaluates an abstract syntax tree (AST) expression using the shunting-yard algorithm

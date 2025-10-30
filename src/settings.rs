@@ -1,11 +1,11 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::runtime::RuntimeConfig;
 use crate::{return_config_error, return_type_error};
 use std::path::PathBuf;
 use wasmer::sys::Target;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";

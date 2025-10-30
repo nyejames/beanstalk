@@ -1,3 +1,4 @@
+use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
 use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::{CompileError};
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
@@ -13,12 +14,11 @@ use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::compiler::traits::ContainsReferences;
-use crate::tokenizer::END_SCOPE_CHAR;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings, timer_log,
 };
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 pub fn new_ast(
     token_stream: &mut FileTokens,

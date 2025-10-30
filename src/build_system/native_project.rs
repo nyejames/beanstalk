@@ -6,9 +6,9 @@
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 pub struct NativeProjectBuilder {
     target: BuildTarget,
@@ -61,13 +61,7 @@ impl ProjectBuilder for NativeProjectBuilder {
             // The list of valid target types is built into Cranelift itself so should always be supported here
             return Ok(());
         }
-
-        // Validate entry point exists
-        // if config.entry_point.as_os_str().is_empty() {
-        //     return Err(CompileError::compiler_error(
-        //         "Native projects require an entry point to be specified"
-        //     ));
-        // }
+        
         return_config_error!(
             TextLocation::default(),
             "Wrong target specified in project config: {:?}",

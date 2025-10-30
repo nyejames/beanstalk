@@ -1,8 +1,8 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::parsers::tokens::TextLocation;
 use std::fmt::Display;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {
@@ -118,8 +118,6 @@ pub enum DataType {
 
     Function(FunctionSignature), // Arg constructor, Returned args
 
-    Main, // Entry point for the module
-
     // Type Types
     // Unions allow types such as option and result
 
@@ -227,7 +225,6 @@ impl DataType {
             DataType::None => DataType::Option(Box::new(DataType::None)),
             DataType::Range => DataType::Option(Box::new(DataType::Range)),
             DataType::Option(_) => DataType::Option(Box::new(DataType::Option(Box::new(self)))),
-            DataType::Main => DataType::Option(Box::new(DataType::Main)),
         }
     }
 
@@ -391,7 +388,6 @@ impl Display for DataType {
                 }
                 write!(f, "Choices({inner_types_str})")
             }
-            DataType::Main => write!(f, "Main"),
         }
     }
 }

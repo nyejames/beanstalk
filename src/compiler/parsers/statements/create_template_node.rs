@@ -2,14 +2,14 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::template::{
+use crate::compiler::parsers::statements::template::{
     Style, TemplateContent, TemplateControlFlow, TemplateType,
 };
-use crate::compiler::parsers::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
 use crate::compiler::parsers::ast::ScopeContext;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 

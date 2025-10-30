@@ -996,8 +996,8 @@ impl WasmModule {
             DataType::Float => Ok(WasmType::F64), // Use f64 for Beanstalk floats
             DataType::Bool => Ok(WasmType::I32),
             DataType::String => Ok(WasmType::I32), // String slice pointer (immutable reference to data section)
-            DataType::Collection(_, _) => Ok(WasmType::I32), // Collection pointer
-            DataType::Function(_, _) => Ok(WasmType::FuncRef),
+            DataType::Collection(..) => Ok(WasmType::I32), // Collection pointer
+            DataType::Function(..) => Ok(WasmType::FuncRef),
             DataType::Inferred => Ok(WasmType::I32), // Default to i32 for unresolved types
             DataType::None => Ok(WasmType::I32),
             DataType::True | DataType::False => Ok(WasmType::I32), // Booleans as i32
@@ -1005,7 +1005,7 @@ impl WasmModule {
             DataType::Template => Ok(WasmType::I32), // Mutable string pointer (heap-allocated)
             DataType::Range => Ok(WasmType::I32),    // Range pointer
             DataType::CoerceToString => Ok(WasmType::I32), // String pointer
-            DataType::Parameters(_) | DataType::Struct(_, _) => Ok(WasmType::I32), // Struct pointer
+            DataType::Parameters(_) | DataType::Struct(..) => Ok(WasmType::I32), // Struct pointer
             DataType::Choices(_) => Ok(WasmType::I32), // Union pointer
             DataType::Option(_) => Ok(WasmType::I32), // Option pointer
             DataType::Reference(inner_type, _) => {

@@ -1,10 +1,11 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::Arg;
-use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::return_compiler_error;
 use std::collections::HashMap;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Defines how a host function handles errors
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -17,6 +18,16 @@ pub enum ErrorHandling {
     Panics,
 }
 
+// Parameters that don't have default arguments
+// This is to avoid the rabbit hole of dynamic dispatching in templates
+// Which makes multithreading unsafe in certain parts of the compiler pipeline.
+#[derive(Debug, Clone)]
+struct BasicParameter {
+    name: String,
+    data_type: DataType,
+}
+
+
 /// Defines a host function that can be called from Beanstalk code
 /// Uses the same parameter and return type system as regular Beanstalk functions
 #[derive(Debug, Clone)]
@@ -24,7 +35,7 @@ pub struct HostFunctionDef {
     /// Function name as used in Beanstalk code
     pub name: String,
     /// Function parameters using the same Arg structure as regular functions
-    pub parameters: Vec<Arg>,
+    pub parameters: Vec<BasicParameter>,
     /// Return types using the same system as regular functions
     pub return_types: Vec<DataType>,
     /// WASM import module name (e.g., "beanstalk_io")
@@ -41,7 +52,7 @@ impl HostFunctionDef {
     /// Create a new host function definition
     pub fn new(
         name: &str,
-        parameters: Vec<Arg>,
+        parameters: Vec<BasicParameter>,
         return_types: Vec<DataType>,
         module: &str,
         import_name: &str,
@@ -61,7 +72,7 @@ impl HostFunctionDef {
     /// Create a new host function definition that can fail
     pub fn new_with_error(
         name: &str,
-        parameters: Vec<Arg>,
+        parameters: Vec<BasicParameter>,
         return_types: Vec<DataType>,
         module: &str,
         import_name: &str,
@@ -88,16 +99,33 @@ impl HostFunctionDef {
             .map(|(i, data_type)| Arg {
                 name: format!("return_{}", i),
                 value: Expression::new(
-                    crate::compiler::parsers::expressions::expression::ExpressionKind::None,
-                    crate::compiler::parsers::tokens::TextLocation::default(),
+                    ExpressionKind::None,
+                    TextLocation::default(),
                     data_type.clone(),
                     crate::compiler::datatypes::Ownership::default(),
                 ),
             })
             .collect();
 
+        // Convert parameters Vec<Parameter> to Vec<Arg>
+        let parameters = self
+            .parameters
+            .iter()
+            .map(|param|
+                Arg {
+                    name: param.name.to_owned(),
+                    value: Expression::new(
+                        ExpressionKind::None,
+                        TextLocation::default(),
+                        param.data_type.to_owned(),
+                        crate::compiler::datatypes::Ownership::default(),
+                    ),
+                }
+            )
+            .collect();
+
         let signature = FunctionSignature {
-            parameters: self.parameters.to_owned(),
+            parameters,
             returns: return_args,
         };
 
@@ -167,21 +195,12 @@ impl Default for HostFunctionRegistry {
 pub fn create_builtin_registry() -> Result<HostFunctionRegistry, CompileError> {
     let mut registry = HostFunctionRegistry::new();
 
-    // Define the print function: print(message String)
-    // Using the same Arg structure as regular Beanstalk functions
-    let print_param = Arg {
-        name: "message".to_string(),
-        value: Expression::new(
-            crate::compiler::parsers::expressions::expression::ExpressionKind::None,
-            crate::compiler::parsers::tokens::TextLocation::default(),
-            DataType::String,
-            crate::compiler::datatypes::Ownership::ImmutableReference,
-        ),
-    };
-
     let print_function = HostFunctionDef::new(
         "print",
-        vec![print_param],
+        vec![BasicParameter {
+            name: "message".to_string(),
+            data_type: DataType::String,
+        }],
         vec![], // No return value (void function)
         "wasix_32v1",
         "fd_write",

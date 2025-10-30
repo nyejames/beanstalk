@@ -5,10 +5,10 @@ use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::statements::imports::parse_import;
-use crate::compiler::parsers::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::{ast_log, return_rule_error, timer_log};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 
 // Each header is one of these categories:
 // - Functions
@@ -51,22 +51,27 @@ pub struct Header {
 pub fn parse_headers(
     tokenized_files: Vec<FileTokens>,
     host_registry: &HostFunctionRegistry,
-) -> Result<Vec<Header>, CompilerMessages> {
-    let mut messages = CompilerMessages::new();
+    warnings: &mut Vec<CompilerWarning>,
+) -> Result<Vec<Header>, Vec<CompileError>> {
     let mut headers: Vec<Header> = Vec::new();
+    let mut errors: Vec<CompileError> = Vec::new();
 
     for mut file in tokenized_files {
         let headers_from_file =
-            parse_headers_in_file(&mut file, host_registry, &mut messages.warnings);
+            parse_headers_in_file(&mut file, host_registry, warnings);
 
         match headers_from_file {
             Ok(file_headers) => {
                 headers.extend(file_headers);
             }
             Err(e) => {
-                messages.errors.push(e);
+                errors.push(e);
             }
         }
+    }
+    
+    if errors.len() > 0 {
+        return Err(errors);
     }
 
     Ok(headers)

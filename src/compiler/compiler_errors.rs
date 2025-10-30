@@ -1,10 +1,10 @@
-use crate::compiler::parsers::tokens::TextLocation;
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
 use std::path::PathBuf;
 use std::{env, fs};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 #[derive(Debug)]
 pub struct CompilerMessages {
@@ -311,7 +311,7 @@ macro_rules! return_file_error {
     ($path:expr, $($msg:tt)+) => {
         return Err(CompileError {
             msg: format!($($msg)+),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::File,
             file_path: $path.to_owned(),
         })
@@ -345,7 +345,7 @@ macro_rules! return_compiler_error {
     ($($msg:tt)+) => {
         return Err(CompileError {
             msg: format!("COMPILER BUG - {}", format!($($msg)+)),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
         })
@@ -362,7 +362,7 @@ macro_rules! return_dev_server_error {
         return Err(CompilerMessages {
             errors: vec![CompileError {
                 msg: format!($($msg)+),
-                location: crate::compiler::parsers::tokens::TextLocation::default(),
+                location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 error_type: crate::compiler::compiler_errors::ErrorType::DevServer,
                 file_path: $path.to_owned(),
             }],
@@ -526,7 +526,7 @@ macro_rules! return_thread_err {
     ($process:expr) => {
         return Err(CompileError {
             msg: format!("Thread panicked during {}", $process),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
         })
@@ -538,7 +538,7 @@ macro_rules! return_wat_err {
     ($err:expr) => {
         return Err(CompileError {
             msg: format!("Error while parsing WAT: {}", $err),
-            location: crate::compiler::parsers::tokens::TextLocation::default(),
+            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
             file_path: std::path::PathBuf::new(),
         })

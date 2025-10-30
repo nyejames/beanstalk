@@ -5,10 +5,10 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::{ new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
 use crate::compiler::parsers::ast::ScopeContext;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 // TODO: Loop invariance analysis.

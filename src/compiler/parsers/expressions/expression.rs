@@ -2,7 +2,7 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::parsers::tokens::TextLocation;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.

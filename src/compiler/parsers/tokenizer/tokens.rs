@@ -337,7 +337,6 @@ pub enum TokenKind {
     // Special compiler directives
     /// The only way to manually force a panic in the compiler in release mode
     Panic,
-    Assert,
     Wat(String),
     Ignore,
 

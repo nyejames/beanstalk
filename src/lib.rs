@@ -26,7 +26,6 @@ mod compiler {
         pub(crate) mod ast;
         pub(crate) mod ast_nodes;
         pub(crate) mod build_ast;
-        pub(crate) mod collections;
 
         pub(crate) mod parse_file_headers;
         // pub(crate) mod markdown; // Commented out to silence unused warnings - will be used by frontend later
@@ -45,12 +44,17 @@ mod compiler {
             pub(crate) mod loops;
             pub(crate) mod structs;
             pub(crate) mod variables;
+            pub(crate) mod collections;
+            pub(crate) mod template;
         }
         pub(crate) mod builtin_methods;
-        pub(crate) mod template;
 
-        pub(crate) mod tokenizer;
-        pub(crate) mod tokens;
+        pub(crate) mod tokenizer {
+            pub(crate) mod tokenizer;
+            pub(crate) mod tokens;
+            pub(crate) mod compiler_directives;
+
+        }
     }
     pub(crate) mod optimizers {
         pub(crate) mod constant_folding;
@@ -96,7 +100,6 @@ use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer;
-use crate::compiler::parsers::tokens::{FileTokens, TokenizeMode};
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
@@ -105,8 +108,11 @@ use std::path::{Path, PathBuf};
 // Re-export types for the build system
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::parse_file_headers::{Header, parse_headers, parse_headers_in_file};
+use crate::compiler::parsers::parse_file_headers::{parse_headers, Header};
 pub(crate) use build::*;
+use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -155,7 +161,7 @@ impl<'a> Compiler<'a> {
             _ => TokenizeMode::Normal,
         };
 
-        match tokenizer::tokenize(source_code, module_path, tokenizer_mode) {
+        match tokenize(source_code, module_path, tokenizer_mode) {
             Ok(tokens) => Ok(tokens),
             Err(e) => Err(e.with_file_path(PathBuf::from(module_path))),
         }
@@ -174,8 +180,9 @@ impl<'a> Compiler<'a> {
     pub fn tokens_to_headers(
         &self,
         files: Vec<FileTokens>,
-    ) -> Result<Vec<Header>, CompilerMessages> {
-        parse_headers(files, &self.host_function_registry)
+        warnings: &mut Vec<CompilerWarning>,
+    ) -> Result<Vec<Header>, Vec<CompileError>> {
+        parse_headers(files, &self.host_function_registry, warnings)
     }
 
     /// Every dependency needed for each file should be known before its headers are parsed.
@@ -187,7 +194,7 @@ impl<'a> Compiler<'a> {
     /// the types of each dependency will be known.
     /// This section answers the following question:
     /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
-    pub fn sort_headers(&self, headers: Vec<Header>) -> Result<Vec<Header>, CompilerMessages> {
+    pub fn sort_headers(&self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
         resolve_module_dependencies(headers)
     }
 

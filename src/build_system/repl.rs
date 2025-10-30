@@ -7,10 +7,13 @@
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::tokens::TokenizeMode;
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
+use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
+use crate::compiler::parsers::tokenizer;
+use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
+use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
 
 /// Start the REPL session
 pub fn start_repl_session() {
@@ -78,12 +81,10 @@ fn compile_beanstalk_to_string(
     source_code: &str,
     source_path: &Path,
 ) -> Result<String, CompileError> {
-    use crate::compiler::parsers::build_ast::{ContextKind, ScopeContext};
-    use crate::compiler::parsers::tokenizer;
 
     // Tokenize the source code
     let mut tokenizer_output =
-        tokenizer::tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
+        tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
     let ast_context = ScopeContext::new(ContextKind::Template, source_path.to_path_buf(), &[]);
 
     // Build Template

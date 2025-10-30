@@ -1,14 +1,14 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::parsers::tokens::{
-    FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
-};
 use crate::{return_syntax_error, settings, token_log};
 use colour::green_ln;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode};
 
 pub const END_SCOPE_CHAR: char = ';';
 
+#[macro_export]
 macro_rules! return_token {
     ($kind:expr, $stream:expr $(,)?) => {
         return Ok(Token::new($kind, $stream.new_location()))
@@ -549,8 +549,6 @@ fn keyword_or_variable(
             "and" => return_token!(TokenKind::And, stream),
             "or" => return_token!(TokenKind::Or, stream),
 
-            "async" => return_token!(TokenKind::Async, stream),
-
             // Data Types
             "true" => return_token!(TokenKind::BoolLiteral(true), stream),
             "True" => return_token!(TokenKind::DatatypeTrue, stream),
@@ -586,51 +584,6 @@ fn keyword_or_variable(
     }
 }
 
-fn compiler_directive(
-    token_value: &mut String,
-    stream: &mut TokenStream,
-) -> Result<Token, CompileError> {
-    loop {
-        if stream
-            .peek()
-            .is_some_and(|c| c.is_alphanumeric() || c == &'_')
-        {
-            token_value.push(stream.next().unwrap());
-            continue;
-        }
-
-        match token_value.as_str() {
-            // Import Statement
-            "import" => {
-                // imports.insert(tokenize_import(stream)?);
-                return_token!(TokenKind::Import, stream)
-            }
-            // For exporting functions or constants out of the final Wasm module
-            "export" => {
-                return_token!(TokenKind::Export, stream)
-            }
-
-            // Built-in functions
-            "assert" => return_token!(TokenKind::Assert, stream),
-            "panic" => return_token!(TokenKind::Panic, stream),
-
-            // External language blocks
-            "WAT" => return_token!(TokenKind::Wat(string_block(stream)?), stream),
-
-            // Special template tokens
-            "slot" => return_token!(TokenKind::Slot, stream),
-
-            _ => {
-                return_syntax_error!(
-                    stream.new_location(),
-                    "Invalid compiler directive: #{}",
-                    token_value
-                )
-            }
-        };
-    }
-}
-
 // Checking if the variable name is valid
 fn is_valid_identifier(s: &str) -> bool {
     // Check if the string is a valid identifier (variable name)
@@ -640,10 +593,10 @@ fn is_valid_identifier(s: &str) -> bool {
         && s.chars().all(|c| c.is_alphanumeric() || c == '_')
 }
 
-// A block that starts with: and ends with the 'fin' keyword
-// Everything inbetween is returned as a string
-// Throws an error if there is no starting colon or ending 'fin' keyword
-fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
+// A block that starts with an open parenthesis and ends with a close parenthesis
+// Everything in between is returned as a string
+// Throws an error if there is no starting parenthesis or ending parenthesis
+pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
     let mut string_value = String::new();
 
     while let Some(ch) = stream.peek() {
@@ -654,7 +607,7 @@ fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
         }
 
         // Start the code block at the colon
-        if *ch != ':' {
+        if *ch != '(' {
             return_syntax_error!(
                 stream.new_location(),
                 "Expected ':' to start a new block, found '{}'",
@@ -666,33 +619,36 @@ fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
         }
     }
 
-    let mut closing_end_keyword = false;
+    let mut parenthesis_closed = 0;
+    let mut parenthesis_opened = 1;
 
     loop {
         match stream.peek() {
             Some(char) => {
-                string_value.push(*char);
+                if char == &')' {
+                    parenthesis_closed += 1;
+                }
+                if char == &'(' {
+                    parenthesis_opened += 1;
+                }
 
+                if parenthesis_opened == parenthesis_closed {
+                    stream.next();
+                    break;
+                }
+                string_value.push(*char);
                 stream.next();
             }
             None => {
-                if !closing_end_keyword {
+                if parenthesis_opened > parenthesis_closed {
                     return_syntax_error!(
                         stream.new_location(),
-                        "Expected '{}' keyword to end the block",
-                        END_SCOPE_CHAR
+                        "File ended before closing the last parenthesis",
                     )
                 }
                 break;
             }
         };
-
-        // Push everything to the JS code block until the first 'end' token
-        // must have a newline before and whitespace after the 'end' token
-        if string_value.ends_with(END_SCOPE_CHAR) {
-            closing_end_keyword = true;
-            string_value = string_value.split_at(string_value.len() - 1).0.to_string();
-        }
     }
 
     Ok(string_value)

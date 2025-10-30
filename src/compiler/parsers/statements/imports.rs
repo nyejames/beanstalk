@@ -1,7 +1,7 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::return_rule_error;
 use std::path::Path;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 // Parses tokens after the "Import" token
 // Each Import is a path to a file and the name of the header being imported.

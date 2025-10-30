@@ -2,10 +2,10 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
-use crate::compiler::parsers::tokens::TextLocation;
 use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 #[derive(Debug, Clone)]
 pub struct Arg {

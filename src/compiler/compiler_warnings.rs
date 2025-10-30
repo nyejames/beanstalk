@@ -1,6 +1,6 @@
-use crate::compiler::parsers::tokens::TextLocation;
 use colour::yellow_ln_bold;
 use std::path::PathBuf;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {

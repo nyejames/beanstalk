@@ -1,6 +1,5 @@
 // Optimized imports - consolidated for better maintainability and reduced compilation overhead
 use crate::compiler::{
-    parsers::tokens::TextLocation,
     wir::{
         place::Place,
         wir_nodes::{
@@ -11,6 +10,7 @@ use crate::compiler::{
 };
 use std::collections::{HashMap, HashSet};
 use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtractor, StateMapping};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Unified borrow checker that combines liveness, loan tracking, and conflict detection.
 ///

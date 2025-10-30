@@ -5,9 +5,9 @@ use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::{new_ast};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error};
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 // IF STATEMENTS / MATCH STATEMENTS
 // Can also be expressions (todo)
 // Example:

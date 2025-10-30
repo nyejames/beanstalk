@@ -3,9 +3,9 @@ use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 use crate::{CompileError, ast_log};
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as

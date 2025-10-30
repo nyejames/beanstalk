@@ -9,9 +9,9 @@ use crate::compiler::parsers::statements::structs::create_struct_definition;
 
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
-use crate::compiler::parsers::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error, return_type_error};
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 
 // Arg names and types are required
 // Can have default values

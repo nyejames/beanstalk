@@ -11,12 +11,12 @@ use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::parsers::tokens::FileTokens;
-use crate::settings::{Config, EXPORTS_CAPACITY};
+use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
 use rayon::prelude::*;
 use std::time::Instant;
+use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -79,7 +79,7 @@ pub enum WasmType {
 /// Core compilation result containing WASM and required imports
 pub struct CompilationResult {
     pub wasm_bytes: Vec<u8>,
-    pub required_imports: Vec<ExternalImport>,
+    pub required_module_imports: Vec<ExternalImport>,
     pub exported_functions: Vec<String>,
     pub warnings: Vec<CompilerWarning>,
 }
@@ -102,78 +102,87 @@ pub fn compile_modules(
         .par_iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
-    timer_log!(time, "Tokenized in: ");
 
-    // ----------------------------------
-    //       Dependency resolution
-    // ----------------------------------
-    // TODO: Imports are known at this stage,
-    // so should be creating the vec of required imports here.
-    // Imports from host environment or from other modules should be separated and treated differently.
-    //let time = Instant::now();
-    //let sorted_modules = match resolve_module_dependencies(project_tokens) {
-    //    Ok(modules) => modules,
-    //    Err(messages) => {
-    //        return Err(messages)
-    //    }
-    //}
-    //timer_log!(time, "Dependency graph created in: ");
+    // Check for any errors first
+    let errors: Vec<CompileError> = project_tokens
+        .iter()
+        .filter_map(|result| result.err())
+        .collect();
+
+    if !errors.is_empty() {
+        let mut messages = CompilerMessages::new();
+        messages.errors = errors;
+        return Err(messages);
+    }
+
+    // If no errors, collect all the FileTokens
+    let project_tokens: Vec<FileTokens> = project_tokens
+        .into_iter()
+        .filter_map(|result| result.ok())
+        .collect();
+
+    timer_log!(time, "Tokenized in: ");
 
     // ----------------------------------
     //           Parse Headers
     // ----------------------------------
-    // This will parse all the top level declarations across the tokenstream
+    // This will parse all the top level declarations across the token_stream
     // This is to split up the AST generation into discreet blocks and make all the public declarations known during AST generation.
-    // All #included files are known at this stage
+    // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
+    let time = Instant::now();
+    let mut compiler_messages = CompilerMessages::new();
+    let module_headers = match compiler.tokens_to_headers(project_tokens, &mut compiler_messages.warnings) {
+        Ok(headers) => headers,
+        Err(e) => {
+        compiler_messages.errors.extend(e);
+            return Err(compiler_messages)
+        }
+    };
+
+    timer_log!(time, "Headers Parsed in: ");
+
+    // ----------------------------------
+    //       Dependency resolution
+    // ----------------------------------
+    let time = Instant::now();
+    let sorted_modules = match compiler.sort_headers(module_headers) {
+        Ok(modules) => modules,
+        Err(error) => {
+            compiler_messages.errors.extend(error);
+            return Err(compiler_messages)
+        }
+    };
+
+    timer_log!(time, "Dependency graph created in: ");
 
     // ----------------------------------
     //          AST generation
     // ----------------------------------
     let time = Instant::now();
-    let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
+    //let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
     let mut messages: CompilerMessages = CompilerMessages::new();
-    let mut ast_blocks: Vec<AstNode> = Vec::with_capacity(project_tokens.len());
+    let mut module_ast: Vec<AstNode> = Vec::with_capacity(sorted_modules.len());
 
-    for declaration in project_tokens {
-        match declaration {
-            Err(e) => messages.errors.push(e),
-            Ok(declaration) => {
-                // Extends the compiler messages with warnings and errors from the parser
-                match compiler.headers_to_ast(declaration, &exported_declarations) {
-                    Ok(parser_output) => {
-                        exported_declarations.extend(parser_output.public);
-                        ast_blocks.push(parser_output);
-                        messages.warnings.extend(parser_output.warnings);
-                    }
-                    Err(e) => {
-                        messages.errors.push(e);
-                    }
-                }
-            }
+    // Combine all the headers into one AST
+    match compiler.headers_to_ast(sorted_modules) {
+        Ok(parser_output) => {
+            module_ast.extend(parser_output.nodes);
+
+            // Extends the compiler messages with warnings and errors from the parser
+            messages.warnings.extend(parser_output.warnings);
+        }
+        Err(e) => {
+            messages.errors.extend(e.errors);
+            return Err(messages)
         }
     }
 
-    if !messages.errors.is_empty() {
-        return Err(messages);
-    }
-
-    if !flags.contains(&Flag::DisableTimers) {
-        print!("AST created in: ");
-        green_ln!("{:?}", time.elapsed());
-    }
-
-    // ----------------------------------
-    //       Link ASTs into module
-    // ----------------------------------
-    let mut combined_module: Vec<AstNode> = Vec::new();
-    for block in &ast_blocks {
-        combined_module.extend(block.ast.clone());
-    }
+    timer_log!(time, "AST created in: ");
 
     // ----------------------------------
     //          WIR generation
     // ----------------------------------
-    let wir = match compiler.ast_to_ir(combined_module) {
+    let wir = match compiler.ast_to_ir(module_ast) {
         Ok(wir) => {
             if !flags.contains(&Flag::DisableTimers) {
                 print!("Wasm Intermediate Representation generated in: ");
@@ -206,13 +215,12 @@ pub fn compile_modules(
     // -----------------------------------
     //      Extract required imports
     // -----------------------------------
-    let required_imports = extract_required_imports(&exported_declarations);
-    let exported_functions = extract_exported_functions(&exported_declarations);
+    // let exported_functions = extract_exported_functions(&exported_declarations);
 
     Ok(CompilationResult {
         wasm_bytes,
-        required_imports,
-        exported_functions,
+        required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
+        exported_functions: Vec::new(),      //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: messages.warnings,
     })
 }

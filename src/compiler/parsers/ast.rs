@@ -5,9 +5,9 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::new_ast;
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::parsers::tokens::{FileTokens, TokenStream};
 use crate::settings;
 use std::path::PathBuf;
+use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 
 pub struct Ast {
     pub nodes: Vec<AstNode>,
