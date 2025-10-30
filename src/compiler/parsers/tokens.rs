@@ -174,6 +174,10 @@ impl FileTokens {
         &self.tokens[self.index].kind
     }
 
+    pub fn current_token(&self) -> Token {
+        self.tokens[self.index].clone()
+    }
+
     /// This should never be called from a context where there is no previous token
     pub fn previous_token(&self) -> &TokenKind {
         &self.tokens[self.index - 1].kind
@@ -345,7 +349,7 @@ pub enum TokenKind {
 
     // Literals
     StringSliceLiteral(String),
-    PathLiteral(PathBuf),
+    PathLiteral(String),
     FloatLiteral(f64),
     IntLiteral(i64),
     CharLiteral(char),

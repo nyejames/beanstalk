@@ -1,12 +1,13 @@
 use crate::compiler::compiler_errors::CompilerMessages;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::parsers::parse_file_headers::Header;
+use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::build_ast::new_ast;
+use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
+use crate::compiler::parsers::tokens::{FileTokens, TokenStream};
 use crate::settings;
 use std::path::PathBuf;
-use crate::compiler::parsers::build_ast::new_ast;
 
 pub struct Ast {
     pub nodes: Vec<AstNode>,
@@ -28,25 +29,60 @@ impl Ast {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
             Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
-
-        // Each header needs to be wrapped in a struct instance.
-        // It then exposes its
+        let mut external_exports: Vec<Arg> = Vec::new();
+        let mut warnings: Vec<CompilerWarning> = Vec::new();
+        let entry_path = sorted_headers[0].path.to_owned();
 
         for header in sorted_headers {
-            let ast_context = ScopeContext::new(
-                ContextKind::Function,
-                header.path.to_owned(),
-                &[],
-            );
+            match header.kind {
+                HeaderKind::Function(signature, tokens) => {
+                    let context = ScopeContext::new_with_registry(
+                        ContextKind::Function,
+                        header.path.to_owned(),
+                        &[],
+                        host_registry.clone(),
+                    );
 
-            let header_ast = new_ast()
+                    let body = match new_ast(
+                        &mut FileTokens::new(header.path.to_owned(), tokens),
+                        context.to_owned(),
+                        &mut warnings,
+                    ) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            return Err(CompilerMessages {
+                                errors: vec![e],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    ast.push(AstNode {
+                        kind: NodeKind::Function(
+                            header.name.to_owned(),
+                            signature.to_owned(),
+                            body.to_owned(),
+                        ),
+                        location: header.name_location,
+                        scope: context.scope_name,
+                    });
+                }
+
+                // TODO: remaining header definitions
+                // Don't wildcard
+                _ => {}
+            }
+
+            // TODO: create an function definition for these exported headers
+            if header.exported {}
         }
 
-        Ast {
+        Ok(Ast {
             nodes: ast,
-            external_exports: exports,
+            entry_path,
+            external_exports,
             warnings,
-        }
+        })
     }
 }
 

@@ -41,6 +41,7 @@ mod compiler {
             pub(crate) mod branching;
             pub(crate) mod create_template_node;
             pub(crate) mod functions;
+            pub(crate) mod imports;
             pub(crate) mod loops;
             pub(crate) mod structs;
             pub(crate) mod variables;

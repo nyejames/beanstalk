@@ -5,7 +5,7 @@ use crate::compiler::parsers::tokens::{
 use crate::{return_syntax_error, settings, token_log};
 use colour::green_ln;
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -417,7 +417,7 @@ pub fn get_token_kind(
         return compiler_directive(&mut token_value, stream);
     }
 
-    // For ID's or labels? Or maybe paths too?
+    // Used for paths outside of template heads
     if current_char == '@' {
         if stream.mode == TokenizeMode::TemplateHead {
             while let Some(&next_char) = stream.peek() {
@@ -430,10 +430,13 @@ pub fn get_token_kind(
             return_token!(TokenKind::Id(token_value), stream);
         }
 
-        return_syntax_error!(
-            stream.new_location(),
-            "Cannot use @ outside of a template head"
-        )
+        // The @ should always be followed by a path
+        // Todo: allow spaces after the '@'?
+        stream.next();
+
+        //
+        let path = tokenize_path(stream)?;
+        return_token!(TokenKind::PathLiteral(path), stream);
     }
 
     // Wildcard for pattern matching
@@ -741,40 +744,29 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringSliceLiteral(token_value), stream);
 }
 
-// fn tokenize_import(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
-//     // Skip starting whitespace
-//     while let Some(c) = stream.peek() {
-//         if c.is_whitespace() {
-//             if c == &'\n' {
-//                 return_syntax_error!(
-//                     stream.new_location(),
-//                     "Unexpected newline in import statement. Import statements must be on a single line. e.g import path/to/file"
-//                 )
-//             }
-//
-//             stream.next();
-//             continue;
-//         }
-//
-//         break;
-//     }
-//
-//     // TODO: this should simply be a generic import
-//
-//     // Parse the import path
-//     // This assumes starting the path from the project root directory
-//     let mut import_path = String::new();
-//     while let Some(c) = stream.peek() {
-//         if c.is_whitespace() {
-//             break;
-//         }
-//
-//         import_path.push(stream.next().unwrap());
-//     }
-//
-//     if import_path.is_empty() {
-//         return_syntax_error!(stream.new_location(), "Import path cannot be empty")
-//     }
-//
-//     Ok(PathBuf::from(import_path))
-// }
+fn tokenize_path(stream: &mut TokenStream) -> Result<String, CompileError> {
+    let mut import_path = String::new();
+    let mut break_on_whitespace = true;
+
+    // If the path has to have whitespaces, it can be optionally surrounded by quotes
+    if stream.peek() == Some(&'"') {
+        break_on_whitespace = false;
+    }
+
+    while let Some(c) = stream.peek() {
+        // Breakout on the first-detected whitespace or the end of the string
+        if (c.is_whitespace() && break_on_whitespace) || (*c == '"' && !break_on_whitespace) {
+            break;
+        }
+
+        import_path.push(c.to_owned());
+        stream.next();
+        continue;
+    }
+
+    if import_path.is_empty() {
+        return_syntax_error!(stream.new_location(), "Import path cannot be empty")
+    }
+
+    Ok(import_path)
+}
