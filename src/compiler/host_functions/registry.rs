@@ -21,6 +21,7 @@ pub enum ErrorHandling {
 // Parameters that don't have default arguments
 // This is to avoid the rabbit hole of dynamic dispatching in templates
 // Which makes multithreading unsafe in certain parts of the compiler pipeline.
+// Update: Doing this changed nothing, there is still an issue with multithreading.
 #[derive(Debug, Clone)]
 struct BasicParameter {
     name: String,

@@ -395,7 +395,6 @@ fn format_type_for_error(data_type: &DataType) -> String {
                 ownership.as_string()
             )
         }
-        DataType::Main => "Main".to_string(),
     }
 }
 

@@ -173,54 +173,49 @@ pub fn build_project_files_with_target(
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
             // Parse the config file
-            let mut tokenizer_output = match tokenize(
-                &config_source_code,
-                &config_path,
-                TokenizeMode::Normal,
-            ) {
-                Ok(tokens) => tokens,
-                Err(e) => {
-                    return Err(CompilerMessages {
-                        errors: vec![e.with_file_path(config_path.clone())],
-                        warnings: Vec::new(),
-                    });
-                }
-            };
-
-            // Create the host function registry
-            let host_registry = match create_builtin_registry() {
-                Ok(registry) => registry,
-                Err(e) => {
-                    return Err(CompilerMessages {
-                        errors: vec![e.with_file_path(config_path.clone())],
-                        warnings: Vec::new(),
-                    });
-                }
-            };
-
-            let ast_context = ScopeContext::new_with_registry(
-                ContextKind::Function,
-                config_path.to_owned(),
-                &[],
-                host_registry,
-            );
-
-            let config_tokens = vec![tokenizer_output];
-            let config_ast = match Ast::new(config_tokens, &HostFunctionRegistry::new()) {
-                Ok(config_ast) => config_ast,
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-
-            // Parse configuration from AST
-            if let Err(e) = get_config_from_ast(config_ast, &mut project_config) {
-                return Err(CompilerMessages {
-                    errors: vec![e.with_file_path(config_path.clone())],
-                    warnings: Vec::new(),
-                });
-            }
-
+            // let mut tokenizer_output = match tokenize(
+            //     &config_source_code,
+            //     &config_path,
+            //     TokenizeMode::Normal,
+            // ) {
+            //     Ok(tokens) => tokens,
+            //     Err(e) => {
+            //         return Err(CompilerMessages {
+            //             errors: vec![e.with_file_path(config_path.clone())],
+            //             warnings: Vec::new(),
+            //         });
+            //     }
+            // };
+//
+            // // Create the host function registry
+            // let host_registry = match create_builtin_registry() {
+            //     Ok(registry) => registry,
+            //     Err(e) => {
+            //         return Err(CompilerMessages {
+            //             errors: vec![e.with_file_path(config_path.clone())],
+            //             warnings: Vec::new(),
+            //         });
+            //     }
+            // };
+//
+            // let config_tokens = vec![tokenizer_output];
+            // let config_ast = match Ast::new(config_tokens, &HostFunctionRegistry::new()) {
+            //     Ok(config_ast) => config_ast,
+            //     Err(e) => {
+            //         return Err(e);
+            //     }
+            // };
+//
+            // // Parse configuration from AST
+            // if let Err(e) = get_config_from_ast(config_ast, &mut project_config) {
+            //     return Err(CompilerMessages {
+            //         errors: vec![e.with_file_path(config_path.clone())],
+            //         warnings: Vec::new(),
+            //     });
+            // }
+//
+            // Just use default for now
+            // TODO: custom config parser, as a mark through file?
             let src_dir = entry_dir.join(&project_config.src);
             let _output_dir = match release_build {
                 true => entry_dir.join(&project_config.release_folder),

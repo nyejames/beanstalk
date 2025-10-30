@@ -14,7 +14,7 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
-use rayon::prelude::*;
+// use rayon::prelude::*;
 use std::time::Instant;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 
@@ -98,28 +98,30 @@ pub fn compile_modules(
     // ----------------------------------
     //         Token generation
     // ----------------------------------
-    let project_tokens: Vec<Result<FileTokens, CompileError>> = modules
-        .par_iter()
+    let tokenizer_result: Vec<Result<FileTokens, CompileError>> = modules
+        .iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
 
     // Check for any errors first
-    let errors: Vec<CompileError> = project_tokens
-        .iter()
-        .filter_map(|result| result.err())
-        .collect();
+    let mut project_tokens = Vec::new();
+    let mut errors: Vec<CompileError> = Vec::new();
+    for file in tokenizer_result {
+        match file {
+            Ok(tokens) => {
+                project_tokens.push(tokens);
+            }
+            Err(e) => {
+                errors.push(e);
+            }
+        }
+    }
 
     if !errors.is_empty() {
         let mut messages = CompilerMessages::new();
         messages.errors = errors;
         return Err(messages);
     }
-
-    // If no errors, collect all the FileTokens
-    let project_tokens: Vec<FileTokens> = project_tokens
-        .into_iter()
-        .filter_map(|result| result.ok())
-        .collect();
 
     timer_log!(time, "Tokenized in: ");
 

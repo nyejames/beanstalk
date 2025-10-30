@@ -18,12 +18,13 @@ use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 use crate::compiler::{
     compiler_errors::CompileError,
-    parsers::{ast_nodes::AstNode, tokens::TextLocation},
 };
 // Error handling macros - grouped for maintainability
 use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::{ir_log, wir_log};
+use crate::compiler::parsers::ast_nodes::AstNode;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Main entry point: Transform AST to WIR with borrow checking
 ///
