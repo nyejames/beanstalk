@@ -2,7 +2,7 @@
 -- Tests precise last-use detection in complex scenarios
 
 -- Test 1: Last use in conditional branches
-data1 = "branch test"
+data1 ~= "branch test"
 condition = true
 
 if condition:
@@ -17,7 +17,7 @@ else
 data1 = "modified"
 
 -- Test 2: Last use with multiple references
-data2 = "multi ref test"
+data2 ~= "multi ref test"
 ref1 = data2
 ref2 = data2
 ref3 = data2
@@ -31,7 +31,7 @@ temp3 = ref3  -- This should be the last use
 data2 = "changed"
 
 -- Test 3: Last use with function-like patterns
-data3 = "function test"
+data3 ~= "function test"
 param_ref = data3
 
 -- Simulate function call pattern

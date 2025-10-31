@@ -92,8 +92,13 @@ pub fn compile_modules(
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
 
-    // TODO: define the host function registry based on the config
-    let compiler = Compiler::new(config, HostFunctionRegistry::new());
+    // Create builtin host function registry with print and other host functions
+    let host_registry = crate::compiler::host_functions::registry::create_builtin_registry()
+        .map_err(|e| CompilerMessages {
+            errors: vec![e],
+            warnings: Vec::new(),
+        })?;
+    let compiler = Compiler::new(config, host_registry);
 
     // ----------------------------------
     //         Token generation
