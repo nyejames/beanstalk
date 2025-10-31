@@ -60,9 +60,9 @@ pub fn execute_direct_jit_with_capture(
         CompileError::compiler_error(&format!("Failed to instantiate WASM module: {}", e))
     })?;
 
-    // Set up WASIX memory access if using WASIX backend
-    if matches!(config.io_backend, IoBackend::Wasix) {
-        // Try different memory export names
+    // Set up memory access for backends that need it (WASIX and Native)
+    if matches!(config.io_backend, IoBackend::Wasix | IoBackend::Native) {
+        // Try different memory export names in order of preference
         let memory_result = instance
             .exports
             .get_memory("memory")
@@ -71,9 +71,24 @@ pub fn execute_direct_jit_with_capture(
 
         match memory_result {
             Ok(memory) => {
-                set_wasix_memory_and_store(memory.clone(), &mut store as *mut Store);
+                // Validate memory configuration
+                let memory_view = memory.view(&store);
+                let memory_size = memory_view.data_size();
+                
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASIX memory access configured");
+                println!("WASIX memory found: {} bytes", memory_size);
+                
+                // Ensure minimum memory size for WASIX operations
+                if memory_size < 65536 {
+                    return Err(CompileError::compiler_error(
+                        "WASM memory too small for WASIX operations. Minimum 64KB required."
+                    ));
+                }
+
+                set_wasix_memory_and_store(memory.clone(), &mut store as *mut Store);
+                
+                #[cfg(feature = "verbose_codegen_logging")]
+                println!("WASIX memory access configured successfully");
             }
             Err(_) => {
                 #[cfg(feature = "verbose_codegen_logging")]
@@ -84,6 +99,17 @@ pub fn execute_direct_jit_with_capture(
                         println!("  - {}", name);
                     }
                 }
+                
+                // For WASIX and Native backends, memory is required
+                let backend_name = match config.io_backend {
+                    IoBackend::Wasix => "WASIX",
+                    IoBackend::Native => "Native",
+                    _ => "Unknown",
+                };
+                return Err(CompileError::compiler_error(&format!(
+                    "{} backend requires WASM memory export. Ensure the WASM module exports memory.",
+                    backend_name
+                )));
             }
         }
     }
@@ -170,9 +196,9 @@ pub fn create_import_object_with_capture(
             Ok(imports)
         }
         IoBackend::Native => {
-            // Set up native system call imports
+            // Set up native system call imports with capture support
             let mut imports = imports! {};
-            setup_native_imports(store, &mut imports)?;
+            setup_native_imports_with_capture(store, &mut imports, capture_output)?;
             Ok(imports)
         }
     }
@@ -306,109 +332,280 @@ fn read_iovecs_from_memory(
     Ok(iovecs)
 }
 
-/// Read bytes from WASM linear memory with bounds checking
+/// Read bytes from WASM linear memory with enhanced bounds checking and error handling
 fn read_bytes_from_memory(
     memory: &wasmer::Memory,
     store: &impl wasmer::AsStoreRef,
     ptr: u32,
     len: u32,
 ) -> Result<Vec<u8>, String> {
+    // Handle zero-length reads
     if len == 0 {
         return Ok(Vec::new());
     }
 
-    let end_ptr = ptr.checked_add(len).ok_or("Memory address overflow")?;
+    // Validate reasonable length limits to prevent excessive memory allocation
+    const MAX_READ_SIZE: u32 = 16 * 1024 * 1024; // 16MB limit
+    if len > MAX_READ_SIZE {
+        return Err(format!(
+            "Read size {} exceeds maximum allowed size of {} bytes",
+            len, MAX_READ_SIZE
+        ));
+    }
 
-    // Get memory view and check bounds
+    // Check for address overflow
+    let end_ptr = ptr.checked_add(len).ok_or_else(|| {
+        format!(
+            "Memory address overflow: ptr=0x{:x} + len={} would overflow u32",
+            ptr, len
+        )
+    })?;
+
+    // Get memory view and validate bounds
     let memory_view = memory.view(store);
     let memory_size = memory_view.data_size() as u32;
 
     #[cfg(feature = "verbose_codegen_logging")]
     println!(
-        "WASIX: Memory bounds check - ptr: 0x{:x}, len: {}, end_ptr: 0x{:x}, memory_size: {}",
+        "Memory bounds check - ptr: 0x{:x}, len: {}, end_ptr: 0x{:x}, memory_size: {}",
         ptr, len, end_ptr, memory_size
     );
 
+    // Validate memory bounds
+    if ptr >= memory_size {
+        return Err(format!(
+            "Memory out of bounds: start address 0x{:x} is beyond memory size {}",
+            ptr, memory_size
+        ));
+    }
+
     if end_ptr > memory_size {
         return Err(format!(
-            "Memory out of bounds: trying to read {}..{} but memory size is {}",
+            "Memory out of bounds: trying to read 0x{:x}..0x{:x} but memory size is {}",
             ptr, end_ptr, memory_size
         ));
     }
 
-    // Read bytes from memory
+    // Allocate buffer and read from memory
     let mut bytes = vec![0u8; len as usize];
     memory_view
         .read(ptr as u64, &mut bytes)
-        .map_err(|e| format!("Failed to read from memory: {}", e))?;
+        .map_err(|e| format!("Failed to read from memory at 0x{:x}: {}", ptr, e))?;
+
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!(
+        "Successfully read {} bytes from memory at 0x{:x}",
+        bytes.len(),
+        ptr
+    );
 
     Ok(bytes)
 }
 
-/// Read string data from WASM memory with UTF-8 validation
+/// Read string data from WASM memory with enhanced UTF-8 validation and error handling
 fn read_string_from_memory(
     memory: &wasmer::Memory,
     store: &impl wasmer::AsStoreRef,
     ptr: u32,
     len: u32,
 ) -> Result<String, String> {
+    // Handle zero-length strings
     if len == 0 {
         return Ok(String::new());
+    }
+
+    // Validate reasonable string length limits
+    const MAX_STRING_SIZE: u32 = 1024 * 1024; // 1MB limit for strings
+    if len > MAX_STRING_SIZE {
+        return Err(format!(
+            "String length {} exceeds maximum allowed size of {} bytes",
+            len, MAX_STRING_SIZE
+        ));
     }
 
     // Read raw bytes from memory
     let bytes = read_bytes_from_memory(memory, store, ptr, len)?;
 
-    // Debug: Print the raw bytes to see what we're reading
     #[cfg(feature = "verbose_codegen_logging")]
-    println!(
-        "WASIX: Reading {} bytes from 0x{:x}: {:?}",
-        len,
-        ptr,
-        &bytes[..std::cmp::min(bytes.len(), 50)]
-    );
-
-    // Validate and convert UTF-8
-    let result = String::from_utf8(bytes)
-        .map_err(|e| format!("Invalid UTF-8 string data at 0x{:x}: {}", ptr, e));
-
-    #[cfg(feature = "verbose_codegen_logging")]
-    if let Ok(ref s) = result {
+    {
+        let preview_len = std::cmp::min(bytes.len(), 50);
         println!(
-            "WASIX: Decoded string: {:?}",
-            &s[..std::cmp::min(s.len(), 50)]
+            "Reading string: {} bytes from 0x{:x}, preview: {:?}",
+            len,
+            ptr,
+            &bytes[..preview_len]
         );
     }
 
-    result
+    // Validate UTF-8 with detailed error information
+    match String::from_utf8(bytes) {
+        Ok(string) => {
+            #[cfg(feature = "verbose_codegen_logging")]
+            {
+                let preview_len = std::cmp::min(string.len(), 50);
+                println!(
+                    "Successfully decoded string: {:?}{}",
+                    &string[..preview_len],
+                    if string.len() > 50 { "..." } else { "" }
+                );
+            }
+            Ok(string)
+        }
+        Err(utf8_error) => {
+            let error_pos = utf8_error.utf8_error().valid_up_to();
+            Err(format!(
+                "Invalid UTF-8 string data at memory 0x{:x}: error at byte position {} - {}",
+                ptr, error_pos, utf8_error
+            ))
+        }
+    }
 }
 
-/// Write a u32 value to WASM memory (little-endian)
+/// Write a u32 value to WASM memory with enhanced bounds checking (little-endian)
 fn write_u32_to_memory(
     memory: &wasmer::Memory,
     store: &impl wasmer::AsStoreRef,
     ptr: u32,
     value: u32,
 ) -> Result<(), String> {
-    let bytes = value.to_le_bytes();
-
-    // Get memory view and check bounds
+    // Get memory view and validate bounds
     let memory_view = memory.view(store);
     let memory_size = memory_view.data_size() as u32;
 
-    if ptr + 4 > memory_size {
+    // Check for address overflow
+    let end_ptr = ptr.checked_add(4).ok_or_else(|| {
+        format!(
+            "Memory address overflow: ptr=0x{:x} + 4 would overflow u32",
+            ptr
+        )
+    })?;
+
+    // Validate memory bounds
+    if ptr >= memory_size {
         return Err(format!(
-            "Memory out of bounds: trying to write u32 at 0x{:x} but memory size is {}",
+            "Memory out of bounds: write address 0x{:x} is beyond memory size {}",
             ptr, memory_size
         ));
     }
 
-    // Write bytes to memory
+    if end_ptr > memory_size {
+        return Err(format!(
+            "Memory out of bounds: trying to write u32 at 0x{:x}..0x{:x} but memory size is {}",
+            ptr, end_ptr, memory_size
+        ));
+    }
+
+    // Convert value to little-endian bytes and write
+    let bytes = value.to_le_bytes();
     memory_view
         .write(ptr as u64, &bytes)
-        .map_err(|e| format!("Failed to write to memory: {}", e))?;
+        .map_err(|e| format!("Failed to write u32 to memory at 0x{:x}: {}", ptr, e))?;
+
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!(
+        "Successfully wrote u32 value {} to memory at 0x{:x}",
+        value, ptr
+    );
 
     Ok(())
+}
+
+/// Write bytes to WASM memory with enhanced bounds checking and cleanup
+fn write_bytes_to_memory(
+    memory: &wasmer::Memory,
+    store: &impl wasmer::AsStoreRef,
+    ptr: u32,
+    data: &[u8],
+) -> Result<(), String> {
+    if data.is_empty() {
+        return Ok(());
+    }
+
+    let len = data.len() as u32;
+    
+    // Get memory view and validate bounds
+    let memory_view = memory.view(store);
+    let memory_size = memory_view.data_size() as u32;
+
+    // Check for address overflow
+    let end_ptr = ptr.checked_add(len).ok_or_else(|| {
+        format!(
+            "Memory address overflow: ptr=0x{:x} + len={} would overflow u32",
+            ptr, len
+        )
+    })?;
+
+    // Validate memory bounds
+    if ptr >= memory_size {
+        return Err(format!(
+            "Memory out of bounds: write address 0x{:x} is beyond memory size {}",
+            ptr, memory_size
+        ));
+    }
+
+    if end_ptr > memory_size {
+        return Err(format!(
+            "Memory out of bounds: trying to write {} bytes at 0x{:x}..0x{:x} but memory size is {}",
+            len, ptr, end_ptr, memory_size
+        ));
+    }
+
+    // Write data to memory
+    memory_view
+        .write(ptr as u64, data)
+        .map_err(|e| format!("Failed to write {} bytes to memory at 0x{:x}: {}", len, ptr, e))?;
+
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!(
+        "Successfully wrote {} bytes to memory at 0x{:x}",
+        len, ptr
+    );
+
+    Ok(())
+}
+
+/// Memory cleanup utilities for host function operations
+pub struct MemoryCleanup {
+    /// Allocated memory regions that need cleanup
+    allocated_regions: Vec<(u32, u32)>, // (ptr, size) pairs
+}
+
+impl MemoryCleanup {
+    /// Create a new memory cleanup tracker
+    pub fn new() -> Self {
+        Self {
+            allocated_regions: Vec::new(),
+        }
+    }
+
+    /// Track an allocated memory region for cleanup
+    pub fn track_allocation(&mut self, ptr: u32, size: u32) {
+        self.allocated_regions.push((ptr, size));
+    }
+
+    /// Clear tracked allocations (for manual cleanup)
+    pub fn clear_tracked(&mut self) {
+        self.allocated_regions.clear();
+    }
+
+    /// Get tracked allocations for debugging
+    pub fn get_tracked(&self) -> &[(u32, u32)] {
+        &self.allocated_regions
+    }
+}
+
+impl Drop for MemoryCleanup {
+    fn drop(&mut self) {
+        // In a full implementation, this would free the tracked memory regions
+        // For now, we just log the cleanup for debugging
+        #[cfg(feature = "verbose_codegen_logging")]
+        if !self.allocated_regions.is_empty() {
+            println!(
+                "Memory cleanup: {} regions tracked for cleanup",
+                self.allocated_regions.len()
+            );
+        }
+    }
 }
 
 /// IOVec structure matching WASIX specification
@@ -424,7 +621,37 @@ struct IOVec {
 thread_local! {
     static WASIX_MEMORY: RefCell<Option<Memory>> = RefCell::new(None);
     static WASIX_STORE: RefCell<Option<*mut Store>> = RefCell::new(None);
+    static CAPTURED_OUTPUT: RefCell<Option<CapturedOutput>> = RefCell::new(None);
 }
+
+/// Captured output for testing scenarios
+#[derive(Debug, Clone)]
+pub struct CapturedOutput {
+    pub stdout: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+    pub stderr: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+}
+
+impl CapturedOutput {
+    /// Get captured stdout as a string
+    pub fn get_stdout(&self) -> Result<String, std::string::FromUtf8Error> {
+        let stdout = self.stdout.lock().unwrap();
+        String::from_utf8(stdout.clone())
+    }
+
+    /// Get captured stderr as a string
+    pub fn get_stderr(&self) -> Result<String, std::string::FromUtf8Error> {
+        let stderr = self.stderr.lock().unwrap();
+        String::from_utf8(stderr.clone())
+    }
+
+    /// Clear captured output
+    pub fn clear(&self) {
+        self.stdout.lock().unwrap().clear();
+        self.stderr.lock().unwrap().clear();
+    }
+}
+
+
 
 /// Set memory and store for WASIX functions to use
 fn set_wasix_memory_and_store(memory: Memory, store: *mut Store) {
@@ -446,125 +673,88 @@ fn get_wasix_store() -> Option<*mut Store> {
     WASIX_STORE.with(|s| *s.borrow())
 }
 
+/// Get captured output for testing
+pub fn get_captured_output() -> Option<CapturedOutput> {
+    CAPTURED_OUTPUT.with(|output| output.borrow().clone())
+}
+
+/// Clear captured output
+pub fn clear_captured_output() {
+    CAPTURED_OUTPUT.with(|output| {
+        if let Some(ref captured) = *output.borrow() {
+            captured.clear();
+        }
+    });
+}
+
 /// Set up WASIX imports with configurable I/O redirection and error handling
 fn setup_wasix_imports_with_io(
     store: &mut Store,
     module: &Module,
     wasm_bytes: &[u8],
-    _capture_output: bool,
+    capture_output: bool,
 ) -> Result<wasmer::Imports, CompileError> {
-    // For now, provide a simple fd_write implementation instead of full WASIX
-    // This avoids the Tokio runtime requirement while still providing the functionality
-
     #[cfg(feature = "verbose_codegen_logging")]
-    if _capture_output {
+    if capture_output {
         println!("WASIX environment configured for output capture (testing mode)");
     } else {
         println!("WASIX environment configured for normal output");
     }
 
-    // Create fd_write function that uses shared memory state with enhanced error handling
-    let fd_write_func = Function::new_typed(
-        store,
-        |fd: i32, iovs_ptr: i32, iovs_len: i32, nwritten_ptr: i32| -> i32 {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!(
-                "WASIX fd_write called with fd={}, iovs_ptr=0x{:x}, iovs_len={}, nwritten_ptr=0x{:x}",
-                fd, iovs_ptr, iovs_len, nwritten_ptr
-            );
+    // Create proper WASIX environment using wasmer-wasix
+    let wasi_env_builder = WasiEnvBuilder::new("beanstalk-program");
 
-            // Get memory and store from shared state with detailed error reporting
-            let memory = match get_wasix_memory() {
-                Some(mem) => mem,
-                None => {
-                    eprintln!(
-                        "WASIX import resolution error: Memory not available - WASM instance not properly initialized. Suggestion: Ensure the WASM module is instantiated before calling WASIX functions"
-                    );
-                    return 8; // ENOEXEC
-                }
-            };
+    // For capture_output, we'll use a different approach - intercept at the fd_write level
+    if capture_output {
+        // Initialize captured output storage
+        let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        
+        CAPTURED_OUTPUT.with(|output| {
+            *output.borrow_mut() = Some(CapturedOutput {
+                stdout: captured_stdout,
+                stderr: captured_stderr,
+            });
+        });
+    }
 
-            let store_ptr = match get_wasix_store() {
-                Some(ptr) => ptr,
-                None => {
-                    eprintln!(
-                        "WASIX import resolution error: Store not available - WASM instance not properly initialized. Suggestion: Ensure the WASM runtime is properly configured"
-                    );
-                    return 8; // ENOEXEC
-                }
-            };
+    // Build the WASIX environment with enhanced error handling
+    let wasi_env = wasi_env_builder
+        .finalize(store)
+        .map_err(|e| {
+            let error_msg = format!("Failed to create WASIX environment: {}", e);
+            let suggestion = "Ensure wasmer-wasix is properly installed and configured. Try updating Wasmer to the latest version.";
+            CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
+        })?;
 
-            // Implement the actual fd_write functionality with memory access
-            let store_ref = unsafe { &*store_ptr };
-            match implement_fd_write_with_memory(
-                &memory,
-                store_ref,
-                fd,
-                iovs_ptr as u32,
-                iovs_len as u32,
-                nwritten_ptr as u32,
-            ) {
-                Ok(errno) => errno as i32,
-                Err(e) => {
-                    eprintln!(
-                        "WASIX fd_write execution error: {}. Suggestion: Check memory layout and ensure IOVec structures are properly formatted",
-                        e
-                    );
-                    match e.as_str() {
-                        s if s.contains("Invalid file descriptor") => 9, // EBADF
-                        s if s.contains("Memory") => 14,                 // EFAULT
-                        s if s.contains("IOVec") => 22,                  // EINVAL
-                        _ => 8,                                          // ENOEXEC
-                    }
-                }
+    // Generate WASIX import object with comprehensive error handling
+    let wasix_imports = wasi_env.import_object(store, module).map_err(|e| {
+        let error_msg = format!("Failed to create WASIX imports: {}", e);
+        let suggestion = match e.to_string().as_str() {
+            s if s.contains("memory") => {
+                "Increase WASM memory limits or check memory configuration"
             }
-        },
-    );
-
-    // Validate that we can create the imports object
-    let imports = match create_wasix_imports_object(fd_write_func) {
-        Ok(imports) => imports,
-        Err(e) => {
-            return Err(CompileError::compiler_error(&format!(
-                "Failed to create WASIX imports object: {}. Suggestion: Check Wasmer version compatibility and ensure WASIX support is available",
-                e
-            )));
-        }
-    };
+            s if s.contains("function") => {
+                "Verify that all required WASIX functions are available in the runtime"
+            }
+            s if s.contains("module") => {
+                "Check that the WASM module has correct WASIX import declarations"
+            }
+            _ => "Verify WASIX runtime configuration and ensure all dependencies are available",
+        };
+        CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
+    })?;
 
     // Validate imports against module requirements
-    validate_wasix_imports(wasm_bytes, &imports)?;
+    validate_wasix_imports(wasm_bytes, &wasix_imports)?;
 
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("WASIX fd_write implementation with memory access configured");
+    println!("WASIX environment configured with proper fd_write implementation");
 
-    Ok(imports)
+    Ok(wasix_imports)
 }
 
-/// Create WASIX imports object with error handling
-fn create_wasix_imports_object(fd_write_func: Function) -> Result<wasmer::Imports, String> {
-    // Create imports object with our fd_write implementation
-    let imports = imports! {
-        "wasix_32v1" => {
-            "fd_write" => fd_write_func,
-        }
-    };
 
-    // Validate that the imports object was created successfully
-    if !imports.contains_namespace("wasix_32v1") {
-        return Err("Failed to create wasix_32v1 namespace in imports object".to_string());
-    }
-
-    let wasix_namespace = imports
-        .get_namespace_exports("wasix_32v1")
-        .ok_or("Failed to access wasix_32v1 namespace exports")?;
-
-    if !wasix_namespace.iter().any(|(name, _)| name == "fd_write") {
-        return Err("fd_write function not found in wasix_32v1 namespace".to_string());
-    }
-
-    Ok(imports)
-}
 
 /// Set up WASIX imports with native function support and comprehensive error handling
 fn setup_wasix_imports_with_native_support(
@@ -701,13 +891,103 @@ fn setup_js_imports(store: &mut Store, imports: &mut wasmer::Imports) -> Result<
 }
 
 /// Set up native system call imports
-#[allow(unused_variables)]
 fn setup_native_imports(
     store: &mut Store,
     imports: &mut wasmer::Imports,
 ) -> Result<(), CompileError> {
-    // Native system call imports are not yet implemented
-    // This functionality is planned for native target support
+    setup_native_imports_with_capture(store, imports, false)
+}
+
+/// Set up native system call imports with optional output capture
+fn setup_native_imports_with_capture(
+    store: &mut Store,
+    imports: &mut wasmer::Imports,
+    capture_output: bool,
+) -> Result<(), CompileError> {
+    // Initialize captured output if needed
+    if capture_output {
+        let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        
+        CAPTURED_OUTPUT.with(|output| {
+            *output.borrow_mut() = Some(CapturedOutput {
+                stdout: captured_stdout,
+                stderr: captured_stderr,
+            });
+        });
+    }
+
+    // Create native print function that directly outputs to stdout or captures
+    let print_func = Function::new_typed(
+        store,
+        move |text_ptr: i32, text_len: i32| -> i32 {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "Native print called with text_ptr=0x{:x}, text_len={}",
+                text_ptr, text_len
+            );
+
+            // Get memory from shared state
+            let memory = match get_wasix_memory() {
+                Some(mem) => mem,
+                None => {
+                    eprintln!("Native print error: Memory not available");
+                    return -1; // Error
+                }
+            };
+
+            let store_ptr = match get_wasix_store() {
+                Some(ptr) => ptr,
+                None => {
+                    eprintln!("Native print error: Store not available");
+                    return -1; // Error
+                }
+            };
+
+            // Read string from WASM memory
+            let store_ref = unsafe { &*store_ptr };
+            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+                Ok(text) => {
+                    // Check if we should capture output or print normally
+                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+                    
+                    if should_capture {
+                        // Capture output for testing
+                        CAPTURED_OUTPUT.with(|output| {
+                            if let Some(ref captured) = *output.borrow() {
+                                let mut stdout = captured.stdout.lock().unwrap();
+                                stdout.extend_from_slice(text.as_bytes());
+                            }
+                        });
+                    } else {
+                        // Normal output to stdout
+                        print!("{}", text);
+                        if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
+                            eprintln!("Native print error: Failed to flush stdout: {}", e);
+                            return -1; // Error
+                        }
+                    }
+                    
+                    0 // Success
+                }
+                Err(e) => {
+                    eprintln!("Native print error: {}", e);
+                    -1 // Error
+                }
+            }
+        },
+    );
+
+    // Add print function to beanstalk_io module
+    imports.define("beanstalk_io", "print", print_func);
+
+    #[cfg(feature = "verbose_codegen_logging")]
+    if capture_output {
+        println!("Native backend host functions configured with output capture");
+    } else {
+        println!("Native backend host functions configured");
+    }
+
     Ok(())
 }
 

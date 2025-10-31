@@ -133,7 +133,23 @@ pub fn compile_modules(
     // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
     let time = Instant::now();
     let mut compiler_messages = CompilerMessages::new();
-    let module_headers = match compiler.tokens_to_headers(project_tokens, &mut compiler_messages.warnings) {
+    
+    // Identify the entry file - for single file compilation, it's the first (and only) module
+    // For multi-file compilation, we need to determine which file is the entry point
+    let entry_file_path = if modules.len() == 1 {
+        Some(&modules[0].source_path)
+    } else {
+        // For multi-file projects, we need logic to determine the entry file
+        // For now, assume the first module is the entry file
+        // TODO: This should be configurable or determined by project structure
+        modules.first().map(|m| &m.source_path)
+    };
+    
+    let module_headers = match compiler.tokens_to_headers_with_entry_file(
+        project_tokens, 
+        &mut compiler_messages.warnings,
+        entry_file_path
+    ) {
         Ok(headers) => headers,
         Err(e) => {
         compiler_messages.errors.extend(e);

@@ -2,8 +2,9 @@ pub mod registry;
 pub mod wasix_registry;
 
 pub use registry::{
-    HostFunctionDef, HostFunctionRegistry, ErrorHandling,
-    create_builtin_registry
+    HostFunctionDef, HostFunctionRegistry, ErrorHandling, RuntimeBackend,
+    WasixFunctionDef, JsFunctionDef, RuntimeFunctionMapping,
+    create_builtin_registry, create_builtin_registry_with_backend
 };
 
 pub use wasix_registry::{

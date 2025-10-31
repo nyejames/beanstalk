@@ -7,6 +7,10 @@ mod dev_server;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod test_runner;
+    pub(crate) mod header_parsing_tests;
+    pub(crate) mod host_function_registry_tests;
+    pub(crate) mod wir_to_wasm_lowering_tests;
+    pub(crate) mod jit_runtime_tests;
 }
 
 // New runtime and build system modules
@@ -108,7 +112,7 @@ use std::path::{Path, PathBuf};
 // Re-export types for the build system
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::parse_file_headers::{parse_headers, Header};
+use crate::compiler::parsers::parse_file_headers::{parse_headers, parse_headers_with_entry_file, Header};
 pub(crate) use build::*;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
@@ -183,6 +187,15 @@ impl<'a> Compiler<'a> {
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Vec<Header>, Vec<CompileError>> {
         parse_headers(files, &self.host_function_registry, warnings)
+    }
+
+    pub fn tokens_to_headers_with_entry_file(
+        &self,
+        files: Vec<FileTokens>,
+        warnings: &mut Vec<CompilerWarning>,
+        entry_file_path: Option<&PathBuf>,
+    ) -> Result<Vec<Header>, Vec<CompileError>> {
+        parse_headers_with_entry_file(files, &self.host_function_registry, warnings, entry_file_path)
     }
 
     /// Every dependency needed for each file should be known before its headers are parsed.

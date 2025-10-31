@@ -1,5 +1,6 @@
 use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::wir::wir_nodes::ExportKind;
 use crate::return_compiler_error;
@@ -23,11 +24,22 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
 /// Complex validation and performance tracking have been removed to focus
 /// on core functionality until borrow checking is complete.
 pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
+    new_wasm_module_with_registry(wir, None)
+}
+
+/// WIR-to-WASM compilation with host function registry support
+///
+/// This function provides direct WIR → WASM lowering with access to the host function registry
+/// for proper runtime-specific function mapping during codegen.
+pub fn new_wasm_module_with_registry(
+    wir: WIR, 
+    registry: Option<&HostFunctionRegistry>
+) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir)?;
 
-    // Create WASM module from WIR (this already compiles all functions)
-    let mut module = WasmModule::from_wir(&wir)?;
+    // Create WASM module from WIR with registry access
+    let mut module = WasmModule::from_wir_with_registry(&wir, registry)?;
 
     // Handle exports (functions are already compiled in from_wir)
     for wir_function in &wir.functions {

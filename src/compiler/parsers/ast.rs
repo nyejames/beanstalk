@@ -68,9 +68,96 @@ impl Ast {
                     });
                 }
 
-                // TODO: remaining header definitions
-                // Don't wildcard
-                _ => {}
+                HeaderKind::EntryPoint(tokens) => {
+                    let context = ScopeContext::new_with_registry(
+                        ContextKind::Module,
+                        header.path.to_owned(),
+                        &[],
+                        host_registry.clone(),
+                    );
+
+                    let body = match new_ast(
+                        &mut FileTokens::new(header.path.to_owned(), tokens),
+                        context.to_owned(),
+                        &mut warnings,
+                    ) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            return Err(CompilerMessages {
+                                errors: vec![e],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    // Create an entry point function that will be exported as the start function
+                    let entry_signature = FunctionSignature {
+                        parameters: vec![],
+                        returns: vec![],
+                    };
+
+                    ast.push(AstNode {
+                        kind: NodeKind::Function(
+                            "_start".to_string(),
+                            entry_signature,
+                            body,
+                        ),
+                        location: header.name_location,
+                        scope: context.scope_name,
+                    });
+                }
+
+                HeaderKind::ImplicitMain(tokens) => {
+                    let context = ScopeContext::new_with_registry(
+                        ContextKind::Module,
+                        header.path.to_owned(),
+                        &[],
+                        host_registry.clone(),
+                    );
+
+                    let body = match new_ast(
+                        &mut FileTokens::new(header.path.to_owned(), tokens),
+                        context.to_owned(),
+                        &mut warnings,
+                    ) {
+                        Ok(b) => b,
+                        Err(e) => {
+                            return Err(CompilerMessages {
+                                errors: vec![e],
+                                warnings,
+                            });
+                        }
+                    };
+
+                    // Create an implicit main function that can be called by other modules
+                    let function_name = format!("_implicit_main_{}", header.path.file_stem().unwrap_or_default().to_string_lossy());
+                    let main_signature = FunctionSignature {
+                        parameters: vec![],
+                        returns: vec![],
+                    };
+
+                    ast.push(AstNode {
+                        kind: NodeKind::Function(
+                            function_name,
+                            main_signature,
+                            body,
+                        ),
+                        location: header.name_location,
+                        scope: context.scope_name,
+                    });
+                }
+
+                HeaderKind::Struct(_fields) => {
+                    // TODO: Implement struct handling
+                }
+
+                HeaderKind::Constant(_arg) => {
+                    // TODO: Implement constant handling
+                }
+
+                HeaderKind::Choice => {
+                    // TODO: Implement choice handling
+                }
             }
 
             // TODO: create an function definition for these exported headers

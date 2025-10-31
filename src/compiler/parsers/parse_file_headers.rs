@@ -53,11 +53,31 @@ pub fn parse_headers(
     host_registry: &HostFunctionRegistry,
     warnings: &mut Vec<CompilerWarning>,
 ) -> Result<Vec<Header>, Vec<CompileError>> {
+    parse_headers_with_entry_file(tokenized_files, host_registry, warnings, None)
+}
+
+// This takes all the files in the module
+// and parses them into headers, with entry file detection.
+pub fn parse_headers_with_entry_file(
+    tokenized_files: Vec<FileTokens>,
+    host_registry: &HostFunctionRegistry,
+    warnings: &mut Vec<CompilerWarning>,
+    entry_file_path: Option<&PathBuf>,
+) -> Result<Vec<Header>, Vec<CompileError>> {
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompileError> = Vec::new();
 
     for mut file in tokenized_files {
-        let headers_from_file = parse_headers_in_file(&mut file, host_registry, warnings);
+        let is_entry_file = entry_file_path
+            .map(|entry_path| file.src_path == *entry_path)
+            .unwrap_or(false);
+        
+        let headers_from_file = parse_headers_in_file_with_entry_detection(
+            &mut file, 
+            host_registry, 
+            warnings, 
+            is_entry_file
+        );
 
         match headers_from_file {
             Ok(file_headers) => {
@@ -73,6 +93,26 @@ pub fn parse_headers(
         return Err(errors);
     }
 
+    // Validate that only one EntryPoint exists in the module
+    let entry_point_count = headers.iter()
+        .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
+        .count();
+    
+    if entry_point_count > 1 {
+        let entry_points: Vec<_> = headers.iter()
+            .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
+            .collect();
+        
+        return Err(vec![CompileError::new_rule_error(
+            format!(
+                "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {:?}, Second entry point: {:?}",
+                entry_points[0].path,
+                entry_points[1].path
+            ),
+            entry_points[1].name_location.clone(),
+        )]);
+    }
+
     Ok(headers)
 }
 
@@ -83,6 +123,18 @@ pub fn parse_headers_in_file(
     token_stream: &mut FileTokens,
     host_function_registry: &HostFunctionRegistry,
     warnings: &mut Vec<CompilerWarning>,
+) -> Result<Vec<Header>, CompileError> {
+    parse_headers_in_file_with_entry_detection(token_stream, host_function_registry, warnings, false)
+}
+
+// Everything at the top level of a file is visible to the whole module.
+// This function splits up the file into each of its headers with entry point detection.
+// Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
+pub fn parse_headers_in_file_with_entry_detection(
+    token_stream: &mut FileTokens,
+    host_function_registry: &HostFunctionRegistry,
+    warnings: &mut Vec<CompilerWarning>,
+    is_entry_file: bool,
 ) -> Result<Vec<Header>, CompileError> {
     let mut headers = Vec::new();
     let mut encountered_symbols = HashSet::new();
@@ -181,10 +233,17 @@ pub fn parse_headers_in_file(
         }
     }
 
+    // Create the appropriate header kind based on whether this is the entry file
+    let main_header_kind = if is_entry_file {
+        HeaderKind::EntryPoint(main_function_body)
+    } else {
+        HeaderKind::ImplicitMain(main_function_body)
+    };
+
     headers.push(Header {
         name: String::new(), // Implicit main function doesn't have a name
         path: token_stream.src_path.to_owned(),
-        kind: HeaderKind::ImplicitMain(main_function_body),
+        kind: main_header_kind,
         exported: next_statement_exported,
         dependencies: header_imports,
         name_location: TextLocation::default(),
