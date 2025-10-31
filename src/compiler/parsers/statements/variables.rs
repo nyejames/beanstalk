@@ -3,7 +3,7 @@ use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::AstNode;
-use crate::compiler::parsers::build_ast::new_ast;
+use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::structs::create_struct_definition;
@@ -95,7 +95,8 @@ pub fn new_arg(
             //     ),
             // });
 
-            let function_body = new_ast(token_stream, func_context.to_owned(), warnings)?;
+            let function_body =
+                function_body_to_ast(token_stream, func_context.to_owned(), warnings)?;
 
             return Ok(Arg {
                 name: name.to_owned(),

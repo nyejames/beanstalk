@@ -1,13 +1,13 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{new_ast};
+use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::{ast_log, return_rule_error};
-use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::{ast_log, return_rule_error};
 // IF STATEMENTS / MATCH STATEMENTS
 // Can also be expressions (todo)
 // Example:
@@ -64,12 +64,16 @@ pub fn create_branch(
 
     token_stream.advance(); // Consume ':'
     let if_context = context.new_child_control_flow(ContextKind::Branch);
-    let then_block = new_ast(token_stream, if_context.to_owned(), warnings)?;
+    let then_block = function_body_to_ast(token_stream, if_context.to_owned(), warnings)?;
 
     // Check for else condition
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
         token_stream.advance();
-        Some(new_ast(token_stream, if_context.to_owned(), warnings)?)
+        Some(function_body_to_ast(
+            token_stream,
+            if_context.to_owned(),
+            warnings,
+        )?)
     } else {
         None
     };
@@ -147,7 +151,11 @@ fn create_match_node(
             // Move past the colon
             token_stream.advance();
 
-            else_block = Some(new_ast(token_stream, match_context.to_owned(), warnings)?);
+            else_block = Some(function_body_to_ast(
+                token_stream,
+                match_context.to_owned(),
+                warnings,
+            )?);
         }
 
         let condition = create_expression(
@@ -169,7 +177,7 @@ fn create_match_node(
         // Move past the colon
         token_stream.advance();
 
-        let block = new_ast(token_stream, match_context.to_owned(), warnings)?;
+        let block = function_body_to_ast(token_stream, match_context.to_owned(), warnings)?;
 
         arms.push(MatchArm {
             condition,

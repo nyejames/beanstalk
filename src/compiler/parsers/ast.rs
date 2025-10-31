@@ -1,13 +1,16 @@
-use crate::compiler::compiler_errors::CompilerMessages;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::datatypes::Ownership;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::new_ast;
+use crate::compiler::parsers::build_ast::function_body_to_ast;
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::settings;
-use std::path::PathBuf;
+use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
+use crate::{return_compiler_error, settings};
+use std::path::PathBuf;
 
 pub struct Ast {
     pub nodes: Vec<AstNode>,
@@ -31,7 +34,7 @@ impl Ast {
             Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
         let mut external_exports: Vec<Arg> = Vec::new();
         let mut warnings: Vec<CompilerWarning> = Vec::new();
-        let entry_path = sorted_headers[0].path.to_owned();
+        let mut entry_path = None;
 
         for header in sorted_headers {
             match header.kind {
@@ -43,7 +46,7 @@ impl Ast {
                         host_registry.clone(),
                     );
 
-                    let body = match new_ast(
+                    let body = match function_body_to_ast(
                         &mut FileTokens::new(header.path.to_owned(), tokens),
                         context.to_owned(),
                         &mut warnings,
@@ -76,7 +79,7 @@ impl Ast {
                         host_registry.clone(),
                     );
 
-                    let body = match new_ast(
+                    let body = match function_body_to_ast(
                         &mut FileTokens::new(header.path.to_owned(), tokens),
                         context.to_owned(),
                         &mut warnings,
@@ -96,12 +99,10 @@ impl Ast {
                         returns: vec![],
                     };
 
+                    entry_path = Some(header.path.to_owned());
+
                     ast.push(AstNode {
-                        kind: NodeKind::Function(
-                            "_start".to_string(),
-                            entry_signature,
-                            body,
-                        ),
+                        kind: NodeKind::Function("_start".to_string(), entry_signature, body),
                         location: header.name_location,
                         scope: context.scope_name,
                     });
@@ -115,7 +116,7 @@ impl Ast {
                         host_registry.clone(),
                     );
 
-                    let body = match new_ast(
+                    let body = match function_body_to_ast(
                         &mut FileTokens::new(header.path.to_owned(), tokens),
                         context.to_owned(),
                         &mut warnings,
@@ -130,25 +131,32 @@ impl Ast {
                     };
 
                     // Create an implicit main function that can be called by other modules
-                    let function_name = format!("_implicit_main_{}", header.path.file_stem().unwrap_or_default().to_string_lossy());
+                    let function_name = format!(
+                        "_implicit_main_{}",
+                        header
+                            .path
+                            .file_stem()
+                            .unwrap_or_default()
+                            .to_string_lossy()
+                    );
                     let main_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![],
                     };
 
                     ast.push(AstNode {
-                        kind: NodeKind::Function(
-                            function_name,
-                            main_signature,
-                            body,
-                        ),
+                        kind: NodeKind::Function(function_name, main_signature, body),
                         location: header.name_location,
                         scope: context.scope_name,
                     });
                 }
 
-                HeaderKind::Struct(_fields) => {
-                    // TODO: Implement struct handling
+                HeaderKind::Struct(fields) => {
+                    ast.push(AstNode {
+                        kind: NodeKind::StructDefinition(header.name, fields),
+                        location: header.name_location,
+                        scope: header.path,
+                    });
                 }
 
                 HeaderKind::Constant(_arg) => {
@@ -164,12 +172,20 @@ impl Ast {
             if header.exported {}
         }
 
-        Ok(Ast {
-            nodes: ast,
-            entry_path,
-            external_exports,
-            warnings,
-        })
+        match entry_path {
+            None => Err(CompilerMessages {
+                warnings,
+                errors: vec![CompileError::compiler_error(
+                    "No entry point found. The compiler should always create an entry point.",
+                )],
+            }),
+            Some(path) => Ok(Ast {
+                nodes: ast,
+                entry_path: path,
+                external_exports,
+                warnings,
+            }),
+        }
     }
 }
 

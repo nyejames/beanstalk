@@ -361,6 +361,59 @@ impl WirTransformContext {
     ) {
         self.host_imports.insert(host_function);
     }
+
+    /// Create a place for a function parameter
+    ///
+    /// Allocates a place for a function parameter with the given name, index, and type.
+    /// Parameters are allocated as local variables within the function scope.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: Parameter name
+    /// - `index`: Parameter index in the function signature
+    /// - `data_type`: Parameter data type
+    ///
+    /// # Returns
+    ///
+    /// A new `Place` allocated for the parameter
+    pub fn create_place_for_parameter(
+        &mut self,
+        name: String,
+        _index: u32,
+        data_type: &DataType,
+    ) -> Result<Place, CompileError> {
+        let place = self.place_manager.allocate_local(data_type);
+        self.register_variable(name, place.clone());
+        Ok(place)
+    }
+
+    /// Get the next function ID and increment the counter
+    ///
+    /// Returns a unique function ID for creating new WIR functions.
+    /// Each function gets a unique ID for identification and WASM generation.
+    ///
+    /// # Returns
+    ///
+    /// A unique function ID
+    pub fn get_next_function_id(&mut self) -> u32 {
+        let id = self.next_function_id;
+        self.next_function_id += 1;
+        id
+    }
+
+    /// Add a function to the context
+    ///
+    /// Registers a WIR function in the context for later processing.
+    /// This is used when transforming function definitions.
+    ///
+    /// # Parameters
+    ///
+    /// - `function`: WIR function to add
+    pub fn add_function(&mut self, function: WirFunction) {
+        self.function_names.insert(function.name.clone(), function.id);
+        // Note: In a full implementation, we would store the function somewhere
+        // For now, we just track the name-to-ID mapping
+    }
 }
 
 impl VariableUsageTracker {

@@ -1,14 +1,14 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{ new_ast};
+use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
-use crate::compiler::parsers::ast::ScopeContext;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 // TODO: Loop invariance analysis.
@@ -57,7 +57,7 @@ pub fn create_loop(
                         Ok(AstNode {
                             kind: NodeKind::WhileLoop(
                                 condition,
-                                new_ast(token_stream, context, warnings)?,
+                                function_body_to_ast(token_stream, context, warnings)?,
                             ),
                             location: token_stream.current_location(),
                             scope,
@@ -140,7 +140,7 @@ pub fn create_loop(
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,
-                    new_ast(token_stream, context, warnings)?,
+                    function_body_to_ast(token_stream, context, warnings)?,
                 ),
                 location: token_stream.current_location(),
             })

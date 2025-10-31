@@ -1,26 +1,26 @@
-use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
 use super::ast_nodes::NodeKind;
-use crate::compiler::compiler_errors::{CompileError};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::datatypes::DataType;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
-use crate::compiler::parsers::expressions::expression::{ExpressionKind};
+use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
 
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings, timer_log,
 };
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
-pub fn new_ast(
+pub fn function_body_to_ast(
     token_stream: &mut FileTokens,
     mut context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
@@ -176,9 +176,7 @@ pub fn new_ast(
                         // -----------------------------
                         _ => {
                             ast.push(AstNode {
-                                kind: NodeKind::VariableDeclaration(
-                                    arg.to_owned(),
-                                ),
+                                kind: NodeKind::VariableDeclaration(arg.to_owned()),
                                 location: token_stream.current_location(),
                                 scope: context.scope_name.to_owned(),
                             });
