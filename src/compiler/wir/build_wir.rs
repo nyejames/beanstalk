@@ -99,9 +99,31 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
     }
 
     // Create a main function for any remaining top-level statements
+    // Only create if we don't already have an entry point function
     if !other_statements.is_empty() {
-        let main_function = create_main_function_from_ast(&other_statements, &mut context)?;
-        wir.add_function(main_function);
+        let has_entry_point = wir.exports.contains_key("_start");
+        
+        if has_entry_point {
+            // If we already have an entry point, don't create another main function
+            // This prevents duplicate exports
+            wir_log!("Skipping main function creation - entry point already exists");
+        } else {
+            // Create main function and export it as _start
+            let mut main_function = create_main_function_from_ast(&other_statements, &mut context)?;
+            
+            // Rename to _start to match WASM convention
+            main_function.name = "_start".to_string();
+            
+            // Add export for the entry point
+            wir.exports.insert("_start".to_string(), crate::compiler::wir::wir_nodes::Export {
+                name: "_start".to_string(),
+                kind: crate::compiler::wir::wir_nodes::ExportKind::Function,
+                index: wir.functions.len() as u32,
+            });
+            
+            wir.add_function(main_function);
+            wir_log!("Created _start function from top-level statements");
+        }
     }
 
     // Run borrow checking on the WIR

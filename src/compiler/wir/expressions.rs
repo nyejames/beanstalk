@@ -312,9 +312,6 @@ pub fn evaluate_rpn_to_wir_statements(
                 let rhs = operand_stack.pop().unwrap();
                 let lhs = operand_stack.pop().unwrap();
 
-                // Convert AST operator to WIR binary operation
-                let wir_op = ast_operator_to_wir_binop(op)?;
-
                 // Infer result type
                 let lhs_type = operand_to_datatype(&lhs, context)?;
                 let rhs_type = operand_to_datatype(&rhs, context)?;
@@ -323,10 +320,22 @@ pub fn evaluate_rpn_to_wir_statements(
                 // Create temporary for result
                 let result_place = context.create_temporary_place(&result_type);
 
-                // Create binary operation statement
+                // Check if this is string concatenation
+                use crate::compiler::parsers::expressions::expression::Operator;
+                let rvalue = if matches!(op, Operator::Add) && 
+                              (lhs_type == DataType::String || rhs_type == DataType::String) {
+                    // String concatenation
+                    Rvalue::StringConcat(lhs, rhs)
+                } else {
+                    // Regular binary operation
+                    let wir_op = ast_operator_to_wir_binop(op)?;
+                    Rvalue::BinaryOp(wir_op, lhs, rhs)
+                };
+
+                // Create operation statement
                 statements.push(Statement::Assign {
                     place: result_place.clone(),
-                    rvalue: Rvalue::BinaryOp(wir_op, lhs, rhs),
+                    rvalue,
                 });
 
                 // Push result operand to stack

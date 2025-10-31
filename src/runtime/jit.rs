@@ -23,6 +23,15 @@ pub fn execute_direct_jit_with_capture(
     config: &RuntimeConfig,
     capture_output: bool,
 ) -> Result<(), CompileError> {
+    // WASIX requires a Tokio runtime context for async I/O operations
+    // Create a runtime only for JIT execution to avoid overhead in other CLI operations
+    let runtime = tokio::runtime::Runtime::new()
+        .map_err(|e| CompileError::compiler_error(&format!("Failed to create Tokio runtime for WASIX: {}", e)))?;
+    
+    // Enter the runtime context and execute synchronously
+    // The _guard ensures we stay in the runtime context for the duration of this function
+    let _guard = runtime.enter();
+    
     // Create a Wasmer store for JIT execution
     let mut store = Store::default();
 
@@ -702,7 +711,14 @@ fn setup_wasix_imports_with_io(
     }
 
     // Create proper WASIX environment using wasmer-wasix
-    let wasi_env_builder = WasiEnvBuilder::new("beanstalk-program");
+    let mut wasi_env_builder = WasiEnvBuilder::new("beanstalk-program");
+    
+    // Set the runtime for WASIX - required for async I/O operations
+    // Get the current Tokio runtime handle and create a pluggable runtime
+    let runtime_handle = tokio::runtime::Handle::current();
+    let task_manager = wasmer_wasix::runtime::task_manager::tokio::TokioTaskManager::new(runtime_handle);
+    let runtime = wasmer_wasix::PluggableRuntime::new(std::sync::Arc::new(task_manager));
+    wasi_env_builder.set_runtime(std::sync::Arc::new(runtime));
 
     // For capture_output, we'll use a different approach - intercept at the fd_write level
     if capture_output {

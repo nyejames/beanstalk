@@ -119,6 +119,7 @@ dependencies = [
  "colour",
  "fs_extra",
  "rayon",
+ "tokio",
  "wasm-encoder 0.238.1",
  "wasmer",
  "wasmer-types",

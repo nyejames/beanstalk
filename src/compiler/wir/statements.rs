@@ -72,6 +72,11 @@ pub fn transform_ast_node_to_wir(
         NodeKind::HostFunctionCall(name, args, _, module, function, _) => {
             ast_host_function_call_to_wir(name, args, module, function, &node.location, context)
         }
+        NodeKind::Print(expr) => {
+            // Transform Print node to a host function call to the print function
+            // Print is a built-in host function provided by the runtime
+            ast_print_to_wir(expr, &node.location, context)
+        }
         NodeKind::If(condition, then_block, else_block) => {
             ast_if_statement_to_wir(condition, then_block, else_block, &node.location, context)
         }
@@ -260,6 +265,27 @@ fn ast_function_call_to_wir(
     });
 
     Ok(statements)
+}
+
+/// Transform AST print statement to WIR statements
+fn ast_print_to_wir(
+    expr: &Expression,
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    // Print is a host function call to the print function
+    // Convert the expression to a single-element argument list
+    let args = vec![expr.clone()];
+    
+    // Call the host function transformation with print-specific parameters
+    ast_host_function_call_to_wir(
+        "print",
+        &args,
+        "beanstalk_io",
+        "print",
+        location,
+        context,
+    )
 }
 
 /// Transform AST host function call to WIR statements

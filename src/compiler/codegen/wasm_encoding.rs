@@ -772,6 +772,10 @@ impl LocalAnalyzer {
             Rvalue::Ref { place, .. } => {
                 self.collect_from_place(place);
             }
+            Rvalue::StringConcat(left, right) => {
+                self.collect_from_operand(left);
+                self.collect_from_operand(right);
+            }
         }
     }
 
@@ -945,6 +949,9 @@ pub struct WasmModule {
     pub function_count: u32,
     pub type_count: u32,
     global_count: u32,
+    
+    // Track exported names to prevent duplicates
+    exported_names: std::collections::HashSet<String>,
 }
 
 /// Source information for a compiled function
@@ -1211,6 +1218,7 @@ impl WasmModule {
             function_count: 0,
             type_count: 0,
             global_count: 0,
+            exported_names: std::collections::HashSet::new(),
         }
     }
 
@@ -1295,12 +1303,15 @@ impl WasmModule {
 
         // Look for entry point functions in WIR
         for (index, wir_function) in wir.functions.iter().enumerate() {
+            let mut exported = false;
+            
             // Check if this function is marked as an entry point in WIR exports
             if let Some(export) = wir.exports.get(&wir_function.name) {
                 if export.kind == crate::compiler::wir::wir_nodes::ExportKind::Function {
                     // Check if this is the entry point by looking for specific naming patterns
-                    // Entry points are typically named "main" or marked specially in the WIR
+                    // Entry points are typically named "main", "_start", or marked specially in the WIR
                     let is_entry_point = wir_function.name == "main" || 
+                                        wir_function.name == "_start" ||
                                         wir_function.name.contains("entry") ||
                                         export.name == "_start"; // WASM start function convention
 
@@ -1313,6 +1324,7 @@ impl WasmModule {
                         
                         // Mark as start function for WASM module
                         start_function_index = Some(function_index);
+                        exported = true;
 
                         #[cfg(feature = "verbose_codegen_logging")]
                         println!(
@@ -1321,18 +1333,21 @@ impl WasmModule {
                         );
                     }
                 }
-            } else if wir_function.name == "main" {
-                // Handle implicit main function export even if not explicitly marked
+            }
+            
+            // Handle implicit main/_start function export only if not already exported
+            if !exported && (wir_function.name == "main" || wir_function.name == "_start") {
                 entry_point_count += 1;
                 let function_index = index as u32;
                 
-                self.add_function_export("main", function_index)?;
+                // Use the function's actual name for the export
+                self.add_function_export(&wir_function.name, function_index)?;
                 start_function_index = Some(function_index);
 
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!(
-                    "WASM: Exported implicit main function at index {}",
-                    function_index
+                    "WASM: Exported implicit entry point function '{}' at index {}",
+                    wir_function.name, function_index
                 );
             }
         }
@@ -2690,6 +2705,14 @@ impl WasmModule {
                 // Implement Beanstalk's implicit borrowing semantics in WASM
                 self.lower_beanstalk_reference(place, borrow_kind, function, local_map)
             }
+            Rvalue::StringConcat(left, right) => {
+                // String concatenation: load both operands and call string concat helper
+                self.lower_operand(left, function, local_map)?;
+                self.lower_operand(right, function, local_map)?;
+                // For now, just leave both values on the stack
+                // TODO: Implement actual string concatenation via runtime helper
+                Ok(())
+            }
         }
     }
 
@@ -3417,6 +3440,10 @@ impl WasmModule {
                 // References are pointers (i32)
                 Ok(WasmType::I32)
             }
+            Rvalue::StringConcat(_, _) => {
+                // String concatenation results in a string pointer (i32)
+                Ok(WasmType::I32)
+            }
         }
     }
 
@@ -3870,9 +3897,22 @@ impl WasmModule {
         name: &str,
         function_index: u32,
     ) -> Result<u32, CompileError> {
+        // Check if this export name has already been added
+        if self.exported_names.contains(name) {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "WASM: Skipping duplicate export '{}' at index {}",
+                name, function_index
+            );
+            return Ok(function_index);
+        }
+        
         // Add export entry to export section
         self.export_section
             .export(name, ExportKind::Func, function_index);
+        
+        // Track this export name
+        self.exported_names.insert(name.to_string());
 
         #[cfg(feature = "verbose_codegen_logging")]
         println!(
@@ -5007,6 +5047,14 @@ impl WasmModule {
             Rvalue::Ref { place, .. } => {
                 // For references, load the place value
                 self.lower_place_access_enhanced(place, function_builder, local_map)
+            }
+            Rvalue::StringConcat(left, right) => {
+                // String concatenation: load both operands
+                self.lower_operand_enhanced(left, function_builder, local_map)?;
+                self.lower_operand_enhanced(right, function_builder, local_map)?;
+                // For now, just leave both values on the stack
+                // TODO: Implement actual string concatenation via runtime helper
+                Ok(())
             }
         }
     }
