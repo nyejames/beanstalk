@@ -15,8 +15,9 @@ use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue, Statement};
 use crate::compiler::{
     compiler_errors::CompileError,
     datatypes::DataType,
-    parsers::{statements::create_template_node::Template, tokens::TextLocation},
+    parsers::{statements::create_template_node::Template},
 };
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Transform a Beanstalk template expression to WIR rvalue
 ///

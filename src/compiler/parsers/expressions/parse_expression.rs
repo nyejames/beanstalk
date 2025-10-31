@@ -1,21 +1,21 @@
-use crate::compiler::parsers::ast::ContextKind;
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::ContextKind;
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::statements::collections::new_collection;
 use crate::compiler::parsers::expressions::expression::{Expression, Operator};
+use crate::compiler::parsers::statements::collections::new_collection;
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::statements::functions::{parse_function_call, FunctionSignature};
-use crate::compiler::parsers::statements::variables::create_reference;
+use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::template::TemplateType;
+use crate::compiler::parsers::statements::variables::create_reference;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
     return_type_error,
 };
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 
 // For multiple returns or function calls
 // MUST know all the types
@@ -256,15 +256,7 @@ pub fn create_expression(
                 if let Some(host_func_def) = context.host_registry.get_function(name) {
 
                     // Convert return types to Arg format
-                    let converted_returns = host_func_def.return_types
-                        .iter()
-                        .map(|x| x.to_arg())
-                        .collect::<Vec<Arg>>();
-                    
-                    let signature = FunctionSignature {
-                        parameters: host_func_def.parameters.clone(),
-                        returns: converted_returns.clone(),
-                    };
+                    let signature = host_func_def.params_to_signature();
 
                     // This is a function call - parse it using the function call parser
                     let function_call_node = parse_function_call(
@@ -278,7 +270,7 @@ pub fn create_expression(
                         let func_call_expr = Expression::function_call(
                             func_name.to_owned(),
                             expressions.to_owned(),
-                            converted_returns,
+                            signature.returns,
                             location,
                         );
 

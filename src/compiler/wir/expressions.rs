@@ -19,10 +19,9 @@ use crate::compiler::{
     parsers::{
         ast_nodes::{AstNode, NodeKind},
         expressions::expression::{Expression, ExpressionKind},
-        tokens::TextLocation,
     },
 };
-
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 // Error handling macros
 use crate::return_compiler_error;
 

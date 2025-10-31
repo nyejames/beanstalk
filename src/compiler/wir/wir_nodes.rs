@@ -1,8 +1,6 @@
 // Optimized import structure - grouped by module for clarity
-use crate::compiler::{
-    parsers::tokens::TextLocation,
-    wir::place::{Place, WasmType},
-};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::wir::place::{Place, WasmType};
 use std::collections::HashMap;
 
 /// WASM Intermediate Representation structure with simplified borrow checking

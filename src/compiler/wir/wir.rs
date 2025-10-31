@@ -7,6 +7,7 @@ use crate::compiler::{
     wir::wir_nodes::{BorrowError, WirFunction},
 };
 use crate::{borrow_log, wir_log};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// WASM Intermediate Representation (WIR) with simplified borrow checking
 ///
@@ -118,12 +119,12 @@ fn convert_borrow_errors_to_compile_errors(
 
             // Use the error location if available, otherwise use a default location
             let error_location = if borrow_error.primary_location
-                != crate::compiler::parsers::tokens::TextLocation::default()
+                != TextLocation::default()
             {
                 borrow_error.primary_location.clone()
             } else {
                 // TODO: Map program points to source locations for better error reporting
-                crate::compiler::parsers::tokens::TextLocation::default()
+                TextLocation::default()
             };
 
             // Create compile error with rule error type (user-facing borrow checker error)

@@ -4,14 +4,15 @@ use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::structs::create_struct_definition;
 
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error, return_type_error};
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler::datatypes::DataType::Parameters;
 
 // Arg names and types are required
 // Can have default values
@@ -205,6 +206,13 @@ impl FunctionSignature {
             token_stream.current_location(),
             "Expected a colon after the return types",
         )
+    }
+    
+    pub fn default() -> Self {
+        Self {
+            parameters: Vec::new(),
+            returns: Vec::new(),
+        }
     }
 }
 
@@ -538,8 +546,10 @@ pub fn parse_host_function_call(
 ) -> Result<AstNode, CompileError> {
     let location = token_stream.current_location();
 
+    let params_as_args = host_func.params_to_signature();
+
     // Parse arguments using the same logic as regular function calls
-    let args = create_function_call_arguments(token_stream, &host_func.parameters, context)?;
+    let args = create_function_call_arguments(token_stream, &params_as_args.parameters, context)?;
 
     // Validate the host function call
     validate_host_function_call(host_func, &args, &location)?;
@@ -604,27 +614,27 @@ pub fn validate_host_function_call(
 
     // Check argument types
     for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
-        if !types_compatible(&expression.data_type, &param.value.data_type) {
+        if !types_compatible(&expression.data_type, &param.data_type) {
             return_type_error!(
                 location.clone(),
                 "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
                 i + 1,
                 function.name,
-                format_type_for_error(&param.value.data_type),
+                format_type_for_error(&param.data_type),
                 format_type_for_error(&expression.data_type),
-                get_type_conversion_hint(&expression.data_type, &param.value.data_type)
+                get_type_conversion_hint(&expression.data_type, &param.data_type)
             );
         }
 
         // Check mutability requirements
-        if param.value.ownership.is_mutable() && !expression.ownership.is_mutable() {
+        if param.ownership.is_mutable() && !expression.ownership.is_mutable() {
             return_type_error!(
                 location.clone(),
                 "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
                 i + 1,
                 function.name,
                 format_type_for_error(&expression.data_type),
-                format_type_for_error(&param.value.data_type).to_lowercase()
+                format_type_for_error(&param.data_type).to_lowercase()
             );
         }
     }

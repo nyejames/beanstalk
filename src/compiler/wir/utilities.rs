@@ -8,10 +8,12 @@
 use crate::compiler::{
     compiler_errors::CompileError,
     datatypes::DataType,
-    parsers::{expressions::expression::Operator, tokens::TextLocation},
+    parsers::expressions::expression::Operator,
     wir::wir_nodes::{BinOp, Constant, Operand},
 };
 
+use crate::compiler::parsers::statements::functions::FunctionSignature;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::{return_compiler_error, return_type_error};
 
 /// Infer the result type of a binary operation based on operand types
@@ -142,7 +144,7 @@ pub fn operand_to_datatype(operand: &Operand) -> DataType {
                 Constant::Bool(_) => DataType::Bool,
                 Constant::String(_) => DataType::String,
                 Constant::MutableString(_) => DataType::Template,
-                Constant::Function(_) => DataType::Function(vec![], vec![]),
+                Constant::Function(_) => DataType::Function(FunctionSignature::default()),
                 Constant::Null => DataType::Int, // Null is represented as integer 0
                 Constant::MemoryOffset(_) => DataType::Int, // Memory offsets are integers
                 Constant::TypeSize(_) => DataType::Int, // Type sizes are integers
@@ -151,7 +153,7 @@ pub fn operand_to_datatype(operand: &Operand) -> DataType {
         // For places, we'd need to look up the type in the place manager
         // For now, assume Int as default (this should be enhanced)
         Operand::Copy(_) | Operand::Move(_) => DataType::Int,
-        Operand::FunctionRef(_) => DataType::Function(vec![], vec![]),
+        Operand::FunctionRef(_) => DataType::Function(FunctionSignature::default()),
         Operand::GlobalRef(_) => DataType::Int,
     }
 }

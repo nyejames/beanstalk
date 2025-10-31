@@ -5,10 +5,10 @@ use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::statements::imports::parse_import;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::{ast_log, return_rule_error, timer_log};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 
 // Each header is one of these categories:
 // - Functions
@@ -57,8 +57,7 @@ pub fn parse_headers(
     let mut errors: Vec<CompileError> = Vec::new();
 
     for mut file in tokenized_files {
-        let headers_from_file =
-            parse_headers_in_file(&mut file, host_registry, warnings);
+        let headers_from_file = parse_headers_in_file(&mut file, host_registry, warnings);
 
         match headers_from_file {
             Ok(file_headers) => {
@@ -69,7 +68,7 @@ pub fn parse_headers(
             }
         }
     }
-    
+
     if errors.len() > 0 {
         return Err(errors);
     }
@@ -97,8 +96,8 @@ pub fn parse_headers_in_file(
     let mut header_imports: HashSet<String> = HashSet::new();
 
     loop {
-        ast_log!("Parsing Header Token: {:?}", current_token);
         let current_token = token_stream.current_token();
+        ast_log!("Parsing Header Token: {:?}", current_token);
         let current_location = token_stream.current_location();
         token_stream.advance();
 

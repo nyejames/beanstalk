@@ -130,16 +130,7 @@ pub fn new_ast(
                     token_stream.advance();
 
                     // Convert return types to Arg format
-                    let converted_returns = host_func_call
-                        .return_types
-                        .iter()
-                        .map(|x| x.to_arg())
-                        .collect::<Vec<Arg>>();
-
-                    let signature = FunctionSignature {
-                        parameters: host_func_call.parameters.to_owned(),
-                        returns: converted_returns.to_owned(),
-                    };
+                    let signature = host_func_call.params_to_signature();
 
                     ast.push(parse_function_call(
                         token_stream,

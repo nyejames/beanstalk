@@ -7,12 +7,12 @@ use crate::compiler::parsers::build_ast::new_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::structs::create_struct_definition;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
     expressions::parse_expression::create_expression,
 };
 use crate::{ast_log, return_rule_error, return_syntax_error};
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -199,12 +199,7 @@ pub fn new_arg(
         _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
     };
 
-    ast_log!(
-        "Created new {:?} variable: '{}' of type: {}",
-        ownership,
-        name,
-        data_type
-    );
+    ast_log!("Created new variable: '{}' of type: {}", name, data_type);
 
     Ok(Arg {
         name: name.to_owned(),

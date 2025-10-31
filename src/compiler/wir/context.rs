@@ -4,8 +4,10 @@
 //! used during AST to WIR transformation. It manages variable scoping, place
 //! allocation, temporary variable tracking, and usage tracking for move detection.
 
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
 
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::wir::{
     place::{Place, PlaceManager},
     wir_nodes::{Operand, WirFunction},
@@ -179,8 +181,6 @@ impl WirTransformContext {
         match self.lookup_variable(name) {
             Some(place) => Ok(place.clone()),
             None => {
-                use crate::compiler::compiler_errors::CompileError;
-                use crate::compiler::parsers::tokens::TextLocation;
                 Err(CompileError::new_rule_error(
                     format!("Undefined variable '{}'", name),
                     TextLocation::default()

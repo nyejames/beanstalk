@@ -14,13 +14,13 @@ use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
 use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
 
 // Core compiler imports
-use crate::compiler::parsers::build_ast::Ast;
+use crate::compiler::parsers::expressions::expression::ExpressionKind;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::{
     compiler_errors::CompileError,
     parsers::{
         ast_nodes::{Arg, AstNode, NodeKind},
         expressions::expression::Expression,
-        tokens::TextLocation,
     },
 };
 // Error handling macros
@@ -60,8 +60,8 @@ pub fn transform_ast_node_to_wir(
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
-        NodeKind::VariableDeclaration(name, value) => {
-            ast_declaration_to_wir(name, value, &node.location, context)
+        NodeKind::VariableDeclaration(arg) => {
+            ast_declaration_to_wir(&arg.name, &arg.value, &node.location, context)
         }
         NodeKind::Mutation(name, value, is_mutable) => {
             ast_mutation_to_wir(name, value, *is_mutable, &node.location, context)
@@ -78,11 +78,9 @@ pub fn transform_ast_node_to_wir(
         NodeKind::Expression(expr) => {
             // Handle standalone expressions (like function definitions)
             match &expr.kind {
-                crate::compiler::parsers::expressions::expression::ExpressionKind::Function(
-                    args,
-                    body,
-                    _,
-                ) => ast_function_definition_to_wir(args, body, &node.location, context),
+                ExpressionKind::Function(args, body) => {
+                    ast_function_definition_to_wir(&args.parameters, body, &node.location, context)
+                }
                 _ => {
                     // For other expressions, convert to assignment to temporary
                     let (statements, _rvalue) =

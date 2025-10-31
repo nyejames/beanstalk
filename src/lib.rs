@@ -1,7 +1,7 @@
 pub(crate) mod build;
 pub mod settings;
 
-pub(crate) mod cli;
+pub mod cli;
 mod create_new_project;
 mod dev_server;
 

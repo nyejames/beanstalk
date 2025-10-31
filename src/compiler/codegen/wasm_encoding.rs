@@ -3630,7 +3630,8 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         for host_func in host_imports {
             // Create WASM function type signature from host function definition
-            let param_types = self.create_wasm_param_types(&host_func.parameters)?;
+            let param_types =
+                self.create_wasm_param_types(&host_func.params_to_signature().parameters)?;
             let result_types = self.create_wasm_result_types(&host_func.return_types)?;
 
             // Add function type to type section

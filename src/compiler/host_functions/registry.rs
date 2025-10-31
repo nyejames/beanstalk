@@ -1,11 +1,11 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::return_compiler_error;
 use std::collections::HashMap;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Defines how a host function handles errors
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -23,11 +23,11 @@ pub enum ErrorHandling {
 // Which makes multithreading unsafe in certain parts of the compiler pipeline.
 // Update: Doing this changed nothing, there is still an issue with multithreading.
 #[derive(Debug, Clone)]
-struct BasicParameter {
-    name: String,
-    data_type: DataType,
+pub struct BasicParameter {
+    pub(crate) name: String,
+    pub(crate) data_type: DataType,
+    pub(crate) ownership: Ownership,
 }
-
 
 /// Defines a host function that can be called from Beanstalk code
 /// Uses the same parameter and return type system as regular Beanstalk functions
@@ -92,6 +92,10 @@ impl HostFunctionDef {
 
     /// Get the function signature as a DataType::Function for compatibility
     pub fn as_function_type(&self) -> DataType {
+        DataType::Function(self.params_to_signature())
+    }
+
+    pub fn params_to_signature(&self) -> FunctionSignature {
         // Convert return_types Vec<DataType> to Vec<Arg>
         let return_args: Vec<Arg> = self
             .return_types
@@ -103,7 +107,7 @@ impl HostFunctionDef {
                     ExpressionKind::None,
                     TextLocation::default(),
                     data_type.clone(),
-                    crate::compiler::datatypes::Ownership::default(),
+                    Ownership::default(),
                 ),
             })
             .collect();
@@ -112,25 +116,21 @@ impl HostFunctionDef {
         let parameters = self
             .parameters
             .iter()
-            .map(|param|
-                Arg {
-                    name: param.name.to_owned(),
-                    value: Expression::new(
-                        ExpressionKind::None,
-                        TextLocation::default(),
-                        param.data_type.to_owned(),
-                        crate::compiler::datatypes::Ownership::default(),
-                    ),
-                }
-            )
+            .map(|param| Arg {
+                name: param.name.to_owned(),
+                value: Expression::new(
+                    ExpressionKind::None,
+                    TextLocation::default(),
+                    param.data_type.to_owned(),
+                    Ownership::default(),
+                ),
+            })
             .collect();
 
-        let signature = FunctionSignature {
+        FunctionSignature {
             parameters,
             returns: return_args,
-        };
-
-        DataType::Function(signature)
+        }
     }
 }
 
@@ -201,6 +201,7 @@ pub fn create_builtin_registry() -> Result<HostFunctionRegistry, CompileError> {
         vec![BasicParameter {
             name: "message".to_string(),
             data_type: DataType::String,
+            ownership: Ownership::default(),
         }],
         vec![], // No return value (void function)
         "wasix_32v1",
