@@ -15,8 +15,8 @@ use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
 // use rayon::prelude::*;
-use std::time::Instant;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
+use std::time::Instant;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -138,29 +138,15 @@ pub fn compile_modules(
     // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
     let time = Instant::now();
     let mut compiler_messages = CompilerMessages::new();
-    
-    // Identify the entry file - for single file compilation, it's the first (and only) module
-    // For multi-file compilation, we need to determine which file is the entry point
-    let entry_file_path = if modules.len() == 1 {
-        Some(&modules[0].source_path)
-    } else {
-        // For multi-file projects, we need logic to determine the entry file
-        // For now, assume the first module is the entry file
-        // TODO: This should be configurable or determined by project structure
-        modules.first().map(|m| &m.source_path)
-    };
-    
-    let module_headers = match compiler.tokens_to_headers_with_entry_file(
-        project_tokens, 
-        &mut compiler_messages.warnings,
-        entry_file_path
-    ) {
-        Ok(headers) => headers,
-        Err(e) => {
-        compiler_messages.errors.extend(e);
-            return Err(compiler_messages)
-        }
-    };
+
+    let module_headers =
+        match compiler.tokens_to_headers(project_tokens, &mut compiler_messages.warnings) {
+            Ok(headers) => headers,
+            Err(e) => {
+                compiler_messages.errors.extend(e);
+                return Err(compiler_messages);
+            }
+        };
 
     timer_log!(time, "Headers Parsed in: ");
 
@@ -172,7 +158,7 @@ pub fn compile_modules(
         Ok(modules) => modules,
         Err(error) => {
             compiler_messages.errors.extend(error);
-            return Err(compiler_messages)
+            return Err(compiler_messages);
         }
     };
 
@@ -196,7 +182,7 @@ pub fn compile_modules(
         }
         Err(e) => {
             messages.errors.extend(e.errors);
-            return Err(messages)
+            return Err(messages);
         }
     }
 
@@ -243,7 +229,7 @@ pub fn compile_modules(
     Ok(CompilationResult {
         wasm_bytes,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
-        exported_functions: Vec::new(),      //TODO: Get the list of exported functions from the AST (with their signatures)
+        exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: messages.warnings,
     })
 }

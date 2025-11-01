@@ -57,7 +57,7 @@ impl FunctionSignature {
         let mut next_in_list: bool = true;
         let mut mutable: bool = false;
 
-        while token_stream.index < token_stream.length {
+        loop {
             token_stream.advance();
 
             match token_stream.current_token_kind() {
@@ -177,7 +177,7 @@ impl FunctionSignature {
                 TokenKind::Colon => {
                     token_stream.advance();
                     return Ok(FunctionSignature {
-                        parameters: parameters,
+                        parameters,
                         returns,
                     });
                 }
@@ -201,11 +201,6 @@ impl FunctionSignature {
                 }
             }
         }
-
-        return_syntax_error!(
-            token_stream.current_location(),
-            "Expected a colon after the return types",
-        )
     }
     
     pub fn default() -> Self {

@@ -2,17 +2,12 @@ use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
-use crate::compiler::host_functions::registry::{create_builtin_registry, HostFunctionRegistry};
-use crate::compiler::parsers::tokenizer;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
 use crate::{Flag, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use crate::compiler::parsers::ast::{Ast, ContextKind, ScopeContext};
-use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
-use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
 
 pub struct InputModule {
     pub source_code: String,
@@ -27,36 +22,6 @@ pub enum OutputFile {
 pub struct Project {
     pub config: Config,
     pub output_files: Vec<OutputFile>,
-}
-
-/// Build a Beanstalk project from source files
-///
-/// This is the main entry point for compiling Beanstalk projects. It handles both
-/// single-file compilation and multi-file project builds with automatic dependency
-/// resolution and target detection.
-///
-/// ## Parameters
-///
-/// - `entry_path`: Path to the main source file or project directory
-/// - `release_build`: Whether to enable release optimizations
-/// - `flags`: Compilation flags for debugging and feature control
-///
-/// ## Returns
-///
-/// A [`Project`] containing the compiled configuration and output files, or a vector
-/// of [`CompileError`]s if compilation fails.
-///
-/// ## Supported Targets
-///
-/// - **HTML Projects**: Generate WASM + HTML with JavaScript bindings
-/// - **Native Projects**: Generate standalone WASM for native execution
-/// - **Single Files**: Compile individual `.bst` files with automatic target detection
-pub fn build_project_files(
-    entry_path: &Path,
-    release_build: bool,
-    flags: &[Flag],
-) -> Result<Project, CompilerMessages> {
-    build_project_files_with_target(entry_path, release_build, flags, None)
 }
 
 /// Build a Beanstalk project with explicit target specification
@@ -80,7 +45,7 @@ pub fn build_project_files(
 /// - `Some(BuildTarget::HtmlProject)`: Force HTML/WASM output
 /// - `Some(BuildTarget::Native { .. })`: Force native WASM output
 /// - `None`: Use automatic target detection based on project structure
-pub fn build_project_files_with_target(
+pub fn build_project_files(
     entry_path: &Path,
     release_build: bool,
     flags: &[Flag],
@@ -93,7 +58,7 @@ pub fn build_project_files_with_target(
         Err(e) => {
             return Err(CompilerMessages {
                 errors: vec![CompileError::file_error(
-                    &entry_path,
+                    entry_path,
                     &format!("Error finding current directory: {:?}", e),
                 )],
                 warnings: Vec::new(),
@@ -105,7 +70,7 @@ pub fn build_project_files_with_target(
     // dark_yellow_ln!("{:?}", &entry_dir);
 
     let mut beanstalk_modules_to_parse: Vec<InputModule> = Vec::with_capacity(1);
-    let mut project_config = Config::default();
+    let project_config = Config::new(entry_path.to_owned());
 
     // Determine if this is a single file or project directory
     enum CompileType {
@@ -169,6 +134,8 @@ pub fn build_project_files_with_target(
             });
         }
 
+        // TODO: No longer have config files working,
+        // this needs to be picked up later when more complex projects are needed
         CompileType::MultiFile(config_source_code) => {
             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
 
@@ -186,7 +153,7 @@ pub fn build_project_files_with_target(
             //         });
             //     }
             // };
-//
+            //
             // // Create the host function registry
             // let host_registry = match create_builtin_registry() {
             //     Ok(registry) => registry,
@@ -197,7 +164,7 @@ pub fn build_project_files_with_target(
             //         });
             //     }
             // };
-//
+            //
             // let config_tokens = vec![tokenizer_output];
             // let config_ast = match Ast::new(config_tokens, &HostFunctionRegistry::new()) {
             //     Ok(config_ast) => config_ast,
@@ -205,7 +172,7 @@ pub fn build_project_files_with_target(
             //         return Err(e);
             //     }
             // };
-//
+            //
             // // Parse configuration from AST
             // if let Err(e) = get_config_from_ast(config_ast, &mut project_config) {
             //     return Err(CompilerMessages {
@@ -213,7 +180,7 @@ pub fn build_project_files_with_target(
             //         warnings: Vec::new(),
             //     });
             // }
-//
+            //
             // Just use default for now
             // TODO: custom config parser, as a mark through file?
             let src_dir = entry_dir.join(&project_config.src);

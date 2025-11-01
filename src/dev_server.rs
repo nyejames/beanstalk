@@ -10,6 +10,7 @@ use std::{
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
 };
+use crate::build_system::build_system::BuildTarget;
 
 pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), CompilerMessages> {
     let url = "127.0.0.1:6969";
@@ -24,7 +25,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), CompilerMessa
     // Is checking to make sure the path is a directory
     let path = get_current_dir()?.join(path);
 
-    let project_config = build::build_project_files(&path, false, flags)?;
+    let project_config = build::build_project_files(&path, false, flags, Some(BuildTarget::HtmlProject))?;
 
     // TODO: Now separately build all the runtime hooks / project structure
 
@@ -108,7 +109,7 @@ fn handle_connection(
                 // Check if the file has been modified
                 if has_been_modified(&parsed_url, last_modified)? || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build::build_project_files(path, false, flags)?;
+                    build::build_project_files(path, false, flags, Some(BuildTarget::HtmlProject))?;
                     status_line = "HTTP/1.1 205 Reset Content";
                 } else {
                     status_line = "HTTP/1.1 200 OK";

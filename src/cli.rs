@@ -1,3 +1,4 @@
+use crate::build_system::build_system::BuildTarget;
 use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
 use crate::compiler::compiler_errors::{print_compiler_messages, print_formatted_error};
@@ -78,7 +79,7 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
-            build_project(&path, false, &flags);
+            build_project(&path, false, &flags, None);
         }
 
         Command::Run(path) => {
@@ -86,7 +87,7 @@ pub fn start_cli() {
         }
 
         Command::Release(path) => {
-            build_project(&path, true, &flags);
+            build_project(&path, true, &flags, None);
         }
 
         Command::Dev(ref path) => {
@@ -207,10 +208,15 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     }
 }
 
-fn build_project(path: &Path, release_build: bool, flags: &[Flag]) {
+fn build_project(
+    path: &Path,
+    release_build: bool,
+    flags: &[Flag],
+    target_override: Option<BuildTarget>,
+) {
     let start = Instant::now();
 
-    match build::build_project_files(path, release_build, flags) {
+    match build::build_project_files(path, release_build, flags, target_override) {
         Ok(project) => {
             let duration = start.elapsed();
 
@@ -233,7 +239,7 @@ fn jit_project(path: &Path, flags: &[Flag]) {
     use crate::build_system::build_system::BuildTarget;
     let start = Instant::now();
 
-    match build::build_project_files_with_target(path, false, flags, Some(BuildTarget::Jit)) {
+    match build::build_project_files(path, false, flags, Some(BuildTarget::Jit)) {
         Ok(_project) => {
             timer_log!(start, "\nJIT program ran for: ");
         }
@@ -306,8 +312,6 @@ fn print_help(commands_only: bool) {
     //println!("  build <path>         - Builds a file");
     println!("  run <path>           - JITs a file");
     //println!("  release <path>       - Builds a project in release mode");
-    println!(
-        "  tests                - Runs the test suite"
-    );
+    println!("  tests                - Runs the test suite");
     println!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }

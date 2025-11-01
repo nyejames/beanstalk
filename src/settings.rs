@@ -1,11 +1,11 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::runtime::RuntimeConfig;
 use crate::{return_config_error, return_type_error};
 use std::path::PathBuf;
 use wasmer::sys::Target;
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";
@@ -55,6 +55,26 @@ pub struct Config {
 
     // New runtime and build system configuration
     pub runtime: RuntimeConfig,
+}
+
+impl Config {
+    pub fn new(entry_point: PathBuf) -> Self {
+        Config {
+            project_type: ProjectType::default(),
+            entry_point,
+            src: PathBuf::from("src"),
+            dev_folder: PathBuf::from("dev"),
+            release_folder: PathBuf::from("release"),
+            name: String::from("html_project"),
+            version: String::from("0.1.0"),
+            author: String::new(),
+            license: String::from("MIT"),
+            html_meta: HTMLMeta::default(),
+
+            // New configuration defaults
+            runtime: RuntimeConfig::for_development(),
+        }
+    }
 }
 
 impl Default for Config {

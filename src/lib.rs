@@ -6,7 +6,6 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod host_function_registry_tests;
     pub(crate) mod jit_runtime_tests;
     pub(crate) mod memory_utils_tests;
     pub(crate) mod test_runner;
