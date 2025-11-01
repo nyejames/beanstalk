@@ -1867,20 +1867,36 @@ impl WasmModule {
                 then_statements,
                 else_statements,
             } => {
-                // TODO: Implement proper conditional lowering with blocks
-                // For now, just lower the condition and statements sequentially
-                let _condition_local =
-                    self.lower_operand_enhanced(condition, function_builder, local_map)?;
+                // Lower the condition operand to get it on the stack
+                self.lower_operand_enhanced(condition, function_builder, local_map)?;
 
-                // Lower then statements
+                // Create WASM if/else block structure
+                // The condition is already on the stack from lower_operand_enhanced
+                
+                // Determine block type based on whether branches produce values
+                // For now, use empty block type (no return value)
+                let block_type = wasm_encoder::BlockType::Empty;
+                
+                // Emit if instruction
+                function_builder.instruction(&Instruction::If(block_type))?;
+
+                // Lower then block statements
                 for stmt in then_statements {
                     self.lower_statement_enhanced(stmt, function_builder, local_map)?;
                 }
 
-                // Lower else statements
-                for stmt in else_statements {
-                    self.lower_statement_enhanced(stmt, function_builder, local_map)?;
+                // Emit else instruction if there are else statements
+                if !else_statements.is_empty() {
+                    function_builder.instruction(&Instruction::Else)?;
+                    
+                    // Lower else block statements
+                    for stmt in else_statements {
+                        self.lower_statement_enhanced(stmt, function_builder, local_map)?;
+                    }
                 }
+
+                // End the if/else block
+                function_builder.instruction(&Instruction::End)?;
 
                 Ok(())
             }
@@ -2074,19 +2090,36 @@ impl WasmModule {
                 then_statements,
                 else_statements,
             } => {
-                // TODO: Implement proper conditional lowering with blocks
-                // For now, just lower the condition and statements sequentially
-                let _condition_local = self.lower_operand(condition, function, local_map)?;
+                // Lower the condition operand to get it on the stack
+                self.lower_operand(condition, function, local_map)?;
 
-                // Lower then statements
+                // Create WASM if/else block structure
+                // The condition is already on the stack from lower_operand
+                
+                // Determine block type based on whether branches produce values
+                // For now, use empty block type (no return value)
+                let block_type = wasm_encoder::BlockType::Empty;
+                
+                // Emit if instruction
+                function.instruction(&Instruction::If(block_type));
+
+                // Lower then block statements
                 for stmt in then_statements {
                     self.lower_statement(stmt, function, local_map)?;
                 }
 
-                // Lower else statements
-                for stmt in else_statements {
-                    self.lower_statement(stmt, function, local_map)?;
+                // Emit else instruction if there are else statements
+                if !else_statements.is_empty() {
+                    function.instruction(&Instruction::Else);
+                    
+                    // Lower else block statements
+                    for stmt in else_statements {
+                        self.lower_statement(stmt, function, local_map)?;
+                    }
                 }
+
+                // End the if/else block
+                function.instruction(&Instruction::End);
 
                 Ok(())
             }

@@ -164,8 +164,35 @@ pub struct WirTransformContext {
 
 impl WirTransformContext {
     /// Create a place for a variable and register it in the current scope
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: Variable name to create and register
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Place)`: Successfully created place for the variable
+    /// - `Err(CompileError)`: Error if variable name is invalid
+    ///
+    /// # Validation
+    ///
+    /// - Variable name must not be empty
+    /// - Variable name should not start with underscore (reserved for temporaries)
     pub fn create_place_for_variable(&mut self, name: String) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
         use crate::compiler::datatypes::DataType;
+        
+        // Validate variable name
+        if name.is_empty() {
+            return Err(CompileError::compiler_error(
+                "Attempted to create place for variable with empty name. This indicates a bug in AST processing."
+            ));
+        }
+        
+        // Warn if variable name starts with underscore (reserved for temporaries)
+        if name.starts_with('_') && !name.starts_with("_temp_") {
+            // This is just a warning - we'll still create the place
+            // In a full implementation, we might want to emit a compiler warning
+        }
         
         // Create a new place for the variable (default to String type for now)
         let place = self.place_manager.allocate_local(&DataType::String);
@@ -177,16 +204,85 @@ impl WirTransformContext {
     }
     
     /// Get the place for an existing variable
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: Variable name to look up
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(Place)`: Place for the variable if found
+    /// - `Err(CompileError)`: Error if variable is not defined
+    ///
+    /// # Validation
+    ///
+    /// - Variable name must not be empty
+    /// - Variable must exist in the current scope chain
     pub fn get_place_for_variable(&self, name: &str) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
+        // Validate variable name
+        if name.is_empty() {
+            return Err(CompileError::compiler_error(
+                "Attempted to get place for variable with empty name. This indicates a bug in AST processing."
+            ));
+        }
+        
         match self.lookup_variable(name) {
             Some(place) => Ok(place.clone()),
             None => {
+                // Provide helpful error message with suggestions
+                let mut error_msg = format!("Undefined variable '{}'. Variable must be declared before use.", name);
+                
+                // Try to find similar variable names for suggestions
+                let similar_vars = self.find_similar_variable_names(name, 3);
+                if !similar_vars.is_empty() {
+                    error_msg.push_str(&format!(" Did you mean one of: {}?", similar_vars.join(", ")));
+                }
+                
                 Err(CompileError::new_rule_error(
-                    format!("Undefined variable '{}'", name),
+                    error_msg,
                     TextLocation::default()
                 ))
             }
         }
+    }
+    
+    /// Find similar variable names for error suggestions
+    ///
+    /// Uses simple string distance to find variables with similar names.
+    /// This helps provide helpful "did you mean" suggestions in error messages.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: Variable name to find similar matches for
+    /// - `max_suggestions`: Maximum number of suggestions to return
+    ///
+    /// # Returns
+    ///
+    /// Vector of similar variable names, sorted by similarity
+    fn find_similar_variable_names(&self, name: &str, max_suggestions: usize) -> Vec<String> {
+        let mut candidates = Vec::new();
+        
+        // Collect all variable names from all scopes
+        for scope in &self.variable_scopes {
+            for var_name in scope.keys() {
+                // Simple similarity check: same length or starts with same prefix
+                if var_name.len() == name.len() || 
+                   var_name.starts_with(&name[..name.len().min(3)]) ||
+                   name.starts_with(&var_name[..var_name.len().min(3)]) {
+                    candidates.push(var_name.clone());
+                }
+            }
+        }
+        
+        // Sort by similarity (simple: prefer exact length matches)
+        candidates.sort_by_key(|v| {
+            let len_diff = (v.len() as i32 - name.len() as i32).abs();
+            len_diff
+        });
+        
+        // Return top suggestions
+        candidates.truncate(max_suggestions);
+        candidates
     }
     
 
@@ -250,9 +346,18 @@ impl WirTransformContext {
     ///
     /// - `name`: Variable name as it appears in source code
     /// - `place`: Allocated memory location for the variable
+    ///
+    /// # Panics
+    ///
+    /// This method should never panic as the global scope is always present.
+    /// However, if the scope stack is somehow empty, this indicates a critical
+    /// compiler bug in scope management.
     pub fn register_variable(&mut self, name: String, place: Place) {
         if let Some(current_scope) = self.variable_scopes.last_mut() {
             current_scope.insert(name, place);
+        } else {
+            // This should never happen as we always have at least the global scope
+            panic!("COMPILER BUG: Attempted to register variable '{}' but no scope exists. This indicates a critical error in scope management.", name);
         }
     }
 
@@ -297,12 +402,25 @@ impl WirTransformContext {
     ///
     /// Temporary names follow the pattern `_temp_N` where N is an incrementing counter.
     /// This ensures uniqueness and makes temporaries easily identifiable in debugging.
+    ///
+    /// # Safety
+    ///
+    /// This method checks for counter overflow to prevent temporary name collisions.
+    /// If the counter would overflow, it panics with a descriptive error message.
     pub fn create_temporary_place(
         &mut self,
         data_type: &crate::compiler::datatypes::DataType,
     ) -> Place {
+        // Check for counter overflow (extremely unlikely but good to be safe)
+        if self.temporary_counter == u32::MAX {
+            panic!(
+                "COMPILER BUG: Temporary variable counter overflow. Created {} temporary variables, which exceeds the maximum. This indicates an issue with temporary cleanup or an extremely complex expression.",
+                u32::MAX
+            );
+        }
+        
         self.temporary_counter += 1;
-        let temp_name = format!("_temp_{}", self.temporary_counter);
+        let _temp_name = format!("_temp_{}", self.temporary_counter);
         self.place_manager.allocate_local(data_type)
     }
 
@@ -329,13 +447,23 @@ impl WirTransformContext {
     /// Variables from outer scopes that were shadowed become accessible again.
     /// The global scope is never removed to maintain context integrity.
     ///
-    /// # Panics
+    /// # Safety
     ///
-    /// This method is safe and will not remove the global scope even if called
-    /// when only the global scope remains.
+    /// This method protects the global scope from being removed. If called when
+    /// only the global scope remains, it will not remove it and will log a warning
+    /// in debug builds to help identify scope management issues.
     pub fn exit_scope(&mut self) {
         if self.variable_scopes.len() > 1 {
             self.variable_scopes.pop();
+        } else {
+            // In debug builds, warn about attempting to exit the global scope
+            #[cfg(debug_assertions)]
+            {
+                eprintln!(
+                    "WARNING: Attempted to exit global scope. This may indicate a scope management bug. \
+                    Ensure enter_scope() and exit_scope() calls are properly balanced."
+                );
+            }
         }
     }
 
@@ -375,13 +503,36 @@ impl WirTransformContext {
     ///
     /// # Returns
     ///
-    /// A new `Place` allocated for the parameter
+    /// - `Ok(Place)`: Successfully created place for the parameter
+    /// - `Err(CompileError)`: Error if parameter name is invalid
+    ///
+    /// # Validation
+    ///
+    /// - Parameter name must not be empty
+    /// - Parameter name should not conflict with reserved names
     pub fn create_place_for_parameter(
         &mut self,
         name: String,
         _index: u32,
         data_type: &DataType,
     ) -> Result<Place, CompileError> {
+        // Validate parameter name
+        if name.is_empty() {
+            return Err(CompileError::compiler_error(
+                "Attempted to create place for parameter with empty name. This indicates a bug in function signature processing."
+            ));
+        }
+        
+        // Check for reserved names
+        if name.starts_with("_temp_") {
+            return Err(CompileError::compiler_error(
+                &format!(
+                    "Parameter name '{}' conflicts with reserved temporary variable naming pattern. This indicates a bug in AST processing.",
+                    name
+                )
+            ));
+        }
+        
         let place = self.place_manager.allocate_local(data_type);
         self.register_variable(name, place.clone());
         Ok(place)

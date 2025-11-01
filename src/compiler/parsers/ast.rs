@@ -1,15 +1,12 @@
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::datatypes::Ownership;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
-use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
-use crate::{return_compiler_error, settings};
+use crate::settings;
 use std::path::PathBuf;
 
 pub struct Ast {

@@ -1,6 +1,7 @@
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::{env, fs};
 use crate::compiler::compiler_warnings::CompilerWarning;
@@ -247,6 +248,18 @@ pub enum ErrorType {
     Config,
     Compiler,
     DevServer,
+}
+
+pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
+    match e_type {
+        ErrorType::Compiler => "Compiler Bug",
+        ErrorType::Syntax => "Syntax Error",
+        ErrorType::Config => "Malformed Config",
+        ErrorType::File => "File Error",
+        ErrorType::Rule => "Language Rule Violation",
+        ErrorType::Type => "Type Error",
+        ErrorType::DevServer => "Dev Server Issue",
+    }
 }
 
 /// Returns a new CompileError for syntax violations.

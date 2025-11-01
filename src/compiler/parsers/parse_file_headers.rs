@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
@@ -7,8 +7,8 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::statements::imports::parse_import;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::{ast_log, return_rule_error, timer_log};
-use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 // Each header is one of these categories:
 // - Functions
@@ -47,37 +47,21 @@ pub struct Header {
 }
 
 // This takes all the files in the module
-// and parses them into headers.
+// and parses them into headers, with entry file detection.
 pub fn parse_headers(
     tokenized_files: Vec<FileTokens>,
     host_registry: &HostFunctionRegistry,
     warnings: &mut Vec<CompilerWarning>,
-) -> Result<Vec<Header>, Vec<CompileError>> {
-    parse_headers_with_entry_file(tokenized_files, host_registry, warnings, None)
-}
-
-// This takes all the files in the module
-// and parses them into headers, with entry file detection.
-pub fn parse_headers_with_entry_file(
-    tokenized_files: Vec<FileTokens>,
-    host_registry: &HostFunctionRegistry,
-    warnings: &mut Vec<CompilerWarning>,
-    entry_file_path: Option<&PathBuf>,
+    entry_file_path: &Path,
 ) -> Result<Vec<Header>, Vec<CompileError>> {
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompileError> = Vec::new();
 
     for mut file in tokenized_files {
-        let is_entry_file = entry_file_path
-            .map(|entry_path| file.src_path == *entry_path)
-            .unwrap_or(false);
-        
-        let headers_from_file = parse_headers_in_file_with_entry_detection(
-            &mut file, 
-            host_registry, 
-            warnings, 
-            is_entry_file
-        );
+        let is_entry_file = file.src_path == *entry_file_path;
+
+        let headers_from_file =
+            parse_headers_in_file(&mut file, host_registry, warnings, is_entry_file);
 
         match headers_from_file {
             Ok(file_headers) => {
@@ -94,20 +78,21 @@ pub fn parse_headers_with_entry_file(
     }
 
     // Validate that only one EntryPoint exists in the module
-    let entry_point_count = headers.iter()
+    let entry_point_count = headers
+        .iter()
         .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
         .count();
-    
+
     if entry_point_count > 1 {
-        let entry_points: Vec<_> = headers.iter()
+        let entry_points: Vec<_> = headers
+            .iter()
             .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
             .collect();
-        
+
         return Err(vec![CompileError::new_rule_error(
             format!(
                 "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {:?}, Second entry point: {:?}",
-                entry_points[0].path,
-                entry_points[1].path
+                entry_points[0].path, entry_points[1].path
             ),
             entry_points[1].name_location.clone(),
         )]);
@@ -117,20 +102,9 @@ pub fn parse_headers_with_entry_file(
 }
 
 // Everything at the top level of a file is visible to the whole module.
-// This function splits up the file into each of its headers.
-// Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
-pub fn parse_headers_in_file(
-    token_stream: &mut FileTokens,
-    host_function_registry: &HostFunctionRegistry,
-    warnings: &mut Vec<CompilerWarning>,
-) -> Result<Vec<Header>, CompileError> {
-    parse_headers_in_file_with_entry_detection(token_stream, host_function_registry, warnings, false)
-}
-
-// Everything at the top level of a file is visible to the whole module.
 // This function splits up the file into each of its headers with entry point detection.
 // Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
-pub fn parse_headers_in_file_with_entry_detection(
+pub fn parse_headers_in_file(
     token_stream: &mut FileTokens,
     host_function_registry: &HostFunctionRegistry,
     warnings: &mut Vec<CompilerWarning>,

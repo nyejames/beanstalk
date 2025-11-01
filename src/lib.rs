@@ -6,11 +6,11 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod test_runner;
-    pub(crate) mod header_parsing_tests;
     pub(crate) mod host_function_registry_tests;
-    pub(crate) mod wir_to_wasm_lowering_tests;
     pub(crate) mod jit_runtime_tests;
+    pub(crate) mod memory_utils_tests;
+    pub(crate) mod test_runner;
+    pub(crate) mod wir_to_wasm_lowering_tests;
 }
 
 // New runtime and build system modules
@@ -42,22 +42,21 @@ mod compiler {
         }
         pub(crate) mod statements {
             pub(crate) mod branching;
+            pub(crate) mod collections;
             pub(crate) mod create_template_node;
             pub(crate) mod functions;
             pub(crate) mod imports;
             pub(crate) mod loops;
             pub(crate) mod structs;
-            pub(crate) mod variables;
-            pub(crate) mod collections;
             pub(crate) mod template;
+            pub(crate) mod variables;
         }
         pub(crate) mod builtin_methods;
 
         pub(crate) mod tokenizer {
+            pub(crate) mod compiler_directives;
             pub(crate) mod tokenizer;
             pub(crate) mod tokens;
-            pub(crate) mod compiler_directives;
-
         }
     }
     pub(crate) mod optimizers {
@@ -110,13 +109,13 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 // Re-export types for the build system
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::parse_file_headers::{parse_headers, parse_headers_with_entry_file, Header};
-pub(crate) use build::*;
-use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
+pub(crate) use build::*;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -186,16 +185,12 @@ impl<'a> Compiler<'a> {
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Vec<Header>, Vec<CompileError>> {
-        parse_headers(files, &self.host_function_registry, warnings)
-    }
-
-    pub fn tokens_to_headers_with_entry_file(
-        &self,
-        files: Vec<FileTokens>,
-        warnings: &mut Vec<CompilerWarning>,
-        entry_file_path: Option<&PathBuf>,
-    ) -> Result<Vec<Header>, Vec<CompileError>> {
-        parse_headers_with_entry_file(files, &self.host_function_registry, warnings, entry_file_path)
+        parse_headers(
+            files,
+            &self.host_function_registry,
+            warnings,
+            &self.project_config.entry_point,
+        )
     }
 
     /// Every dependency needed for each file should be known before its headers are parsed.

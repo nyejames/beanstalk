@@ -133,6 +133,10 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
 }
 
 /// Create a main function containing all top-level AST statements
+///
+/// # Performance Optimization
+///
+/// Pre-allocates the statement vector with estimated capacity to reduce reallocations.
 fn create_main_function_from_ast(
     ast: &Vec<AstNode>,
     context: &mut WirTransformContext,
@@ -155,7 +159,8 @@ fn create_main_function_from_ast(
 
     // Create a single basic block for all statements
     let mut main_block = WirBlock::new(0);
-    let mut statements = Vec::new();
+    // Pre-allocate with estimated capacity (assume ~2 statements per AST node on average)
+    let mut statements = Vec::with_capacity(ast.len() * 2);
 
     // Transform each AST node to WIR statements
     for node in ast {
@@ -182,6 +187,12 @@ fn create_main_function_from_ast(
 }
 
 /// Transform a single AST node to WIR statements
+///
+/// # Performance Notes
+///
+/// - Pre-allocates statement vectors with estimated capacity to reduce reallocations
+/// - Uses references where possible to avoid unnecessary clones
+/// - Delegates to specialized transformation functions for better code organization
 fn transform_ast_node_to_wir(
     node: &AstNode,
     context: &mut WirTransformContext,
@@ -355,7 +366,7 @@ fn create_wir_function_from_ast(
         // Validate entry point signature - should have no parameters and no returns
         if !signature.parameters.is_empty() {
             return_compiler_error!(
-                "Entry point function '{}' should not have parameters, found {} parameters",
+                "Entry point function '{}' should not have parameters, found {} parameters. The entry point is the module's starting function and cannot accept arguments.",
                 name,
                 signature.parameters.len()
             );
@@ -363,7 +374,7 @@ fn create_wir_function_from_ast(
         
         if !signature.returns.is_empty() {
             return_compiler_error!(
-                "Entry point function '{}' should not have return values, found {} return values",
+                "Entry point function '{}' should not have return values, found {} return values. The entry point is the module's starting function and cannot return values.",
                 name,
                 signature.returns.len()
             );
@@ -442,12 +453,12 @@ fn create_wir_function_from_ast(
 /// - `Ok(Vec<Statement>)`: Empty vector (function handling is done at higher level)
 /// - `Err(CompileError)`: Transformation error
 fn transform_function_node(
-    name: &str,
+    _name: &str,
     _signature: &crate::compiler::parsers::statements::functions::FunctionSignature,
     _body: &[AstNode],
     _context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
-    wir_log!("Function '{}' encountered in statement context - this should be handled at module level", name);
+    wir_log!("Function '{}' encountered in statement context - this should be handled at module level", _name);
     
     // For now, return empty statements since functions should be handled at the module level
     // In a complete implementation, this might create a function reference or similar
@@ -469,11 +480,17 @@ fn transform_function_node(
 ///
 /// - `Ok(Vec<Statement>)`: WIR statements for the function body
 /// - `Err(CompileError)`: Transformation error
+///
+/// # Performance Optimization
+///
+/// Pre-allocates the statement vector with estimated capacity based on the number
+/// of AST nodes to reduce reallocations during transformation.
 fn transform_function_body(
     body: &[AstNode],
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
-    let mut statements = Vec::new();
+    // Pre-allocate with estimated capacity (assume ~2 statements per AST node on average)
+    let mut statements = Vec::with_capacity(body.len() * 2);
 
     // Enter a new scope for the function body
     context.enter_scope();
@@ -521,7 +538,7 @@ fn convert_datatype_to_wasm_type(
         DataType::String => Ok(WasmType::I32), // String references are i32 pointers
         _ => {
             return_compiler_error!(
-                "DataType to WasmType conversion not yet implemented for {:?}",
+                "DataType to WasmType conversion not yet implemented for {:?}. This is a missing compiler feature for handling this type in function signatures.",
                 data_type
             );
         }

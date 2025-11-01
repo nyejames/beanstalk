@@ -4,9 +4,9 @@
 
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::parse_file_headers::Header;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::return_rule_error;
 use std::collections::{HashMap, HashSet};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
 /// and which have been permanently visited.
@@ -24,7 +24,7 @@ impl DependencyTracker {
     }
 }
 
-/// Given a list of (possibly errored) `TokenContext`
+/// Given a list of, possibly errored, `TokenContext`
 /// builds a graph of successful ones and topologically sorts them.
 pub fn resolve_module_dependencies(headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
     let mut graph: HashMap<String, Header> = HashMap::with_capacity(headers.len());

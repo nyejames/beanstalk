@@ -669,7 +669,7 @@ impl UnifiedBorrowChecker {
         // Generate helpful error messages with actionable advice
         let message = match (&loan_a.kind, &loan_b.kind) {
             (BorrowKind::Mut, BorrowKind::Mut) => {
-                "Cannot borrow as mutable more than once at a time. Consider using a single mutable reference or restructuring your code.".to_string()
+                "Cannot borrow as mutable more than once at a time. Consider creating a copy of it instead.".to_string()
             },
             (BorrowKind::Shared, BorrowKind::Mut) => {
                 "Cannot borrow as mutable because it is already borrowed as immutable. Ensure all immutable borrows are finished before creating a mutable borrow.".to_string()
