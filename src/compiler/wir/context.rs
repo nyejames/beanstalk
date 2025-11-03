@@ -490,6 +490,19 @@ impl WirTransformContext {
         self.host_imports.insert(host_function);
     }
 
+    /// Get all host function imports collected during WIR transformation
+    ///
+    /// Returns a reference to the set of host functions that need to be imported
+    /// in the final WASM module. This is used to transfer imports from the context
+    /// to the WIR structure.
+    ///
+    /// # Returns
+    ///
+    /// Reference to the set of host function definitions
+    pub fn get_host_imports(&self) -> &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef> {
+        &self.host_imports
+    }
+
     /// Create a place for a function parameter
     ///
     /// Allocates a place for a function parameter with the given name, index, and type.

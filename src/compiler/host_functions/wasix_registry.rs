@@ -203,7 +203,11 @@ pub fn create_wasix_registry() -> Result<WasixFunctionRegistry, CompileError> {
         "Write data to a file descriptor. Used to implement print() function with native WASIX implementation.",
     );
 
-    registry.register_function("print", fd_write_function)?;
+    registry.register_function("print", fd_write_function.clone())?;
+    
+    // Also register template_output with the same fd_write implementation
+    // template_output is the new way to output text in Beanstalk (replaces print)
+    registry.register_function("template_output", fd_write_function)?;
 
     // Validate all registered functions
     validate_wasix_registry(&registry)?;

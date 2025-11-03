@@ -1,5 +1,5 @@
 -- Test circular dependency detection
 #import @helper
 
-print("Main starting")
+["Main starting"]
 helper.do_something()

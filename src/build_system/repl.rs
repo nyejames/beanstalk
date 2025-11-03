@@ -10,6 +10,7 @@ use crate::compiler::parsers::statements::create_template_node::Template;
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
@@ -85,7 +86,13 @@ fn compile_beanstalk_to_string(
     // Tokenize the source code
     let mut tokenizer_output =
         tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
-    let ast_context = ScopeContext::new(ContextKind::Template, source_path.to_path_buf(), &[]);
+    let ast_context = ScopeContext::new(
+        ContextKind::Template, 
+        source_path.to_path_buf(), 
+        &[],
+        HostFunctionRegistry::new(),
+        Vec::new(),
+    );
 
     // Build Template
     let mut template = Template::new(&mut tokenizer_output, &ast_context, None)?;

@@ -147,6 +147,7 @@ pub fn parse_headers_in_file(
                         // Since this is a new scope,
                         // We don't want to add any imports from the header's scope to the global imports.
                         &header_imports,
+                        &host_function_registry,
                     )?;
 
                     match header.kind {
@@ -233,6 +234,7 @@ fn create_header(
     token_stream: &mut FileTokens,
     name_location: TextLocation,
     file_imports: &HashSet<String>,
+    host_registry: &HostFunctionRegistry,
 ) -> Result<Header, CompileError> {
     // We only need to know what imports this header is actually using.
     // So only track symbols matching this file's imports to add to the dependencies.
@@ -248,7 +250,13 @@ fn create_header(
         //      NEW FUNCTION HEADER
         // -----------------------------
         TokenKind::TypeParameterBracket => {
-            let empty_context = ScopeContext::new(ContextKind::Module, path.to_owned(), &[]);
+            let empty_context = ScopeContext::new(
+                ContextKind::Module, 
+                path.to_owned(), 
+                &[],
+                host_registry.to_owned(),
+                Vec::new()
+            );
 
             let signature = FunctionSignature::new(token_stream, &empty_context)?;
 

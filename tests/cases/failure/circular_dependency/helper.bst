@@ -2,7 +2,7 @@
 #import @main
 
 export do_something || -> Void:
-    print("Helper doing something")
+    ["Helper doing something"]
 ;
 
-print("Helper loaded")
+["Helper loaded"]

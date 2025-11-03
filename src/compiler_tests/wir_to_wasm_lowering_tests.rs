@@ -30,18 +30,18 @@ fn test_host_function_call_lowering_with_registry() {
     let module = result.unwrap();
     
     // Verify that host functions are properly registered
-    assert!(module.get_host_function_index("print").is_some(), 
-           "Print function should be registered in WASM module");
+    assert!(module.get_host_function_index("template_output").is_some(), 
+           "Template output function should be registered in WASM module");
 }
 
-/// Test WASIX fd_write generation for print statements
+/// Test WASIX fd_write generation for template output statements
 #[test]
 fn test_wasix_fd_write_generation() {
     // Create a registry with WASIX backend
     let registry = create_builtin_registry().expect("Failed to create builtin registry");
     
-    // Create WIR with print statement
-    let wir = create_test_wir_with_print_statement();
+    // Create WIR with template output statement
+    let wir = create_test_wir_with_template_output_statement();
     
     // Generate WASM module
     let result = WasmModule::from_wir_with_registry(&wir, Some(&registry));
@@ -154,7 +154,7 @@ fn test_import_section_generation() {
             wasmparser::Payload::ImportSection(reader) => {
                 for import in reader {
                     let import = import.expect("Failed to read import");
-                    // Check for WASIX mapping (print -> fd_write)
+                    // Check for WASIX mapping (template_output -> fd_write)
                     if import.module == "wasix_32v1" && import.name == "fd_write" {
                         found_correct_import = true;
                         break;
@@ -186,16 +186,16 @@ fn create_test_wir_with_host_call() -> WIR {
     
     // Add host call statement
     let host_func = HostFunctionDef::new(
-        "print",
+        "template_output",
         vec![BasicParameter {
-            name: "message".to_string(),
-            data_type: DataType::String,
-            ownership: crate::compiler::datatypes::Ownership::default(),
+            name: "content".to_string(),
+            data_type: DataType::Template,
+            ownership: crate::compiler::datatypes::Ownership::MutableOwned,
         }],
         vec![],
         "beanstalk_io",
-        "print",
-        "Print function for testing",
+        "template_output",
+        "Template output function for testing",
     );
     
     block.add_statement(Statement::HostCall {
@@ -216,7 +216,7 @@ fn create_test_wir_with_host_call() -> WIR {
     wir
 }
 
-fn create_test_wir_with_print_statement() -> WIR {
+fn create_test_wir_with_template_output_statement() -> WIR {
     create_test_wir_with_host_call() // Same as host call test for now
 }
 

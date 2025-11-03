@@ -2,6 +2,6 @@
 #import @nonexistent/module
 #import @utils/broken_module
 
-print("This should not compile")
+["This should not compile"]
 nonexistent.function()
 broken_module.function()

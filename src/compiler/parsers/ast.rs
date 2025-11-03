@@ -57,11 +57,12 @@ impl Ast {
             match header.kind {
                 HeaderKind::Function(signature, tokens) => {
                     // Function parameters should be available in the function body scope
-                    let context = ScopeContext::new_with_registry(
+                    let mut context = ScopeContext::new(
                         ContextKind::Function,
                         header.path.to_owned(),
                         &signature.parameters,
                         host_registry.clone(),
+                        signature.returns.clone(),
                     );
 
                     let body = match function_body_to_ast(
@@ -90,11 +91,12 @@ impl Ast {
                 }
 
                 HeaderKind::EntryPoint(tokens) => {
-                    let context = ScopeContext::new_with_registry(
+                    let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
                         &function_declarations,
                         host_registry.clone(),
+                        Vec::new(),
                     );
 
                     let body = match function_body_to_ast(
@@ -127,11 +129,12 @@ impl Ast {
                 }
 
                 HeaderKind::ImplicitMain(tokens) => {
-                    let context = ScopeContext::new_with_registry(
+                    let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
                         &function_declarations,
                         host_registry.clone(),
+                        Vec::new(),
                     );
 
                     let body = match function_body_to_ast(
@@ -227,30 +230,18 @@ pub enum ContextKind {
 }
 
 impl ScopeContext {
-    pub fn new(kind: ContextKind, scope: PathBuf, declarations: &[Arg]) -> ScopeContext {
-        // Create a default registry - this will be replaced with the actual registry
-        let host_registry = HostFunctionRegistry::new();
-
-        ScopeContext {
-            kind,
-            scope_name: scope,
-            declarations: declarations.to_owned(),
-            returns: Vec::new(),
-            host_registry,
-        }
-    }
-
-    pub fn new_with_registry(
+    pub fn new(
         kind: ContextKind,
         scope: PathBuf,
         declarations: &[Arg],
         host_registry: HostFunctionRegistry,
+        returns: Vec<Arg>,
     ) -> ScopeContext {
         ScopeContext {
             kind,
             scope_name: scope,
             declarations: declarations.to_owned(),
-            returns: Vec::new(),
+            returns,
             host_registry,
         }
     }

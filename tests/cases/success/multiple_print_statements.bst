@@ -1,4 +1,4 @@
 -- Test multiple print statements
-print("First line")
-print("Second line")
-print("Third line")
+["First line"]
+["Second line"]
+["Third line"]

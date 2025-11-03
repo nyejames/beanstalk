@@ -771,8 +771,14 @@ fn setup_native_wasix_fd_write(
     // Add fd_write to wasi_snapshot_preview1 module
     imports.define("wasi_snapshot_preview1", "fd_write", fd_write_func);
 
+    // Create template_output function for WASIX backend
+    let template_output_func = create_template_output_import(store);
+    
+    // Add template_output function to beanstalk_io module
+    imports.define("beanstalk_io", "template_output", template_output_func);
+
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("Native WASIX fd_write implementation configured");
+    println!("Native WASIX fd_write and template_output implementation configured");
 
     Ok(())
 }
@@ -975,17 +981,91 @@ fn setup_custom_io_imports(
     store: &mut Store,
     imports: &mut wasmer::Imports,
 ) -> Result<(), CompileError> {
-    // Custom IO imports are not yet implemented
-    // This functionality is planned for future development
+    // Create template_output function for custom IO backend
+    let template_output_func = create_template_output_import(store);
+    
+    // Add template_output function to beanstalk_io module
+    imports.define("beanstalk_io", "template_output", template_output_func);
+    
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("Custom IO backend configured with template_output");
+    
     Ok(())
 }
 
 /// Set up JavaScript/DOM bindings for web targets
 #[allow(unused_variables)]
 fn setup_js_imports(store: &mut Store, imports: &mut wasmer::Imports) -> Result<(), CompileError> {
-    // JavaScript/DOM bindings are not yet implemented
-    // This functionality is planned for web target support
+    // Create template_output function for JavaScript backend
+    let template_output_func = create_template_output_import(store);
+    
+    // Add template_output function to beanstalk_io module
+    imports.define("beanstalk_io", "template_output", template_output_func);
+    
+    #[cfg(feature = "verbose_codegen_logging")]
+    println!("JavaScript backend configured with template_output");
+    
     Ok(())
+}
+
+/// Create a template_output import function for the JIT runtime
+/// This function reads a string from WASM memory and outputs it to stdout
+fn create_template_output_import(store: &mut Store) -> Function {
+    Function::new_typed(
+        store,
+        move |text_ptr: i32, text_len: i32| {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "template_output called with text_ptr=0x{:x}, text_len={}",
+                text_ptr, text_len
+            );
+
+            // Get memory from shared state
+            let memory = match get_wasix_memory() {
+                Some(mem) => mem,
+                None => {
+                    eprintln!("template_output error: Memory not available");
+                    return; // Void function, just return
+                }
+            };
+
+            let store_ptr = match get_wasix_store() {
+                Some(ptr) => ptr,
+                None => {
+                    eprintln!("template_output error: Store not available");
+                    return; // Void function, just return
+                }
+            };
+
+            // Read string from WASM memory
+            let store_ref = unsafe { &*store_ptr };
+            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+                Ok(text) => {
+                    // Check if we should capture output or print normally
+                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+                    
+                    if should_capture {
+                        // Capture output for testing
+                        CAPTURED_OUTPUT.with(|output| {
+                            if let Some(ref captured) = *output.borrow() {
+                                let mut stdout = captured.stdout.lock().unwrap();
+                                stdout.extend_from_slice(text.as_bytes());
+                            }
+                        });
+                    } else {
+                        // Normal output to stdout
+                        print!("{}", text);
+                        if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
+                            eprintln!("template_output error: Failed to flush stdout: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("template_output error: {}", e);
+                }
+            }
+        },
+    )
 }
 
 /// Set up native system call imports
@@ -1015,7 +1095,13 @@ fn setup_native_imports_with_capture(
         });
     }
 
-    // Create native print function that directly outputs to stdout or captures
+    // Create template_output function for native backend
+    let template_output_func = create_template_output_import(store);
+    
+    // Add template_output function to beanstalk_io module
+    imports.define("beanstalk_io", "template_output", template_output_func);
+
+    // Create native print function that directly outputs to stdout or captures (legacy support)
     let print_func = Function::new_typed(
         store,
         move |text_ptr: i32, text_len: i32| -> i32 {
@@ -1076,7 +1162,7 @@ fn setup_native_imports_with_capture(
         },
     );
 
-    // Add print function to beanstalk_io module
+    // Add print function to beanstalk_io module (legacy support)
     imports.define("beanstalk_io", "print", print_func);
 
     #[cfg(feature = "verbose_codegen_logging")]

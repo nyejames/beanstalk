@@ -126,6 +126,10 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
         }
     }
 
+    // Transfer host imports from context to WIR
+    wir.add_host_imports(&context.get_host_imports());
+    wir_log!("Transferred {} host imports to WIR", context.get_host_imports().len());
+
     // Run borrow checking on the WIR
     run_borrow_checking_on_wir(&mut wir)?;
 

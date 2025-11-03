@@ -1,20 +1,21 @@
 use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler::datatypes::DataType;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::builtin_methods::get_builtin_methods;
-use crate::compiler::parsers::expressions::expression::ExpressionKind;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
 
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::branching::create_branch;
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings, timer_log,
@@ -285,6 +286,26 @@ pub fn function_body_to_ast(
                     context.scope_name.to_owned(),
                 ));
                 token_stream.advance();
+            }
+
+            // String template as an expression without being assigned.
+            // This is the primary way to produce output in Beanstalk.
+            // Top-level templates automatically output to a host-defined output mechanism.
+            TokenKind::TemplateHead | TokenKind::ParentTemplate => {
+                let template = Template::new(token_stream, &context, None)?;
+                let expr = Expression::template(template, Ownership::MutableOwned);
+                ast.push(AstNode {
+                    kind: NodeKind::HostFunctionCall(
+                        "template_output".to_owned(),
+                        Vec::from([expr]),
+                        Vec::new(),
+                        "beanstalk_io".to_owned(),
+                        "template_output".to_owned(),
+                        token_stream.current_location(),
+                    ),
+                    location: token_stream.current_location(),
+                    scope: context.scope_name.to_owned(),
+                })
             }
 
             TokenKind::Eof => {

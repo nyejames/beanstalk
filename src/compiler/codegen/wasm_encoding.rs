@@ -2413,9 +2413,44 @@ impl WasmModule {
             );
         }
 
-        // Step 1: Load all arguments onto stack (1 instruction per arg)
-        for arg in args {
-            self.lower_operand(arg, function, local_map)?;
+        // Step 1: Load all arguments onto stack
+        // For string/template arguments, we need to push both pointer and length
+        for (arg_index, arg) in args.iter().enumerate() {
+            // Check if this parameter is a string/template type
+            let param_type = if arg_index < host_function.parameters.len() {
+                &host_function.parameters[arg_index].data_type
+            } else {
+                // If we don't have parameter info, infer from operand
+                &DataType::Int // Default fallback
+            };
+
+            match param_type {
+                DataType::String | DataType::Template => {
+                    // For string/template types, push pointer and length
+                    match arg {
+                        Operand::Constant(Constant::String(s)) => {
+                            // Add string to data section and get offset
+                            let offset = self.string_manager.add_string_slice_constant(s);
+                            let length = s.len() as i32;
+                            
+                            // Push pointer
+                            function.instruction(&Instruction::I32Const(offset as i32));
+                            // Push length
+                            function.instruction(&Instruction::I32Const(length));
+                        }
+                        _ => {
+                            // For other operand types, lower normally and assume it's a pointer
+                            // Then we need to load the length somehow - for now, just push 0
+                            self.lower_operand(arg, function, local_map)?;
+                            function.instruction(&Instruction::I32Const(0)); // TODO: Get actual length
+                        }
+                    }
+                }
+                _ => {
+                    // For non-string types, lower normally
+                    self.lower_operand(arg, function, local_map)?;
+                }
+            }
         }
 
         // Step 2: Generate call instruction to imported host function (1 instruction)
@@ -2455,8 +2490,8 @@ impl WasmModule {
         // Get runtime-specific mapping
         match registry.get_runtime_mapping(&host_function.name) {
             Some(RuntimeFunctionMapping::Wasix(wasix_func)) => {
-                // Use WASIX fd_write generation for print calls
-                if host_function.name == "print" {
+                // Use WASIX fd_write generation for print and template_output calls
+                if host_function.name == "print" || host_function.name == "template_output" {
                     return self.generate_wasix_fd_write_call(args, function, local_map);
                 }
                 
@@ -2486,9 +2521,44 @@ impl WasmModule {
         function: &mut Function,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
-        // Step 1: Load all arguments onto stack (1 instruction per arg)
-        for arg in args {
-            self.lower_operand(arg, function, local_map)?;
+        // Step 1: Load all arguments onto stack
+        // For string/template arguments, we need to push both pointer and length
+        for (arg_index, arg) in args.iter().enumerate() {
+            // Check if this parameter is a string/template type
+            let param_type = if arg_index < host_function.parameters.len() {
+                &host_function.parameters[arg_index].data_type
+            } else {
+                // If we don't have parameter info, infer from operand
+                &DataType::Int // Default fallback
+            };
+
+            match param_type {
+                DataType::String | DataType::Template => {
+                    // For string/template types, push pointer and length
+                    match arg {
+                        Operand::Constant(Constant::String(s)) => {
+                            // Add string to data section and get offset
+                            let offset = self.string_manager.add_string_slice_constant(s);
+                            let length = s.len() as i32;
+                            
+                            // Push pointer
+                            function.instruction(&Instruction::I32Const(offset as i32));
+                            // Push length
+                            function.instruction(&Instruction::I32Const(length));
+                        }
+                        _ => {
+                            // For other operand types, lower normally and assume it's a pointer
+                            // Then we need to load the length somehow - for now, just push 0
+                            self.lower_operand(arg, function, local_map)?;
+                            function.instruction(&Instruction::I32Const(0)); // TODO: Get actual length
+                        }
+                    }
+                }
+                _ => {
+                    // For non-string types, lower normally
+                    self.lower_operand(arg, function, local_map)?;
+                }
+            }
         }
 
         // Step 2: Generate call instruction to imported host function (1 instruction)
@@ -2615,10 +2685,10 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match function_name {
-            "print" => self.lower_wasix_print_simple(args, function, local_map),
+            "print" | "template_output" => self.lower_wasix_print_simple(args, function, local_map),
             _ => {
                 return_compiler_error!(
-                    "Unsupported WASIX function: {}. Only 'print' is currently implemented.",
+                    "Unsupported WASIX function: {}. Only 'print' and 'template_output' are currently implemented.",
                     function_name
                 );
             }
@@ -4081,8 +4151,17 @@ impl WasmModule {
         let mut param_types = Vec::new();
 
         for param in parameters {
-            let wasm_type = Self::unified_datatype_to_wasm_type(&param.value.data_type)?;
-            param_types.push(self.wasm_type_to_val_type(&wasm_type));
+            // String and Template types need two parameters: pointer and length
+            match &param.value.data_type {
+                DataType::String | DataType::Template => {
+                    param_types.push(ValType::I32); // pointer
+                    param_types.push(ValType::I32); // length
+                }
+                _ => {
+                    let wasm_type = Self::unified_datatype_to_wasm_type(&param.value.data_type)?;
+                    param_types.push(self.wasm_type_to_val_type(&wasm_type));
+                }
+            }
         }
 
         Ok(param_types)
@@ -5653,10 +5732,10 @@ impl WasmModule {
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match function_name {
-            "print" => self.lower_wasix_print(args, destination, function_builder, local_map),
+            "print" | "template_output" => self.lower_wasix_print(args, destination, function_builder, local_map),
             _ => {
                 return_compiler_error!(
-                    "Unsupported WASIX function: {}. Only 'print' is currently implemented.",
+                    "Unsupported WASIX function: {}. Only 'print' and 'template_output' are currently implemented.",
                     function_name
                 );
             }

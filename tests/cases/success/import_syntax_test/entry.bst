@@ -4,4 +4,4 @@
 
 result = math.add(5, 3)
 formatted = string.format_number(result)
-print("Result: " + formatted)
+["Result: " + formatted]

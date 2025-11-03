@@ -441,42 +441,42 @@ impl Default for HostFunctionRegistry {
 pub fn create_builtin_registry_with_backend(backend: RuntimeBackend) -> Result<HostFunctionRegistry, CompileError> {
     let mut registry = HostFunctionRegistry::new_with_backend(backend);
 
-    // Register the print function with all runtime mappings
-    let print_function = HostFunctionDef::new(
-        "print",
+    // Register the template_output function with all runtime mappings
+    let template_output_function = HostFunctionDef::new(
+        "template_output",
         vec![BasicParameter {
-            name: "message".to_string(),
-            data_type: DataType::String,
-            ownership: Ownership::default(),
+            name: "content".to_string(),
+            data_type: DataType::Template, // Accept Template (mutable string)
+            ownership: Ownership::MutableOwned,
         }],
         vec![], // No return value (void function)
         "beanstalk_io",
-        "print",
-        "Print a message to stdout",
+        "template_output",
+        "Output a template string to the host-defined output mechanism",
     );
 
     // WASIX fd_write signature: (fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
-    let print_wasix_mapping = WasixFunctionDef::new(
+    let template_output_wasix_mapping = WasixFunctionDef::new(
         "wasix_32v1",
         "fd_write",
         vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32], // fd, iovs, iovs_len, nwritten
         vec![ValType::I32], // errno result
-        "Write data to a file descriptor. Used to implement print() function with WASIX fd_write.",
+        "Write template output to stdout using WASIX fd_write",
     );
 
-    let print_js_mapping = JsFunctionDef::new(
+    let template_output_js_mapping = JsFunctionDef::new(
         "beanstalk_io",
-        "print",
+        "template_output",
         vec![ValType::I32, ValType::I32], // ptr, len for string data
         vec![], // No return value
-        "Print a message to console using JavaScript console.log",
+        "Output template to console using JavaScript console.log",
     );
 
     // Register function with all mappings at once
     registry.register_function_with_mappings(
-        print_function,
-        Some(print_wasix_mapping),
-        Some(print_js_mapping),
+        template_output_function,
+        Some(template_output_wasix_mapping),
+        Some(template_output_js_mapping),
     )?;
 
     // Validate all registered functions

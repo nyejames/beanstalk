@@ -1,7 +1,7 @@
 -- Helper file for multi-file module test
 export greet |name String| -> Void:
-    print("Hello, " + name + "!")
+    ["Hello, " + name + "!"]
 ;
 
 -- This is helper's implicit main (callable but doesn't auto-execute)
-print("Helper module loaded")
+["Helper module loaded"]

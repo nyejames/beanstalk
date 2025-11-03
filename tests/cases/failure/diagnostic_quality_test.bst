@@ -1,7 +1,7 @@
 -- Test diagnostic message quality for various error types
 
 -- Syntax error
-print("unclosed string
+["unclosed string
 
 -- Type error  
 number = 42

@@ -2,14 +2,14 @@
 condition = true
 counter ~= 0
 
-print("Starting control flow test")
+["Starting control flow test"]
 
 if condition:
-    print("Condition is true")
+    ["Condition is true"]
     counter = counter + 1
-    print("Counter incremented: " + counter)
+    ["Counter incremented: ", counter]
 else
-    print("Condition is false")
+    ["Condition is false"]
 ;
 
 -- Test with variables and expressions
@@ -18,10 +18,10 @@ y = 5
 
 if x > y:
     result = x + y
-    print("x is greater: " + x + " + " + y + " = " + result)
+    ["x is greater: ", x, " + ", y, " = ", result])
 else
     result = x - y
-    print("x is not greater: " + x + " - " + y + " = " + result)
+    ["x is not greater: ", x, " - ", y, " = ", result])
 ;
 
-print("Control flow test complete")
+["Control flow test complete"]

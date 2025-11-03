@@ -75,17 +75,17 @@ mod tests {
             "fd_write",
             vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
             vec![ValType::I32],
-            "WASIX fd_write function for print implementation",
+            "WASIX fd_write function for template_output implementation",
         );
         
-        registry.register_wasix_mapping("print", wasix_mapping).expect("WASIX mapping registration should succeed");
+        registry.register_wasix_mapping("template_output", wasix_mapping).expect("WASIX mapping registration should succeed");
         
         // Verify registration
         assert_eq!(registry.wasix_mapping_count(), 1);
-        assert!(registry.get_wasix_mapping("print").is_some());
+        assert!(registry.get_wasix_mapping("template_output").is_some());
         assert!(registry.get_wasix_mapping("nonexistent").is_none());
         
-        let retrieved_mapping = registry.get_wasix_mapping("print").expect("WASIX mapping should exist");
+        let retrieved_mapping = registry.get_wasix_mapping("template_output").expect("WASIX mapping should exist");
         assert_eq!(retrieved_mapping.module, "wasix_32v1");
         assert_eq!(retrieved_mapping.name, "fd_write");
         assert_eq!(retrieved_mapping.parameters.len(), 4);
@@ -100,22 +100,22 @@ mod tests {
         // Register a JavaScript mapping
         let js_mapping = JsFunctionDef::new(
             "beanstalk_io",
-            "print",
+            "template_output",
             vec![ValType::I32, ValType::I32],
             vec![],
-            "JavaScript console.log function for print implementation",
+            "JavaScript console.log function for template_output implementation",
         );
         
-        registry.register_js_mapping("print", js_mapping).expect("JavaScript mapping registration should succeed");
+        registry.register_js_mapping("template_output", js_mapping).expect("JavaScript mapping registration should succeed");
         
         // Verify registration
         assert_eq!(registry.js_mapping_count(), 1);
-        assert!(registry.get_js_mapping("print").is_some());
+        assert!(registry.get_js_mapping("template_output").is_some());
         assert!(registry.get_js_mapping("nonexistent").is_none());
         
-        let retrieved_mapping = registry.get_js_mapping("print").expect("JavaScript mapping should exist");
+        let retrieved_mapping = registry.get_js_mapping("template_output").expect("JavaScript mapping should exist");
         assert_eq!(retrieved_mapping.module, "beanstalk_io");
-        assert_eq!(retrieved_mapping.name, "print");
+        assert_eq!(retrieved_mapping.name, "template_output");
         assert_eq!(retrieved_mapping.parameters.len(), 2);
         assert_eq!(retrieved_mapping.returns.len(), 0);
     }
@@ -126,16 +126,16 @@ mod tests {
         let mut registry = HostFunctionRegistry::new();
         
         let host_function = HostFunctionDef::new(
-            "print",
+            "template_output",
             vec![BasicParameter {
-                name: "message".to_string(),
-                data_type: DataType::String,
-                ownership: Ownership::default(),
+                name: "content".to_string(),
+                data_type: DataType::Template,
+                ownership: Ownership::MutableOwned,
             }],
             vec![],
             "beanstalk_io",
-            "print",
-            "Print function with multiple runtime mappings",
+            "template_output",
+            "Template output function with multiple runtime mappings",
         );
         
         let wasix_mapping = WasixFunctionDef::new(
@@ -143,15 +143,15 @@ mod tests {
             "fd_write",
             vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32],
             vec![ValType::I32],
-            "WASIX fd_write for print",
+            "WASIX fd_write for template_output",
         );
         
         let js_mapping = JsFunctionDef::new(
             "beanstalk_io",
-            "print",
+            "template_output",
             vec![ValType::I32, ValType::I32],
             vec![],
-            "JavaScript console.log for print",
+            "JavaScript console.log for template_output",
         );
         
         registry.register_function_with_mappings(
@@ -165,9 +165,9 @@ mod tests {
         assert_eq!(registry.wasix_mapping_count(), 1);
         assert_eq!(registry.js_mapping_count(), 1);
         
-        assert!(registry.has_function("print"));
-        assert!(registry.get_wasix_mapping("print").is_some());
-        assert!(registry.get_js_mapping("print").is_some());
+        assert!(registry.has_function("template_output"));
+        assert!(registry.get_wasix_mapping("template_output").is_some());
+        assert!(registry.get_js_mapping("template_output").is_some());
     }
 
     /// Test runtime-specific function mapping lookup
@@ -177,16 +177,16 @@ mod tests {
         
         // Register function with all mappings
         let host_function = HostFunctionDef::new(
-            "print",
+            "template_output",
             vec![BasicParameter {
-                name: "message".to_string(),
-                data_type: DataType::String,
-                ownership: Ownership::default(),
+                name: "content".to_string(),
+                data_type: DataType::Template,
+                ownership: Ownership::MutableOwned,
             }],
             vec![],
             "beanstalk_io",
-            "print",
-            "Print function",
+            "template_output",
+            "Template output function",
         );
         
         let wasix_mapping = WasixFunctionDef::new(
@@ -199,7 +199,7 @@ mod tests {
         
         let js_mapping = JsFunctionDef::new(
             "beanstalk_io",
-            "print",
+            "template_output",
             vec![ValType::I32, ValType::I32],
             vec![],
             "JavaScript console.log",
@@ -213,20 +213,20 @@ mod tests {
         
         // Test WASIX backend
         registry.set_current_backend(RuntimeBackend::Wasix);
-        assert!(registry.has_runtime_mapping("print"));
-        let wasix_runtime_mapping = registry.get_runtime_mapping("print").expect("WASIX mapping should exist");
+        assert!(registry.has_runtime_mapping("template_output"));
+        let wasix_runtime_mapping = registry.get_runtime_mapping("template_output").expect("WASIX mapping should exist");
         assert!(matches!(wasix_runtime_mapping, RuntimeFunctionMapping::Wasix(_)));
         
         // Test JavaScript backend
         registry.set_current_backend(RuntimeBackend::JavaScript);
-        assert!(registry.has_runtime_mapping("print"));
-        let js_runtime_mapping = registry.get_runtime_mapping("print").expect("JavaScript mapping should exist");
+        assert!(registry.has_runtime_mapping("template_output"));
+        let js_runtime_mapping = registry.get_runtime_mapping("template_output").expect("JavaScript mapping should exist");
         assert!(matches!(js_runtime_mapping, RuntimeFunctionMapping::JavaScript(_)));
         
         // Test Native backend
         registry.set_current_backend(RuntimeBackend::Native);
-        assert!(registry.has_runtime_mapping("print"));
-        let native_runtime_mapping = registry.get_runtime_mapping("print").expect("Native mapping should exist");
+        assert!(registry.has_runtime_mapping("template_output"));
+        let native_runtime_mapping = registry.get_runtime_mapping("template_output").expect("Native mapping should exist");
         assert!(matches!(native_runtime_mapping, RuntimeFunctionMapping::Native(_)));
     }
 
@@ -235,26 +235,29 @@ mod tests {
     fn test_builtin_registry_creation() {
         let registry = create_builtin_registry().expect("Builtin registry creation should succeed");
         
-        // Should have print function registered
-        assert!(registry.has_function("print"));
-        assert!(registry.get_wasix_mapping("print").is_some());
-        assert!(registry.get_js_mapping("print").is_some());
+        // Should have template_output function registered
+        assert!(registry.has_function("template_output"));
+        assert!(registry.get_wasix_mapping("template_output").is_some());
+        assert!(registry.get_js_mapping("template_output").is_some());
         
-        // Verify print function details
-        let print_func = registry.get_function("print").expect("Print function should exist");
-        assert_eq!(print_func.name, "print");
-        assert_eq!(print_func.parameters.len(), 1);
-        assert_eq!(print_func.return_types.len(), 0);
+        // Should NOT have print function registered
+        assert!(!registry.has_function("print"));
+        
+        // Verify template_output function details
+        let template_output_func = registry.get_function("template_output").expect("Template output function should exist");
+        assert_eq!(template_output_func.name, "template_output");
+        assert_eq!(template_output_func.parameters.len(), 1);
+        assert_eq!(template_output_func.return_types.len(), 0);
         
         // Verify WASIX mapping
-        let wasix_mapping = registry.get_wasix_mapping("print").expect("WASIX mapping should exist");
+        let wasix_mapping = registry.get_wasix_mapping("template_output").expect("WASIX mapping should exist");
         assert_eq!(wasix_mapping.module, "wasix_32v1");
         assert_eq!(wasix_mapping.name, "fd_write");
         
         // Verify JavaScript mapping
-        let js_mapping = registry.get_js_mapping("print").expect("JavaScript mapping should exist");
+        let js_mapping = registry.get_js_mapping("template_output").expect("JavaScript mapping should exist");
         assert_eq!(js_mapping.module, "beanstalk_io");
-        assert_eq!(js_mapping.name, "print");
+        assert_eq!(js_mapping.name, "template_output");
     }
 
     /// Test builtin registry creation with specific backend
@@ -264,11 +267,11 @@ mod tests {
             .expect("Builtin registry creation with backend should succeed");
         
         assert_eq!(registry.get_current_backend(), &RuntimeBackend::JavaScript);
-        assert!(registry.has_function("print"));
-        assert!(registry.has_runtime_mapping("print"));
+        assert!(registry.has_function("template_output"));
+        assert!(registry.has_runtime_mapping("template_output"));
         
         // Should be able to get JavaScript runtime mapping
-        let runtime_mapping = registry.get_runtime_mapping("print").expect("Runtime mapping should exist");
+        let runtime_mapping = registry.get_runtime_mapping("template_output").expect("Runtime mapping should exist");
         assert!(matches!(runtime_mapping, RuntimeFunctionMapping::JavaScript(_)));
     }
 

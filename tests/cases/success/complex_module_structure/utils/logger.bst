@@ -1,11 +1,11 @@
 -- Logger utility module
 export log |message String| -> Void:
-    print("[LOG] " + message)
+    ["[LOG] " + message]
 ;
 
 export debug |message String| -> Void:
-    print("[DEBUG] " + message)
+    ["[DEBUG] " + message]
 ;
 
 -- Logger module initialization
-print("Logger module initialized")
+["Logger module initialized"]

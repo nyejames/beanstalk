@@ -8,4 +8,4 @@ export multiply |a Int, b Int| -> Int:
 ;
 
 -- Math module initialization
-print("Math module initialized")
+["Math module initialized"]
