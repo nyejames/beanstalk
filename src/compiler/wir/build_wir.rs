@@ -613,8 +613,8 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
         if !borrow_results.errors.is_empty() {
             let first_error = &borrow_results.errors[0];
             let detailed_message = format!(
-                "Borrow checking error in function '{}': {}.",
-                function.name, first_error.message
+                "Borrow checking error: {}.",
+                first_error.message
             );
 
             let error_location = if first_error.primary_location != TextLocation::default() {

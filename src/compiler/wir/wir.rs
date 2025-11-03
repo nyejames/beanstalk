@@ -113,8 +113,8 @@ fn convert_borrow_errors_to_compile_errors(
         .map(|borrow_error| {
             // Create detailed error message with function context
             let detailed_message = format!(
-                "Borrow checking error in function '{}': {}",
-                function_name, borrow_error.message
+                "Borrow checking error: {}",
+                borrow_error.message
             );
 
             // Use the error location if available, otherwise use a default location
