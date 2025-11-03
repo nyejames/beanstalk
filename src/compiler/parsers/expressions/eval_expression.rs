@@ -122,22 +122,11 @@ pub fn evaluate_expression(
             NodeKind::Operator(ref op) => {
                 match current_type {
                     DataType::String | DataType::Template => {
-                        // Check if this is the Add operator - if so, treat as string concatenation
-                        if matches!(op, crate::compiler::parsers::expressions::expression::Operator::Add) {
-                            // Convert to CoerceToString to allow concatenation
-                            *current_type = DataType::CoerceToString;
-                            // Move any expressions from output_queue to simplified_expression
-                            // since we're now doing string concatenation
-                            simplified_expression.append(&mut output_queue);
-                            simplified_expression.push(node);
-                            continue 'outer;
-                        } else {
-                            return_syntax_error!(
-                                node.location,
-                                "You can't use the '{:?}' operator with strings or templates",
-                                op
-                            )
-                        }
+                        return_syntax_error!(
+                            node.location,
+                            "You can't use the '{:?}' operator with strings or templates",
+                            op
+                        )
                     }
 
                     DataType::CoerceToString => {

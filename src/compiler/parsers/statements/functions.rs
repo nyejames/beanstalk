@@ -4,7 +4,7 @@ use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::structs::create_struct_definition;
 
 use crate::compiler::parsers::ast::ScopeContext;
@@ -12,7 +12,6 @@ use crate::compiler::parsers::expressions::parse_expression::create_multiple_exp
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error, return_type_error};
-use crate::compiler::datatypes::DataType::Parameters;
 
 // Arg names and types are required
 // Can have default values
@@ -202,7 +201,7 @@ impl FunctionSignature {
             }
         }
     }
-    
+
     pub fn default() -> Self {
         Self {
             parameters: Vec::new(),
