@@ -23,7 +23,7 @@ use crate::compiler::{
 };
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 // Error handling macros
-use crate::return_compiler_error;
+use crate::{return_compiler_error, return_wir_transformation_error};
 
 /// Transform an expression statement to WIR statements
 ///
@@ -130,7 +130,8 @@ pub fn expression_to_rvalue_with_context(
             evaluate_rpn_to_wir_statements(rpn_nodes, location, context)
         }
         _ => {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                location.clone(),
                 "Expression kind {:?} not yet implemented in WIR transformation at {}:{}. This expression type needs to be added to the WIR lowering implementation.",
                 expression.kind,
                 location.start_pos.line_number,
@@ -482,7 +483,8 @@ fn ast_operator_to_wir_binop(
         Operator::Not => Ok(BinOp::Ne), // Boolean negation mapped to Ne
         
         // Unsupported operators
-        _ => return_compiler_error!(
+        _ => return_wir_transformation_error!(
+            TextLocation::default(),
             "Operator {:?} not yet supported in WIR transformation. This operator needs to be added to the WIR binary operation mapping.",
             op
         ),
@@ -552,7 +554,8 @@ fn infer_binary_operation_result_type(
         }
         
         // Unsupported operators
-        _ => return_compiler_error!(
+        _ => return_wir_transformation_error!(
+            TextLocation::default(),
             "Operator {:?} not supported for type inference. This operator needs type inference rules to be added.",
             op
         ),

@@ -14,7 +14,7 @@ use crate::compiler::{
 
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::{return_compiler_error, return_type_error};
+use crate::{return_compiler_error, return_type_error, return_wir_transformation_error};
 
 /// Infer the result type of a binary operation based on operand types
 ///
@@ -101,7 +101,8 @@ pub fn infer_binary_operation_result_type(
             }
         }
         _ => {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                location.clone(),
                 "Binary operation {:?} not yet implemented in type inference at line {}, column {}",
                 wir_op,
                 location.start_pos.line_number,
@@ -302,7 +303,8 @@ pub fn ast_operator_to_wir_binop(
         Operator::And => Ok(BinOp::And),
         Operator::Or => Ok(BinOp::Or),
         _ => {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                location.clone(),
                 "Operator {:?} not yet implemented for WIR binary operations at line {}, column {}",
                 ast_op,
                 location.start_pos.line_number,

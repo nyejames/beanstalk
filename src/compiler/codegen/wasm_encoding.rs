@@ -41,6 +41,7 @@ use crate::compiler::wir::wir_nodes::{
 };
 use crate::{
     return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error,
+    return_wasm_generation_error,
 };
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
@@ -1254,6 +1255,11 @@ impl WasmModule {
         // Generate WASIX import section for WASIX functions
         module.add_wasix_imports()?;
 
+        // Save the number of imports before compiling functions
+        // This is needed for correct function index calculation in exports
+        // Imports come first in the WASM function index space, then defined functions
+        let import_count = module.function_count;
+
         // Process functions with enhanced error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
             module.compile_function(function).map_err(|mut error| {
@@ -1266,8 +1272,8 @@ impl WasmModule {
             })?;
         }
 
-        // Export entry point functions correctly
-        module.export_entry_point_functions(&wir)?;
+        // Export entry point functions correctly, passing the import count
+        module.export_entry_point_functions_with_import_count(&wir, import_count)?;
 
         // Export memory for WASIX access
         module.add_memory_export("memory")?;
@@ -1292,12 +1298,12 @@ impl WasmModule {
         self.host_registry.as_ref()
     }
 
-    /// Export entry point functions correctly in WASM modules
+    /// Export entry point functions correctly in WASM modules with explicit import count
     ///
     /// This method implements subtask 3.3: Fix entry point export generation
     /// It ensures entry point functions are exported correctly and validates
     /// that only one start function is exported per module.
-    pub fn export_entry_point_functions(&mut self, wir: &WIR) -> Result<(), CompileError> {
+    pub fn export_entry_point_functions_with_import_count(&mut self, wir: &WIR, import_count: u32) -> Result<(), CompileError> {
         let mut entry_point_count = 0;
         let mut start_function_index: Option<u32> = None;
 
@@ -1317,7 +1323,9 @@ impl WasmModule {
 
                     if is_entry_point {
                         entry_point_count += 1;
-                        let function_index = index as u32;
+                        // FIXED: Add import_count to get the correct WASM function index
+                        // Imports come first in the function index space, then defined functions
+                        let function_index = import_count + (index as u32);
                         
                         // Export the entry point function
                         self.add_function_export(&export.name, function_index)?;
@@ -1338,7 +1346,8 @@ impl WasmModule {
             // Handle implicit main/_start function export only if not already exported
             if !exported && (wir_function.name == "main" || wir_function.name == "_start") {
                 entry_point_count += 1;
-                let function_index = index as u32;
+                // FIXED: Add import_count to get the correct WASM function index
+                let function_index = import_count + (index as u32);
                 
                 // Use the function's actual name for the export
                 self.add_function_export(&wir_function.name, function_index)?;
@@ -1625,7 +1634,7 @@ impl WasmModule {
             .map(|t| self.wasm_type_to_val_type(t))
             .collect();
 
-        // Use wasm_encoder's type builder for type-safe function signatures
+        // Use wasm_encoder's type-safe function signatures
         self.type_section
             .ty()
             .function(param_types.clone(), result_types.clone());
@@ -4174,8 +4183,8 @@ impl WasmModule {
             );
 
             self.import_section.import(
-                &module, // This should be "wasix_32v1" for WASIX functions
-                &name,   // This should be "fd_write" etc. for WASIX functions
+                &module,
+                &name,
                 EntityType::Function(self.type_count),
             );
 
@@ -5881,10 +5890,7 @@ impl WasmModule {
             "WASM: Generating call instruction to fd_write with function index: {}",
             fd_write_func_index
         );
-        let call_result = function_builder.instruction(&Instruction::Call(fd_write_func_index));
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Call instruction result: {:?}", call_result);
-        call_result?;
+        function_builder.instruction(&Instruction::Call(fd_write_func_index))?;
 
         // Handle the return value (errno) for basic error detection
         // Store errno in a local variable for potential error checking

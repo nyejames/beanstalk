@@ -22,7 +22,7 @@ use crate::compiler::{
 // Error handling macros - grouped for maintainability
 use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use crate::{ir_log, wir_log, return_compiler_error};
+use crate::{ir_log, wir_log, return_compiler_error, return_wir_transformation_error};
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
@@ -365,7 +365,8 @@ fn create_wir_function_from_ast(
         
         // Validate entry point signature - should have no parameters and no returns
         if !signature.parameters.is_empty() {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                TextLocation::default(),
                 "Entry point function '{}' should not have parameters, found {} parameters. The entry point is the module's starting function and cannot accept arguments.",
                 name,
                 signature.parameters.len()
@@ -373,7 +374,8 @@ fn create_wir_function_from_ast(
         }
         
         if !signature.returns.is_empty() {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                TextLocation::default(),
                 "Entry point function '{}' should not have return values, found {} return values. The entry point is the module's starting function and cannot return values.",
                 name,
                 signature.returns.len()
@@ -537,7 +539,8 @@ fn convert_datatype_to_wasm_type(
         DataType::Bool => Ok(WasmType::I32), // Booleans are represented as i32 in WASM
         DataType::String => Ok(WasmType::I32), // String references are i32 pointers
         _ => {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                TextLocation::default(),
                 "DataType to WasmType conversion not yet implemented for {:?}. This is a missing compiler feature for handling this type in function signatures.",
                 data_type
             );
@@ -620,10 +623,13 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
                 TextLocation::default()
             };
 
-            return Err(CompileError::new_rule_error(
-                detailed_message,
-                error_location,
-            ));
+            use crate::compiler::compiler_errors::ErrorType;
+            return Err(CompileError {
+                msg: detailed_message,
+                location: error_location,
+                error_type: ErrorType::BorrowChecker,
+                file_path: std::path::PathBuf::new(),
+            });
         }
 
         ir_log!(

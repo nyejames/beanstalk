@@ -193,8 +193,9 @@ pub fn create_wasix_registry() -> Result<WasixFunctionRegistry, CompileError> {
 
     // Register fd_write function for print() support with native implementation
     // WASIX fd_write signature: (fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
+    // Use "wasi_snapshot_preview1" module name for compatibility with wasmer-wasix
     let fd_write_function = WasixFunctionDef::new_with_native(
-        "wasix_32v1",
+        "wasi_snapshot_preview1",
         "fd_write",
         vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32], // fd, iovs, iovs_len, nwritten
         vec![ValType::I32],                                           // errno result

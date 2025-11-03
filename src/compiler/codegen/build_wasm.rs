@@ -3,14 +3,15 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::wir::wir_nodes::ExportKind;
-use crate::return_compiler_error;
+use crate::{return_compiler_error, return_wasm_generation_error};
 
 /// Basic WASM validation using wasmparser
 fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
     match wasmparser::validate(wasm_bytes) {
         Ok(_) => Ok(()),
         Err(e) => {
-            return_compiler_error!(
+            return_wasm_generation_error!(
+                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 "Generated WASM module is invalid: {}. This indicates a bug in the WASM backend.",
                 e
             );
@@ -92,7 +93,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
         let mut function_names = std::collections::HashSet::new();
         for function in &wir.functions {
             if !function_names.insert(&function.name) {
-                return_compiler_error!(
+                return_wasm_generation_error!(
+                    crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                     "Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.",
                     function.name
                 );
@@ -103,7 +105,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
     // Validate memory configuration is reasonable
     let memory_info = &wir.type_info.memory_info;
     if memory_info.initial_pages > 65536 {
-        return_compiler_error!(
+        return_wasm_generation_error!(
+            crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             "WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).",
             memory_info.initial_pages
         );
@@ -111,7 +114,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
 
     if let Some(max_pages) = memory_info.max_pages {
         if max_pages > 65536 {
-            return_compiler_error!(
+            return_wasm_generation_error!(
+                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 "WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).",
                 max_pages
             );
@@ -119,7 +123,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
 
         // Check that max pages is not less than initial pages
         if max_pages < memory_info.initial_pages {
-            return_compiler_error!(
+            return_wasm_generation_error!(
+                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 "WIR memory max pages ({}) is less than initial pages ({}). \
                 Maximum memory pages must be greater than or equal to initial pages.",
                 max_pages,
@@ -132,7 +137,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
     if !wir.type_info.interface_info.interfaces.is_empty() {
         for (interface_id, interface_def) in &wir.type_info.interface_info.interfaces {
             if interface_def.methods.is_empty() {
-                return_compiler_error!(
+                return_wasm_generation_error!(
+                    crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                     "Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.",
                     interface_id
                 );

@@ -24,7 +24,7 @@ use crate::compiler::{
     },
 };
 // Error handling macros
-use crate::return_compiler_error;
+use crate::{return_compiler_error, return_wir_transformation_error};
 
 /// Transform a single AST node to WIR statements
 ///
@@ -95,7 +95,8 @@ pub fn transform_ast_node_to_wir(
             }
         }
         _ => {
-            return_compiler_error!(
+            return_wir_transformation_error!(
+                node.location.clone(),
                 "AST node type {:?} not yet implemented in WIR transformation at {}:{}. This language feature needs WIR lowering support to be added to the compiler.",
                 node.kind,
                 node.location.start_pos.line_number,

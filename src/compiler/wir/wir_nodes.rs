@@ -1415,7 +1415,7 @@ impl BorrowError {
         CompileError {
             msg: formatted_message,
             location: self.primary_location.clone(),
-            error_type: ErrorType::Rule, // Borrow checker errors are rule violations
+            error_type: ErrorType::BorrowChecker, // Borrow checker errors have their own type
             file_path: std::path::PathBuf::new(),
         }
     }
