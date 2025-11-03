@@ -94,24 +94,26 @@ pub fn get_token_kind(
     }
 
     // Whitespace
-
-    if current_char == '\n' {
-        return_token!(TokenKind::Newline, stream);
-    } else if current_char == '\r' {
-        if stream.peek() == Some(&'\n') {
-            stream.next();
-            return_token!(TokenKind::Newline, stream);
-        } else {
-            // Ignore naked CR (throw warning in future?)
-            stream.next();
-        }
-    }
-
     while current_char.is_whitespace() {
-        current_char = match stream.next() {
-            Some(ch) => ch,
-            None => return_token!(TokenKind::Eof, stream),
-        };
+        if current_char == '\n' {
+            return_token!(TokenKind::Newline, stream);
+        } else if current_char == '\r' {
+            if stream.peek() == Some(&'\n') {
+                stream.next();
+                return_token!(TokenKind::Newline, stream);
+            } else {
+                // Ignore naked CR (throw warning in future?)
+                current_char = match stream.next() {
+                    Some(ch) => ch,
+                    None => return_token!(TokenKind::Eof, stream),
+                };
+            }
+        } else {
+            current_char = match stream.next() {
+                Some(ch) => ch,
+                None => return_token!(TokenKind::Eof, stream),
+            };
+        }
     }
 
     // To ignore leading whitespace for the next token position

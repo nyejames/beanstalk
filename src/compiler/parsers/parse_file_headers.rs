@@ -256,20 +256,31 @@ fn create_header(
             let mut scopes_closed = 0;
             let mut function_body = Vec::new();
 
+            // FunctionSignature::new leaves us at the first token of the function body
+            // Don't advance before the first iteration
             while scopes_opened > scopes_closed {
-                token_stream.advance();
                 match token_stream.current_token_kind() {
-                    TokenKind::End => scopes_closed += 1,
-                    TokenKind::Colon => scopes_opened += 1,
+                    TokenKind::End => {
+                        scopes_closed += 1;
+                        if scopes_opened > scopes_closed {
+                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                    }
+                    TokenKind::Colon => {
+                        scopes_opened += 1;
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
                     TokenKind::Symbol(name) => {
                         if imports.contains(name) {
                             dependencies.insert(name.to_owned());
                         }
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                     _ => {
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                 }
+                token_stream.advance();
             }
 
             kind = HeaderKind::Function(signature, function_body);

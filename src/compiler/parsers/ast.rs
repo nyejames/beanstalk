@@ -1,8 +1,10 @@
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
@@ -33,13 +35,32 @@ impl Ast {
         let mut warnings: Vec<CompilerWarning> = Vec::new();
         let mut entry_path = None;
 
+        // First pass: collect all function signatures to register them in scope
+        let mut function_declarations: Vec<Arg> = Vec::new();
+        for header in &sorted_headers {
+            if let HeaderKind::Function(signature, _) = &header.kind {
+                // Create an Arg representing this function for scope registration
+                let func_arg = Arg {
+                    name: header.name.clone(),
+                    value: Expression {
+                        kind: ExpressionKind::None,
+                        data_type: DataType::Function(signature.clone()),
+                        ownership: Ownership::ImmutableOwned,
+                        location: header.name_location.clone(),
+                    },
+                };
+                function_declarations.push(func_arg);
+            }
+        }
+
         for header in sorted_headers {
             match header.kind {
                 HeaderKind::Function(signature, tokens) => {
+                    // Function parameters should be available in the function body scope
                     let context = ScopeContext::new_with_registry(
                         ContextKind::Function,
                         header.path.to_owned(),
-                        &[],
+                        &signature.parameters,
                         host_registry.clone(),
                     );
 
@@ -72,7 +93,7 @@ impl Ast {
                     let context = ScopeContext::new_with_registry(
                         ContextKind::Module,
                         header.path.to_owned(),
-                        &[],
+                        &function_declarations,
                         host_registry.clone(),
                     );
 
@@ -109,7 +130,7 @@ impl Ast {
                     let context = ScopeContext::new_with_registry(
                         ContextKind::Module,
                         header.path.to_owned(),
-                        &[],
+                        &function_declarations,
                         host_registry.clone(),
                     );
 

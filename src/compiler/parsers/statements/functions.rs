@@ -29,8 +29,8 @@ impl FunctionSignature {
     ) -> Result<Self, CompileError> {
         let parameters: Vec<Arg> = create_struct_definition(token_stream, context)?;
 
-        // Move past the closing struct bracket
-        token_stream.advance();
+        // create_struct_definition already advances past the closing bracket
+        // So we're now at the Arrow or Colon token
 
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}
