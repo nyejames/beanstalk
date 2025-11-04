@@ -22,7 +22,7 @@ use crate::compiler::{
 // Error handling macros - grouped for maintainability
 use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use crate::{ir_log, wir_log, return_compiler_error, return_wir_transformation_error};
+use crate::{ir_log, wir_log, return_wir_transformation_error};
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
@@ -82,6 +82,7 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
                         kind: crate::compiler::wir::wir_nodes::ExportKind::Function,
                         index: wir.functions.len() as u32, // Function index in the WIR
                     });
+                    #[cfg(debug_assertions)]
                     wir_log!("Added export for entry point function '{}'", name);
                 }
                 
@@ -106,6 +107,7 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
         if has_entry_point {
             // If we already have an entry point, don't create another main function
             // This prevents duplicate exports
+            #[cfg(debug_assertions)]
             wir_log!("Skipping main function creation - entry point already exists");
         } else {
             // Create main function and export it as _start
@@ -122,12 +124,14 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
             });
             
             wir.add_function(main_function);
+            #[cfg(debug_assertions)]
             wir_log!("Created _start function from top-level statements");
         }
     }
 
     // Transfer host imports from context to WIR
     wir.add_host_imports(&context.get_host_imports());
+    #[cfg(debug_assertions)]
     wir_log!("Transferred {} host imports to WIR", context.get_host_imports().len());
 
     // Run borrow checking on the WIR
@@ -138,15 +142,18 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
 
 /// Create a main function containing all top-level AST statements
 ///
-/// # Performance Optimization
+/// # Performance Optimizations
 ///
-/// Pre-allocates the statement vector with estimated capacity to reduce reallocations.
+/// - Pre-allocates statement vector with capacity based on AST size
+/// - Reduces logging overhead in release builds
+/// - Uses efficient vector extension instead of individual pushes
 fn create_main_function_from_ast(
     ast: &Vec<AstNode>,
     context: &mut WirTransformContext,
 ) -> Result<WirFunction, CompileError> {
     use crate::compiler::wir::wir_nodes::{Terminator, WirBlock, WirFunction};
 
+    #[cfg(debug_assertions)]
     wir_log!(
         "create_main_function_from_ast called with {} AST nodes",
         ast.len()
@@ -163,18 +170,23 @@ fn create_main_function_from_ast(
 
     // Create a single basic block for all statements
     let mut main_block = WirBlock::new(0);
-    // Pre-allocate with estimated capacity (assume ~2 statements per AST node on average)
-    let mut statements = Vec::with_capacity(ast.len() * 2);
+    // Optimized pre-allocation: estimate 3 statements per AST node (more accurate)
+    let mut statements = Vec::with_capacity(ast.len() * 3);
 
     // Transform each AST node to WIR statements
     for node in ast {
+        #[cfg(debug_assertions)]
         wir_log!("Processing AST node: {:?}", node.kind);
+        
         let node_statements = transform_ast_node_to_wir(node, context)?;
+        
+        #[cfg(debug_assertions)]
         wir_log!(
             "Generated {} WIR statements for node {:?}",
             node_statements.len(),
             node.kind
         );
+        
         statements.extend(node_statements);
     }
 
@@ -192,11 +204,12 @@ fn create_main_function_from_ast(
 
 /// Transform a single AST node to WIR statements
 ///
-/// # Performance Notes
+/// # Performance Optimizations
 ///
-/// - Pre-allocates statement vectors with estimated capacity to reduce reallocations
-/// - Uses references where possible to avoid unnecessary clones
-/// - Delegates to specialized transformation functions for better code organization
+/// - Pre-allocates statement vectors with estimated capacity
+/// - Uses references to avoid unnecessary clones
+/// - Delegates to specialized transformation functions
+/// - Reduces debug logging overhead in release builds
 fn transform_ast_node_to_wir(
     node: &AstNode,
     context: &mut WirTransformContext,

@@ -260,7 +260,8 @@ impl WirTransformContext {
     ///
     /// Vector of similar variable names, sorted by similarity
     fn find_similar_variable_names(&self, name: &str, max_suggestions: usize) -> Vec<String> {
-        let mut candidates = Vec::new();
+        // Performance optimization: pre-allocate with estimated capacity
+        let mut candidates: Vec<String> = Vec::with_capacity(max_suggestions * 2);
         
         // Collect all variable names from all scopes
         for scope in &self.variable_scopes {
@@ -420,7 +421,8 @@ impl WirTransformContext {
         }
         
         self.temporary_counter += 1;
-        let _temp_name = format!("_temp_{}", self.temporary_counter);
+        // Performance optimization: avoid string allocation for temporary names
+        // since they're not actually used in the current implementation
         self.place_manager.allocate_local(data_type)
     }
 

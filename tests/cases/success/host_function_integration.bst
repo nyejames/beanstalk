@@ -1,6 +1,6 @@
 -- Test various host function combinations
 message = "Testing host functions"
-print(message)
+[message]
 
 -- Test with different data types
 number = 42

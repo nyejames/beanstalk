@@ -25,38 +25,6 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 // Error handling macros
 use crate::{return_compiler_error, return_wir_transformation_error};
 
-/// Transform an expression statement to WIR statements
-///
-/// Converts an AST expression used as a statement (e.g., function calls, assignments)
-/// into WIR statements. The expression is evaluated for its side effects, but the
-/// result value is not assigned to any place.
-///
-/// # Parameters
-///
-/// - `expression`: AST expression to transform
-/// - `location`: Source location for error reporting
-/// - `context`: Transformation context for variable lookup and place allocation
-///
-/// # Returns
-///
-/// - `Ok(Vec<Statement>)`: WIR statements that evaluate the expression
-/// - `Err(CompileError)`: Transformation error with source location
-///
-/// # Examples
-///
-/// ```beanstalk
-/// print("hello")  // Expression statement - evaluated for side effects
-/// ```
-pub fn ast_expression_to_wir(
-    expression: &Expression,
-    location: &TextLocation,
-    context: &mut WirTransformContext,
-) -> Result<Vec<Statement>, CompileError> {
-    // For expression statements, we evaluate the expression but don't assign the result
-    let (statements, _rvalue) = expression_to_rvalue_with_context(expression, location, context)?;
-    Ok(statements)
-}
-
 /// Convert an AST expression to a WIR rvalue with supporting statements
 ///
 /// This is the core expression transformation function that handles all expression
@@ -189,75 +157,7 @@ pub fn expression_to_operand_with_context(
     }
 }
 
-// Placeholder functions for future implementation
-// These functions are mentioned in the task requirements but don't exist yet
 
-/// Convert expression to rvalue (variant function)
-/// This is a placeholder for the expression_to_rvalue variants mentioned in the task
-pub fn expression_to_rvalue(
-    expression: &Expression,
-    location: &TextLocation,
-    context: &mut WirTransformContext,
-) -> Result<(Vec<Statement>, Rvalue), CompileError> {
-    // For now, delegate to the existing function
-    expression_to_rvalue_with_context(expression, location, context)
-}
-
-/// Transform runtime expression with enhanced processing
-/// This is a placeholder for future implementation
-pub fn transform_runtime_expression_enhanced(
-    _expression: &Expression,
-    _location: &TextLocation,
-    _context: &mut WirTransformContext,
-) -> Result<Vec<Statement>, CompileError> {
-    return_compiler_error!(
-        "transform_runtime_expression_enhanced not yet implemented. This is a placeholder function for future enhanced runtime expression processing."
-    );
-}
-
-/// Evaluate RPN expressions to WIR statements
-// Removed duplicate function - implementation is below
-
-/// Process binary operator in RPN evaluation
-/// This is a placeholder for future implementation
-pub fn process_binary_operator_in_rpn(
-    _operator: &str,
-    _lhs: Operand,
-    _rhs: Operand,
-    _location: &TextLocation,
-    _context: &mut WirTransformContext,
-) -> Result<(Vec<Statement>, Rvalue), CompileError> {
-    return_compiler_error!(
-        "process_binary_operator_in_rpn not yet implemented. This is a placeholder function for future RPN operator processing."
-    );
-}
-
-// Variable reference transformation functions
-// These are placeholders for future implementation
-
-/// Transform variable reference to operand
-/// This is a placeholder for future implementation
-pub fn transform_variable_reference(
-    _name: &str,
-    _location: &TextLocation,
-    _context: &mut WirTransformContext,
-) -> Result<Operand, CompileError> {
-    return_compiler_error!(
-        "transform_variable_reference not yet implemented. This is a placeholder function for future variable reference transformation."
-    );
-}
-
-/// Transform mutable variable reference
-/// This is a placeholder for future implementation  
-pub fn transform_mutable_variable_reference(
-    _name: &str,
-    _location: &TextLocation,
-    _context: &mut WirTransformContext,
-) -> Result<Operand, CompileError> {
-    return_compiler_error!(
-        "transform_mutable_variable_reference not yet implemented. This is a placeholder function for future mutable variable reference transformation."
-    );
-}
 /// Evaluate RPN (Reverse Polish Notation) expression to WIR statements
 ///
 /// Processes a runtime expression that has been converted to RPN form during AST

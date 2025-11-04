@@ -18,10 +18,10 @@ y = 5
 
 if x > y:
     result = x + y
-    ["x is greater: ", x, " + ", y, " = ", result])
+    ["x is greater: ", x, " + ", y, " = ", result]
 else
     result = x - y
-    ["x is not greater: ", x, " - ", y, " = ", result])
+    ["x is not greater: ", x, " - ", y, " = ", result]
 ;
 
 ["Control flow test complete"]

@@ -2700,7 +2700,7 @@ impl WasmModule {
         &mut self,
         args: &[Operand],
         function: &mut Function,
-        _local_map: &LocalMap,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         // Validate arguments - print() should have exactly one string argument
         if args.len() != 1 {
@@ -2712,17 +2712,31 @@ impl WasmModule {
 
         let string_arg = &args[0];
 
-        // Extract string content from the operand
-        let string_content = match string_arg {
-            Operand::Constant(Constant::String(content)) => content.clone(),
+        // Check if this is a constant string or a variable
+        match string_arg {
+            Operand::Constant(Constant::String(content)) => {
+                // String literal - use the existing implementation
+                self.lower_wasix_print_constant(content, function)
+            }
+            Operand::Copy(place) | Operand::Move(place) => {
+                // String variable - use runtime implementation
+                self.lower_wasix_print_variable(place, function, local_map)
+            }
             _ => {
-                // For non-constant strings, we need to handle them differently
-                // For now, this is a limitation - we only support string literals
                 return_compiler_error!(
-                    "WASI print() currently only supports string literals. Variable string printing not yet implemented."
+                    "print() argument must be a string literal or string variable, got {:?}",
+                    string_arg
                 );
             }
-        };
+        }
+    }
+
+    /// Print a constant string literal (compile-time known)
+    fn lower_wasix_print_constant(
+        &mut self,
+        string_content: &str,
+        function: &mut Function,
+    ) -> Result<(), CompileError> {
 
         // Get the WASIX fd_write function index
         let wasix_function = match self.wasix_registry.get_function("print") {
@@ -2790,6 +2804,97 @@ impl WasmModule {
         // For now, we'll just drop it, but this provides the foundation for error handling
         function.instruction(&Instruction::Drop);
 
+        Ok(())
+    }
+
+    /// Print a string variable (runtime value)
+    fn lower_wasix_print_variable(
+        &mut self,
+        place: &Place,
+        function: &mut Function,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Get the WASIX fd_write function index
+        let wasix_function = match self.wasix_registry.get_function("print") {
+            Some(func) => func,
+            None => {
+                return_compiler_error!(
+                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
+                );
+            }
+        };
+
+        let fd_write_func_index = wasix_function.get_function_index()?;
+
+        // Load the string pointer from the variable
+        // The place contains a pointer to: [length: u32][data: bytes]
+        self.lower_place_access(place, function, local_map)?;
+        
+        // Stack: [string_ptr]
+        // Duplicate for later use
+        function.instruction(&Instruction::LocalTee(0)); // Save string_ptr in local 0
+        
+        // Read the length (first 4 bytes)
+        function.instruction(&Instruction::I32Load(MemArg {
+            offset: 0,
+            align: 2, // 4-byte alignment
+            memory_index: 0,
+        }));
+        
+        // Stack: [length]
+        function.instruction(&Instruction::LocalSet(1)); // Save length in local 1
+        
+        // Calculate data pointer (string_ptr + 4)
+        function.instruction(&Instruction::LocalGet(0));
+        function.instruction(&Instruction::I32Const(4));
+        function.instruction(&Instruction::I32Add);
+        function.instruction(&Instruction::LocalSet(2)); // Save data_ptr in local 2
+        
+        // Now we need to create an IOVec structure at runtime
+        // Allocate IOVec space (8 bytes: ptr + len)
+        let iovec_ptr = match self.wasix_memory_manager.allocate_iovec_array(1) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX IOVec allocation failed: {}", e);
+            }
+        };
+        
+        // Write data_ptr to IOVec (first 4 bytes)
+        function.instruction(&Instruction::I32Const(iovec_ptr as i32));
+        function.instruction(&Instruction::LocalGet(2)); // data_ptr
+        function.instruction(&Instruction::I32Store(MemArg {
+            offset: 0,
+            align: 2,
+            memory_index: 0,
+        }));
+        
+        // Write length to IOVec (next 4 bytes)
+        function.instruction(&Instruction::I32Const(iovec_ptr as i32 + 4));
+        function.instruction(&Instruction::LocalGet(1)); // length
+        function.instruction(&Instruction::I32Store(MemArg {
+            offset: 0,
+            align: 2,
+            memory_index: 0,
+        }));
+        
+        // Allocate space for nwritten result
+        let nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX nwritten allocation failed: {}", e);
+            }
+        };
+        
+        // Call fd_write(fd=1, iovs=iovec_ptr, iovs_len=1, nwritten=nwritten_ptr)
+        function.instruction(&Instruction::I32Const(1)); // stdout fd
+        function.instruction(&Instruction::I32Const(iovec_ptr as i32));
+        function.instruction(&Instruction::I32Const(1)); // iovs_len
+        function.instruction(&Instruction::I32Const(nwritten_ptr as i32));
+        function.instruction(&Instruction::Call(fd_write_func_index));
+        
+        // Drop the return value (errno)
+        function.instruction(&Instruction::Drop);
+        
         Ok(())
     }
 
@@ -5754,7 +5859,7 @@ impl WasmModule {
         args: &[Operand],
         _destination: &Option<Place>,
         function_builder: &mut EnhancedFunctionBuilder,
-        _local_map: &LocalMap,
+        local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         // Validate arguments - print() should have exactly one string argument
         if args.len() != 1 {
@@ -5766,17 +5871,31 @@ impl WasmModule {
 
         let string_arg = &args[0];
 
-        // Extract string content from the operand
-        let string_content = match string_arg {
-            Operand::Constant(Constant::String(content)) => content.clone(),
+        // Check if this is a constant string or a variable
+        match string_arg {
+            Operand::Constant(Constant::String(content)) => {
+                // String literal - use the existing implementation
+                self.lower_wasix_print_constant_enhanced(content, function_builder)
+            }
+            Operand::Copy(place) | Operand::Move(place) => {
+                // String variable - use runtime implementation
+                self.lower_wasix_print_variable_enhanced(place, function_builder, local_map)
+            }
             _ => {
-                // For non-constant strings, we need to handle them differently
-                // For now, this is a limitation - we only support string literals
                 return_compiler_error!(
-                    "WASI print() currently only supports string literals. Variable string printing not yet implemented."
+                    "print() argument must be a string literal or string variable, got {:?}",
+                    string_arg
                 );
             }
-        };
+        }
+    }
+
+    /// Print a constant string literal using EnhancedFunctionBuilder
+    fn lower_wasix_print_constant_enhanced(
+        &mut self,
+        string_content: &str,
+        function_builder: &mut EnhancedFunctionBuilder,
+    ) -> Result<(), CompileError> {
 
         // Add string data to WASM data section with proper alignment
         let string_offset = self.string_manager.add_string_constant(&string_content);
@@ -5825,6 +5944,97 @@ impl WasmModule {
             function_builder,
         )?;
 
+        Ok(())
+    }
+
+    /// Print a string variable using EnhancedFunctionBuilder
+    fn lower_wasix_print_variable_enhanced(
+        &mut self,
+        place: &Place,
+        function_builder: &mut EnhancedFunctionBuilder,
+        local_map: &LocalMap,
+    ) -> Result<(), CompileError> {
+        // Get the WASIX fd_write function index
+        let wasix_function = match self.wasix_registry.get_function("print") {
+            Some(func) => func,
+            None => {
+                return_compiler_error!(
+                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
+                );
+            }
+        };
+
+        let fd_write_func_index = wasix_function.get_function_index()?;
+
+        // Load the string pointer from the variable
+        // The place contains a pointer to: [length: u32][data: bytes]
+        self.lower_place_access_enhanced(place, function_builder, local_map)?;
+        
+        // Stack: [string_ptr]
+        // Duplicate for later use
+        function_builder.instruction(&Instruction::LocalTee(0))?; // Save string_ptr in local 0
+        
+        // Read the length (first 4 bytes)
+        function_builder.instruction(&Instruction::I32Load(MemArg {
+            offset: 0,
+            align: 2, // 4-byte alignment
+            memory_index: 0,
+        }))?;
+        
+        // Stack: [length]
+        function_builder.instruction(&Instruction::LocalSet(1))?; // Save length in local 1
+        
+        // Calculate data pointer (string_ptr + 4)
+        function_builder.instruction(&Instruction::LocalGet(0))?;
+        function_builder.instruction(&Instruction::I32Const(4))?;
+        function_builder.instruction(&Instruction::I32Add)?;
+        function_builder.instruction(&Instruction::LocalSet(2))?; // Save data_ptr in local 2
+        
+        // Now we need to create an IOVec structure at runtime
+        // Allocate IOVec space (8 bytes: ptr + len)
+        let iovec_ptr = match self.wasix_memory_manager.allocate_iovec_array(1) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX IOVec allocation failed: {}", e);
+            }
+        };
+        
+        // Write data_ptr to IOVec (first 4 bytes)
+        function_builder.instruction(&Instruction::I32Const(iovec_ptr as i32))?;
+        function_builder.instruction(&Instruction::LocalGet(2))?; // data_ptr
+        function_builder.instruction(&Instruction::I32Store(MemArg {
+            offset: 0,
+            align: 2,
+            memory_index: 0,
+        }))?;
+        
+        // Write length to IOVec (next 4 bytes)
+        function_builder.instruction(&Instruction::I32Const(iovec_ptr as i32 + 4))?;
+        function_builder.instruction(&Instruction::LocalGet(1))?; // length
+        function_builder.instruction(&Instruction::I32Store(MemArg {
+            offset: 0,
+            align: 2,
+            memory_index: 0,
+        }))?;
+        
+        // Allocate space for nwritten result
+        let nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
+            Ok(ptr) => ptr,
+            Err(e) => {
+                return_compiler_error!("WASIX nwritten allocation failed: {}", e);
+            }
+        };
+        
+        // Call fd_write(fd=1, iovs=iovec_ptr, iovs_len=1, nwritten=nwritten_ptr)
+        function_builder.instruction(&Instruction::I32Const(1))?; // stdout fd
+        function_builder.instruction(&Instruction::I32Const(iovec_ptr as i32))?;
+        function_builder.instruction(&Instruction::I32Const(1))?; // iovs_len
+        function_builder.instruction(&Instruction::I32Const(nwritten_ptr as i32))?;
+        function_builder.instruction(&Instruction::Call(fd_write_func_index))?;
+        
+        // Drop the return value (errno)
+        function_builder.instruction(&Instruction::Drop)?;
+        
         Ok(())
     }
 

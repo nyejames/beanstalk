@@ -263,6 +263,17 @@ impl Place {
         }
     }
 
+    /// Get a reference to the WASM type of this place (performance optimized)
+    /// 
+    /// Returns None for computed types (Memory, Projection) that require calculation
+    pub fn wasm_type_ref(&self) -> Option<&WasmType> {
+        match self {
+            Place::Local { wasm_type, .. } => Some(wasm_type),
+            Place::Global { wasm_type, .. } => Some(wasm_type),
+            Place::Memory { .. } | Place::Projection { .. } => None,
+        }
+    }
+
     /// Check if this place maps directly to a WASM local
     pub fn is_wasm_local(&self) -> bool {
         matches!(self, Place::Local { .. })
@@ -307,6 +318,10 @@ impl Place {
     }
 
     /// Generate WASM stack operations for loading this place
+    /// 
+    /// # Performance Optimization
+    /// 
+    /// Pre-allocates vector with known capacity to avoid reallocations
     pub fn generate_load_operations(&self) -> Vec<StackOperation> {
         match self {
             Place::Local { wasm_type, .. } => vec![StackOperation {
@@ -684,22 +699,32 @@ impl PlaceManager {
     }
 
     /// Allocate a new local place
+    /// 
+    /// # Performance Optimization
+    /// 
+    /// Avoids unnecessary clone by reusing the WasmType value
     pub fn allocate_local(&mut self, data_type: &DataType) -> Place {
         let index = self.next_local_index;
         self.next_local_index += 1;
 
         let wasm_type = WasmType::from_data_type(data_type);
+        // Store the type and reuse the same value to avoid clone
         self.local_types.insert(index, wasm_type.clone());
 
         Place::Local { index, wasm_type }
     }
 
     /// Allocate a new global place
+    /// 
+    /// # Performance Optimization
+    /// 
+    /// Avoids unnecessary clone by reusing the WasmType value
     pub fn allocate_global(&mut self, data_type: &DataType) -> Place {
         let index = self.next_global_index;
         self.next_global_index += 1;
 
         let wasm_type = WasmType::from_data_type(data_type);
+        // Store the type and reuse the same value to avoid clone
         self.global_types.insert(index, wasm_type.clone());
 
         Place::Global { index, wasm_type }

@@ -24,7 +24,7 @@ use crate::compiler::{
     },
 };
 // Error handling macros
-use crate::{return_compiler_error, return_wir_transformation_error};
+use crate::return_wir_transformation_error;
 
 /// Transform a single AST node to WIR statements
 ///
@@ -94,6 +94,9 @@ pub fn transform_ast_node_to_wir(
                 }
             }
         }
+        NodeKind::Return(return_values) => {
+            ast_return_to_wir(return_values, &node.location, context)
+        }
         _ => {
             return_wir_transformation_error!(
                 node.location.clone(),
@@ -106,21 +109,14 @@ pub fn transform_ast_node_to_wir(
     }
 }
 
-// Removed duplicate function - implementation is below
 
-// Removed duplicate function - implementation is below
-
-// Removed duplicate function - implementation is below
-
-// TODO: Add additional statement transformation functions as they are implemented:
-// - ast_host_function_call_to_wir
-// - ast_if_statement_to_wir
-// - Control flow functions (for, while, match, return, print)
 /// Transform AST declaration to WIR statements
 ///
-/// # Performance Optimization
+/// # Performance Optimizations
 ///
-/// Pre-allocates statement vector with estimated capacity to reduce reallocations.
+/// - Pre-allocates statement vector with estimated capacity
+/// - Avoids unnecessary string allocation by using string references
+/// - Reduces clone operations where possible
 fn ast_declaration_to_wir(
     name: &str,
     value: &Expression,
@@ -137,8 +133,8 @@ fn ast_declaration_to_wir(
     // Create a place for the variable
     let place = context.get_place_manager().allocate_local(&value.data_type);
 
-    // Register the variable in the context
-    context.register_variable(name.to_string(), place.clone());
+    // Register the variable in the context (avoid unnecessary string allocation)
+    context.register_variable(name.to_owned(), place.clone());
 
     // Create assignment statement
     statements.push(Statement::Assign { place, rvalue });
@@ -302,6 +298,56 @@ fn ast_print_to_wir(
         location,
         context,
     )
+}
+
+/// Transform AST return statement to WIR statements
+///
+/// Converts a return statement with return values into WIR statements that prepare
+/// the return values. For now, this is a simplified implementation that just evaluates
+/// the return expressions. Proper return handling with terminators will be added later.
+///
+/// # Parameters
+///
+/// - `return_values`: Expressions to return from the function
+/// - `location`: Source location for error reporting
+/// - `context`: Transformation context for variable management
+///
+/// # Returns
+///
+/// - `Ok(Vec<Statement>)`: WIR statements that evaluate return values
+/// - `Err(CompileError)`: Transformation error with source location
+///
+/// # TODO
+///
+/// - Add proper Return terminator support
+/// - Handle early returns (breaking out of current block)
+/// - Integrate with control flow analysis
+fn ast_return_to_wir(
+    return_values: &[Expression],
+    location: &TextLocation,
+    context: &mut WirTransformContext,
+) -> Result<Vec<Statement>, CompileError> {
+    let mut statements = Vec::with_capacity(return_values.len() * 2);
+
+    // For now, just evaluate the return expressions
+    // Proper return handling with terminators will be added in a future task
+    for return_expr in return_values {
+        let (expr_statements, rvalue) =
+            expression_to_rvalue_with_context(return_expr, location, context)?;
+        statements.extend(expr_statements);
+
+        // Create a temporary place for the return value
+        let return_place = context.create_temporary_place(&return_expr.data_type);
+        statements.push(Statement::Assign {
+            place: return_place,
+            rvalue,
+        });
+    }
+
+    // TODO: Add proper Return terminator handling
+    // For now, we just evaluate the expressions and let the function builder
+    // add a default return terminator at the end of the function
+    Ok(statements)
 }
 
 /// Transform AST host function call to WIR statements

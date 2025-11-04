@@ -106,18 +106,25 @@ impl UnifiedBorrowChecker {
     }
 
     /// Create a new unified borrow checker with the function name for diagnostics
+    /// 
+    /// # Performance Optimization
+    /// 
+    /// Pre-allocates hash maps with estimated capacity based on function size
     pub fn new_with_function_name(loan_count: usize, _function_name: String) -> Self {
+        // Estimate capacity based on loan count (typically 2-4x program points vs loans)
+        let estimated_capacity = (loan_count * 3).max(16);
+        
         Self {
-            live_vars_in: HashMap::new(),
-            live_vars_out: HashMap::new(),
-            live_loans_in: HashMap::new(),
-            live_loans_out: HashMap::new(),
-            moved_places_in: HashMap::new(),
-            moved_places_out: HashMap::new(),
-            successors: HashMap::new(),
-            predecessors: HashMap::new(),
-            gen_sets: HashMap::new(),
-            kill_sets: HashMap::new(),
+            live_vars_in: HashMap::with_capacity(estimated_capacity),
+            live_vars_out: HashMap::with_capacity(estimated_capacity),
+            live_loans_in: HashMap::with_capacity(estimated_capacity),
+            live_loans_out: HashMap::with_capacity(estimated_capacity),
+            moved_places_in: HashMap::with_capacity(estimated_capacity),
+            moved_places_out: HashMap::with_capacity(estimated_capacity),
+            successors: HashMap::with_capacity(estimated_capacity),
+            predecessors: HashMap::with_capacity(estimated_capacity),
+            gen_sets: HashMap::with_capacity(estimated_capacity),
+            kill_sets: HashMap::with_capacity(estimated_capacity),
             loans: Vec::new(),
             loan_count,
             errors: Vec::new(),
