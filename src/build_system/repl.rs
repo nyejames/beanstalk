@@ -82,10 +82,14 @@ fn compile_beanstalk_to_string(
     source_code: &str,
     source_path: &Path,
 ) -> Result<String, CompileError> {
+    use crate::compiler::string_interning::StringTable;
+
+    // Create a string table for this compilation
+    let mut string_table = StringTable::new();
 
     // Tokenize the source code
     let mut tokenizer_output =
-        tokenize(source_code, source_path, TokenizeMode::TemplateHead)?;
+        tokenize(source_code, source_path, TokenizeMode::TemplateHead, &mut string_table)?;
     let ast_context = ScopeContext::new(
         ContextKind::Template, 
         source_path.to_path_buf(), 

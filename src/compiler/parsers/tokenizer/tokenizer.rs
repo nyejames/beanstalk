@@ -1,8 +1,8 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::{return_syntax_error, settings, token_log};
-use colour::green_ln;
+use crate::compiler::string_interning::{StringTable, InternedString};
+use crate::{return_syntax_error, settings};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode};
 
@@ -19,6 +19,7 @@ pub fn tokenize(
     source_code: &str,
     src_path: &Path,
     mode: TokenizeMode,
+    string_table: &mut StringTable,
 ) -> Result<FileTokens, CompileError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
@@ -53,6 +54,7 @@ pub fn tokenize(
             &mut stream,
             &mut template_nesting_level,
             &mut type_declarations,
+            string_table,
         )?;
     }
 
@@ -66,6 +68,7 @@ pub fn get_token_kind(
     stream: &mut TokenStream,
     template_nesting_level: &mut i64,
     type_declarations: &mut HashSet<String>,
+    string_table: &mut StringTable,
 ) -> Result<Token, CompileError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
@@ -82,7 +85,8 @@ pub fn get_token_kind(
     if current_char == '`' {
         while let Some(ch) = stream.next() {
             if ch == '`' {
-                return_token!(TokenKind::RawStringLiteral(token_value), stream);
+                let interned_string = string_table.intern(&token_value);
+                return_token!(TokenKind::RawStringLiteral(interned_string), stream);
             }
 
             token_value.push(ch);
@@ -90,7 +94,7 @@ pub fn get_token_kind(
     }
 
     if stream.mode == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
-        return tokenize_template_body(current_char, stream);
+        return tokenize_template_body(current_char, stream, string_table);
     }
 
     // Whitespace
@@ -201,7 +205,7 @@ pub fn get_token_kind(
 
     // Check for string literals
     if current_char == '"' {
-        return tokenize_string(stream);
+        return tokenize_string(stream, string_table);
     }
 
     // Check for character literals
@@ -291,7 +295,7 @@ pub fn get_token_kind(
                 }
 
                 // Do not add any token to the stream, call this function again
-                return get_token_kind(stream, template_nesting_level, type_declarations);
+                return get_token_kind(stream, template_nesting_level, type_declarations, string_table);
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -438,7 +442,8 @@ pub fn get_token_kind(
 
         //
         let path = tokenize_path(stream)?;
-        return_token!(TokenKind::PathLiteral(path), stream);
+        let interned_path = string_table.intern(&path);
+        return_token!(TokenKind::PathLiteral(interned_path), stream);
     }
 
     // Wildcard for pattern matching
@@ -496,7 +501,7 @@ pub fn get_token_kind(
 
     if current_char.is_alphabetic() {
         token_value.push(current_char);
-        return keyword_or_variable(&mut token_value, stream, type_declarations);
+        return keyword_or_variable(&mut token_value, stream, type_declarations, string_table);
     }
 
     return_syntax_error!(
@@ -510,6 +515,7 @@ fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
     type_declarations: &mut HashSet<String>,
+    string_table: &mut StringTable,
 ) -> Result<Token, CompileError> {
     // Match variables or keywords
     loop {
@@ -574,7 +580,8 @@ fn keyword_or_variable(
                 type_declarations.insert(token_value.clone());
             }
 
-            return_token!(TokenKind::Symbol(token_value.to_string()), stream);
+            let interned_symbol = string_table.intern(token_value);
+            return_token!(TokenKind::Symbol(interned_symbol), stream);
         } else {
             // Failing all of that, this is an invalid variable name
             return_syntax_error!(
@@ -656,7 +663,7 @@ pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
     Ok(string_value)
 }
 
-fn tokenize_string(stream: &mut TokenStream) -> Result<Token, CompileError> {
+fn tokenize_string(stream: &mut TokenStream, string_table: &mut StringTable) -> Result<Token, CompileError> {
     let mut token_value = String::new();
 
     // Currently should be at the character that started the String
@@ -667,18 +674,21 @@ fn tokenize_string(stream: &mut TokenStream) -> Result<Token, CompileError> {
                 token_value.push(next_char);
             }
         } else if ch == '"' {
-            return_token!(TokenKind::StringSliceLiteral(token_value), stream);
+            let interned_string = string_table.intern(&token_value);
+            return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
         }
 
         token_value.push(ch);
     }
 
-    return_token!(TokenKind::StringSliceLiteral(token_value), stream);
+    let interned_string = string_table.intern(&token_value);
+    return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
 
 fn tokenize_template_body(
     current_char: char,
     stream: &mut TokenStream,
+    string_table: &mut StringTable,
 ) -> Result<Token, CompileError> {
     let mut token_value = String::from(current_char);
 
@@ -692,14 +702,16 @@ fn tokenize_template_body(
                 token_value.push(next_char);
             }
         } else if ch == &'[' || ch == &']' {
-            return_token!(TokenKind::StringSliceLiteral(token_value), stream);
+            let interned_string = string_table.intern(&token_value);
+            return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
         }
 
         // Should always be a valid char
         token_value.push(stream.next().unwrap());
     }
 
-    return_token!(TokenKind::StringSliceLiteral(token_value), stream);
+    let interned_string = string_table.intern(&token_value);
+    return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
 
 fn tokenize_path(stream: &mut TokenStream) -> Result<String, CompileError> {

@@ -1,9 +1,7 @@
-use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::datatypes::DataType;
+use crate::compiler::string_interning::{InternedString, StringTable};
 
-use crate::compiler::compiler_warnings::CompilerWarning;
-use colour::red_ln;
 use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
@@ -149,6 +147,34 @@ impl Token {
 
     pub fn to_string(&self) -> String {
         format!("{:?}", self.kind)
+    }
+
+    /// Get the string content of this token if it contains string data.
+    /// Returns the resolved string content for Symbol, StringSliceLiteral, RawStringLiteral, and PathLiteral tokens.
+    /// Returns empty string for other token types.
+    pub fn as_string(&self, string_table: &StringTable) -> String {
+        match &self.kind {
+            TokenKind::Symbol(id) => string_table.resolve(*id).to_string(),
+            TokenKind::StringSliceLiteral(id) => string_table.resolve(*id).to_string(),
+            TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
+            TokenKind::PathLiteral(id) => string_table.resolve(*id).to_string(),
+            TokenKind::ModuleStart(name) => name.clone(),
+            _ => String::new(),
+        }
+    }
+
+    /// Compare this token's string content with a string slice efficiently.
+    /// Only works for tokens that contain string data (Symbol, StringSliceLiteral, etc.).
+    /// Returns false for tokens that don't contain string data.
+    pub fn eq_str(&self, string_table: &StringTable, other: &str) -> bool {
+        match &self.kind {
+            TokenKind::Symbol(id) => string_table.resolve(*id) == other,
+            TokenKind::StringSliceLiteral(id) => string_table.resolve(*id) == other,
+            TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
+            TokenKind::PathLiteral(id) => string_table.resolve(*id) == other,
+            TokenKind::ModuleStart(name) => name == other,
+            _ => false,
+        }
     }
 }
 
@@ -344,15 +370,15 @@ pub enum TokenKind {
     Arrow,
 
     /// Variable name
-    Symbol(String),
+    Symbol(InternedString),
 
     // Literals
-    StringSliceLiteral(String),
-    PathLiteral(String),
+    StringSliceLiteral(InternedString),
+    PathLiteral(InternedString),
     FloatLiteral(f64),
     IntLiteral(i64),
     CharLiteral(char),
-    RawStringLiteral(String),
+    RawStringLiteral(InternedString),
     BoolLiteral(bool),
 
     // Collections
@@ -469,11 +495,11 @@ pub enum TokenKind {
 }
 
 impl TokenKind {
-    pub fn get_name(&self) -> String {
+    pub fn get_name(&self, string_table: &StringTable) -> String {
         match self {
-            TokenKind::Symbol(name, ..) => name.clone(),
-            TokenKind::RawStringLiteral(value) => value.clone(),
-            TokenKind::StringSliceLiteral(string) => string.clone(),
+            TokenKind::Symbol(name) => string_table.resolve(*name).to_string(),
+            TokenKind::RawStringLiteral(value) => string_table.resolve(*value).to_string(),
+            TokenKind::StringSliceLiteral(string) => string_table.resolve(*string).to_string(),
             TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }

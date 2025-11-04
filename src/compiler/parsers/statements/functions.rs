@@ -6,6 +6,7 @@ use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::structs::create_struct_definition;
+use crate::compiler::string_interning::InternedString;
 
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
@@ -78,8 +79,10 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    // TODO: This needs to be updated to use string table when available
+                    // For now, using a placeholder approach
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        name: InternedString::from_u32(returns.len() as u32),
                         value: Expression::int(
                             0,
                             token_stream.current_location(),
@@ -98,8 +101,9 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    // TODO: This needs to be updated to use string table when available
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        name: InternedString::from_u32(returns.len() as u32),
                         value: Expression::float(
                             0.0,
                             token_stream.current_location(),
@@ -118,8 +122,9 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    // TODO: This needs to be updated to use string table when available
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        name: InternedString::from_u32(returns.len() as u32),
                         value: Expression::bool(
                             false,
                             token_stream.current_location(),
@@ -138,10 +143,11 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    // TODO: This needs to be updated to use string table when available
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        name: InternedString::from_u32(returns.len() as u32),
                         value: Expression::string_slice(
-                            "".to_string(),
+                            InternedString::from_u32(0), // Empty string placeholder
                             token_stream.current_location(),
                             if mutable {
                                 Ownership::MutableOwned
@@ -160,17 +166,21 @@ impl FunctionSignature {
                         )
                     }
 
+                    // TODO: This needs to be updated to resolve interned strings
+                    // when string table integration is complete
+                    // For now, we'll skip this symbol resolution
+                    // 
                     // Search through declarations for any data types
                     // Also search through the function parameters,
                     // as the function can return references to those parameters.
-                    if let Some(possible_type) = context.get_reference(name) {
-                        // Make sure this is actually a struct (Args)
-                        if matches!(possible_type.value.data_type, DataType::Parameters(..)) {
-                            returns.push(possible_type.to_owned());
-                        }
-                    } else if let Some(reference_return) = parameters.get_reference(name) {
-                        returns.push(reference_return.to_owned());
-                    }
+                    // if let Some(possible_type) = context.get_reference(name) {
+                    //     // Make sure this is actually a struct (Args)
+                    //     if matches!(possible_type.value.data_type, DataType::Parameters(..)) {
+                    //         returns.push(possible_type.to_owned());
+                    //     }
+                    // } else if let Some(reference_return) = parameters.get_reference(name) {
+                    //     returns.push(reference_return.to_owned());
+                    // }
                 }
 
                 TokenKind::Colon => {
@@ -482,9 +492,12 @@ pub fn parse_function_call(
     //     return inline_function_call(&args, &accessed_args, &original_function.value);
     // }
 
+    // TODO: This needs to be updated to intern the function name when string table is available
+    let interned_name = InternedString::from_u32(0); // Placeholder
+
     Ok(AstNode {
         kind: NodeKind::FunctionCall(
-            name.to_owned(),
+            interned_name,
             args,
             signature.returns.to_owned(),
             token_stream.current_location(),
@@ -548,13 +561,18 @@ pub fn parse_host_function_call(
     // Validate the host function call
     validate_host_function_call(host_func, &args, &location)?;
 
+    // TODO: These need to be updated to intern strings when string table is available
+    let interned_name = InternedString::from_u32(0); // Placeholder
+    let interned_module = InternedString::from_u32(1); // Placeholder
+    let interned_import_name = InternedString::from_u32(2); // Placeholder
+
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall(
-            host_func.name.clone(),
+            interned_name,
             args,
             host_func.return_types.clone(),
-            host_func.module.clone(),
-            host_func.import_name.clone(),
+            interned_module,
+            interned_import_name,
             location.clone(),
         ),
         location,

@@ -6,10 +6,11 @@ use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::string_interning::{InternedString, StringTable};
 
 #[derive(Debug, Clone)]
 pub struct Arg {
-    pub name: String,
+    pub name: InternedString,
     pub value: Expression,
 }
 
@@ -35,7 +36,7 @@ pub enum NodeKind {
 
     // Generic import path to another Beanstalk file
     // Effectively means the file is included in the current file as a struct that can be accessed
-    Include(String, PathBuf), // Name of file import, Imported file object
+    Include(InternedString, PathBuf), // Name of file import, Imported file object
 
     // Control Flow
     Access,
@@ -53,7 +54,7 @@ pub enum NodeKind {
 
     // Basics
     FunctionCall(
-        String,
+        InternedString,
         Vec<Expression>, // Arguments passed in (eventually will have a syntax for named arguments)
         Vec<Arg>,        // Returns (can be named so using an Arg rather than just the data type)
         TextLocation,
@@ -63,11 +64,11 @@ pub enum NodeKind {
     // Host function call (functions provided by the runtime)
     // Uses the same structure as regular function calls but includes binding info
     HostFunctionCall(
-        String,          // Function name
+        InternedString,  // Function name
         Vec<Expression>, // Arguments passed in - Can't be named for host functions
         Vec<DataType>,   // Return types
-        String,          // WASM module name (e.g., "beanstalk_io")
-        String,          // WASM import name (e.g., "print")
+        InternedString,  // WASM module name (e.g., "beanstalk_io")
+        InternedString,  // WASM import name (e.g., "print")
         TextLocation,    // Location for error reporting
     ),
 
@@ -77,14 +78,14 @@ pub enum NodeKind {
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
     //          new_struct_instance(arg) -- Calls the main function of the struct
     StructDefinition(
-        String,   // Name
-        Vec<Arg>, // Fields
+        InternedString, // Name
+        Vec<Arg>,       // Fields
     ),
     
-    Function(String, FunctionSignature, Vec<AstNode>),
+    Function(InternedString, FunctionSignature, Vec<AstNode>),
 
     // Mutation of existing mutable variables
-    Mutation(String, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
+    Mutation(InternedString, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
 
     // An actual r-value
     Expression(Expression),
@@ -96,8 +97,8 @@ pub enum NodeKind {
     Print(Expression),
 
     // Other language code blocks
-    JS(String),  // Code,
-    Css(String), // Code,
+    JS(InternedString),  // Code,
+    Css(InternedString), // Code,
 
     TemplateFormatter,
     Slot,
@@ -119,23 +120,29 @@ impl AstNode {
             | NodeKind::Mutation(_, value, _) => Ok(value.to_owned()),
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(
-                    name.to_owned(),
+                    *name,
                     arguments.to_owned(),
                     returns.to_owned(),
                     location.to_owned(),
                 ))
             }
             NodeKind::HostFunctionCall(name, arguments, return_types, _, _, location) => {
+                // We need a string table to create interned strings for indices
+                // For now, we'll use a placeholder approach - this will need to be updated
+                // when the AST construction is updated to use the string table
                 let mut return_types_from_expr = Vec::new();
                 for (idx, _return_type) in return_types.iter().enumerate() {
+                    // This is a temporary solution - we'll need to pass string_table here
+                    // when updating AST construction methods
+                    let placeholder_name = InternedString::from_u32(idx as u32);
                     return_types_from_expr.push(Arg {
-                        name: idx.to_string(),
+                        name: placeholder_name,
                         value: Expression::int(0, location.to_owned(), Ownership::default()),
                     })
                 }
 
                 Ok(Expression::function_call(
-                    name.to_owned(),
+                    *name,
                     arguments.to_owned(),
                     return_types_from_expr,
                     location.to_owned(),

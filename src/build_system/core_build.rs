@@ -9,8 +9,8 @@
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::string_interning::StringId;
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
@@ -98,7 +98,7 @@ pub fn compile_modules(
             errors: vec![e],
             warnings: Vec::new(),
         })?;
-    let compiler = Compiler::new(config, host_registry);
+    let mut compiler = Compiler::new(config, host_registry);
 
     // ----------------------------------
     //         Token generation
@@ -317,7 +317,7 @@ fn get_standard_io_imports() -> Vec<ExternalImport> {
 }
 
 /// Extract exported functions from the compilation
-fn extract_exported_functions(exported_declarations: &[Arg]) -> Vec<String> {
+fn extract_exported_functions(exported_declarations: &[Arg]) -> Vec<StringId> {
     exported_declarations
         .iter()
         .map(|arg| arg.name.clone())
