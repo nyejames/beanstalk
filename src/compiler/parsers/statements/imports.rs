@@ -1,15 +1,19 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::return_rule_error;
-use std::path::Path;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::string_interning::{StringId, StringTable};
+use crate::return_rule_error;
 
 // Parses tokens after the "Import" token
 // Each Import is a path to a file and the name of the header being imported.
-// import @libraries/math/sqrt
+// #import(@libraries/math/sqrt)
 // The TokenKind::Import must be followed by a TokenKind::path(PathBuf)
 // The header being imported from the file is just the last part of the path,
 // and the same symbol will be used as the header (sqrt in this example).
-pub fn parse_import(token_stream: &mut FileTokens) -> Result<String, CompileError> {
+pub fn parse_import(
+    token_stream: &mut FileTokens,
+    string_table: &mut StringTable,
+) -> Result<(StringId, InternedPath), CompileError> {
     // Starts after the import token
     let path = if let TokenKind::PathLiteral(p) = token_stream.current_token_kind().to_owned() {
         p
@@ -23,5 +27,10 @@ pub fn parse_import(token_stream: &mut FileTokens) -> Result<String, CompileErro
 
     token_stream.advance();
     
-    Ok(path)
+    let import_name = match path.file_name() {
+        Some(name) => name,
+        None => return_rule_error!(token_stream.current_location(), "Invalid import path: {:?}. You might be forgetting to add the name of what you are importing at the end of the path!", path),
+    };
+
+    Ok((import_name, path))
 }

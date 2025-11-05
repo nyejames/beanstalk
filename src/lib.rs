@@ -6,11 +6,11 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
+    pub(crate) mod interned_path_tests;
     pub(crate) mod jit_runtime_tests;
     pub(crate) mod memory_utils_tests;
     pub(crate) mod string_interning_tests;
     pub(crate) mod test_runner;
-    pub(crate) mod wir_to_wasm_lowering_tests;
 }
 
 // New runtime and build system modules
@@ -84,6 +84,7 @@ mod compiler {
     pub(crate) mod compiler_errors;
     pub(crate) mod compiler_warnings;
     pub(crate) mod datatypes;
+    pub(crate) mod interned_path;
     pub(crate) mod string_interning;
     pub(crate) mod traits;
 
@@ -118,6 +119,7 @@ use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build::*;
+use crate::compiler::interned_path::InternedPath;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -157,17 +159,12 @@ impl<'a> Compiler<'a> {
 
     /// Intern a string using the compiler's string table, returning a unique identifier.
     /// This is a convenience method that delegates to the internal string table.
-    /// 
-    /// Time complexity: O(1) average case
     pub fn intern_string(&mut self, s: &str) -> InternedString {
         self.string_table.intern(s)
     }
 
     /// Resolve an interned string ID back to its string content.
     /// This is a convenience method that delegates to the internal string table.
-    /// 
-    /// Time complexity: O(1)
-    /// 
     /// # Panics
     /// Panics if the StringId is invalid (not created by this compiler's string table)
     pub fn resolve_string(&self, id: InternedString) -> &str {
@@ -192,7 +189,7 @@ impl<'a> Compiler<'a> {
     pub fn source_to_tokens(
         &mut self,
         source_code: &str,
-        module_path: &Path,
+        module_path: &InternedPath,
     ) -> Result<FileTokens, CompileError> {
         let tokenizer_mode = match self.project_config.project_type {
             ProjectType::Repl => TokenizeMode::TemplateHead,
@@ -201,7 +198,7 @@ impl<'a> Compiler<'a> {
 
         match tokenize(source_code, module_path, tokenizer_mode, &mut self.string_table) {
             Ok(tokens) => Ok(tokens),
-            Err(e) => Err(e.with_file_path(PathBuf::from(module_path))),
+            Err(e) => Err(e.with_file_path(module_path.to_path_buf(&mut self.string_table))),
         }
     }
 
@@ -216,15 +213,17 @@ impl<'a> Compiler<'a> {
     /// - What types and shapes do those symbols have?
     /// - What imports do headers actually depend on?
     pub fn tokens_to_headers(
-        &self,
+        &mut self,
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Vec<Header>, Vec<CompileError>> {
+
         parse_headers(
             files,
             &self.host_function_registry,
             warnings,
             &self.project_config.entry_point,
+            &mut self.string_table,
         )
     }
 
@@ -237,8 +236,11 @@ impl<'a> Compiler<'a> {
     /// the types of each dependency will be known.
     /// This section answers the following question:
     /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
-    pub fn sort_headers(&self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
-        resolve_module_dependencies(headers)
+    pub fn sort_headers(&mut self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
+        resolve_module_dependencies(
+            headers,
+            &mut self.string_table,
+        )
     }
 
     /// -----------------------------
@@ -249,7 +251,7 @@ impl<'a> Compiler<'a> {
     /// The AST also provides a list of exports from the module.
     pub fn headers_to_ast(&mut self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
         // Pass string table to AST construction for string interning during AST building
-        Ast::new_with_string_table(module_tokens, &self.host_function_registry, &mut self.string_table)
+        Ast::new(module_tokens, &self.host_function_registry, &mut self.string_table)
     }
 
     /// -----------------------------

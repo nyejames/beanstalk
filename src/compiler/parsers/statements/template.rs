@@ -1,6 +1,7 @@
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 
 use std::collections::HashMap;
+use crate::compiler::string_interning::InternedString;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
@@ -100,7 +101,7 @@ pub struct Style {
     // templates that this style will unlock
     // Basically a bunch of template declarations that are captured by this template
     // TODO: Styles and template unlocks as different things? Do full templates with styles being inherited suffice if they are empty?
-    pub unlocked_templates: HashMap<String, ExpressionKind>,
+    pub unlocked_templates: HashMap<InternedString, ExpressionKind>,
 
     // If this is true, no unlocked styles will be inherited from the parent
     pub unlocks_override: bool,

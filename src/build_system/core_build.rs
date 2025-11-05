@@ -10,11 +10,13 @@ use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::string_interning::StringId;
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
 // use rayon::prelude::*;
+use crate::compiler::host_functions::registry::create_builtin_registry;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 use std::time::Instant;
 
@@ -89,15 +91,15 @@ pub fn compile_modules(
     modules: Vec<InputModule>,
     config: &Config,
     flags: &[Flag],
+    string_table: &mut StringTable,
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
 
-    // Create builtin host function registry with print and other host functions
-    let host_registry = crate::compiler::host_functions::registry::create_builtin_registry()
-        .map_err(|e| CompilerMessages {
-            errors: vec![e],
-            warnings: Vec::new(),
-        })?;
+    // Create a builtin host function registry with print and other host functions
+    let host_registry = create_builtin_registry(string_table).map_err(|e| CompilerMessages {
+        errors: vec![e],
+        warnings: Vec::new(),
+    })?;
     let mut compiler = Compiler::new(config, host_registry);
 
     // ----------------------------------
@@ -105,7 +107,12 @@ pub fn compile_modules(
     // ----------------------------------
     let tokenizer_result: Vec<Result<FileTokens, CompileError>> = modules
         .iter()
-        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
+        .map(|module| {
+            compiler.source_to_tokens(
+                &module.source_code,
+                &InternedPath::from_path_buf(&module.source_path, string_table),
+            )
+        })
         .collect();
 
     // Check for any errors first
@@ -320,7 +327,7 @@ fn get_standard_io_imports() -> Vec<ExternalImport> {
 fn extract_exported_functions(exported_declarations: &[Arg]) -> Vec<StringId> {
     exported_declarations
         .iter()
-        .map(|arg| arg.name.clone())
+        .map(|arg| arg.id.clone())
         .collect()
 }
 
@@ -329,6 +336,7 @@ pub fn compile_single_module(
     module: InputModule,
     config: &Config,
     flags: &[Flag],
+    string_table: &mut StringTable,
 ) -> Result<CompilationResult, CompilerMessages> {
-    compile_modules(vec![module], config, flags)
+    compile_modules(vec![module], config, flags, string_table)
 }

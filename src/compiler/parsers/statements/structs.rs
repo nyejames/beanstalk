@@ -6,19 +6,20 @@ use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::return_syntax_error;
 use crate::{CompileError, ast_log};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler::string_interning::InternedString;
+use crate::compiler::string_interning::{InternedString, StringTable};
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Arg>, CompileError> {
     // Should start at the FunctionParameterBracket,
     // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, context, &mut true)?;
+    let arguments = parse_parameters(token_stream, context, &mut true, string_table)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -30,6 +31,7 @@ pub fn parse_parameters(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     pure: &mut bool,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args: Vec<Arg> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -52,7 +54,7 @@ pub fn parse_parameters(
 
                 // Create a new variable
                 // TODO: This needs to be updated to use string table when available
-                let argument = new_parameter(token_stream, arg_name, &context)?;
+                let argument = new_parameter(token_stream, arg_name, &context, string_table)?;
 
                 if argument.value.ownership.is_mutable() {
                     *pure = false;
@@ -97,6 +99,7 @@ pub fn new_parameter(
     token_stream: &mut FileTokens,
     name: InternedString,
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<Arg, CompileError> {
     // Move past the name
     token_stream.advance();
@@ -172,7 +175,7 @@ pub fn new_parameter(
         | TokenKind::TypeParameterBracket => {
             ast_log!("Created new parameter of type: {}", data_type);
             return Ok(Arg {
-                name,
+                id: name,
                 value: Expression::none(),
             });
         }
@@ -193,9 +196,9 @@ pub fn new_parameter(
     let parsed_expr = match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {
             token_stream.advance();
-            create_expression(token_stream, context, &mut data_type, &ownership, true)?
+            create_expression(token_stream, context, &mut data_type, &ownership, true, string_table)?
         }
-        _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
+        _ => create_expression(token_stream, context, &mut data_type, &ownership, false, string_table)?,
     };
 
     ast_log!(
@@ -205,7 +208,7 @@ pub fn new_parameter(
     );
 
     Ok(Arg {
-        name,
+        id: name,
         value: parsed_expr,
     })
 }

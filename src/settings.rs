@@ -1,10 +1,11 @@
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::runtime::RuntimeConfig;
 use crate::{return_config_error, return_type_error};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use wasmer::sys::Target;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
@@ -81,7 +82,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             project_type: ProjectType::default(),
-            entry_point: PathBuf::from("src/main").with_extension(BEANSTALK_FILE_EXTENSION),
+            entry_point: PathBuf::from("src/main.bst"),
             src: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
@@ -147,300 +148,300 @@ impl Default for HTMLMeta {
     }
 }
 
-pub fn get_config_from_ast(
-    config_ast: Ast,
-    project_config: &mut Config,
-) -> Result<(), CompileError> {
-    // TODO: Maybe these should be compiler directives again instead of explicit exports with determined names?
-    for arg in config_ast.external_exports {
-        match arg.name.as_str() {
-            "project" => {
-                project_config.project_type = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => match value.as_str() {
-                        "" => ProjectType::default(),
-                        _ => return_type_error!(
-                            TextLocation::default(),
-                            "Project type must be a string"
-                        ),
-                    },
-                    _ => {
-                        return_type_error!(TextLocation::default(), "Project type must be a string")
-                    }
-                };
-            }
+// pub fn get_config_from_ast(
+//     config_ast: Ast,
+//     project_config: &mut Config,
+// ) -> Result<(), CompileError> {
+//     // TODO: Maybe these should be compiler directives again instead of explicit exports with determined names?
+//     for arg in config_ast.external_exports {
+//         match arg.name.as_str() {
+//             "project" => {
+//                 project_config.project_type = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => match value.as_str() {
+//                         "" => ProjectType::default(),
+//                         _ => return_type_error!(
+//                             TextLocation::default(),
+//                             "Project type must be a string"
+//                         ),
+//                     },
+//                     _ => {
+//                         return_type_error!(TextLocation::default(), "Project type must be a string")
+//                     }
+//                 };
+//             }
 
-            "runtime_backend" => {
-                project_config.runtime = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => match value.as_str() {
-                        "web" => RuntimeConfig::for_html_release(),
-                        "" => {
-                            // Default backend for the project type
-                            RuntimeConfig::for_native_release()
-                        }
-                        _ => {
-                            return_config_error!(
-                                TextLocation::default(),
-                                "Runtime backend must be a string"
-                            )
-                        }
-                    },
-                    _ => {
-                        return_type_error!(
-                            TextLocation::default(),
-                            "Runtime backend must be a string"
-                        )
-                    }
-                };
-            }
+//             "runtime_backend" => {
+//                 project_config.runtime = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => match value.as_str() {
+//                         "web" => RuntimeConfig::for_html_release(),
+//                         "" => {
+//                             // Default backend for the project type
+//                             RuntimeConfig::for_native_release()
+//                         }
+//                         _ => {
+//                             return_config_error!(
+//                                 TextLocation::default(),
+//                                 "Runtime backend must be a string"
+//                             )
+//                         }
+//                     },
+//                     _ => {
+//                         return_type_error!(
+//                             TextLocation::default(),
+//                             "Runtime backend must be a string"
+//                         )
+//                     }
+//                 };
+//             }
 
-            "entry_point" => {
-                project_config.entry_point = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
-                    _ => {
-                        return_type_error!(TextLocation::default(), "Entry point must be a string")
-                    }
-                };
-            }
+//             "entry_point" => {
+//                 project_config.entry_point = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
+//                     _ => {
+//                         return_type_error!(TextLocation::default(), "Entry point must be a string")
+//                     }
+//                 };
+//             }
 
-            "src" => {
-                project_config.src = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
-                    _ => return_type_error!(
-                        TextLocation::default(),
-                        "Source folder must be a string"
-                    ),
-                };
-            }
+//             "src" => {
+//                 project_config.src = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
+//                     _ => return_type_error!(
+//                         TextLocation::default(),
+//                         "Source folder must be a string"
+//                     ),
+//                 };
+//             }
 
-            "dev" => {
-                project_config.dev_folder = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
-                    _ => return_type_error!(TextLocation::default(), "Dev folder must be a string"),
-                };
-            }
+//             "dev" => {
+//                 project_config.dev_folder = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
+//                     _ => return_type_error!(TextLocation::default(), "Dev folder must be a string"),
+//                 };
+//             }
 
-            "release" => {
-                project_config.release_folder = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => PathBuf::from(value),
-                    _ => return_type_error!(
-                        TextLocation::default(),
-                        "Release folder must be a string"
-                    ),
-                };
-            }
+//             "release" => {
+//                 project_config.release_folder = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
+//                     _ => return_type_error!(
+//                         TextLocation::default(),
+//                         "Release folder must be a string"
+//                     ),
+//                 };
+//             }
 
-            "name" => {
-                project_config.name = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => value.to_owned(),
-                    _ => {
-                        return_type_error!(TextLocation::default(), "Name must be a string")
-                    }
-                };
-            }
+//             "name" => {
+//                 project_config.name = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => value.to_owned(),
+//                     _ => {
+//                         return_type_error!(TextLocation::default(), "Name must be a string")
+//                     }
+//                 };
+//             }
 
-            "version" => {
-                project_config.version = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => value.to_owned(),
-                    _ => {
-                        return_type_error!(TextLocation::default(), "Version must be a string")
-                    }
-                };
-            }
+//             "version" => {
+//                 project_config.version = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => value.to_owned(),
+//                     _ => {
+//                         return_type_error!(TextLocation::default(), "Version must be a string")
+//                     }
+//                 };
+//             }
 
-            "author" => {
-                project_config.author = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => value.to_owned(),
-                    _ => return_type_error!(TextLocation::default(), "Author must be a string"),
-                };
-            }
+//             "author" => {
+//                 project_config.author = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => value.to_owned(),
+//                     _ => return_type_error!(TextLocation::default(), "Author must be a string"),
+//                 };
+//             }
 
-            "license" => {
-                project_config.license = match &arg.value.kind {
-                    ExpressionKind::StringSlice(value) => value.to_owned(),
-                    _ => {
-                        return_type_error!(TextLocation::default(), "License must be a string")
-                    }
-                };
-            }
+//             "license" => {
+//                 project_config.license = match &arg.value.kind {
+//                     ExpressionKind::StringSlice(value) => value.to_owned(),
+//                     _ => {
+//                         return_type_error!(TextLocation::default(), "License must be a string")
+//                     }
+//                 };
+//             }
 
-            "html_settings" => {
-                match &arg.value.kind {
-                    ExpressionKind::StructInstance(args) => {
-                        for arg in args {
-                            match arg.name.as_str() {
-                                "site_title" => {
-                                    project_config.html_meta.site_title = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Site title must be a string"
-                                        ),
-                                    };
-                                }
+//             "html_settings" => {
+//                 match &arg.value.kind {
+//                     ExpressionKind::StructInstance(args) => {
+//                         for arg in args {
+//                             match arg.name.as_str() {
+//                                 "site_title" => {
+//                                     project_config.html_meta.site_title = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Site title must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_description" => {
-                                    project_config.html_meta.page_description =
-                                        match &arg.value.kind {
-                                            ExpressionKind::StringSlice(value) => value.to_owned(),
-                                            _ => return_type_error!(
-                                                TextLocation::default(),
-                                                "Page description must be a string"
-                                            ),
-                                        };
-                                }
+//                                 "page_description" => {
+//                                     project_config.html_meta.page_description =
+//                                         match &arg.value.kind {
+//                                             ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                             _ => return_type_error!(
+//                                                 TextLocation::default(),
+//                                                 "Page description must be a string"
+//                                             ),
+//                                         };
+//                                 }
 
-                                "site_url" => {
-                                    project_config.html_meta.site_url = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Site url must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "site_url" => {
+//                                     project_config.html_meta.site_url = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Site url must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_url" => {
-                                    project_config.html_meta.page_url = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page url must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_url" => {
+//                                     project_config.html_meta.page_url = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page url must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_og_title" => {
-                                    project_config.html_meta.page_og_title = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page og title must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_og_title" => {
+//                                     project_config.html_meta.page_og_title = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page og title must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_og_description" => {
-                                    project_config.html_meta.page_og_description =
-                                        match &arg.value.kind {
-                                            ExpressionKind::StringSlice(value) => value.to_owned(),
-                                            _ => return_type_error!(
-                                                TextLocation::default(),
-                                                "Page og description must be a string"
-                                            ),
-                                        };
-                                }
+//                                 "page_og_description" => {
+//                                     project_config.html_meta.page_og_description =
+//                                         match &arg.value.kind {
+//                                             ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                             _ => return_type_error!(
+//                                                 TextLocation::default(),
+//                                                 "Page og description must be a string"
+//                                             ),
+//                                         };
+//                                 }
 
-                                "page_image_url" => {
-                                    project_config.html_meta.page_image_url = match &arg.value.kind
-                                    {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page image url must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_image_url" => {
+//                                     project_config.html_meta.page_image_url = match &arg.value.kind
+//                                     {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page image url must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_image_alt" => {
-                                    project_config.html_meta.page_image_alt = match &arg.value.kind
-                                    {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page image alt must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_image_alt" => {
+//                                     project_config.html_meta.page_image_alt = match &arg.value.kind
+//                                     {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page image alt must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_locale" => {
-                                    project_config.html_meta.page_locale = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page locale must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_locale" => {
+//                                     project_config.html_meta.page_locale = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page locale must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_type" => {
-                                    project_config.html_meta.page_type = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page type must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_type" => {
+//                                     project_config.html_meta.page_type = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page type must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "page_twitter_large_image" => {
-                                    project_config.html_meta.page_twitter_large_image =
-                                        match &arg.value.kind {
-                                            ExpressionKind::StringSlice(value) => value.to_owned(),
-                                            _ => return_type_error!(
-                                                TextLocation::default(),
-                                                "Page twitter large image must be a string"
-                                            ),
-                                        };
-                                }
+//                                 "page_twitter_large_image" => {
+//                                     project_config.html_meta.page_twitter_large_image =
+//                                         match &arg.value.kind {
+//                                             ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                             _ => return_type_error!(
+//                                                 TextLocation::default(),
+//                                                 "Page twitter large image must be a string"
+//                                             ),
+//                                         };
+//                                 }
 
-                                "page_canonical_url" => {
-                                    project_config.html_meta.page_canonical_url =
-                                        match &arg.value.kind {
-                                            ExpressionKind::StringSlice(value) => value.to_owned(),
-                                            _ => return_type_error!(
-                                                TextLocation::default(),
-                                                "Page canonical url must be a string"
-                                            ),
-                                        };
-                                }
+//                                 "page_canonical_url" => {
+//                                     project_config.html_meta.page_canonical_url =
+//                                         match &arg.value.kind {
+//                                             ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                             _ => return_type_error!(
+//                                                 TextLocation::default(),
+//                                                 "Page canonical url must be a string"
+//                                             ),
+//                                         };
+//                                 }
 
-                                "page_root_url" => {
-                                    project_config.html_meta.page_root_url = match &arg.value.kind {
-                                        ExpressionKind::StringSlice(value) => value.to_owned(),
-                                        _ => return_type_error!(
-                                            TextLocation::default(),
-                                            "Page root url must be a string"
-                                        ),
-                                    };
-                                }
+//                                 "page_root_url" => {
+//                                     project_config.html_meta.page_root_url = match &arg.value.kind {
+//                                         ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                         _ => return_type_error!(
+//                                             TextLocation::default(),
+//                                             "Page root url must be a string"
+//                                         ),
+//                                     };
+//                                 }
 
-                                "image_folder_url" => {
-                                    project_config.html_meta.image_folder_url =
-                                        match &arg.value.kind {
-                                            ExpressionKind::StringSlice(value) => value.to_owned(),
-                                            _ => return_type_error!(
-                                                TextLocation::default(),
-                                                "Image folder url must be a string"
-                                            ),
-                                        };
-                                }
+//                                 "image_folder_url" => {
+//                                     project_config.html_meta.image_folder_url =
+//                                         match &arg.value.kind {
+//                                             ExpressionKind::StringSlice(value) => value.to_owned(),
+//                                             _ => return_type_error!(
+//                                                 TextLocation::default(),
+//                                                 "Image folder url must be a string"
+//                                             ),
+//                                         };
+//                                 }
 
-                                _ => return_type_error!(
-                                    TextLocation::default(),
-                                    "Unknown HTML setting"
-                                ),
-                            }
-                        }
-                    }
+//                                 _ => return_type_error!(
+//                                     TextLocation::default(),
+//                                     "Unknown HTML setting"
+//                                 ),
+//                             }
+//                         }
+//                     }
 
-                    _ => return_type_error!(
-                        TextLocation::default(),
-                        "HTML settings must be a struct"
-                    ),
-                };
-            }
+//                     _ => return_type_error!(
+//                         TextLocation::default(),
+//                         "HTML settings must be a struct"
+//                     ),
+//                 };
+//             }
 
-            _ => {}
-        }
+//             _ => {}
+//         }
 
-        // if *is_exported {
-        //     exported_variables.push(Arg {
-        //         name: name.to_owned(),
-        //         data_type: data_type.to_owned(),
-        //         value: value.to_owned(),
-        //     });
-        // }
-    }
+//         // if *is_exported {
+//         //     exported_variables.push(Arg {
+//         //         name: name.to_owned(),
+//         //         data_type: data_type.to_owned(),
+//         //         value: value.to_owned(),
+//         //     });
+//         // }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }

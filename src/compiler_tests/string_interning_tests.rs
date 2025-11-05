@@ -1,20 +1,22 @@
+use crate::compiler::interned_path::InternedPath;
+
 #[cfg(test)]
 mod tests {
-    use crate::compiler::string_interning::{StringTable, StringId, InternedString};
+    use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 
     #[test]
     fn test_basic_interning() {
         let mut table = StringTable::new();
-        
+
         // Test basic interning
         let id1 = table.intern("hello");
         let id2 = table.intern("world");
         let id3 = table.intern("hello"); // Duplicate
-        
+
         // Same string should return same ID
         assert_eq!(id1, id3);
         assert_ne!(id1, id2);
-        
+
         // Test resolution
         assert_eq!(table.resolve(id1), "hello");
         assert_eq!(table.resolve(id2), "world");
@@ -25,12 +27,12 @@ mod tests {
     fn test_string_id_methods() {
         let mut table = StringTable::new();
         let id = table.intern("test_string");
-        
+
         // Test serialization methods
         let raw_id = id.as_u32();
         let reconstructed = StringId::from_u32(raw_id);
         assert_eq!(id, reconstructed);
-        
+
         // Test convenience methods
         assert!(id.eq_str(&table, "test_string"));
         assert!(!id.eq_str(&table, "different_string"));
@@ -40,15 +42,15 @@ mod tests {
     #[test]
     fn test_get_or_intern() {
         let mut table = StringTable::new();
-        
+
         // Test with owned String
         let owned_string = String::from("owned_test");
         let id1 = table.get_or_intern(owned_string);
-        
+
         // Test duplicate with owned String
         let duplicate_string = String::from("owned_test");
         let id2 = table.get_or_intern(duplicate_string);
-        
+
         assert_eq!(id1, id2);
         assert_eq!(table.resolve(id1), "owned_test");
     }
@@ -56,24 +58,24 @@ mod tests {
     #[test]
     fn test_memory_efficiency() {
         let mut table = StringTable::new();
-        
+
         // Intern the same string multiple times
         let test_string = "repeated_identifier";
         let mut ids = Vec::new();
-        
+
         for _ in 0..100 {
             ids.push(table.intern(test_string));
         }
-        
+
         // All IDs should be the same
         let first_id = ids[0];
         for id in &ids {
             assert_eq!(*id, first_id);
         }
-        
+
         // Should only have one unique string
         assert_eq!(table.len(), 1);
-        
+
         // Check statistics
         let stats = table.stats();
         assert_eq!(stats.unique_strings, 1);
@@ -86,10 +88,10 @@ mod tests {
     fn test_try_resolve() {
         let mut table = StringTable::new();
         let id = table.intern("valid_string");
-        
+
         // Valid ID should resolve
         assert_eq!(table.try_resolve(id), Some("valid_string"));
-        
+
         // Invalid ID should return None
         let invalid_id = StringId::from_u32(999);
         assert_eq!(table.try_resolve(invalid_id), None);
@@ -98,13 +100,13 @@ mod tests {
     #[test]
     fn test_get_existing() {
         let mut table = StringTable::new();
-        
+
         // String not yet interned
         assert_eq!(table.get_existing("not_interned"), None);
-        
+
         // Intern a string
         let id = table.intern("interned_string");
-        
+
         // Should now find it
         assert_eq!(table.get_existing("interned_string"), Some(id));
         assert_eq!(table.get_existing("still_not_interned"), None);
@@ -113,16 +115,16 @@ mod tests {
     #[test]
     fn test_memory_usage_stats() {
         let mut table = StringTable::new();
-        
+
         // Start with empty table
         let initial_stats = table.memory_usage();
         assert_eq!(initial_stats.unique_strings, 0);
-        
+
         // Add some strings
         table.intern("short");
         table.intern("a_much_longer_string_for_testing");
         table.intern("medium_length");
-        
+
         let final_stats = table.memory_usage();
         assert_eq!(final_stats.unique_strings, 3);
         assert!(final_stats.total_bytes > initial_stats.total_bytes);
@@ -132,15 +134,15 @@ mod tests {
     #[test]
     fn test_empty_and_special_strings() {
         let mut table = StringTable::new();
-        
+
         // Test empty string
         let empty_id = table.intern("");
         assert_eq!(table.resolve(empty_id), "");
-        
+
         // Test Unicode string
         let unicode_id = table.intern("Hello, 世界! 🦀");
         assert_eq!(table.resolve(unicode_id), "Hello, 世界! 🦀");
-        
+
         // Test very long string
         let long_string = "a".repeat(1000);
         let long_id = table.intern(&long_string);
@@ -158,25 +160,25 @@ mod tests {
     #[cfg(debug_assertions)]
     fn test_debug_features() {
         let mut table = StringTable::new();
-        
+
         // Intern some strings
         let id1 = table.intern("debug_test_1");
         let id2 = table.intern("debug_test_2");
         table.intern("debug_test_1"); // Duplicate for debug info
-        
+
         // Test debug info
         let debug_info = table.debug_info(id1);
         assert!(debug_info.is_some());
         if let Some(info) = debug_info {
             assert_eq!(info.intern_count, 2); // Original + duplicate
         }
-        
+
         // Test string dumping
         let dumped = table.dump_strings();
         assert_eq!(dumped.len(), 2);
         assert!(dumped.iter().any(|(_, s)| *s == "debug_test_1"));
         assert!(dumped.iter().any(|(_, s)| *s == "debug_test_2"));
-        
+
         // Test most frequent strings
         let frequent = table.most_frequent_strings(5);
         assert!(!frequent.is_empty());
@@ -187,32 +189,32 @@ mod tests {
 
     #[test]
     fn test_compiler_string_table_integration() {
+        use crate::Compiler;
         use crate::compiler::host_functions::registry::HostFunctionRegistry;
         use crate::settings::Config;
-        use crate::Compiler;
-        
+
         let config = Config::default();
         let host_registry = HostFunctionRegistry::new();
         let mut compiler = Compiler::new(&config, host_registry);
-        
+
         // Test string interning through compiler
         let id1 = compiler.intern_string("test_identifier");
         let id2 = compiler.intern_string("another_string");
         let id3 = compiler.intern_string("test_identifier"); // Duplicate
-        
+
         // Same string should return same ID
         assert_eq!(id1, id3);
         assert_ne!(id1, id2);
-        
+
         // Test string resolution through compiler
         assert_eq!(compiler.resolve_string(id1), "test_identifier");
         assert_eq!(compiler.resolve_string(id2), "another_string");
         assert_eq!(compiler.resolve_string(id3), "test_identifier");
-        
+
         // Test access to string table
         let string_table = compiler.string_table();
         assert_eq!(string_table.len(), 2); // Two unique strings
-        
+
         let stats = string_table.stats();
         assert_eq!(stats.unique_strings, 2);
         assert_eq!(stats.total_intern_calls, 3);
@@ -221,94 +223,25 @@ mod tests {
 
     #[test]
     fn test_compiler_string_table_lifetime() {
+        use crate::Compiler;
         use crate::compiler::host_functions::registry::HostFunctionRegistry;
         use crate::settings::Config;
-        use crate::Compiler;
-        
+
         let config = Config::default();
         let host_registry = HostFunctionRegistry::new();
         let mut compiler = Compiler::new(&config, host_registry);
-        
+
         // Intern strings and store IDs
         let ids: Vec<_> = (0..10)
             .map(|i| compiler.intern_string(&format!("string_{}", i)))
             .collect();
-        
+
         // All IDs should remain valid throughout compiler lifetime
         for (i, &id) in ids.iter().enumerate() {
             assert_eq!(compiler.resolve_string(id), format!("string_{}", i));
         }
-        
+
         // String table should persist all strings
         assert_eq!(compiler.string_table().len(), 10);
-    }}
-    #[test]
-    fn test_tokenizer_string_interning() {
-        use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
-        use crate::compiler::parsers::tokenizer::tokens::{TokenizeMode, TokenKind};
-        use crate::compiler::string_interning::StringTable;
-        use std::path::Path;
-        
-        let mut string_table = StringTable::new();
-        let source_code = r#"
-            variable_name = "hello world"
-            another_var = "hello world"
-            function_name()
-        "#;
-        
-        let tokens = tokenize(
-            source_code, 
-            Path::new("test.bst"), 
-            TokenizeMode::Normal, 
-            &mut string_table
-        ).expect("Tokenization should succeed");
-        
-        // Find the string literal tokens
-        let mut string_literal_ids = Vec::new();
-        let mut symbol_ids = Vec::new();
-        
-        for token in &tokens.tokens {
-            match &token.kind {
-                TokenKind::StringSliceLiteral(id) => string_literal_ids.push(*id),
-                TokenKind::Symbol(id) => symbol_ids.push(*id),
-                _ => {}
-            }
-        }
-        
-        // Should have found some tokens
-        assert!(!string_literal_ids.is_empty(), "Should have found string literals");
-        assert!(!symbol_ids.is_empty(), "Should have found symbols");
-        
-        // The two "hello world" strings should have the same ID (interned)
-        if string_literal_ids.len() >= 2 {
-            // Find the "hello world" strings
-            let hello_world_ids: Vec<_> = string_literal_ids.iter()
-                .filter(|&&id| string_table.resolve(id) == "hello world")
-                .collect();
-            
-            if hello_world_ids.len() >= 2 {
-                assert_eq!(hello_world_ids[0], hello_world_ids[1], 
-                    "Duplicate string literals should have the same interned ID");
-            }
-        }
-        
-        // Verify that strings can be resolved back
-        for &id in &string_literal_ids {
-            let resolved = string_table.resolve(id);
-            assert!(!resolved.is_empty() || resolved == "", "String should resolve to valid content");
-        }
-        
-        for &id in &symbol_ids {
-            let resolved = string_table.resolve(id);
-            assert!(!resolved.is_empty(), "Symbol should resolve to non-empty string");
-        }
-        
-        // Check that string table has the expected strings
-        let stats = string_table.stats();
-        assert!(stats.unique_strings > 0, "Should have interned some strings");
-        
-        // If we had duplicates, should have cache hits
-        if stats.total_intern_calls > stats.unique_strings {
-            assert!(stats.cache_hits > 0, "Should have cache hits for duplicate strings");
-        }
     }
+}

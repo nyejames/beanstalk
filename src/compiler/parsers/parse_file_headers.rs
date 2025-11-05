@@ -1,14 +1,16 @@
+use crate::ast_log;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::statements::imports::parse_import;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
-use crate::{ast_log, return_rule_error, timer_log};
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use crate::compiler::string_interning::{StringId, StringTable};
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 // Each header is one of these categories:
 // - Functions
@@ -36,13 +38,12 @@ pub enum HeaderKind {
 
 #[derive(Clone, Debug)]
 pub struct Header {
-    pub path: PathBuf,
-    pub name: String,
+    pub path: InternedPath, // The last part of the path is the name of the header
     pub kind: HeaderKind,
     pub exported: bool,
     // Which headers should be parsed before this one?
     // And what does this header name this import? (last part of the path)
-    pub dependencies: HashSet<String>,
+    pub dependencies: HashSet<InternedPath>,
     pub name_location: TextLocation,
 }
 
@@ -53,15 +54,21 @@ pub fn parse_headers(
     host_registry: &HostFunctionRegistry,
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Header>, Vec<CompileError>> {
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompileError> = Vec::new();
 
     for mut file in tokenized_files {
-        let is_entry_file = file.src_path == *entry_file_path;
+        let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
 
-        let headers_from_file =
-            parse_headers_in_file(&mut file, host_registry, warnings, is_entry_file);
+        let headers_from_file = parse_headers_in_file(
+            &mut file,
+            host_registry,
+            warnings,
+            is_entry_file,
+            string_table,
+        );
 
         match headers_from_file {
             Ok(file_headers) => {
@@ -109,17 +116,19 @@ pub fn parse_headers_in_file(
     host_function_registry: &HostFunctionRegistry,
     warnings: &mut Vec<CompilerWarning>,
     is_entry_file: bool,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Header>, CompileError> {
     let mut headers = Vec::new();
-    let mut encountered_symbols = HashSet::new();
+    let mut encountered_symbols: HashSet<StringId> = HashSet::new();
     let mut next_statement_exported = false;
     let mut main_function_body = Vec::new();
+    let mut main_function_dependencies: HashSet<InternedPath> = HashSet::new();
 
     // We parse and track imports as we go,
     // so we can check if the headers depend on those imports.
-    // The string is the symbol for the header (This is namespaced to its original file)
+    // The StringId is the symbol for the header (This is namespaced to its original file)
     // The path is the file it's from.
-    let mut header_imports: HashSet<String> = HashSet::new();
+    let mut file_imports: HashMap<StringId, InternedPath> = HashMap::new();
 
     loop {
         let current_token = token_stream.current_token();
@@ -129,30 +138,35 @@ pub fn parse_headers_in_file(
 
         match current_token.kind.to_owned() {
             // New Function, Struct, Choice, or Variable declaration
-            TokenKind::Symbol(name) => {
+            TokenKind::Symbol(name_id) => {
+                // No need to resolve the name since we use StringId directly
+
                 // If this is also not a host registry function,
                 // Then it's a new symbol and should be parsed as a header
-                if host_function_registry.get_function(&name).is_none()
-                    && encountered_symbols.get(&name).is_none()
+                if host_function_registry.get_function(&name_id).is_none()
+                    && encountered_symbols.get(&name_id).is_none()
                 {
                     // Every time we encounter a new symbol,
                     // we check if it fits into one of the Header categories.
                     // If not, it goes into the implicit main function.
                     let header = create_header(
-                        name.to_owned(),
-                        token_stream.src_path.to_owned(),
+                        token_stream.src_path.join_id(name_id),
                         next_statement_exported,
                         token_stream,
                         current_location,
                         // Since this is a new scope,
                         // We don't want to add any imports from the header's scope to the global imports.
-                        &header_imports,
+                        &file_imports,
                         &host_function_registry,
+                        string_table,
                     )?;
 
                     match header.kind {
                         HeaderKind::ImplicitMain(_) => {
                             main_function_body.push(current_token);
+                            if let Some(path) = file_imports.get(&name_id) {
+                                main_function_dependencies.insert(path.to_owned());
+                            }
                         }
                         _ => {
                             headers.push(header);
@@ -160,7 +174,7 @@ pub fn parse_headers_in_file(
                     }
 
                     next_statement_exported = false;
-                    encountered_symbols.insert(name);
+                    encountered_symbols.insert(name_id);
                 } else {
                     // This is a reference, so it goes into the implicit main function
                     main_function_body.push(current_token);
@@ -177,14 +191,17 @@ pub fn parse_headers_in_file(
                 }
             }
 
-            // Parse new imports and add them to the file imports
+            // Nameless import,
+            // #import(@libraries/math/sqrt)
+            // Just uses the end of the path as the name of the header being imported.
+            // Named imports not yet supported, will need to be added through create_header.
             TokenKind::Import => {
-                let import_path = parse_import(token_stream)?;
-                header_imports.insert(import_path);
+                let (import_name, import_path) = parse_import(token_stream, string_table)?;
+                file_imports.insert(import_name, import_path);
             }
 
             TokenKind::Export => {
-                if let TokenKind::Symbol(name) = token_stream.current_token_kind() {
+                if let TokenKind::Symbol(_name) = token_stream.current_token_kind() {
                     next_statement_exported = true;
                 } else {
                     warnings.push(CompilerWarning::new(
@@ -216,11 +233,10 @@ pub fn parse_headers_in_file(
     };
 
     headers.push(Header {
-        name: String::new(), // Implicit main function doesn't have a name
         path: token_stream.src_path.to_owned(),
         kind: main_header_kind,
         exported: next_statement_exported,
-        dependencies: header_imports,
+        dependencies: main_function_dependencies,
         name_location: TextLocation::default(),
     });
 
@@ -228,19 +244,18 @@ pub fn parse_headers_in_file(
 }
 
 fn create_header(
-    name: String,
-    path: PathBuf,
+    path: InternedPath,
     exported: bool,
     token_stream: &mut FileTokens,
     name_location: TextLocation,
-    file_imports: &HashSet<String>,
+    file_imports: &HashMap<StringId, InternedPath>,
     host_registry: &HostFunctionRegistry,
+    string_table: &mut StringTable,
 ) -> Result<Header, CompileError> {
     // We only need to know what imports this header is actually using.
     // So only track symbols matching this file's imports to add to the dependencies.
-    let mut dependencies = HashSet::new();
+    let mut dependencies: HashSet<InternedPath> = HashSet::new();
     let mut kind: HeaderKind = HeaderKind::ImplicitMain(Vec::new());
-    let mut imports = file_imports.clone();
 
     // Starts at the first token after the declaration symbol
     let current_token = token_stream.current_token_kind().to_owned();
@@ -251,14 +266,14 @@ fn create_header(
         // -----------------------------
         TokenKind::TypeParameterBracket => {
             let empty_context = ScopeContext::new(
-                ContextKind::Module, 
-                path.to_owned(), 
+                ContextKind::Module,
+                path.to_owned(),
                 &[],
                 host_registry.to_owned(),
-                Vec::new()
+                Vec::new(),
             );
 
-            let signature = FunctionSignature::new(token_stream, &empty_context)?;
+            let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
 
             let mut scopes_opened = 1;
             let mut scopes_closed = 0;
@@ -278,9 +293,9 @@ fn create_header(
                         scopes_opened += 1;
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
-                    TokenKind::Symbol(name) => {
-                        if imports.contains(name) {
-                            dependencies.insert(name.to_owned());
+                    TokenKind::Symbol(name_id) => {
+                        if let Some(path) = file_imports.get(name_id) {
+                            dependencies.insert(path.to_owned());
                         }
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
@@ -307,7 +322,6 @@ fn create_header(
     }
 
     Ok(Header {
-        name,
         path,
         kind,
         exported,

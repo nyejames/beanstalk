@@ -220,7 +220,7 @@ fn transform_ast_node_to_wir(
     match &node.kind {
         NodeKind::VariableDeclaration(arg) => {
             // Create a place for the variable
-            let var_place = context.create_place_for_variable(arg.name.clone())?;
+            let var_place = context.create_place_for_variable(arg.id.clone())?;
 
             // For now, create a simple assignment
             // This is a minimal implementation - full expression handling will be added later
@@ -408,7 +408,7 @@ fn create_wir_function_from_ast(
     for (param_index, param) in signature.parameters.iter().enumerate() {
         // Create a place for each parameter
         let param_place = context.create_place_for_parameter(
-            param.name.clone(),
+            param.id.clone(),
             param_index as u32,
             &param.value.data_type,
         )?;

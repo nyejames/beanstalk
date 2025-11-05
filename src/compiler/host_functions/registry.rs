@@ -4,6 +4,7 @@ use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
 use wasm_encoder::ValType;
@@ -42,7 +43,7 @@ pub enum ErrorHandling {
 // Update: Doing this changed nothing, there is still an issue with multithreading.
 #[derive(Debug, Clone)]
 pub struct BasicParameter {
-    pub(crate) name: String,
+    pub(crate) name: InternedString,
     pub(crate) data_type: DataType,
     pub(crate) ownership: Ownership,
 }
@@ -120,17 +121,17 @@ impl JsFunctionDef {
 #[derive(Debug, Clone)]
 pub struct HostFunctionDef {
     /// Function name as used in Beanstalk code
-    pub name: String,
+    pub name: InternedString,
     /// Function parameters using the same Arg structure as regular functions
     pub parameters: Vec<BasicParameter>,
     /// Return types using the same system as regular functions
     pub return_types: Vec<DataType>,
     /// WASM import module name (e.g., "beanstalk_io")
-    pub module: String,
+    pub module: InternedString,
     /// WASM import function name (e.g., "print")
-    pub import_name: String,
+    pub import_name: InternedString,
     /// Human-readable description for documentation
-    pub description: String,
+    pub description: InternedString,
     /// Error handling strategy
     pub error_handling: ErrorHandling,
 }
@@ -144,14 +145,15 @@ impl HostFunctionDef {
         module: &str,
         import_name: &str,
         description: &str,
+        string_table: &mut StringTable,
     ) -> Self {
         HostFunctionDef {
-            name: name.to_string(),
+            name: string_table.intern(name),
             parameters,
             return_types,
-            module: module.to_string(),
-            import_name: import_name.to_string(),
-            description: description.to_string(),
+            module: string_table.intern(module),
+            import_name: string_table.intern(import_name),
+            description: string_table.intern(description),
             error_handling: ErrorHandling::None, // Default to no error handling
         }
     }
@@ -164,31 +166,32 @@ impl HostFunctionDef {
         module: &str,
         import_name: &str,
         description: &str,
+        string_table: &mut StringTable,
     ) -> Self {
         HostFunctionDef {
-            name: name.to_string(),
+            name: string_table.intern(name),
             parameters,
             return_types,
-            module: module.to_string(),
-            import_name: import_name.to_string(),
-            description: description.to_string(),
+            module: string_table.intern(module),
+            import_name: string_table.intern(import_name),
+            description: string_table.intern(description),
             error_handling: ErrorHandling::ReturnsError,
         }
     }
 
     /// Get the function signature as a DataType::Function for compatibility
-    pub fn as_function_type(&self) -> DataType {
-        DataType::Function(self.params_to_signature())
+    pub fn as_function_type(&self, string_table: &mut StringTable) -> DataType {
+        DataType::Function(self.params_to_signature(string_table))
     }
 
-    pub fn params_to_signature(&self) -> FunctionSignature {
+    pub fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {
         // Convert return_types Vec<DataType> to Vec<Arg>
         let return_args: Vec<Arg> = self
             .return_types
             .iter()
             .enumerate()
             .map(|(i, data_type)| Arg {
-                name: format!("return_{}", i),
+                id: string_table.get_or_intern(i.to_string()),
                 value: Expression::new(
                     ExpressionKind::None,
                     TextLocation::default(),
@@ -203,7 +206,7 @@ impl HostFunctionDef {
             .parameters
             .iter()
             .map(|param| Arg {
-                name: param.name.to_owned(),
+                id: param.name,
                 value: Expression::new(
                     ExpressionKind::None,
                     TextLocation::default(),
@@ -224,11 +227,11 @@ impl HostFunctionDef {
 #[derive(Clone)]
 pub struct HostFunctionRegistry {
     /// Map from function name to function definition
-    functions: HashMap<String, HostFunctionDef>,
+    functions: HashMap<InternedString, HostFunctionDef>,
     /// Map from Beanstalk function name to WASIX function definition
-    wasix_mappings: HashMap<String, WasixFunctionDef>,
+    wasix_mappings: HashMap<InternedString, WasixFunctionDef>,
     /// Map from Beanstalk function name to JavaScript function definition
-    js_mappings: HashMap<String, JsFunctionDef>,
+    js_mappings: HashMap<InternedString, JsFunctionDef>,
     /// Current runtime backend
     current_backend: RuntimeBackend,
 }
@@ -255,23 +258,27 @@ impl HostFunctionRegistry {
     }
 
     /// Get a host function definition by name
-    pub fn get_function(&self, name: &str) -> Option<&HostFunctionDef> {
-        self.functions.get(name)
+    pub fn get_function(&self, id: &InternedString) -> Option<&HostFunctionDef> {
+        self.functions.get(id)
     }
 
     /// Register a new host function
-    pub fn register_function(&mut self, function: HostFunctionDef) -> Result<(), CompileError> {
+    pub fn register_function(
+        &mut self,
+        function: HostFunctionDef,
+        string_table: &StringTable,
+    ) -> Result<(), CompileError> {
         // Validate the function definition first
-        validate_host_function_def(&function)?;
+        validate_host_function_def(&function, string_table)?;
 
         if self.functions.contains_key(&function.name) {
             return_compiler_error!(
                 "Host function '{}' is already registered. This is a compiler bug - duplicate function registration.",
-                function.name
+                string_table.resolve(function.name)
             );
         }
 
-        self.functions.insert(function.name.clone(), function);
+        self.functions.insert(function.name, function);
         Ok(())
     }
 
@@ -281,18 +288,19 @@ impl HostFunctionRegistry {
         function: HostFunctionDef,
         wasix_mapping: Option<WasixFunctionDef>,
         js_mapping: Option<JsFunctionDef>,
+        string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Register the core function first
-        self.register_function(function.clone())?;
+        self.register_function(function.clone(), string_table)?;
 
         // Register WASIX mapping if provided
         if let Some(wasix_func) = wasix_mapping {
-            self.register_wasix_mapping(&function.name, wasix_func)?;
+            self.register_wasix_mapping(function.name, wasix_func, string_table)?;
         }
 
         // Register JavaScript mapping if provided
         if let Some(js_func) = js_mapping {
-            self.register_js_mapping(&function.name, js_func)?;
+            self.register_js_mapping(function.name, js_func, string_table)?;
         }
 
         Ok(())
@@ -304,7 +312,7 @@ impl HostFunctionRegistry {
     }
 
     /// Check if a function is registered
-    pub fn has_function(&self, name: &str) -> bool {
+    pub fn has_function(&self, name: &InternedString) -> bool {
         self.functions.contains_key(name)
     }
 
@@ -324,59 +332,62 @@ impl HostFunctionRegistry {
     }
 
     /// Get a WASIX function mapping by Beanstalk function name
-    pub fn get_wasix_mapping(&self, beanstalk_name: &str) -> Option<&WasixFunctionDef> {
+    pub fn get_wasix_mapping(&self, beanstalk_name: &InternedString) -> Option<&WasixFunctionDef> {
         self.wasix_mappings.get(beanstalk_name)
     }
 
     /// Get a JavaScript function mapping by Beanstalk function name
-    pub fn get_js_mapping(&self, beanstalk_name: &str) -> Option<&JsFunctionDef> {
+    pub fn get_js_mapping(&self, beanstalk_name: &InternedString) -> Option<&JsFunctionDef> {
         self.js_mappings.get(beanstalk_name)
     }
 
     /// Register a WASIX mapping for a Beanstalk function
     pub fn register_wasix_mapping(
         &mut self,
-        beanstalk_name: &str,
+        beanstalk_name: InternedString,
         wasix_function: WasixFunctionDef,
+        string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Validate the WASIX function definition
         validate_wasix_function_def(&wasix_function)?;
 
-        if self.wasix_mappings.contains_key(beanstalk_name) {
+        if self.wasix_mappings.contains_key(&beanstalk_name) {
             return_compiler_error!(
                 "WASIX mapping for function '{}' is already registered. This is a compiler bug - duplicate mapping registration.",
-                beanstalk_name
+                string_table.resolve(beanstalk_name)
             );
         }
 
-        self.wasix_mappings
-            .insert(beanstalk_name.to_string(), wasix_function);
+        self.wasix_mappings.insert(beanstalk_name, wasix_function);
         Ok(())
     }
 
     /// Register a JavaScript mapping for a Beanstalk function
     pub fn register_js_mapping(
         &mut self,
-        beanstalk_name: &str,
+        beanstalk_name: InternedString,
         js_function: JsFunctionDef,
+        string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Validate the JavaScript function definition
         validate_js_function_def(&js_function)?;
 
-        if self.js_mappings.contains_key(beanstalk_name) {
+        if self.js_mappings.contains_key(&beanstalk_name) {
             return_compiler_error!(
                 "JavaScript mapping for function '{}' is already registered. This is a compiler bug - duplicate mapping registration.",
-                beanstalk_name
+                string_table.resolve(beanstalk_name)
             );
         }
 
-        self.js_mappings
-            .insert(beanstalk_name.to_string(), js_function);
+        self.js_mappings.insert(beanstalk_name, js_function);
         Ok(())
     }
 
     /// Get runtime-specific function mapping based on current backend
-    pub fn get_runtime_mapping<'a>(&'a self, beanstalk_name: &str) -> Option<RuntimeFunctionMapping<'a>> {
+    pub fn get_runtime_mapping<'a>(
+        &'a self,
+        beanstalk_name: &InternedString,
+    ) -> Option<RuntimeFunctionMapping<'a>> {
         match self.current_backend {
             RuntimeBackend::Wasix => self
                 .get_wasix_mapping(beanstalk_name)
@@ -391,7 +402,7 @@ impl HostFunctionRegistry {
     }
 
     /// Check if a function has a mapping for the current backend
-    pub fn has_runtime_mapping(&self, beanstalk_name: &str) -> bool {
+    pub fn has_runtime_mapping(&self, beanstalk_name: &InternedString) -> bool {
         match self.current_backend {
             RuntimeBackend::Wasix => self.wasix_mappings.contains_key(beanstalk_name),
             RuntimeBackend::JavaScript => self.js_mappings.contains_key(beanstalk_name),
@@ -400,12 +411,12 @@ impl HostFunctionRegistry {
     }
 
     /// List all WASIX mappings
-    pub fn list_wasix_mappings(&self) -> Vec<(&String, &WasixFunctionDef)> {
+    pub fn list_wasix_mappings(&self) -> Vec<(&InternedString, &WasixFunctionDef)> {
         self.wasix_mappings.iter().collect()
     }
 
     /// List all JavaScript mappings
-    pub fn list_js_mappings(&self) -> Vec<(&String, &JsFunctionDef)> {
+    pub fn list_js_mappings(&self) -> Vec<(&InternedString, &JsFunctionDef)> {
         self.js_mappings.iter().collect()
     }
 
@@ -438,14 +449,17 @@ impl Default for HostFunctionRegistry {
 }
 
 /// Create a registry populated with built-in host functions for a specific backend
-pub fn create_builtin_registry_with_backend(backend: RuntimeBackend) -> Result<HostFunctionRegistry, CompileError> {
+pub fn create_builtin_registry_with_backend(
+    backend: RuntimeBackend,
+    string_table: &mut StringTable,
+) -> Result<HostFunctionRegistry, CompileError> {
     let mut registry = HostFunctionRegistry::new_with_backend(backend);
 
     // Register the template_output function with all runtime mappings
     let template_output_function = HostFunctionDef::new(
         "template_output",
         vec![BasicParameter {
-            name: "content".to_string(),
+            name: string_table.intern("content"),
             data_type: DataType::Template, // Accept Template (mutable string)
             ownership: Ownership::MutableOwned,
         }],
@@ -453,6 +467,7 @@ pub fn create_builtin_registry_with_backend(backend: RuntimeBackend) -> Result<H
         "beanstalk_io",
         "template_output",
         "Output a template string to the host-defined output mechanism",
+        string_table,
     );
 
     // WASIX fd_write signature: (fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
@@ -460,7 +475,7 @@ pub fn create_builtin_registry_with_backend(backend: RuntimeBackend) -> Result<H
         "wasix_32v1",
         "fd_write",
         vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32], // fd, iovs, iovs_len, nwritten
-        vec![ValType::I32], // errno result
+        vec![ValType::I32],                                           // errno result
         "Write template output to stdout using WASIX fd_write",
     );
 
@@ -468,7 +483,7 @@ pub fn create_builtin_registry_with_backend(backend: RuntimeBackend) -> Result<H
         "beanstalk_io",
         "template_output",
         vec![ValType::I32, ValType::I32], // ptr, len for string data
-        vec![], // No return value
+        vec![],                           // No return value
         "Output template to console using JavaScript console.log",
     );
 
@@ -477,24 +492,30 @@ pub fn create_builtin_registry_with_backend(backend: RuntimeBackend) -> Result<H
         template_output_function,
         Some(template_output_wasix_mapping),
         Some(template_output_js_mapping),
+        string_table,
     )?;
 
     // Validate all registered functions
-    validate_registry(&registry)?;
+    validate_registry(&registry, string_table)?;
 
     Ok(registry)
 }
 
 /// Create a registry populated with built-in host functions (uses default WASIX backend)
-pub fn create_builtin_registry() -> Result<HostFunctionRegistry, CompileError> {
-    create_builtin_registry_with_backend(RuntimeBackend::default())
+pub fn create_builtin_registry(
+    string_table: &mut StringTable,
+) -> Result<HostFunctionRegistry, CompileError> {
+    create_builtin_registry_with_backend(RuntimeBackend::default(), string_table)
 }
 
 /// Validate that all host function definitions in the registry are correct
-fn validate_registry(registry: &HostFunctionRegistry) -> Result<(), CompileError> {
+fn validate_registry(
+    registry: &HostFunctionRegistry,
+    string_table: &StringTable,
+) -> Result<(), CompileError> {
     // Validate core host functions
     for function in registry.list_functions() {
-        validate_host_function_def(function)?;
+        validate_host_function_def(function, string_table)?;
     }
 
     // Validate WASIX mappings
@@ -529,7 +550,11 @@ fn validate_wasix_function_def(function: &WasixFunctionDef) -> Result<(), Compil
 
     // Validate module name is a standard WASIX module
     match function.module.as_str() {
-        "wasix_32v1" | "wasix_64v1" | "wasix_snapshot_preview1" | "wasi_snapshot_preview1" | "wasi_unstable" => {
+        "wasix_32v1"
+        | "wasix_64v1"
+        | "wasix_snapshot_preview1"
+        | "wasi_snapshot_preview1"
+        | "wasi_unstable" => {
             // Valid WASIX module names
         }
         _ => {
@@ -615,50 +640,58 @@ fn validate_js_function_def(function: &JsFunctionDef) -> Result<(), CompileError
 }
 
 /// Validate a single host function definition
-fn validate_host_function_def(function: &HostFunctionDef) -> Result<(), CompileError> {
+fn validate_host_function_def(
+    function: &HostFunctionDef,
+    string_table: &StringTable,
+) -> Result<(), CompileError> {
+    let function_name = string_table.resolve(function.name);
+    let module_name = string_table.resolve(function.module);
+    let import_name = string_table.resolve(function.import_name);
+
     // Validate function name is not empty
-    if function.name.is_empty() {
+    if function_name.is_empty() {
         return_compiler_error!(
             "Host function has empty name. Function definitions must have valid names."
         );
     }
 
     // Validate module name follows WASM import conventions
-    if function.module.is_empty() {
+    if module_name.is_empty() {
         return_compiler_error!(
             "Host function '{}' has empty module name. WASM imports require valid module names.",
-            function.name
+            function_name
         );
     }
 
     // Validate import name is not empty
-    if function.import_name.is_empty() {
+    if import_name.is_empty() {
         return_compiler_error!(
             "Host function '{}' has empty import name. WASM imports require valid function names.",
-            function.name
+            function_name
         );
     }
 
     // Validate module name is one of the standard Beanstalk modules
-    match function.module.as_str() {
+    match module_name {
         "beanstalk_io" | "beanstalk_env" | "beanstalk_sys" | "wasix_32v1" => {
             // Valid module names
         }
         _ => {
             return_compiler_error!(
                 "Host function '{}' uses invalid module '{}'. Valid modules are: beanstalk_io, beanstalk_env, beanstalk_sys, wasix_32v1",
-                function.name,
-                function.module
+                function_name,
+                module_name
             );
         }
     }
 
     // Validate parameter names are not empty
     for (i, param) in function.parameters.iter().enumerate() {
-        if param.name.is_empty() {
+        let param_name = string_table.resolve(param.name);
+        if param_name.is_empty() {
             return_compiler_error!(
                 "Host function '{}' has parameter {} with empty name. All parameters must have names.",
-                function.name,
+                function_name,
                 i + 1
             );
         }

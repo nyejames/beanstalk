@@ -6,11 +6,12 @@ use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::interned_path::InternedPath;
+use crate::compiler::string_interning::{InternedString, StringId};
 
 #[derive(Debug, Clone)]
 pub struct Arg {
-    pub name: InternedString,
+    pub id: InternedString,
     pub value: Expression,
 }
 
@@ -18,7 +19,7 @@ pub struct Arg {
 pub struct AstNode {
     pub kind: NodeKind,
     pub location: TextLocation,
-    pub scope: PathBuf,
+    pub scope: InternedPath,
 }
 
 #[derive(Debug, Clone)]
@@ -136,7 +137,7 @@ impl AstNode {
                     // when updating AST construction methods
                     let placeholder_name = InternedString::from_u32(idx as u32);
                     return_types_from_expr.push(Arg {
-                        name: placeholder_name,
+                        id: placeholder_name,
                         value: Expression::int(0, location.to_owned(), Ownership::default()),
                     })
                 }

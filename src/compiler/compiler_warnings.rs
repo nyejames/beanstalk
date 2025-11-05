@@ -1,13 +1,15 @@
 use colour::yellow_ln_bold;
 use std::path::PathBuf;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::string_interning::StringTable;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {
     pub msg: String,
     pub location: TextLocation,
     pub warning_kind: WarningKind,
-    pub file_path: PathBuf,
+    pub file_path: InternedPath,
 }
 
 impl CompilerWarning {
@@ -15,7 +17,7 @@ impl CompilerWarning {
         msg: &str,
         location: TextLocation,
         warning_kind: WarningKind,
-        file_path: PathBuf,
+        file_path: InternedPath,
     ) -> CompilerWarning {
         CompilerWarning {
             msg: msg.to_owned(),
@@ -23,6 +25,33 @@ impl CompilerWarning {
             warning_kind,
             file_path,
         }
+    }
+
+    /// Create a CompilerWarning from a PathBuf (for compatibility)
+    pub fn new_from_path_buf(
+        msg: &str,
+        location: TextLocation,
+        warning_kind: WarningKind,
+        file_path: PathBuf,
+        string_table: &mut StringTable,
+    ) -> CompilerWarning {
+        let interned_path = InternedPath::from_path_buf(&file_path, string_table);
+        CompilerWarning {
+            msg: msg.to_owned(),
+            location,
+            warning_kind,
+            file_path: interned_path,
+        }
+    }
+
+    /// Get the file path as a PathBuf for display purposes
+    pub fn file_path_display(&self, string_table: &StringTable) -> PathBuf {
+        self.file_path.to_path_buf(string_table)
+    }
+
+    /// Get the file path as a string for display purposes
+    pub fn file_path_string(&self, string_table: &StringTable) -> String {
+        format!("{}", self.file_path.to_string(string_table))
     }
 }
 
@@ -40,8 +69,9 @@ pub enum WarningKind {
     PointlessExport,
 }
 
-pub fn print_formatted_warning(w: CompilerWarning) {
+pub fn print_formatted_warning(w: CompilerWarning, string_table: &StringTable) {
     yellow_ln_bold!("WARNING: ");
+    println!("File: {}", w.file_path_string(string_table));
     match w.warning_kind {
         WarningKind::UnusedVariable => {
             println!("Unused variable '{}'", w.msg);

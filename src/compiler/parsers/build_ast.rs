@@ -12,19 +12,19 @@ use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
+use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
 use crate::compiler::parsers::statements::variables::new_arg;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::traits::ContainsReferences;
-use crate::{
-    ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings, timer_log,
-};
+use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
 
 pub fn function_body_to_ast(
     token_stream: &mut FileTokens,
     mut context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
 ) -> Result<Vec<AstNode>, CompileError> {
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
@@ -42,16 +42,16 @@ pub fn function_body_to_ast(
             }
 
             // New Function or Variable declaration
-            TokenKind::Symbol(ref name) => {
+            TokenKind::Symbol(id) => {
                 // Check if this has already been declared (is a reference)
-                if let Some(arg) = context.get_reference(name) {
+                if let Some(arg) = context.get_reference(&id) {
                     // Then the associated mutation afterward.
                     // Or error if trying to mutate an immutable reference
 
                     // Move past the name
                     token_stream.advance();
 
-                    check_for_dot_access(token_stream, arg, &context, &mut ast)?;
+                    check_for_dot_access(token_stream, arg, &context, &mut ast, string_table)?;
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
@@ -67,7 +67,7 @@ pub fn function_body_to_ast(
                         | TokenKind::DivideAssign
                         | TokenKind::ExponentAssign
                         | TokenKind::RootAssign => {
-                            ast.push(handle_mutation(token_stream, arg, &context)?);
+                            ast.push(handle_mutation(token_stream, arg, &context, string_table)?);
                         }
 
                         // Type declarations after variable reference - error (shadowing not supported)
@@ -85,13 +85,13 @@ pub fn function_body_to_ast(
                                 return_syntax_error!(
                                     token_stream.current_location(),
                                     "Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.",
-                                    name
+                                    string_table.resolve(id)
                                 );
                             } else {
                                 return_rule_error!(
                                     token_stream.current_location(),
                                     "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
-                                    name
+                                    string_table.resolve(id)
                                 );
                             }
                         }
@@ -105,9 +105,10 @@ pub fn function_body_to_ast(
                             {
                                 ast.push(parse_function_call(
                                     token_stream,
-                                    name,
+                                    &id,
                                     &context,
                                     signature,
+                                    string_table,
                                 )?)
                             }
                         }
@@ -118,7 +119,7 @@ pub fn function_body_to_ast(
                                 token_stream.current_location(),
                                 "Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation",
                                 token_stream.current_token_kind(),
-                                name
+                                &id
                             );
                         }
                     }
@@ -126,21 +127,22 @@ pub fn function_body_to_ast(
                 // ----------------------------
                 //     HOST FUNCTION CALLS
                 // ----------------------------
-                } else if let Some(host_func_call) = context.host_registry.get_function(name) {
+                } else if let Some(host_func_call) = context.host_registry.get_function(&id) {
                     // Move past the name
                     token_stream.advance();
 
                     // Convert return types to Arg format
-                    let signature = host_func_call.params_to_signature();
+                    let signature = host_func_call.params_to_signature(string_table);
 
                     ast.push(parse_function_call(
                         token_stream,
-                        name,
+                        &id,
                         &context,
                         &signature,
+                        string_table,
                     )?)
                 } else {
-                    let arg = new_arg(token_stream, name, &context, warnings)?;
+                    let arg = new_arg(token_stream, id, &context, warnings, string_table)?;
 
                     // -----------------------------
                     //    NEW STRUCT DECLARATIONS
@@ -148,12 +150,9 @@ pub fn function_body_to_ast(
                     match arg.value.kind {
                         ExpressionKind::StructDefinition(ref params) => {
                             ast.push(AstNode {
-                                kind: NodeKind::StructDefinition(
-                                    name.to_owned(),
-                                    params.to_owned(),
-                                ),
+                                kind: NodeKind::StructDefinition(id, params.to_owned()),
                                 location: token_stream.current_location(),
-                                scope: context.scope_name.to_owned(),
+                                scope: context.scope.clone(),
                             });
                         }
 
@@ -162,13 +161,9 @@ pub fn function_body_to_ast(
                         // -----------------------------
                         ExpressionKind::Function(ref signature, ref body) => {
                             ast.push(AstNode {
-                                kind: NodeKind::Function(
-                                    name.to_owned(),
-                                    signature.to_owned(),
-                                    body.to_owned(),
-                                ),
+                                kind: NodeKind::Function(id, signature.to_owned(), body.to_owned()),
                                 location: token_stream.current_location(),
-                                scope: context.scope_name.to_owned(),
+                                scope: context.scope.clone(),
                             });
                         }
 
@@ -179,7 +174,7 @@ pub fn function_body_to_ast(
                             ast.push(AstNode {
                                 kind: NodeKind::VariableDeclaration(arg.to_owned()),
                                 location: token_stream.current_location(),
-                                scope: context.scope_name.to_owned(),
+                                scope: context.scope.clone(),
                             });
                         }
                     }
@@ -196,6 +191,7 @@ pub fn function_body_to_ast(
                     token_stream,
                     context.new_child_control_flow(ContextKind::Loop),
                     warnings,
+                    string_table,
                 )?);
             }
 
@@ -207,6 +203,7 @@ pub fn function_body_to_ast(
                     token_stream,
                     &mut context.new_child_control_flow(ContextKind::Branch),
                     warnings,
+                    string_table,
                 )?);
             }
 
@@ -238,7 +235,8 @@ pub fn function_body_to_ast(
 
                 token_stream.advance();
 
-                let return_values = create_multiple_expressions(token_stream, &context, false)?;
+                let return_values =
+                    create_multiple_expressions(token_stream, &context, false, string_table)?;
 
                 // if !return_value.is_pure() {
                 //     *pure = false;
@@ -247,7 +245,7 @@ pub fn function_body_to_ast(
                 ast.push(AstNode {
                     kind: NodeKind::Return(return_values),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -283,7 +281,7 @@ pub fn function_body_to_ast(
                     "You can only export functions and variables from the top level of a file",
                     token_stream.current_location(),
                     WarningKind::PointlessExport,
-                    context.scope_name.to_owned(),
+                    context.scope.clone(),
                 ));
                 token_stream.advance();
             }
@@ -292,19 +290,21 @@ pub fn function_body_to_ast(
             // This is the primary way to produce output in Beanstalk.
             // Top-level templates automatically output to a host-defined output mechanism.
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
-                let template = Template::new(token_stream, &context, None)?;
+                let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
+                let template_output_name = string_table.intern("template_output");
+                let beanstalk_io_module = string_table.intern("beanstalk_io");
                 ast.push(AstNode {
                     kind: NodeKind::HostFunctionCall(
-                        "template_output".to_owned(),
+                        template_output_name,
                         Vec::from([expr]),
                         Vec::new(),
-                        "beanstalk_io".to_owned(),
-                        "template_output".to_owned(),
+                        beanstalk_io_module,
+                        template_output_name,
                         token_stream.current_location(),
                     ),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 })
             }
 
@@ -330,9 +330,10 @@ fn check_for_dot_access(
     arg: &Arg,
     context: &ScopeContext,
     ast: &mut Vec<AstNode>,
+    string_table: &mut StringTable,
 ) -> Result<(), CompileError> {
     // Name of variable, with any accesses added to the path
-    let mut scope = context.scope_name.to_owned();
+    let mut scope = context.scope.clone();
 
     // We will need to keep pushing nodes if there are accesses after method calls
     while token_stream.current_token_kind() == &TokenKind::Dot {
@@ -342,11 +343,11 @@ fn check_for_dot_access(
         // Currently, there is no just integer access.
         // Only properties or methods are accessed on structs and collections.
         // Collections have a .get() method for accessing elements, no [] syntax.
-        if let TokenKind::Symbol(name, ..) = token_stream.current_token_kind().to_owned() {
+        if let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() {
             let members = match &arg.value.data_type {
                 DataType::Parameters(inner_args) => inner_args,
                 DataType::Function(sig) => &sig.returns,
-                _ => &get_builtin_methods(&arg.value.data_type),
+                _ => &get_builtin_methods(&arg.value.data_type, string_table),
             };
 
             // Nothing to access error
@@ -354,23 +355,23 @@ fn check_for_dot_access(
                 return_rule_error!(
                     token_stream.current_location(),
                     "'{}' has No methods or properties to access 😞",
-                    name
+                    &id
                 )
             }
 
             // No access with that name exists error
-            let access = match members.iter().find(|member| member.name == *name) {
+            let access = match members.iter().find(|member| member.id == id) {
                 Some(access) => access,
                 None => return_rule_error!(
                     token_stream.current_location(),
                     "Can't find property or method '{}' inside '{}'",
-                    name,
-                    arg.name
+                    string_table.resolve(id),
+                    string_table.resolve(arg.id)
                 ),
             };
 
             // Add the name to the scope
-            scope.push(&access.name);
+            scope.push(access.id);
 
             // Move past the name
             token_stream.advance();
@@ -381,9 +382,10 @@ fn check_for_dot_access(
             if let DataType::Function(signature) = &access.value.data_type {
                 ast.push(parse_function_call(
                     token_stream,
-                    &name,
+                    &id,
                     context,
                     signature,
+                    string_table,
                 )?)
             }
         } else {

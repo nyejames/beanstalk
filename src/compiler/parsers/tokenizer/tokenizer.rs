@@ -1,10 +1,14 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::string_interning::{StringTable, InternedString};
-use crate::{return_syntax_error, settings};
-use std::collections::HashSet;
-use std::path::Path;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode};
+use crate::compiler::parsers::tokenizer::tokens::{
+    FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
+};
+use crate::compiler::string_interning::StringTable;
+use crate::{return_syntax_error, settings, token_log};
+use colour::green_ln;
+use std::collections::HashSet;
+use std::path::PathBuf;
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -17,7 +21,7 @@ macro_rules! return_token {
 
 pub fn tokenize(
     source_code: &str,
-    src_path: &Path,
+    src_path: &InternedPath,
     mode: TokenizeMode,
     string_table: &mut StringTable,
 ) -> Result<FileTokens, CompileError> {
@@ -42,7 +46,6 @@ pub fn tokenize(
     );
 
     loop {
-        #[cfg(feature = "show_tokens")]
         token_log!(token);
 
         if token.kind == TokenKind::Eof {
@@ -295,7 +298,12 @@ pub fn get_token_kind(
                 }
 
                 // Do not add any token to the stream, call this function again
-                return get_token_kind(stream, template_nesting_level, type_declarations, string_table);
+                return get_token_kind(
+                    stream,
+                    template_nesting_level,
+                    type_declarations,
+                    string_table,
+                );
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -442,7 +450,7 @@ pub fn get_token_kind(
 
         //
         let path = tokenize_path(stream)?;
-        let interned_path = string_table.intern(&path);
+        let interned_path = InternedPath::from_path_buf(&path, string_table);
         return_token!(TokenKind::PathLiteral(interned_path), stream);
     }
 
@@ -663,7 +671,10 @@ pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
     Ok(string_value)
 }
 
-fn tokenize_string(stream: &mut TokenStream, string_table: &mut StringTable) -> Result<Token, CompileError> {
+fn tokenize_string(
+    stream: &mut TokenStream,
+    string_table: &mut StringTable,
+) -> Result<Token, CompileError> {
     let mut token_value = String::new();
 
     // Currently should be at the character that started the String
@@ -714,7 +725,7 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
 
-fn tokenize_path(stream: &mut TokenStream) -> Result<String, CompileError> {
+fn tokenize_path(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
     let mut import_path = String::new();
     let mut break_on_whitespace = true;
 
@@ -738,5 +749,5 @@ fn tokenize_path(stream: &mut TokenStream) -> Result<String, CompileError> {
         return_syntax_error!(stream.new_location(), "Import path cannot be empty")
     }
 
-    Ok(import_path)
+    Ok(PathBuf::from(import_path))
 }

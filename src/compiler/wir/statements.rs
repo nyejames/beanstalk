@@ -61,7 +61,7 @@ pub fn transform_ast_node_to_wir(
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
         NodeKind::VariableDeclaration(arg) => {
-            ast_declaration_to_wir(&arg.name, &arg.value, &node.location, context)
+            ast_declaration_to_wir(&arg.id, &arg.value, &node.location, context)
         }
         NodeKind::Mutation(name, value, is_mutable) => {
             ast_mutation_to_wir(name, value, *is_mutable, &node.location, context)
@@ -555,7 +555,7 @@ fn ast_function_definition_to_wir(
         let param_place = context
             .get_place_manager()
             .allocate_local(&arg.value.data_type);
-        context.register_variable(arg.name.clone(), param_place);
+        context.register_variable(arg.id.clone(), param_place);
     }
 
     // Transform function body

@@ -2,20 +2,20 @@ use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings;
-use std::path::PathBuf;
-
 pub struct Ast {
     pub nodes: Vec<AstNode>,
 
     // The path to the original entry point file
-    pub entry_path: PathBuf,
+    pub entry_path: InternedPath,
 
     // Exported out of the final compiled wasm module
     // Functions must use explicit 'export' syntax Token::Export to be exported
@@ -27,6 +27,7 @@ impl Ast {
     pub fn new(
         sorted_headers: Vec<Header>,
         host_registry: &HostFunctionRegistry,
+        string_table: &mut StringTable,
     ) -> Result<Ast, CompilerMessages> {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
@@ -40,8 +41,9 @@ impl Ast {
         for header in &sorted_headers {
             if let HeaderKind::Function(signature, _) = &header.kind {
                 // Create an Arg representing this function for scope registration
+                let interned_name = header.path.to_interned_string(string_table);
                 let func_arg = Arg {
-                    name: header.name.clone(),
+                    id: interned_name,
                     value: Expression {
                         kind: ExpressionKind::None,
                         data_type: DataType::Function(signature.clone()),
@@ -69,6 +71,7 @@ impl Ast {
                         &mut FileTokens::new(header.path.to_owned(), tokens),
                         context.to_owned(),
                         &mut warnings,
+                        string_table,
                     ) {
                         Ok(b) => b,
                         Err(e) => {
@@ -79,14 +82,15 @@ impl Ast {
                         }
                     };
 
+                    let interned_name = header.path.to_interned_string(string_table);
                     ast.push(AstNode {
                         kind: NodeKind::Function(
-                            header.name.to_owned(),
+                            interned_name,
                             signature.to_owned(),
                             body.to_owned(),
                         ),
                         location: header.name_location,
-                        scope: context.scope_name,
+                        scope: context.scope.clone(),
                     });
                 }
 
@@ -103,6 +107,7 @@ impl Ast {
                         &mut FileTokens::new(header.path.to_owned(), tokens),
                         context.to_owned(),
                         &mut warnings,
+                        string_table,
                     ) {
                         Ok(b) => b,
                         Err(e) => {
@@ -121,10 +126,11 @@ impl Ast {
 
                     entry_path = Some(header.path.to_owned());
 
+                    let start_name = string_table.intern("_start");
                     ast.push(AstNode {
-                        kind: NodeKind::Function("_start".to_string(), entry_signature, body),
+                        kind: NodeKind::Function(start_name, entry_signature, body),
                         location: header.name_location,
-                        scope: context.scope_name,
+                        scope: context.scope.clone(),
                     });
                 }
 
@@ -141,6 +147,7 @@ impl Ast {
                         &mut FileTokens::new(header.path.to_owned(), tokens),
                         context.to_owned(),
                         &mut warnings,
+                        string_table,
                     ) {
                         Ok(b) => b,
                         Err(e) => {
@@ -152,31 +159,25 @@ impl Ast {
                     };
 
                     // Create an implicit main function that can be called by other modules
-                    let function_name = format!(
-                        "_implicit_main_{}",
-                        header
-                            .path
-                            .file_stem()
-                            .unwrap_or_default()
-                            .to_string_lossy()
-                    );
+                    let interned_name = header.path.to_interned_string(string_table);
                     let main_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![],
                     };
 
                     ast.push(AstNode {
-                        kind: NodeKind::Function(function_name, main_signature, body),
+                        kind: NodeKind::Function(interned_name, main_signature, body),
                         location: header.name_location,
-                        scope: context.scope_name,
+                        scope: context.scope.clone(),
                     });
                 }
 
                 HeaderKind::Struct(fields) => {
+                    let interned_name = header.path.to_interned_string(string_table);
                     ast.push(AstNode {
-                        kind: NodeKind::StructDefinition(header.name, fields),
+                        kind: NodeKind::StructDefinition(interned_name, fields),
                         location: header.name_location,
-                        scope: header.path,
+                        scope: header.path.to_owned(),
                     });
                 }
 
@@ -213,7 +214,7 @@ impl Ast {
 #[derive(Clone)]
 pub struct ScopeContext {
     pub kind: ContextKind,
-    pub scope_name: PathBuf,
+    pub scope: InternedPath,
     pub declarations: Vec<Arg>,
     pub returns: Vec<Arg>,
     pub host_registry: HostFunctionRegistry,
@@ -232,14 +233,14 @@ pub enum ContextKind {
 impl ScopeContext {
     pub fn new(
         kind: ContextKind,
-        scope: PathBuf,
+        scope: InternedPath,
         declarations: &[Arg],
         host_registry: HostFunctionRegistry,
         returns: Vec<Arg>,
     ) -> ScopeContext {
         ScopeContext {
             kind,
-            scope_name: scope,
+            scope,
             declarations: declarations.to_owned(),
             returns,
             host_registry,
@@ -254,11 +255,13 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_function(&self, name: &str, signature: FunctionSignature) -> ScopeContext {
+    pub fn new_child_function(&self, id: StringId, signature: FunctionSignature) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.returns = signature.returns.to_owned();
-        new_context.scope_name.push(name);
+
+        // Create a new scope path by joining the current scope with the function name
+        new_context.scope = self.scope.join_id(id);
 
         new_context.declarations = signature.parameters;
 
@@ -269,7 +272,6 @@ impl ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
-        new_context.scope_name.push("expression");
         new_context
     }
 
@@ -287,7 +289,7 @@ macro_rules! new_template_context {
     ($context:expr) => {
         &ScopeContext {
             kind: ContextKind::Template,
-            scope_name: $context.scope_name.to_owned(),
+            scope: $context.scope.clone(),
             declarations: $context.declarations.to_owned(),
             returns: vec![],
             host_registry: $context.host_registry.clone(),
@@ -300,15 +302,17 @@ macro_rules! new_template_context {
 /// name (for scope), args (declarations it can reference)
 #[macro_export]
 macro_rules! new_config_context {
-    ($name:expr, $args:expr, $registry:expr) => {
+    ($name:expr, $args:expr, $registry:expr, $string_table:expr) => {{
+        let mut scope = InternedPath::new();
+        scope.push_str($name, $string_table);
         ScopeContext {
             kind: ContextKind::Template,
-            scope_name: PathBuf::from($name),
+            scope,
             declarations: $args,
             returns: vec![],
             host_registry: $registry,
         }
-    };
+    }};
 }
 
 /// New Condition AstContext
@@ -316,13 +320,15 @@ macro_rules! new_config_context {
 /// name (for scope), args (declarations it can reference)
 #[macro_export]
 macro_rules! new_condition_context {
-    ($name:expr, $args:expr, $registry:expr) => {
+    ($name:expr, $args:expr, $registry:expr, $string_table:expr) => {{
+        let mut scope = InternedPath::new();
+        scope.push_str($name, $string_table);
         ScopeContext {
             kind: ContextKind::Condition,
-            scope_name: PathBuf::from($name),
+            scope,
             declarations: $args,
             returns: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
         }
-    };
+    }};
 }

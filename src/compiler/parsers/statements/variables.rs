@@ -12,21 +12,27 @@ use crate::compiler::parsers::{
     ast_nodes::{Arg, NodeKind},
     expressions::parse_expression::create_expression,
 };
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
     reference_arg: &Arg,
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<AstNode, CompileError> {
     // Move past the name
     token_stream.advance();
 
     match reference_arg.value.data_type {
         // Function Call
-        DataType::Function(ref signature) => {
-            parse_function_call(token_stream, &reference_arg.name, context, signature)
-        }
+        DataType::Function(ref signature) => parse_function_call(
+            token_stream,
+            &reference_arg.id,
+            context,
+            signature,
+            string_table,
+        ),
 
         _ => {
             let ownership = if reference_arg.value.ownership.is_mutable() {
@@ -37,13 +43,13 @@ pub fn create_reference(
 
             Ok(AstNode {
                 kind: NodeKind::Expression(Expression::reference(
-                    reference_arg.name.to_owned(),
+                    reference_arg.id,
                     reference_arg.value.data_type.clone(),
                     token_stream.current_location(),
                     ownership,
                 )),
                 location: token_stream.current_location(),
-                scope: context.scope_name.to_owned(),
+                scope: context.scope.clone(),
             })
         }
     }
@@ -54,9 +60,10 @@ pub fn create_reference(
 // [name] [optional mutability '~'] [optional type] [assignment operator '='] [value]
 pub fn new_arg(
     token_stream: &mut FileTokens,
-    name: &str,
+    id: StringId,
     context: &ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
 ) -> Result<Arg, CompileError> {
     // Move past the name
     token_stream.advance();
@@ -81,9 +88,8 @@ pub fn new_arg(
         }
 
         TokenKind::TypeParameterBracket => {
-            let func_sig = FunctionSignature::new(token_stream, &context)?;
-
-            let func_context = context.new_child_function(name, func_sig.to_owned());
+            let func_sig = FunctionSignature::new(token_stream, &context, string_table)?;
+            let func_context = context.new_child_function(id, func_sig.to_owned());
 
             // TODO: fast check for function without signature
             // let context = context.new_child_function(name, &[]);
@@ -95,11 +101,15 @@ pub fn new_arg(
             //     ),
             // });
 
-            let function_body =
-                function_body_to_ast(token_stream, func_context.to_owned(), warnings)?;
+            let function_body = function_body_to_ast(
+                token_stream,
+                func_context.to_owned(),
+                warnings,
+                string_table,
+            )?;
 
             return Ok(Arg {
-                name: name.to_owned(),
+                id: id,
                 value: Expression::function(
                     func_sig,
                     function_body,
@@ -142,9 +152,8 @@ pub fn new_arg(
         _ => {
             return_syntax_error!(
                 token_stream.current_location(),
-                "Invalid operator: {:?} after new variable declaration: '{}'. Expect a type or assignment operator.",
-                token_stream.tokens[token_stream.index].kind,
-                name
+                "Invalid operator: {:?} after new variable declaration. Expect a type or assignment operator.",
+                token_stream.tokens[token_stream.index].kind
             )
         }
     };
@@ -190,20 +199,34 @@ pub fn new_arg(
     let parsed_expr = match token_stream.current_token_kind() {
         // Check if this is a struct definition (type)
         TokenKind::TypeParameterBracket => {
-            let struct_def = create_struct_definition(token_stream, context)?;
+            let struct_def = create_struct_definition(token_stream, context, string_table)?;
             Expression::struct_definition(struct_def, token_stream.current_location(), ownership)
         }
         TokenKind::OpenParenthesis => {
             token_stream.advance();
-            create_expression(token_stream, context, &mut data_type, &ownership, true)?
+            create_expression(
+                token_stream,
+                context,
+                &mut data_type,
+                &ownership,
+                true,
+                string_table,
+            )?
         }
-        _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
+        _ => create_expression(
+            token_stream,
+            context,
+            &mut data_type,
+            &ownership,
+            false,
+            string_table,
+        )?,
     };
 
-    ast_log!("Created new variable: '{}' of type: {}", name, data_type);
+    ast_log!("Created new variable of type: {}", data_type);
 
     Ok(Arg {
-        name: name.to_owned(),
+        id: id,
         value: parsed_expr,
     })
 }

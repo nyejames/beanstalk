@@ -1,6 +1,7 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
+use crate::compiler::string_interning::{InternedString, StringTable};
 use std::fmt::Display;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
@@ -249,9 +250,9 @@ impl DataType {
         }
     }
 
-    pub fn to_arg(&self) -> Arg {
+    pub fn to_arg(&self, string_table: &mut StringTable) -> Arg {
         Arg {
-            name: String::new(),
+            id: string_table.get_or_intern(self.to_string()),
             value: Expression::new(
                 ExpressionKind::None,
                 TextLocation::default(),
@@ -260,6 +261,72 @@ impl DataType {
             ),
         }
     }
+
+    /// Display the DataType with proper string resolution for interned strings.
+    /// This method should be used instead of Display when a StringTable is available.
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        match self {
+            DataType::Reference(inner_type, ownership) => {
+                let ownership = ownership.as_string();
+                format!("{} {} Reference", inner_type.display_with_table(string_table), ownership)
+            }
+            DataType::Inferred => "Inferred".to_string(),
+            DataType::CoerceToString => "CoerceToString".to_string(),
+            DataType::Bool => "Bool".to_string(),
+            DataType::String => "String".to_string(),
+            DataType::Float => "Float".to_string(),
+            DataType::Int => "Int".to_string(),
+            DataType::Decimal => "Decimal".to_string(),
+            DataType::Collection(inner_type, _mutable) => {
+                format!("{} Collection", inner_type.display_with_table(string_table))
+            }
+            DataType::Parameters(args) => {
+                let mut arg_str = String::new();
+                for arg in args {
+                    let name = string_table.resolve(arg.id);
+                    arg_str.push_str(&format!("{}: {}, ", name, arg.value.data_type.display_with_table(string_table)));
+                }
+                format!("Parameters({})", arg_str)
+            }
+            DataType::Struct(args, ..) => {
+                let mut arg_str = String::new();
+                for arg in args {
+                    let name = string_table.resolve(arg.id);
+                    arg_str.push_str(&format!("{}: {}, ", name, arg.value.data_type.display_with_table(string_table)));
+                }
+                format!("Struct({})", arg_str)
+            }
+            DataType::Function(signature) => {
+                let mut arg_str = String::new();
+                let mut returns_string = String::new();
+                for arg in &signature.parameters {
+                    let name = string_table.resolve(arg.id);
+                    arg_str.push_str(&format!("{}: {}, ", name, arg.value.data_type.display_with_table(string_table)));
+                }
+                for return_type in &signature.returns {
+                    let name = string_table.resolve(return_type.id);
+                    returns_string.push_str(&format!("{}, ", name));
+                }
+                format!("Function({} -> {})", arg_str, returns_string)
+            }
+            DataType::Template => "Template".to_string(),
+            DataType::None => "None".to_string(),
+            DataType::True => "True".to_string(),
+            DataType::False => "False".to_string(),
+            DataType::Range => "Range".to_string(),
+            DataType::Option(inner_type) => {
+                format!("Option({})", inner_type.display_with_table(string_table))
+            }
+            DataType::Choices(inner_types) => {
+                let mut inner_types_str = String::new();
+                for inner_type in inner_types {
+                    inner_types_str.push_str(&format!("{}", inner_type.value.data_type.display_with_table(string_table)));
+                }
+                format!("Choices({})", inner_types_str)
+            }
+        }
+    }
+
 }
 
 impl PartialEq for DataType {
@@ -286,14 +353,14 @@ impl PartialEq for DataType {
                 a.len() == b.len()
                     && a.iter()
                         .zip(b.iter())
-                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+                        .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
             }
             (DataType::Struct(a, oa), DataType::Struct(b, ob)) => {
                 oa == ob
                     && a.len() == b.len()
                     && a.iter()
                         .zip(b.iter())
-                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+                        .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
             }
             (DataType::Function(signature1), DataType::Function(signature2)) => {
                 // If both functions have the same signature.returns types,
@@ -311,7 +378,7 @@ impl PartialEq for DataType {
                 a.len() == b.len()
                     && a.iter()
                         .zip(b.iter())
-                        .all(|(arg_a, arg_b)| arg_a.name == arg_b.name)
+                        .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
             }
             _ => false,
         }
@@ -320,6 +387,8 @@ impl PartialEq for DataType {
 
 impl Display for DataType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // Note: This Display implementation cannot resolve interned strings without a StringTable.
+        // For debugging with actual string content, use DataType::display_with_table() instead.
         match self {
             DataType::Reference(inner_type, ownership) => {
                 let ownership = ownership.as_string();
@@ -348,14 +417,14 @@ impl Display for DataType {
             DataType::Parameters(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
+                    arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
             DataType::Struct(args, ..) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
+                    arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
@@ -364,10 +433,10 @@ impl Display for DataType {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
                 for arg in &signature.parameters {
-                    arg_str.push_str(&format!("{}: {}, ", arg.name, arg.value.data_type));
+                    arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
                 }
                 for return_type in &signature.returns {
-                    returns_string.push_str(&format!("{}, ", return_type.name));
+                    returns_string.push_str(&format!("{}, ", return_type.id));
                 }
 
                 write!(f, "Function({arg_str} -> {returns_string})")

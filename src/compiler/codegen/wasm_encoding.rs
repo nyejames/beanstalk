@@ -1679,7 +1679,7 @@ impl WasmModule {
         for (i, return_arg) in wir_function.return_args.iter().enumerate() {
             return_info.push(ReturnParameterInfo {
                 index: i,
-                name: return_arg.name.clone(),
+                name: return_arg.id.clone(),
                 data_type: return_arg.value.data_type.clone(),
                 is_reference: self.is_datatype_reference(&return_arg.value.data_type),
             });

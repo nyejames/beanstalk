@@ -2,7 +2,7 @@ use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
-use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, get_config_from_ast};
+use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{Flag, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
 use std::fs;
@@ -53,8 +53,8 @@ pub fn build_project_files(
 ) -> Result<Project, CompilerMessages> {
     let _time = Instant::now();
 
-    let entry_dir = match std::env::current_dir() {
-        Ok(dir) => dir.join(entry_path),
+    let current_dir = match std::env::current_dir() {
+        Ok(dir) => dir,
         Err(e) => {
             return Err(CompilerMessages {
                 errors: vec![CompileError::file_error(
@@ -65,6 +65,8 @@ pub fn build_project_files(
             });
         }
     };
+
+    let entry_dir = current_dir.join(entry_path);
 
     // print_ln_bold!("Project Directory: ");
     // dark_yellow_ln!("{:?}", &entry_dir);

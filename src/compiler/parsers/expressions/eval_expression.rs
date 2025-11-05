@@ -1,10 +1,12 @@
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
 
 use crate::compiler::datatypes::Ownership;
+use crate::compiler::string_interning::StringTable;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
     return_compiler_error, return_syntax_error,
@@ -80,10 +82,11 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
  * - Implements defensive checks for edge cases, such as invalid or unsupported AST nodes.
  */
 pub fn evaluate_expression(
-    scope: PathBuf,
+    scope: &InternedPath,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
     ownership: &Ownership,
+    string_table: &mut StringTable,
 ) -> Result<Expression, CompileError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
@@ -188,10 +191,12 @@ pub fn evaluate_expression(
             // red_ln!("Treating this as simplified exp: {:#?}", simplified_expression);
 
             for node in simplified_expression {
-                new_string += &node.get_expr()?.as_string();
+                new_string += &node.get_expr()?.as_string(string_table);
             }
 
-            Ok(Expression::string_slice(new_string, location, ownership))
+            let new_id = string_table.intern(&new_string);
+
+            Ok(Expression::string_slice(new_id, location, ownership))
         }
 
         DataType::Inferred => {
@@ -210,7 +215,7 @@ pub fn evaluate_expression(
             eval_log!("Attempting to Fold: {:#?}", output_queue);
 
             // Evaluate all constants in the maths expression
-            let stack = constant_fold(&output_queue)?;
+            let stack = constant_fold(&output_queue, string_table)?;
 
             eval_log!("Stack after folding: {:#?}", stack);
 
@@ -232,7 +237,7 @@ pub fn evaluate_expression(
             Ok(Expression::runtime(
                 stack,
                 current_type.to_owned(),
-                TextLocation::new(scope, first_node_start, last_node_end),
+                TextLocation::new(scope.to_owned(), first_node_start, last_node_end),
                 ownership,
             ))
         }
