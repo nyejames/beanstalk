@@ -3,6 +3,7 @@ use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::string_interning::{InternedString, StringTable};
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.
@@ -18,25 +19,25 @@ pub struct Expression {
 }
 
 impl Expression {
-    pub fn as_string(&self) -> String {
+    pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
-            ExpressionKind::StringSlice(string) => string.to_owned(),
+            ExpressionKind::StringSlice(interned_string) => string_table.resolve(*interned_string).to_owned(),
             ExpressionKind::Int(int) => int.to_string(),
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
-            ExpressionKind::Reference(name) => name.to_string(),
+            ExpressionKind::Reference(interned_name) => string_table.resolve(*interned_name).to_string(),
             ExpressionKind::Template(..) => String::new(),
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
                 for item in items {
-                    all_items.push_str(&item.as_string());
+                    all_items.push_str(&item.as_string(string_table));
                 }
                 all_items
             }
             ExpressionKind::StructInstance(args) | ExpressionKind::StructDefinition(args) => {
                 let mut all_items = String::new();
                 for arg in args {
-                    all_items.push_str(&arg.value.as_string());
+                    all_items.push_str(&arg.value.as_string(string_table));
                 }
                 all_items
             }
@@ -44,7 +45,7 @@ impl Expression {
             ExpressionKind::FunctionCall(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
             ExpressionKind::Range(lower, upper) => {
-                format!("{} to {}", lower.as_string(), upper.as_string())
+                format!("{} to {}", lower.as_string(string_table), upper.as_string(string_table))
             }
             ExpressionKind::None => String::new(),
         }
@@ -100,7 +101,7 @@ impl Expression {
             ownership,
         }
     }
-    pub fn string_slice(value: String, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn string_slice(value: InternedString, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::String,
             kind: ExpressionKind::StringSlice(value),
@@ -118,7 +119,7 @@ impl Expression {
     }
 
     pub fn reference(
-        name: String,
+        name: InternedString,
         data_type: DataType,
         location: TextLocation,
         ownership: Ownership,
@@ -190,7 +191,7 @@ impl Expression {
 
     // Function calls
     pub fn function_call(
-        name: String,
+        name: InternedString,
         args: Vec<Expression>,
         returns: Vec<Arg>,
         location: TextLocation,
@@ -262,7 +263,7 @@ impl Expression {
     }
 
     pub fn parameter(
-        name: String,
+        name: InternedString,
         data_type: DataType,
         location: TextLocation,
         ownership: Ownership,
@@ -287,11 +288,11 @@ pub enum ExpressionKind {
 
     Int(i64),
     Float(f64),
-    StringSlice(String),
+    StringSlice(InternedString),
     Bool(bool),
 
     // Reference to a variable by name
-    Reference(String),
+    Reference(InternedString),
 
     // Because functions can all be values
     Function(
@@ -300,7 +301,7 @@ pub enum ExpressionKind {
     ),
 
     FunctionCall(
-        String,          // Function name
+        InternedString,  // Function name
         Vec<Expression>, // Arguments
     ),
 

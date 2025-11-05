@@ -6,6 +6,10 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
+    pub(crate) mod interned_path_tests;
+    pub(crate) mod jit_runtime_tests;
+    pub(crate) mod memory_utils_tests;
+    pub(crate) mod string_interning_tests;
     pub(crate) mod test_runner;
 }
 
@@ -38,22 +42,21 @@ mod compiler {
         }
         pub(crate) mod statements {
             pub(crate) mod branching;
+            pub(crate) mod collections;
             pub(crate) mod create_template_node;
             pub(crate) mod functions;
             pub(crate) mod imports;
             pub(crate) mod loops;
             pub(crate) mod structs;
-            pub(crate) mod variables;
-            pub(crate) mod collections;
             pub(crate) mod template;
+            pub(crate) mod variables;
         }
         pub(crate) mod builtin_methods;
 
         pub(crate) mod tokenizer {
+            pub(crate) mod compiler_directives;
             pub(crate) mod tokenizer;
             pub(crate) mod tokens;
-            pub(crate) mod compiler_directives;
-
         }
     }
     pub(crate) mod optimizers {
@@ -81,6 +84,8 @@ mod compiler {
     pub(crate) mod compiler_errors;
     pub(crate) mod compiler_warnings;
     pub(crate) mod datatypes;
+    pub(crate) mod interned_path;
+    pub(crate) mod string_interning;
     pub(crate) mod traits;
 
     pub(crate) mod codegen {
@@ -100,19 +105,21 @@ use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer;
+use crate::compiler::string_interning::{StringTable, InternedString};
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 // Re-export types for the build system
+use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::parse_file_headers::{parse_headers, Header};
-pub(crate) use build::*;
-use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
+pub(crate) use build::*;
+use crate::compiler::interned_path::InternedPath;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -138,6 +145,7 @@ pub enum Flag {
 pub struct Compiler<'a> {
     project_config: &'a Config,
     host_function_registry: HostFunctionRegistry,
+    string_table: StringTable,
 }
 
 impl<'a> Compiler<'a> {
@@ -145,25 +153,52 @@ impl<'a> Compiler<'a> {
         Self {
             project_config,
             host_function_registry,
+            string_table: StringTable::new(),
         }
+    }
+
+    /// Intern a string using the compiler's string table, returning a unique identifier.
+    /// This is a convenience method that delegates to the internal string table.
+    pub fn intern_string(&mut self, s: &str) -> InternedString {
+        self.string_table.intern(s)
+    }
+
+    /// Resolve an interned string ID back to its string content.
+    /// This is a convenience method that delegates to the internal string table.
+    /// # Panics
+    /// Panics if the StringId is invalid (not created by this compiler's string table)
+    pub fn resolve_string(&self, id: InternedString) -> &str {
+        self.string_table.resolve(id)
+    }
+
+    /// Get a reference to the compiler's string table for advanced operations.
+    /// This allows access to statistics, memory usage, and other string table features.
+    pub fn string_table(&self) -> &StringTable {
+        &self.string_table
+    }
+
+    /// Get a mutable reference to the compiler's string table for advanced operations.
+    /// This allows access to interning operations and string table management.
+    pub fn string_table_mut(&mut self) -> &mut StringTable {
+        &mut self.string_table
     }
 
     /// -----------------------------
     ///          TOKENIZER
     /// -----------------------------
     pub fn source_to_tokens(
-        &self,
+        &mut self,
         source_code: &str,
-        module_path: &Path,
+        module_path: &InternedPath,
     ) -> Result<FileTokens, CompileError> {
         let tokenizer_mode = match self.project_config.project_type {
             ProjectType::Repl => TokenizeMode::TemplateHead,
             _ => TokenizeMode::Normal,
         };
 
-        match tokenize(source_code, module_path, tokenizer_mode) {
+        match tokenize(source_code, module_path, tokenizer_mode, &mut self.string_table) {
             Ok(tokens) => Ok(tokens),
-            Err(e) => Err(e.with_file_path(PathBuf::from(module_path))),
+            Err(e) => Err(e.with_file_path(module_path.to_path_buf(&mut self.string_table))),
         }
     }
 
@@ -178,11 +213,18 @@ impl<'a> Compiler<'a> {
     /// - What types and shapes do those symbols have?
     /// - What imports do headers actually depend on?
     pub fn tokens_to_headers(
-        &self,
+        &mut self,
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Vec<Header>, Vec<CompileError>> {
-        parse_headers(files, &self.host_function_registry, warnings)
+
+        parse_headers(
+            files,
+            &self.host_function_registry,
+            warnings,
+            &self.project_config.entry_point,
+            &mut self.string_table,
+        )
     }
 
     /// Every dependency needed for each file should be known before its headers are parsed.
@@ -194,8 +236,11 @@ impl<'a> Compiler<'a> {
     /// the types of each dependency will be known.
     /// This section answers the following question:
     /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
-    pub fn sort_headers(&self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
-        resolve_module_dependencies(headers)
+    pub fn sort_headers(&mut self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
+        resolve_module_dependencies(
+            headers,
+            &mut self.string_table,
+        )
     }
 
     /// -----------------------------
@@ -204,8 +249,9 @@ impl<'a> Compiler<'a> {
     /// This assumes that the vec of FileTokens contains all dependencies for each file.
     /// The headers of each file will be parsed first, then each file will be combined into one module.
     /// The AST also provides a list of exports from the module.
-    pub fn headers_to_ast(&self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
-        Ast::new(module_tokens, &self.host_function_registry)
+    pub fn headers_to_ast(&mut self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
+        // Pass string table to AST construction for string interning during AST building
+        Ast::new(module_tokens, &self.host_function_registry, &mut self.string_table)
     }
 
     /// -----------------------------
@@ -213,7 +259,10 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
-    pub fn ast_to_ir(&self, ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
+    pub fn ast_to_ir(&mut self, ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
+        // TODO: Pass string table to WIR generation for string interning during WIR building
+        // This will be implemented in task 5 (Update WIR to use interned strings)
+        
         // Use the new borrow checking pipeline
         compiler::wir::wir::borrow_check_pipeline(ast)
     }

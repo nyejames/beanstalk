@@ -1,6 +1,7 @@
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::{env, fs};
 use crate::compiler::compiler_warnings::CompilerWarning;
@@ -247,6 +248,24 @@ pub enum ErrorType {
     Config,
     Compiler,
     DevServer,
+    BorrowChecker,
+    WirTransformation,
+    WasmGeneration,
+}
+
+pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
+    match e_type {
+        ErrorType::Compiler => "Compiler Bug",
+        ErrorType::Syntax => "Syntax Error",
+        ErrorType::Config => "Malformed Config",
+        ErrorType::File => "File Error",
+        ErrorType::Rule => "Language Rule Violation",
+        ErrorType::Type => "Type Error",
+        ErrorType::DevServer => "Dev Server Issue",
+        ErrorType::BorrowChecker => "Borrow Checker",
+        ErrorType::WirTransformation => "WIR Transformation",
+        ErrorType::WasmGeneration => "WASM Generation",
+    }
 }
 
 /// Returns a new CompileError for syntax violations.
@@ -499,6 +518,62 @@ macro_rules! return_wasm_validation_error {
     };
 }
 
+/// Returns a new CompileError for borrow checking violations.
+///
+/// Borrow checker errors indicate memory safety violations detected during
+/// lifetime analysis. These should include clear explanations of the conflict
+/// and suggestions for resolving it.
+///
+/// Usage: `return_borrow_checker_error!(location, "Cannot borrow '{}' as mutable because it is already borrowed", var_name)`;
+#[macro_export]
+macro_rules! return_borrow_checker_error {
+    ($location:expr, $($msg:tt)+) => {
+        return Err(CompileError {
+            msg: format!($($msg)+),
+            location: $location,
+            error_type: crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            file_path: std::path::PathBuf::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for WIR transformation failures.
+///
+/// WIR transformation errors indicate failures during AST to WIR conversion.
+/// These are typically compiler bugs where the WIR infrastructure is missing
+/// or incomplete for a particular language feature.
+///
+/// Usage: `return_wir_transformation_error!(location, "Function '{}' transformation not yet implemented", func_name)`;
+#[macro_export]
+macro_rules! return_wir_transformation_error {
+    ($location:expr, $($msg:tt)+) => {
+        return Err(CompileError {
+            msg: format!($($msg)+),
+            location: $location,
+            error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
+            file_path: std::path::PathBuf::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for WASM generation failures.
+///
+/// WASM generation errors indicate failures during WIR to WASM codegen.
+/// These are typically compiler bugs in the WASM lowering or module generation.
+///
+/// Usage: `return_wasm_generation_error!(location, "Failed to generate WASM export for function '{}'", func_name)`;
+#[macro_export]
+macro_rules! return_wasm_generation_error {
+    ($location:expr, $($msg:tt)+) => {
+        return Err(CompileError {
+            msg: format!($($msg)+),
+            location: $location,
+            error_type: crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            file_path: std::path::PathBuf::new(),
+        })
+    };
+}
+
 #[macro_export]
 macro_rules! return_err_with_added_msg {
     ($($extra_context:tt)+) => {
@@ -656,6 +731,32 @@ pub fn print_formatted_error(e: CompileError) {
             e_yellow_ln!("Dev Server whoopsie");
             e_red_ln!("  {}", e.msg);
             return;
+        }
+
+        ErrorType::BorrowChecker => {
+            eprint!("\n(╯°Д°)╯  🔥🔥 ");
+            e_dark_magenta!("{}", relative_dir);
+            eprintln!(" 🔥🔥  (╯°□°)╯ ");
+
+            e_red_ln!("Borrow Checker");
+            e_dark_magenta!("Line ");
+            e_magenta_ln!("{}\n", line_number + 1);
+        }
+
+        ErrorType::WirTransformation => {
+            eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ");
+            e_dark_magenta!("{}", relative_dir);
+            eprintln!(" 🔥🔥🔥  ╰(° _ o╰) ");
+            e_yellow!("WIR TRANSFORMATION BUG - ");
+            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+        }
+
+        ErrorType::WasmGeneration => {
+            eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
+            e_dark_magenta!("{}", relative_dir);
+            eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
+            e_yellow!("WASM GENERATION BUG - ");
+            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
         }
     }
 

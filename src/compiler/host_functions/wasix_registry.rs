@@ -193,8 +193,9 @@ pub fn create_wasix_registry() -> Result<WasixFunctionRegistry, CompileError> {
 
     // Register fd_write function for print() support with native implementation
     // WASIX fd_write signature: (fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
+    // Use "wasi_snapshot_preview1" module name for compatibility with wasmer-wasix
     let fd_write_function = WasixFunctionDef::new_with_native(
-        "wasix_32v1",
+        "wasi_snapshot_preview1",
         "fd_write",
         vec![ValType::I32, ValType::I32, ValType::I32, ValType::I32], // fd, iovs, iovs_len, nwritten
         vec![ValType::I32],                                           // errno result
@@ -202,7 +203,11 @@ pub fn create_wasix_registry() -> Result<WasixFunctionRegistry, CompileError> {
         "Write data to a file descriptor. Used to implement print() function with native WASIX implementation.",
     );
 
-    registry.register_function("print", fd_write_function)?;
+    registry.register_function("print", fd_write_function.clone())?;
+    
+    // Also register template_output with the same fd_write implementation
+    // template_output is the new way to output text in Beanstalk (replaces print)
+    registry.register_function("template_output", fd_write_function)?;
 
     // Validate all registered functions
     validate_wasix_registry(&registry)?;

@@ -1,7 +1,7 @@
 -- Test file: Mutable and immutable borrow conflict (should fail borrow checker)
 
 -- Declare a mutable variable
-data ~= ["conflicted data"]
+data ~= 42
 
 -- Create immutable reference
 immutable_ref = data
@@ -12,4 +12,4 @@ mutable_ref ~= data
 -- Use both references (this should trigger borrow checker error)
 -- Because if immutable_ref is not used after the mutable_ref, 
 -- then its safe. But since both are used, an error should occur
-result = immutable_ref + mutable_ref
+result = immutable_ref

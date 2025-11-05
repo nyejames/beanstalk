@@ -40,7 +40,7 @@ pub fn execute_with_cranelift(
     })?;
 
     // Set up imports based on IO backend
-    let import_object = crate::runtime::jit::create_import_object(
+    let (import_object, _wasi_env_guard) = crate::runtime::jit::create_import_object(
         &mut store,
         &module,
         wasm_bytes,

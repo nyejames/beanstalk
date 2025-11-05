@@ -6,18 +6,20 @@ use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::return_syntax_error;
 use crate::{CompileError, ast_log};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::string_interning::{InternedString, StringTable};
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Arg>, CompileError> {
     // Should start at the FunctionParameterBracket,
     // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, context, &mut true)?;
+    let arguments = parse_parameters(token_stream, context, &mut true, string_table)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -29,6 +31,7 @@ pub fn parse_parameters(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     pure: &mut bool,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args: Vec<Arg> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -41,7 +44,7 @@ pub fn parse_parameters(
                 return Ok(args);
             }
 
-            TokenKind::Symbol(arg_name, ..) => {
+            TokenKind::Symbol(arg_name) => {
                 if !next_in_list {
                     return_syntax_error!(
                         token_stream.current_location(),
@@ -50,7 +53,8 @@ pub fn parse_parameters(
                 }
 
                 // Create a new variable
-                let argument = new_parameter(token_stream, &arg_name, &context)?;
+                // TODO: This needs to be updated to use string table when available
+                let argument = new_parameter(token_stream, arg_name, &context, string_table)?;
 
                 if argument.value.ownership.is_mutable() {
                     *pure = false;
@@ -93,8 +97,9 @@ pub fn parse_parameters(
 // 2. The assigned values (default values) are optional and must be constants if assigned
 pub fn new_parameter(
     token_stream: &mut FileTokens,
-    name: &str,
+    name: InternedString,
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<Arg, CompileError> {
     // Move past the name
     token_stream.advance();
@@ -143,9 +148,8 @@ pub fn new_parameter(
         _ => {
             return_syntax_error!(
                 token_stream.current_location(),
-                "Unexpected Token: {:?} after parameter name: '{}'. Expected a type declaration.",
-                token_stream.tokens[token_stream.index].kind,
-                name
+                "Unexpected Token: {:?} after parameter name. Expected a type declaration.",
+                token_stream.tokens[token_stream.index].kind
             )
         }
     };
@@ -169,9 +173,9 @@ pub fn new_parameter(
         | TokenKind::Eof
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
-            ast_log!("Created new parameter: '{}' of type: {}", name, data_type);
+            ast_log!("Created new parameter of type: {}", data_type);
             return Ok(Arg {
-                name: name.to_owned(),
+                id: name,
                 value: Expression::none(),
             });
         }
@@ -192,20 +196,19 @@ pub fn new_parameter(
     let parsed_expr = match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {
             token_stream.advance();
-            create_expression(token_stream, context, &mut data_type, &ownership, true)?
+            create_expression(token_stream, context, &mut data_type, &ownership, true, string_table)?
         }
-        _ => create_expression(token_stream, context, &mut data_type, &ownership, false)?,
+        _ => create_expression(token_stream, context, &mut data_type, &ownership, false, string_table)?,
     };
 
     ast_log!(
-        "Created new {:?} variable: '{}' of type: {}",
+        "Created new {:?} variable of type: {}",
         ownership,
-        name,
         data_type
     );
 
     Ok(Arg {
-        name: name.to_owned(),
+        id: name,
         value: parsed_expr,
     })
 }

@@ -4,15 +4,14 @@ use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::structs::create_struct_definition;
+use crate::compiler::string_interning::{StringId, StringTable};
 
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
-use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error, return_type_error};
-use crate::compiler::datatypes::DataType::Parameters;
 
 // Arg names and types are required
 // Can have default values
@@ -26,11 +25,12 @@ impl FunctionSignature {
     pub fn new(
         token_stream: &mut FileTokens,
         context: &ScopeContext,
+        string_table: &mut StringTable,
     ) -> Result<Self, CompileError> {
-        let parameters: Vec<Arg> = create_struct_definition(token_stream, context)?;
+        let parameters: Vec<Arg> = create_struct_definition(token_stream, context, string_table)?;
 
-        // Move past the closing struct bracket
-        token_stream.advance();
+        // create_struct_definition already advances past the closing bracket
+        // So we're now at the Arrow or Colon token
 
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}
@@ -58,7 +58,7 @@ impl FunctionSignature {
         let mut next_in_list: bool = true;
         let mut mutable: bool = false;
 
-        while token_stream.index < token_stream.length {
+        loop {
             token_stream.advance();
 
             match token_stream.current_token_kind() {
@@ -80,8 +80,9 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    let return_name = format!("return_{}", returns.len());
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        id: string_table.intern(&return_name),
                         value: Expression::int(
                             0,
                             token_stream.current_location(),
@@ -100,8 +101,9 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    let return_name = format!("return_{}", returns.len());
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        id: string_table.intern(&return_name),
                         value: Expression::float(
                             0.0,
                             token_stream.current_location(),
@@ -120,8 +122,9 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    let return_name = format!("return_{}", returns.len());
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        id: string_table.intern(&return_name),
                         value: Expression::bool(
                             false,
                             token_stream.current_location(),
@@ -140,10 +143,11 @@ impl FunctionSignature {
                             "Should have a comma to separate return types",
                         )
                     }
+                    let return_name = format!("return_{}", returns.len());
                     returns.push(Arg {
-                        name: returns.len().to_string(),
+                        id: string_table.intern(&return_name),
                         value: Expression::string_slice(
-                            "".to_string(),
+                            string_table.intern(""), // Empty string
                             token_stream.current_location(),
                             if mutable {
                                 Ownership::MutableOwned
@@ -162,23 +166,27 @@ impl FunctionSignature {
                         )
                     }
 
+                    // TODO: This needs to be updated to resolve interned strings
+                    // when string table integration is complete
+                    // For now, we'll skip this symbol resolution
+                    //
                     // Search through declarations for any data types
                     // Also search through the function parameters,
                     // as the function can return references to those parameters.
-                    if let Some(possible_type) = context.get_reference(name) {
-                        // Make sure this is actually a struct (Args)
-                        if matches!(possible_type.value.data_type, DataType::Parameters(..)) {
-                            returns.push(possible_type.to_owned());
-                        }
-                    } else if let Some(reference_return) = parameters.get_reference(name) {
-                        returns.push(reference_return.to_owned());
-                    }
+                    // if let Some(possible_type) = context.get_reference(name) {
+                    //     // Make sure this is actually a struct (Args)
+                    //     if matches!(possible_type.value.data_type, DataType::Parameters(..)) {
+                    //         returns.push(possible_type.to_owned());
+                    //     }
+                    // } else if let Some(reference_return) = parameters.get_reference(name) {
+                    //     returns.push(reference_return.to_owned());
+                    // }
                 }
 
                 TokenKind::Colon => {
                     token_stream.advance();
                     return Ok(FunctionSignature {
-                        parameters: parameters,
+                        parameters,
                         returns,
                     });
                 }
@@ -202,13 +210,8 @@ impl FunctionSignature {
                 }
             }
         }
-
-        return_syntax_error!(
-            token_stream.current_location(),
-            "Expected a colon after the return types",
-        )
     }
-    
+
     pub fn default() -> Self {
         Self {
             parameters: Vec::new(),
@@ -371,6 +374,8 @@ impl FunctionSignature {
 // }
 
 /// Format a DataType for user-friendly error messages
+/// Note: This function provides basic type names without resolving interned strings.
+/// For full type information with resolved strings, use DataType::display_with_table().
 fn format_type_for_error(data_type: &DataType) -> String {
     match data_type {
         DataType::String => "String".to_string(),
@@ -405,6 +410,15 @@ fn format_type_for_error(data_type: &DataType) -> String {
             )
         }
     }
+}
+
+/// Format a DataType for user-friendly error messages with proper string resolution
+fn format_type_for_error_with_table(
+    data_type: &DataType,
+    string_table: &crate::compiler::string_interning::StringTable,
+) -> String {
+    // Use the display_with_table method for proper string resolution
+    data_type.display_with_table(string_table)
 }
 
 /// Provide helpful hints for type conversion
@@ -457,18 +471,20 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
 // Built-in functions will do their own thing
 pub fn parse_function_call(
     token_stream: &mut FileTokens,
-    name: &str,
+    id: &StringId,
     context: &ScopeContext,
     signature: &FunctionSignature,
+    string_table: &mut StringTable,
 ) -> Result<AstNode, CompileError> {
     // Assumes we're starting at the first token after the name of the function call
     // Check if it's a host function first
-    if let Some(host_func) = &context.host_registry.get_function(name) {
-        return parse_host_function_call(token_stream, host_func, context);
+    if let Some(host_func) = &context.host_registry.get_function(id) {
+        return parse_host_function_call(token_stream, host_func, context, string_table);
     }
 
     // Create expressions until hitting a closed parenthesis
-    let args = create_function_call_arguments(token_stream, &signature.parameters, context)?;
+    let args =
+        create_function_call_arguments(token_stream, &signature.parameters, context, string_table)?;
 
     // TODO
     // Makes sure the call value is correct for the function call
@@ -489,15 +505,17 @@ pub fn parse_function_call(
     //     return inline_function_call(&args, &accessed_args, &original_function.value);
     // }
 
+    let interned_name = *id;
+
     Ok(AstNode {
         kind: NodeKind::FunctionCall(
-            name.to_owned(),
+            interned_name,
             args,
             signature.returns.to_owned(),
             token_stream.current_location(),
         ),
         location: token_stream.current_location(),
-        scope: context.scope_name.to_owned(),
+        scope: context.scope.clone(),
     })
 }
 
@@ -505,6 +523,7 @@ pub fn create_function_call_arguments(
     token_stream: &mut FileTokens,
     required_arguments: &[Arg],
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompileError> {
     // Starts at the first token after the function name
     ast_log!("Creating function call arguments");
@@ -535,7 +554,7 @@ pub fn create_function_call_arguments(
         let required_argument_types = required_arguments.to_owned();
         let call_context = context.new_child_expression(required_argument_types.to_owned());
 
-        create_multiple_expressions(token_stream, &call_context, true)
+        create_multiple_expressions(token_stream, &call_context, true, string_table)
     }
 }
 
@@ -544,28 +563,34 @@ pub fn parse_host_function_call(
     token_stream: &mut FileTokens,
     host_func: &HostFunctionDef,
     context: &ScopeContext,
+    string_table: &mut StringTable,
 ) -> Result<AstNode, CompileError> {
     let location = token_stream.current_location();
 
-    let params_as_args = host_func.params_to_signature();
+    let params_as_args = host_func.params_to_signature(string_table);
 
     // Parse arguments using the same logic as regular function calls
-    let args = create_function_call_arguments(token_stream, &params_as_args.parameters, context)?;
+    let args = create_function_call_arguments(
+        token_stream,
+        &params_as_args.parameters,
+        context,
+        string_table,
+    )?;
 
     // Validate the host function call
     validate_host_function_call(host_func, &args, &location)?;
 
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall(
-            host_func.name.clone(),
+            host_func.name,
             args,
             host_func.return_types.clone(),
-            host_func.module.clone(),
-            host_func.import_name.clone(),
+            host_func.module,
+            host_func.import_name,
             location.clone(),
         ),
         location,
-        scope: context.scope_name.to_owned(),
+        scope: context.scope.clone(),
     })
 }
 

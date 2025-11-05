@@ -9,14 +9,16 @@
 use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
 // use rayon::prelude::*;
-use std::time::Instant;
+use crate::compiler::host_functions::registry::create_builtin_registry;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
+use std::time::Instant;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -89,18 +91,28 @@ pub fn compile_modules(
     modules: Vec<InputModule>,
     config: &Config,
     flags: &[Flag],
+    string_table: &mut StringTable,
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
 
-    // TODO: define the host function registry based on the config
-    let compiler = Compiler::new(config, HostFunctionRegistry::new());
+    // Create a builtin host function registry with print and other host functions
+    let host_registry = create_builtin_registry(string_table).map_err(|e| CompilerMessages {
+        errors: vec![e],
+        warnings: Vec::new(),
+    })?;
+    let mut compiler = Compiler::new(config, host_registry);
 
     // ----------------------------------
     //         Token generation
     // ----------------------------------
     let tokenizer_result: Vec<Result<FileTokens, CompileError>> = modules
         .iter()
-        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
+        .map(|module| {
+            compiler.source_to_tokens(
+                &module.source_code,
+                &InternedPath::from_path_buf(&module.source_path, string_table),
+            )
+        })
         .collect();
 
     // Check for any errors first
@@ -133,13 +145,15 @@ pub fn compile_modules(
     // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
     let time = Instant::now();
     let mut compiler_messages = CompilerMessages::new();
-    let module_headers = match compiler.tokens_to_headers(project_tokens, &mut compiler_messages.warnings) {
-        Ok(headers) => headers,
-        Err(e) => {
-        compiler_messages.errors.extend(e);
-            return Err(compiler_messages)
-        }
-    };
+
+    let module_headers =
+        match compiler.tokens_to_headers(project_tokens, &mut compiler_messages.warnings) {
+            Ok(headers) => headers,
+            Err(e) => {
+                compiler_messages.errors.extend(e);
+                return Err(compiler_messages);
+            }
+        };
 
     timer_log!(time, "Headers Parsed in: ");
 
@@ -151,7 +165,7 @@ pub fn compile_modules(
         Ok(modules) => modules,
         Err(error) => {
             compiler_messages.errors.extend(error);
-            return Err(compiler_messages)
+            return Err(compiler_messages);
         }
     };
 
@@ -175,7 +189,7 @@ pub fn compile_modules(
         }
         Err(e) => {
             messages.errors.extend(e.errors);
-            return Err(messages)
+            return Err(messages);
         }
     }
 
@@ -222,7 +236,7 @@ pub fn compile_modules(
     Ok(CompilationResult {
         wasm_bytes,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
-        exported_functions: Vec::new(),      //TODO: Get the list of exported functions from the AST (with their signatures)
+        exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: messages.warnings,
     })
 }
@@ -310,10 +324,10 @@ fn get_standard_io_imports() -> Vec<ExternalImport> {
 }
 
 /// Extract exported functions from the compilation
-fn extract_exported_functions(exported_declarations: &[Arg]) -> Vec<String> {
+fn extract_exported_functions(exported_declarations: &[Arg]) -> Vec<StringId> {
     exported_declarations
         .iter()
-        .map(|arg| arg.name.clone())
+        .map(|arg| arg.id.clone())
         .collect()
 }
 
@@ -322,6 +336,7 @@ pub fn compile_single_module(
     module: InputModule,
     config: &Config,
     flags: &[Flag],
+    string_table: &mut StringTable,
 ) -> Result<CompilationResult, CompilerMessages> {
-    compile_modules(vec![module], config, flags)
+    compile_modules(vec![module], config, flags, string_table)
 }

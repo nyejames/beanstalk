@@ -1,13 +1,14 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{new_ast};
+use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::{ast_log, return_rule_error};
-use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::string_interning::StringTable;
+use crate::{ast_log, return_rule_error};
 // IF STATEMENTS / MATCH STATEMENTS
 // Can also be expressions (todo)
 // Example:
@@ -36,6 +37,7 @@ pub fn create_branch(
     token_stream: &mut FileTokens,
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
 ) -> Result<Vec<AstNode>, CompileError> {
     let then_condition = create_expression(
         token_stream,
@@ -43,13 +45,14 @@ pub fn create_branch(
         &mut DataType::Bool,
         &Ownership::ImmutableOwned,
         false,
+        string_table,
     )?;
 
     // Check if this is a match statement rather than a regular if statement
     if token_stream.current_token_kind() == &TokenKind::Is {
         // create_expression will only NOT consume the 'is' token if it's a match statement
         token_stream.advance(); // Consume 'is'
-        let match_statement = create_match_node(then_condition, token_stream, context, warnings)?;
+        let match_statement = create_match_node(then_condition, token_stream, context, warnings, string_table)?;
         return Ok(vec![match_statement]);
     }
 
@@ -64,12 +67,18 @@ pub fn create_branch(
 
     token_stream.advance(); // Consume ':'
     let if_context = context.new_child_control_flow(ContextKind::Branch);
-    let then_block = new_ast(token_stream, if_context.to_owned(), warnings)?;
+    let then_block =
+        function_body_to_ast(token_stream, if_context.to_owned(), warnings, string_table)?;
 
     // Check for else condition
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
         token_stream.advance();
-        Some(new_ast(token_stream, if_context.to_owned(), warnings)?)
+        Some(function_body_to_ast(
+            token_stream,
+            if_context.to_owned(),
+            warnings,
+            string_table,
+        )?)
     } else {
         None
     };
@@ -85,7 +94,7 @@ pub fn create_branch(
                     "This else block is never reached due to the if condition always being true.",
                 )),
                 location: token_stream.current_location(),
-                scope: if_context.scope_name,
+                scope: if_context.scope,
             })
         }
         return Ok(flattened_statement);
@@ -94,7 +103,7 @@ pub fn create_branch(
     Ok(vec![AstNode {
         kind: NodeKind::If(then_condition, then_block, else_block),
         location: token_stream.current_location(),
-        scope: if_context.scope_name,
+        scope: if_context.scope,
     }])
 }
 
@@ -103,6 +112,7 @@ fn create_match_node(
     token_stream: &mut FileTokens,
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
 ) -> Result<AstNode, CompileError> {
     ast_log!("Creating Match Statement");
 
@@ -115,7 +125,7 @@ fn create_match_node(
     }
 
     token_stream.advance(); // Consume ':'
-    let match_context = &context.new_child_control_flow(ContextKind::Branch);
+    let match_context = context.new_child_control_flow(ContextKind::Branch);
 
     // SYNTAX EXAMPLE:
     // if subject is:
@@ -147,7 +157,12 @@ fn create_match_node(
             // Move past the colon
             token_stream.advance();
 
-            else_block = Some(new_ast(token_stream, match_context.to_owned(), warnings)?);
+            else_block = Some(function_body_to_ast(
+                token_stream,
+                match_context.to_owned(),
+                warnings,
+                string_table,
+            )?);
         }
 
         let condition = create_expression(
@@ -156,6 +171,7 @@ fn create_match_node(
             &mut DataType::Int,
             &Ownership::ImmutableOwned,
             false,
+            string_table,
         )?;
 
         if token_stream.current_token_kind() != &TokenKind::Colon {
@@ -169,7 +185,12 @@ fn create_match_node(
         // Move past the colon
         token_stream.advance();
 
-        let block = new_ast(token_stream, match_context.to_owned(), warnings)?;
+        let block = function_body_to_ast(
+            token_stream,
+            match_context.to_owned(),
+            warnings,
+            string_table,
+        )?;
 
         arms.push(MatchArm {
             condition,
@@ -180,6 +201,6 @@ fn create_match_node(
     Ok(AstNode {
         kind: NodeKind::Match(subject, arms, else_block),
         location: token_stream.current_location(),
-        scope: match_context.scope_name.clone(),
+        scope: match_context.scope,
     })
 }

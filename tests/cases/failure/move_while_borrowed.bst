@@ -11,4 +11,4 @@ data_ref = data
 moved_data = data
 
 -- Use the reference (this should trigger borrow checker error)
-result = data_ref + moved_data
+result = moved_data

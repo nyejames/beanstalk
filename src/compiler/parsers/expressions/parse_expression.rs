@@ -11,6 +11,7 @@ use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_f
 use crate::compiler::parsers::statements::template::TemplateType;
 use crate::compiler::parsers::statements::variables::create_reference;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
@@ -23,6 +24,7 @@ pub fn create_multiple_expressions(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     consume_closing_parenthesis: bool,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompileError> {
     let mut expressions: Vec<Expression> = Vec::new();
     let mut type_index = 0;
@@ -37,6 +39,7 @@ pub fn create_multiple_expressions(
             &mut expected_arg.value.data_type,
             &expected_arg.value.ownership,
             consume_closing_parenthesis,
+            string_table,
         )?;
 
         expressions.push(expression);
@@ -82,6 +85,7 @@ pub fn create_expression(
     data_type: &mut DataType,
     ownership: &Ownership,
     consume_closing_parenthesis: bool,
+    string_table: &mut StringTable,
 ) -> Result<Expression, CompileError> {
     let mut expression: Vec<AstNode> = Vec::new();
     // let mut number_union = get_any_number_datatype(false);
@@ -117,12 +121,12 @@ pub fn create_expression(
                 // Removed this at one point for a test caused a wonderful infinite loop
                 token_stream.advance();
 
-                let value = create_expression(token_stream, context, data_type, ownership, true)?;
+                let value = create_expression(token_stream, context, data_type, ownership, true, string_table)?;
 
                 expression.push(AstNode {
                     kind: NodeKind::Expression(value),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -136,9 +140,10 @@ pub fn create_expression(
                                 inner_type,
                                 context,
                                 ownership,
+                                string_table,
                             )?),
                             location: token_stream.current_location(),
-                            scope: context.scope_name.to_owned(),
+                            scope: context.scope.clone(),
                         });
                     }
 
@@ -149,9 +154,10 @@ pub fn create_expression(
                                 &DataType::Inferred,
                                 context,
                                 ownership,
+                                string_table,
                             )?),
                             location: token_stream.current_location(),
-                            scope: context.scope_name.to_owned(),
+                            scope: context.scope.clone(),
                         });
                     }
 
@@ -203,8 +209,8 @@ pub fn create_expression(
             // --------------------------------------------
             // REFERENCE OR FUNCTION CALL INSIDE EXPRESSION
             // --------------------------------------------
-            TokenKind::Symbol(ref name, ..) => {
-                if let Some(arg) = context.get_reference(name) {
+            TokenKind::Symbol(ref id, ..) => {
+                if let Some(arg) = context.get_reference(id) {
                     match &arg.value.data_type {
                         DataType::Function(signature) => {
                             // Advance past the function name to position at the opening parenthesis
@@ -213,9 +219,10 @@ pub fn create_expression(
                             // This is a function call - parse it using the function call parser
                             let function_call_node = parse_function_call(
                                 token_stream,
-                                name,
+                                id,
                                 context,
-                                signature
+                                signature,
+                                string_table,
                             )?;
 
                             // -------------------------------
@@ -232,7 +239,7 @@ pub fn create_expression(
                                 expression.push(AstNode {
                                     kind: NodeKind::Expression(func_call_expr),
                                     location: function_call_node.location,
-                                    scope: context.scope_name.to_owned(),
+                                    scope: context.scope.clone(),
                                 });
 
                                 continue;
@@ -243,7 +250,12 @@ pub fn create_expression(
                         // VARIABLE INSIDE EXPRESSION
                         // --------------------------
                         _ => {
-                            expression.push(create_reference(token_stream, arg, context)?);
+                            expression.push(create_reference(
+                                token_stream,
+                                arg,
+                                context,
+                                string_table,
+                            )?);
 
                             continue; // Will have moved onto the next token already
                         }
@@ -253,17 +265,18 @@ pub fn create_expression(
                 // ------------------------------------
                 // HOST FUNCTION CALL INSIDE EXPRESSION
                 // ------------------------------------
-                if let Some(host_func_def) = context.host_registry.get_function(name) {
+                if let Some(host_func_def) = context.host_registry.get_function(id) {
 
                     // Convert return types to Arg format
-                    let signature = host_func_def.params_to_signature();
+                    let signature = host_func_def.params_to_signature(string_table);
 
                     // This is a function call - parse it using the function call parser
                     let function_call_node = parse_function_call(
                         token_stream,
-                        name,
+                        id,
                         context,
                         &signature,
+                        string_table,
                     )?;
 
                     if let NodeKind::HostFunctionCall(func_name, expressions, _returns, _module_name, _wasm_import_name, location) = function_call_node.kind {
@@ -277,7 +290,7 @@ pub fn create_expression(
                         expression.push(AstNode {
                             kind: NodeKind::Expression(func_call_expr),
                             location: TextLocation::default(),
-                            scope: context.scope_name.to_owned(),
+                            scope: context.scope.clone(),
                         });
 
                         continue;
@@ -287,7 +300,7 @@ pub fn create_expression(
                 return_rule_error!(
                     token_stream.current_location(),
                     "Undefined variable '{}'. Variable must be declared before use.",
-                    name,
+                    id,
                 )
             }
 
@@ -309,7 +322,7 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Expression(float_expr),
                     location,
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -329,7 +342,7 @@ pub fn create_expression(
 
                 expression.push(AstNode {
                     kind: NodeKind::Expression(int_expr),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                     location,
                 });
             }
@@ -338,21 +351,21 @@ pub fn create_expression(
                 let location = token_stream.current_location();
 
                 let string_expr = Expression::string_slice(
-                    string.to_owned(),
+                    *string,
                     location.to_owned(),
                     ownership.to_owned(),
                 );
 
                 expression.push(AstNode {
                     kind: NodeKind::Expression(string_expr),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                     location,
                 });
             }
 
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
                 let mut template =
-                    Template::new(token_stream, new_template_context!(context), None)?;
+                    Template::new(token_stream, new_template_context!(context), None, string_table)?;
 
                 match template.kind {
                     TemplateType::StringFunction => {
@@ -360,8 +373,11 @@ pub fn create_expression(
                     }
 
                     TemplateType::CompileTimeString => {
+                        let folded_string = template.fold(&None, string_table)?;
+                        let interned = string_table.get_or_intern(folded_string);
+
                         return Ok(Expression::string_slice(
-                            template.fold(&None)?,
+                            interned,
                             token_stream.current_location(),
                             ownership.get_owned(),
                         ));
@@ -391,7 +407,7 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Expression(bool_expr),
                     location,
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -406,10 +422,11 @@ pub fn create_expression(
                 // Breaks out of the current expression and changes the type to Range
                 token_stream.advance();
                 return evaluate_expression(
-                    context.scope_name.to_owned(),
+                    &context.scope,
                     expression,
                     &mut DataType::Range,
                     &ownership.get_reference(),
+                    string_table,
                 );
             }
 
@@ -418,7 +435,7 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Add),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -426,21 +443,21 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Subtract),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
             TokenKind::Multiply => expression.push(AstNode {
                 kind: NodeKind::Operator(Operator::Multiply),
                 location: token_stream.current_location(),
-                scope: context.scope_name.to_owned(),
+                scope: context.scope.clone(),
             }),
 
             TokenKind::Divide => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Divide),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -448,7 +465,7 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Exponent),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -456,7 +473,7 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Modulus),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
@@ -488,7 +505,13 @@ pub fn create_expression(
                             )
                         }
 
-                        return evaluate_expression(context.scope_name.to_owned(), expression, data_type, ownership);
+                        return evaluate_expression(
+                            &context.scope,
+                            expression,
+                            data_type,
+                            ownership,
+                            string_table,
+                        );
                     }
 
                     // IS
@@ -496,7 +519,7 @@ pub fn create_expression(
                         expression.push(AstNode {
                             kind: NodeKind::Operator(Operator::Equality),
                             location: token_stream.current_location(),
-                            scope: context.scope_name.to_owned(),
+                            scope: context.scope.clone(),
                         })
                     }
                 }
@@ -506,56 +529,56 @@ pub fn create_expression(
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::LessThan),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
             TokenKind::LessThanOrEqual => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::LessThanOrEqual),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
             TokenKind::GreaterThan => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::GreaterThan),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
             TokenKind::GreaterThanOrEqual => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::GreaterThanOrEqual),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
             TokenKind::And => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::And),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
             TokenKind::Or => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Or),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
             TokenKind::Not => {
                 expression.push(AstNode {
                     kind: NodeKind::Operator(Operator::Not),
                     location: token_stream.current_location(),
-                    scope: context.scope_name.to_owned(),
+                    scope: context.scope.clone(),
                 });
             }
 
             TokenKind::Range => expression.push(AstNode {
                 kind: NodeKind::Operator(Operator::Range),
                 location: token_stream.current_location(),
-                scope: context.scope_name.to_owned(),
+                scope: context.scope.clone(),
             }),
 
             // For mutating references
@@ -574,10 +597,11 @@ pub fn create_expression(
     }
 
     evaluate_expression(
-        context.scope_name.to_owned(),
+        &context.scope,
         expression,
         data_type,
         ownership,
+        string_table,
     )
 }
 

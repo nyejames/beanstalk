@@ -18,25 +18,6 @@ pub fn find_first_missing(indexes_filled: &[usize]) -> usize {
     }
     i
 }
-
-pub fn sort_unnamed_args_last(args: &[Arg]) -> Vec<Arg> {
-    let length = args.len();
-    let mut args_in_sorted = Vec::with_capacity(length);
-    let mut empty: Vec<Arg> = Vec::with_capacity(length);
-
-    for a in args {
-        if a.name.is_empty() {
-            empty.push(a.to_owned());
-        } else {
-            args_in_sorted.push(a.to_owned());
-        }
-    }
-
-    args_in_sorted.extend(empty);
-
-    args_in_sorted
-}
-
 pub fn first_letter_is_capitalised(s: &str) -> bool {
     let mut c = s.chars();
     match c.next() {
@@ -57,20 +38,6 @@ pub fn count_newlines_at_end_of_string(s: &str) -> usize {
             continue;
         }
 
-        break;
-    }
-
-    count
-}
-
-pub fn _count_newlines_at_start_of_string(s: &str) -> usize {
-    let mut count = 0;
-
-    for c in s.chars() {
-        if c == '\n' {
-            count += 1;
-            continue;
-        }
         break;
     }
 

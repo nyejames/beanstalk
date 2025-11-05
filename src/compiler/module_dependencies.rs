@@ -3,16 +3,18 @@
 // Declarations will be parsed first in the tokenizer now.
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::parse_file_headers::Header;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::string_interning::StringTable;
 use crate::return_rule_error;
 use std::collections::{HashMap, HashSet};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
 /// and which have been permanently visited.
 struct DependencyTracker {
-    temp_mark: HashSet<String>,
-    visited: HashSet<String>,
+    temp_mark: HashSet<InternedPath>,
+    visited: HashSet<InternedPath>,
 }
 
 impl DependencyTracker {
@@ -24,15 +26,18 @@ impl DependencyTracker {
     }
 }
 
-/// Given a list of (possibly errored) `TokenContext`
+/// Given a list of, possibly errored, `TokenContext`
 /// builds a graph of successful ones and topologically sorts them.
-pub fn resolve_module_dependencies(headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
-    let mut graph: HashMap<String, Header> = HashMap::with_capacity(headers.len());
+pub fn resolve_module_dependencies(
+    headers: Vec<Header>,
+    string_table: &mut StringTable,
+) -> Result<Vec<Header>, Vec<CompileError>> {
+    let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(headers.len());
     let mut errors: Vec<CompileError> = Vec::with_capacity(headers.len());
 
     // Build graph or collect errors
     for header in headers {
-        graph.insert(header.name.to_owned(), header);
+        graph.insert(header.path.to_owned(), header);
     }
 
     if !errors.is_empty() {
@@ -43,9 +48,9 @@ pub fn resolve_module_dependencies(headers: Vec<Header>) -> Result<Vec<Header>, 
     let mut tracker = DependencyTracker::new(graph.len());
     let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
-    for name in graph.keys() {
-        if !tracker.visited.contains(name) {
-            if let Err(e) = visit_node(name, &mut tracker, &graph, &mut sorted) {
+    for path in graph.keys() {
+        if !tracker.visited.contains(path) {
+            if let Err(e) = visit_node(path, &mut tracker, &graph, &mut sorted, string_table) {
                 errors.push(e);
             }
         }
@@ -60,17 +65,18 @@ pub fn resolve_module_dependencies(headers: Vec<Header>) -> Result<Vec<Header>, 
 
 /// DFS visit for one module node, pushing clones into `sorted`.
 fn visit_node(
-    node_path: &String,
+    node_path: &InternedPath,
     tracker: &mut DependencyTracker,
-    graph: &HashMap<String, Header>,
+    graph: &HashMap<InternedPath, Header>,
     sorted: &mut Vec<Header>,
+    string_table: &mut StringTable,
 ) -> Result<(), CompileError> {
     // cycle?
     if tracker.temp_mark.contains(node_path) {
         return_rule_error!(
             TextLocation::default(),
             "Circular dependency detected at {}",
-            node_path
+            node_path.to_string(string_table),
         )
     }
 
@@ -82,7 +88,7 @@ fn visit_node(
         // recurse on all imports
         if let Some(header) = graph.get(node_path) {
             for import in &header.dependencies {
-                visit_node(import, tracker, graph, sorted)?;
+                visit_node(import, tracker, graph, sorted, string_table)?;
             }
             // when children are done, push this node (clone of context)
             sorted.push(header.clone());

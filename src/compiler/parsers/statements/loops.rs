@@ -1,14 +1,15 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::build_ast::{ new_ast};
+use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
-use crate::compiler::parsers::ast::ScopeContext;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 // TODO: Loop invariance analysis.
@@ -21,6 +22,7 @@ pub fn create_loop(
     token_stream: &mut FileTokens,
     mut context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
+    string_table: &mut StringTable,
 ) -> Result<AstNode, CompileError> {
     ast_log!("Creating a Loop");
 
@@ -36,8 +38,14 @@ pub fn create_loop(
             if let Some(arg) = context.get_reference(&name) {
                 let mut data_type = arg.value.data_type.to_owned();
                 let ownership = &arg.value.ownership;
-                let condition =
-                    create_expression(token_stream, &context, &mut data_type, ownership, false)?;
+                let condition = create_expression(
+                    token_stream,
+                    &context,
+                    &mut data_type,
+                    ownership,
+                    false,
+                    string_table,
+                )?;
 
                 // Make sure this condition is a boolean expression
                 return match data_type {
@@ -51,13 +59,18 @@ pub fn create_loop(
                         }
 
                         token_stream.advance();
-                        let scope = context.scope_name.clone();
+                        let scope = context.scope.clone();
 
                         // create while loop
                         Ok(AstNode {
                             kind: NodeKind::WhileLoop(
                                 condition,
-                                new_ast(token_stream, context, warnings)?,
+                                function_body_to_ast(
+                                    token_stream,
+                                    context,
+                                    warnings,
+                                    string_table,
+                                )?,
                             ),
                             location: token_stream.current_location(),
                             scope,
@@ -101,6 +114,7 @@ pub fn create_loop(
                 &mut iterable_type,
                 &Ownership::ImmutableReference,
                 false,
+                string_table,
             )?;
 
             // Make sure this type can be iterated over
@@ -124,7 +138,7 @@ pub fn create_loop(
 
             // The thing being iterated over
             let loop_arg = Arg {
-                name: name.to_owned(),
+                id: name.to_owned(),
                 value: Expression::new(
                     iterated_item.kind.to_owned(),
                     token_stream.current_location(),
@@ -136,11 +150,11 @@ pub fn create_loop(
             context.declarations.push(loop_arg.to_owned());
 
             Ok(AstNode {
-                scope: context.scope_name.to_owned(),
+                scope: context.scope.to_owned(),
                 kind: NodeKind::ForLoop(
                     Box::new(loop_arg),
                     iterated_item,
-                    new_ast(token_stream, context, warnings)?,
+                    function_body_to_ast(token_stream, context, warnings, string_table)?,
                 ),
                 location: token_stream.current_location(),
             })

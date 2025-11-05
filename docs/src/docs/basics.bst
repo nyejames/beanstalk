@@ -13,7 +13,7 @@ From the config file you can define another Beanstalk file as the entry point of
 Web projects can be configured to have a directory based structure for each module.
 
 # Quick Synax Overview
-- Colon opens a scope, semicolon closes it.
+- Colon opens a scope, semicolon closes it. Semicolon does not end statements!
 - No use of square brackets for arrays, curly braces are used instead. 
 Square brackets are only used for templates.
 - Equality and other logical operators use keywords like "is" and "not" 
@@ -32,11 +32,11 @@ Comments use a double minus sign '--'.
 
 Documentation comments will eventually be created via special templates.
 
-[#Code: 
+[#code(): 
 
 -- normal comment
 
-[#Docs:
+[#docs():
     Multiline comment
 
     Woo
@@ -52,7 +52,7 @@ All variables must be assigned a value when they are declared.
 ## Assignment
 
 ### Variables
-[#Code:
+[#code():
     int ~= 0
     float ~= 0.0
 
@@ -76,7 +76,7 @@ All variables must be assigned a value when they are declared.
 ]
 
 ## Static Assignment
-[#Code:
+[#code():
     -- 64 bit immutable float
     number = 420.69
 
@@ -98,7 +98,7 @@ All variables must be assigned a value when they are declared.
 
 All copies of collections are explicit and must use the 'copy' keyword in place of a type.
 
-[#Code:
+[#code():
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -123,7 +123,7 @@ Expressions can span over multiple lines.
 
 But statements must start after a newline.
 
-[#Code:
+[#code():
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
@@ -162,7 +162,7 @@ These are all different ways to create strings.
 String is the keyword for string types in Beanstalk. 
 Double quotes are automatically string slices. 
 
-[#Code: "Double quotes for a UTF-16 string slice"]
+[#code(): "Double quotes for a UTF-16 string slice"]
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 

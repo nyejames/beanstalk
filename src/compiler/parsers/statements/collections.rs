@@ -5,6 +5,7 @@ use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler::string_interning::StringTable;
 use crate::return_syntax_error;
 
 // This is a dynamic array of one data type
@@ -15,6 +16,7 @@ pub fn new_collection(
     collection_type: &DataType,
     context: &ScopeContext,
     ownership: &Ownership,
+    string_table: &mut StringTable
 ) -> Result<Expression, CompileError> {
     let mut items: Vec<Expression> = Vec::new();
 
@@ -61,6 +63,7 @@ pub fn new_collection(
                     &mut collection_inner_type,
                     &MutableOwned,
                     false,
+                    string_table,
                 )?;
 
                 items.push(item);

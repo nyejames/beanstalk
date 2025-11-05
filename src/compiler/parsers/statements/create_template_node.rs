@@ -1,15 +1,16 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::statements::template::{
     Style, TemplateContent, TemplateControlFlow, TemplateType,
 };
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
-use crate::compiler::parsers::ast::ScopeContext;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 
@@ -28,6 +29,7 @@ impl Template {
         token_stream: &mut FileTokens,
         context: &ScopeContext,
         inherited_style: Option<Box<Style>>,
+        string_table: &mut StringTable,
     ) -> Result<Template, CompileError> {
         // These are variables or special keywords passed into the template head
         let mut template = Self::create_default(inherited_style);
@@ -38,7 +40,13 @@ impl Template {
         // If the entire template can be folded, it just becomes a string after the AST stage.
         let mut foldable = true;
 
-        parse_template_head(token_stream, context, &mut template, &mut foldable)?;
+        parse_template_head(
+            token_stream,
+            context,
+            &mut template,
+            &mut foldable,
+            string_table,
+        )?;
 
         // TODO: Also parse (remove from the final output) ignored scenes
         // TokenKind::Ignore => {
@@ -95,6 +103,7 @@ impl Template {
                         token_stream,
                         context,
                         template.style.child_default.to_owned(),
+                        string_table,
                     )?;
 
                     match nested_template.kind {
@@ -106,10 +115,12 @@ impl Template {
                                 .as_ref()
                                 .map(|style| *style.to_owned());
 
-                            let folded_child = nested_template.fold(&inherited_style)?;
+                            let folded_child =
+                                nested_template.fold(&inherited_style, string_table)?;
+                            let interned_child = string_table.get_or_intern(folded_child);
                             template.content.add(
                                 Expression::string_slice(
-                                    folded_child,
+                                    interned_child,
                                     token_stream.current_location(),
                                     Ownership::ImmutableOwned,
                                 ),
@@ -142,7 +153,7 @@ impl Template {
                 TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
                     template.content.add(
                         Expression::string_slice(
-                            content.to_string(),
+                            *content,
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ),
@@ -164,9 +175,10 @@ impl Template {
                 //     }
                 // }
                 TokenKind::Newline => {
+                    let newline_id = string_table.intern("\n");
                     template.content.add(
                         Expression::string_slice(
-                            "\n".to_string(),
+                            newline_id,
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ),
@@ -263,7 +275,11 @@ impl Template {
         Ok(())
     }
 
-    pub fn fold(&mut self, inherited_style: &Option<Style>) -> Result<String, CompileError> {
+    pub fn fold(
+        &mut self,
+        inherited_style: &Option<Style>,
+        string_table: &StringTable,
+    ) -> Result<String, CompileError> {
         // Now we start combining everything into one string
         let mut final_string = String::with_capacity(3);
 
@@ -310,7 +326,7 @@ impl Template {
         for value in self.content.flatten() {
             match &value.kind {
                 ExpressionKind::StringSlice(string) => {
-                    final_string.push_str(string);
+                    final_string.push_str(string_table.resolve(*string));
                 }
 
                 ExpressionKind::Float(float) => {
@@ -387,6 +403,7 @@ pub fn parse_template_head(
     context: &ScopeContext,
     template: &mut Template,
     foldable: &mut bool,
+    string_table: &mut StringTable,
 ) -> Result<(), CompileError> {
     // TODO: Add control flow parsing
 
@@ -456,7 +473,7 @@ pub fn parse_template_head(
                     // Constant inherited
                     Some(ExpressionKind::StringSlice(string)) => {
                         template.content.before.push(Expression::string_slice(
-                            string.to_owned(),
+                            *string,
                             token_stream.current_location(),
                             Ownership::ImmutableOwned,
                         ));
@@ -487,6 +504,7 @@ pub fn parse_template_head(
                                 &mut DataType::CoerceToString,
                                 &arg.value.ownership,
                                 false,
+                                string_table,
                             )?;
 
                             // Any non-constant expression can't be folded
@@ -521,6 +539,7 @@ pub fn parse_template_head(
                     &mut DataType::Inferred,
                     &Ownership::ImmutableOwned,
                     false,
+                    string_table,
                 )?;
 
                 if !expr.kind.is_foldable() {
@@ -537,6 +556,7 @@ pub fn parse_template_head(
                     &mut DataType::CoerceToString,
                     &Ownership::MutableOwned,
                     true,
+                    string_table,
                 )?;
 
                 if !expr.kind.is_foldable() {

@@ -113,8 +113,8 @@ fn convert_borrow_errors_to_compile_errors(
         .map(|borrow_error| {
             // Create detailed error message with function context
             let detailed_message = format!(
-                "Borrow checking error in function '{}': {}",
-                function_name, borrow_error.message
+                "Borrow checking error: {}",
+                borrow_error.message
             );
 
             // Use the error location if available, otherwise use a default location
@@ -127,8 +127,14 @@ fn convert_borrow_errors_to_compile_errors(
                 TextLocation::default()
             };
 
-            // Create compile error with rule error type (user-facing borrow checker error)
-            CompileError::new_rule_error(detailed_message, error_location)
+            // Create compile error with borrow checker error type
+            use crate::compiler::compiler_errors::ErrorType;
+            CompileError {
+                msg: detailed_message,
+                location: error_location,
+                error_type: ErrorType::BorrowChecker,
+                file_path: std::path::PathBuf::new(),
+            }
         })
         .collect()
 }

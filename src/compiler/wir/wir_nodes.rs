@@ -712,6 +712,20 @@ impl Statement {
                 // which scans WIR statements for Rvalue::Ref operations
                 // and creates appropriate loans with unique IDs
             }
+            Rvalue::StringConcat(left, right) => {
+                // String concatenation uses both operands
+                self.generate_operand_events(left, events);
+                self.generate_operand_events(right, events);
+
+                // String concatenation creates owned result
+                events.state_transitions.push(StateTransition {
+                    place: target_place.clone(),
+                    from_state: PlaceState::Owned, // Assume previous state
+                    to_state: PlaceState::Owned,   // String concat creates owned value
+                    program_point,
+                    reason: TransitionReason::Assignment,
+                });
+            }
         }
     }
 
@@ -742,6 +756,7 @@ impl Statement {
 /// - Use: Direct use of operands (constants, copies, moves)
 /// - BinaryOp/UnaryOp: Arithmetic and logical operations
 /// - Ref: Explicit representation of Beanstalk's implicit borrows
+/// - StringConcat: String concatenation operation
 #[derive(Debug, Clone, PartialEq)]
 pub enum Rvalue {
     /// Use a place or constant (copies, moves, constants)
@@ -760,6 +775,9 @@ pub enum Rvalue {
         place: Place,
         borrow_kind: BorrowKind,
     },
+
+    /// String concatenation operation (lhs + rhs for strings)
+    StringConcat(Operand, Operand),
 }
 
 /// WASM-specific memory operations
@@ -1397,7 +1415,7 @@ impl BorrowError {
         CompileError {
             msg: formatted_message,
             location: self.primary_location.clone(),
-            error_type: ErrorType::Rule, // Borrow checker errors are rule violations
+            error_type: ErrorType::BorrowChecker, // Borrow checker errors have their own type
             file_path: std::path::PathBuf::new(),
         }
     }

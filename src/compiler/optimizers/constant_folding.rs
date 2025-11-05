@@ -28,6 +28,7 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
+use crate::compiler::string_interning::StringTable;
 use crate::{return_rule_error, return_syntax_error};
 
 /// Perform constant folding on an expression in RPN order
@@ -50,7 +51,7 @@ use crate::{return_rule_error, return_syntax_error};
 /// - Type mismatches in operations
 /// - Division by zero in constant expressions
 /// - Unsupported operations on constant types
-pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileError> {
+pub fn constant_fold(output_stack: &[AstNode], string_table: &mut StringTable) -> Result<Vec<AstNode>, CompileError> {
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 
     for node in output_stack {
@@ -96,7 +97,7 @@ pub fn constant_fold(output_stack: &[AstNode]) -> Result<Vec<AstNode>, CompileEr
                 // }
 
                 // Try to evaluate the operation
-                if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op)? {
+                if let Some(result) = lhs_expr.evaluate_operator(&rhs_expr, op, string_table)? {
                     // Successfully evaluated - push a result onto the stack
                     let new_literal = AstNode {
                         kind: NodeKind::Expression(result.to_owned()),
@@ -130,6 +131,7 @@ impl Expression {
         &self,
         rhs: &Expression,
         op: &Operator,
+        string_table: &mut StringTable,
     ) -> Result<Option<Expression>, CompileError> {
         let kind: ExpressionKind = match (&self.kind, &rhs.kind) {
             // Float operations
@@ -236,7 +238,14 @@ impl Expression {
             // String operations
             (ExpressionKind::StringSlice(lhs_val), ExpressionKind::StringSlice(rhs_val)) => {
                 match op {
-                    Operator::Add => ExpressionKind::StringSlice(format!("{}{}", lhs_val, rhs_val)),
+                    Operator::Add => {
+                        // Resolve both interned strings, concatenate, and intern the result
+                        let lhs_str = string_table.resolve(*lhs_val);
+                        let rhs_str = string_table.resolve(*rhs_val);
+                        let concatenated = format!("{}{}", lhs_str, rhs_str);
+                        let interned_result = string_table.get_or_intern(concatenated);
+                        ExpressionKind::StringSlice(interned_result)
+                    },
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
                     _ => return_rule_error!(
                         self.location.to_owned(),

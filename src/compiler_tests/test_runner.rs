@@ -1,6 +1,7 @@
 //! Test runner for validating core Beanstalk compiler functionality
 
-use crate::compiler::compiler_errors::print_formatted_error;
+use crate::build_system::build_system::BuildTarget;
+use crate::compiler::compiler_errors::{error_type_to_str, print_formatted_error};
 
 ///
 /// This module provides a focused test suite that validates the essential
@@ -42,7 +43,7 @@ pub fn run_all_test_cases() {
                     println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    match build_project_files(&path, false, &flags) {
+                    match build_project_files(&path, false, &flags, Some(BuildTarget::Jit)) {
                         Ok(_) => {
                             green_ln!("✓ PASS");
                             passed_tests += 1;
@@ -79,13 +80,16 @@ pub fn run_all_test_cases() {
                     println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    match build_project_files(&path, false, &flags) {
+                    match build_project_files(&path, false, &flags, Some(BuildTarget::Jit)) {
                         Ok(_) => {
                             yellow_ln!("✗ UNEXPECTED SUCCESS");
                             unexpected_successes += 1;
                         }
-                        Err(_) => {
+                        Err(e) => {
                             green_ln!("✓ EXPECTED FAILURE");
+                            for error in e.errors {
+                                yellow_ln!("{}", error_type_to_str(&error.error_type));
+                            }
                             expected_failures += 1;
                         }
                     }
