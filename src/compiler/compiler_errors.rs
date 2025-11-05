@@ -568,7 +568,10 @@ pub fn print_formatted_error(e: CompileError) {
             .strip_prefix(dir)
             .unwrap_or(&e.file_path)
             .to_string_lossy(),
-        Err(_) => e.file_path.to_string_lossy(),
+        Err(_) => {
+            red_ln!("Compiler failed to find the file to give you the snippet. Another compiler developer skill issue.");
+            e.file_path.to_string_lossy()
+        },
     };
 
     let line_number = e.location.start_pos.line_number as usize;

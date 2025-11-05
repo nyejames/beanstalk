@@ -47,7 +47,8 @@ impl FunctionSignature {
             _ => {
                 return_syntax_error!(
                     token_stream.current_location(),
-                    "Expected an arrow operator or colon after function arguments",
+                    "Expected an arrow operator or colon after function arguments. Found {:?} instead.",
+                    token_stream.current_token_kind()
                 )
             }
         }
