@@ -1,7 +1,6 @@
 [Navbar]
 
 [Header center: [title(1): BASIC BS SYNTAX]]
-[Page:
 
 Every project needing to be split into multiple Wasm modules must have a config.bst file.
 
@@ -182,8 +181,6 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: %%]         [: Remainder (floored)]  [: 3]
     [: +]          [: Sum]                  [: 2]
     [: `-`]        [: Subtraction]          [: 2]
-]
-
 ]
 
 [Footer]
