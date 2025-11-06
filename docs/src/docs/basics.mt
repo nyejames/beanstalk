@@ -1,6 +1,10 @@
-[Navbar]
+[#import(@libs/html/basic)]
+[#import(@styles/docs_styles)]
+[#import(@./components)]
 
-[Header center: [title(1): BASIC BS SYNTAX]]
+[docs_styles.Navbar]
+
+[docs_styles.Header, basic.Center: [basic.Title: BASIC BS SYNTAX]]
 
 Every project needing to be split into multiple Wasm modules must have a config.bst file.
 
@@ -20,6 +24,8 @@ Square brackets are only used for templates.
 - ~ tilde symbol to indicate mutability (mutability must be explicit). 
 This comes before the type.
 - Double dashes for single line comments (--)
+- Reference semantics. All copies have to be explict unless they are used in part of a new expression. 
+Even for primitive types such as integers.
 
 4 spaces are recommended for indentation. 
 
@@ -31,16 +37,15 @@ Comments use a double minus sign '--'.
 
 Documentation comments will eventually be created via special templates.
 
-[#code(): 
+[basic.Code: 
 
--- normal comment
+    -- normal comment
 
-[#docs():
-    Multiline comment
+    [#docs():
+        Multiline comment
 
-    Woo
-]
-
+        Woo
+    ]
 ]
 
 # Variables
@@ -51,7 +56,7 @@ All variables must be assigned a value when they are declared.
 ## Assignment
 
 ### Variables
-[#code():
+[basic.Code:
     int ~= 0
     float ~= 0.0
 
@@ -74,8 +79,7 @@ All variables must be assigned a value when they are declared.
     ;
 ]
 
-## Static Assignment
-[#code():
+[basic.Code:
     -- 64 bit immutable float
     number = 420.69
 
@@ -88,16 +92,29 @@ All variables must be assigned a value when they are declared.
     -- or moves the value if it isn't used again later in the scope
     another_mutable_number ~= number
 
+    -- Even with primative stack types,
+    -- Copying is still explicit
+    a_copy_of_a_number ~Copy = another_mutable_number
+
     -- Type error (number is not mutable)
     number = 1
 
     -- Type error (another_mutable_number is a float type)
     another_mutable_number ~= "Not a number"
+
+    -- Explicit type declarations
+    a_float ~Float = 84
+    string_slice = "Hello "
+    a_mutable_string ~String = [:World!]
+
+    -- You can't use the '+' operator on strings,
+    -- They are always concatenated using templates
+    concatenated_strings = [string_slice, a_mutable_string]
 ]
 
-All copies of collections are explicit and must use the 'copy' keyword in place of a type.
+All copies are explicit and must use the 'copy' keyword in place of a type.
 
-[#code():
+[basic.Code:
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -120,9 +137,9 @@ All copies of collections are explicit and must use the 'copy' keyword in place 
 
 Expressions can span over multiple lines.
 
-But statements must start after a newline.
+But new statements must start after a newline.
 
-[#code():
+[basic.Code:
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
@@ -130,48 +147,48 @@ But statements must start after a newline.
 
     -- Also valid
     some_int =
-        4 + 5 + 6 + 7
-        + 8 + 9 + 10
+        4 + (5 + 6) * 7
+        + 8 / 9 + 10
 ]
 
 # Data Types
 All data type keywords contain methods from the standard library for common manipulation of types.
 
 ## Numerical Types
-[table(3):
+[basic.table(3):
     [: Type] [: Description]
 
     [: float ] [: 64 bit floating point number]
 
-    [: int ] [:  32 bit signed integer (may become 64 bit in the future or in certain contexts) ]
+    [: int ] [:  64 bit signed integer ]
 ]
 
 ## String based Types
 These are all different ways to create strings.
 
-[table(3): 
+[basic.table(3): 
     [: Type] [: Description]
 
     [: string slice ] [: UTF-16 (For JS compatibility)]
 
-    [: template ] [: The string templating syntax of Beanstalk for creating strings. See [link "./scenes": Scenes for more info!]]
+    [: template ] [: The string templating syntax of Beanstalk for creating strings. See [@./templates: Templates] for more info!]
 ]
 
 # Strings and String slices
 String is the keyword for string types in Beanstalk. 
 Double quotes are automatically string slices. 
 
-[#code(): "Double quotes for a UTF-16 string slice"]
+[basic.Code: "Double quotes for a UTF-16 string slice"]
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 
-Scenes are used instead of format strings. See [link "./scenes": Scenes] for more information.
+Scenes are used instead of format strings. See [@./templates: Scenes] for more information.
 
 # Logical Operators
 The 'is' keyword is used to check equality, not '==''. 
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
-[table(3):
+[basic.table(3):
     [: Operator] [: Description]          [: Precedence]
     [: `^`]        [: Exponent]            [: 4]
     [: `//`]       [: Root]                [: 4]
@@ -183,4 +200,4 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: `-`]        [: Subtraction]          [: 2]
 ]
 
-[Footer]
+[docs_styles.Footer]

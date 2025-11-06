@@ -1,8 +1,12 @@
-[navbar]
+[#import(@libs/html/basic)]
+[#import(@styles/docs_styles)]
+[#import(@./components)]
 
-[header center: [title(1): BEANSTALK TEMPLATES]]
+[docs_styles.Navbar]
 
-[page:
+[docs_styles.Header, basic.Center: [basic.Title: BEANSTALK TEMPLATES]]
+
+[basic.Section:
 
 Beanstalk has unique, superpowered templating strings.
 
@@ -40,169 +44,29 @@ is used to define the content of the template. This is a string.
 
 Inside the body of a template, you can nest more templates using square brackets. 
 
-## Beanstalk Markdown
-Beanstalk uses it's own flavour of markdown that can be used inside template bodies if the template is using it as a body parsing option. 
-Instead of writing any raw HTML, you can use the Beanstalk template syntax to write your text content inside of a template body. 
-Beanstalk markdown supports the familiar heading, bold and italic syntax from most markdown parsers.
 
-[#Code:
-    [page:
+## Template example
 
-    The open square bracket is used to start a new template. 
-    The colon begins the template body. 
-    This is defining the main template, 
-    which by default will add a main tag to the HTML and wrap the content in a centered container.
-
-    PAGE is a top-level style that unlocks all the basic HTML styles for nested templates.
-    It uses the built-in markdown parser function to parse this template body into markdown at compile time.
-
-    # A Heading
-    Some text that has a [link("example.com"): link] inside it.
-
-    A constant variable from the code inserted into the template: [ constant ].
-
-    The body of a template is mostly like a simple flavour of markdown, 
-    the main difference being square brackets [red: *cannot*] be used without an escape character or by using backticks to create a raw string.
-
-    ]
-]
-
-## Template exmaple
-
-[#Code:
-    [section:
+[basic.Code:
 
     [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
-
-    [img("images/meme.jpg"): meme (this text in the template body is the alt description automatically)]
-
-    # A Cool Section
-    Using the export symbol @ you can give the template an ID in the form of a variable name. 
-    The @ is needed to tell the compiler this is a declaration of the ID. 
-    ID's can be created for templates at runtime but cannot be changed once a template is created.
-
-    [section @template_id:
-        [ variable ]
-        [link("example.com/page"): here's a link!]
-    ]
 
     [ loop text in text_array: 
         [text]
     ]
 
-    [table(2):
-        [: Heading 1] [: Heading 2]
-        [: text] [: text]
-    ] 
-
     [if not text.isBlank():
         [ text: plus some extra text in the same element as the variable text ]
     ]
 
-    [rgb(230,20,150): this is a bunch of text with rgb color]
-
-    [ imported_template ]
-
-    ]
-]
-
-# HTML Standard library
-
-## Scene Style Keywords
-More styles and template configs will be added overtime. Here are some of the ideas so far:
-
-### Style
-[table(2):
-    [: Property] [: Description]
-
-    [: bg] [: Changes the background color of the element (will eventually just be passed a style argument such as a color and will automatically make those style changes to the background)]
-    [: rgb, hsl, hex] [: The color of the element. Color keywords will also be supported in the future]
-    [: code] [: A code block]
-    [: blank] [: removes all styling from the element]
-    [: title] [: An even bigger, more styalized heading]
-]
-
-### Layout
-[table(2):
-    [: Property] [: Description]
-
-    [: pad] [: The padding around the element]
-    [: space] [: The margin around the element]
-    [: center] [: Centers the element horizontally. Pass in a bool of true to center vertically]
-    [: table] [: A table element]
-    [: size] [: The size of the text in the element]
-    [: nav] [: A navigation element. Basically a nav bar, will automatically add ul tags for child templates]
-    [: order] [: The order of the element inside a container]
-    [: gap] [: Creates a gap between elements]
-
-    [: main] [: The main element of the page. Creates a main tag with a centered container]
-    [: header] [: The header element of the page. Creates a header tag with a centered container]
-    [: footer] [: The footer element of the page. Creates a footer tag with a centered container]
-    [: section] [: A section element of the page. Creates a section tag with a centered container]
-]
-
-### Interactive 
-[table(2):
-    [: Property] [: Description]
-
-    [: link] [: link (anchor tag)]
-    [: button] [: A button]
-    [: input] [: An input element]
-    [: click] [: You can provide a function as an argument to the click event]
-    [: form] [: A form element]
-    [: option] [: An option element]
-    [: dropdown] [: A dropdown element]
-]
-
-### Media
-[table(2):
-    [: Property] [: Description]
-
-    [: img] [: An image element ]
-    [: video] [: A video element ]
-    [: audio] [: An audio element ]
-    [: alt] [: An alternative text for media ]
-]
-
-### HTTP 
-These are directly from the HTMX library and will be the same keywords, but without the leading 'hx-' prefix. More to be added soon!
-[table(2):
-    [: Property] [: Description]
-
-    [: get] [: ]
-    [: post]  [: ]
-    [: swap] [: ]
-]
-
-### Other
-[table(2): 
-    [: Property] [: Description]
-
-    [: ignore] [: Creates a comment, but does not add it to the final output]
-    [: canvas] [: An HTML canvas element ]
-]
-
-## Unique Scene Logic
-Variables and expressions are typecast into strings when put into a template. This is the behaviour of all the numerical types and most of the string types. There are some exceptions to how other types are handled by templates.
-
-### Booleans
-If statements in a templatehead will conditonally hide or show itself based on the value of the boolean. 
-If the boolean is true, the template and it's children will be shown, if false, it will be hidden.
-
-[#Code:
-    logged_in = false
-
-    -- Scene is hidden
-    [if not logged_in:
-        [button: Log In]
-    ]
+    [ another_template_insert ]
 ]
 
 ### Errors
-If an error is added to a template, it will be displayed in the console, rather than injected into the template. 
+If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. 
 This usually means that the variable with the error has reverted to its default value, which will be shown.
 
-[red size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the template rather than a zero value being shown.*]
+[basic.Red, basic.Size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the template rather than a zero value being shown.*]
 
 
-[footer]
+[docs_styles.Footer]
