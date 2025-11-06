@@ -215,7 +215,7 @@ pub fn compile_modules(
     // ----------------------------------
     //          WASM generation
     // ----------------------------------
-    let wasm_bytes = match new_wasm_module(wir) {
+    let wasm_bytes = match compiler.ir_to_wasm(wir) {
         Ok(w) => w,
         Err(e) => {
             messages.errors.push(e);

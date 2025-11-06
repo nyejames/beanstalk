@@ -1,13 +1,13 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
-use crate::{return_compiler_error, return_type_error};
-use std::path::PathBuf;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler::interned_path::InternedPath;
 use crate::compiler::string_interning::{InternedString, StringId};
+use crate::{return_common_type_error, return_compiler_error, return_type_error};
+use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Arg {
@@ -82,7 +82,7 @@ pub enum NodeKind {
         InternedString, // Name
         Vec<Arg>,       // Fields
     ),
-    
+
     Function(InternedString, FunctionSignature, Vec<AstNode>),
 
     // Mutation of existing mutable variables
@@ -117,8 +117,9 @@ impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompileError> {
         match &self.kind {
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
-            NodeKind::Expression(value, ..)
-            | NodeKind::Mutation(_, value, _) => Ok(value.to_owned()),
+            NodeKind::Expression(value, ..) | NodeKind::Mutation(_, value, _) => {
+                Ok(value.to_owned())
+            }
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(
                     *name,
@@ -166,7 +167,7 @@ impl AstNode {
                 }
                 ExpressionKind::Runtime(_) => {
                     if !value.ownership.is_mutable() {
-                        return_type_error!(
+                        return_common_type_error!(
                             self.location.to_owned(),
                             "Tried to use the 'not' operator on a non-mutable value"
                         )

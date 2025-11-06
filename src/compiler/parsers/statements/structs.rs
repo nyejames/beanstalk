@@ -15,11 +15,11 @@ pub fn create_struct_definition(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<Arg>, CompileError> {
-    // Should start at the FunctionParameterBracket,
+    // Should start at the Colon
     // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, context, &mut true, string_table)?;
+    let arguments = parse_parameters(token_stream, context, &mut true, string_table, true)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -32,6 +32,7 @@ pub fn parse_parameters(
     context: &ScopeContext,
     pure: &mut bool,
     string_table: &mut StringTable,
+    is_definition: bool,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args: Vec<Arg> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -41,12 +42,36 @@ pub fn parse_parameters(
             // Return the args if the closing token is found
             // Don't skip the closing token
             TokenKind::TypeParameterBracket => {
-                return Ok(args);
+                if !is_definition {
+                    return Ok(args);
+                }
+
+                if !next_in_list {
+                    return_syntax_error!(
+                        string_table,
+                        token_stream.current_location(),
+                        "Should have a comma to separate arguments",
+                    )
+                }
+
+                // TODO: new constructor override?
+            }
+
+            TokenKind::End => {
+                if is_definition {
+                    return Ok(Args)
+                }
+                return_syntax_error!(
+                    string_table,
+                    token_stream.current_location(),
+                    "Unexpected end to this scope while parsing function parameters."
+                )
             }
 
             TokenKind::Symbol(arg_name) => {
                 if !next_in_list {
                     return_syntax_error!(
+                        string_table,
                         token_stream.current_location(),
                         "Should have a comma to separate arguments",
                     )
@@ -73,6 +98,7 @@ pub fn parse_parameters(
             // If the EOF is encountered, give an error that a closing token is missing
             TokenKind::Eof => {
                 return_syntax_error!(
+                    string_table,
                     token_stream.current_location(),
                     "Unexpected end of file. Type definition is missing a closing bracket. Expected: '|'",
                 )
@@ -80,6 +106,7 @@ pub fn parse_parameters(
 
             _ => {
                 return_syntax_error!(
+                    string_table,
                     token_stream.current_location(),
                     "Unexpected token used in function arguments: {:?}",
                     token_stream.current_token_kind()
@@ -133,6 +160,7 @@ pub fn new_parameter(
             // Make sure there is a closing curly brace
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
+                    string_table,
                     token_stream.current_location(),
                     "Missing closing curly brace for collection type declaration"
                 )
@@ -147,6 +175,7 @@ pub fn new_parameter(
         // Anything else is a syntax error
         _ => {
             return_syntax_error!(
+                string_table,
                 token_stream.current_location(),
                 "Unexpected Token: {:?} after parameter name. Expected a type declaration.",
                 token_stream.tokens[token_stream.index].kind
@@ -182,6 +211,7 @@ pub fn new_parameter(
 
         _ => {
             return_syntax_error!(
+                string_table,
                 token_stream.current_location(),
                 "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
                 token_stream.current_token_kind()

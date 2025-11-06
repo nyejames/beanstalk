@@ -61,7 +61,7 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 /// - All places map to WASM locals or linear memory locations
 /// - All operations correspond to WASM instruction sequences
 /// - Function calls are prepared for WASM function tables
-pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
+pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_interning::StringTable) -> Result<WIR, CompileError> {
     let mut context = WirTransformContext::new();
     let mut wir = WIR::new();
 
@@ -72,13 +72,17 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
     for node in ast {
         match &node.kind {
             crate::compiler::parsers::ast_nodes::NodeKind::Function(name, signature, body) => {
+                // Resolve the function name first
+                let func_name = string_table.resolve(*name).to_string();
+                
                 // Transform function definition and add to WIR
-                let wir_function = create_wir_function_from_ast(name, signature, body, &mut context)?;
+                let wir_function = create_wir_function_from_ast(&func_name, signature, body, &mut context, string_table)?;
                 
                 // Check if this is an entry point function and add export
-                if name == "_start" {
-                    wir.exports.insert("_start".to_string(), crate::compiler::wir::wir_nodes::Export {
-                        name: "_start".to_string(),
+                if func_name == "_start" {
+                    let start_name = string_table.intern("_start");
+                    wir.exports.insert(start_name, crate::compiler::wir::wir_nodes::Export {
+                        name: start_name,
                         kind: crate::compiler::wir::wir_nodes::ExportKind::Function,
                         index: wir.functions.len() as u32, // Function index in the WIR
                     });
@@ -102,7 +106,8 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
     // Create a main function for any remaining top-level statements
     // Only create if we don't already have an entry point function
     if !other_statements.is_empty() {
-        let has_entry_point = wir.exports.contains_key("_start");
+        let start_name = string_table.intern("_start");
+        let has_entry_point = wir.exports.contains_key(&start_name);
         
         if has_entry_point {
             // If we already have an entry point, don't create another main function
@@ -111,14 +116,14 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
             wir_log!("Skipping main function creation - entry point already exists");
         } else {
             // Create main function and export it as _start
-            let mut main_function = create_main_function_from_ast(&other_statements, &mut context)?;
+            let mut main_function = create_main_function_from_ast(&other_statements, &mut context, string_table)?;
             
             // Rename to _start to match WASM convention
-            main_function.name = "_start".to_string();
+            main_function.name = start_name;
             
             // Add export for the entry point
-            wir.exports.insert("_start".to_string(), crate::compiler::wir::wir_nodes::Export {
-                name: "_start".to_string(),
+            wir.exports.insert(start_name, crate::compiler::wir::wir_nodes::Export {
+                name: start_name,
                 kind: crate::compiler::wir::wir_nodes::ExportKind::Function,
                 index: wir.functions.len() as u32,
             });
@@ -150,6 +155,7 @@ pub fn ast_to_wir(ast: Vec<AstNode>) -> Result<WIR, CompileError> {
 fn create_main_function_from_ast(
     ast: &Vec<AstNode>,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<WirFunction, CompileError> {
     use crate::compiler::wir::wir_nodes::{Terminator, WirBlock, WirFunction};
 
@@ -160,9 +166,10 @@ fn create_main_function_from_ast(
     );
 
     // Create the main function
+    let main_name = string_table.intern("main");
     let mut main_function = WirFunction::new(
         0, // function ID
-        "main".to_string(),
+        main_name,
         vec![], // no parameters
         vec![], // no return types for now
         vec![], // no return args for now
@@ -178,7 +185,7 @@ fn create_main_function_from_ast(
         #[cfg(debug_assertions)]
         wir_log!("Processing AST node: {:?}", node.kind);
         
-        let node_statements = transform_ast_node_to_wir(node, context)?;
+        let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
         
         #[cfg(debug_assertions)]
         wir_log!(
@@ -213,6 +220,7 @@ fn create_main_function_from_ast(
 fn transform_ast_node_to_wir(
     node: &AstNode,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     use crate::compiler::parsers::ast_nodes::NodeKind;
     use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
@@ -220,33 +228,35 @@ fn transform_ast_node_to_wir(
     match &node.kind {
         NodeKind::VariableDeclaration(arg) => {
             // Create a place for the variable
-            let var_place = context.create_place_for_variable(arg.id.clone())?;
+            let var_name = string_table.resolve(arg.id);
+            let var_place = context.create_place_for_variable(var_name.to_string())?;
 
             // For now, create a simple assignment
             // This is a minimal implementation - full expression handling will be added later
             let rvalue = match &arg.value.kind {
                 ExpressionKind::StringSlice(s) => {
-                    // Create a string constant
-                    Rvalue::Use(Operand::Constant(Constant::String(s.clone())))
+                    // Create a string constant - s is already an InternedString
+                    Rvalue::Use(Operand::Constant(Constant::String(*s)))
                 }
                 ExpressionKind::Int(i) => Rvalue::Use(Operand::Constant(Constant::I32(*i as i32))),
                 ExpressionKind::Reference(var_ref) => {
                     // This is a reference to another variable - create a borrow
-                    let source_place = context.get_place_for_variable(var_ref)?;
+                    let var_ref_name = string_table.resolve(*var_ref);
+                    let source_place = context.get_place_for_variable(var_ref_name)?;
 
                     // Check the ownership to determine borrow kind
                     let borrow_kind = match &arg.value.ownership {
                         Ownership::MutableReference => {
                             wir_log!(
                                 "Creating mutable borrow for declaration '{}' with MutableReference ownership",
-                                arg.name
+                                var_name
                             );
                             BorrowKind::Mut
                         }
                         _ => {
                             wir_log!(
                                 "Creating shared borrow for declaration '{}' with {:?} ownership",
-                                arg.name,
+                                var_name,
                                 arg.value.ownership
                             );
                             BorrowKind::Shared
@@ -272,12 +282,13 @@ fn transform_ast_node_to_wir(
 
         NodeKind::Mutation(var_name, expression, is_mutable) => {
             // Get the existing place for the variable
-            let var_place = context.get_place_for_variable(var_name)?;
+            let resolved_var_name = string_table.resolve(*var_name);
+            let var_place = context.get_place_for_variable(resolved_var_name)?;
 
             // Debug logging
             wir_log!(
                 "Processing mutation for '{}', is_mutable: {}",
-                var_name,
+                resolved_var_name,
                 is_mutable
             );
             wir_log!("Expression kind: {:?}", expression.kind);
@@ -285,7 +296,8 @@ fn transform_ast_node_to_wir(
             // Handle assignment based on mutability flag
             let rvalue = match &expression.kind {
                 ExpressionKind::Reference(var_ref) => {
-                    let source_place = context.get_place_for_variable(var_ref)?;
+                    let source_var_name = string_table.resolve(*var_ref);
+                    let source_place = context.get_place_for_variable(source_var_name)?;
                     // Use the is_mutable flag to determine borrow kind
                     let borrow_kind = if *is_mutable {
                         wir_log!(
@@ -338,13 +350,14 @@ fn transform_ast_node_to_wir(
 
         NodeKind::Function(name, signature, body) => {
             // Transform function definition to WIR function
-            transform_function_node(name, signature, body, context)
+            let func_name = string_table.resolve(*name);
+            transform_function_node(func_name, signature, body, context)
         }
 
         _ => {
             // For other node types, delegate to the statements module
             // This ensures all node types are properly handled
-            crate::compiler::wir::statements::transform_ast_node_to_wir(node, context)
+            crate::compiler::wir::statements::transform_ast_node_to_wir(node, context, string_table)
         }
     }
 }
@@ -370,6 +383,7 @@ fn create_wir_function_from_ast(
     signature: &crate::compiler::parsers::statements::functions::FunctionSignature,
     body: &[AstNode],
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<crate::compiler::wir::wir_nodes::WirFunction, CompileError> {
     use crate::compiler::wir::wir_nodes::{Terminator, WirBlock, WirFunction};
 
@@ -407,8 +421,9 @@ fn create_wir_function_from_ast(
     // Process parameters
     for (param_index, param) in signature.parameters.iter().enumerate() {
         // Create a place for each parameter
+        let param_name = string_table.resolve(param.id);
         let param_place = context.create_place_for_parameter(
-            param.id.clone(),
+            param_name.to_string(),
             param_index as u32,
             &param.value.data_type,
         )?;
@@ -423,16 +438,17 @@ fn create_wir_function_from_ast(
 
     // Create the WIR function
     let function_id = context.get_next_function_id();
+    let interned_name = string_table.intern(name);
     let mut wir_function = WirFunction::new(
         function_id,
-        name.to_string(),
+        interned_name,
         param_places,
         return_types,
         signature.returns.clone(),
     );
 
     // Transform function body
-    let body_statements = transform_function_body(body, context)?;
+    let body_statements = transform_function_body(body, context, string_table)?;
 
     // Create a single basic block for the function body
     let mut main_block = WirBlock::new(0);
@@ -507,6 +523,7 @@ fn transform_function_node(
 fn transform_function_body(
     body: &[AstNode],
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with estimated capacity (assume ~2 statements per AST node on average)
     let mut statements = Vec::with_capacity(body.len() * 2);
@@ -517,7 +534,7 @@ fn transform_function_body(
     for (_node_index, node) in body.iter().enumerate() {
         wir_log!("Processing function body node {}: {:?}", _node_index, node.kind);
         
-        let node_statements = transform_ast_node_to_wir(node, context)?;
+        let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
         wir_log!(
             "Generated {} WIR statements for function body node {}",
             node_statements.len(),

@@ -109,7 +109,7 @@ pub fn new_arg(
             )?;
 
             return Ok(Arg {
-                id: id,
+                id,
                 value: Expression::function(
                     func_sig,
                     function_body,
@@ -137,6 +137,7 @@ pub fn new_arg(
             // Make sure there is a closing curly brace
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
+                    string_table,
                     token_stream.current_location(),
                     "Missing closing curly brace for collection type declaration"
                 )
@@ -148,9 +149,23 @@ pub fn new_arg(
             // Ignore
         }
 
+        TokenKind::Colon => {
+            let struct_def = create_struct_definition(token_stream, context, string_table)?;
+            
+            return Ok(Arg {
+                id,
+                value: Expression::struct_definition(
+                    struct_def, 
+                    token_stream.current_location(), 
+                    ownership
+                ),
+            });
+        }
+
         // Anything else is a syntax error
         _ => {
             return_syntax_error!(
+                string_table,
                 token_stream.current_location(),
                 "Invalid operator: {:?} after new variable declaration. Expect a type or assignment operator.",
                 token_stream.tokens[token_stream.index].kind
@@ -178,6 +193,7 @@ pub fn new_arg(
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
             return_rule_error!(
+                string_table,
                 token_stream.current_location(),
                 "All variables must be initialized with an assignment operator."
             )
@@ -185,6 +201,7 @@ pub fn new_arg(
 
         _ => {
             return_syntax_error!(
+                string_table,
                 token_stream.current_location(),
                 "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
                 token_stream.current_token_kind()
@@ -197,11 +214,11 @@ pub fn new_arg(
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
     let parsed_expr = match token_stream.current_token_kind() {
-        // Check if this is a struct definition (type)
+        // Is this a hashset or something?
         TokenKind::TypeParameterBracket => {
-            let struct_def = create_struct_definition(token_stream, context, string_table)?;
-            Expression::struct_definition(struct_def, token_stream.current_location(), ownership)
+            // TODO
         }
+
         TokenKind::OpenParenthesis => {
             token_stream.advance();
             create_expression(

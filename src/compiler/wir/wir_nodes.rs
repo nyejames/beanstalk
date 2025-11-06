@@ -1,6 +1,7 @@
 // Optimized import structure - grouped by module for clarity
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::wir::place::{Place, WasmType};
+use crate::compiler::string_interning::InternedString;
 use std::collections::HashMap;
 
 /// WASM Intermediate Representation structure with simplified borrow checking
@@ -44,7 +45,7 @@ pub struct WIR {
     /// Global variables and their places
     pub globals: HashMap<u32, Place>,
     /// Module exports
-    pub exports: HashMap<String, Export>,
+    pub exports: HashMap<InternedString, Export>,
     /// Type information for WASM module generation
     pub type_info: TypeInfo,
     /// Host function imports for WASM generation
@@ -165,7 +166,7 @@ pub struct WirFunction {
     /// Function ID
     pub id: u32,
     /// Function name
-    pub name: String,
+    pub name: InternedString,
     /// Parameter places
     pub parameters: Vec<Place>,
     /// Return type information (WASM types for code generation)
@@ -175,7 +176,7 @@ pub struct WirFunction {
     /// Basic blocks
     pub blocks: Vec<WirBlock>,
     /// Local variable places
-    pub locals: HashMap<String, Place>,
+    pub locals: HashMap<InternedString, Place>,
     /// WASM function signature
     pub signature: FunctionSignature,
     /// Simple event storage per program point
@@ -188,7 +189,7 @@ impl WirFunction {
     /// Create a new simplified WIR function
     pub fn new(
         id: u32,
-        name: String,
+        name: InternedString,
         parameters: Vec<Place>,
         return_types: Vec<WasmType>,
         return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>,
@@ -216,7 +217,7 @@ impl WirFunction {
     }
 
     /// Add a local variable to this function
-    pub fn add_local(&mut self, name: String, place: Place) {
+    pub fn add_local(&mut self, name: InternedString, place: Place) {
         self.locals.insert(name, place);
     }
 
@@ -382,7 +383,7 @@ pub enum Statement {
 
     /// WASIX function call (low-level WASM system calls)
     WasixCall {
-        function_name: String,
+        function_name: InternedString,
         args: Vec<Operand>,
         destination: Option<Place>,
     },
@@ -397,7 +398,7 @@ pub enum Statement {
     /// Mark a struct field as initialized (for tracking optional defaults)
     MarkFieldInitialized {
         struct_place: Place,
-        field_name: String,
+        field_name: InternedString,
         field_index: u32,
     },
 
@@ -826,9 +827,9 @@ pub enum Constant {
     /// Boolean (as i32)
     Bool(bool),
     /// String slice literal (immutable pointer to data section)
-    String(String),
+    String(InternedString),
     /// Mutable string (heap-allocated with capacity)
-    MutableString(String),
+    MutableString(InternedString),
     /// Function reference
     Function(u32),
     /// Null pointer (0 in linear memory)
@@ -1435,7 +1436,7 @@ pub fn convert_borrow_errors_to_compile_errors(
 #[derive(Debug, Clone)]
 pub struct Export {
     /// Export name
-    pub name: String,
+    pub name: InternedString,
     /// Export kind
     pub kind: ExportKind,
     /// Index in respective section
@@ -1492,7 +1493,7 @@ pub struct InterfaceDefinition {
     /// Interface ID
     pub id: u32,
     /// Interface name
-    pub name: String,
+    pub name: InternedString,
     /// Method signatures
     pub methods: Vec<MethodSignature>,
 }
@@ -1503,7 +1504,7 @@ pub struct MethodSignature {
     /// Method ID within interface
     pub id: u32,
     /// Method name
-    pub name: String,
+    pub name: InternedString,
     /// Parameter types (including receiver)
     pub param_types: Vec<WasmType>,
     /// Return types

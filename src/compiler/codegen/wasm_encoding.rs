@@ -1224,14 +1224,15 @@ impl WasmModule {
     }
 
     /// Create a new WasmModule from WIR with comprehensive error handling and validation
-    pub fn from_wir(wir: &WIR) -> Result<WasmModule, CompileError> {
-        Self::from_wir_with_registry(wir, None)
+    pub fn from_wir(wir: &WIR, string_table: &crate::compiler::string_interning::StringTable) -> Result<WasmModule, CompileError> {
+        Self::from_wir_with_registry(wir, None, string_table)
     }
 
     /// Create a new WasmModule from WIR with host function registry access
     pub fn from_wir_with_registry(
         wir: &WIR, 
-        registry: Option<&crate::compiler::host_functions::registry::HostFunctionRegistry>
+        registry: Option<&crate::compiler::host_functions::registry::HostFunctionRegistry>,
+        string_table: &crate::compiler::string_interning::StringTable,
     ) -> Result<WasmModule, CompileError> {
         let mut module = WasmModule::new();
 
@@ -1262,18 +1263,19 @@ impl WasmModule {
 
         // Process functions with enhanced error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
-            module.compile_function(function).map_err(|mut error| {
+            module.compile_function(function, string_table).map_err(|mut error| {
                 // Add context about which function failed
+                let function_name = string_table.resolve(function.name);
                 error.msg = format!(
                     "Failed to compile function '{}' (index {}): {}",
-                    function.name, index, error.msg
+                    function_name, index, error.msg
                 );
                 error
             })?;
         }
 
         // Export entry point functions correctly, passing the import count
-        module.export_entry_point_functions_with_import_count(&wir, import_count)?;
+        module.export_entry_point_functions_with_import_count(&wir, import_count, string_table)?;
 
         // Export memory for WASIX access
         module.add_memory_export("memory")?;
@@ -1303,7 +1305,7 @@ impl WasmModule {
     /// This method implements subtask 3.3: Fix entry point export generation
     /// It ensures entry point functions are exported correctly and validates
     /// that only one start function is exported per module.
-    pub fn export_entry_point_functions_with_import_count(&mut self, wir: &WIR, import_count: u32) -> Result<(), CompileError> {
+    pub fn export_entry_point_functions_with_import_count(&mut self, wir: &WIR, import_count: u32, string_table: &crate::compiler::string_interning::StringTable) -> Result<(), CompileError> {
         let mut entry_point_count = 0;
         let mut start_function_index: Option<u32> = None;
 
@@ -1314,12 +1316,16 @@ impl WasmModule {
             // Check if this function is marked as an entry point in WIR exports
             if let Some(export) = wir.exports.get(&wir_function.name) {
                 if export.kind == crate::compiler::wir::wir_nodes::ExportKind::Function {
+                    // Resolve interned strings for comparison
+                    let function_name = string_table.resolve(wir_function.name);
+                    let export_name = string_table.resolve(export.name);
+                    
                     // Check if this is the entry point by looking for specific naming patterns
                     // Entry points are typically named "main", "_start", or marked specially in the WIR
-                    let is_entry_point = wir_function.name == "main" || 
-                                        wir_function.name == "_start" ||
-                                        wir_function.name.contains("entry") ||
-                                        export.name == "_start"; // WASM start function convention
+                    let is_entry_point = function_name == "main" || 
+                                        function_name == "_start" ||
+                                        function_name.contains("entry") ||
+                                        export_name == "_start"; // WASM start function convention
 
                     if is_entry_point {
                         entry_point_count += 1;
@@ -1328,7 +1334,7 @@ impl WasmModule {
                         let function_index = import_count + (index as u32);
                         
                         // Export the entry point function
-                        self.add_function_export(&export.name, function_index)?;
+                        self.add_function_export(export_name, function_index)?;
                         
                         // Mark as start function for WASM module
                         start_function_index = Some(function_index);
@@ -1337,26 +1343,27 @@ impl WasmModule {
                         #[cfg(feature = "verbose_codegen_logging")]
                         println!(
                             "WASM: Exported entry point function '{}' at index {} as '{}'",
-                            wir_function.name, function_index, export.name
+                            function_name, function_index, export_name
                         );
                     }
                 }
             }
             
             // Handle implicit main/_start function export only if not already exported
-            if !exported && (wir_function.name == "main" || wir_function.name == "_start") {
+            let function_name = string_table.resolve(wir_function.name);
+            if !exported && (function_name == "main" || function_name == "_start") {
                 entry_point_count += 1;
                 // FIXED: Add import_count to get the correct WASM function index
                 let function_index = import_count + (index as u32);
                 
                 // Use the function's actual name for the export
-                self.add_function_export(&wir_function.name, function_index)?;
+                self.add_function_export(function_name, function_index)?;
                 start_function_index = Some(function_index);
 
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!(
                     "WASM: Exported implicit entry point function '{}' at index {}",
-                    wir_function.name, function_index
+                    function_name, function_index
                 );
             }
         }
@@ -1583,17 +1590,18 @@ impl WasmModule {
 
         // Process functions
         for function in &wir.functions {
-            module.compile_function(function)?;
+            module.compile_function(function, string_table)?;
         }
 
         Ok(module)
     }
 
     /// Compile a WIR function to WASM with enhanced wasm_encoder integration
-    pub fn compile_function(&mut self, wir_function: &WirFunction) -> Result<(), CompileError> {
+    pub fn compile_function(&mut self, wir_function: &WirFunction, string_table: &crate::compiler::string_interning::StringTable) -> Result<(), CompileError> {
         // Register function in the function registry
+        let function_name = string_table.resolve(wir_function.name);
         self.function_registry
-            .insert(wir_function.name.clone(), self.function_count);
+            .insert(function_name.to_string(), self.function_count);
 
         // Prepare function compilation context
         let (param_types, result_types, local_map) = self.prepare_function_context(wir_function)?;
@@ -1658,11 +1666,12 @@ impl WasmModule {
         let wasm_locals = analyzer.generate_wasm_locals();
 
         // Create enhanced function builder with wasm_encoder integration
+        let function_name = string_table.resolve(wir_function.name);
         let mut function_builder = EnhancedFunctionBuilder::new(
             wasm_locals,
             param_types,
             result_types,
-            wir_function.name.clone(),
+            function_name.to_string(),
         );
 
         // Compile function body using enhanced builder
@@ -1673,20 +1682,20 @@ impl WasmModule {
     }
 
     /// Generate enhanced function metadata for named returns and references
-    fn generate_function_metadata(&self, wir_function: &WirFunction) -> FunctionMetadata {
+    fn generate_function_metadata(&self, wir_function: &WirFunction, string_table: &crate::compiler::string_interning::StringTable) -> FunctionMetadata {
         let mut return_info = Vec::new();
 
         for (i, return_arg) in wir_function.return_args.iter().enumerate() {
             return_info.push(ReturnParameterInfo {
                 index: i,
-                name: return_arg.id.clone(),
+                name: string_table.resolve(return_arg.id).to_string(),
                 data_type: return_arg.value.data_type.clone(),
                 is_reference: self.is_datatype_reference(&return_arg.value.data_type),
             });
         }
 
         FunctionMetadata {
-            name: wir_function.name.clone(),
+            name: string_table.resolve(wir_function.name).to_string(),
             return_parameters: return_info,
         }
     }
@@ -1704,15 +1713,16 @@ impl WasmModule {
     /// Finalize function registration and add to module
     fn finalize_function_registration(&mut self, wir_function: &WirFunction, function: Function) {
         // Generate enhanced metadata for named returns and references
-        let metadata = self.generate_function_metadata(wir_function);
+        let metadata = self.generate_function_metadata(wir_function, string_table);
 
         // Store metadata for debugging and error reporting
+        let function_name = string_table.resolve(wir_function.name);
         self.function_metadata
-            .insert(wir_function.name.clone(), metadata);
+            .insert(function_name.to_string(), metadata);
 
         // Store source information for error reporting
         let source_info = FunctionSourceInfo {
-            function_name: wir_function.name.clone(),
+            function_name: function_name.to_string(),
             source_file: None, // TODO: Extract from WIR when available
             start_line: 1,     // TODO: Extract from WIR when available
             end_line: 1,       // TODO: Extract from WIR when available
@@ -1731,7 +1741,7 @@ impl WasmModule {
         {
             println!(
                 "WASM: Successfully compiled function '{}' with {} blocks",
-                wir_function.name,
+                function_name,
                 wir_function.blocks.len()
             );
             for (i, block) in wir_function.blocks.iter().enumerate() {
@@ -4102,9 +4112,10 @@ impl WasmModule {
     pub fn compile_wir_function(
         &mut self,
         wir_function: &WirFunction,
+        string_table: &crate::compiler::string_interning::StringTable,
     ) -> Result<u32, CompileError> {
         let function_index = self.function_count;
-        self.compile_function(wir_function)?;
+        self.compile_function(wir_function, string_table)?;
         Ok(function_index)
     }
 

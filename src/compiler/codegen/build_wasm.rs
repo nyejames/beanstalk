@@ -10,11 +10,7 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
     match wasmparser::validate(wasm_bytes) {
         Ok(_) => Ok(()),
         Err(e) => {
-            return_wasm_generation_error!(
-                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                "Generated WASM module is invalid: {}. This indicates a bug in the WASM backend.",
-                e
-            );
+            return_compiler_error!("Generated WASM module is invalid. This indicates a bug in the WASM backend");
         }
     }
 }
@@ -24,8 +20,8 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
 /// This function provides direct WIR → WASM lowering with minimal overhead.
 /// Complex validation and performance tracking have been removed to focus
 /// on core functionality until borrow checking is complete.
-pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
-    new_wasm_module_with_registry(wir, None)
+pub fn new_wasm_module(wir: WIR, string_table: &crate::compiler::string_interning::StringTable) -> Result<Vec<u8>, CompileError> {
+    new_wasm_module_with_registry(wir, None, string_table)
 }
 
 /// WIR-to-WASM compilation with host function registry support
@@ -34,13 +30,14 @@ pub fn new_wasm_module(wir: WIR) -> Result<Vec<u8>, CompileError> {
 /// for proper runtime-specific function mapping during codegen.
 pub fn new_wasm_module_with_registry(
     wir: WIR, 
-    registry: Option<&HostFunctionRegistry>
+    registry: Option<&HostFunctionRegistry>,
+    string_table: &crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
-    validate_wir_for_wasm_compilation(&wir)?;
+    validate_wir_for_wasm_compilation(&wir, string_table)?;
 
     // Create WASM module from WIR with registry access
-    let mut module = WasmModule::from_wir_with_registry(&wir, registry)?;
+    let mut module = WasmModule::from_wir_with_registry(&wir, registry, string_table)?;
 
     // Handle exports (functions are already compiled in from_wir)
     for wir_function in &wir.functions {
@@ -53,13 +50,15 @@ pub fn new_wasm_module_with_registry(
                     .iter()
                     .position(|f| f.name == wir_function.name)
                     .unwrap() as u32;
-                let _ = module.add_function_export(&export.name, function_index);
+                let export_name = string_table.resolve(export.name);
+                let _ = module.add_function_export(export_name, function_index);
             }
         }
     }
 
     // Handle other exports
-    for (export_name, export) in &wir.exports {
+    for (export_name_id, export) in &wir.exports {
+        let export_name = string_table.resolve(*export_name_id);
         match export.kind {
             ExportKind::Global => {
                 let _ = module.add_global_export(export_name, export.index);
@@ -84,7 +83,7 @@ pub fn new_wasm_module_with_registry(
 }
 
 /// Validate WIR structure before WASM compilation
-fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
+fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::string_interning::StringTable) -> Result<(), CompileError> {
     // Empty WIR is allowed - it creates a minimal WASM module
     // This is useful for testing and incremental compilation
 
@@ -92,11 +91,13 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
     if !wir.functions.is_empty() {
         let mut function_names = std::collections::HashSet::new();
         for function in &wir.functions {
-            if !function_names.insert(&function.name) {
+            let function_name = string_table.resolve(function.name);
+            if !function_names.insert(function_name) {
                 return_wasm_generation_error!(
+                    string_table,
                     crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                     "Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.",
-                    function.name
+                    function_name
                 );
             }
         }
@@ -106,6 +107,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
     let memory_info = &wir.type_info.memory_info;
     if memory_info.initial_pages > 65536 {
         return_wasm_generation_error!(
+            string_table,
             crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             "WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).",
             memory_info.initial_pages
@@ -115,6 +117,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
     if let Some(max_pages) = memory_info.max_pages {
         if max_pages > 65536 {
             return_wasm_generation_error!(
+                string_table,
                 crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 "WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).",
                 max_pages
@@ -124,6 +127,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
         // Check that max pages is not less than initial pages
         if max_pages < memory_info.initial_pages {
             return_wasm_generation_error!(
+                string_table,
                 crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 "WIR memory max pages ({}) is less than initial pages ({}). \
                 Maximum memory pages must be greater than or equal to initial pages.",
@@ -138,6 +142,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR) -> Result<(), CompileError> {
         for (interface_id, interface_def) in &wir.type_info.interface_info.interfaces {
             if interface_def.methods.is_empty() {
                 return_wasm_generation_error!(
+                    string_table,
                     crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                     "Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.",
                     interface_id

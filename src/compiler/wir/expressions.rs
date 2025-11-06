@@ -57,6 +57,7 @@ pub fn expression_to_rvalue_with_context(
     expression: &Expression,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok((
@@ -71,13 +72,17 @@ pub fn expression_to_rvalue_with_context(
             vec![],
             Rvalue::Use(Operand::Constant(Constant::Bool(*value))),
         )),
-        ExpressionKind::StringSlice(value) => Ok((
-            vec![],
-            Rvalue::Use(Operand::Constant(Constant::String(value.clone()))),
-        )),
+        ExpressionKind::StringSlice(value) => {
+            // value is already an InternedString from the AST
+            Ok((
+                vec![],
+                Rvalue::Use(Operand::Constant(Constant::String(*value))),
+            ))
+        },
         ExpressionKind::Reference(name) => {
+            let var_name = string_table.resolve(*name);
             let variable_place = context
-                .lookup_variable(name)
+                .lookup_variable(var_name)
                 .ok_or_else(|| {
                     CompileError::new_rule_error(
                         format!("Undefined variable '{}'", name),
@@ -95,7 +100,7 @@ pub fn expression_to_rvalue_with_context(
         }
         ExpressionKind::Runtime(rpn_nodes) => {
             // Handle runtime expressions (RPN evaluation)
-            evaluate_rpn_to_wir_statements(rpn_nodes, location, context)
+            evaluate_rpn_to_wir_statements(rpn_nodes, location, context, string_table)
         }
         _ => {
             return_wir_transformation_error!(
@@ -138,8 +143,9 @@ pub fn expression_to_operand_with_context(
     expression: &Expression,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<(Vec<Statement>, Operand), CompileError> {
-    let (statements, rvalue) = expression_to_rvalue_with_context(expression, location, context)?;
+    let (statements, rvalue) = expression_to_rvalue_with_context(expression, location, context, string_table)?;
 
     match rvalue {
         Rvalue::Use(operand) => Ok((statements, operand)),
@@ -201,6 +207,7 @@ pub fn evaluate_rpn_to_wir_statements(
     rpn_nodes: &[AstNode],
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     // Validate input
     if rpn_nodes.is_empty() {
@@ -221,7 +228,7 @@ pub fn evaluate_rpn_to_wir_statements(
             NodeKind::Expression(expr) => {
                 // Convert expression to operand and push to stack
                 let (expr_statements, operand) =
-                    expression_to_operand_with_context(expr, &node.location, context)?;
+                    expression_to_operand_with_context(expr, &node.location, context, string_table)?;
                 statements.extend(expr_statements);
                 operand_stack.push(operand);
             }

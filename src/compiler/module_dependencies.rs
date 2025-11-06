@@ -74,6 +74,7 @@ fn visit_node(
     // cycle?
     if tracker.temp_mark.contains(node_path) {
         return_rule_error!(
+            string_table,
             TextLocation::default(),
             "Circular dependency detected at {}",
             node_path.to_string(string_table),

@@ -102,15 +102,15 @@ pub struct UnifiedBorrowCheckResults {
 impl UnifiedBorrowChecker {
     /// Create a new unified borrow checker
     pub fn new(loan_count: usize) -> Self {
-        Self::new_with_function_name(loan_count, "unknown".to_string())
+        Self::new_with_function_id(loan_count, 0)
     }
 
-    /// Create a new unified borrow checker with the function name for diagnostics
+    /// Create a new unified borrow checker with the function ID for diagnostics
     /// 
     /// # Performance Optimization
     /// 
     /// Pre-allocates hash maps with estimated capacity based on function size
-    pub fn new_with_function_name(loan_count: usize, _function_name: String) -> Self {
+    pub fn new_with_function_id(loan_count: usize, _function_id: u32) -> Self {
         // Estimate capacity based on loan count (typically 2-4x program points vs loans)
         let estimated_capacity = (loan_count * 3).max(16);
         

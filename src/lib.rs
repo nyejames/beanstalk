@@ -101,7 +101,7 @@ mod compiler {
 }
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages, CommonErrorMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer;
@@ -146,14 +146,19 @@ pub struct Compiler<'a> {
     project_config: &'a Config,
     host_function_registry: HostFunctionRegistry,
     string_table: StringTable,
+    common_error_messages: CommonErrorMessages,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(project_config: &'a Config, host_function_registry: HostFunctionRegistry) -> Self {
+        let mut string_table = StringTable::new();
+        let common_error_messages = CommonErrorMessages::new(&mut string_table);
+        
         Self {
             project_config,
             host_function_registry,
-            string_table: StringTable::new(),
+            string_table,
+            common_error_messages,
         }
     }
 
@@ -181,6 +186,12 @@ impl<'a> Compiler<'a> {
     /// This allows access to interning operations and string table management.
     pub fn string_table_mut(&mut self) -> &mut StringTable {
         &mut self.string_table
+    }
+
+    /// Get a reference to the pre-interned common error messages.
+    /// This provides access to frequently used error message templates.
+    pub fn common_error_messages(&self) -> &CommonErrorMessages {
+        &self.common_error_messages
     }
 
     /// -----------------------------
@@ -260,18 +271,15 @@ impl<'a> Compiler<'a> {
     /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
     pub fn ast_to_ir(&mut self, ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
-        // TODO: Pass string table to WIR generation for string interning during WIR building
-        // This will be implemented in task 5 (Update WIR to use interned strings)
-        
-        // Use the new borrow checking pipeline
-        compiler::wir::wir::borrow_check_pipeline(ast)
+        // Pass string table to WIR generation for string interning during WIR building
+        compiler::wir::wir::borrow_check_pipeline(ast, &mut self.string_table)
     }
 
     /// -----------------------
     ///        BACKEND
     ///    (Wasm Generation)
     /// -----------------------
-    pub fn ir_to_wasm(wir: WIR) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(wir)
+    pub fn ir_to_wasm(&self, wir: WIR) -> Result<Vec<u8>, CompileError> {
+        new_wasm_module(wir, &self.string_table)
     }
 }

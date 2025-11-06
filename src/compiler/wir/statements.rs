@@ -58,44 +58,51 @@ use crate::return_wir_transformation_error;
 pub fn transform_ast_node_to_wir(
     node: &AstNode,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     match &node.kind {
         NodeKind::VariableDeclaration(arg) => {
-            ast_declaration_to_wir(&arg.id, &arg.value, &node.location, context)
+            let var_name = string_table.resolve(arg.id).to_string();
+            ast_declaration_to_wir(&var_name, &arg.value, &node.location, context, string_table)
         }
         NodeKind::Mutation(name, value, is_mutable) => {
-            ast_mutation_to_wir(name, value, *is_mutable, &node.location, context)
+            let var_name = string_table.resolve(*name).to_string();
+            ast_mutation_to_wir(&var_name, value, *is_mutable, &node.location, context, string_table)
         }
         NodeKind::FunctionCall(name, args, _, _) => {
-            ast_function_call_to_wir(name, args, &node.location, context)
+            let func_name = string_table.resolve(*name).to_string();
+            ast_function_call_to_wir(&func_name, args, &node.location, context, string_table)
         }
         NodeKind::HostFunctionCall(name, args, _, module, function, _) => {
-            ast_host_function_call_to_wir(name, args, module, function, &node.location, context)
+            let func_name = string_table.resolve(*name).to_string();
+            let module_name = string_table.resolve(*module).to_string();
+            let function_name = string_table.resolve(*function).to_string();
+            ast_host_function_call_to_wir(&func_name, args, &module_name, &function_name, &node.location, context, string_table)
         }
         NodeKind::Print(expr) => {
             // Transform Print node to a host function call to the print function
             // Print is a built-in host function provided by the runtime
-            ast_print_to_wir(expr, &node.location, context)
+            ast_print_to_wir(expr, &node.location, context, string_table)
         }
         NodeKind::If(condition, then_block, else_block) => {
-            ast_if_statement_to_wir(condition, then_block, else_block, &node.location, context)
+            ast_if_statement_to_wir(condition, then_block, else_block, &node.location, context, string_table)
         }
         NodeKind::Expression(expr) => {
             // Handle standalone expressions (like function definitions)
             match &expr.kind {
                 ExpressionKind::Function(args, body) => {
-                    ast_function_definition_to_wir(&args.parameters, body, &node.location, context)
+                    ast_function_definition_to_wir(&args.parameters, body, &node.location, context, string_table)
                 }
                 _ => {
                     // For other expressions, convert to assignment to temporary
                     let (statements, _rvalue) =
-                        expression_to_rvalue_with_context(expr, &node.location, context)?;
+                        expression_to_rvalue_with_context(expr, &node.location, context, string_table)?;
                     Ok(statements)
                 }
             }
         }
         NodeKind::Return(return_values) => {
-            ast_return_to_wir(return_values, &node.location, context)
+            ast_return_to_wir(return_values, &node.location, context, string_table)
         }
         _ => {
             return_wir_transformation_error!(
@@ -122,12 +129,13 @@ fn ast_declaration_to_wir(
     value: &Expression,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with capacity for expression statements + assignment (typically 2-4 statements)
     let mut statements = Vec::with_capacity(4);
 
     // Convert the value expression to an rvalue
-    let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context)?;
+    let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context, string_table)?;
     statements.extend(expr_statements);
 
     // Create a place for the variable
@@ -153,6 +161,7 @@ fn ast_mutation_to_wir(
     is_mutable: bool,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with capacity for expression statements + assignment (typically 2-4 statements)
     let mut statements = Vec::with_capacity(4);
@@ -174,11 +183,12 @@ fn ast_mutation_to_wir(
                 var_name,
             ) => {
                 // This is a mutable borrow: x ~= y
+                let resolved_var_name = string_table.resolve(*var_name);
                 let source_place = context
-                    .lookup_variable(var_name)
+                    .lookup_variable(resolved_var_name)
                     .ok_or_else(|| {
                         CompileError::new_rule_error(
-                            format!("Undefined variable '{}'", var_name),
+                            format!("Undefined variable '{}'", resolved_var_name),
                             location.clone(),
                         )
                     })?
@@ -192,7 +202,7 @@ fn ast_mutation_to_wir(
             _ => {
                 // For non-reference expressions, convert normally
                 let (expr_statements, rvalue) =
-                    expression_to_rvalue_with_context(value, location, context)?;
+                    expression_to_rvalue_with_context(value, location, context, string_table)?;
                 statements.extend(expr_statements);
                 rvalue
             }
@@ -205,11 +215,12 @@ fn ast_mutation_to_wir(
                 var_name,
             ) => {
                 // This is a shared borrow: x = y
+                let resolved_var_name = string_table.resolve(*var_name);
                 let source_place = context
-                    .lookup_variable(var_name)
+                    .lookup_variable(resolved_var_name)
                     .ok_or_else(|| {
                         CompileError::new_rule_error(
-                            format!("Undefined variable '{}'", var_name),
+                            format!("Undefined variable '{}'", resolved_var_name),
                             location.clone(),
                         )
                     })?
@@ -223,7 +234,7 @@ fn ast_mutation_to_wir(
             _ => {
                 // For non-reference expressions, convert normally
                 let (expr_statements, rvalue) =
-                    expression_to_rvalue_with_context(value, location, context)?;
+                    expression_to_rvalue_with_context(value, location, context, string_table)?;
                 statements.extend(expr_statements);
                 rvalue
             }
@@ -246,6 +257,7 @@ fn ast_function_call_to_wir(
     args: &[Expression],
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with capacity for arg processing + call (typically 2 statements per arg + 1)
     let mut statements = Vec::with_capacity(args.len() * 2 + 1);
@@ -253,7 +265,7 @@ fn ast_function_call_to_wir(
     // Convert arguments to operands
     let mut arg_operands = Vec::with_capacity(args.len());
     for arg in args {
-        let (arg_statements, rvalue) = expression_to_rvalue_with_context(arg, location, context)?;
+        let (arg_statements, rvalue) = expression_to_rvalue_with_context(arg, location, context, string_table)?;
         statements.extend(arg_statements);
 
         // Create temporary for the argument result
@@ -267,8 +279,9 @@ fn ast_function_call_to_wir(
 
     // Create function call statement
     // TODO: Properly resolve function name to operand
+    let interned_name = string_table.intern(name);
     let func_operand = Operand::Constant(crate::compiler::wir::wir_nodes::Constant::String(
-        name.to_string(),
+        interned_name,
     ));
     statements.push(Statement::Call {
         func: func_operand,
@@ -284,6 +297,7 @@ fn ast_print_to_wir(
     expr: &Expression,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Print is a host function call to the print function
     // Convert the expression to a single-element argument list
@@ -297,6 +311,7 @@ fn ast_print_to_wir(
         "print",
         location,
         context,
+        string_table,
     )
 }
 
@@ -326,6 +341,7 @@ fn ast_return_to_wir(
     return_values: &[Expression],
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::with_capacity(return_values.len() * 2);
 
@@ -333,7 +349,7 @@ fn ast_return_to_wir(
     // Proper return handling with terminators will be added in a future task
     for return_expr in return_values {
         let (expr_statements, rvalue) =
-            expression_to_rvalue_with_context(return_expr, location, context)?;
+            expression_to_rvalue_with_context(return_expr, location, context, string_table)?;
         statements.extend(expr_statements);
 
         // Create a temporary place for the return value
@@ -362,6 +378,7 @@ fn ast_host_function_call_to_wir(
     function: &str,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with capacity for arg processing + call (typically 2 statements per arg + 1)
     let mut statements = Vec::with_capacity(args.len() * 2 + 1);
@@ -373,12 +390,13 @@ fn ast_host_function_call_to_wir(
         match &arg.kind {
             crate::compiler::parsers::expressions::expression::ExpressionKind::StringSlice(s) => {
                 // Create a constant operand directly for string literals
-                arg_operands.push(Operand::Constant(Constant::String(s.clone())));
+                // s is already an InternedString from the AST
+                arg_operands.push(Operand::Constant(Constant::String(*s)));
             }
             _ => {
                 // For other expression types, use the general approach
                 let (arg_statements, rvalue) =
-                    expression_to_rvalue_with_context(arg, location, context)?;
+                    expression_to_rvalue_with_context(arg, location, context, string_table)?;
                 statements.extend(arg_statements);
 
                 // Create temporary for the argument result
@@ -393,9 +411,10 @@ fn ast_host_function_call_to_wir(
     }
 
     // Look up the host function definition from the builtin registry
-    let host_function = match crate::compiler::host_functions::registry::create_builtin_registry() {
+    let interned_name = string_table.intern(name);
+    let host_function = match crate::compiler::host_functions::registry::create_builtin_registry(string_table) {
         Ok(registry) => {
-            match registry.get_function(name) {
+            match registry.get_function(&interned_name) {
                 Some(func_def) => func_def.clone(),
                 None => {
                     // If not found in builtin registry, create a basic definition
@@ -407,6 +426,7 @@ fn ast_host_function_call_to_wir(
                         module,
                         function,
                         &format!("Host function call to {}.{}", module, function),
+                        string_table,
                     )
                 }
             }
@@ -420,6 +440,7 @@ fn ast_host_function_call_to_wir(
                 module,
                 function,
                 &format!("Host function call to {}.{}", module, function),
+                string_table,
             )
         }
     };
@@ -479,6 +500,7 @@ fn ast_if_statement_to_wir(
     else_block: &Option<Vec<AstNode>>,
     location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with capacity for condition + blocks (estimate based on block sizes)
     let estimated_capacity = 2 + then_block.len() + else_block.as_ref().map_or(0, |b| b.len());
@@ -486,7 +508,7 @@ fn ast_if_statement_to_wir(
 
     // Convert condition to operand
     let (cond_statements, cond_rvalue) =
-        expression_to_rvalue_with_context(condition, location, context)?;
+        expression_to_rvalue_with_context(condition, location, context, string_table)?;
     statements.extend(cond_statements);
 
     // Create temporary for the condition result
@@ -504,7 +526,7 @@ fn ast_if_statement_to_wir(
     // Transform then block
     let mut then_statements = Vec::new();
     for node in then_block {
-        let node_statements = transform_ast_node_to_wir(node, context)?;
+        let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
         then_statements.extend(node_statements);
     }
     
@@ -518,7 +540,7 @@ fn ast_if_statement_to_wir(
         context.enter_scope();
         
         for node in else_nodes {
-            let node_statements = transform_ast_node_to_wir(node, context)?;
+            let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
             else_statements.extend(node_statements);
         }
         
@@ -544,6 +566,7 @@ fn ast_function_definition_to_wir(
     body: &[AstNode],
     _location: &TextLocation,
     context: &mut WirTransformContext,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
 
@@ -555,12 +578,13 @@ fn ast_function_definition_to_wir(
         let param_place = context
             .get_place_manager()
             .allocate_local(&arg.value.data_type);
-        context.register_variable(arg.id.clone(), param_place);
+        let param_name = string_table.resolve(arg.id);
+        context.register_variable(param_name.to_string(), param_place);
     }
 
     // Transform function body
     for node in body {
-        let node_statements = transform_ast_node_to_wir(node, context)?;
+        let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
         statements.extend(node_statements);
     }
 

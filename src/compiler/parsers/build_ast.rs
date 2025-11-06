@@ -83,12 +83,14 @@ pub fn function_body_to_ast(
                                 // This is invalid: var ~= value where var already exists
                                 // ~= should only be used for initial declarations, not reassignments
                                 return_syntax_error!(
+                                    string_table,
                                     token_stream.current_location(),
                                     "Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.",
                                     string_table.resolve(id)
                                 );
                             } else {
                                 return_rule_error!(
+                                    string_table,
                                     token_stream.current_location(),
                                     "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
                                     string_table.resolve(id)
@@ -116,6 +118,7 @@ pub fn function_body_to_ast(
                         // At top level, a bare variable reference without assignment is a syntax error
                         _ => {
                             return_syntax_error!(
+                                string_table,
                                 token_stream.current_location(),
                                 "Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation",
                                 token_stream.current_token_kind(),
@@ -142,6 +145,7 @@ pub fn function_body_to_ast(
                         string_table,
                     )?)
                 } else {
+                    // TODO: Change back to immediate colon afterwards syntax
                     let arg = new_arg(token_stream, id, &context, warnings, string_table)?;
 
                     // -----------------------------
@@ -213,6 +217,7 @@ pub fn function_body_to_ast(
                     break;
                 } else {
                     return_rule_error!(
+                        string_table,
                         token_stream.current_location(),
                         "Unexpected use of 'else' keyword. You can only be used inside an if statement or match statement",
                     )
@@ -228,6 +233,7 @@ pub fn function_body_to_ast(
             TokenKind::Return => {
                 if !matches!(context.kind, ContextKind::Function) {
                     return_rule_error!(
+                        string_table,
                         token_stream.current_location(),
                         "Return statements can only be used inside functions",
                     )
@@ -255,6 +261,7 @@ pub fn function_body_to_ast(
                 match context.kind {
                     ContextKind::Expression => {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Unexpected scope close with '{END_SCOPE_CHAR}'. Expressions are not terminated like this.\
                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug."
@@ -262,6 +269,7 @@ pub fn function_body_to_ast(
                     }
                     ContextKind::Template => {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Unexpected use of '{END_SCOPE_CHAR}' inside a template. Templates are not closed with '{END_SCOPE_CHAR}'.\
                             If you are seeing this error, this might be a compiler bug instead."
@@ -315,6 +323,7 @@ pub fn function_body_to_ast(
             // Or stuff that hasn't been implemented yet
             _ => {
                 return_compiler_error!(
+                    string_table,
                     "Token not recognised by AST parser when creating AST: {:?}",
                     &token_stream.current_token_kind()
                 )
@@ -353,6 +362,7 @@ fn check_for_dot_access(
             // Nothing to access error
             if members.is_empty() {
                 return_rule_error!(
+                    string_table,
                     token_stream.current_location(),
                     "'{}' has No methods or properties to access 😞",
                     &id
@@ -363,6 +373,7 @@ fn check_for_dot_access(
             let access = match members.iter().find(|member| member.id == id) {
                 Some(access) => access,
                 None => return_rule_error!(
+                    string_table,
                     token_stream.current_location(),
                     "Can't find property or method '{}' inside '{}'",
                     string_table.resolve(id),
@@ -390,6 +401,7 @@ fn check_for_dot_access(
             }
         } else {
             return_rule_error!(
+                string_table,
                 token_stream.current_location(),
                 "Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.",
                 token_stream.current_token_kind()

@@ -20,9 +20,9 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 /// 1. AST-to-WIR lowering with event generation
 /// 2. State-aware borrow checking with hybrid loan-state mapping
 /// 3. Error reporting and conversion to compile errors
-pub fn borrow_check_pipeline(ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
+pub fn borrow_check_pipeline(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_interning::StringTable) -> Result<WIR, Vec<CompileError>> {
     // Step 1: Lower AST to simplified WIR
-    let wir = match ast_to_wir(ast) {
+    let wir = match ast_to_wir(ast, string_table) {
         Ok(wir) => wir,
         Err(e) => return Err(vec![e]),
     };
@@ -55,7 +55,7 @@ pub fn borrow_check_pipeline(ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>
 /// 4. Convert borrow errors to compile errors with source locations
 fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<CompileError>> {
     // Debug: Log that borrow checking is being called
-    borrow_log!("Running borrow checker on function '{}'", function.name);
+    borrow_log!("Running borrow checker on function with ID {}", function.id);
     borrow_log!("Function has {} blocks", function.blocks.len());
     borrow_log!("Function has {} events", function.events.len());
     borrow_log!("Function has {} loans", function.loans.len());
@@ -63,37 +63,37 @@ fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<Comp
     let (fact_extractor, state_mapping) = BorrowFactExtractor::from_function_with_states(function)
         .map_err(|e| {
             vec![CompileError::compiler_error(&format!(
-                "Failed to extract borrow facts with states for function '{}': {}",
-                function.name, e
+                "Failed to extract borrow facts with states for function {}: {}",
+                function.id, e
             ))]
         })?;
 
     // Step 2: Run state-aware unified borrow checking
     let loan_count = fact_extractor.get_loan_count();
     let mut checker =
-        UnifiedBorrowChecker::new_with_function_name(loan_count, function.name.clone());
+        UnifiedBorrowChecker::new_with_function_id(loan_count, function.id);
 
     let borrow_results = checker
         .check_function_with_states(function, &fact_extractor, &state_mapping)
         .map_err(|e| {
             vec![CompileError::compiler_error(&format!(
-                "State-aware borrow checking failed for function '{}': {}",
-                function.name, e
+                "State-aware borrow checking failed for function {}: {}",
+                function.id, e
             ))]
         })?;
 
     // Step 3: Convert borrow errors to compile errors
     if !borrow_results.errors.is_empty() {
         let compile_errors =
-            convert_borrow_errors_to_compile_errors(&borrow_results.errors, &function.name);
+            convert_borrow_errors_to_compile_errors(&borrow_results.errors, function.id);
         return Err(compile_errors);
     }
 
     // Log successful borrow checking for debugging
     #[cfg(feature = "verbose_codegen_logging")]
     println!(
-        "State-aware borrow checking completed successfully for function '{}'",
-        function.name
+        "State-aware borrow checking completed successfully for function {}",
+        function.id
     );
 
     Ok(())
@@ -106,7 +106,7 @@ fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<Comp
 /// error messages that explain Beanstalk's memory model.
 fn convert_borrow_errors_to_compile_errors(
     borrow_errors: &[BorrowError],
-    function_name: &str,
+    function_id: u32,
 ) -> Vec<CompileError> {
     borrow_errors
         .iter()
