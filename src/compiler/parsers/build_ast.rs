@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
@@ -323,9 +324,8 @@ pub fn function_body_to_ast(
             // Or stuff that hasn't been implemented yet
             _ => {
                 return_compiler_error!(
-                    string_table,
-                    "Token not recognised by AST parser when creating AST: {:?}",
-                    &token_stream.current_token_kind()
+                    PathBuf::from("src/compiler/parsers/build_ast.rs"),
+                    328
                 )
             }
         }

@@ -119,6 +119,7 @@ dependencies = [
  "colour",
  "fs_extra",
  "rayon",
+ "serde_json",
  "tokio",
  "wasm-encoder 0.238.1",
  "wasmer",

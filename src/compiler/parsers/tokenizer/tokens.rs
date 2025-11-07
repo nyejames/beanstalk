@@ -2,6 +2,7 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::string_interning::{InternedString, StringTable};
 
+use crate::compiler::parsers::ast::ScopeContext;
 use colour::red_ln;
 use std::cmp::Ordering;
 use std::iter::Peekable;
@@ -55,13 +56,16 @@ impl TextLocation {
         }
     }
 
-    pub fn new_same_line(&self, start: CharPosition, length: i32) -> Self {
+    pub fn new_just_line(start: i32) -> Self {
         Self {
-            scope: self.scope.to_owned(),
-            start_pos: start,
+            scope: InternedPath::new(),
+            start_pos: CharPosition {
+                line_number: start,
+                char_column: 0,
+            },
             end_pos: CharPosition {
-                line_number: start.line_number,
-                char_column: start.char_column + length,
+                line_number: start,
+                char_column: 120, // Arbitrary number
             },
         }
     }

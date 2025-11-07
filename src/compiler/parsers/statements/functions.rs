@@ -46,6 +46,7 @@ impl FunctionSignature {
 
             _ => {
                 return_syntax_error!(
+                    string_table,
                     token_stream.current_location(),
                     "Expected an arrow operator or colon after function arguments. Found {:?} instead.",
                     token_stream.current_token_kind()
@@ -65,6 +66,7 @@ impl FunctionSignature {
                 TokenKind::Mutable => {
                     if !next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should have a comma to separate return types",
                         )
@@ -76,6 +78,7 @@ impl FunctionSignature {
                 TokenKind::DatatypeInt => {
                     if !next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should have a comma to separate return types",
                         )
@@ -97,6 +100,7 @@ impl FunctionSignature {
                 TokenKind::DatatypeFloat => {
                     if !next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should have a comma to separate return types",
                         )
@@ -118,6 +122,7 @@ impl FunctionSignature {
                 TokenKind::DatatypeBool => {
                     if !next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should have a comma to separate return types",
                         )
@@ -139,6 +144,7 @@ impl FunctionSignature {
                 TokenKind::DatatypeString => {
                     if !next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should have a comma to separate return types",
                         )
@@ -161,6 +167,7 @@ impl FunctionSignature {
                 TokenKind::Symbol(name) => {
                     if !next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should have a comma to separate return types",
                         )
@@ -194,6 +201,7 @@ impl FunctionSignature {
                 TokenKind::Comma => {
                     if next_in_list {
                         return_syntax_error!(
+                            string_table,
                             token_stream.current_location(),
                             "Should not have a comma at the end of the return types",
                         )
@@ -204,6 +212,7 @@ impl FunctionSignature {
 
                 _ => {
                     return_syntax_error!(
+                        string_table,
                         token_stream.current_location(),
                         "Expected a type keyword after the arrow operator",
                     )
