@@ -1,13 +1,11 @@
-use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
 use crate::compiler::string_interning::{InternedString, StringTable};
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
-use serde_json::json;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::{env, fs};
 
 #[derive(Debug)]
@@ -51,7 +49,7 @@ pub enum ErrorMetaDataKey {
 
 #[derive(Debug)]
 pub struct CompileError {
-    pub msg: &'static str,
+    pub msg: String,
 
     // Includes the scope path, which will have the file name and header data.
     // This file path will need to be resolved to the actual file path when the error is displayed.
@@ -65,6 +63,19 @@ pub struct CompileError {
 }
 
 impl CompileError {
+    pub fn new(
+        msg: impl Into<String>,
+        location: TextLocation,
+        error_type: ErrorType,
+    ) -> CompileError {
+        CompileError {
+            msg: msg.into(),
+            location,
+            error_type,
+            metadata: HashMap::new(),
+        }
+    }
+
     pub fn with_file_path(mut self, file_path: InternedPath) -> Self {
         self.location.scope = file_path;
         self
@@ -74,18 +85,18 @@ impl CompileError {
         self.metadata.insert(key, value);
     }
 
-    /// Create a new rule error with a descriptive message and metadata
-    pub fn new_rule_error(msg: &'static str, location: TextLocation) -> Self {
+    /// Create a new syntax error with a clear explanation
+    pub fn new_syntax_error(msg: impl Into<String>, location: TextLocation) -> Self {
         CompileError {
             msg,
             location,
-            error_type: ErrorType::Rule,
+            error_type: ErrorType::Syntax,
             metadata: HashMap::new(),
         }
     }
 
-    /// Create a new rule error with suggestions
-    pub fn new_rule_error_with_suggestions(msg: &'static str, location: TextLocation) -> Self {
+    /// Create a new rule error with a descriptive message and metadata
+    pub fn new_rule_error(msg: impl Into<String>, location: TextLocation) -> Self {
         CompileError {
             msg,
             location,
@@ -95,55 +106,17 @@ impl CompileError {
     }
 
     /// Create a new type error with type information and suggestions
-    pub fn new_type_error(msg: &'static str, location: TextLocation) -> Self {
+    pub fn new_type_error(msg: impl Into<String>, location: TextLocation) -> Self {
         CompileError {
             msg,
             location,
             error_type: ErrorType::Type,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Create a new type error with suggestions
-    pub fn new_type_error_with_suggestions(
-        msg: &'static str,
-        location: TextLocation,
-        suggestions: Vec<InternedString>,
-    ) -> Self {
-        CompileError {
-            msg,
-            location,
-            error_type: ErrorType::Type,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Create a new syntax error with clear explanation
-    pub fn new_syntax_error(msg: &'static str, location: TextLocation) -> Self {
-        CompileError {
-            msg,
-            location,
-            error_type: ErrorType::Syntax,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Create a new syntax error with suggestions
-    pub fn new_syntax_error_with_suggestions(
-        msg: &'static str,
-        location: TextLocation,
-        suggestions: Vec<InternedString>,
-    ) -> Self {
-        CompileError {
-            msg,
-            location,
-            error_type: ErrorType::Syntax,
             metadata: HashMap::new(),
         }
     }
 
     /// Create a thread panic error (internal compiler issue)
-    pub fn new_thread_panic(msg: &'static str) -> Self {
+    pub fn new_thread_panic(msg: impl Into<String>) -> Self {
         CompileError {
             msg,
             location: TextLocation::default(),
@@ -153,7 +126,7 @@ impl CompileError {
     }
 
     /// Create a compiler error (internal bug, not user's fault)
-    pub fn compiler_error(msg: &'static str) -> Self {
+    pub fn compiler_error(msg: impl Into<String>) -> Self {
         CompileError {
             msg,
             location: TextLocation::default(),
@@ -163,7 +136,7 @@ impl CompileError {
     }
 
     /// Create a file system error
-    pub fn file_error(msg: &'static str, path: InternedPath) -> Self {
+    pub fn file_error(msg: impl Into<String>, path: InternedPath) -> Self {
         CompileError {
             msg,
             location: TextLocation::new(path, CharPosition::default(), CharPosition::default()),
@@ -222,16 +195,24 @@ pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
 /// Syntax errors indicate malformed code that doesn't follow Beanstalk language rules.
 /// These should include clear explanations and suggestions when possible.
 ///
-/// Usage: `return_syntax_error!(string_table, location, "Expected ';' after statement, found '{}'", token)`;
-#[macro_export]
+/// Usage: `return_syntax_error!("message", location, {
+///    VariableName => "foo",
+//     CompilationStage => "Parsing",
+//     TopSuggestion => "Did you mean 'bar'?",
+/// })`;
 macro_rules! return_syntax_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
+    ($msg:expr, $loc:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
-            location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            msg: $msg.into(),
+            location: $loc,
+            error_type: ErrorType::Syntax,
+            metadata: {
+                let mut map = std::collections::HashMapHashMap::new();
+                $(
+                    map.insert(ErrorMetaDataKey::$key, $value);
+                )*
+                map
+            },
         })
     };
 }
@@ -626,15 +607,15 @@ macro_rules! return_wat_err {
     }};
 }
 
-pub fn print_compiler_messages(messages: CompilerMessages, string_table: Option<&StringTable>) {
+pub fn print_compiler_messages(messages: CompilerMessages, string_table: &StringTable) {
     // Format and print out the messages:
     for err in messages.errors {
         print_formatted_error(err, string_table);
     }
 
-    // TODO
-    // Format and print out the warnings:
-    for _warning in messages.warnings {}
+    for warning in messages.warnings {
+        print_formatted_warning(warning, string_table);
+    }
 }
 
 pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
@@ -802,113 +783,4 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
     let length_of_underline =
         (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
     red_ln!("{}", "^".repeat(length_of_underline));
-}
-
-/// Convenience macros for using pre-interned error messages
-
-/// Returns a syntax error using pre-interned common messages when possible
-#[macro_export]
-macro_rules! return_common_syntax_error {
-    ($compiler:expr, $location:expr, expected_semicolon) => {
-        return Err(CompileError::new_syntax_error(
-            $compiler.common_error_messages().expected_semicolon,
-            $location,
-        ))
-    };
-    ($compiler:expr, $location:expr, expected_colon) => {
-        return Err(CompileError::new_syntax_error(
-            $compiler.common_error_messages().expected_colon,
-            $location,
-        ))
-    };
-    ($compiler:expr, $location:expr, unexpected_token) => {
-        return Err(CompileError::new_syntax_error(
-            $compiler.common_error_messages().unexpected_token,
-            $location,
-        ))
-    };
-    ($compiler:expr, $location:expr, malformed_expression) => {
-        return Err(CompileError::new_syntax_error(
-            $compiler.common_error_messages().malformed_expression,
-            $location,
-        ))
-    };
-}
-
-/// Returns a type error using pre-interned common messages
-#[macro_export]
-macro_rules! return_common_type_error {
-    ($compiler:expr, $location:expr, type_mismatch, $expected:expr, $found:expr, $context:expr) => {
-        return Err(CompileError::new_type_error(
-            $compiler.common_error_messages().type_mismatch_error(
-                $expected,
-                $found,
-                $context,
-                $compiler.string_table_mut(),
-            ),
-            $location,
-        ))
-    };
-    ($compiler:expr, $location:expr, cannot_add_types, $lhs:expr, $rhs:expr) => {
-        return Err(CompileError::new_type_error(
-            $compiler.common_error_messages().format_template(
-                $compiler.common_error_messages().cannot_add_types,
-                &[$lhs, $rhs],
-                $compiler.string_table_mut(),
-            ),
-            $location,
-        ))
-    };
-}
-
-/// Returns a rule error using pre-interned common messages
-#[macro_export]
-macro_rules! return_common_rule_error {
-    ($compiler:expr, $location:expr, undefined_variable, $var_name:expr, $suggestions:expr) => {
-        return Err(CompileError::new_rule_error(
-            $compiler
-                .common_error_messages()
-                .undefined_variable_with_suggestions(
-                    $var_name,
-                    $suggestions,
-                    $compiler.string_table_mut(),
-                ),
-            $location,
-        ))
-    };
-    ($compiler:expr, $location:expr, undefined_function, $func_name:expr, $suggestions:expr) => {
-        return Err(CompileError::new_rule_error(
-            $compiler
-                .common_error_messages()
-                .undefined_function_with_suggestions(
-                    $func_name,
-                    $suggestions,
-                    $compiler.string_table_mut(),
-                ),
-            $location,
-        ))
-    };
-}
-
-/// Returns a compiler error using pre-interned common messages
-#[macro_export]
-macro_rules! return_common_compiler_error {
-    ($compiler:expr, unimplemented_feature, $feature:expr) => {
-        return Err(CompileError::compiler_error(
-            $compiler.common_error_messages().format_template(
-                $compiler.common_error_messages().unimplemented_feature,
-                &[$feature],
-                $compiler.string_table_mut(),
-            ),
-        ))
-    };
-    ($compiler:expr, internal_error, $details:expr) => {
-        return Err(CompileError::compiler_error(
-            $compiler.common_error_messages().format_template(
-                $compiler.common_error_messages().internal_error,
-                &[$details],
-                $compiler.string_table_mut(),
-            ),
-        ))
-    };
 }
