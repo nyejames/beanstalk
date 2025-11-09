@@ -6,7 +6,7 @@ use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::{InternedString, StringId};
-use crate::{return_common_type_error, return_compiler_error, return_type_error};
+use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
@@ -151,10 +151,7 @@ impl AstNode {
                 ))
             }
             // Compiler tried to get the expression of a node that cannot contain expressions
-            _ => return_compiler_error!(
-                PathBuf::from("src/compiler/parsers/ast_nodes.rs"),
-                154
-            ),
+            _ => return_compiler_error!(PathBuf::from("src/compiler/parsers/ast_nodes.rs"), 154),
         }
     }
 
@@ -168,16 +165,29 @@ impl AstNode {
                 }
                 ExpressionKind::Runtime(_) => {
                     if !value.ownership.is_mutable() {
-                        return_common_type_error!(
-                            self.location.to_owned(),
-                            "Tried to use the 'not' operator on a non-mutable value"
+                        return_type_error!(
+                            "Tried to use the 'not' operator on a non-mutable value",
+                            self.location.to_owned(), {
+                                ExpectedType => "Boolean",
+                                FoundType => &value.data_type.to_string(),
+                                InferredType => &value.data_type.to_string(),
+                                BorrowKind => "Shared",
+                                LifetimeHint => "This value is borrowed",
+                            }
                         )
                     } else {
                         return_type_error!(
-                            string_table,
-                            self.location.to_owned(),
-                            "Tried to use the 'not' operator on value of type {:?}",
-                            value.data_type
+                            format!(
+                                "Tried to use the 'not' operator on value of type {:?}",
+                                value.data_type
+                            ),
+                            self.location.to_owned(), {
+                                ExpectedType => "Boolean",
+                                FoundType => &value.data_type.to_string(),
+                                InferredType => &value.data_type.to_string(),
+                                BorrowKind => "Shared",
+                                LifetimeHint => "This value is borrowed",
+                            }
                         )
                     }
                 }

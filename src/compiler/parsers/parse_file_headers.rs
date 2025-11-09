@@ -38,7 +38,9 @@ pub enum HeaderKind {
 
 #[derive(Clone, Debug)]
 pub struct Header {
-    pub path: InternedPath, // The last part of the path is the name of the header
+    // The last part of the path is the name of the header
+    // It will also have a special extension to indicate it's a header and not a file or directory
+    pub path: InternedPath,
     pub kind: HeaderKind,
     pub exported: bool,
     // Which headers should be parsed before this one?
@@ -150,7 +152,7 @@ pub fn parse_headers_in_file(
                     // we check if it fits into one of the Header categories.
                     // If not, it goes into the implicit main function.
                     let header = create_header(
-                        token_stream.src_path.join_id(name_id),
+                        token_stream.src_path.join_header(name_id, string_table),
                         next_statement_exported,
                         token_stream,
                         current_location,

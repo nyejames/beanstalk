@@ -88,7 +88,7 @@ impl CompileError {
     /// Create a new syntax error with a clear explanation
     pub fn new_syntax_error(msg: impl Into<String>, location: TextLocation) -> Self {
         CompileError {
-            msg,
+            msg: msg.into(),
             location,
             error_type: ErrorType::Syntax,
             metadata: HashMap::new(),
@@ -192,24 +192,26 @@ pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
 
 /// Returns a new CompileError for syntax violations.
 ///
-/// Syntax errors indicate malformed code that doesn't follow Beanstalk language rules.
+/// Syntax errors indicate malformed code that don't follow Beanstalk language rules.
 /// These should include clear explanations and suggestions when possible.
 ///
-/// Usage: `return_syntax_error!("message", location, {
-///    VariableName => "foo",
-//     CompilationStage => "Parsing",
-//     TopSuggestion => "Did you mean 'bar'?",
+/// Usage:
+/// `return_syntax_error!("message", location, {
+///     VariableName => "foo",
+///     CompilationStage => "Parsing",
+///     PrimarySuggestion => "Did you mean 'bar'?",
 /// })`;
+#[macro_export]
 macro_rules! return_syntax_error {
     ($msg:expr, $loc:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err(CompileError {
+        return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
             location: $loc,
-            error_type: ErrorType::Syntax,
+            error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
             metadata: {
-                let mut map = std::collections::HashMapHashMap::new();
+                let mut map = std::collections::HashMap::new();
                 $(
-                    map.insert(ErrorMetaDataKey::$key, $value);
+                    map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value);
                 )*
                 map
             },
@@ -222,16 +224,30 @@ macro_rules! return_syntax_error {
 /// Type errors indicate mismatched types or invalid type operations.
 /// Should mention both expected and actual types with suggestions.
 ///
-/// Usage: `return_type_error!(string_table, location, "Cannot add {} and {}, both must be numeric", lhs_type, rhs_type)`;
+/// Usage:
+/// `return_type_error!("Cannot add x and y — both must be numeric", location, { ExpectedType => "Int", FoundType => "String" })`;
 #[macro_export]
 macro_rules! return_type_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
+    // New with metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Type,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::Type,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -239,19 +255,34 @@ macro_rules! return_type_error {
 /// Returns a new CompileError for semantic rule violations.
 ///
 /// Rule errors indicate violations of language semantics like undefined variables,
-/// scope violations, or incorrect usage patterns. Should include specific names
-/// and helpful suggestions.
+/// scope violations, or incorrect usage patterns. Include specific names and
+/// helpful suggestions when possible.
 ///
-/// Usage: `return_rule_error!(string_table, location, "Undefined variable '{}'. Did you mean '{}'?", name, suggestion)`;
+/// Usage examples:
+/// - Legacy style: `return_rule_error!(string_table, location, "Undefined variable '{}'", name)`;
+/// - New style: `return_rule_error!("Undefined variable", location, { VariableName => "x" })`;
 #[macro_export]
 macro_rules! return_rule_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
+    // New arm with metadata map
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
             location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Rule,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::Rule,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple arm without metadata
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::Rule,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -260,15 +291,12 @@ macro_rules! return_rule_error {
 /// Usage: `return_file_error!(string_table, path, "message", message format args)`;
 #[macro_export]
 macro_rules! return_file_error {
-    ($string_table:expr, $path:expr, $($msg:tt)+) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
-            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::File,
-            file_path: $path.to_owned(),
-            suggestions: Vec::new(),
-        })
-    };
+    // New usage with direct message and path (InternedPath)
+    ($msg:expr, $path:expr) => {{
+        return Err($crate::compiler::compiler_errors::CompileError::file_error(
+            $msg, $path,
+        ));
+    }};
 }
 
 /// Returns a new CompileError
@@ -276,13 +304,26 @@ macro_rules! return_file_error {
 /// Usage: `return_config_error!(string_table, location, "message", message format args)`;
 #[macro_export]
 macro_rules! return_config_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
+    // New with metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
             location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Config,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::Config,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::Config,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -290,20 +331,27 @@ macro_rules! return_config_error {
 /// Returns a new CompileError for internal compiler bugs.
 ///
 /// Compiler errors indicate bugs in the compiler itself, not user code issues.
-/// These do not have a message but instead provide the location of the bug in the compiler source code
+/// These provide the location of the bug in the compiler source code
 #[macro_export]
 macro_rules! return_compiler_error {
-    // Doesn't give a message
-    // Gives a location in the compiler source code instead
-    ($compiler_file_path:expr, $line:expr) => {{
-        return Err(CompileError {
-            msg: crate::compiler::string_interning::StringId::from_u32(0),
-            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::new_just_line(
-                $line,
-            ),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: $compiler_file_path,
-            suggestions: Vec::new(),
+    ($msg:expr, $compiler_file_path:expr, $line:expr) => {{
+        let _ = &$compiler_file_path; // kept for compatibility, currently unused
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation {
+                scope: InternedPath::new(),
+                start_pos: CharPosition {
+                    line_number: $line,
+                    char_column: 0,
+                },
+                end_pos: CharPosition {
+                    line_number: $line,
+                    char_column: 120, // Arbitrary number
+                },
+                scope: $compiler_file_path,
+            },
+            error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
+            metadata: std::collections::HashMap::new(),
         });
     }};
 }
@@ -314,159 +362,18 @@ macro_rules! return_compiler_error {
 /// Usage: `return_dev_server_error!(string_table, path, "Server failed to start: {}", reason)`;
 #[macro_export]
 macro_rules! return_dev_server_error {
-    ($string_table:expr, $path:expr, $($msg:tt)+) => {
-        return Err(CompilerMessages {
-            errors: vec![CompileError {
-                msg: $string_table.intern(&format!($($msg)+)),
-                location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                error_type: crate::compiler::compiler_errors::ErrorType::DevServer,
-                file_path: $path.to_owned(),
-                suggestions: Vec::new(),
+    // New usage: message only (location defaults)
+    ($msg:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerMessages {
+            errors: vec![$crate::compiler::compiler_errors::CompileError {
+                msg: $msg.into(),
+                location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                error_type: $crate::compiler::compiler_errors::ErrorType::DevServer,
+                metadata: std::collections::HashMap::new(),
             }],
-            warnings: Vec::new()
+            warnings: Vec::new(),
         })
     };
-}
-
-/// Returns a new CompileError for undefined variables with suggestions.
-///
-/// Provides enhanced error messages for undefined variable access with
-/// suggestions for similar variable names or common fixes.
-///
-/// Usage: `return_undefined_variable_error!(string_table, location, "my_var", vec!["my_variable", "my_val"])`;
-#[macro_export]
-macro_rules! return_undefined_variable_error {
-    ($string_table:expr, $location:expr, $var_name:expr, $suggestions:expr) => {{
-        let mut msg = format!(
-            "Undefined variable '{}'. Variable must be declared before use.",
-            $var_name
-        );
-        let suggestions: Vec<String> = $suggestions;
-        if !suggestions.is_empty() {
-            msg.push_str(&format!(
-                " Did you mean one of: {}?",
-                suggestions.join(", ")
-            ));
-        } else {
-            msg.push_str(&format!(
-                " Make sure '{}' is declared in this scope or a parent scope.",
-                $var_name
-            ));
-        }
-        return Err(CompileError {
-            msg: $string_table.intern(&msg),
-            location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Rule,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
-        });
-    }};
-}
-
-/// Returns a new CompileError for undefined functions with suggestions.
-///
-/// Provides enhanced error messages for undefined function calls with
-/// suggestions for similar function names or import hints.
-///
-/// Usage: `return_undefined_function_error!(string_table, location, "my_func", vec!["my_function"])`;
-#[macro_export]
-macro_rules! return_undefined_function_error {
-    ($string_table:expr, $location:expr, $func_name:expr, $suggestions:expr) => {{
-        let mut msg = format!(
-            "Undefined function '{}'. Function must be declared before use.",
-            $func_name
-        );
-        let suggestions: Vec<String> = $suggestions;
-        if !suggestions.is_empty() {
-            msg.push_str(&format!(
-                " Did you mean one of: {}?",
-                suggestions.join(", ")
-            ));
-        } else {
-            msg.push_str(
-                " Make sure the function is defined in this file or imported from another module.",
-            );
-        }
-        return Err(CompileError {
-            msg: $string_table.intern(&msg),
-            location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Rule,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
-        });
-    }};
-}
-
-/// Returns a new CompileError for type mismatches with detailed context.
-///
-/// Provides enhanced type error messages with expected vs actual types
-/// and suggestions for fixing the mismatch.
-///
-/// Usage: `return_type_mismatch_error!(string_table, location, "Int", "String", "arithmetic operation")`;
-#[macro_export]
-macro_rules! return_type_mismatch_error {
-    ($string_table:expr, $location:expr, $expected:expr, $found:expr, $context:expr) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!(
-                "Type mismatch in {}: expected {}, found {}. Make sure the types match or use appropriate type conversion.",
-                $context, $expected, $found
-            )),
-            location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::Type,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
-        })
-    };
-}
-
-/// Returns a new CompileError for unimplemented features with context.
-///
-/// Provides helpful error messages for features not yet implemented,
-/// including workarounds when available.
-///
-/// Usage: `return_unimplemented_feature_error!(string_table, "Complex expressions", Some(location), Some("break into simpler parts"))`;
-/// Or legacy usage: `return_unimplemented_feature_error!("Complex expressions", Some(location), Some("break into simpler parts"))`;
-#[macro_export]
-macro_rules! return_unimplemented_feature_error {
-    // New version with string table
-    ($string_table:expr, $feature:expr, $location:expr, $workaround:expr) => {{
-        let mut msg = format!(
-            "{} not yet implemented in the Beanstalk compiler.",
-            $feature
-        );
-        if let Some(workaround_text) = $workaround {
-            msg.push_str(&format!(" Workaround: {}", workaround_text));
-        }
-        msg.push_str(" This feature is planned for a future release.");
-
-        return Err(CompileError {
-            msg: $string_table.intern(&msg),
-            location: $location.unwrap_or_default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
-        });
-    }};
-    // Legacy version without string table
-    ($feature:expr, $location:expr, $workaround:expr) => {{
-        let mut temp_string_table = crate::compiler::string_interning::StringTable::new();
-        let mut msg = format!(
-            "{} not yet implemented in the Beanstalk compiler.",
-            $feature
-        );
-        if let Some(workaround_text) = $workaround {
-            msg.push_str(&format!(" Workaround: {}", workaround_text));
-        }
-        msg.push_str(" This feature is planned for a future release.");
-
-        return Err(CompileError {
-            msg: temp_string_table.intern(&msg),
-            location: $location.unwrap_or_default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
-        });
-    }};
 }
 
 /// Returns a new CompileError for WASM validation failures.
@@ -495,13 +402,26 @@ macro_rules! return_wasm_validation_error {
 /// Usage: `return_borrow_checker_error!(string_table, location, "Cannot borrow '{}' as mutable because it is already borrowed", var_name)`;
 #[macro_export]
 macro_rules! return_borrow_checker_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
+    // New with metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
             location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::BorrowChecker,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -515,13 +435,25 @@ macro_rules! return_borrow_checker_error {
 /// Usage: `return_wir_transformation_error!(string_table, location, "Function '{}' transformation not yet implemented", func_name)`;
 #[macro_export]
 macro_rules! return_wir_transformation_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
-        return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
+    // New arms
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
             location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::WirTransformation,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WirTransformation,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }
@@ -622,14 +554,14 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => {
-            // TODO: also strip the actual header at the end of the path
-            // Maybe Beanstalk headers should have a special extension so they can just always be treated like file paths?
+            // Strip the actual header at the end of the path (.header extension)
             let path = e.location.scope.to_path_buf(string_table);
             path.strip_prefix(dir).to_string_lossy()
         }
-        Err(_) => {
+        Err(err) => {
             red_ln!(
-                "Compiler failed to find the file to give you the snippet. Another compiler developer skill issue."
+                "Compiler failed to find the file to give you the snippet. Another compiler developer skill issue. {}",
+                err
             );
             e.location.scope.to_string(string_table)
         }
@@ -638,14 +570,27 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
     let line_number = e.location.start_pos.line_number as usize;
 
     // Read the file and get the actual line as a string from the code
-    let line = match fs::read_to_string(&e.file_path) {
+    // Strip the actual header at the end of the path (.header extension)
+    let mut actual_file = e.location.scope.to_path_buf(string_table);
+    let header = actual_file.file_name().unwrap().to_string_lossy();
+    if actual_file.ends_with(".header") {
+        actual_file = match actual_file.ancestors().nth(1) {
+            Some(p) => p.to_path_buf(),
+            None => actual_file,
+        }
+    }
+
+    let line = match fs::read_to_string(&actual_file) {
         Ok(file) => file
             .lines()
             .nth(line_number)
             .unwrap_or_default()
             .to_string(),
         Err(_) => {
-            // red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ File path is invalid: {}", e.file_path.display());
+            red_ln!(
+                "Compiler Skill Issue: Error with printing error. File path is invalid: {}",
+                actual_file.display()
+            );
             "".to_string()
         }
     };
@@ -686,17 +631,7 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
         }
 
         ErrorType::File => {
-            e_yellow_ln!("🏚 Can't find/read file or directory: {:?}", e.file_path);
-            let msg = if let Some(st) = string_table {
-                e.resolve_message(st)
-            } else {
-                // Fallback: create temporary string table to resolve message
-                let temp_st = StringTable::new();
-                temp_st
-                    .try_resolve(e.msg)
-                    .unwrap_or("Error message unavailable")
-            };
-            e_red_ln!("  {}", msg);
+            e_yellow_ln!("🏚 Can't find/read file or directory: {:?}", relative_dir);
             return;
         }
 
@@ -723,15 +658,7 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
             e_dark_magenta!("{}", relative_dir);
             eprintln!(" 🔥 ╰(° O °)╯ ");
             e_yellow_ln!("Dev Server whoopsie");
-            let msg = if let Some(st) = string_table {
-                e.resolve_message(st)
-            } else {
-                let temp_st = StringTable::new();
-                temp_st
-                    .try_resolve(e.msg)
-                    .unwrap_or("Error message unavailable")
-            };
-            e_red_ln!("  {}", msg);
+            e_red_ln!("  {}", e.msg);
             return;
         }
 
@@ -762,15 +689,7 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
         }
     }
 
-    let msg = if let Some(st) = string_table {
-        e.resolve_message(st)
-    } else {
-        let temp_st = StringTable::new();
-        temp_st
-            .try_resolve(e.msg)
-            .unwrap_or("Error message unavailable")
-    };
-    e_red_ln!("  {}", msg);
+    e_red_ln!("  {}", e.msg);
 
     println!("\n{line}");
 

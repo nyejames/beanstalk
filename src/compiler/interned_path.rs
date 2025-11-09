@@ -119,9 +119,11 @@ impl InternedPath {
         }
     }
 
-    pub fn join_id(&self, other: StringId) -> InternedPath {
+    pub fn join_header(&self, other: StringId, string_table: &mut StringTable) -> InternedPath {
         let mut new_components = self.components.clone();
-        new_components.push(other);
+        let other = format!("{}.header", string_table.resolve(other));
+        let interned = string_table.get_or_intern(other);
+        new_components.push(interned);
         InternedPath {
             components: new_components,
         }

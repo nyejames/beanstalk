@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
@@ -9,6 +8,7 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
+use std::path::PathBuf;
 
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::branching::create_branch;
@@ -84,10 +84,10 @@ pub fn function_body_to_ast(
                                 // This is invalid: var ~= value where var already exists
                                 // ~= should only be used for initial declarations, not reassignments
                                 return_syntax_error!(
-                                    string_table,
-                                    token_stream.current_location(),
-                                    "Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.",
-                                    string_table.resolve(id)
+                                    format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
+                                    token_stream.current_location(), {
+                                        
+                                    }
                                 );
                             } else {
                                 return_rule_error!(
@@ -234,9 +234,8 @@ pub fn function_body_to_ast(
             TokenKind::Return => {
                 if !matches!(context.kind, ContextKind::Function) {
                     return_rule_error!(
-                        string_table,
-                        token_stream.current_location(),
                         "Return statements can only be used inside functions",
+                        token_stream.current_location(), {}
                     )
                 }
 
@@ -262,18 +261,20 @@ pub fn function_body_to_ast(
                 match context.kind {
                     ContextKind::Expression => {
                         return_syntax_error!(
-                            string_table,
-                            token_stream.current_location(),
-                            "Unexpected scope close with '{END_SCOPE_CHAR}'. Expressions are not terminated like this.\
-                            Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug."
+                            "Unexpected scope close. Expressions are not terminated like this.
+                            Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug.",
+                            token_stream.current_location(), {
+
+                            }
                         );
                     }
                     ContextKind::Template => {
                         return_syntax_error!(
-                            string_table,
-                            token_stream.current_location(),
-                            "Unexpected use of '{END_SCOPE_CHAR}' inside a template. Templates are not closed with '{END_SCOPE_CHAR}'.\
-                            If you are seeing this error, this might be a compiler bug instead."
+                            "Unexpected use of ';' inside a template. Templates are not closed with ';'.
+                            If you are seeing this error, this might be a compiler bug instead.",
+                            token_stream.current_location(), {
+
+                            }
                         )
                     }
                     _ => {
@@ -323,10 +324,7 @@ pub fn function_body_to_ast(
 
             // Or stuff that hasn't been implemented yet
             _ => {
-                return_compiler_error!(
-                    PathBuf::from("src/compiler/parsers/build_ast.rs"),
-                    328
-                )
+                return_compiler_error!(PathBuf::from("src/compiler/parsers/build_ast.rs"), 328)
             }
         }
     }

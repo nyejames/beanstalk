@@ -261,7 +261,7 @@ impl ScopeContext {
         new_context.returns = signature.returns.to_owned();
 
         // Create a new scope path by joining the current scope with the function name
-        new_context.scope = self.scope.join_id(id);
+        new_context.scope = self.scope.join_header(id);
 
         new_context.declarations = signature.parameters;
 
