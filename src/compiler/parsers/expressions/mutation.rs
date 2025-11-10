@@ -26,10 +26,16 @@ pub fn handle_mutation(
     );
 
     if !ownership.is_mutable() {
+        let var_name_static: &'static str = Box::leak(string_table.resolve(variable_arg.id).to_string().into_boxed_str());
         return_rule_error!(
+            format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", var_name_static),
             location,
-            "Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable",
-            string_table.resolve(variable_arg.id)
+            {
+                VariableName => var_name_static,
+                BorrowKind => "Mutable",
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Declare the variable with '~=' to make it mutable",
+            }
         );
     }
 
@@ -215,11 +221,15 @@ pub fn handle_mutation(
         }
 
         _ => {
+            let var_name_static: &'static str = Box::leak(string_table.resolve(variable_arg.id).to_string().into_boxed_str());
             return_syntax_error!(
+                format!("Expected assignment operator after variable '{}', found '{:?}'", var_name_static, token_stream.current_token_kind()),
                 location.clone(),
-                "Expected assignment operator after variable '{}', found '{:?}'",
-                string_table.resolve(variable_arg.id),
-                token_stream.current_token_kind()
+                {
+                    VariableName => var_name_static,
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use '=', '+=', '-=', '*=', or '/=' for assignment",
+                }
             );
         }
     }

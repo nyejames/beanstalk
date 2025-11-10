@@ -137,9 +137,13 @@ pub fn new_arg(
             // Make sure there is a closing curly brace
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
-                    string_table,
+                    "Missing closing curly brace for collection type declaration",
                     token_stream.current_location(),
-                    "Missing closing curly brace for collection type declaration"
+                    {
+                        CompilationStage => "Variable Declaration",
+                        PrimarySuggestion => "Add '}' to close the collection type declaration",
+                        SuggestedInsertion => "}",
+                    }
                 )
             }
         }
@@ -165,10 +169,15 @@ pub fn new_arg(
         // Anything else is a syntax error
         _ => {
             return_syntax_error!(
-                string_table,
+                format!(
+                    "Invalid operator: {:?} after new variable declaration. Expect a type or assignment operator.",
+                    token_stream.tokens[token_stream.index].kind
+                ),
                 token_stream.current_location(),
-                "Invalid operator: {:?} after new variable declaration. Expect a type or assignment operator.",
-                token_stream.tokens[token_stream.index].kind
+                {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Use a type declaration (Int, String, etc.) or assignment operator '='",
+                }
             )
         }
     };
@@ -192,19 +201,29 @@ pub fn new_arg(
         | TokenKind::Eof
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
+            let var_name = string_table.resolve(id);
             return_rule_error!(
-                string_table,
+                format!("Variable '{}' must be initialized with a value", var_name),
                 token_stream.current_location(),
-                "All variables must be initialized with an assignment operator."
+                {
+                    VariableName => var_name,
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Add '= value' after the variable declaration",
+                }
             )
         }
 
         _ => {
             return_syntax_error!(
-                string_table,
+                format!(
+                    "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
+                    token_stream.current_token_kind()
+                ),
                 token_stream.current_location(),
-                "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
-                token_stream.current_token_kind()
+                {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Check that all referenced variables are declared before use",
+                }
             )
         }
     }

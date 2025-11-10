@@ -40,9 +40,12 @@ pub fn compiler_directive(
 
             _ => {
                 return_syntax_error!(
+                    format!("Invalid compiler directive: #{}", token_value),
                     stream.new_location(),
-                    "Invalid compiler directive: #{}",
-                    token_value
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Valid compiler directives are: #import, #export, #panic, #async, #WAT, #slot",
+                    }
                 )
             }
         };

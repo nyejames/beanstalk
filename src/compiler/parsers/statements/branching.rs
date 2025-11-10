@@ -59,9 +59,16 @@ pub fn create_branch(
     ast_log!("Creating If Statement");
     if token_stream.current_token_kind() != &TokenKind::Colon {
         return_rule_error!(
+            format!(
+                "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
+                token_stream.current_token_kind()
+            ),
             token_stream.current_location(),
-            "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
-            token_stream.current_token_kind()
+            {
+                CompilationStage => "If Statement Parsing",
+                PrimarySuggestion => "Add ':' after the if condition to open the if body",
+                SuggestedInsertion => ":",
+            }
         )
     }
 
@@ -118,9 +125,16 @@ fn create_match_node(
 
     if token_stream.current_token_kind() != &TokenKind::Colon {
         return_rule_error!(
+            format!(
+                "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
+                token_stream.current_token_kind()
+            ),
             token_stream.current_location(),
-            "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
-            token_stream.current_token_kind()
+            {
+                CompilationStage => "Match Statement Parsing",
+                PrimarySuggestion => "Add ':' after 'is' to open the match body",
+                SuggestedInsertion => ":",
+            }
         )
     }
 
@@ -141,16 +155,27 @@ fn create_match_node(
         if token_stream.current_token_kind() == &TokenKind::Else {
             if arms.is_empty() {
                 return_rule_error!(
+                    "Should be at least one condition in the match statement before the 'else' arm",
                     token_stream.current_location(),
-                    "Should be at least one condition in the match statement before the 'else' arm"
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => "Add at least one match arm before the 'else' arm",
+                    }
                 )
             }
 
             if token_stream.current_token_kind() != &TokenKind::Colon {
                 return_rule_error!(
+                    format!(
+                        "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
+                        token_stream.current_token_kind()
+                    ),
                     token_stream.current_location(),
-                    "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
-                    token_stream.current_token_kind()
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => "Add ':' after 'else' to open the else body",
+                        SuggestedInsertion => ":",
+                    }
                 )
             }
 
@@ -176,9 +201,16 @@ fn create_match_node(
 
         if token_stream.current_token_kind() != &TokenKind::Colon {
             return_rule_error!(
+                format!(
+                    "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
+                    token_stream.current_token_kind()
+                ),
                 token_stream.current_location(),
-                "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
-                token_stream.current_token_kind()
+                {
+                    CompilationStage => "Match Statement Parsing",
+                    PrimarySuggestion => "Add ':' after the match arm condition to open the arm body",
+                    SuggestedInsertion => ":",
+                }
             )
         }
 

@@ -94,6 +94,18 @@ pub fn get_token_kind(
 
             token_value.push(ch);
         }
+        
+        // If we reach here, the raw string was not terminated
+        return_syntax_error!(
+            "Unterminated raw string literal - missing closing backtick",
+            stream.new_location(),
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Add closing backtick at the end of the raw string",
+                SuggestedInsertion => "`",
+                SuggestedLocation => "at end of raw string",
+            }
+        )
     }
 
     if stream.mode == TokenizeMode::TemplateBody && current_char != ']' && current_char != '[' {
@@ -131,9 +143,14 @@ pub fn get_token_kind(
         match stream.mode {
             TokenizeMode::TemplateHead => {
                 return_syntax_error!(
-                    stream.new_location(),
                     "Cannot have nested templates inside of a template head, must be inside the template body. \
                     Use a colon to start the template body.",
+                    stream.new_location(),
+                    {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Add ':' after the template head to start the template body",
+                        SuggestedInsertion => ":",
+                    }
                 )
             }
 
@@ -223,8 +240,13 @@ pub fn get_token_kind(
 
         // If not correct declaration of char
         return_syntax_error!(
+            format!("Expected a character after the single quote in a char literal. Found {current_char}"),
             stream.new_location(),
-            "Expected a character after the single quote in a char literal. Found {current_char}",
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Character literals must be exactly one character between single quotes",
+                SuggestedReplacement => "'x'",
+            }
         )
     }
 
@@ -478,8 +500,12 @@ pub fn get_token_kind(
                 // Stop if too many dots in number
                 if dot_count > 1 {
                     return_syntax_error!(
+                        "Can't have more than one decimal point in a number",
                         stream.new_location(),
-                        "Can't have more than one decimal point in a number"
+                        {
+                            CompilationStage => "Tokenization",
+                            PrimarySuggestion => "Remove extra decimal points from the number",
+                        }
                     )
                 }
 
@@ -513,9 +539,12 @@ pub fn get_token_kind(
     }
 
     return_syntax_error!(
+        format!("Invalid Token Used: '{}' this is not recognised or supported by the compiler", current_char),
         stream.new_location(),
-        "Invalid Token Used: '{}' this is not recognised or supported by the compiler",
-        current_char
+        {
+            CompilationStage => "Tokenization",
+            PrimarySuggestion => "Check for typos or unsupported characters",
+        }
     )
 }
 
@@ -593,9 +622,12 @@ fn keyword_or_variable(
         } else {
             // Failing all of that, this is an invalid variable name
             return_syntax_error!(
+                format!("Invalid variable name or keyword: '{}'", token_value),
                 stream.new_location(),
-                "Invalid variable name or keyword: '{}'",
-                token_value
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Variable names must start with a letter or underscore and contain only alphanumeric characters or underscores",
+                }
             )
         }
     }
@@ -626,9 +658,13 @@ pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
         // Start the code block at the colon
         if *ch != '(' {
             return_syntax_error!(
+                format!("Expected '(' to start a new block, found '{}'", ch),
                 stream.new_location(),
-                "Expected ':' to start a new block, found '{}'",
-                ch
+                {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Add '(' to start the block",
+                    SuggestedReplacement => "(",
+                }
             )
         } else {
             stream.next();
@@ -659,8 +695,14 @@ pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
             None => {
                 if parenthesis_opened > parenthesis_closed {
                     return_syntax_error!(
-                        stream.new_location(),
                         "File ended before closing the last parenthesis",
+                        stream.new_location(),
+                        {
+                            CompilationStage => "Tokenization",
+                            PrimarySuggestion => "Add ')' to close the block",
+                            SuggestedInsertion => ")",
+                            SuggestedLocation => "at end of file",
+                        }
                     )
                 }
                 break;
@@ -692,8 +734,17 @@ fn tokenize_string(
         token_value.push(ch);
     }
 
-    let interned_string = string_table.intern(&token_value);
-    return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+    // If we reach here, the string was not terminated
+    return_syntax_error!(
+        "Unterminated string literal - missing closing quote",
+        stream.new_location(),
+        {
+            CompilationStage => "Tokenization",
+            PrimarySuggestion => "Add closing double quote at the end of the string",
+            SuggestedInsertion => "\"",
+            SuggestedLocation => "at end of string",
+        }
+    )
 }
 
 fn tokenize_template_body(
@@ -746,7 +797,14 @@ fn tokenize_path(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
     }
 
     if import_path.is_empty() {
-        return_syntax_error!(stream.new_location(), "Import path cannot be empty")
+        return_syntax_error!(
+            "Import path cannot be empty",
+            stream.new_location(),
+            {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Provide a valid file path after '@'",
+            }
+        )
     }
 
     Ok(PathBuf::from(import_path))

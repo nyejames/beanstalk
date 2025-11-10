@@ -19,9 +19,15 @@ pub fn parse_import(
         p
     } else {
         return_rule_error!(
+            format!(
+                "Expected a path after the import keyword. Found: {:?}",
+                token_stream.current_token_kind()
+            ),
             token_stream.current_location(),
-            "Expected a path after the import keyword. Found: {:?}",
-            token_stream.current_token_kind()
+            {
+                CompilationStage => "Import Parsing",
+                PrimarySuggestion => "Use #import @path/to/file syntax to import a file",
+            }
         )
     };
 
@@ -29,7 +35,21 @@ pub fn parse_import(
     
     let import_name = match path.file_name() {
         Some(name) => name,
-        None => return_rule_error!(token_stream.current_location(), "Invalid import path: {:?}. You might be forgetting to add the name of what you are importing at the end of the path!", path),
+        None => {
+            let path_str: &'static str = Box::leak(format!("{:?}", path).into_boxed_str());
+            return_rule_error!(
+                format!(
+                    "Invalid import path: {:?}. You might be forgetting to add the name of what you are importing at the end of the path!",
+                    path
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Import Parsing",
+                    PrimarySuggestion => "Add the file name at the end of the import path",
+                    SuggestedLocation => path_str,
+                }
+            )
+        }
     };
 
     Ok((import_name, path))

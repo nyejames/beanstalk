@@ -50,10 +50,12 @@ pub fn create_multiple_expressions(
             &TokenKind::Comma => {
                 if type_index >= context.returns.len() {
                     return_type_error!(
+                        format!("Too many arguments provided. Expected: {}. Provided: {}.", context.returns.len(), expressions.len()),
                         token_stream.current_location(),
-                        "Too many arguments provided. Expected: {}. Provided: {}.",
-                        context.returns.len(),
-                        expressions.len()
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Remove extra arguments to match the expected count",
+                        }
                     )
                 }
 
@@ -63,10 +65,12 @@ pub fn create_multiple_expressions(
             _ => {
                 if type_index < context.returns.len() {
                     return_type_error!(
+                        format!("Too few arguments provided. Expected: {}. Provided: {}.", context.returns.len(), expressions.len()),
                         token_stream.current_location(),
-                        "Too few arguments provided. Expected: {}. Provided: {}.",
-                        context.returns.len(),
-                        expressions.len()
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Add missing arguments to match the expected count",
+                        }
                     )
                 }
             }
@@ -108,8 +112,12 @@ pub fn create_expression(
 
                 if expression.is_empty() {
                     return_syntax_error!(
+                        "Empty expression found. Expected a value, variable, or expression.",
                         token_stream.current_location(),
-                        "Empty expression found. Expected a value, variable, or expression."
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Add a value, variable reference, or expression inside the parentheses",
+                        }
                     );
                 }
 
@@ -164,9 +172,13 @@ pub fn create_expression(
                     // Need to error here as a collection literal is being made with the wrong type declaration
                     _ => {
                         return_type_error!(
+                            format!("Expected a collection, but assigned variable with a literal type of: {:?}", &data_type),
                             token_stream.current_location(),
-                            "Expected a collection, but assigned variable with a literal type of: {:?}",
-                            &data_type
+                            {
+                                ExpectedType => "Collection",
+                                CompilationStage => "Expression Parsing",
+                                PrimarySuggestion => "Change the variable type to a collection or use a different literal",
+                            }
                         )
                     }
                 };
@@ -185,9 +197,13 @@ pub fn create_expression(
 
                 if consume_closing_parenthesis {
                     return_syntax_error!(
+                        format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
                         token_stream.current_location(),
-                        "Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.",
-                        token
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
+                            SuggestedInsertion => ")",
+                        }
                     )
                 }
 
@@ -297,11 +313,18 @@ pub fn create_expression(
                     }
                 }
 
-                return_rule_error!(
-                    token_stream.current_location(),
-                    "Undefined variable '{}'. Variable must be declared before use.",
-                    id,
-                )
+                {
+                    let var_name_static: &'static str = Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
+                    return_rule_error!(
+                        format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
+                        token_stream.current_location(),
+                        {
+                            VariableName => var_name_static,
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Declare the variable before using it in this expression",
+                        }
+                    )
+                }
             }
 
             // Check if is a literal
@@ -389,7 +412,9 @@ pub fn create_expression(
                     // Error for anything else for now
                     TemplateType::Slot => {
                         return_compiler_error!(
-                            "Slots are not supported in templates at the moment. They might be removed completely in the future."
+                            "Slots are not supported in templates at the moment. They might be removed completely in the future.",
+                            file!(),
+                            line!()
                         );
                     }
                 }
@@ -499,9 +524,12 @@ pub fn create_expression(
                         // So, we should make sure if there is a colon now, there is just one valid expression being matched
                         if expression.len() > 1 {
                             return_type_error!(
+                                format!("Match statements can only have one value to match against. Found: {}", expression.len()),
                                 token_stream.current_location(),
-                                "Match statements can only have one value to match against. Found: {}",
-                                expression.len()
+                                {
+                                    CompilationStage => "Expression Parsing",
+                                    PrimarySuggestion => "Simplify the expression to a single value before the 'is:' match",
+                                }
                             )
                         }
 
@@ -586,9 +614,12 @@ pub fn create_expression(
 
             _ => {
                 return_type_error!(
+                    format!("Invalid token used in expression: '{:?}'", token),
                     token_stream.current_location(),
-                    "Invalid token used in expression: '{:?}'",
-                    token,
+                    {
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Remove or replace this token with a valid expression element",
+                    }
                 )
             }
         }

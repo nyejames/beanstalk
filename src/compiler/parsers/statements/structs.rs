@@ -48,9 +48,13 @@ pub fn parse_parameters(
 
                 if !next_in_list {
                     return_syntax_error!(
-                        string_table,
-                        token_stream.current_location(),
                         "Should have a comma to separate arguments",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Struct/Parameter Parsing",
+                            PrimarySuggestion => "Add ',' between struct fields or function parameters",
+                            SuggestedInsertion => ",",
+                        }
                     )
                 }
 
@@ -59,21 +63,29 @@ pub fn parse_parameters(
 
             TokenKind::End => {
                 if is_definition {
-                    return Ok(Args)
+                    return Ok(args)
                 }
                 return_syntax_error!(
-                    string_table,
+                    "Unexpected end to this scope while parsing function parameters",
                     token_stream.current_location(),
-                    "Unexpected end to this scope while parsing function parameters."
+                    {
+                        CompilationStage => "Struct/Parameter Parsing",
+                        PrimarySuggestion => "Add closing bracket '|' for function parameters",
+                        SuggestedInsertion => "|",
+                    }
                 )
             }
 
             TokenKind::Symbol(arg_name) => {
                 if !next_in_list {
                     return_syntax_error!(
-                        string_table,
-                        token_stream.current_location(),
                         "Should have a comma to separate arguments",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Struct/Parameter Parsing",
+                            PrimarySuggestion => "Add ',' between struct fields or function parameters",
+                            SuggestedInsertion => ",",
+                        }
                     )
                 }
 
@@ -98,18 +110,27 @@ pub fn parse_parameters(
             // If the EOF is encountered, give an error that a closing token is missing
             TokenKind::Eof => {
                 return_syntax_error!(
-                    string_table,
-                    token_stream.current_location(),
                     "Unexpected end of file. Type definition is missing a closing bracket. Expected: '|'",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Struct/Parameter Parsing",
+                        PrimarySuggestion => "Add closing bracket '|' to complete the type definition",
+                        SuggestedInsertion => "|",
+                    }
                 )
             }
 
             _ => {
                 return_syntax_error!(
-                    string_table,
+                    format!(
+                        "Unexpected token used in function arguments: {:?}",
+                        token_stream.current_token_kind()
+                    ),
                     token_stream.current_location(),
-                    "Unexpected token used in function arguments: {:?}",
-                    token_stream.current_token_kind()
+                    {
+                        CompilationStage => "Struct/Parameter Parsing",
+                        PrimarySuggestion => "Use valid parameter syntax: name Type or name ~Type for mutable",
+                    }
                 )
             }
         }
@@ -160,9 +181,13 @@ pub fn new_parameter(
             // Make sure there is a closing curly brace
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
-                    string_table,
+                    "Missing closing curly brace for collection type declaration",
                     token_stream.current_location(),
-                    "Missing closing curly brace for collection type declaration"
+                    {
+                        CompilationStage => "Parameter Type Parsing",
+                        PrimarySuggestion => "Add '}' to close the collection type declaration",
+                        SuggestedInsertion => "}",
+                    }
                 )
             }
         }
@@ -174,11 +199,18 @@ pub fn new_parameter(
 
         // Anything else is a syntax error
         _ => {
+            let param_name = string_table.resolve(name);
             return_syntax_error!(
-                string_table,
+                format!(
+                    "Unexpected Token: {:?} after parameter name. Expected a type declaration.",
+                    token_stream.tokens[token_stream.index].kind
+                ),
                 token_stream.current_location(),
-                "Unexpected Token: {:?} after parameter name. Expected a type declaration.",
-                token_stream.tokens[token_stream.index].kind
+                {
+                    VariableName => param_name,
+                    CompilationStage => "Parameter Type Parsing",
+                    PrimarySuggestion => "Add a type declaration (Int, String, Float, Bool) after the parameter name",
+                }
             )
         }
     };
@@ -211,10 +243,15 @@ pub fn new_parameter(
 
         _ => {
             return_syntax_error!(
-                string_table,
+                format!(
+                    "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
+                    token_stream.current_token_kind()
+                ),
                 token_stream.current_location(),
-                "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
-                token_stream.current_token_kind()
+                {
+                    CompilationStage => "Parameter Parsing",
+                    PrimarySuggestion => "Check that all referenced variables are declared before use",
+                }
             )
         }
     }

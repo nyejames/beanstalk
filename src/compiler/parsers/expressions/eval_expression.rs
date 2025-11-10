@@ -93,7 +93,7 @@ pub fn evaluate_expression(
     eval_log!("Evaluating expression: {:#?}", nodes);
 
     if nodes.is_empty() {
-        return_compiler_error!("No nodes found in expression. This should never happen.");
+        return_compiler_error!("No nodes found in expression. This should never happen.", file!(), line!());
     }
 
     // SHUNTING YARD ALGORITHM
@@ -126,9 +126,12 @@ pub fn evaluate_expression(
                 match current_type {
                     DataType::String | DataType::Template => {
                         return_syntax_error!(
+                            format!("You can't use the '{:?}' operator with strings or templates", op),
                             node.location,
-                            "You can't use the '{:?}' operator with strings or templates",
-                            op
+                            {
+                                CompilationStage => "Expression Evaluation",
+                                PrimarySuggestion => "Use string concatenation or template syntax instead of arithmetic operators",
+                            }
                         )
                     }
 
@@ -154,7 +157,7 @@ pub fn evaluate_expression(
             }
 
             _ => {
-                return_compiler_error!("Unsupported AST node found in expression: {:?}", node.kind)
+                return_compiler_error!(format!("Unsupported AST node found in expression: {:?}", node.kind), file!(), line!())
             }
         }
     }
@@ -201,7 +204,9 @@ pub fn evaluate_expression(
 
         DataType::Inferred => {
             return_compiler_error!(
-                "Inferred data type made it into eval_expression! Everything should be type checked by now"
+                "Inferred data type made it into eval_expression! Everything should be type checked by now",
+                file!(),
+                line!()
             )
         }
 
@@ -225,8 +230,12 @@ pub fn evaluate_expression(
 
             if stack.is_empty() {
                 return_syntax_error!(
+                    "Invalid expression: no valid operands found during evaluation.",
                     TextLocation::default(),
-                    "Invalid expression: no valid operands found during evaluation."
+                    {
+                        CompilationStage => "Expression Evaluation",
+                        PrimarySuggestion => "Ensure the expression contains valid operands and operators",
+                    }
                 );
             }
 
@@ -312,7 +321,9 @@ fn concat_template(
 
             _ => {
                 return_compiler_error!(
-                    "Non-template value found in template expression (you can only concatenate templates with other templates)"
+                    "Non-template value found in template expression (you can only concatenate templates with other templates)",
+                    file!(),
+                    line!()
                 )
             }
         }
@@ -326,7 +337,7 @@ fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompileError> {
     // This should PROBABLY iterate through until it hits the first expression node
     match nodes.first() {
         Some(node) => Ok(node.location.to_owned()),
-        None => return_compiler_error!("No nodes found in expression. This should never happen."),
+        None => return_compiler_error!("No nodes found in expression. This should never happen.", file!(), line!()),
     }
 }
 
