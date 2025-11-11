@@ -184,9 +184,15 @@ auto_reload = true
             if let Some(io_config_path) = io_config {
                 // Validate IO configuration file exists
                 if !std::path::Path::new(io_config_path).exists() {
-                    return Err(CompileError::file_error(
+                    return Err(CompileError::new_file_error(
                         std::path::Path::new(io_config_path),
                         "IO configuration file not found",
+                        {
+                            let mut map = std::collections::HashMap::new();
+                            map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
+                            map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Create the IO configuration file or update the path in your build configuration");
+                            map
+                        }
                     ));
                 }
             }
@@ -194,8 +200,16 @@ auto_reload = true
 
         // Embedded projects should have a clear module name
         if config.name.is_empty() {
-            return Err(CompileError::compiler_error(
+            return Err(CompileError::new_config_error(
                 "Embedded projects require a project_name to be specified",
+                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                {
+                    let mut map = std::collections::HashMap::new();
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Add 'name' field to your project configuration");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::SuggestedInsertion, "name = \"my_module\"");
+                    map
+                }
             ));
         }
 

@@ -151,7 +151,7 @@ impl AstNode {
                 ))
             }
             // Compiler tried to get the expression of a node that cannot contain expressions
-            _ => return_compiler_error!(PathBuf::from("src/compiler/parsers/ast_nodes.rs"), 154),
+            _ => return_compiler_error!("Compiler tried to get the expression of a node that cannot contain expressions in src/compiler/parsers/ast_nodes.rs"),
         }
     }
 
@@ -196,10 +196,8 @@ impl AstNode {
         }
 
         return_type_error!(
-            string_table,
-            self.location.to_owned(),
-            "Tried to use the 'not' operator on a non-boolean node: {:?}",
-            self.kind
+            format!("Tried to use the 'not' operator on a non-boolean node: {:?}", self.kind),
+            self.location.to_owned(), {}
         );
     }
 

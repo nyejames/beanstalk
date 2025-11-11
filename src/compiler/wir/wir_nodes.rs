@@ -1214,6 +1214,8 @@ pub struct BorrowError {
     pub current_state: Option<PlaceState>,
     /// Expected state for the operation to succeed
     pub expected_state: Option<PlaceState>,
+    /// Structured metadata for LLM and LSP integration
+    pub metadata: std::collections::HashMap<crate::compiler::compiler_errors::ErrorMetaDataKey, &'static str>,
 }
 
 /// Types of borrow checking errors with Beanstalk-specific semantics
@@ -1255,6 +1257,18 @@ impl BorrowError {
         existing_location: TextLocation,
         new_location: TextLocation,
     ) -> Self {
+        use crate::compiler::compiler_errors::ErrorMetaDataKey;
+        
+        let place_str: &'static str = Box::leak(format!("{:?}", place).into_boxed_str());
+        
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(ErrorMetaDataKey::VariableName, place_str);
+        metadata.insert(ErrorMetaDataKey::BorrowKind, "Mutable");
+        metadata.insert(ErrorMetaDataKey::ConflictingVariable, place_str);
+        metadata.insert(ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+        metadata.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure the first mutable borrow is no longer used before creating the second");
+        metadata.insert(ErrorMetaDataKey::LifetimeHint, "Only one mutable borrow can exist at a time");
+        
         Self {
             error_type: BorrowErrorType::MultipleMutableBorrows {
                 place: place.clone(),
@@ -1273,6 +1287,7 @@ impl BorrowError {
             ),
             current_state: Some(PlaceState::Borrowed),
             expected_state: Some(PlaceState::Owned),
+            metadata,
         }
     }
 
@@ -1284,7 +1299,19 @@ impl BorrowError {
         existing_location: TextLocation,
         new_location: TextLocation,
     ) -> Self {
-        let (message, current_state, expected_state) = match (&existing_kind, &new_kind) {
+        use crate::compiler::compiler_errors::ErrorMetaDataKey;
+        
+        let place_str: &'static str = Box::leak(format!("{:?}", place).into_boxed_str());
+        let existing_kind_str: &'static str = match existing_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mut => "Mutable",
+        };
+        let new_kind_str: &'static str = match new_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mut => "Mutable",
+        };
+        
+        let (message, current_state, expected_state, suggestion, lifetime_hint) = match (&existing_kind, &new_kind) {
             (BorrowKind::Shared, BorrowKind::Mut) => (
                 format!(
                     "cannot mutably borrow `{:?}` because it is already referenced",
@@ -1292,6 +1319,8 @@ impl BorrowError {
                 ),
                 PlaceState::Referenced,
                 PlaceState::Owned,
+                "Ensure all shared references are finished before creating mutable access",
+                "Mutable borrows require exclusive access - no other borrows can exist",
             ),
             (BorrowKind::Mut, BorrowKind::Shared) => (
                 format!(
@@ -1300,13 +1329,31 @@ impl BorrowError {
                 ),
                 PlaceState::Borrowed,
                 PlaceState::Owned,
+                "Finish using the mutable borrow before creating shared references",
+                "Mutable borrows are exclusive - no other borrows can exist while active",
             ),
             _ => (
                 format!("conflicting borrows of `{:?}`", place),
                 PlaceState::Owned, // Default
                 PlaceState::Owned,
+                "Resolve the borrow conflict by restructuring your code",
+                "Check the borrow rules for your specific case",
             ),
         };
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(ErrorMetaDataKey::VariableName, place_str);
+        metadata.insert(ErrorMetaDataKey::BorrowKind, new_kind_str);
+        metadata.insert(ErrorMetaDataKey::ConflictingVariable, place_str);
+        metadata.insert(ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+        metadata.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
+        metadata.insert(ErrorMetaDataKey::LifetimeHint, lifetime_hint);
+        
+        // Add information about the existing borrow kind
+        let existing_borrow_info: &'static str = Box::leak(
+            format!("Existing {} borrow conflicts with new {} borrow", existing_kind_str, new_kind_str).into_boxed_str()
+        );
+        metadata.insert(ErrorMetaDataKey::AlternativeSuggestion, existing_borrow_info);
 
         Self {
             error_type: BorrowErrorType::SharedMutableConflict {
@@ -1319,12 +1366,10 @@ impl BorrowError {
             primary_location: new_location,
             secondary_location: Some(existing_location),
             message,
-            suggestion: Some(
-                "ensure all shared references are finished before creating mutable access"
-                    .to_string(),
-            ),
+            suggestion: Some(suggestion.to_string()),
             current_state: Some(current_state),
             expected_state: Some(expected_state),
+            metadata,
         }
     }
 
@@ -1334,6 +1379,25 @@ impl BorrowError {
         move_location: TextLocation,
         use_location: TextLocation,
     ) -> Self {
+        use crate::compiler::compiler_errors::ErrorMetaDataKey;
+        
+        let place_str: &'static str = Box::leak(format!("{:?}", place).into_boxed_str());
+        let move_loc_str: &'static str = Box::leak(
+            format!("Value moved at line {}", move_location.line).into_boxed_str()
+        );
+        let use_loc_str: &'static str = Box::leak(
+            format!("Used at line {}", use_location.line).into_boxed_str()
+        );
+        
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(ErrorMetaDataKey::VariableName, place_str);
+        metadata.insert(ErrorMetaDataKey::MovedVariable, place_str);
+        metadata.insert(ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+        metadata.insert(ErrorMetaDataKey::PrimarySuggestion, "Consider using a reference instead of moving the value");
+        metadata.insert(ErrorMetaDataKey::AlternativeSuggestion, "Clone the value before moving if you need to use it later");
+        metadata.insert(ErrorMetaDataKey::SuggestedLocation, move_loc_str);
+        metadata.insert(ErrorMetaDataKey::LifetimeHint, "Once a value is moved, ownership transfers and the original variable can no longer be used");
+        
         Self {
             error_type: BorrowErrorType::UseAfterMove {
                 place: place.clone(),
@@ -1346,6 +1410,7 @@ impl BorrowError {
             suggestion: Some("consider cloning the value before the move, or restructure your code to avoid the move".to_string()),
             current_state: Some(PlaceState::Moved),
             expected_state: Some(PlaceState::Owned),
+            metadata,
         }
     }
 
@@ -1356,6 +1421,14 @@ impl BorrowError {
         borrow_location: TextLocation,
         move_location: TextLocation,
     ) -> Self {
+        use crate::compiler::compiler_errors::ErrorMetaDataKey;
+        
+        let place_str: &'static str = Box::leak(format!("{:?}", place).into_boxed_str());
+        let borrow_kind_str: &'static str = match borrow_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mut => "Mutable",
+        };
+        
         let borrow_type = match borrow_kind {
             BorrowKind::Shared => "referenced",
             BorrowKind::Mut => "mutably borrowed",
@@ -1365,6 +1438,20 @@ impl BorrowError {
             BorrowKind::Shared => PlaceState::Referenced,
             BorrowKind::Mut => PlaceState::Borrowed,
         };
+        
+        let borrow_loc_str: &'static str = Box::leak(
+            format!("Borrowed at line {}", borrow_location.line).into_boxed_str()
+        );
+
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(ErrorMetaDataKey::VariableName, place_str);
+        metadata.insert(ErrorMetaDataKey::BorrowedVariable, place_str);
+        metadata.insert(ErrorMetaDataKey::BorrowKind, borrow_kind_str);
+        metadata.insert(ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+        metadata.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure all borrows are finished before moving the value");
+        metadata.insert(ErrorMetaDataKey::AlternativeSuggestion, "Use references instead of moving the value");
+        metadata.insert(ErrorMetaDataKey::SuggestedLocation, borrow_loc_str);
+        metadata.insert(ErrorMetaDataKey::LifetimeHint, "Cannot move a value while it has active borrows - the borrows must end first");
 
         Self {
             error_type: BorrowErrorType::MoveWhileBorrowed {
@@ -1382,6 +1469,7 @@ impl BorrowError {
             suggestion: Some("ensure all borrows are finished before moving the value".to_string()),
             current_state: Some(current_state),
             expected_state: Some(PlaceState::Owned),
+            metadata,
         }
     }
 
@@ -1416,8 +1504,8 @@ impl BorrowError {
         CompileError {
             msg: formatted_message,
             location: self.primary_location.clone(),
-            error_type: ErrorType::BorrowChecker, // Borrow checker errors have their own type
-            file_path: std::path::PathBuf::new(),
+            error_type: ErrorType::BorrowChecker,
+            metadata: self.metadata.clone(),
         }
     }
 }

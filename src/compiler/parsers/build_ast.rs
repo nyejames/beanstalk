@@ -83,18 +83,24 @@ pub fn function_body_to_ast(
                             if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
                                 // This is invalid: var ~= value where var already exists
                                 // ~= should only be used for initial declarations, not reassignments
+                                let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_syntax_error!(
                                     format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
                                     token_stream.current_location(), {
-                                        
+                                        VariableName => var_name_static,
+                                        CompilationStage => "AST Construction",
+                                        PrimarySuggestion => "Use '=' to mutate the existing variable instead of '~='",
                                     }
                                 );
                             } else {
+                                let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_rule_error!(
-                                    string_table,
-                                    token_stream.current_location(),
-                                    "Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name",
-                                    string_table.resolve(id)
+                                    format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
+                                    token_stream.current_location(), {
+                                        VariableName => var_name_static,
+                                        CompilationStage => "AST Construction",
+                                        PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
+                                    }
                                 );
                             }
                         }
@@ -118,12 +124,14 @@ pub fn function_body_to_ast(
 
                         // At top level, a bare variable reference without assignment is a syntax error
                         _ => {
+                            let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                             return_syntax_error!(
-                                string_table,
-                                token_stream.current_location(),
-                                "Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation",
-                                token_stream.current_token_kind(),
-                                &id
+                                format!("Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation", token_stream.current_token_kind(), string_table.resolve(id)),
+                                token_stream.current_location(), {
+                                    VariableName => var_name_static,
+                                    CompilationStage => "AST Construction",
+                                    PrimarySuggestion => "Add an assignment operator like '=' or '+=' after the variable",
+                                }
                             );
                         }
                     }
@@ -218,9 +226,11 @@ pub fn function_body_to_ast(
                     break;
                 } else {
                     return_rule_error!(
-                        string_table,
-                        token_stream.current_location(),
-                        "Unexpected use of 'else' keyword. You can only be used inside an if statement or match statement",
+                        "Unexpected use of 'else' keyword. It can only be used inside an if statement or match statement",
+                        token_stream.current_location(), {
+                            CompilationStage => "AST Construction",
+                            PrimarySuggestion => "Remove the 'else' or place it inside an if/match statement",
+                        }
                     )
                 }
             }
@@ -324,7 +334,7 @@ pub fn function_body_to_ast(
 
             // Or stuff that hasn't been implemented yet
             _ => {
-                return_compiler_error!(PathBuf::from("src/compiler/parsers/build_ast.rs"), 328)
+                return_compiler_error!("Unexpected token found in the body of a function. Could be unimplemented. Token: {}", token_stream.current_token())
             }
         }
     }
@@ -359,24 +369,32 @@ fn check_for_dot_access(
 
             // Nothing to access error
             if members.is_empty() {
+                let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                 return_rule_error!(
-                    string_table,
-                    token_stream.current_location(),
-                    "'{}' has No methods or properties to access 😞",
-                    &id
+                    format!("'{}' has no methods or properties to access 😞", string_table.resolve(id)),
+                    token_stream.current_location(), {
+                        VariableName => var_name_static,
+                        CompilationStage => "AST Construction",
+                        PrimarySuggestion => "This type doesn't support property or method access",
+                    }
                 )
             }
 
             // No access with that name exists error
             let access = match members.iter().find(|member| member.id == id) {
                 Some(access) => access,
-                None => return_rule_error!(
-                    string_table,
-                    token_stream.current_location(),
-                    "Can't find property or method '{}' inside '{}'",
-                    string_table.resolve(id),
-                    string_table.resolve(arg.id)
-                ),
+                None => {
+                    let property_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
+                    let var_name_static: &'static str = Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
+                    return_rule_error!(
+                        format!("Can't find property or method '{}' inside '{}'", string_table.resolve(id), string_table.resolve(arg.id)),
+                        token_stream.current_location(), {
+                            VariableName => property_name_static,
+                            CompilationStage => "AST Construction",
+                            PrimarySuggestion => "Check the available methods and properties for this type",
+                        }
+                    )
+                },
             };
 
             // Add the name to the scope
@@ -399,10 +417,11 @@ fn check_for_dot_access(
             }
         } else {
             return_rule_error!(
-                string_table,
-                token_stream.current_location(),
-                "Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.",
-                token_stream.current_token_kind()
+                format!("Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.", token_stream.current_token_kind()),
+                token_stream.current_location(), {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use a valid property or method name after the dot",
+                }
             )
         }
     }

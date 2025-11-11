@@ -412,9 +412,7 @@ pub fn create_expression(
                     // Error for anything else for now
                     TemplateType::Slot => {
                         return_compiler_error!(
-                            "Slots are not supported in templates at the moment. They might be removed completely in the future.",
-                            file!(),
-                            line!()
+                            "Slots are not supported in templates at the moment. They might be removed completely in the future."
                         );
                     }
                 }

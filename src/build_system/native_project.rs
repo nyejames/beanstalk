@@ -62,10 +62,15 @@ impl ProjectBuilder for NativeProjectBuilder {
             return Ok(());
         }
         
+        let target_str: &'static str = Box::leak(format!("{:?}", &self.target).into_boxed_str());
         return_config_error!(
+            format!("Wrong target specified in project config: {:?}", &self.target),
             TextLocation::default(),
-            "Wrong target specified in project config: {:?}",
-            &self.target
+            {
+                CompilationStage => "Configuration",
+                PrimarySuggestion => "Use BuildTarget::Native for native projects",
+                FoundType => target_str,
+            }
         )
     }
 }

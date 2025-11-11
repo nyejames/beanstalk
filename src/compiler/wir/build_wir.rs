@@ -396,20 +396,26 @@ fn create_wir_function_from_ast(
         
         // Validate entry point signature - should have no parameters and no returns
         if !signature.parameters.is_empty() {
+            let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
             return_wir_transformation_error!(
-                TextLocation::default(),
-                "Entry point function '{}' should not have parameters, found {} parameters. The entry point is the module's starting function and cannot accept arguments.",
-                name,
-                signature.parameters.len()
+                format!("Entry point function '{}' should not have parameters, found {} parameters", name, signature.parameters.len()),
+                TextLocation::default(), {
+                    VariableName => func_name_static,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "Remove parameters from the entry point function - it's the module's starting function and cannot accept arguments",
+                }
             );
         }
         
         if !signature.returns.is_empty() {
+            let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
             return_wir_transformation_error!(
-                TextLocation::default(),
-                "Entry point function '{}' should not have return values, found {} return values. The entry point is the module's starting function and cannot return values.",
-                name,
-                signature.returns.len()
+                format!("Entry point function '{}' should not have return values, found {} return values", name, signature.returns.len()),
+                TextLocation::default(), {
+                    VariableName => func_name_static,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "Remove return values from the entry point function - it's the module's starting function and cannot return values",
+                }
             );
         }
     }
@@ -573,10 +579,14 @@ fn convert_datatype_to_wasm_type(
         DataType::Bool => Ok(WasmType::I32), // Booleans are represented as i32 in WASM
         DataType::String => Ok(WasmType::I32), // String references are i32 pointers
         _ => {
+            let type_str: &'static str = Box::leak(format!("{:?}", data_type).into_boxed_str());
             return_wir_transformation_error!(
-                TextLocation::default(),
-                "DataType to WasmType conversion not yet implemented for {:?}. This is a missing compiler feature for handling this type in function signatures.",
-                data_type
+                format!("DataType to WasmType conversion not yet implemented for {:?}", data_type),
+                TextLocation::default(), {
+                    FoundType => type_str,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "This type is not yet supported in function signatures - this is a missing compiler feature",
+                }
             );
         }
     }
@@ -647,7 +657,7 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
         if !borrow_results.errors.is_empty() {
             let first_error = &borrow_results.errors[0];
             let detailed_message = format!(
-                "Borrow checking error: {}.",
+                "Borrow checking error: {}",
                 first_error.message
             );
 
@@ -662,7 +672,7 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
                 msg: detailed_message,
                 location: error_location,
                 error_type: ErrorType::BorrowChecker,
-                file_path: std::path::PathBuf::new(),
+                metadata: std::collections::HashMap::new(),
             });
         }
 

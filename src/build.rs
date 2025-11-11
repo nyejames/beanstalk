@@ -1,10 +1,11 @@
 use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages, ErrorMetaDataKey};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{Flag, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -56,10 +57,17 @@ pub fn build_project_files(
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
+            let error_msg: &'static str = Box::leak(format!("Error finding current directory: {:?}", e).into_boxed_str());
             return Err(CompilerMessages {
-                errors: vec![CompileError::file_error(
+                errors: vec![CompileError::new_file_error(
                     entry_path,
-                    &format!("Error finding current directory: {:?}", e),
+                    error_msg,
+                    {
+                        let mut map = HashMap::new();
+                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                        map.insert(ErrorMetaDataKey::PrimarySuggestion, "Check that you have permission to access the current directory");
+                        map
+                    }
                 )],
                 warnings: Vec::new(),
             });
@@ -88,10 +96,25 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::SingleBeanstalkFile(content),
             Err(e) => {
+                let error_msg: &'static str = Box::leak(format!("Error reading file: {:?}", e).into_boxed_str());
+                let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                    "Check that the file exists at the specified path"
+                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    "Check that you have permission to read this file"
+                } else {
+                    "Verify the file is accessible and not corrupted"
+                };
+                
                 return Err(CompilerMessages {
-                    errors: vec![CompileError::file_error(
+                    errors: vec![CompileError::new_file_error(
                         &entry_dir,
-                        &format!("Error reading file: {:?}", e),
+                        error_msg,
+                        {
+                            let mut map = HashMap::new();
+                            map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                            map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                            map
+                        }
                     )],
                     warnings: Vec::new(),
                 });
@@ -105,11 +128,33 @@ pub fn build_project_files(
         let source_code = fs::read_to_string(&config_path);
         match source_code {
             Ok(content) => CompileType::MultiFile(content),
-            Err(_) => {
+            Err(e) => {
+                let error_msg: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                    "Config file not found"
+                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    "Permission denied reading config file"
+                } else {
+                    Box::leak(format!("Error reading config file: {:?}", e).into_boxed_str())
+                };
+                
+                let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                    "Create a #config.bst file in the project root directory"
+                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                    "Check file permissions for the config file"
+                } else {
+                    "Verify the config file is accessible and not corrupted"
+                };
+                
                 return Err(CompilerMessages {
-                    errors: vec![CompileError::file_error(
+                    errors: vec![CompileError::new_file_error(
                         &config_path,
-                        "Error reading config file",
+                        error_msg,
+                        {
+                            let mut map = HashMap::new();
+                            map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                            map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                            map
+                        }
                     )],
                     warnings: Vec::new(),
                 });
@@ -229,13 +274,31 @@ fn add_bst_files_to_parse(
     let all_dir_entries: fs::ReadDir = match fs::read_dir(project_root_dir) {
         Ok(dir) => dir,
         Err(e) => {
+            let error_msg: &'static str = Box::leak(
+                format!(
+                    "Can't find any files to parse inside this directory. Might be empty? \nError: {:?}",
+                    e
+                ).into_boxed_str()
+            );
+            
+            let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                "Check that the directory exists at the specified path"
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                "Check that you have permission to read this directory"
+            } else {
+                "Verify the directory is accessible"
+            };
+            
             return Err(CompilerMessages {
-                errors: vec![CompileError::file_error(
-                    &project_root_dir,
-                    &format!(
-                        "Can't find any files to parse inside this directory. Might be empty? \nError: {:?}",
-                        e
-                    ),
+                errors: vec![CompileError::new_file_error(
+                    project_root_dir,
+                    error_msg,
+                    {
+                        let mut map = HashMap::new();
+                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                        map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                        map
+                    }
                 )],
                 warnings: Vec::new(),
             });
@@ -252,13 +315,31 @@ fn add_bst_files_to_parse(
                     let code = match fs::read_to_string(&file_path) {
                         Ok(content) => content,
                         Err(e) => {
+                            let error_msg: &'static str = Box::leak(
+                                format!(
+                                    "Error reading file when adding new bst files to parse: {:?}",
+                                    e
+                                ).into_boxed_str()
+                            );
+                            
+                            let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                                "Check that the file exists at the specified path"
+                            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                                "Check that you have permission to read this file"
+                            } else {
+                                "Verify the file is accessible and not corrupted"
+                            };
+                            
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::file_error(
+                                errors: vec![CompileError::new_file_error(
                                     &file_path,
-                                    &format!(
-                                        "Error reading file when adding new bst files to parse: {:?}",
-                                        e
-                                    ),
+                                    error_msg,
+                                    {
+                                        let mut map = HashMap::new();
+                                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                                        map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                                        map
+                                    }
                                 )],
                                 warnings: Vec::new(),
                             });
@@ -285,9 +366,15 @@ fn add_bst_files_to_parse(
                         }
                         None => {
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::file_error(
+                                errors: vec![CompileError::new_file_error(
                                     &file_path,
-                                    "Error getting file stem",
+                                    "Error getting file stem - file name contains invalid characters",
+                                    {
+                                        let mut map = HashMap::new();
+                                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                                        map.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure the file name contains only valid UTF-8 characters");
+                                        map
+                                    }
                                 )],
                                 warnings: Vec::new(),
                             });
@@ -328,13 +415,23 @@ fn add_bst_files_to_parse(
             }
 
             Err(e) => {
+                let error_msg: &'static str = Box::leak(
+                    format!(
+                        "Error reading directory entry when adding new bst files to parse: {:?}",
+                        e
+                    ).into_boxed_str()
+                );
+                
                 return Err(CompilerMessages {
-                    errors: vec![CompileError::file_error(
-                        &project_root_dir,
-                        &format!(
-                            "Error reading file when adding new bst files to parse: {:?}",
-                            e
-                        ),
+                    errors: vec![CompileError::new_file_error(
+                        project_root_dir,
+                        error_msg,
+                        {
+                            let mut map = HashMap::new();
+                            map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                            map.insert(ErrorMetaDataKey::PrimarySuggestion, "Check directory permissions and file system integrity");
+                            map
+                        }
                     )],
                     warnings: Vec::new(),
                 });

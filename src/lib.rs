@@ -101,7 +101,7 @@ mod compiler {
 }
 
 use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages, CommonErrorMessages};
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer;
@@ -146,19 +146,16 @@ pub struct Compiler<'a> {
     project_config: &'a Config,
     host_function_registry: HostFunctionRegistry,
     string_table: StringTable,
-    common_error_messages: CommonErrorMessages,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(project_config: &'a Config, host_function_registry: HostFunctionRegistry) -> Self {
         let mut string_table = StringTable::new();
-        let common_error_messages = CommonErrorMessages::new(&mut string_table);
         
         Self {
             project_config,
             host_function_registry,
             string_table,
-            common_error_messages,
         }
     }
 
@@ -188,12 +185,6 @@ impl<'a> Compiler<'a> {
         &mut self.string_table
     }
 
-    /// Get a reference to the pre-interned common error messages.
-    /// This provides access to frequently used error message templates.
-    pub fn common_error_messages(&self) -> &CommonErrorMessages {
-        &self.common_error_messages
-    }
-
     /// -----------------------------
     ///          TOKENIZER
     /// -----------------------------
@@ -209,7 +200,7 @@ impl<'a> Compiler<'a> {
 
         match tokenize(source_code, module_path, tokenizer_mode, &mut self.string_table) {
             Ok(tokens) => Ok(tokens),
-            Err(e) => Err(e.with_file_path(module_path.to_path_buf(&mut self.string_table))),
+            Err(e) => Err(e.with_file_path(module_path.clone())),
         }
     }
 

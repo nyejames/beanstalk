@@ -190,9 +190,8 @@ impl Template {
 
                 _ => {
                     return_syntax_error!(
-                        token_stream.current_location(),
-                        "Invalid Token Used Inside template body when creating template node. Token: {:?}",
-                        token_stream.current_token_kind()
+                        format!("Invalid Token Used Inside template body when creating template node. Token: {:?}", token_stream.current_token_kind()),
+                        token_stream.current_location(), {}
                     )
                 }
             }
@@ -241,8 +240,8 @@ impl Template {
             TemplateType::Slot => {
                 // Error, can't use slots in the scene head (would be empty square brackets)
                 return_syntax_error!(
-                    template_being_inserted.location.to_owned(),
-                    "Can't use slots '[]' in the template head. Token"
+                    format!("Can't use slots '{}' in the template head. Token", template_being_inserted.location.to_owned()),
+                    self.location, {}
                 )
             }
             TemplateType::CompileTimeString => {
@@ -440,9 +439,8 @@ pub fn parse_template_head(
         if !comma_separator {
             if token != TokenKind::Comma {
                 return_syntax_error!(
-                    token_stream.current_location(),
-                    "Expected a comma before the next token in the template head. Token: {:?}",
-                    token
+                    format!("Expected a comma before the next token in the template head. Token: {:?}", token),
+                    token_stream.current_location(), {}
                 )
             }
 
@@ -517,11 +515,9 @@ pub fn parse_template_head(
                     }
                 } else {
                     return_syntax_error!(
-                        token_stream.current_location(),
-                        "Cannot declare new variables inside of a template head. Variable '{}' is not declared.
-                        \n Here are all the variables in scope: {:#?}",
-                        name,
-                        context.declarations
+                        format!("Cannot declare new variables inside of a template head. Variable '{}' is not declared.
+                        \n Here are all the variables in scope: {:#?}", name, context.declarations),
+                        token_stream.current_location(), {}
                     )
                 };
             }
@@ -569,8 +565,8 @@ pub fn parse_template_head(
             TokenKind::Comma => {
                 // Multiple commas in succession
                 return_syntax_error!(
-                    token_stream.current_location(),
-                    "Multiple commas used back to back in the template head. You must have a valid expression between each comma"
+                    "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
+                    token_stream.current_location(), {}
                 )
             }
 
@@ -581,9 +577,8 @@ pub fn parse_template_head(
 
             _ => {
                 return_syntax_error!(
-                    token_stream.current_location(),
-                    "Invalid Token Used Inside template head when creating template node. Token: {:?}",
-                    token
+                    format!("Invalid Token Used Inside template head when creating template node. Token: {:?}", token),
+                    token_stream.current_location(), {}
                 )
             }
         }

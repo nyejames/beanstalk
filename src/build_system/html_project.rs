@@ -122,14 +122,30 @@ impl ProjectBuilder for HtmlProjectBuilder {
     fn validate_config(&self, config: &Config) -> Result<(), CompileError> {
         // Validate HTML-specific configuration
         if config.dev_folder.as_os_str().is_empty() {
-            return Err(CompileError::compiler_error(
+            return Err(CompileError::new_config_error(
                 "HTML projects require a dev_folder to be specified",
+                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                {
+                    let mut map = std::collections::HashMap::new();
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Add 'dev_folder' field to your project configuration");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::SuggestedInsertion, "dev_folder = \"dev\"");
+                    map
+                }
             ));
         }
 
         if config.release_folder.as_os_str().is_empty() {
-            return Err(CompileError::compiler_error(
+            return Err(CompileError::new_config_error(
                 "HTML projects require a release_folder to be specified",
+                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                {
+                    let mut map = std::collections::HashMap::new();
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Add 'release_folder' field to your project configuration");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::SuggestedInsertion, "release_folder = \"release\"");
+                    map
+                }
             ));
         }
 

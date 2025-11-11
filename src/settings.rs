@@ -160,12 +160,27 @@ impl Default for HTMLMeta {
 //                     ExpressionKind::StringSlice(value) => match value.as_str() {
 //                         "" => ProjectType::default(),
 //                         _ => return_type_error!(
+//                             "Project type must be a string",
 //                             TextLocation::default(),
-//                             "Project type must be a string"
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 PrimarySuggestion => "Use a valid project type string",
+//                             }
 //                         ),
 //                     },
 //                     _ => {
-//                         return_type_error!(TextLocation::default(), "Project type must be a string")
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Project type must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a string value for project type",
+//                             }
+//                         )
 //                     }
 //                 };
 //             }
@@ -179,16 +194,30 @@ impl Default for HTMLMeta {
 //                             RuntimeConfig::for_native_release()
 //                         }
 //                         _ => {
+//                             let backend_value: &'static str = Box::leak(value.clone().into_boxed_str());
 //                             return_config_error!(
+//                                 format!("Invalid runtime backend: '{}'", value),
 //                                 TextLocation::default(),
-//                                 "Runtime backend must be a string"
+//                                 {
+//                                     CompilationStage => "Configuration",
+//                                     FoundType => backend_value,
+//                                     PrimarySuggestion => "Use 'web' for HTML projects or leave empty for native",
+//                                     AlternativeSuggestion => "Valid backends: 'web' (HTML/JS), '' (native default)",
+//                                 }
 //                             )
 //                         }
 //                     },
 //                     _ => {
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
 //                         return_type_error!(
+//                             "Runtime backend must be a string",
 //                             TextLocation::default(),
-//                             "Runtime backend must be a string"
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a string value for runtime_backend",
+//                             }
 //                         )
 //                     }
 //                 };
@@ -198,7 +227,18 @@ impl Default for HTMLMeta {
 //                 project_config.entry_point = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
 //                     _ => {
-//                         return_type_error!(TextLocation::default(), "Entry point must be a string")
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Entry point must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a file path string for entry_point",
+//                                 SuggestedInsertion => "entry_point = \"src/main.bst\"",
+//                             }
+//                         )
 //                     }
 //                 };
 //             }
@@ -206,27 +246,60 @@ impl Default for HTMLMeta {
 //             "src" => {
 //                 project_config.src = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
-//                     _ => return_type_error!(
-//                         TextLocation::default(),
-//                         "Source folder must be a string"
-//                     ),
+//                     _ => {
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Source folder must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a directory path string for src",
+//                                 SuggestedInsertion => "src = \"src\"",
+//                             }
+//                         )
+//                     },
 //                 };
 //             }
 
 //             "dev" => {
 //                 project_config.dev_folder = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
-//                     _ => return_type_error!(TextLocation::default(), "Dev folder must be a string"),
+//                     _ => {
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Dev folder must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a directory path string for dev",
+//                                 SuggestedInsertion => "dev = \"dev\"",
+//                             }
+//                         )
+//                     },
 //                 };
 //             }
 
 //             "release" => {
 //                 project_config.release_folder = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => PathBuf::from(value),
-//                     _ => return_type_error!(
-//                         TextLocation::default(),
-//                         "Release folder must be a string"
-//                     ),
+//                     _ => {
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Release folder must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a directory path string for release",
+//                                 SuggestedInsertion => "release = \"release\"",
+//                             }
+//                         )
+//                     },
 //                 };
 //             }
 
@@ -234,7 +307,18 @@ impl Default for HTMLMeta {
 //                 project_config.name = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => value.to_owned(),
 //                     _ => {
-//                         return_type_error!(TextLocation::default(), "Name must be a string")
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Name must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a string value for name",
+//                                 SuggestedInsertion => "name = \"my_project\"",
+//                             }
+//                         )
 //                     }
 //                 };
 //             }
@@ -243,7 +327,18 @@ impl Default for HTMLMeta {
 //                 project_config.version = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => value.to_owned(),
 //                     _ => {
-//                         return_type_error!(TextLocation::default(), "Version must be a string")
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Version must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a version string",
+//                                 SuggestedInsertion => "version = \"0.1.0\"",
+//                             }
+//                         )
 //                     }
 //                 };
 //             }
@@ -251,7 +346,20 @@ impl Default for HTMLMeta {
 //             "author" => {
 //                 project_config.author = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => value.to_owned(),
-//                     _ => return_type_error!(TextLocation::default(), "Author must be a string"),
+//                     _ => {
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "Author must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a string value for author",
+//                                 SuggestedInsertion => "author = \"Your Name\"",
+//                             }
+//                         )
+//                     },
 //                 };
 //             }
 
@@ -259,7 +367,18 @@ impl Default for HTMLMeta {
 //                 project_config.license = match &arg.value.kind {
 //                     ExpressionKind::StringSlice(value) => value.to_owned(),
 //                     _ => {
-//                         return_type_error!(TextLocation::default(), "License must be a string")
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "License must be a string",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "String",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a license string",
+//                                 SuggestedInsertion => "license = \"MIT\"",
+//                             }
+//                         )
 //                     }
 //                 };
 //             }
@@ -272,10 +391,19 @@ impl Default for HTMLMeta {
 //                                 "site_title" => {
 //                                     project_config.html_meta.site_title = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Site title must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Site title must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for site_title in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
@@ -283,40 +411,76 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.page_description =
 //                                         match &arg.value.kind {
 //                                             ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                             _ => return_type_error!(
-//                                                 TextLocation::default(),
-//                                                 "Page description must be a string"
-//                                             ),
+//                                             _ => {
+//                                                 let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                                 return_type_error!(
+//                                                     "Page description must be a string",
+//                                                     TextLocation::default(),
+//                                                     {
+//                                                         CompilationStage => "Configuration",
+//                                                         ExpectedType => "String",
+//                                                         FoundType => found_type,
+//                                                         PrimarySuggestion => "Provide a string value for page_description in html_settings",
+//                                                     }
+//                                                 )
+//                                             },
 //                                         };
 //                                 }
 
 //                                 "site_url" => {
 //                                     project_config.html_meta.site_url = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Site url must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Site url must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for site_url in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
 //                                 "page_url" => {
 //                                     project_config.html_meta.page_url = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page url must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page url must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_url in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
 //                                 "page_og_title" => {
 //                                     project_config.html_meta.page_og_title = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page og title must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page og title must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_og_title in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
@@ -324,10 +488,19 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.page_og_description =
 //                                         match &arg.value.kind {
 //                                             ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                             _ => return_type_error!(
-//                                                 TextLocation::default(),
-//                                                 "Page og description must be a string"
-//                                             ),
+//                                             _ => {
+//                                                 let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                                 return_type_error!(
+//                                                     "Page og description must be a string",
+//                                                     TextLocation::default(),
+//                                                     {
+//                                                         CompilationStage => "Configuration",
+//                                                         ExpectedType => "String",
+//                                                         FoundType => found_type,
+//                                                         PrimarySuggestion => "Provide a string value for page_og_description in html_settings",
+//                                                     }
+//                                                 )
+//                                             },
 //                                         };
 //                                 }
 
@@ -335,10 +508,19 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.page_image_url = match &arg.value.kind
 //                                     {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page image url must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page image url must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_image_url in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
@@ -346,30 +528,57 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.page_image_alt = match &arg.value.kind
 //                                     {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page image alt must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page image alt must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_image_alt in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
 //                                 "page_locale" => {
 //                                     project_config.html_meta.page_locale = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page locale must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page locale must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_locale in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
 //                                 "page_type" => {
 //                                     project_config.html_meta.page_type = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page type must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page type must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_type in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
@@ -377,10 +586,19 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.page_twitter_large_image =
 //                                         match &arg.value.kind {
 //                                             ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                             _ => return_type_error!(
-//                                                 TextLocation::default(),
-//                                                 "Page twitter large image must be a string"
-//                                             ),
+//                                             _ => {
+//                                                 let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                                 return_type_error!(
+//                                                     "Page twitter large image must be a string",
+//                                                     TextLocation::default(),
+//                                                     {
+//                                                         CompilationStage => "Configuration",
+//                                                         ExpectedType => "String",
+//                                                         FoundType => found_type,
+//                                                         PrimarySuggestion => "Provide a string value for page_twitter_large_image in html_settings",
+//                                                     }
+//                                                 )
+//                                             },
 //                                         };
 //                                 }
 
@@ -388,20 +606,38 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.page_canonical_url =
 //                                         match &arg.value.kind {
 //                                             ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                             _ => return_type_error!(
-//                                                 TextLocation::default(),
-//                                                 "Page canonical url must be a string"
-//                                             ),
+//                                             _ => {
+//                                                 let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                                 return_type_error!(
+//                                                     "Page canonical url must be a string",
+//                                                     TextLocation::default(),
+//                                                     {
+//                                                         CompilationStage => "Configuration",
+//                                                         ExpectedType => "String",
+//                                                         FoundType => found_type,
+//                                                         PrimarySuggestion => "Provide a string value for page_canonical_url in html_settings",
+//                                                     }
+//                                                 )
+//                                             },
 //                                         };
 //                                 }
 
 //                                 "page_root_url" => {
 //                                     project_config.html_meta.page_root_url = match &arg.value.kind {
 //                                         ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                         _ => return_type_error!(
-//                                             TextLocation::default(),
-//                                             "Page root url must be a string"
-//                                         ),
+//                                         _ => {
+//                                             let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                             return_type_error!(
+//                                                 "Page root url must be a string",
+//                                                 TextLocation::default(),
+//                                                 {
+//                                                     CompilationStage => "Configuration",
+//                                                     ExpectedType => "String",
+//                                                     FoundType => found_type,
+//                                                     PrimarySuggestion => "Provide a string value for page_root_url in html_settings",
+//                                                 }
+//                                             )
+//                                         },
 //                                     };
 //                                 }
 
@@ -409,25 +645,53 @@ impl Default for HTMLMeta {
 //                                     project_config.html_meta.image_folder_url =
 //                                         match &arg.value.kind {
 //                                             ExpressionKind::StringSlice(value) => value.to_owned(),
-//                                             _ => return_type_error!(
-//                                                 TextLocation::default(),
-//                                                 "Image folder url must be a string"
-//                                             ),
+//                                             _ => {
+//                                                 let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                                                 return_type_error!(
+//                                                     "Image folder url must be a string",
+//                                                     TextLocation::default(),
+//                                                     {
+//                                                         CompilationStage => "Configuration",
+//                                                         ExpectedType => "String",
+//                                                         FoundType => found_type,
+//                                                         PrimarySuggestion => "Provide a string value for image_folder_url in html_settings",
+//                                                     }
+//                                                 )
+//                                             },
 //                                         };
 //                                 }
 
-//                                 _ => return_type_error!(
-//                                     TextLocation::default(),
-//                                     "Unknown HTML setting"
-//                                 ),
+//                                 _ => {
+//                                     let field_name: &'static str = Box::leak(arg.name.clone().into_boxed_str());
+//                                     return_type_error!(
+//                                         format!("Unknown HTML setting: '{}'", arg.name),
+//                                         TextLocation::default(),
+//                                         {
+//                                             CompilationStage => "Configuration",
+//                                             VariableName => field_name,
+//                                             PrimarySuggestion => "Check the field name against valid HTML settings",
+//                                             AlternativeSuggestion => "Valid fields: site_title, page_description, site_url, page_url, etc.",
+//                                         }
+//                                     )
+//                                 },
 //                             }
 //                         }
 //                     }
 
-//                     _ => return_type_error!(
-//                         TextLocation::default(),
-//                         "HTML settings must be a struct"
-//                     ),
+//                     _ => {
+//                         let found_type: &'static str = Box::leak(format!("{:?}", arg.value.kind).into_boxed_str());
+//                         return_type_error!(
+//                             "HTML settings must be a struct",
+//                             TextLocation::default(),
+//                             {
+//                                 CompilationStage => "Configuration",
+//                                 ExpectedType => "Struct",
+//                                 FoundType => found_type,
+//                                 PrimarySuggestion => "Provide a struct instance for html_settings",
+//                                 SuggestedInsertion => "html_settings = { site_title = \"My Site\", ... }",
+//                             }
+//                         )
+//                     },
 //                 };
 //             }
 

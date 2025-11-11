@@ -1,5 +1,5 @@
 use crate::ast_log;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, ErrorMetaDataKey};
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::interned_path::InternedPath;
@@ -98,12 +98,26 @@ pub fn parse_headers(
             .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
             .collect();
 
-        return Err(vec![CompileError::new_rule_error(
+        let first_path_str: &'static str = Box::leak(
+            format!("{:?}", entry_points[0].path.to_string(string_table)).into_boxed_str()
+        );
+        let second_path_str: &'static str = Box::leak(
+            format!("{:?}", entry_points[1].path.to_string(string_table)).into_boxed_str()
+        );
+
+        return Err(vec![CompileError::new_rule_error_with_metadata(
             format!(
-                "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {:?}, Second entry point: {:?}",
-                entry_points[0].path, entry_points[1].path
+                "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {}, Second entry point: {}",
+                first_path_str, second_path_str
             ),
             entry_points[1].name_location.clone(),
+            {
+                let mut map = HashMap::new();
+                map.insert(ErrorMetaDataKey::CompilationStage, "Module Dependency Resolution");
+                map.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure only one file is designated as the entry point for the module");
+                map.insert(ErrorMetaDataKey::SuggestedLocation, second_path_str);
+                map
+            }
         )]);
     }
 

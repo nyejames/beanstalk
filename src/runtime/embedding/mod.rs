@@ -53,7 +53,25 @@ impl EmbeddedRuntime {
         wasm_path: &Path,
     ) -> Result<(), CompileError> {
         let wasm_bytes = std::fs::read(wasm_path).map_err(|e| {
-            CompileError::file_error(wasm_path, &format!("Failed to read WASM file: {}", e))
+            let error_msg: &'static str = Box::leak(format!("Failed to read WASM file: {}", e).into_boxed_str());
+            let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                "Check that the WASM file exists at the specified path"
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                "Check that you have permission to read the WASM file"
+            } else {
+                "Verify the WASM file is accessible and not corrupted"
+            };
+            
+            CompileError::new_file_error(
+                wasm_path,
+                error_msg,
+                {
+                    let mut map = std::collections::HashMap::new();
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Runtime Embedding");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                    map
+                }
+            )
         })?;
 
         self.load_module(module_name, &wasm_bytes)

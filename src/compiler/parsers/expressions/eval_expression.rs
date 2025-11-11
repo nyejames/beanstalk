@@ -93,7 +93,7 @@ pub fn evaluate_expression(
     eval_log!("Evaluating expression: {:#?}", nodes);
 
     if nodes.is_empty() {
-        return_compiler_error!("No nodes found in expression. This should never happen.", file!(), line!());
+        return_compiler_error!("No nodes found in expression. This should never happen.");
     }
 
     // SHUNTING YARD ALGORITHM
@@ -125,12 +125,19 @@ pub fn evaluate_expression(
             NodeKind::Operator(ref op) => {
                 match current_type {
                     DataType::String | DataType::Template => {
+                        let found_type_static: &'static str = match current_type {
+                            DataType::String => "String",
+                            DataType::Template => "Template",
+                            _ => "Unknown",
+                        };
                         return_syntax_error!(
                             format!("You can't use the '{:?}' operator with strings or templates", op),
                             node.location,
                             {
+                                FoundType => found_type_static,
                                 CompilationStage => "Expression Evaluation",
                                 PrimarySuggestion => "Use string concatenation or template syntax instead of arithmetic operators",
+                                AlternativeSuggestion => "Convert to a numeric type if arithmetic is needed",
                             }
                         )
                     }
@@ -157,7 +164,7 @@ pub fn evaluate_expression(
             }
 
             _ => {
-                return_compiler_error!(format!("Unsupported AST node found in expression: {:?}", node.kind), file!(), line!())
+                return_compiler_error!(format!("Unsupported AST node found in expression: {:?}", node.kind))
             }
         }
     }
@@ -204,9 +211,7 @@ pub fn evaluate_expression(
 
         DataType::Inferred => {
             return_compiler_error!(
-                "Inferred data type made it into eval_expression! Everything should be type checked by now",
-                file!(),
-                line!()
+                "Inferred data type made it into eval_expression! Everything should be type checked by now"
             )
         }
 
@@ -229,10 +234,12 @@ pub fn evaluate_expression(
             }
 
             if stack.is_empty() {
+                let expected_type_static: &'static str = Box::leak(format!("{}", current_type).into_boxed_str());
                 return_syntax_error!(
                     "Invalid expression: no valid operands found during evaluation.",
                     TextLocation::default(),
                     {
+                        ExpectedType => expected_type_static,
                         CompilationStage => "Expression Evaluation",
                         PrimarySuggestion => "Ensure the expression contains valid operands and operators",
                     }
@@ -321,9 +328,7 @@ fn concat_template(
 
             _ => {
                 return_compiler_error!(
-                    "Non-template value found in template expression (you can only concatenate templates with other templates)",
-                    file!(),
-                    line!()
+                    "Non-template value found in template expression (you can only concatenate templates with other templates)"
                 )
             }
         }
@@ -337,7 +342,7 @@ fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompileError> {
     // This should PROBABLY iterate through until it hits the first expression node
     match nodes.first() {
         Some(node) => Ok(node.location.to_owned()),
-        None => return_compiler_error!("No nodes found in expression. This should never happen.", file!(), line!()),
+        None => return_compiler_error!("No nodes found in expression. This should never happen."),
     }
 }
 

@@ -105,12 +105,14 @@ pub fn transform_ast_node_to_wir(
             ast_return_to_wir(return_values, &node.location, context, string_table)
         }
         _ => {
+            let node_type_str: &'static str = Box::leak(format!("{:?}", node.kind).into_boxed_str());
             return_wir_transformation_error!(
-                node.location.clone(),
-                "AST node type {:?} not yet implemented in WIR transformation at {}:{}. This language feature needs WIR lowering support to be added to the compiler.",
-                node.kind,
-                node.location.start_pos.line_number,
-                node.location.start_pos.char_column
+                format!("AST node type {:?} not yet implemented in WIR transformation", node.kind),
+                node.location.clone(), {
+                    FoundType => node_type_str,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "This language feature needs WIR lowering support to be added to the compiler",
+                }
             );
         }
     }

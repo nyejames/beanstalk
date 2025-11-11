@@ -10,7 +10,14 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
     match wasmparser::validate(wasm_bytes) {
         Ok(_) => Ok(()),
         Err(e) => {
-            return_compiler_error!("Generated WASM module is invalid. This indicates a bug in the WASM backend");
+            let error_msg = e.to_string();
+            let error_msg_static: &'static str = Box::leak(error_msg.into_boxed_str());
+            return_compiler_error!(
+                "Generated WASM module is invalid. This indicates a bug in the WASM backend" ; {
+                    CompilationStage => "WASM Validation",
+                    PrimarySuggestion => error_msg_static,
+                }
+            );
         }
     }
 }
@@ -93,11 +100,16 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
         for function in &wir.functions {
             let function_name = string_table.resolve(function.name);
             if !function_names.insert(function_name) {
+                let function_name_static: &'static str = Box::leak(function_name.to_string().into_boxed_str());
                 return_wasm_generation_error!(
                     string_table,
                     crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                    "Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.",
-                    function_name
+                    &format!("Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.", function_name),
+                    {
+                        CompilationStage => "WASM Generation",
+                        VariableName => function_name_static,
+                        PrimarySuggestion => "Rename one of the duplicate functions to have a unique name",
+                    }
                 );
             }
         }
@@ -109,8 +121,11 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
         return_wasm_generation_error!(
             string_table,
             crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-            "WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).",
-            memory_info.initial_pages
+            &format!("WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).", memory_info.initial_pages),
+            {
+                CompilationStage => "WASM Generation",
+                PrimarySuggestion => "Reduce the initial memory pages to 65536 or less",
+            }
         );
     }
 
@@ -119,8 +134,11 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
             return_wasm_generation_error!(
                 string_table,
                 crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                "WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).",
-                max_pages
+                &format!("WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).", max_pages),
+                {
+                    CompilationStage => "WASM Generation",
+                    PrimarySuggestion => "Reduce the maximum memory pages to 65536 or less",
+                }
             );
         }
 
@@ -129,10 +147,11 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
             return_wasm_generation_error!(
                 string_table,
                 crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                "WIR memory max pages ({}) is less than initial pages ({}). \
-                Maximum memory pages must be greater than or equal to initial pages.",
-                max_pages,
-                memory_info.initial_pages
+                &format!("WIR memory max pages ({}) is less than initial pages ({}). Maximum memory pages must be greater than or equal to initial pages.", max_pages, memory_info.initial_pages),
+                {
+                    CompilationStage => "WASM Generation",
+                    PrimarySuggestion => "Increase max pages to be at least equal to initial pages",
+                }
             );
         }
     }
@@ -144,8 +163,11 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
                 return_wasm_generation_error!(
                     string_table,
                     crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                    "Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.",
-                    interface_id
+                    &format!("Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.", interface_id),
+                    {
+                        CompilationStage => "WASM Generation",
+                        PrimarySuggestion => "Add at least one method to the interface or remove it",
+                    }
                 );
             }
         }

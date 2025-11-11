@@ -1,13 +1,14 @@
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::{StringTable};
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
 use std::collections::HashMap;
 use std::{env, fs};
 
+// The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
 pub struct CompilerMessages {
     pub errors: Vec<CompileError>,
@@ -81,6 +82,11 @@ impl CompileError {
         self
     }
 
+    pub fn with_error_type(mut self, error_type: ErrorType) -> Self {
+        self.error_type = error_type;
+        self
+    }
+
     pub fn new_metadata_entry(&mut self, key: ErrorMetaDataKey, value: &'static str) {
         self.metadata.insert(key, value);
     }
@@ -95,20 +101,34 @@ impl CompileError {
         }
     }
 
-    /// Create a new rule error with a descriptive message and metadata
+    /// Create a new rule error with a descriptive message (no metadata)
     pub fn new_rule_error(msg: impl Into<String>, location: TextLocation) -> Self {
         CompileError {
-            msg,
+            msg: msg.into(),
             location,
             error_type: ErrorType::Rule,
             metadata: HashMap::new(),
         }
     }
 
+    /// Create a new rule error with metadata
+    pub fn new_rule_error_with_metadata(
+        msg: impl Into<String>,
+        location: TextLocation,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        CompileError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::Rule,
+            metadata,
+        }
+    }
+
     /// Create a new type error with type information and suggestions
     pub fn new_type_error(msg: impl Into<String>, location: TextLocation) -> Self {
         CompileError {
-            msg,
+            msg: msg.into(),
             location,
             error_type: ErrorType::Type,
             metadata: HashMap::new(),
@@ -118,7 +138,7 @@ impl CompileError {
     /// Create a thread panic error (internal compiler issue)
     pub fn new_thread_panic(msg: impl Into<String>) -> Self {
         CompileError {
-            msg,
+            msg: msg.into(),
             location: TextLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
@@ -128,20 +148,67 @@ impl CompileError {
     /// Create a compiler error (internal bug, not user's fault)
     pub fn compiler_error(msg: impl Into<String>) -> Self {
         CompileError {
-            msg,
+            msg: msg.into(),
             location: TextLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
         }
     }
 
-    /// Create a file system error
-    pub fn file_error(msg: impl Into<String>, path: InternedPath) -> Self {
+    /// Create a file system error from a Path (legacy method without metadata)
+    pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
+        // Create a temporary InternedPath for the location
+        // This is a workaround since we don't have access to StringTable here
+        let mut temp_table = StringTable::new();
+        let interned_path = InternedPath::from_path_buf(&path.to_path_buf(), &mut temp_table);
+        
         CompileError {
-            msg,
+            msg: msg.into(),
+            location: TextLocation::new(interned_path, CharPosition::default(), CharPosition::default()),
+            error_type: ErrorType::File,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a file system error from InternedPath (legacy method without metadata)
+    pub fn file_error_interned(msg: impl Into<String>, path: InternedPath) -> Self {
+        CompileError {
+            msg: msg.into(),
             location: TextLocation::new(path, CharPosition::default(), CharPosition::default()),
             error_type: ErrorType::File,
             metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a file system error from Path with metadata
+    pub fn new_file_error(
+        path: &std::path::Path,
+        msg: impl Into<String>,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        // Create a temporary InternedPath for the location
+        let mut temp_table = StringTable::new();
+        let interned_path = InternedPath::from_path_buf(&path.to_path_buf(), &mut temp_table);
+        
+        CompileError {
+            msg: msg.into(),
+            location: TextLocation::new(interned_path, CharPosition::default(), CharPosition::default()),
+            error_type: ErrorType::File,
+            metadata,
+        }
+    }
+
+    /// Create a file system error from InternedPath with metadata
+    pub fn new_file_error_interned(
+        msg: impl Into<String>,
+        path: InternedPath,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        CompileError {
+            msg: msg.into(),
+            location: TextLocation::new(path, CharPosition::default(), CharPosition::default()),
+            error_type: ErrorType::File,
+            metadata,
         }
     }
 
@@ -288,13 +355,25 @@ macro_rules! return_rule_error {
 }
 /// Returns a new CompileError
 ///
-/// Usage: `return_file_error!(string_table, path, "message", message format args)`;
+/// Usage: `return_file_error!(path, "message", { metadata })`;
 #[macro_export]
 macro_rules! return_file_error {
-    // New usage with direct message and path (InternedPath)
-    ($msg:expr, $path:expr) => {{
+    // New usage with metadata (Path)
+    ($path:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err($crate::compiler::compiler_errors::CompileError::new_file_error(
+            $path,
+            $msg,
+            {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        ));
+    }};
+    // Legacy usage without metadata (for backward compatibility)
+    ($path:expr, $msg:expr) => {{
         return Err($crate::compiler::compiler_errors::CompileError::file_error(
-            $msg, $path,
+            $path, $msg,
         ));
     }};
 }
@@ -334,22 +413,46 @@ macro_rules! return_config_error {
 /// These provide the location of the bug in the compiler source code
 #[macro_export]
 macro_rules! return_compiler_error {
-    ($msg:expr, $compiler_file_path:expr, $line:expr) => {{
-        let _ = &$compiler_file_path; // kept for compatibility, currently unused
+    // Variant with format string, arguments, and metadata (with semicolon separator)
+    ($fmt:expr, $($arg:expr),+ ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: format!($fmt, $($arg),+),
+            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        });
+    }};
+    // Variant with format string and arguments (no metadata)
+    ($fmt:expr, $($arg:expr),+ $(,)?) => {{
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: format!($fmt, $($arg),+),
+            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
+            metadata: std::collections::HashMap::new(),
+        });
+    }};
+    // Variant with message and metadata (with semicolon separator)
+    ($msg:expr ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
-            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation {
-                scope: InternedPath::new(),
-                start_pos: CharPosition {
-                    line_number: $line,
-                    char_column: 0,
-                },
-                end_pos: CharPosition {
-                    line_number: $line,
-                    char_column: 120, // Arbitrary number
-                },
-                scope: $compiler_file_path,
+            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
             },
+        });
+    }};
+    // Simple variant with just message (no metadata)
+    ($msg:expr) => {{
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
             metadata: std::collections::HashMap::new(),
         });
@@ -359,10 +462,30 @@ macro_rules! return_compiler_error {
 /// Returns a new CompileError for development server issues.
 /// INSIDE A VEC ALREADY.
 ///
-/// Usage: `return_dev_server_error!(string_table, path, "Server failed to start: {}", reason)`;
+/// Usage: `return_dev_server_error!("message")` or `return_dev_server_error!(path, "message", args...)`;
 #[macro_export]
 macro_rules! return_dev_server_error {
-    // New usage: message only (location defaults)
+    // With path, format string, and arguments
+    ($path:expr, $fmt:expr, $($arg:expr),+) => {
+        return Err($crate::compiler::compiler_errors::CompilerMessages {
+            errors: vec![$crate::compiler::compiler_errors::CompileError::file_error(
+                &$path,
+                &format!($fmt, $($arg),+),
+            ).with_error_type($crate::compiler::compiler_errors::ErrorType::DevServer)],
+            warnings: Vec::new(),
+        })
+    };
+    // With path and message (no format args)
+    ($path:expr, $msg:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerMessages {
+            errors: vec![$crate::compiler::compiler_errors::CompileError::file_error(
+                &$path,
+                $msg,
+            ).with_error_type($crate::compiler::compiler_errors::ErrorType::DevServer)],
+            warnings: Vec::new(),
+        })
+    };
+    // Message only (location defaults)
     ($msg:expr) => {
         return Err($crate::compiler::compiler_errors::CompilerMessages {
             errors: vec![$crate::compiler::compiler_errors::CompileError {
@@ -426,6 +549,210 @@ macro_rules! return_borrow_checker_error {
     };
 }
 
+/// Creates a CompileError for multiple mutable borrows (non-returning version).
+///
+/// This macro creates a detailed error when attempting to create a second mutable
+/// borrow while a first one is still active. Returns the error object without returning from function.
+///
+/// Usage: `let error = create_multiple_mutable_borrows_error!(place, existing_location, new_location);`;
+#[macro_export]
+macro_rules! create_multiple_mutable_borrows_error {
+    ($place:expr, $existing_location:expr, $new_location:expr) => {{
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        
+        $crate::compiler::compiler_errors::CompileError {
+            msg: format!("cannot mutably borrow `{:?}` because it is already mutably borrowed", $place),
+            location: $new_location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind, "Mutable");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingVariable, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the first mutable borrow is no longer used before creating the second");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Only one mutable borrow can exist at a time");
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for multiple mutable borrows (returning version).
+///
+/// This macro creates a detailed error when attempting to create a second mutable
+/// borrow while a first one is still active, and returns it immediately.
+///
+/// Usage: `return_multiple_mutable_borrows_error!(place, existing_location, new_location)`;
+#[macro_export]
+macro_rules! return_multiple_mutable_borrows_error {
+    ($place:expr, $existing_location:expr, $new_location:expr) => {{
+        return Err(create_multiple_mutable_borrows_error!($place, $existing_location, $new_location))
+    }};
+}
+
+/// Creates a CompileError for shared/mutable borrow conflicts (non-returning version).
+///
+/// This macro creates a detailed error when attempting to create a borrow that
+/// conflicts with an existing borrow (e.g., mutable when shared exists, or vice versa).
+///
+/// Usage: `let error = create_shared_mutable_conflict_error!(place, existing_kind, new_kind, existing_location, new_location);`;
+#[macro_export]
+macro_rules! create_shared_mutable_conflict_error {
+    ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
+        use $crate::compiler::wir::wir_nodes::BorrowKind;
+        
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        let existing_kind_str: &'static str = match $existing_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mut => "Mutable",
+        };
+        let new_kind_str: &'static str = match $new_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mut => "Mutable",
+        };
+        
+        let (message, suggestion, lifetime_hint) = match (&$existing_kind, &$new_kind) {
+            (BorrowKind::Shared, BorrowKind::Mut) => (
+                format!("cannot mutably borrow `{:?}` because it is already referenced", $place),
+                "Ensure all shared references are finished before creating mutable access",
+                "Mutable borrows require exclusive access - no other borrows can exist",
+            ),
+            (BorrowKind::Mut, BorrowKind::Shared) => (
+                format!("cannot reference `{:?}` because it is already mutably borrowed", $place),
+                "Finish using the mutable borrow before creating shared references",
+                "Mutable borrows are exclusive - no other borrows can exist while active",
+            ),
+            _ => (
+                format!("conflicting borrows of `{:?}`", $place),
+                "Resolve the borrow conflict by restructuring your code",
+                "Check the borrow rules for your specific case",
+            ),
+        };
+        
+        let existing_borrow_info: &'static str = Box::leak(
+            format!("Existing {} borrow conflicts with new {} borrow", existing_kind_str, new_kind_str).into_boxed_str()
+        );
+        
+        $crate::compiler::compiler_errors::CompileError {
+            msg: message,
+            location: $new_location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind, new_kind_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingVariable, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, lifetime_hint);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, existing_borrow_info);
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for shared/mutable borrow conflicts (returning version).
+///
+/// Usage: `return_shared_mutable_conflict_error!(place, existing_kind, new_kind, existing_location, new_location)`;
+#[macro_export]
+macro_rules! return_shared_mutable_conflict_error {
+    ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
+        return Err(create_shared_mutable_conflict_error!($place, $existing_kind, $new_kind, $existing_location, $new_location))
+    }};
+}
+
+/// Creates a CompileError for use after move (non-returning version).
+///
+/// This macro creates a detailed error when attempting to use a value that has
+/// already been moved.
+///
+/// Usage: `let error = create_use_after_move_error!(place, move_location, use_location);`;
+#[macro_export]
+macro_rules! create_use_after_move_error {
+    ($place:expr, $move_location:expr, $use_location:expr) => {{
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        
+        $crate::compiler::compiler_errors::CompileError {
+            msg: format!("borrow of moved value: `{:?}`", $place),
+            location: $use_location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::MovedVariable, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Consider using a reference instead of moving the value");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, "Clone the value before moving if you need to use it later");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Once a value is moved, ownership transfers and the original variable can no longer be used");
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for use after move (returning version).
+///
+/// Usage: `return_use_after_move_error!(place, move_location, use_location)`;
+#[macro_export]
+macro_rules! return_use_after_move_error {
+    ($place:expr, $move_location:expr, $use_location:expr) => {{
+        return Err(create_use_after_move_error!($place, $move_location, $use_location))
+    }};
+}
+
+/// Creates a CompileError for move while borrowed (non-returning version).
+///
+/// This macro creates a detailed error when attempting to move a value that has
+/// active borrows.
+///
+/// Usage: `let error = create_move_while_borrowed_error!(place, borrow_kind, borrow_location, move_location);`;
+#[macro_export]
+macro_rules! create_move_while_borrowed_error {
+    ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
+        use $crate::compiler::wir::wir_nodes::BorrowKind;
+        
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        let borrow_kind_str: &'static str = match $borrow_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mut => "Mutable",
+        };
+        
+        let borrow_type = match $borrow_kind {
+            BorrowKind::Shared => "referenced",
+            BorrowKind::Mut => "mutably borrowed",
+        };
+        
+        $crate::compiler::compiler_errors::CompileError {
+            msg: format!("cannot move out of `{:?}` because it is {}", $place, borrow_type),
+            location: $move_location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowedVariable, place_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind, borrow_kind_str);
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure all borrows are finished before moving the value");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, "Use references instead of moving the value");
+                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Cannot move a value while it has active borrows - the borrows must end first");
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for move while borrowed (returning version).
+///
+/// Usage: `return_move_while_borrowed_error!(place, borrow_kind, borrow_location, move_location)`;
+#[macro_export]
+macro_rules! return_move_while_borrowed_error {
+    ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
+        return Err(create_move_while_borrowed_error!($place, $borrow_kind, $borrow_location, $move_location))
+    }};
+}
+
 /// Returns a new CompileError for WIR transformation failures.
 ///
 /// WIR transformation errors indicate failures during AST to WIR conversion.
@@ -463,16 +790,24 @@ macro_rules! return_wir_transformation_error {
 /// WASM generation errors indicate failures during WIR to WASM codegen.
 /// These are typically compiler bugs in the WASM lowering or module generation.
 ///
-/// Usage: `return_wasm_generation_error!(string_table, location, "Failed to generate WASM export for function '{}'", func_name)`;
+/// Usage: `return_wasm_generation_error!(string_table, location, "Failed to generate WASM export for function '{}'", func_name, { CompilationStage => "WASM Generation" })`;
 #[macro_export]
 macro_rules! return_wasm_generation_error {
-    ($string_table:expr, $location:expr, $($msg:tt)+) => {
+    ($string_table:expr, $location:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err(CompileError {
-            msg: $string_table.intern(&format!($($msg)+)),
+            msg: $string_table.intern($msg),
             location: $location,
             error_type: crate::compiler::compiler_errors::ErrorType::WasmGeneration,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $(
+                    map.insert(
+                        crate::compiler::compiler_errors::ErrorMetaDataKey::$key,
+                        $value
+                    );
+                )*
+                map
+            },
         })
     };
 }
@@ -516,14 +851,22 @@ macro_rules! return_thread_err {
 
 #[macro_export]
 macro_rules! return_wat_err {
-    // New version with string table
-    ($string_table:expr, $err:expr) => {
+    // New version with string table and metadata
+    ($string_table:expr, $err:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err(CompileError {
             msg: $string_table.intern(&format!("Error while parsing WAT: {}", $err)),
             location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $(
+                    map.insert(
+                        crate::compiler::compiler_errors::ErrorMetaDataKey::$key,
+                        $value
+                    );
+                )*
+                map
+            },
         })
     };
     // Legacy version without string table
@@ -533,8 +876,7 @@ macro_rules! return_wat_err {
             msg: temp_string_table.intern(&format!("Error while parsing WAT: {}", $err)),
             location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
-            file_path: std::path::PathBuf::new(),
-            suggestions: Vec::new(),
+            metadata: std::collections::HashMap::new(),
         });
     }};
 }

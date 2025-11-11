@@ -73,11 +73,15 @@ fn visit_node(
 ) -> Result<(), CompileError> {
     // cycle?
     if tracker.temp_mark.contains(node_path) {
+        let path_str: &'static str = Box::leak(node_path.to_string(string_table).into_boxed_str());
         return_rule_error!(
-            string_table,
+            format!("Circular dependency detected at {}", path_str),
             TextLocation::default(),
-            "Circular dependency detected at {}",
-            node_path.to_string(string_table),
+            {
+                CompilationStage => "Dependency Resolution",
+                PrimarySuggestion => "Refactor shared code into a separate module to break the cycle",
+                SuggestedLocation => path_str,
+            }
         )
     }
 

@@ -191,16 +191,26 @@ impl EnhancedFunctionBuilder {
                 // Validate that we're in an if frame
                 if let Some(frame) = self.control_stack.last_mut() {
                     if frame.frame_type != ControlFrameType::If {
+                        let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
                         return_compiler_error!(
                             "WASM validation error in function '{}': else instruction without matching if",
-                            self.function_name
+                            self.function_name ; {
+                                CompilationStage => "WASM Validation",
+                                VariableName => function_name_static,
+                                PrimarySuggestion => "Ensure 'else' is only used within an 'if' block",
+                            }
                         );
                     }
                     frame.frame_type = ControlFrameType::Else;
                 } else {
+                    let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
                     return_compiler_error!(
                         "WASM validation error in function '{}': else instruction with empty control stack",
-                        self.function_name
+                        self.function_name ; {
+                            CompilationStage => "WASM Validation",
+                            VariableName => function_name_static,
+                            PrimarySuggestion => "This is an internal compiler error - control stack is empty when processing 'else'",
+                        }
                     );
                 }
             }
@@ -211,15 +221,25 @@ impl EnhancedFunctionBuilder {
                     if frame.frame_type == ControlFrameType::Function
                         && self.control_stack.is_empty()
                     {
+                        let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
                         return_compiler_error!(
                             "WASM validation error in function '{}': attempting to end function frame",
-                            self.function_name
+                            self.function_name ; {
+                                CompilationStage => "WASM Validation",
+                                VariableName => function_name_static,
+                                PrimarySuggestion => "This is an internal compiler error - function frame ended prematurely",
+                            }
                         );
                     }
                 } else {
+                    let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
                     return_compiler_error!(
                         "WASM validation error in function '{}': end instruction with empty control stack",
-                        self.function_name
+                        self.function_name ; {
+                            CompilationStage => "WASM Validation",
+                            VariableName => function_name_static,
+                            PrimarySuggestion => "This is an internal compiler error - control stack is empty when processing 'end'",
+                        }
                     );
                 }
             }
@@ -276,19 +296,29 @@ impl EnhancedFunctionBuilder {
 
         // Validate parameter count doesn't exceed WASM limits
         if self.param_types.len() > 1000 {
+            let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
             return_compiler_error!(
                 "Function '{}' has too many parameters ({}). WASM functions are limited to 1000 parameters.",
                 self.function_name,
-                self.param_types.len()
+                self.param_types.len() ; {
+                    CompilationStage => "WASM Validation",
+                    VariableName => function_name_static,
+                    PrimarySuggestion => "Reduce the number of function parameters to 1000 or fewer",
+                }
             );
         }
 
         // Validate return type count doesn't exceed WASM limits
         if self.result_types.len() > 1000 {
+            let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
             return_compiler_error!(
                 "Function '{}' has too many return values ({}). WASM functions are limited to 1000 return values.",
                 self.function_name,
-                self.result_types.len()
+                self.result_types.len() ; {
+                    CompilationStage => "WASM Validation",
+                    VariableName => function_name_static,
+                    PrimarySuggestion => "Reduce the number of return values to 1000 or fewer",
+                }
             );
         }
 
@@ -316,19 +346,29 @@ impl EnhancedFunctionBuilder {
     fn validate_control_frames(&self) -> Result<(), CompileError> {
         // Should only have the function frame remaining
         if self.control_stack.len() != 1 {
+            let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
             return_compiler_error!(
                 "WASM validation error in function '{}': {} control frames remain unclosed",
                 self.function_name,
-                self.control_stack.len() - 1
+                self.control_stack.len() - 1 ; {
+                    CompilationStage => "WASM Validation",
+                    VariableName => function_name_static,
+                    PrimarySuggestion => "Ensure all control structures (if/else/loops) are properly closed with matching 'end' instructions",
+                }
             );
         }
 
         if let Some(frame) = self.control_stack.first() {
             if frame.frame_type != ControlFrameType::Function {
+                let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
                 return_compiler_error!(
                     "WASM validation error in function '{}': expected function frame, found {:?}",
                     self.function_name,
-                    frame.frame_type
+                    frame.frame_type ; {
+                        CompilationStage => "WASM Validation",
+                        VariableName => function_name_static,
+                        PrimarySuggestion => "This is an internal compiler error - the control frame stack is corrupted",
+                    }
                 );
             }
         }
@@ -2008,7 +2048,11 @@ impl WasmModule {
                     _ => {
                         return_compiler_error!(
                             "Store statement with non-memory place not yet implemented: {:?}",
-                            place
+                            place ; {
+                                CompilationStage => "WASM Encoding",
+                                PrimarySuggestion => "Use memory-based places for store operations",
+                                AlternativeSuggestion => "Convert to local/global assignment if appropriate",
+                            }
                         );
                     }
                 }
@@ -2248,7 +2292,10 @@ impl WasmModule {
                                     memory_index: 0,
                                 }));
                             }
-                            _ => return_compiler_error!("Unsupported store type: {:?}", value_type),
+                            _ => return_compiler_error!("Unsupported store type: {:?}", value_type ; {
+                                CompilationStage => "WASM Encoding",
+                                PrimarySuggestion => "Use a supported WASM type (I32, I64, F32, F64)",
+                            }),
                         }
                     }
                     _ => {
@@ -2340,7 +2387,12 @@ impl WasmModule {
                 place_type,
                 value_type,
                 place,
-                rvalue
+                rvalue ; {
+                    CompilationStage => "WASM Encoding",
+                    ExpectedType => "place type",
+                    FoundType => "rvalue type",
+                    PrimarySuggestion => "Ensure WIR type inference produces consistent types",
+                }
             );
         }
 
@@ -2375,7 +2427,11 @@ impl WasmModule {
             _ => {
                 return_compiler_error!(
                     "WIR function calls must use direct function references, found: {:?}",
-                    func
+                    func ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Use Operand::FunctionRef or Operand::Constant(Constant::Function) for function calls",
+                        ExpectedType => "FunctionRef",
+                    }
                 );
             }
         }
@@ -2512,7 +2568,11 @@ impl WasmModule {
                 // Use JavaScript binding (not implemented yet)
                 return_compiler_error!(
                     "JavaScript runtime mappings not yet implemented for host function '{}'",
-                    host_function.name
+                    host_function.name ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Use WASIX or native runtime mappings instead",
+                        AlternativeSuggestion => "Implement JavaScript binding support in the WASM backend",
+                    }
                 );
             }
             Some(RuntimeFunctionMapping::Native(_)) | None => {
@@ -3285,7 +3345,11 @@ impl WasmModule {
             MemoryBase::Stack => {
                 // Stack-based memory should be handled as locals, not memory operations
                 return_compiler_error!(
-                    "Stack-based memory access should use Place::Local, not Place::Memory"
+                    "Stack-based memory access should use Place::Local, not Place::Memory" ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Use Place::Local for stack-allocated variables",
+                        AlternativeSuggestion => "Convert stack memory access to local variable access in WIR generation",
+                    }
                 );
             }
             MemoryBase::Heap { alloc_id, size: _ } => {
@@ -3620,7 +3684,12 @@ impl WasmModule {
                 } else {
                     return_compiler_error!(
                         "I32 value cannot be stored in {} bytes. Use I64 for larger values.",
-                        bytes
+                        bytes ; {
+                            CompilationStage => "WASM Encoding",
+                            PrimarySuggestion => "Use I64 type for values larger than 4 bytes",
+                            ExpectedType => "I64",
+                            FoundType => "I32",
+                        }
                     );
                 }
             }
@@ -3644,7 +3713,11 @@ impl WasmModule {
                 return_compiler_error!(
                     "Unsupported store combination: {:?} value to {:?} size. Check WIR type consistency.",
                     value_type,
-                    size
+                    size ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Ensure WIR type matches the target memory size",
+                        FoundType => "incompatible type/size combination",
+                    }
                 );
             }
         }
@@ -3687,7 +3760,10 @@ impl WasmModule {
                     Constant::String(_) => Ok(WasmType::I32), // String pointers are i32
                     _ => return_compiler_error!(
                         "Unsupported constant type for WASM type determination: {:?}",
-                        constant
+                        constant ; {
+                            CompilationStage => "WASM Encoding",
+                            PrimarySuggestion => "Use a supported constant type (I32, I64, F32, F64, Bool, String)",
+                        }
                     ),
                 }
             }
@@ -3924,7 +4000,11 @@ impl WasmModule {
             // Logical operations (implemented as short-circuiting control flow)
             (BinOp::And, _) | (BinOp::Or, _) => {
                 return_compiler_error!(
-                    "Logical operations (and/or) should be implemented as control flow, not binary operations. Use if/else statements for short-circuiting behavior."
+                    "Logical operations (and/or) should be implemented as control flow, not binary operations. Use if/else statements for short-circuiting behavior." ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Convert logical operations to if/else control flow in WIR generation",
+                        AlternativeSuggestion => "Use bitwise operations (&, |) for non-short-circuiting behavior",
+                    }
                 );
             }
 
@@ -3933,7 +4013,11 @@ impl WasmModule {
                 return_compiler_error!(
                     "Binary operation {:?} not supported for WASM type {:?}. Check that the operation is valid for the given type.",
                     op,
-                    wasm_type
+                    wasm_type ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Ensure the operation is supported for the operand type",
+                        AlternativeSuggestion => "Check WIR type inference for correctness",
+                    }
                 );
             }
         }
@@ -3951,7 +4035,10 @@ impl WasmModule {
             _ => {
                 return_compiler_error!(
                     "Unary operation not yet implemented in simplified WASM backend: {:?}",
-                    op
+                    op ; {
+                        CompilationStage => "WASM Encoding",
+                        PrimarySuggestion => "Implement the unary operation in the WASM backend",
+                    }
                 );
             }
         }

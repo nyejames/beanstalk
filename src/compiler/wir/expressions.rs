@@ -103,12 +103,14 @@ pub fn expression_to_rvalue_with_context(
             evaluate_rpn_to_wir_statements(rpn_nodes, location, context, string_table)
         }
         _ => {
+            let expr_type_str: &'static str = Box::leak(format!("{:?}", expression.kind).into_boxed_str());
             return_wir_transformation_error!(
-                location.clone(),
-                "Expression kind {:?} not yet implemented in WIR transformation at {}:{}. This expression type needs to be added to the WIR lowering implementation.",
-                expression.kind,
-                location.start_pos.line_number,
-                location.start_pos.char_column
+                format!("Expression kind {:?} not yet implemented in WIR transformation", expression.kind),
+                location.clone(), {
+                    FoundType => expr_type_str,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "This expression type needs to be added to the WIR lowering implementation",
+                }
             );
         }
     }
@@ -211,11 +213,9 @@ pub fn evaluate_rpn_to_wir_statements(
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     // Validate input
     if rpn_nodes.is_empty() {
-        return_compiler_error!(
-            "Empty RPN expression at {}:{}. This indicates a bug in the AST-to-RPN conversion.",
-            location.start_pos.line_number,
-            location.start_pos.char_column
-        );
+        return Err(CompileError::compiler_error(
+            "Empty RPN expression - this indicates a bug in the AST-to-RPN conversion"
+        ));
     }
     
     // Pre-allocate vectors with estimated capacity to reduce reallocations
@@ -235,12 +235,9 @@ pub fn evaluate_rpn_to_wir_statements(
             NodeKind::Operator(op) => {
                 // Process binary operator
                 if operand_stack.len() < 2 {
-                    return_compiler_error!(
-                        "Insufficient operands for binary operator at {}:{}. RPN evaluation stack has {} operands but needs 2. This indicates a bug in the AST-to-RPN conversion.",
-                        node.location.start_pos.line_number,
-                        node.location.start_pos.char_column,
-                        operand_stack.len()
-                    );
+                    return Err(CompileError::compiler_error(
+                        format!("Insufficient operands for binary operator - RPN evaluation stack has {} operands but needs 2. This indicates a bug in the AST-to-RPN conversion", operand_stack.len())
+                    ));
                 }
 
                 let rhs = operand_stack.pop().unwrap();
@@ -276,20 +273,18 @@ pub fn evaluate_rpn_to_wir_statements(
                 operand_stack.push(Operand::Copy(result_place));
             }
             _ => {
-                return_compiler_error!(
-                    "Unexpected node type in RPN expression: {:?}. RPN expressions should only contain Expression and Operator nodes. This indicates a bug in the AST-to-RPN conversion.",
-                    node.kind
-                );
+                return Err(CompileError::compiler_error(
+                    format!("Unexpected node type in RPN expression: {:?}. RPN expressions should only contain Expression and Operator nodes. This indicates a bug in the AST-to-RPN conversion", node.kind)
+                ));
             }
         }
     }
 
     // The final result should be the only operand left on the stack
     if operand_stack.len() != 1 {
-        return_compiler_error!(
-            "Invalid RPN expression: expected 1 result operand on stack, got {}. This indicates a bug in the RPN evaluation or AST-to-RPN conversion.",
-            operand_stack.len()
-        );
+        return Err(CompileError::compiler_error(
+            format!("Invalid RPN expression: expected 1 result operand on stack, got {}. This indicates a bug in the RPN evaluation or AST-to-RPN conversion", operand_stack.len())
+        ));
     }
 
     let result_operand = operand_stack.pop().unwrap();
@@ -390,11 +385,17 @@ fn ast_operator_to_wir_binop(
         Operator::Not => Ok(BinOp::Ne), // Boolean negation mapped to Ne
         
         // Unsupported operators
-        _ => return_wir_transformation_error!(
-            TextLocation::default(),
-            "Operator {:?} not yet supported in WIR transformation. This operator needs to be added to the WIR binary operation mapping.",
-            op
-        ),
+        _ => {
+            let op_str: &'static str = Box::leak(format!("{:?}", op).into_boxed_str());
+            return_wir_transformation_error!(
+                format!("Operator {:?} not yet supported in WIR transformation", op),
+                TextLocation::default(), {
+                    FoundType => op_str,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "This operator needs to be added to the WIR binary operation mapping",
+                }
+            );
+        },
     }
 }
 
@@ -461,10 +462,16 @@ fn infer_binary_operation_result_type(
         }
         
         // Unsupported operators
-        _ => return_wir_transformation_error!(
-            TextLocation::default(),
-            "Operator {:?} not supported for type inference. This operator needs type inference rules to be added.",
-            op
-        ),
+        _ => {
+            let op_str: &'static str = Box::leak(format!("{:?}", op).into_boxed_str());
+            return_wir_transformation_error!(
+                format!("Operator {:?} not supported for type inference", op),
+                TextLocation::default(), {
+                    FoundType => op_str,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "This operator needs type inference rules to be implemented",
+                }
+            );
+        },
     }
 }
