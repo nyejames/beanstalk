@@ -1,7 +1,7 @@
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
-use crate::compiler::string_interning::{StringTable};
+use crate::compiler::string_interning::StringTable;
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
@@ -10,21 +10,23 @@ use std::{env, fs};
 
 // The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
-pub struct CompilerMessages {
+pub struct CompilerMessages<'a> {
     pub errors: Vec<CompileError>,
     pub warnings: Vec<CompilerWarning>,
+    pub string_table: &'a StringTable,
 }
 
-impl CompilerMessages {
-    pub fn new() -> Self {
+impl<'a> CompilerMessages<'a> {
+    pub fn new(string_table: &'a StringTable) -> Self {
         CompilerMessages {
             errors: Vec::new(),
             warnings: Vec::new(),
+            string_table,
         }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum ErrorMetaDataKey {
     VariableName,
     CompilationStage,
@@ -161,10 +163,14 @@ impl CompileError {
         // This is a workaround since we don't have access to StringTable here
         let mut temp_table = StringTable::new();
         let interned_path = InternedPath::from_path_buf(&path.to_path_buf(), &mut temp_table);
-        
+
         CompileError {
             msg: msg.into(),
-            location: TextLocation::new(interned_path, CharPosition::default(), CharPosition::default()),
+            location: TextLocation::new(
+                interned_path,
+                CharPosition::default(),
+                CharPosition::default(),
+            ),
             error_type: ErrorType::File,
             metadata: HashMap::new(),
         }
@@ -189,10 +195,14 @@ impl CompileError {
         // Create a temporary InternedPath for the location
         let mut temp_table = StringTable::new();
         let interned_path = InternedPath::from_path_buf(&path.to_path_buf(), &mut temp_table);
-        
+
         CompileError {
             msg: msg.into(),
-            location: TextLocation::new(interned_path, CharPosition::default(), CharPosition::default()),
+            location: TextLocation::new(
+                interned_path,
+                CharPosition::default(),
+                CharPosition::default(),
+            ),
             error_type: ErrorType::File,
             metadata,
         }
@@ -559,19 +569,40 @@ macro_rules! return_borrow_checker_error {
 macro_rules! create_multiple_mutable_borrows_error {
     ($place:expr, $existing_location:expr, $new_location:expr) => {{
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
-        
+
         $crate::compiler::compiler_errors::CompileError {
-            msg: format!("cannot mutably borrow `{:?}` because it is already mutably borrowed", $place),
+            msg: format!(
+                "cannot mutably borrow `{:?}` because it is already mutably borrowed",
+                $place
+            ),
             location: $new_location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind, "Mutable");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingVariable, place_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the first mutable borrow is no longer used before creating the second");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Only one mutable borrow can exist at a time");
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind,
+                    "Mutable",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingVariable,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Ensure the first mutable borrow is no longer used before creating the second",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint,
+                    "Only one mutable borrow can exist at a time",
+                );
                 map
             },
         }
@@ -587,7 +618,11 @@ macro_rules! create_multiple_mutable_borrows_error {
 #[macro_export]
 macro_rules! return_multiple_mutable_borrows_error {
     ($place:expr, $existing_location:expr, $new_location:expr) => {{
-        return Err(create_multiple_mutable_borrows_error!($place, $existing_location, $new_location))
+        return Err(create_multiple_mutable_borrows_error!(
+            $place,
+            $existing_location,
+            $new_location
+        ));
     }};
 }
 
@@ -601,7 +636,7 @@ macro_rules! return_multiple_mutable_borrows_error {
 macro_rules! create_shared_mutable_conflict_error {
     ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
         use $crate::compiler::wir::wir_nodes::BorrowKind;
-        
+
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
         let existing_kind_str: &'static str = match $existing_kind {
             BorrowKind::Shared => "Shared",
@@ -611,15 +646,21 @@ macro_rules! create_shared_mutable_conflict_error {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mut => "Mutable",
         };
-        
+
         let (message, suggestion, lifetime_hint) = match (&$existing_kind, &$new_kind) {
             (BorrowKind::Shared, BorrowKind::Mut) => (
-                format!("cannot mutably borrow `{:?}` because it is already referenced", $place),
+                format!(
+                    "cannot mutably borrow `{:?}` because it is already referenced",
+                    $place
+                ),
                 "Ensure all shared references are finished before creating mutable access",
                 "Mutable borrows require exclusive access - no other borrows can exist",
             ),
             (BorrowKind::Mut, BorrowKind::Shared) => (
-                format!("cannot reference `{:?}` because it is already mutably borrowed", $place),
+                format!(
+                    "cannot reference `{:?}` because it is already mutably borrowed",
+                    $place
+                ),
                 "Finish using the mutable borrow before creating shared references",
                 "Mutable borrows are exclusive - no other borrows can exist while active",
             ),
@@ -629,24 +670,49 @@ macro_rules! create_shared_mutable_conflict_error {
                 "Check the borrow rules for your specific case",
             ),
         };
-        
+
         let existing_borrow_info: &'static str = Box::leak(
-            format!("Existing {} borrow conflicts with new {} borrow", existing_kind_str, new_kind_str).into_boxed_str()
+            format!(
+                "Existing {} borrow conflicts with new {} borrow",
+                existing_kind_str, new_kind_str
+            )
+            .into_boxed_str(),
         );
-        
+
         $crate::compiler::compiler_errors::CompileError {
             msg: message,
             location: $new_location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind, new_kind_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingVariable, place_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, lifetime_hint);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, existing_borrow_info);
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind,
+                    new_kind_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingVariable,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    suggestion,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint,
+                    lifetime_hint,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion,
+                    existing_borrow_info,
+                );
                 map
             },
         }
@@ -659,7 +725,13 @@ macro_rules! create_shared_mutable_conflict_error {
 #[macro_export]
 macro_rules! return_shared_mutable_conflict_error {
     ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
-        return Err(create_shared_mutable_conflict_error!($place, $existing_kind, $new_kind, $existing_location, $new_location))
+        return Err(create_shared_mutable_conflict_error!(
+            $place,
+            $existing_kind,
+            $new_kind,
+            $existing_location,
+            $new_location
+        ));
     }};
 }
 
@@ -673,7 +745,7 @@ macro_rules! return_shared_mutable_conflict_error {
 macro_rules! create_use_after_move_error {
     ($place:expr, $move_location:expr, $use_location:expr) => {{
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
-        
+
         $crate::compiler::compiler_errors::CompileError {
             msg: format!("borrow of moved value: `{:?}`", $place),
             location: $use_location,
@@ -698,7 +770,11 @@ macro_rules! create_use_after_move_error {
 #[macro_export]
 macro_rules! return_use_after_move_error {
     ($place:expr, $move_location:expr, $use_location:expr) => {{
-        return Err(create_use_after_move_error!($place, $move_location, $use_location))
+        return Err(create_use_after_move_error!(
+            $place,
+            $move_location,
+            $use_location
+        ));
     }};
 }
 
@@ -712,31 +788,55 @@ macro_rules! return_use_after_move_error {
 macro_rules! create_move_while_borrowed_error {
     ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
         use $crate::compiler::wir::wir_nodes::BorrowKind;
-        
+
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
         let borrow_kind_str: &'static str = match $borrow_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mut => "Mutable",
         };
-        
+
         let borrow_type = match $borrow_kind {
             BorrowKind::Shared => "referenced",
             BorrowKind::Mut => "mutably borrowed",
         };
-        
+
         $crate::compiler::compiler_errors::CompileError {
-            msg: format!("cannot move out of `{:?}` because it is {}", $place, borrow_type),
+            msg: format!(
+                "cannot move out of `{:?}` because it is {}",
+                $place, borrow_type
+            ),
             location: $move_location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
             metadata: {
                 let mut map = std::collections::HashMap::new();
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowedVariable, place_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind, borrow_kind_str);
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure all borrows are finished before moving the value");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, "Use references instead of moving the value");
-                map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Cannot move a value while it has active borrows - the borrows must end first");
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowedVariable,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::BorrowKind,
+                    borrow_kind_str,
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Ensure all borrows are finished before moving the value",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion,
+                    "Use references instead of moving the value",
+                );
+                map.insert(
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::LifetimeHint,
+                    "Cannot move a value while it has active borrows - the borrows must end first",
+                );
                 map
             },
         }
@@ -749,7 +849,12 @@ macro_rules! create_move_while_borrowed_error {
 #[macro_export]
 macro_rules! return_move_while_borrowed_error {
     ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
-        return Err(create_move_while_borrowed_error!($place, $borrow_kind, $borrow_location, $move_location))
+        return Err(create_move_while_borrowed_error!(
+            $place,
+            $borrow_kind,
+            $borrow_location,
+            $move_location
+        ));
     }};
 }
 
@@ -898,7 +1003,10 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
         Ok(dir) => {
             // Strip the actual header at the end of the path (.header extension)
             let path = e.location.scope.to_path_buf(string_table);
-            path.strip_prefix(dir).to_string_lossy()
+            path.strip_prefix(dir)
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
         }
         Err(err) => {
             red_ln!(

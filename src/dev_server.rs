@@ -1,8 +1,9 @@
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::build_system::build_system::BuildTarget;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages, print_compiler_messages};
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, build, return_dev_server_error, settings};
-use colour::{blue_ln, green_ln_bold, print_bold, red_ln};
+use colour::{blue_ln, e_red_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{
@@ -10,22 +11,32 @@ use std::{
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
 };
-use crate::build_system::build_system::BuildTarget;
 
-pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), CompilerMessages> {
+pub fn start_dev_server(path: &Path, flags: &[Flag]) {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
-        Err(e) => return_dev_server_error!(
-            path.to_path_buf(),
-            "TCP error: {e}. Is there an instance of this local host server already running on {url}?"
-        ),
+        Err(e) => {
+            e_red_ln!("Errors while starting dev server: \n");
+            e_red_ln!("{:?}", e);
+            return;
+        }
     };
 
     // Is checking to make sure the path is a directory
-    let path = get_current_dir()?.join(path);
+    let path = match get_current_dir() {
+        Ok(p) => p.join(path),
+        Err(e) => {
+            e_red_ln!("Error getting current directory: {:?}", e);
+            return;
+        }
+    };
 
-    let project_config = build::build_project_files(&path, false, flags, Some(BuildTarget::HtmlProject))?;
+    let project_config =
+        match build::build_project_files(&path, false, flags, Some(BuildTarget::HtmlProject)) {
+            Ok(config) => config,
+            Err(messages) => {}
+        };
 
     // TODO: Now separately build all the runtime hooks / project structure
 
@@ -38,8 +49,6 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) -> Result<(), CompilerMessa
         let stream = stream.unwrap();
         handle_connection(stream, &path, &mut modified, &project_config.config, flags)?;
     }
-
-    Ok(())
 }
 
 fn handle_connection(
@@ -317,13 +326,9 @@ fn get_home_page_path(
     }
 }
 
-fn get_current_dir() -> Result<PathBuf, CompilerMessages> {
+fn get_current_dir() -> Result<PathBuf, String> {
     match std::env::current_dir() {
         Ok(dir) => Ok(dir),
-        Err(e) => return_dev_server_error!(
-            PathBuf::from(""),
-            "Error getting current directory: {:?}",
-            e
-        ),
+        Err(e) => Err(format!("Error getting current directory: {:?}", e)),
     }
 }

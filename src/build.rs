@@ -1,10 +1,12 @@
 use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages, ErrorMetaDataKey};
+use crate::compiler::compiler_errors::{
+    CompileError, CompilerMessages, ErrorMetaDataKey, print_compiler_messages,
+};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{Flag, settings};
-use colour::{dark_cyan_ln, dark_yellow_ln, print_bold};
+use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, grey_ln, print_bold, red_ln};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -51,26 +53,14 @@ pub fn build_project_files(
     release_build: bool,
     flags: &[Flag],
     target_override: Option<BuildTarget>,
-) -> Result<Project, CompilerMessages> {
+) {
     let _time = Instant::now();
 
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            let error_msg: &'static str = Box::leak(format!("Error finding current directory: {:?}", e).into_boxed_str());
-            return Err(CompilerMessages {
-                errors: vec![CompileError::new_file_error(
-                    entry_path,
-                    error_msg,
-                    {
-                        let mut map = HashMap::new();
-                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                        map.insert(ErrorMetaDataKey::PrimarySuggestion, "Check that you have permission to access the current directory");
-                        map
-                    }
-                )],
-                warnings: Vec::new(),
-            });
+            red_ln!("Error finding current directory: {:?}", e);
+            return;
         }
     };
 
@@ -96,28 +86,8 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::SingleBeanstalkFile(content),
             Err(e) => {
-                let error_msg: &'static str = Box::leak(format!("Error reading file: {:?}", e).into_boxed_str());
-                let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
-                    "Check that the file exists at the specified path"
-                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    "Check that you have permission to read this file"
-                } else {
-                    "Verify the file is accessible and not corrupted"
-                };
-                
-                return Err(CompilerMessages {
-                    errors: vec![CompileError::new_file_error(
-                        &entry_dir,
-                        error_msg,
-                        {
-                            let mut map = HashMap::new();
-                            map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                            map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                            map
-                        }
-                    )],
-                    warnings: Vec::new(),
-                });
+                red_ln!("Error reading file: {:?}", e);
+                return;
             }
         }
     } else {
@@ -129,35 +99,8 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::MultiFile(content),
             Err(e) => {
-                let error_msg: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
-                    "Config file not found"
-                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    "Permission denied reading config file"
-                } else {
-                    Box::leak(format!("Error reading config file: {:?}", e).into_boxed_str())
-                };
-                
-                let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
-                    "Create a #config.bst file in the project root directory"
-                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    "Check file permissions for the config file"
-                } else {
-                    "Verify the config file is accessible and not corrupted"
-                };
-                
-                return Err(CompilerMessages {
-                    errors: vec![CompileError::new_file_error(
-                        &config_path,
-                        error_msg,
-                        {
-                            let mut map = HashMap::new();
-                            map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                            map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                            map
-                        }
-                    )],
-                    warnings: Vec::new(),
-                });
+                format!("Error reading config file: {:?}", e);
+                return;
             }
         }
     };
@@ -173,12 +116,8 @@ pub fn build_project_files(
 
         CompileType::SingleMarkthroughFile(_code) => {
             // TODO: Handle Markthrough files in the future
-            return Err(CompilerMessages {
-                errors: vec![CompileError::compiler_error(
-                    "Markthrough files not yet supported",
-                )],
-                warnings: Vec::new(),
-            });
+            red_ln!("Markthrough files are not yet supported");
+            return;
         }
 
         // TODO: No longer have config files working,
@@ -236,7 +175,7 @@ pub fn build_project_files(
                 false => entry_dir.join(&project_config.dev_folder),
             };
 
-            add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &src_dir)?;
+            add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &src_dir);
         }
     }
 
@@ -255,12 +194,28 @@ pub fn build_project_files(
     // ----------------------------------
     // BUILD PROJECT USING APPROPRIATE BUILDER
     // ----------------------------------
-    project_builder.build_project(
+    let start = Instant::now();
+    match project_builder.build_project(
         beanstalk_modules_to_parse,
         &project_config,
         release_build,
         flags,
-    )
+    ) {
+        Ok(output_files) => {
+            let duration = start.elapsed();
+
+            // Show build results
+            println!("Build completed successfully");
+            println!("Generated {} output file(s)", project.output_files.len());
+
+            grey_ln!("------------------------------------");
+            print!("\nProject built in: ");
+            green_ln_bold!("{:?}", duration);
+        }
+        Err(messages) => {
+            print_compiler_messages(e);
+        }
+    }
 }
 
 // Look for every subdirectory inside the dir and add all .bst files to the source_code_to_parse
@@ -280,7 +235,7 @@ fn add_bst_files_to_parse(
                     e
                 ).into_boxed_str()
             );
-            
+
             let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
                 "Check that the directory exists at the specified path"
             } else if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -288,18 +243,14 @@ fn add_bst_files_to_parse(
             } else {
                 "Verify the directory is accessible"
             };
-            
+
             return Err(CompilerMessages {
-                errors: vec![CompileError::new_file_error(
-                    project_root_dir,
-                    error_msg,
-                    {
-                        let mut map = HashMap::new();
-                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                        map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                        map
-                    }
-                )],
+                errors: vec![CompileError::new_file_error(project_root_dir, error_msg, {
+                    let mut map = HashMap::new();
+                    map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                    map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
+                    map
+                })],
                 warnings: Vec::new(),
             });
         }
@@ -319,27 +270,32 @@ fn add_bst_files_to_parse(
                                 format!(
                                     "Error reading file when adding new bst files to parse: {:?}",
                                     e
-                                ).into_boxed_str()
+                                )
+                                .into_boxed_str(),
                             );
-                            
-                            let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
-                                "Check that the file exists at the specified path"
-                            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                                "Check that you have permission to read this file"
-                            } else {
-                                "Verify the file is accessible and not corrupted"
-                            };
-                            
+
+                            let suggestion: &'static str =
+                                if e.kind() == std::io::ErrorKind::NotFound {
+                                    "Check that the file exists at the specified path"
+                                } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                                    "Check that you have permission to read this file"
+                                } else {
+                                    "Verify the file is accessible and not corrupted"
+                                };
+
                             return Err(CompilerMessages {
                                 errors: vec![CompileError::new_file_error(
                                     &file_path,
                                     error_msg,
                                     {
                                         let mut map = HashMap::new();
-                                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                                        map.insert(
+                                            ErrorMetaDataKey::CompilationStage,
+                                            "File System",
+                                        );
                                         map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
                                         map
-                                    }
+                                    },
                                 )],
                                 warnings: Vec::new(),
                             });
@@ -371,10 +327,13 @@ fn add_bst_files_to_parse(
                                     "Error getting file stem - file name contains invalid characters",
                                     {
                                         let mut map = HashMap::new();
-                                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                                        map.insert(
+                                            ErrorMetaDataKey::CompilationStage,
+                                            "File System",
+                                        );
                                         map.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure the file name contains only valid UTF-8 characters");
                                         map
-                                    }
+                                    },
                                 )],
                                 warnings: Vec::new(),
                             });
@@ -419,20 +378,20 @@ fn add_bst_files_to_parse(
                     format!(
                         "Error reading directory entry when adding new bst files to parse: {:?}",
                         e
-                    ).into_boxed_str()
+                    )
+                    .into_boxed_str(),
                 );
-                
+
                 return Err(CompilerMessages {
-                    errors: vec![CompileError::new_file_error(
-                        project_root_dir,
-                        error_msg,
-                        {
-                            let mut map = HashMap::new();
-                            map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                            map.insert(ErrorMetaDataKey::PrimarySuggestion, "Check directory permissions and file system integrity");
-                            map
-                        }
-                    )],
+                    errors: vec![CompileError::new_file_error(project_root_dir, error_msg, {
+                        let mut map = HashMap::new();
+                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
+                        map.insert(
+                            ErrorMetaDataKey::PrimarySuggestion,
+                            "Check directory permissions and file system integrity",
+                        );
+                        map
+                    })],
                     warnings: Vec::new(),
                 });
             }

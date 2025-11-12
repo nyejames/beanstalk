@@ -43,6 +43,7 @@ pub fn run_all_test_cases() {
                     println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
+                    // TODO: Build directly and get back the error types
                     match build_project_files(&path, false, &flags, Some(BuildTarget::Jit)) {
                         Ok(_) => {
                             green_ln!("✓ PASS");

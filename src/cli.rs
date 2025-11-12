@@ -1,7 +1,10 @@
 use crate::build_system::build_system::BuildTarget;
 use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
-use crate::compiler::compiler_errors::{print_compiler_messages, print_formatted_error};
+use crate::compiler::compiler_errors::{
+    CompileError, print_compiler_messages, print_formatted_error,
+};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_tests::test_runner::run_all_test_cases;
 use crate::{Flag, build, create_new_project, dev_server, timer_log};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
@@ -93,15 +96,7 @@ pub fn start_cli() {
         Command::Dev(ref path) => {
             println!("Starting dev server...");
 
-            match dev_server::start_dev_server(path, &flags) {
-                Ok(_) => {
-                    println!("Dev server shutting down ... ");
-                }
-                Err(e) => {
-                    e_red_ln!("Errors while building project: \n");
-                    print_compiler_messages(e);
-                }
-            }
+            dev_server::start_dev_server(path, &flags);
         }
 
         Command::Wat(path) => {
@@ -109,7 +104,7 @@ pub fn start_cli() {
             match compile_wat_file(&path) {
                 Ok(_) => {}
                 Err(e) => {
-                    print_formatted_error(e);
+                    red_ln!("Error compiling WAT file: {}", e);
                 }
             }
         }
@@ -214,25 +209,7 @@ fn build_project(
     flags: &[Flag],
     target_override: Option<BuildTarget>,
 ) {
-    let start = Instant::now();
-
-    match build::build_project_files(path, release_build, flags, target_override) {
-        Ok(project) => {
-            let duration = start.elapsed();
-
-            // Show build results
-            println!("Build completed successfully");
-            println!("Generated {} output file(s)", project.output_files.len());
-
-            grey_ln!("------------------------------------");
-            print!("\nProject built in: ");
-            green_ln_bold!("{:?}", duration);
-        }
-        Err(e) => {
-            e_red_ln!("Errors while building project: \n");
-            print_compiler_messages(e);
-        }
-    }
+    build::build_project_files(path, release_build, flags, target_override)
 }
 
 fn jit_project(path: &Path, flags: &[Flag]) {
