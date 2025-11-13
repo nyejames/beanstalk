@@ -1,5 +1,6 @@
 use colour::yellow_ln_bold;
 use std::path::PathBuf;
+use crate::compiler::compiler_errors::ErrorLocation;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
@@ -7,9 +8,9 @@ use crate::compiler::string_interning::StringTable;
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {
     pub msg: String,
-    pub location: TextLocation,
+    pub location: ErrorLocation,
     pub warning_kind: WarningKind,
-    pub file_path: InternedPath,
+    pub file_path: PathBuf,
 }
 
 impl CompilerWarning {
@@ -50,8 +51,8 @@ impl CompilerWarning {
     }
 
     /// Get the file path as a string for display purposes
-    pub fn file_path_string(&self, string_table: &StringTable) -> String {
-        format!("{}", self.file_path.to_string(string_table))
+    pub fn file_path_string(&self) -> String {
+        format!("{}", self.file_path.to_string())
     }
 }
 
@@ -69,7 +70,7 @@ pub enum WarningKind {
     PointlessExport,
 }
 
-pub fn print_formatted_warning(w: CompilerWarning, string_table: &StringTable) {
+pub fn print_formatted_warning(w: CompilerWarning) {
     yellow_ln_bold!("WARNING: ");
     println!("File: {}", w.file_path_string(string_table));
     match w.warning_kind {

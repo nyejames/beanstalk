@@ -8,6 +8,7 @@ use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::path::{Path, PathBuf};
 use std::str::Chars;
+use crate::compiler::compiler_errors::ErrorLocation;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
@@ -69,6 +70,15 @@ impl TextLocation {
             },
         }
     }
+
+    pub fn to_error_location(self, string_table: &mut StringTable) -> ErrorLocation {
+        ErrorLocation {
+            scope: self.scope.to_path_buf(string_table),
+            start_pos: self.start_pos,
+            end_pos: self.end_pos,
+        }
+    }
+
 }
 
 impl PartialOrd for TextLocation {

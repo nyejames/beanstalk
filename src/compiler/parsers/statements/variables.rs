@@ -89,7 +89,7 @@ pub fn new_arg(
 
         TokenKind::TypeParameterBracket => {
             let func_sig = FunctionSignature::new(token_stream, &context, string_table)?;
-            let func_context = context.new_child_function(id, func_sig.to_owned());
+            let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
             // TODO: fast check for function without signature
             // let context = context.new_child_function(name, &[]);
@@ -234,9 +234,9 @@ pub fn new_arg(
     // This is just so we don't wastefully call create_expression recursively right away
     let parsed_expr = match token_stream.current_token_kind() {
         // Is this a hashset or something?
-        TokenKind::TypeParameterBracket => {
-            // TODO
-        }
+        // TokenKind::TypeParameterBracket => {
+        //     // TODO
+        // }
 
         TokenKind::OpenParenthesis => {
             token_stream.advance();
@@ -249,6 +249,7 @@ pub fn new_arg(
                 string_table,
             )?
         }
+
         _ => create_expression(
             token_stream,
             context,

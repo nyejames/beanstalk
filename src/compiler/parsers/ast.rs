@@ -255,13 +255,13 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_function(&self, id: StringId, signature: FunctionSignature) -> ScopeContext {
+    pub fn new_child_function(&self, id: StringId, signature: FunctionSignature, string_table: &mut StringTable) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.returns = signature.returns.to_owned();
 
         // Create a new scope path by joining the current scope with the function name
-        new_context.scope = self.scope.join_header(id);
+        new_context.scope = self.scope.join_header(id, string_table);
 
         new_context.declarations = signature.parameters;
 

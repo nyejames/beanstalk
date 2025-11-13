@@ -49,7 +49,7 @@ pub struct Project {
 /// - `Some(BuildTarget::Native { .. })`: Force native WASM output
 /// - `None`: Use automatic target detection based on project structure
 pub fn build_project_files(
-    project_config: &mut Config,
+    project_config: &Config,
     release_build: bool,
     flags: &[Flag],
     target_override: Option<BuildTarget>,
@@ -189,7 +189,14 @@ pub fn build_project_files(
                 false => entry_dir.join(&project_config.dev_folder),
             };
 
-            add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &src_dir);
+            match add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &src_dir) {
+                // Currently doesn't emit warnings
+                Ok(_) => {}
+                Err(e) => {
+                    messages.errors.push(e);
+                    return messages;
+                }
+            }
         }
     }
 

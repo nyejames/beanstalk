@@ -7,13 +7,13 @@ use colour::{
 };
 use std::collections::HashMap;
 use std::{env, fs};
+use std::path::{PathBuf};
 
 // The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
 pub struct CompilerMessages {
     pub errors: Vec<CompileError>,
     pub warnings: Vec<CompilerWarning>,
-    pub string_table: StringTable,
 }
 
 impl CompilerMessages {
@@ -21,7 +21,6 @@ impl CompilerMessages {
         CompilerMessages {
             errors: Vec::new(),
             warnings: Vec::new(),
-            string_table,
         }
     }
 }
@@ -50,6 +49,32 @@ pub enum ErrorMetaDataKey {
     ConflictingVariable, // Variable causing a borrow conflict
 }
 
+// A completely owned version of TextLocation
+// Without interning to avoid having to pass the string table up with compiler messages
+#[derive(Debug)]
+pub struct ErrorLocation {
+    pub scope: PathBuf,
+    pub start_pos: CharPosition,
+    pub end_pos: CharPosition,
+}
+
+impl ErrorLocation {
+    pub fn new(path_buf: PathBuf, start: CharPosition, end: CharPosition) -> ErrorLocation {
+        ErrorLocation {
+            scope: path_buf,
+            start_pos: start,
+            end_pos: end,
+        }
+    }
+    fn default() -> ErrorLocation {
+        ErrorLocation {
+            scope: PathBuf::new(),
+            start_pos: CharPosition::default(),
+            end_pos: CharPosition::default(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CompileError {
     pub msg: String,
@@ -57,7 +82,7 @@ pub struct CompileError {
     // Includes the scope path, which will have the file name and header data.
     // This file path will need to be resolved to the actual file path when the error is displayed.
     // As this path will include the actual name of the header that the error came from.
-    pub location: TextLocation,
+    pub location: ErrorLocation,
     pub error_type: ErrorType,
 
     // This is for creating more structured and detailed error messages
@@ -68,7 +93,7 @@ pub struct CompileError {
 impl CompileError {
     pub fn new(
         msg: impl Into<String>,
-        location: TextLocation,
+        location: ErrorLocation,
         error_type: ErrorType,
     ) -> CompileError {
         CompileError {
@@ -79,7 +104,7 @@ impl CompileError {
         }
     }
 
-    pub fn with_file_path(mut self, file_path: InternedPath) -> Self {
+    pub fn with_file_path(mut self, file_path: PathBuf) -> Self {
         self.location.scope = file_path;
         self
     }
@@ -94,7 +119,7 @@ impl CompileError {
     }
 
     /// Create a new syntax error with a clear explanation
-    pub fn new_syntax_error(msg: impl Into<String>, location: TextLocation) -> Self {
+    pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
         CompileError {
             msg: msg.into(),
             location,
@@ -104,7 +129,7 @@ impl CompileError {
     }
 
     /// Create a new rule error with a descriptive message (no metadata)
-    pub fn new_rule_error(msg: impl Into<String>, location: TextLocation) -> Self {
+    pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
         CompileError {
             msg: msg.into(),
             location,
@@ -116,7 +141,7 @@ impl CompileError {
     /// Create a new rule error with metadata
     pub fn new_rule_error_with_metadata(
         msg: impl Into<String>,
-        location: TextLocation,
+        location: ErrorLocation,
         metadata: HashMap<ErrorMetaDataKey, &'static str>,
     ) -> Self {
         CompileError {
@@ -128,7 +153,7 @@ impl CompileError {
     }
 
     /// Create a new type error with type information and suggestions
-    pub fn new_type_error(msg: impl Into<String>, location: TextLocation) -> Self {
+    pub fn new_type_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
         CompileError {
             msg: msg.into(),
             location,
@@ -141,7 +166,7 @@ impl CompileError {
     pub fn new_thread_panic(msg: impl Into<String>) -> Self {
         CompileError {
             msg: msg.into(),
-            location: TextLocation::default(),
+            location: ErrorLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
         }
@@ -151,7 +176,7 @@ impl CompileError {
     pub fn compiler_error(msg: impl Into<String>) -> Self {
         CompileError {
             msg: msg.into(),
-            location: TextLocation::default(),
+            location: ErrorLocation::default(),
             error_type: ErrorType::Compiler,
             metadata: HashMap::new(),
         }
@@ -159,28 +184,13 @@ impl CompileError {
 
     /// Create a file system error from a Path (legacy method without metadata)
     pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
-        // Create a temporary InternedPath for the location
-        // This is a workaround since we don't have access to StringTable here
-        let mut temp_table = StringTable::new();
-        let interned_path = InternedPath::from_path_buf(&path.to_path_buf(), &mut temp_table);
-
         CompileError {
             msg: msg.into(),
-            location: TextLocation::new(
-                interned_path,
+            location: ErrorLocation::new(
+                path.to_path_buf(),
                 CharPosition::default(),
                 CharPosition::default(),
             ),
-            error_type: ErrorType::File,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Create a file system error from InternedPath (legacy method without metadata)
-    pub fn file_error_interned(msg: impl Into<String>, path: InternedPath) -> Self {
-        CompileError {
-            msg: msg.into(),
-            location: TextLocation::new(path, CharPosition::default(), CharPosition::default()),
             error_type: ErrorType::File,
             metadata: HashMap::new(),
         }
@@ -192,31 +202,13 @@ impl CompileError {
         msg: impl Into<String>,
         metadata: HashMap<ErrorMetaDataKey, &'static str>,
     ) -> Self {
-        // Create a temporary InternedPath for the location
-        let mut temp_table = StringTable::new();
-        let interned_path = InternedPath::from_path_buf(&path.to_path_buf(), &mut temp_table);
-
         CompileError {
             msg: msg.into(),
-            location: TextLocation::new(
-                interned_path,
+            location: ErrorLocation::new(
+                path.to_path_buf(),
                 CharPosition::default(),
                 CharPosition::default(),
             ),
-            error_type: ErrorType::File,
-            metadata,
-        }
-    }
-
-    /// Create a file system error from InternedPath with metadata
-    pub fn new_file_error_interned(
-        msg: impl Into<String>,
-        path: InternedPath,
-        metadata: HashMap<ErrorMetaDataKey, &'static str>,
-    ) -> Self {
-        CompileError {
-            msg: msg.into(),
-            location: TextLocation::new(path, CharPosition::default(), CharPosition::default()),
             error_type: ErrorType::File,
             metadata,
         }
@@ -286,7 +278,7 @@ macro_rules! return_syntax_error {
             location: $loc,
             error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
             metadata: {
-                let map = std::collections::HashMap::new();
+                let mut map = std::collections::HashMap::new();
                 $(
                     map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value);
                 )*
@@ -336,11 +328,10 @@ macro_rules! return_type_error {
 /// helpful suggestions when possible.
 ///
 /// Usage examples:
-/// - Legacy style: `return_rule_error!(string_table, location, "Undefined variable '{}'", name)`;
-/// - New style: `return_rule_error!("Undefined variable", location, { VariableName => "x" })`;
+/// `return_rule_error!("Undefined variable", location, { VariableName => "x" })`;
 #[macro_export]
 macro_rules! return_rule_error {
-    // New arm with metadata map
+    // Arm with metadata map
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
@@ -353,7 +344,7 @@ macro_rules! return_rule_error {
             },
         })
     };
-    // New simple arm without metadata
+    // Arm without metadata
     ($msg:expr, $location:expr) => {
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
@@ -989,21 +980,20 @@ macro_rules! return_wat_err {
 pub fn print_compiler_messages(messages: CompilerMessages) {
     // Format and print out the messages:
     for err in messages.errors {
-        print_formatted_error(err, &messages.string_table);
+        print_formatted_error(err);
     }
 
     for warning in messages.warnings {
-        print_formatted_warning(warning, &messages.string_table);
+        print_formatted_warning(warning);
     }
 }
 
-pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
+pub fn print_formatted_error(e: CompileError) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => {
             // Strip the actual header at the end of the path (.header extension)
-            let path = e.location.scope.to_path_buf(string_table);
-            path.strip_prefix(dir)
+            e.location.scope.strip_prefix(dir)
                 .unwrap()
                 .to_string_lossy()
                 .to_string()
@@ -1013,7 +1003,7 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
                 "Compiler failed to find the file to give you the snippet. Another compiler developer skill issue. {}",
                 err
             );
-            e.location.scope.to_string(string_table)
+            e.location.scope.to_string_lossy().to_string()
         }
     };
 
@@ -1021,7 +1011,7 @@ pub fn print_formatted_error(e: CompileError, string_table: &StringTable) {
 
     // Read the file and get the actual line as a string from the code
     // Strip the actual header at the end of the path (.header extension)
-    let mut actual_file = e.location.scope.to_path_buf(string_table);
+    let mut actual_file = e.location.scope;
     let header = actual_file.file_name().unwrap().to_string_lossy();
     if actual_file.ends_with(".header") {
         actual_file = match actual_file.ancestors().nth(1) {

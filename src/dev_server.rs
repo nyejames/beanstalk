@@ -1,8 +1,8 @@
 use crate::build_system::build_system::BuildTarget;
-use crate::compiler::compiler_errors::CompilerMessages;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
-use crate::{Flag, build, return_dev_server_error, settings};
+use crate::{Flag, build, settings};
 use colour::{blue_ln, e_red_ln, green_ln_bold, print_bold, red_ln};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -11,6 +11,9 @@ use std::{
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
 };
+use std::collections::HashMap;
+use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::string_interning::StringTable;
 
 pub fn start_dev_server(path: &Path, flags: &[Flag]) {
     let url = "127.0.0.1:6969";
@@ -49,7 +52,25 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, &path, &mut modified, &project_config, flags)?;
+        match handle_connection(
+            stream,
+            &path,
+            &mut modified,
+            &project_config,
+            flags
+        ) {
+            Ok(warnings) => {
+                for warning in warnings {
+                    e_red_ln!("{:?}", warning);
+                }
+            }
+            // TODO: print warnings as well
+            Err(messages) => {
+                for message in messages.errors {
+                    e_red_ln!("{:?}", message);
+                }
+            }
+        }
     }
 }
 
@@ -59,7 +80,7 @@ fn handle_connection(
     last_modified: &mut SystemTime,
     project_config: &Config,
     flags: &[Flag],
-) -> Result<(), CompilerMessages> {
+) -> Result<Vec<CompilerWarning>, CompilerMessages> {
     let buf_reader = BufReader::new(&mut stream);
 
     let dir_404 = &path
@@ -72,15 +93,30 @@ fn handle_connection(
     let mut status_line = "HTTP/1.1 404 NOT FOUND";
     let mut content_type = "text/html";
 
+    let mut messages = CompilerMessages::new(StringTable::new());
+
     let request_line = buf_reader.lines().next().unwrap();
     match request_line {
         Ok(request) => {
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
-                let p = get_home_page_path(path, false, project_config)?;
+                let p = match get_home_page_path(path, false, project_config) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        messages.errors.push(e);
+                        return Err(messages);
+                    }
+                };
                 contents = match fs::read(&p) {
                     Ok(content) => content,
-                    Err(e) => return_dev_server_error!(p, "Error reading home page: {:?}", e),
+                    Err(e) => {
+                        messages.errors.push(CompileError::new_file_error(
+                            &p,
+                            format!("Error reading home page: {:?}", e),
+                            HashMap::new(),
+                        ));
+                        return Err(messages);
+                    },
                 };
                 status_line = "HTTP/1.1 200 OK";
 
@@ -93,7 +129,13 @@ fn handle_connection(
                     Some(p) => {
                         let page_path = p.split_whitespace().collect::<Vec<&str>>()[0];
                         if page_path == "/" {
-                            get_home_page_path(path, true, project_config)?
+                            match get_home_page_path(path, true, project_config) {
+                                Ok(p) => p,
+                                Err(e) => {
+                                    messages.errors.push(e);
+                                    return Err(messages);
+                                }
+                            }
                         } else {
                             PathBuf::from(path)
                                 .join(&project_config.src)
@@ -101,7 +143,15 @@ fn handle_connection(
                                 .with_extension(BEANSTALK_FILE_EXTENSION)
                         }
                     }
-                    None => get_home_page_path(path, true, project_config)?,
+                    None => {
+                        match get_home_page_path(path, true, project_config) {
+                            Ok(p) => p,
+                            Err(e) => {
+                                messages.errors.push(e);
+                                return Err(messages);
+                            }
+                        }
+                    },
                 };
 
                 let global_file_path = &PathBuf::from(&path)
@@ -112,16 +162,41 @@ fn handle_connection(
                 // Get the metadata of the file to check if hot reloading is needed
                 // Check if globals have been modified
                 let global_file_modified = if metadata(global_file_path).is_ok() {
-                    has_been_modified(global_file_path, last_modified)?
+                    match has_been_modified(&global_file_path, last_modified) {
+                        Ok(bool) => bool,
+                        Err(e) => {
+                            messages.errors.push(e);
+                            return Err(messages);
+                        }
+                    }
                 } else {
                     false
                 };
 
                 // Check if the file has been modified
-                if has_been_modified(&parsed_url, last_modified)? || global_file_modified {
+                let has_been_modified = match has_been_modified(&parsed_url, last_modified) {
+                    Ok(bool) => bool,
+                    Err(e) => {
+                        messages.errors.push(e);
+                        return Err(messages);
+                    }
+                };
+                if has_been_modified || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    build::build_project_files(path, false, flags, Some(BuildTarget::HtmlProject))?;
-                    status_line = "HTTP/1.1 205 Reset Content";
+                    let build_messages = build::build_project_files(
+                        project_config,
+                        false,
+                        flags,
+                        Some(BuildTarget::HtmlProject)
+                    );
+
+                    if build_messages.errors.is_empty() {
+
+                        status_line = "HTTP/1.1 205 Reset Content";
+                    } else {
+                        return Err(build_messages);
+                    }
+
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }
@@ -199,44 +274,81 @@ fn handle_connection(
     let response = &[string_response.as_bytes(), &contents].concat();
 
     match stream.write_all(response) {
-        Ok(_) => Ok(()),
-        Err(e) => return_dev_server_error!(path, "Error writing response: {:?}", e),
+        Ok(_) => Ok(messages.warnings),
+        Err(e) => {
+            messages.errors.push(CompileError::new_file_error(
+                path,
+                format!("Error writing response: {:?}", e),
+                // TODO: add some metadata to this error
+                HashMap::new()
+            ));
+            Err(messages)
+        }
     }
 }
 
-fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, CompilerMessages> {
+fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, CompileError> {
     // Check if it's a file or directory
     let path_metadata = match metadata(path) {
         Ok(m) => m,
-        Err(_) => return_dev_server_error!(path, "Error reading file metadata"),
+        Err(e) => {
+            return Err(CompileError::new_file_error(
+                path,
+                format!("Error reading file metadata: {:?}", e),
+                // TODO: add some metadata to this error
+                HashMap::new(),
+            ));
+        },
     };
 
     if path_metadata.is_dir() {
         let entries = match fs::read_dir(path) {
             Ok(all) => all,
-            Err(e) => return_dev_server_error!(path, "Error reading directory: {e}"),
+            Err(e) => {
+                return Err(CompileError::new_file_error(
+                    path,
+                    format!("Error reading directory: {:?}", e),
+                    // TODO: add some metadata to this error
+                    HashMap::new(),
+                ));
+            },
         };
 
         for entry in entries {
             let entry = match entry {
                 Ok(e) => e,
-                Err(e) => return_dev_server_error!(path, "Error reading directory entry: {e}"),
+                Err(e) => {
+                    return Err(CompileError::new_file_error(
+                        path,
+                        format!("Error reading directory entry: {:?}", e),
+                        // TODO: add some metadata to this error
+                        HashMap::new(),
+                    ));
+                }
             };
 
             let meta = match metadata(entry.path()) {
                 Ok(m) => m,
-                Err(e) => return_dev_server_error!(
-                    entry.path(),
-                    "Error reading file metadata in directory entry: {e}"
-                ),
+                Err(e) => {
+                    return Err(CompileError::new_file_error(
+                        path,
+                        format!("Error reading directory: {:?}", e),
+                        // TODO: add some metadata to this error
+                        HashMap::new(),
+                    ));
+                },
             };
 
             let modified_time = match meta.modified() {
                 Ok(t) => t,
-                Err(e) => return_dev_server_error!(
-                    entry.path(),
-                    "Error reading file modified time in directory entry: {e}"
-                ),
+                Err(e) => {
+                    return Err(CompileError::new_file_error(
+                        path,
+                        format!("Error getting the system time for hot reloading: {:?}", e),
+                        // TODO: add some metadata to this error
+                        HashMap::new(),
+                    ))
+                }
             };
 
             if modified_time > *modified {
@@ -254,7 +366,14 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                     return Ok(true);
                 }
             }
-            Err(e) => return_dev_server_error!(path, "Error reading file modified time: {e}"),
+            Err(e) => {
+                return Err(CompileError::new_file_error(
+                    path,
+                    format!("Error reading the file modification time metadata: {:?}", e),
+                    // TODO: add some metadata to this error
+                    HashMap::new(),
+                ))
+            }
         }
     }
 
@@ -265,7 +384,7 @@ fn get_home_page_path(
     path: &Path,
     source_folder: bool,
     project_config: &Config,
-) -> Result<PathBuf, CompilerMessages> {
+) -> Result<PathBuf, CompileError> {
     let root_src_path = if source_folder {
         PathBuf::from(&path).join(&project_config.src)
     } else {
@@ -274,7 +393,14 @@ fn get_home_page_path(
 
     let src_files = match fs::read_dir(&root_src_path) {
         Ok(m) => m,
-        Err(e) => return_dev_server_error!(root_src_path, "Error reading src directory: {:?}", e),
+        Err(e) => {
+            return Err(CompileError::new_file_error(
+                path,
+                format!("Error trying to read the source directory path: {:?}", e),
+                // TODO: add some metadata to this error
+                HashMap::new(),
+            ))
+        }
     };
 
     // Look for the first file that starts with '#page' in the src directory
@@ -309,22 +435,31 @@ fn get_home_page_path(
             }
 
             Err(e) => {
-                return_dev_server_error!(root_src_path, "Error reading src directory: {:?}", e)
+                return Err(CompileError::new_file_error(
+                    path,
+                    format!("Error reading the source directory file: {:?}", e),
+                    // TODO: add some metadata to this error
+                    HashMap::new(),
+                ))
             }
         };
     }
 
     match first_page {
         Some(index_page_path) => Ok(index_page_path),
-        None => return_dev_server_error!(
-            root_src_path,
-            "No page found in {:?} directory",
-            if source_folder {
-                &project_config.src
-            } else {
-                &project_config.dev_folder
-            }
-        ),
+        None => {
+            Err(CompileError::new_file_error(
+                &root_src_path,
+                format!("No page found in {:?} directory",
+                        if source_folder {
+                            &project_config.src
+                        } else {
+                            &project_config.dev_folder
+                        }),
+                // TODO: add some metadata to this error
+                HashMap::new(),
+            ))
+        }
     }
 }
 

@@ -74,12 +74,6 @@ impl InternedPath {
         path
     }
 
-    /// Get a reference to the PathBuf representation (creates a new PathBuf each time)
-    /// This is less efficient than to_path_buf() but matches the expected API
-    pub fn as_path_buf(&self, string_table: &StringTable) -> PathBuf {
-        self.to_path_buf(string_table)
-    }
-
     /// Push a new component to the end of this path
     pub fn push(&mut self, component: StringId) {
         self.components.push(component);
