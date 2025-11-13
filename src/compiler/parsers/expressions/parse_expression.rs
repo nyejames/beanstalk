@@ -51,7 +51,7 @@ pub fn create_multiple_expressions(
                 if type_index >= context.returns.len() {
                     return_type_error!(
                         format!("Too many arguments provided. Expected: {}. Provided: {}.", context.returns.len(), expressions.len()),
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Remove extra arguments to match the expected count",
@@ -66,7 +66,7 @@ pub fn create_multiple_expressions(
                 if type_index < context.returns.len() {
                     return_type_error!(
                         format!("Too few arguments provided. Expected: {}. Provided: {}.", context.returns.len(), expressions.len()),
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add missing arguments to match the expected count",
@@ -113,7 +113,7 @@ pub fn create_expression(
                 if expression.is_empty() {
                     return_syntax_error!(
                         "Empty expression found. Expected a value, variable, or expression.",
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add a value, variable reference, or expression inside the parentheses",
@@ -173,7 +173,7 @@ pub fn create_expression(
                     _ => {
                         return_type_error!(
                             format!("Expected a collection, but assigned variable with a literal type of: {:?}", &data_type),
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 ExpectedType => "Collection",
                                 CompilationStage => "Expression Parsing",
@@ -198,7 +198,7 @@ pub fn create_expression(
                 if consume_closing_parenthesis {
                     return_syntax_error!(
                         format!("Unexpected token: '{:?}'. Seems to be missing a closing parenthesis at the end of this expression.", token),
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add a closing parenthesis ')' at the end of the expression",
@@ -317,7 +317,7 @@ pub fn create_expression(
                     let var_name_static: &'static str = Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
                     return_rule_error!(
                         format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             VariableName => var_name_static,
                             CompilationStage => "Expression Parsing",
@@ -523,7 +523,7 @@ pub fn create_expression(
                         if expression.len() > 1 {
                             return_type_error!(
                                 format!("Match statements can only have one value to match against. Found: {}", expression.len()),
-                                token_stream.current_location(),
+                                token_stream.current_location().to_error_location(&string_table),
                                 {
                                     CompilationStage => "Expression Parsing",
                                     PrimarySuggestion => "Simplify the expression to a single value before the 'is:' match",
@@ -613,7 +613,7 @@ pub fn create_expression(
             _ => {
                 return_type_error!(
                     format!("Invalid token used in expression: '{:?}'", token),
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Expression Parsing",
                         PrimarySuggestion => "Remove or replace this token with a valid expression element",

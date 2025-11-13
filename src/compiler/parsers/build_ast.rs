@@ -86,7 +86,7 @@ pub fn function_body_to_ast(
                                 let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_syntax_error!(
                                     format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
-                                    token_stream.current_location(), {
+                                    token_stream.current_location().to_error_location(&string_table), {
                                         VariableName => var_name_static,
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable instead of '~='",
@@ -96,7 +96,7 @@ pub fn function_body_to_ast(
                                 let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_rule_error!(
                                     format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
-                                    token_stream.current_location(), {
+                                    token_stream.current_location().to_error_location(&string_table), {
                                         VariableName => var_name_static,
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
@@ -127,7 +127,7 @@ pub fn function_body_to_ast(
                             let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                             return_syntax_error!(
                                 format!("Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation", token_stream.current_token_kind(), string_table.resolve(id)),
-                                token_stream.current_location(), {
+                                token_stream.current_location().to_error_location(&string_table), {
                                     VariableName => var_name_static,
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Add an assignment operator like '=' or '+=' after the variable",
@@ -227,7 +227,7 @@ pub fn function_body_to_ast(
                 } else {
                     return_rule_error!(
                         "Unexpected use of 'else' keyword. It can only be used inside an if statement or match statement",
-                        token_stream.current_location(), {
+                        token_stream.current_location().to_error_location(&string_table), {
                             CompilationStage => "AST Construction",
                             PrimarySuggestion => "Remove the 'else' or place it inside an if/match statement",
                         }
@@ -245,7 +245,7 @@ pub fn function_body_to_ast(
                 if !matches!(context.kind, ContextKind::Function) {
                     return_rule_error!(
                         "Return statements can only be used inside functions",
-                        token_stream.current_location(), {}
+                        token_stream.current_location().to_error_location(&string_table), {}
                     )
                 }
 
@@ -273,7 +273,7 @@ pub fn function_body_to_ast(
                         return_syntax_error!(
                             "Unexpected scope close. Expressions are not terminated like this.
                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug.",
-                            token_stream.current_location(), {
+                            token_stream.current_location().to_error_location(&string_table), {
 
                             }
                         );
@@ -282,7 +282,7 @@ pub fn function_body_to_ast(
                         return_syntax_error!(
                             "Unexpected use of ';' inside a template. Templates are not closed with ';'.
                             If you are seeing this error, this might be a compiler bug instead.",
-                            token_stream.current_location(), {
+                            token_stream.current_location().to_error_location(&string_table), {
 
                             }
                         )
@@ -299,9 +299,9 @@ pub fn function_body_to_ast(
                 // Push it as a warning
                 warnings.push(CompilerWarning::new(
                     "You can only export functions and variables from the top level of a file",
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     WarningKind::PointlessExport,
-                    context.scope.clone(),
+                    context.scope.to_path_buf(&string_table),
                 ));
                 token_stream.advance();
             }
@@ -374,7 +374,7 @@ fn check_for_dot_access(
                 let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                 return_rule_error!(
                     format!("'{}' has no methods or properties to access 😞", string_table.resolve(id)),
-                    token_stream.current_location(), {
+                    token_stream.current_location().to_error_location(&string_table), {
                         VariableName => var_name_static,
                         CompilationStage => "AST Construction",
                         PrimarySuggestion => "This type doesn't support property or method access",
@@ -390,7 +390,7 @@ fn check_for_dot_access(
                     let var_name_static: &'static str = Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
                     return_rule_error!(
                         format!("Can't find property or method '{}' inside '{}'", string_table.resolve(id), string_table.resolve(arg.id)),
-                        token_stream.current_location(), {
+                        token_stream.current_location().to_error_location(&string_table), {
                             VariableName => property_name_static,
                             CompilationStage => "AST Construction",
                             PrimarySuggestion => "Check the available methods and properties for this type",
@@ -420,7 +420,7 @@ fn check_for_dot_access(
         } else {
             return_rule_error!(
                 format!("Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.", token_stream.current_token_kind()),
-                token_stream.current_location(), {
+                token_stream.current_location().to_error_location(&string_table), {
                     CompilationStage => "AST Construction",
                     PrimarySuggestion => "Use a valid property or method name after the dot",
                 }

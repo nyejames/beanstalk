@@ -54,7 +54,7 @@ pub fn create_loop(
                         if token_stream.current_token_kind() != &TokenKind::Colon {
                             return_syntax_error!(
                                 "A loop must have a colon after the condition",
-                                token_stream.current_location(),
+                                token_stream.current_location().to_error_location(&string_table),
                                 {
                                     CompilationStage => "Loop Parsing",
                                     PrimarySuggestion => "Add ':' after the loop condition to open the loop body",
@@ -89,7 +89,7 @@ pub fn create_loop(
                                 "A loop condition using an existing variable must be a boolean expression (true or false). Found a {} expression",
                                 data_type.to_string()
                             ),
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 FoundType => type_str,
                                 ExpectedType => "Bool",
@@ -111,12 +111,10 @@ pub fn create_loop(
 
             // Make sure there is an 'in' keyword after the variable
             if token_stream.current_token_kind() != &TokenKind::In {
-                let var_name = string_table.resolve(name);
                 return_syntax_error!(
-                    "A loop must have an 'in' keyword after the variable",
-                    token_stream.current_location(),
+                    format!("A loop must have an 'in' keyword after the variable: {}", string_table.resolve(name)),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
-                        VariableName => var_name,
                         CompilationStage => "Loop Parsing",
                         PrimarySuggestion => "Add 'in' keyword after the loop variable",
                         SuggestedInsertion => "in",
@@ -143,7 +141,7 @@ pub fn create_loop(
                 let type_str: &'static str = Box::leak(format!("{:?}", iterable_type).into_boxed_str());
                 return_syntax_error!(
                     format!("The type {:?} is not iterable", iterable_type),
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         FoundType => type_str,
                         CompilationStage => "Loop Parsing",
@@ -156,7 +154,7 @@ pub fn create_loop(
             if token_stream.current_token_kind() != &TokenKind::Colon {
                 return_syntax_error!(
                     "A loop must have a colon after the condition",
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Loop Parsing",
                         PrimarySuggestion => "Add ':' after the loop condition to open the loop body",
@@ -194,7 +192,7 @@ pub fn create_loop(
         _ => {
             return_syntax_error!(
                 "Loops must have a variable declaration or an expression",
-                token_stream.current_location(),
+                token_stream.current_location().to_error_location(&string_table),
                 {
                     CompilationStage => "Loop Parsing",
                     PrimarySuggestion => "Start the loop with a variable name for 'for' loops or a boolean expression for 'while' loops",

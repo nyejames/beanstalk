@@ -49,7 +49,7 @@ pub fn parse_parameters(
                 if !next_in_list {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Struct/Parameter Parsing",
                             PrimarySuggestion => "Add ',' between struct fields or function parameters",
@@ -67,7 +67,7 @@ pub fn parse_parameters(
                 }
                 return_syntax_error!(
                     "Unexpected end to this scope while parsing function parameters",
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Add closing bracket '|' for function parameters",
@@ -80,7 +80,7 @@ pub fn parse_parameters(
                 if !next_in_list {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Struct/Parameter Parsing",
                             PrimarySuggestion => "Add ',' between struct fields or function parameters",
@@ -111,7 +111,7 @@ pub fn parse_parameters(
             TokenKind::Eof => {
                 return_syntax_error!(
                     "Unexpected end of file. Type definition is missing a closing bracket. Expected: '|'",
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Add closing bracket '|' to complete the type definition",
@@ -126,7 +126,7 @@ pub fn parse_parameters(
                         "Unexpected token used in function arguments: {:?}",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Use valid parameter syntax: name Type or name ~Type for mutable",
@@ -182,7 +182,7 @@ pub fn new_parameter(
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
                     "Missing closing curly brace for collection type declaration",
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Parameter Type Parsing",
                         PrimarySuggestion => "Add '}' to close the collection type declaration",
@@ -199,15 +199,14 @@ pub fn new_parameter(
 
         // Anything else is a syntax error
         _ => {
-            let param_name = string_table.resolve(name);
             return_syntax_error!(
                 format!(
-                    "Unexpected Token: {:?} after parameter name. Expected a type declaration.",
-                    token_stream.tokens[token_stream.index].kind
+                    "Unexpected Token: {:?} after parameter name for {}. Expected a type declaration.",
+                    token_stream.tokens[token_stream.index].kind,
+                    string_table.resolve(name)
                 ),
-                token_stream.current_location(),
+                token_stream.current_location().to_error_location(&string_table),
                 {
-                    VariableName => param_name,
                     CompilationStage => "Parameter Type Parsing",
                     PrimarySuggestion => "Add a type declaration (Int, String, Float, Bool) after the parameter name",
                 }
@@ -247,7 +246,7 @@ pub fn new_parameter(
                     "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location(),
+                token_stream.current_location().to_error_location(&string_table),
                 {
                     CompilationStage => "Parameter Parsing",
                     PrimarySuggestion => "Check that all referenced variables are declared before use",

@@ -138,8 +138,7 @@ pub fn new_arg(
             if token_stream.current_token_kind() != &TokenKind::CloseCurly {
                 return_syntax_error!(
                     "Missing closing curly brace for collection type declaration",
-                    token_stream.current_location(),
-                    {
+                    token_stream.current_location().to_error_location(string_table), {
                         CompilationStage => "Variable Declaration",
                         PrimarySuggestion => "Add '}' to close the collection type declaration",
                         SuggestedInsertion => "}",
@@ -173,8 +172,7 @@ pub fn new_arg(
                     "Invalid operator: {:?} after new variable declaration. Expect a type or assignment operator.",
                     token_stream.tokens[token_stream.index].kind
                 ),
-                token_stream.current_location(),
-                {
+                token_stream.current_location().to_error_location(string_table), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Use a type declaration (Int, String, etc.) or assignment operator '='",
                 }
@@ -204,9 +202,8 @@ pub fn new_arg(
             let var_name = string_table.resolve(id);
             return_rule_error!(
                 format!("Variable '{}' must be initialized with a value", var_name),
-                token_stream.current_location(),
-                {
-                    VariableName => var_name,
+                token_stream.current_location().to_error_location(string_table), {
+                    // VariableName => var_name,
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Add '= value' after the variable declaration",
                 }
@@ -219,8 +216,7 @@ pub fn new_arg(
                     "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location(),
-                {
+                token_stream.current_location().to_error_location(string_table), {
                     CompilationStage => "Variable Declaration",
                     PrimarySuggestion => "Check that all referenced variables are declared before use",
                 }

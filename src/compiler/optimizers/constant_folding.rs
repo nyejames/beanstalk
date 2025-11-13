@@ -67,13 +67,13 @@ pub fn constant_fold(output_stack: &[AstNode], string_table: &mut StringTable) -
                             output_stack,
                             stack
                         ), 
-                        node.location.to_owned(), {}
+                        node.location.to_owned().to_error_location(&string_table), {}
                     )
                 }
 
                 if matches!(op, Operator::Not) {
                     let mut boolean = stack.pop().unwrap();
-                    if !boolean.flip()? {
+                    if !boolean.flip(&string_table)? {
                         stack.push(boolean);
                         stack.push(node.to_owned());
                     } else {
@@ -155,9 +155,8 @@ impl Expression {
 
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
-                        format!("Can't perform operation {} on floats",
-                        op.to_str()),
-                        self.location.to_owned(), {}
+                        format!("Can't perform operation {} on floats", op.to_str()),
+                        self.location.to_owned().to_error_location(&string_table), {}
                     ),
                 }
             }
@@ -171,14 +170,20 @@ impl Expression {
                     Operator::Divide => {
                         // Handle division by zero and integer division
                         if *rhs_val == 0 {
-                            return_rule_error!("Can't divide by zero", self.location.to_owned())
+                            return_rule_error!(
+                                "Can't divide by zero",
+                                self.location.to_owned().to_error_location(&string_table), {}
+                            )
                         }
 
                         ExpressionKind::Int(lhs_val / rhs_val)
                     }
                     Operator::Modulus => {
                         if *rhs_val == 0 {
-                            return_rule_error!("Can't modulus by zero", self.location.to_owned())
+                            return_rule_error!(
+                                "Can't modulus by zero",
+                                self.location.to_owned().to_error_location(&string_table), {}
+                            )
                         }
 
                         ExpressionKind::Int(lhs_val % rhs_val)
@@ -217,9 +222,8 @@ impl Expression {
                     ),
 
                     _ => return_rule_error!(
-                        format!("Can't perform operation {} on integers",
-                        op.to_str()),
-                        self.location.to_owned(), {}
+                        format!("Can't perform operation {} on integers", op.to_str()),
+                        self.location.to_owned().to_error_location(&string_table), {}
                     ),
                 }
             }
@@ -231,9 +235,8 @@ impl Expression {
                 Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
 
                 _ => return_rule_error!(
-                    format!("Can't perform operation {} on booleans",
-                    op.to_str()),
-                    self.location.to_owned(), {}
+                    format!("Can't perform operation {} on booleans", op.to_str()),
+                    self.location.to_owned().to_error_location(&string_table), {}
                 ),
             },
 
@@ -252,7 +255,7 @@ impl Expression {
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on strings",
                         op.to_str()),
-                        self.location.to_owned(), {}
+                        self.location.to_owned().to_error_location(&string_table), {}
                     ),
                 }
             }

@@ -16,9 +16,9 @@ pub struct CompilerWarning {
 impl CompilerWarning {
     pub fn new(
         msg: &str,
-        location: TextLocation,
+        location: ErrorLocation,
         warning_kind: WarningKind,
-        file_path: InternedPath,
+        file_path: PathBuf,
     ) -> CompilerWarning {
         CompilerWarning {
             msg: msg.to_owned(),
@@ -31,28 +31,22 @@ impl CompilerWarning {
     /// Create a CompilerWarning from a PathBuf (for compatibility)
     pub fn new_from_path_buf(
         msg: &str,
-        location: TextLocation,
+        location: ErrorLocation,
         warning_kind: WarningKind,
         file_path: PathBuf,
         string_table: &mut StringTable,
     ) -> CompilerWarning {
-        let interned_path = InternedPath::from_path_buf(&file_path, string_table);
         CompilerWarning {
             msg: msg.to_owned(),
             location,
             warning_kind,
-            file_path: interned_path,
+            file_path,
         }
-    }
-
-    /// Get the file path as a PathBuf for display purposes
-    pub fn file_path_display(&self, string_table: &StringTable) -> PathBuf {
-        self.file_path.to_path_buf(string_table)
     }
 
     /// Get the file path as a string for display purposes
     pub fn file_path_string(&self) -> String {
-        format!("{}", self.file_path.to_string())
+        self.file_path.to_string_lossy().to_string()
     }
 }
 
@@ -72,7 +66,7 @@ pub enum WarningKind {
 
 pub fn print_formatted_warning(w: CompilerWarning) {
     yellow_ln_bold!("WARNING: ");
-    println!("File: {}", w.file_path_string(string_table));
+    println!("File: {}", w.file_path_string());
     match w.warning_kind {
         WarningKind::UnusedVariable => {
             println!("Unused variable '{}'", w.msg);

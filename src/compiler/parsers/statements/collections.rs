@@ -39,8 +39,8 @@ pub fn new_collection(
             TokenKind::Comma => {
                 if next_item {
                     return_syntax_error!(
-                        token_stream.current_location(),
                         "Expected a collection item after the comma",
+                        token_stream.current_location().to_error_location(&string_table),
                         {}
                     )
                 }
@@ -52,8 +52,8 @@ pub fn new_collection(
             _ => {
                 if !next_item {
                     return_syntax_error!(
-                        token_stream.current_location(),
-                        "Expected a collection item after the comma", {}
+                        "Expected a collection item after the comma",
+                        token_stream.current_location().to_error_location(&string_table), {}
                     )
                 }
 

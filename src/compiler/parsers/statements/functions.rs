@@ -31,7 +31,6 @@ impl FunctionSignature {
 
         // create_struct_definition already advances past the closing bracket
         // So we're now at the Arrow or Colon token
-
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}
 
@@ -50,7 +49,7 @@ impl FunctionSignature {
                         "Expected an arrow operator or colon after function arguments. Found {:?} instead.",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Use '->' for functions with return values or ':' for functions without return values",
@@ -72,7 +71,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -88,7 +87,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -114,7 +113,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -140,7 +139,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -166,7 +165,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -193,7 +192,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -231,7 +230,7 @@ impl FunctionSignature {
                     if next_in_list {
                         return_syntax_error!(
                             "Should not have a comma at the end of the return types",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(&string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Remove the trailing comma or add another return type",
@@ -245,7 +244,7 @@ impl FunctionSignature {
                 _ => {
                     return_syntax_error!(
                         "Expected a type keyword after the arrow operator",
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Function Signature Parsing",
                             PrimarySuggestion => "Use a valid type (Int, String, Float, Bool) for the return type",
@@ -579,7 +578,7 @@ pub fn create_function_call_arguments(
                 "Expected a parenthesis after function call. Found '{:?}' instead.",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location(),
+            token_stream.current_location().to_error_location(&string_table),
             {
                 CompilationStage => "Function Call Parsing",
                 PrimarySuggestion => "Add '(' after the function name",
@@ -598,7 +597,7 @@ pub fn create_function_call_arguments(
                     "This function does not accept any arguments, found '{:?}' instead",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location(),
+                token_stream.current_location().to_error_location(&string_table),
                 {
                     CompilationStage => "Function Call Parsing",
                     PrimarySuggestion => "Remove the arguments or check the function signature",
@@ -635,7 +634,7 @@ pub fn parse_host_function_call(
     )?;
 
     // Validate the host function call
-    validate_host_function_call(host_func, &args, &location)?;
+    validate_host_function_call(host_func, &args, location.clone(), &string_table)?;
 
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall(
@@ -655,15 +654,14 @@ pub fn parse_host_function_call(
 pub fn validate_host_function_call(
     function: &HostFunctionDef,
     args: &[Expression],
-    location: &TextLocation,
+    location: TextLocation,
+    string_table: &StringTable,
 ) -> Result<(), CompileError> {
     // Check argument count
     if args.len() != function.parameters.len() {
         let expected = function.parameters.len();
         let got = args.len();
 
-        let func_name_static: &'static str = Box::leak(function.name.into_boxed_str());
-        
         if expected == 0 {
             return_type_error!(
                 format!(
@@ -672,9 +670,8 @@ pub fn validate_host_function_call(
                     got,
                     if got == 1 { "was" } else { "were" }
                 ),
-                location.clone(),
+                location.to_error_location(&string_table),
                 {
-                    VariableName => func_name_static,
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Remove the parentheses and arguments",
                 }
@@ -687,9 +684,8 @@ pub fn validate_host_function_call(
                     expected,
                     if expected == 1 { "" } else { "s" }
                 ),
-                location.clone(),
+                location.to_error_location(&string_table),
                 {
-                    VariableName => func_name_static,
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Add the required arguments to the function call",
                 }
@@ -708,9 +704,8 @@ pub fn validate_host_function_call(
                         "Not enough arguments provided"
                     }
                 ),
-                location.clone(),
+                location.to_error_location(&string_table),
                 {
-                    VariableName => func_name_static,
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => if got > expected {
                         "Remove extra arguments"
@@ -725,10 +720,6 @@ pub fn validate_host_function_call(
     // Check argument types
     for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
         if !types_compatible(&expression.data_type, &param.data_type) {
-            let func_name_static: &'static str = Box::leak(function.name.into_boxed_str());
-            let expected_type_static: &'static str = Box::leak(format_type_for_error(&param.data_type).into_boxed_str());
-            let found_type_static: &'static str = Box::leak(format_type_for_error(&expression.data_type).into_boxed_str());
-            
             return_type_error!(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
@@ -738,11 +729,8 @@ pub fn validate_host_function_call(
                     format_type_for_error(&expression.data_type),
                     get_type_conversion_hint(&expression.data_type, &param.data_type)
                 ),
-                location.clone(),
+                location.to_error_location(&string_table),
                 {
-                    VariableName => func_name_static,
-                    ExpectedType => expected_type_static,
-                    FoundType => found_type_static,
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Convert the argument to the expected type",
                 }
@@ -751,9 +739,6 @@ pub fn validate_host_function_call(
 
         // Check mutability requirements
         if param.ownership.is_mutable() && !expression.ownership.is_mutable() {
-            let func_name_static: &'static str = Box::leak(function.name.into_boxed_str());
-            let found_type_static: &'static str = Box::leak(format_type_for_error(&expression.data_type).into_boxed_str());
-            
             return_type_error!(
                 format!(
                     "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
@@ -762,10 +747,8 @@ pub fn validate_host_function_call(
                     format_type_for_error(&expression.data_type),
                     format_type_for_error(&param.data_type).to_lowercase()
                 ),
-                location.clone(),
+                location.to_error_location(&string_table),
                 {
-                    VariableName => func_name_static,
-                    FoundType => found_type_static,
                     BorrowKind => "Mutable",
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Add '~' before the argument to make it mutable",

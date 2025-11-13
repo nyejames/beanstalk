@@ -4,12 +4,14 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::{return_syntax_error, return_token};
 use crate::compiler::parsers::tokenizer::tokenizer::string_block;
+use crate::compiler::string_interning::StringTable;
 
 // This used by the tokenizer stage
 // Also used by the config file to set compiler settings
 pub fn compiler_directive(
     token_value: &mut String,
     stream: &mut TokenStream,
+    string_table: &StringTable,
 ) -> Result<Token, CompileError> {
     loop {
         if stream
@@ -33,7 +35,7 @@ pub fn compiler_directive(
             "async" => return_token!(TokenKind::Async, stream),
 
             // External language blocks
-            "WAT" => return_token!(TokenKind::Wat(string_block(stream)?), stream),
+            "WAT" => return_token!(TokenKind::Wat(string_block(stream, string_table)?), stream),
 
             // Special template tokens
             "slot" => return_token!(TokenKind::Slot, stream),
@@ -41,7 +43,7 @@ pub fn compiler_directive(
             _ => {
                 return_syntax_error!(
                     format!("Invalid compiler directive: #{}", token_value),
-                    stream.new_location(),
+                    stream.new_location().to_error_location(string_table),
                     {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Valid compiler directives are: #import, #export, #panic, #async, #WAT, #slot",

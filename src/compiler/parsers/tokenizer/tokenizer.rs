@@ -98,7 +98,7 @@ pub fn get_token_kind(
         // If we reach here, the raw string was not terminated
         return_syntax_error!(
             "Unterminated raw string literal - missing closing backtick",
-            stream.new_location(),
+            stream.new_location().to_error_location(&string_table),
             {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Add closing backtick at the end of the raw string",
@@ -145,7 +145,7 @@ pub fn get_token_kind(
                 return_syntax_error!(
                     "Cannot have nested templates inside of a template head, must be inside the template body. \
                     Use a colon to start the template body.",
-                    stream.new_location(),
+                    stream.new_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Add ':' after the template head to start the template body",
@@ -241,7 +241,7 @@ pub fn get_token_kind(
         // If not correct declaration of char
         return_syntax_error!(
             format!("Expected a character after the single quote in a char literal. Found {current_char}"),
-            stream.new_location(),
+            stream.new_location().to_error_location(&string_table),
             {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Character literals must be exactly one character between single quotes",
@@ -450,7 +450,7 @@ pub fn get_token_kind(
 
     // Compiler Directives
     if current_char == '#' {
-        return compiler_directive(&mut token_value, stream);
+        return compiler_directive(&mut token_value, stream, &string_table);
     }
 
     // Used for paths outside of template heads
@@ -470,8 +470,7 @@ pub fn get_token_kind(
         // Todo: allow spaces after the '@'?
         stream.next();
 
-        //
-        let path = tokenize_path(stream)?;
+        let path = tokenize_path(stream, &string_table)?;
         let interned_path = InternedPath::from_path_buf(&path, string_table);
         return_token!(TokenKind::PathLiteral(interned_path), stream);
     }
@@ -501,7 +500,7 @@ pub fn get_token_kind(
                 if dot_count > 1 {
                     return_syntax_error!(
                         "Can't have more than one decimal point in a number",
-                        stream.new_location(),
+                        stream.new_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Remove extra decimal points from the number",
@@ -540,7 +539,7 @@ pub fn get_token_kind(
 
     return_syntax_error!(
         format!("Invalid Token Used: '{}' this is not recognised or supported by the compiler", current_char),
-        stream.new_location(),
+        stream.new_location().to_error_location(&string_table),
         {
             CompilationStage => "Tokenization",
             PrimarySuggestion => "Check for typos or unsupported characters",
@@ -623,7 +622,7 @@ fn keyword_or_variable(
             // Failing all of that, this is an invalid variable name
             return_syntax_error!(
                 format!("Invalid variable name or keyword: '{}'", token_value),
-                stream.new_location(),
+                stream.new_location().to_error_location(&string_table),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Variable names must start with a letter or underscore and contain only alphanumeric characters or underscores",
@@ -645,7 +644,7 @@ fn is_valid_identifier(s: &str) -> bool {
 // A block that starts with an open parenthesis and ends with a close parenthesis
 // Everything in between is returned as a string
 // Throws an error if there is no starting parenthesis or ending parenthesis
-pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
+pub fn string_block(stream: &mut TokenStream, string_table: &StringTable) -> Result<String, CompileError> {
     let mut string_value = String::new();
 
     while let Some(ch) = stream.peek() {
@@ -659,7 +658,7 @@ pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
         if *ch != '(' {
             return_syntax_error!(
                 format!("Expected '(' to start a new block, found '{}'", ch),
-                stream.new_location(),
+                stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Add '(' to start the block",
@@ -696,7 +695,7 @@ pub fn string_block(stream: &mut TokenStream) -> Result<String, CompileError> {
                 if parenthesis_opened > parenthesis_closed {
                     return_syntax_error!(
                         "File ended before closing the last parenthesis",
-                        stream.new_location(),
+                        stream.new_location().to_error_location(&string_table),
                         {
                             CompilationStage => "Tokenization",
                             PrimarySuggestion => "Add ')' to close the block",
@@ -737,7 +736,7 @@ fn tokenize_string(
     // If we reach here, the string was not terminated
     return_syntax_error!(
         "Unterminated string literal - missing closing quote",
-        stream.new_location(),
+        stream.new_location().to_error_location(&string_table),
         {
             CompilationStage => "Tokenization",
             PrimarySuggestion => "Add closing double quote at the end of the string",
@@ -776,7 +775,7 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
 
-fn tokenize_path(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
+fn tokenize_path(stream: &mut TokenStream, string_table: &StringTable) -> Result<PathBuf, CompileError> {
     let mut import_path = String::new();
     let mut break_on_whitespace = true;
 
@@ -799,8 +798,7 @@ fn tokenize_path(stream: &mut TokenStream) -> Result<PathBuf, CompileError> {
     if import_path.is_empty() {
         return_syntax_error!(
             "Import path cannot be empty",
-            stream.new_location(),
-            {
+            stream.new_location().to_error_location(&string_table), {
                 CompilationStage => "Tokenization",
                 PrimarySuggestion => "Provide a valid file path after '@'",
             }

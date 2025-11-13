@@ -110,7 +110,7 @@ pub fn parse_headers(
                 "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {}, Second entry point: {}",
                 first_path_str, second_path_str
             ),
-            entry_points[1].name_location.clone(),
+            entry_points[1].name_location.to_owned().to_error_location(string_table),
             {
                 let mut map = HashMap::new();
                 map.insert(ErrorMetaDataKey::CompilationStage, "Module Dependency Resolution");
@@ -199,9 +199,9 @@ pub fn parse_headers_in_file(
                         next_statement_exported = false;
                         warnings.push(CompilerWarning::new(
                             "You can't export a reference to a variable, only new declarations.",
-                            token_stream.current_location(),
+                            token_stream.current_location().to_error_location(string_table),
                             WarningKind::PointlessExport,
-                            token_stream.src_path.to_owned(),
+                            token_stream.src_path.to_path_buf(string_table),
                         ))
                     }
                 }
@@ -222,9 +222,9 @@ pub fn parse_headers_in_file(
                 } else {
                     warnings.push(CompilerWarning::new(
                         "Expected variable declaration after an export",
-                        token_stream.current_location(),
+                        token_stream.current_location().to_error_location(string_table),
                         WarningKind::PointlessExport,
-                        token_stream.src_path.to_owned(),
+                        token_stream.src_path.to_path_buf(string_table),
                     ))
                 }
             }

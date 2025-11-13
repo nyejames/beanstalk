@@ -71,7 +71,7 @@ impl TextLocation {
         }
     }
 
-    pub fn to_error_location(self, string_table: &mut StringTable) -> ErrorLocation {
+    pub fn to_error_location(self, string_table: &StringTable) -> ErrorLocation {
         ErrorLocation {
             scope: self.scope.to_path_buf(string_table),
             start_pos: self.start_pos,

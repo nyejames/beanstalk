@@ -40,11 +40,13 @@ use crate::compiler::wir::wir_nodes::{
     WirFunction,
 };
 use crate::{
-    return_compiler_error, return_unimplemented_feature_error, return_wasm_validation_error,
+    return_compiler_error, return_wasm_validation_error,
     return_wasm_generation_error,
 };
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::string_interning::StringTable;
 
 /// Enhanced function builder that leverages wasm_encoder's built-in validation and control flow management
 ///
@@ -984,7 +986,7 @@ pub struct WasmModule {
     function_metadata: HashMap<String, FunctionMetadata>,
 
     // Host function registry for runtime-specific mappings
-    host_registry: Option<crate::compiler::host_functions::registry::HostFunctionRegistry>,
+    host_registry: Option<HostFunctionRegistry>,
 
     // Internal state
     pub function_count: u32,
@@ -992,7 +994,7 @@ pub struct WasmModule {
     global_count: u32,
     
     // Track exported names to prevent duplicates
-    exported_names: std::collections::HashSet<String>,
+    exported_names: HashSet<String>,
 }
 
 /// Source information for a compiled function
@@ -1264,15 +1266,15 @@ impl WasmModule {
     }
 
     /// Create a new WasmModule from WIR with comprehensive error handling and validation
-    pub fn from_wir(wir: &WIR, string_table: &crate::compiler::string_interning::StringTable) -> Result<WasmModule, CompileError> {
+    pub fn from_wir(wir: &WIR, string_table: &StringTable) -> Result<WasmModule, CompileError> {
         Self::from_wir_with_registry(wir, None, string_table)
     }
 
     /// Create a new WasmModule from WIR with host function registry access
     pub fn from_wir_with_registry(
         wir: &WIR, 
-        registry: Option<&crate::compiler::host_functions::registry::HostFunctionRegistry>,
-        string_table: &crate::compiler::string_interning::StringTable,
+        registry: Option<&HostFunctionRegistry>,
+        string_table: &StringTable,
     ) -> Result<WasmModule, CompileError> {
         let mut module = WasmModule::new();
 
@@ -1329,14 +1331,14 @@ impl WasmModule {
     /// Set the host function registry for runtime-specific mappings
     pub fn set_host_function_registry(
         &mut self, 
-        registry: &crate::compiler::host_functions::registry::HostFunctionRegistry
+        registry: &HostFunctionRegistry
     ) -> Result<(), CompileError> {
         self.host_registry = Some(registry.clone());
         Ok(())
     }
 
     /// Get the host function registry if available
-    pub fn get_host_function_registry(&self) -> Option<&crate::compiler::host_functions::registry::HostFunctionRegistry> {
+    pub fn get_host_function_registry(&self) -> Option<&HostFunctionRegistry> {
         self.host_registry.as_ref()
     }
 
@@ -1345,7 +1347,7 @@ impl WasmModule {
     /// This method implements subtask 3.3: Fix entry point export generation
     /// It ensures entry point functions are exported correctly and validates
     /// that only one start function is exported per module.
-    pub fn export_entry_point_functions_with_import_count(&mut self, wir: &WIR, import_count: u32, string_table: &crate::compiler::string_interning::StringTable) -> Result<(), CompileError> {
+    pub fn export_entry_point_functions_with_import_count(&mut self, wir: &WIR, import_count: u32, string_table: &StringTable) -> Result<(), CompileError> {
         let mut entry_point_count = 0;
         let mut start_function_index: Option<u32> = None;
 
@@ -1637,8 +1639,8 @@ impl WasmModule {
     }
 
     /// Compile a WIR function to WASM with enhanced wasm_encoder integration
-    pub fn compile_function(&mut self, wir_function: &WirFunction, string_table: &crate::compiler::string_interning::StringTable) -> Result<(), CompileError> {
-        // Register function in the function registry
+    pub fn compile_function(&mut self, wir_function: &WirFunction, string_table: &StringTable) -> Result<(), CompileError> {
+        // Register the function in the function registry
         let function_name = string_table.resolve(wir_function.name);
         self.function_registry
             .insert(function_name.to_string(), self.function_count);
@@ -1722,7 +1724,7 @@ impl WasmModule {
     }
 
     /// Generate enhanced function metadata for named returns and references
-    fn generate_function_metadata(&self, wir_function: &WirFunction, string_table: &crate::compiler::string_interning::StringTable) -> FunctionMetadata {
+    fn generate_function_metadata(&self, wir_function: &WirFunction, string_table: &StringTable) -> FunctionMetadata {
         let mut return_info = Vec::new();
 
         for (i, return_arg) in wir_function.return_args.iter().enumerate() {
@@ -2549,9 +2551,9 @@ impl WasmModule {
         destination: &Option<Place>,
         function: &mut Function,
         local_map: &LocalMap,
-        registry: &crate::compiler::host_functions::registry::HostFunctionRegistry,
+        registry: &HostFunctionRegistry,
     ) -> Result<(), CompileError> {
-        use crate::compiler::host_functions::registry::RuntimeFunctionMapping;
+        use RuntimeFunctionMapping;
 
         // Get runtime-specific mapping
         match registry.get_runtime_mapping(&host_function.name) {
@@ -4199,7 +4201,7 @@ impl WasmModule {
     pub fn compile_wir_function(
         &mut self,
         wir_function: &WirFunction,
-        string_table: &crate::compiler::string_interning::StringTable,
+        string_table: &StringTable,
     ) -> Result<u32, CompileError> {
         let function_index = self.function_count;
         self.compile_function(wir_function, string_table)?;
@@ -4280,7 +4282,7 @@ impl WasmModule {
     pub fn encode_host_function_imports_with_registry(
         &mut self,
         host_imports: &HashSet<HostFunctionDef>,
-        registry: Option<&crate::compiler::host_functions::registry::HostFunctionRegistry>,
+        registry: Option<&HostFunctionRegistry>,
     ) -> Result<(), CompileError> {
         for host_func in host_imports {
             // Check for runtime-specific mapping if registry is available
@@ -4325,9 +4327,9 @@ impl WasmModule {
     fn get_runtime_specific_mapping(
         &self,
         host_func: &HostFunctionDef,
-        registry: &crate::compiler::host_functions::registry::HostFunctionRegistry,
+        registry: &HostFunctionRegistry,
     ) -> Result<(String, String), CompileError> {
-        use crate::compiler::host_functions::registry::{RuntimeBackend, RuntimeFunctionMapping};
+        use {RuntimeBackend, RuntimeFunctionMapping};
 
         // Get the runtime mapping based on current backend
         match registry.get_runtime_mapping(&host_func.name) {
@@ -5772,9 +5774,9 @@ impl WasmModule {
         destination: &Option<Place>,
         function_builder: &mut EnhancedFunctionBuilder,
         local_map: &LocalMap,
-        registry: &crate::compiler::host_functions::registry::HostFunctionRegistry,
+        registry: &HostFunctionRegistry,
     ) -> Result<(), CompileError> {
-        use crate::compiler::host_functions::registry::RuntimeFunctionMapping;
+        use RuntimeFunctionMapping;
 
         // Get runtime-specific mapping
         match registry.get_runtime_mapping(&host_function.name) {

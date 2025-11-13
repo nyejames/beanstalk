@@ -29,7 +29,7 @@ pub fn handle_mutation(
         let var_name_static: &'static str = Box::leak(string_table.resolve(variable_arg.id).to_string().into_boxed_str());
         return_rule_error!(
             format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", var_name_static),
-            location,
+            location.to_error_location(&string_table),
             {
                 VariableName => var_name_static,
                 BorrowKind => "Mutable",
@@ -224,7 +224,7 @@ pub fn handle_mutation(
             let var_name_static: &'static str = Box::leak(string_table.resolve(variable_arg.id).to_string().into_boxed_str());
             return_syntax_error!(
                 format!("Expected assignment operator after variable '{}', found '{:?}'", var_name_static, token_stream.current_token_kind()),
-                location.clone(),
+                location.to_error_location(&string_table),
                 {
                     VariableName => var_name_static,
                     CompilationStage => "Expression Parsing",

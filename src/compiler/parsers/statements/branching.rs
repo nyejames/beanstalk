@@ -10,7 +10,7 @@ use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::StringTable;
 use crate::{ast_log, return_rule_error};
 // IF STATEMENTS / MATCH STATEMENTS
-// Can also be expressions (todo)
+// Possibly will be expressions in the future too?
 // Example:
 
 // if x < 5:
@@ -63,7 +63,7 @@ pub fn create_branch(
                 "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location(),
+            token_stream.current_location().to_error_location(&string_table),
             {
                 CompilationStage => "If Statement Parsing",
                 PrimarySuggestion => "Add ':' after the if condition to open the if body",
@@ -129,7 +129,7 @@ fn create_match_node(
                 "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location(),
+            token_stream.current_location().to_error_location(&string_table),
             {
                 CompilationStage => "Match Statement Parsing",
                 PrimarySuggestion => "Add ':' after 'is' to open the match body",
@@ -156,7 +156,7 @@ fn create_match_node(
             if arms.is_empty() {
                 return_rule_error!(
                     "Should be at least one condition in the match statement before the 'else' arm",
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Add at least one match arm before the 'else' arm",
@@ -170,7 +170,7 @@ fn create_match_node(
                         "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location(),
+                    token_stream.current_location().to_error_location(&string_table),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Add ':' after 'else' to open the else body",
@@ -205,7 +205,7 @@ fn create_match_node(
                     "Expected ':' after the match condition to open a new scope, found '{:?}' instead",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location(),
+                token_stream.current_location().to_error_location(&string_table),
                 {
                     CompilationStage => "Match Statement Parsing",
                     PrimarySuggestion => "Add ':' after the match arm condition to open the arm body",

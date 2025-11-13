@@ -191,7 +191,7 @@ impl Template {
                 _ => {
                     return_syntax_error!(
                         format!("Invalid Token Used Inside template body when creating template node. Token: {:?}", token_stream.current_token_kind()),
-                        token_stream.current_location(), {}
+                        token_stream.current_location().to_error_location(&string_table), {}
                     )
                 }
             }
@@ -227,6 +227,7 @@ impl Template {
         &mut self,
         template_being_inserted: &Template,
         foldable: &mut bool,
+        string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match template_being_inserted.kind {
             TemplateType::StringFunction => {
@@ -240,8 +241,8 @@ impl Template {
             TemplateType::Slot => {
                 // Error, can't use slots in the scene head (would be empty square brackets)
                 return_syntax_error!(
-                    format!("Can't use slots '{}' in the template head. Token", template_being_inserted.location.to_owned()),
-                    self.location, {}
+                    "Can't use slots in the template head. Token",
+                    self.location.to_owned().to_error_location(&string_table), {}
                 )
             }
             TemplateType::CompileTimeString => {
@@ -440,7 +441,7 @@ pub fn parse_template_head(
             if token != TokenKind::Comma {
                 return_syntax_error!(
                     format!("Expected a comma before the next token in the template head. Token: {:?}", token),
-                    token_stream.current_location(), {}
+                    token_stream.current_location().to_error_location(&string_table), {}
                 )
             }
 
@@ -465,7 +466,7 @@ pub fn parse_template_head(
                 // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
                 match template.style.unlocked_templates.to_owned().get(&name) {
                     Some(ExpressionKind::Template(inserted_template)) => {
-                        template.insert_template_into_head(inserted_template, foldable)?;
+                        template.insert_template_into_head(inserted_template, foldable, &string_table)?;
                     }
 
                     // Constant inherited
@@ -486,7 +487,7 @@ pub fn parse_template_head(
                     match &arg.value.kind {
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
-                            template.insert_template_into_head(&*inserted_template, foldable)?;
+                            template.insert_template_into_head(&*inserted_template, foldable, &string_table)?;
                         }
 
                         // TODO: Special stuff for Types (structs)
@@ -517,7 +518,7 @@ pub fn parse_template_head(
                     return_syntax_error!(
                         format!("Cannot declare new variables inside of a template head. Variable '{}' is not declared.
                         \n Here are all the variables in scope: {:#?}", name, context.declarations),
-                        token_stream.current_location(), {}
+                        token_stream.current_location().to_error_location(&string_table), {}
                     )
                 };
             }
@@ -566,7 +567,7 @@ pub fn parse_template_head(
                 // Multiple commas in succession
                 return_syntax_error!(
                     "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
-                    token_stream.current_location(), {}
+                    token_stream.current_location().to_error_location(&string_table), {}
                 )
             }
 
@@ -578,7 +579,7 @@ pub fn parse_template_head(
             _ => {
                 return_syntax_error!(
                     format!("Invalid Token Used Inside template head when creating template node. Token: {:?}", token),
-                    token_stream.current_location(), {}
+                    token_stream.current_location().to_error_location(&string_table), {}
                 )
             }
         }

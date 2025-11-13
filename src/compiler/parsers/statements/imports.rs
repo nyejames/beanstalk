@@ -23,7 +23,7 @@ pub fn parse_import(
                 "Expected a path after the import keyword. Found: {:?}",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location(),
+            token_stream.current_location().to_error_location(&string_table),
             {
                 CompilationStage => "Import Parsing",
                 PrimarySuggestion => "Use #import @path/to/file syntax to import a file",
@@ -42,7 +42,7 @@ pub fn parse_import(
                     "Invalid import path: {:?}. You might be forgetting to add the name of what you are importing at the end of the path!",
                     path
                 ),
-                token_stream.current_location(),
+                token_stream.current_location().to_error_location(&string_table),
                 {
                     CompilationStage => "Import Parsing",
                     PrimarySuggestion => "Add the file name at the end of the import path",

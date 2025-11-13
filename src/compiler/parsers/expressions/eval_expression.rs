@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
@@ -132,7 +132,7 @@ pub fn evaluate_expression(
                         };
                         return_syntax_error!(
                             format!("You can't use the '{:?}' operator with strings or templates", op),
-                            node.location,
+                            node.location.to_error_location(&string_table),
                             {
                                 FoundType => found_type_static,
                                 CompilationStage => "Expression Evaluation",
@@ -237,7 +237,7 @@ pub fn evaluate_expression(
                 let expected_type_static: &'static str = Box::leak(format!("{}", current_type).into_boxed_str());
                 return_syntax_error!(
                     "Invalid expression: no valid operands found during evaluation.",
-                    TextLocation::default(),
+                    ErrorLocation::default(),
                     {
                         ExpectedType => expected_type_static,
                         CompilationStage => "Expression Evaluation",

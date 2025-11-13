@@ -5,7 +5,7 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler::string_interning::{InternedString, StringId};
+use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 
@@ -156,7 +156,7 @@ impl AstNode {
     }
 
     // If this is a boolean value, flip it to the opposite value
-    pub fn flip(&mut self) -> Result<bool, CompileError> {
+    pub fn flip(&mut self, string_table: &StringTable) -> Result<bool, CompileError> {
         if let NodeKind::Expression(value) = &mut self.kind {
             match value.kind {
                 ExpressionKind::Bool(val) => {
@@ -167,10 +167,8 @@ impl AstNode {
                     if !value.ownership.is_mutable() {
                         return_type_error!(
                             "Tried to use the 'not' operator on a non-mutable value",
-                            self.location.to_owned(), {
+                            self.location.to_owned().to_error_location(&string_table), {
                                 ExpectedType => "Boolean",
-                                FoundType => &value.data_type.to_string(),
-                                InferredType => &value.data_type.to_string(),
                                 BorrowKind => "Shared",
                                 LifetimeHint => "This value is borrowed",
                             }
@@ -181,10 +179,8 @@ impl AstNode {
                                 "Tried to use the 'not' operator on value of type {:?}",
                                 value.data_type
                             ),
-                            self.location.to_owned(), {
+                            self.location.to_owned().to_error_location(&string_table), {
                                 ExpectedType => "Boolean",
-                                FoundType => &value.data_type.to_string(),
-                                InferredType => &value.data_type.to_string(),
                                 BorrowKind => "Shared",
                                 LifetimeHint => "This value is borrowed",
                             }
@@ -196,8 +192,10 @@ impl AstNode {
         }
 
         return_type_error!(
-            format!("Tried to use the 'not' operator on a non-boolean node: {:?}", self.kind),
-            self.location.to_owned(), {}
+            format!("Tried to use the 'not' operator on a non-boolean: {:?}", self.kind),
+            self.location.to_owned().to_error_location(&string_table), {
+                ExpectedType => "Boolean",
+            }
         );
     }
 

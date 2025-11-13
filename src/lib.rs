@@ -207,7 +207,7 @@ impl<'a> Compiler<'a> {
             &mut self.string_table,
         ) {
             Ok(tokens) => Ok(tokens),
-            Err(e) => Err(e.with_file_path(module_path.clone())),
+            Err(e) => Err(e.with_file_path(module_path.to_path_buf(self.string_table()))),
         }
     }
 

@@ -1,6 +1,5 @@
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
-use crate::compiler::interned_path::InternedPath;
-use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+use crate::compiler::parsers::tokenizer::tokens::{CharPosition};
 use crate::compiler::string_interning::StringTable;
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
@@ -51,7 +50,7 @@ pub enum ErrorMetaDataKey {
 
 // A completely owned version of TextLocation
 // Without interning to avoid having to pass the string table up with compiler messages
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ErrorLocation {
     pub scope: PathBuf,
     pub start_pos: CharPosition,
@@ -66,7 +65,7 @@ impl ErrorLocation {
             end_pos: end,
         }
     }
-    fn default() -> ErrorLocation {
+    pub fn default() -> ErrorLocation {
         ErrorLocation {
             scope: PathBuf::new(),
             start_pos: CharPosition::default(),
@@ -418,7 +417,7 @@ macro_rules! return_compiler_error {
     ($fmt:expr, $($arg:expr),+ ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: format!($fmt, $($arg),+),
-            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
             metadata: {
                 let mut map = std::collections::HashMap::new();
@@ -431,7 +430,7 @@ macro_rules! return_compiler_error {
     ($fmt:expr, $($arg:expr),+ $(,)?) => {{
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: format!($fmt, $($arg),+),
-            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
             metadata: std::collections::HashMap::new(),
         });
@@ -440,7 +439,7 @@ macro_rules! return_compiler_error {
     ($msg:expr ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
-            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
             metadata: {
                 let mut map = std::collections::HashMap::new();
@@ -453,7 +452,7 @@ macro_rules! return_compiler_error {
     ($msg:expr) => {{
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
-            location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
             metadata: std::collections::HashMap::new(),
         });
