@@ -10,14 +10,14 @@ use std::{env, fs};
 
 // The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
-pub struct CompilerMessages<'a> {
+pub struct CompilerMessages {
     pub errors: Vec<CompileError>,
     pub warnings: Vec<CompilerWarning>,
-    pub string_table: &'a StringTable,
+    pub string_table: StringTable,
 }
 
-impl<'a> CompilerMessages<'a> {
-    pub fn new(string_table: &'a StringTable) -> Self {
+impl CompilerMessages {
+    pub fn new(string_table: StringTable) -> Self {
         CompilerMessages {
             errors: Vec::new(),
             warnings: Vec::new(),
@@ -286,7 +286,7 @@ macro_rules! return_syntax_error {
             location: $loc,
             error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
             metadata: {
-                let mut map = std::collections::HashMap::new();
+                let map = std::collections::HashMap::new();
                 $(
                     map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value);
                 )*
@@ -986,14 +986,14 @@ macro_rules! return_wat_err {
     }};
 }
 
-pub fn print_compiler_messages(messages: CompilerMessages, string_table: &StringTable) {
+pub fn print_compiler_messages(messages: CompilerMessages) {
     // Format and print out the messages:
     for err in messages.errors {
-        print_formatted_error(err, string_table);
+        print_formatted_error(err, &messages.string_table);
     }
 
     for warning in messages.warnings {
-        print_formatted_warning(warning, string_table);
+        print_formatted_warning(warning, &messages.string_table);
     }
 }
 

@@ -9,7 +9,6 @@ use crate::build_system::{embedded_project, html_project, jit, native_project};
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::{Config, ProjectType};
 use crate::{Flag, InputModule, Project};
-use std::path::Path;
 use wasmer::sys::Target;
 
 /// Build configuration that determines how WASM files are generated and organized
@@ -68,9 +67,9 @@ pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
 }
 
 /// Determine a build target from project configuration
-pub fn determine_build_target(config: &Config, entry_path: &Path) -> BuildTarget {
+pub fn determine_build_target(config: &Config) -> BuildTarget {
     // Check if this is a single file or project
-    if entry_path.extension().is_some() {
+    if config.entry_point.extension().is_some() {
         // Single file - default to JIT
         BuildTarget::Jit
     } else {

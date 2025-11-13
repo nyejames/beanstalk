@@ -2,13 +2,15 @@
 
 use crate::build_system::build_system::BuildTarget;
 use crate::compiler::compiler_errors::{error_type_to_str, print_formatted_error};
+use crate::compiler::compiler_warnings::print_formatted_warning;
+use crate::settings::Config;
 
 ///
 /// This module provides a focused test suite that validates the essential
 /// compiler operations without getting bogged down in implementation details.
 ///
 /// Run all test cases from the tests/cases directory
-pub fn run_all_test_cases() {
+pub fn run_all_test_cases(show_warnings: bool) {
     use crate::Flag;
     use crate::build::build_project_files;
     use colour::{cyan_ln, green_ln, red_ln, yellow_ln};
@@ -43,18 +45,30 @@ pub fn run_all_test_cases() {
                     println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    // TODO: Build directly and get back the error types
-                    match build_project_files(&path, false, &flags, Some(BuildTarget::Jit)) {
-                        Ok(_) => {
-                            green_ln!("✓ PASS");
-                            passed_tests += 1;
-                        }
-                        Err(messages) => {
-                            red_ln!("✗ FAIL");
-                            failed_tests += 1;
-                            for error in messages.errors {
-                                print_formatted_error(error);
+                    let mut default_config = Config::new(path);
+                    let messages = build_project_files(
+                        &mut default_config,
+                        false,
+                        &flags,
+                        Some(BuildTarget::Jit),
+                    );
+
+                    if messages.errors.is_empty() {
+                        green_ln!("✓ PASS");
+                        if !messages.warnings.is_empty() {
+                            yellow_ln!("With {} warnings", messages.warnings.len().to_string());
+                            if show_warnings {
+                                for warning in messages.warnings {
+                                    print_formatted_warning(warning, &messages.string_table);
+                                }
                             }
+                        }
+                        passed_tests += 1;
+                    } else {
+                        red_ln!("✗ FAIL");
+                        failed_tests += 1;
+                        for error in messages.errors {
+                            print_formatted_error(error, &messages.string_table);
                         }
                     }
                 }
@@ -79,19 +93,35 @@ pub fn run_all_test_cases() {
 
                     // println!("\n------------------------------------------");
                     println!("  {}", file_name);
-
+                    let mut default_config = Config::new(path);
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    match build_project_files(&path, false, &flags, Some(BuildTarget::Jit)) {
-                        Ok(_) => {
-                            yellow_ln!("✗ UNEXPECTED SUCCESS");
-                            unexpected_successes += 1;
-                        }
-                        Err(e) => {
-                            green_ln!("✓ EXPECTED FAILURE");
-                            for error in e.errors {
-                                yellow_ln!("{}", error_type_to_str(&error.error_type));
+                    let messages = build_project_files(&mut default_config, false, &flags, Some(BuildTarget::Jit));
+                    
+                    if messages.errors.is_empty() {
+                        yellow_ln!("✗ UNEXPECTED SUCCESS");
+                        unexpected_successes += 1;
+                        if !messages.warnings.is_empty() {
+                            yellow_ln!("With {} warnings", messages.warnings.len().to_string());
+                            if show_warnings {
+                                for warning in messages.warnings {
+                                    print_formatted_warning(warning, &messages.string_table);
+                                }
                             }
-                            expected_failures += 1;
+                        }
+                    } else {
+                        green_ln!("✓ EXPECTED FAILURE");
+                        expected_failures += 1;
+                        for error in messages.errors {
+                            yellow_ln!("{}", error_type_to_str(&error.error_type));
+                            print_formatted_error(error, &messages.string_table);
+                        }
+                        if !messages.warnings.is_empty() {
+                            yellow_ln!("With {} warnings", messages.warnings.len().to_string());
+                            if show_warnings {
+                                for warning in messages.warnings {
+                                    print_formatted_warning(warning, &messages.string_table);
+                                }
+                            }
                         }
                     }
                 }

@@ -1,13 +1,12 @@
 use crate::build_system::build_system::{
     BuildTarget, create_project_builder, determine_build_target,
 };
-use crate::compiler::compiler_errors::{
-    CompileError, CompilerMessages, ErrorMetaDataKey, print_compiler_messages,
-};
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{Flag, settings};
+use crate::{Flag, return_file_error, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, grey_ln, print_bold, red_ln};
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -25,9 +24,10 @@ pub enum OutputFile {
 pub struct Project {
     pub config: Config,
     pub output_files: Vec<OutputFile>,
+    pub warnings: Vec<CompilerWarning>,
 }
 
-/// Build a Beanstalk project with explicit target specification
+/// Build a Beanstalk project with an explicit target specification
 ///
 /// Extended version of [`build_project_files`] that allows overriding the automatic
 /// target detection with a specific build target. This is useful for:
@@ -49,28 +49,33 @@ pub struct Project {
 /// - `Some(BuildTarget::Native { .. })`: Force native WASM output
 /// - `None`: Use automatic target detection based on project structure
 pub fn build_project_files(
-    entry_path: &Path,
+    project_config: &mut Config,
     release_build: bool,
     flags: &[Flag],
     target_override: Option<BuildTarget>,
-) {
+) -> CompilerMessages {
     let _time = Instant::now();
+
+    // For early returns before using the compiler messages from the actual compiler pipeline later
+    let mut messages = CompilerMessages::new(StringTable::new());
 
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            red_ln!("Error finding current directory: {:?}", e);
-            return;
+            messages.errors.push(CompileError::file_error(
+                &PathBuf::new(),
+                format!("Error finding current directory: {:?}", e),
+            ));
+            return messages;
         }
     };
 
-    let entry_dir = current_dir.join(entry_path);
+    let entry_dir = current_dir.join(project_config.entry_point.to_owned());
 
     // print_ln_bold!("Project Directory: ");
     // dark_yellow_ln!("{:?}", &entry_dir);
 
     let mut beanstalk_modules_to_parse: Vec<InputModule> = Vec::with_capacity(1);
-    let project_config = Config::new(entry_path.to_owned());
 
     // Determine if this is a single file or project directory
     enum CompileType {
@@ -86,8 +91,11 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::SingleBeanstalkFile(content),
             Err(e) => {
-                red_ln!("Error reading file: {:?}", e);
-                return;
+                messages.errors.push(CompileError::file_error(
+                    &PathBuf::new(),
+                    format!("Error reading file: {:?}", e),
+                ));
+                return messages;
             }
         }
     } else {
@@ -99,8 +107,11 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::MultiFile(content),
             Err(e) => {
-                format!("Error reading config file: {:?}", e);
-                return;
+                messages.errors.push(CompileError::file_error(
+                    &PathBuf::new(),
+                    format!("Error reading config file: {:?}", e),
+                ));
+                return messages;
             }
         }
     };
@@ -110,14 +121,17 @@ pub fn build_project_files(
         CompileType::SingleBeanstalkFile(code) => {
             beanstalk_modules_to_parse.push(InputModule {
                 source_code: code,
-                source_path: entry_path.to_owned(),
+                source_path: project_config.entry_point.to_owned(),
             });
         }
 
         CompileType::SingleMarkthroughFile(_code) => {
             // TODO: Handle Markthrough files in the future
-            red_ln!("Markthrough files are not yet supported");
-            return;
+            messages.errors.push(CompileError::file_error(
+                &PathBuf::new(),
+                "Markthrough files are not yet supported",
+            ));
+            return messages;
         }
 
         // TODO: No longer have config files working,
@@ -183,17 +197,16 @@ pub fn build_project_files(
     // DETERMINE BUILD TARGET AND BUILDER
     // ----------------------------------
     // If no override, read it from the config
-    let build_target =
-        target_override.unwrap_or_else(|| determine_build_target(&project_config, entry_path));
+    let build_target = target_override.unwrap_or_else(|| determine_build_target(&project_config));
 
     let project_builder = create_project_builder(build_target);
 
     print_bold!("Compiling with target: ");
     dark_yellow_ln!("{:?}", project_builder.target_type());
 
-    // ----------------------------------
-    // BUILD PROJECT USING APPROPRIATE BUILDER
-    // ----------------------------------
+    // -------------------------------------------
+    // BUILD PROJECT USING THE APPROPRIATE BUILDER
+    // -------------------------------------------
     let start = Instant::now();
     match project_builder.build_project(
         beanstalk_modules_to_parse,
@@ -201,7 +214,7 @@ pub fn build_project_files(
         release_build,
         flags,
     ) {
-        Ok(output_files) => {
+        Ok(project) => {
             let duration = start.elapsed();
 
             // Show build results
@@ -211,10 +224,12 @@ pub fn build_project_files(
             grey_ln!("------------------------------------");
             print!("\nProject built in: ");
             green_ln_bold!("{:?}", duration);
+
+            messages.warnings.extend(project.warnings);
+            messages
         }
-        Err(messages) => {
-            print_compiler_messages(e);
-        }
+
+        Err(compiler_messages) => compiler_messages,
     }
 }
 
@@ -222,7 +237,7 @@ pub fn build_project_files(
 fn add_bst_files_to_parse(
     source_code_to_parse: &mut Vec<InputModule>,
     project_root_dir: &Path,
-) -> Result<(), CompilerMessages> {
+) -> Result<(), CompileError> {
     // Can't just use the src_dir from config, because this might be recursively called for new subdirectories
 
     // Read all files in the src directory
@@ -244,14 +259,9 @@ fn add_bst_files_to_parse(
                 "Verify the directory is accessible"
             };
 
-            return Err(CompilerMessages {
-                errors: vec![CompileError::new_file_error(project_root_dir, error_msg, {
-                    let mut map = HashMap::new();
-                    map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                    map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                    map
-                })],
-                warnings: Vec::new(),
+            return_file_error!(project_root_dir, error_msg, {
+                CompilationStage => "File System",
+                PrimarySuggestion => suggestion,
             });
         }
     };
@@ -283,22 +293,12 @@ fn add_bst_files_to_parse(
                                     "Verify the file is accessible and not corrupted"
                                 };
 
-                            return Err(CompilerMessages {
-                                errors: vec![CompileError::new_file_error(
-                                    &file_path,
-                                    error_msg,
-                                    {
-                                        let mut map = HashMap::new();
-                                        map.insert(
-                                            ErrorMetaDataKey::CompilationStage,
-                                            "File System",
-                                        );
-                                        map.insert(ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                                        map
-                                    },
-                                )],
-                                warnings: Vec::new(),
-                            });
+                            return_file_error!(
+                                &file_path, error_msg, {
+                                    CompilationStage => "File System",
+                                    PrimarySuggestion => suggestion,
+                                }
+                            )
                         }
                     };
 
@@ -321,22 +321,13 @@ fn add_bst_files_to_parse(
                             }
                         }
                         None => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompileError::new_file_error(
-                                    &file_path,
-                                    "Error getting file stem - file name contains invalid characters",
-                                    {
-                                        let mut map = HashMap::new();
-                                        map.insert(
-                                            ErrorMetaDataKey::CompilationStage,
-                                            "File System",
-                                        );
-                                        map.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure the file name contains only valid UTF-8 characters");
-                                        map
-                                    },
-                                )],
-                                warnings: Vec::new(),
-                            });
+                            return_file_error!(
+                                &file_path,
+                                "Error getting file stem - file name contains invalid characters", {
+                                    CompilationStage => "File System",
+                                    PrimarySuggestion => "Ensure the file name contains only valid UTF-8 characters"
+                                }
+                            )
                         }
                     };
 
@@ -382,18 +373,13 @@ fn add_bst_files_to_parse(
                     .into_boxed_str(),
                 );
 
-                return Err(CompilerMessages {
-                    errors: vec![CompileError::new_file_error(project_root_dir, error_msg, {
-                        let mut map = HashMap::new();
-                        map.insert(ErrorMetaDataKey::CompilationStage, "File System");
-                        map.insert(
-                            ErrorMetaDataKey::PrimarySuggestion,
-                            "Check directory permissions and file system integrity",
-                        );
-                        map
-                    })],
-                    warnings: Vec::new(),
-                });
+                return_file_error!(
+                    project_root_dir,
+                    error_msg, {
+                        CompilationStage => "File System",
+                        PrimarySuggestion => "Check directory permissions and file system integrity"
+                    }
+                )
             }
         }
     }

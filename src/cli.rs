@@ -1,15 +1,12 @@
 use crate::build_system::build_system::BuildTarget;
 use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
-use crate::compiler::compiler_errors::{
-    CompileError, print_compiler_messages, print_formatted_error,
-};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::compiler_errors::print_compiler_messages;
 use crate::compiler_tests::test_runner::run_all_test_cases;
-use crate::{Flag, build, create_new_project, dev_server, timer_log};
+use crate::settings::Config;
+use crate::{Flag, build, create_new_project, dev_server};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
 use std::path::PathBuf;
-use std::time::Instant;
 use std::{
     env, fs,
     io::{self, Write},
@@ -82,15 +79,26 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
-            build_project(&path, false, &flags, None);
+            let mut starting_config = Config::new(path);
+            let messages = build::build_project_files(&mut starting_config, false, &flags, None);
+            print_compiler_messages(messages);
         }
 
         Command::Run(path) => {
-            jit_project(&path, &flags);
+            let mut starting_config = Config::new(path);
+            let messages = build::build_project_files(
+                &mut starting_config,
+                false,
+                &flags,
+                Some(BuildTarget::Jit),
+            );
+            print_compiler_messages(messages);
         }
 
         Command::Release(path) => {
-            build_project(&path, true, &flags, None);
+            let mut starting_config = Config::new(path);
+            let messages = build::build_project_files(&mut starting_config, true, &flags, None);
+            print_compiler_messages(messages);
         }
 
         Command::Dev(ref path) => {
@@ -110,7 +118,10 @@ pub fn start_cli() {
         }
 
         Command::CompilerTests => {
-            run_all_test_cases();
+            // Warnings are hidden by default for compiler tests,
+            // unless the show-warnings flag is set
+            let show_warnings = flags.contains(&Flag::ShowWarnings);
+            run_all_test_cases(show_warnings);
         }
     }
 }
@@ -203,30 +214,6 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     }
 }
 
-fn build_project(
-    path: &Path,
-    release_build: bool,
-    flags: &[Flag],
-    target_override: Option<BuildTarget>,
-) {
-    build::build_project_files(path, release_build, flags, target_override)
-}
-
-fn jit_project(path: &Path, flags: &[Flag]) {
-    use crate::build_system::build_system::BuildTarget;
-    let start = Instant::now();
-
-    match build::build_project_files(path, false, flags, Some(BuildTarget::Jit)) {
-        Ok(_project) => {
-            timer_log!(start, "\nJIT program ran for: ");
-        }
-        Err(e) => {
-            e_red_ln!("Errors while running project: \n");
-            print_compiler_messages(e);
-        }
-    }
-}
-
 fn get_flags(args: &[String]) -> Vec<Flag> {
     let mut flags = Vec::new();
 
@@ -235,7 +222,8 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
             "--ast" => flags.push(Flag::ShowAst),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
-
+            "--show-warnings" => flags.push(Flag::ShowWarnings),
+            "--verbose" => flags.push(Flag::Verbose),
             _ => {}
         }
     }

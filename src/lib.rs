@@ -105,7 +105,7 @@ use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::tokenizer;
-use crate::compiler::string_interning::{StringTable, InternedString};
+use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
@@ -113,13 +113,13 @@ use std::path::{Path, PathBuf};
 
 // Re-export types for the build system
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build::*;
-use crate::compiler::interned_path::InternedPath;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -139,7 +139,9 @@ impl OutputModule {
 pub enum Flag {
     ShowAst,
     DisableWarnings,
+    ShowWarnings, // The default behaviour for tests is to hide warnings, so this enables them in those cases
     DisableTimers,
+    Verbose, // TODO: Prints out absolutely everything
 }
 
 pub struct Compiler<'a> {
@@ -151,7 +153,7 @@ pub struct Compiler<'a> {
 impl<'a> Compiler<'a> {
     pub fn new(project_config: &'a Config, host_function_registry: HostFunctionRegistry) -> Self {
         let mut string_table = StringTable::new();
-        
+
         Self {
             project_config,
             host_function_registry,
@@ -198,7 +200,12 @@ impl<'a> Compiler<'a> {
             _ => TokenizeMode::Normal,
         };
 
-        match tokenize(source_code, module_path, tokenizer_mode, &mut self.string_table) {
+        match tokenize(
+            source_code,
+            module_path,
+            tokenizer_mode,
+            &mut self.string_table,
+        ) {
             Ok(tokens) => Ok(tokens),
             Err(e) => Err(e.with_file_path(module_path.clone())),
         }
@@ -219,7 +226,6 @@ impl<'a> Compiler<'a> {
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
     ) -> Result<Vec<Header>, Vec<CompileError>> {
-
         parse_headers(
             files,
             &self.host_function_registry,
@@ -239,10 +245,7 @@ impl<'a> Compiler<'a> {
     /// This section answers the following question:
     /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
     pub fn sort_headers(&mut self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
-        resolve_module_dependencies(
-            headers,
-            &mut self.string_table,
-        )
+        resolve_module_dependencies(headers, &mut self.string_table)
     }
 
     /// -----------------------------
@@ -253,7 +256,11 @@ impl<'a> Compiler<'a> {
     /// The AST also provides a list of exports from the module.
     pub fn headers_to_ast(&mut self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
         // Pass string table to AST construction for string interning during AST building
-        Ast::new(module_tokens, &self.host_function_registry, &mut self.string_table)
+        Ast::new(
+            module_tokens,
+            &self.host_function_registry,
+            &mut self.string_table,
+        )
     }
 
     /// -----------------------------

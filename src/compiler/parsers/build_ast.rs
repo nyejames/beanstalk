@@ -334,7 +334,9 @@ pub fn function_body_to_ast(
 
             // Or stuff that hasn't been implemented yet
             _ => {
-                return_compiler_error!("Unexpected token found in the body of a function. Could be unimplemented. Token: {}", token_stream.current_token())
+                return_compiler_error!(
+                    format!("Unexpected token found in the body of a function. Could be unimplemented. Token: {:?}", token_stream.current_token_kind())
+                )
             }
         }
     }

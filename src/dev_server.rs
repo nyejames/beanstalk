@@ -1,5 +1,5 @@
 use crate::build_system::build_system::BuildTarget;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages, print_compiler_messages};
+use crate::compiler::compiler_errors::CompilerMessages;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, build, return_dev_server_error, settings};
@@ -32,11 +32,13 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
         }
     };
 
-    let project_config =
-        match build::build_project_files(&path, false, flags, Some(BuildTarget::HtmlProject)) {
-            Ok(config) => config,
-            Err(messages) => {}
-        };
+    let mut project_config = Config::new(path.to_owned());
+    let messages = build::build_project_files(
+        &mut project_config,
+        false,
+        flags,
+        Some(BuildTarget::HtmlProject),
+    );
 
     // TODO: Now separately build all the runtime hooks / project structure
 
@@ -47,7 +49,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        handle_connection(stream, &path, &mut modified, &project_config.config, flags)?;
+        handle_connection(stream, &path, &mut modified, &project_config, flags)?;
     }
 }
 
