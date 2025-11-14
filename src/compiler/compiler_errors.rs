@@ -16,7 +16,7 @@ pub struct CompilerMessages {
 }
 
 impl CompilerMessages {
-    pub fn new(string_table: StringTable) -> Self {
+    pub fn new() -> Self {
         CompilerMessages {
             errors: Vec::new(),
             warnings: Vec::new(),
@@ -448,7 +448,7 @@ macro_rules! return_compiler_error {
             },
         });
     }};
-    // Simple variant with just message (no metadata)
+    // Simple variant with just a message (no metadata)
     ($msg:expr) => {{
         return Err($crate::compiler::compiler_errors::CompileError {
             msg: $msg.into(),
@@ -496,23 +496,6 @@ macro_rules! return_dev_server_error {
             }],
             warnings: Vec::new(),
         })
-    };
-}
-
-/// Returns a new CompileError for WASM validation failures.
-///
-/// Maps WASM validation errors to appropriate compiler error types
-/// with helpful context about what went wrong.
-///
-/// Usage: `return_wasm_validation_error!(wasm_error, Some(location), string_table)`;
-#[macro_export]
-macro_rules! return_wasm_validation_error {
-    ($wasm_error:expr, $location:expr, $string_table:expr) => {
-        return Err(CompileError::wasm_validation_error(
-            $wasm_error,
-            $location,
-            $string_table,
-        ))
     };
 }
 
@@ -854,7 +837,7 @@ macro_rules! return_move_while_borrowed_error {
 /// These are typically compiler bugs where the WIR infrastructure is missing
 /// or incomplete for a particular language feature.
 ///
-/// Usage: `return_wir_transformation_error!(string_table, location, "Function '{}' transformation not yet implemented", func_name)`;
+/// Usage: `return_wir_transformation_error!("Function '{}' transformation not yet implemented", func_name, location, {})`;
 #[macro_export]
 macro_rules! return_wir_transformation_error {
     // New arms
@@ -885,10 +868,10 @@ macro_rules! return_wir_transformation_error {
 /// WASM generation errors indicate failures during WIR to WASM codegen.
 /// These are typically compiler bugs in the WASM lowering or module generation.
 ///
-/// Usage: `return_wasm_generation_error!(string_table, location, "Failed to generate WASM export for function '{}'", func_name, { CompilationStage => "WASM Generation" })`;
+/// Usage: `return_wasm_generation_error!(format!("Failed to generate WASM export for function '{}'", func_name), location, { CompilationStage => "WASM Generation" })`;
 #[macro_export]
 macro_rules! return_wasm_generation_error {
-    ($string_table:expr, $location:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err(CompileError {
             msg: $string_table.intern($msg),
             location: $location,
@@ -908,34 +891,10 @@ macro_rules! return_wasm_generation_error {
 }
 
 #[macro_export]
-macro_rules! return_err_with_added_msg {
-    ($string_table:expr, $($extra_context:tt)+) => {
-        .map_err(|e| {
-            let combined_msg = format!("{}{}", format!($($extra_context)+), e.resolve_message($string_table));
-            return Err(CompileError {
-                msg: $string_table.intern(&combined_msg),
-                location: e.location,
-                error_type: e.error_type,
-                file_path: e.file_path,
-                suggestions: e.suggestions,
-            })
-        })
-    };
-}
-
-/// Takes in an existing error and adds a path to it
-#[macro_export]
-macro_rules! return_err_with_path {
-    ($err:expr, $path:expr) => {
-        return Err($err.with_file_path($path))
-    };
-}
-
-#[macro_export]
 macro_rules! return_thread_err {
-    ($string_table:expr, $process:expr) => {
+    ($process:expr) => {
         return Err(CompileError {
-            msg: $string_table.intern(&format!("Thread panicked during {}", $process)),
+            msg: &format!("Thread panicked during {}", $process),
             location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
@@ -947,9 +906,9 @@ macro_rules! return_thread_err {
 #[macro_export]
 macro_rules! return_wat_err {
     // New version with string table and metadata
-    ($string_table:expr, $err:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+    ($err:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err(CompileError {
-            msg: $string_table.intern(&format!("Error while parsing WAT: {}", $err)),
+            msg: &format!("Error while parsing WAT: {}", $err),
             location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
             metadata: {
@@ -964,16 +923,6 @@ macro_rules! return_wat_err {
             },
         })
     };
-    // Legacy version without string table
-    ($err:expr) => {{
-        let mut temp_string_table = crate::compiler::string_interning::StringTable::new();
-        return Err(CompileError {
-            msg: temp_string_table.intern(&format!("Error while parsing WAT: {}", $err)),
-            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
-            metadata: std::collections::HashMap::new(),
-        });
-    }};
 }
 
 pub fn print_compiler_messages(messages: CompilerMessages) {

@@ -1,22 +1,27 @@
-[Navbar]
+[#import(@libs/html/basic)]
+[#import(@styles/docs_styles)]
+[#import(@./components)]
 
-[Header center: [title(1): COLLECTIONS]]
-[Page:
+[docs_styles.Navbar]
+
+[docs_styles.Header, basic.Center: [basic.Title: COLLECTIONS]]
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
-Instead of accessing elements directly, all collections have built in methods for accessing, mutating, pushing or removing elements.
+Instead of accessing elements directly, 
+all collections have built-in methods for accessing, mutating, pushing or removing elements.
 
-Collections are ordered groups of values that are zero indexed (start from 0). 
+Collections are ordered groups of values that are zero-indexed (start from 0). 
 
 For unordered groups of values with optional keys, use a Hash Map (see below).
 
-Elements inside of collections are accessed using the .get() method.
+Elements inside collections are accessed using the .get() method.
 
 array.get(0) is the equivalent of array[0] in most C like languages. 
 There is no square or curly brackets notation.
 
-There may not actually be a function call under the hood when using collection methods, as the compiler abstracts these to be direct accesses in many cases.
+There may not be a function call under the hood when using collection methods, 
+as the compiler abstracts these to be direct accesses in many cases.
 
 ## Immutable Collections
 [#Code:

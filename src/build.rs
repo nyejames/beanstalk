@@ -57,7 +57,7 @@ pub fn build_project_files(
     let _time = Instant::now();
 
     // For early returns before using the compiler messages from the actual compiler pipeline later
-    let mut messages = CompilerMessages::new(StringTable::new());
+    let mut messages = CompilerMessages::new();
 
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,

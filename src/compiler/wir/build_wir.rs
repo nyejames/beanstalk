@@ -5,9 +5,6 @@
 //! place-based representation that enables efficient borrow checking and direct
 //! WASM lowering.
 
-// Re-export all WIR components from sibling modules
-pub use crate::compiler::wir::wir_nodes::*;
-
 // Import context types from context module
 use crate::compiler::wir::context::WirTransformContext;
 
@@ -20,11 +17,15 @@ use crate::compiler::{
     compiler_errors::CompileError,
 };
 // Error handling macros - grouped for maintainability
-use crate::compiler::datatypes::Ownership;
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::{ir_log, wir_log, return_wir_transformation_error};
-use crate::compiler::parsers::ast_nodes::AstNode;
+use crate::compiler::compiler_errors::{ErrorLocation, ErrorType};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::wir::place::WasmType;
+pub(crate) use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Export, ExportKind, Operand, Rvalue, Statement, Terminator, WirBlock, WirFunction, WIR};
+use crate::compiler::wir::wir_nodes::ProgramPoint;
 
 /// Main entry point: Transform AST to WIR with borrow checking
 ///
@@ -81,9 +82,9 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
                 // Check if this is an entry point function and add export
                 if func_name == "_start" {
                     let start_name = string_table.intern("_start");
-                    wir.exports.insert(start_name, crate::compiler::wir::wir_nodes::Export {
+                    wir.exports.insert(start_name, Export {
                         name: start_name,
-                        kind: crate::compiler::wir::wir_nodes::ExportKind::Function,
+                        kind: ExportKind::Function,
                         index: wir.functions.len() as u32, // Function index in the WIR
                     });
                     #[cfg(debug_assertions)]
@@ -122,9 +123,9 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
             main_function.name = start_name;
             
             // Add export for the entry point
-            wir.exports.insert(start_name, crate::compiler::wir::wir_nodes::Export {
+            wir.exports.insert(start_name, Export {
                 name: start_name,
-                kind: crate::compiler::wir::wir_nodes::ExportKind::Function,
+                kind: ExportKind::Function,
                 index: wir.functions.len() as u32,
             });
             
@@ -157,7 +158,6 @@ fn create_main_function_from_ast(
     context: &mut WirTransformContext,
     string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<WirFunction, CompileError> {
-    use crate::compiler::wir::wir_nodes::{Terminator, WirBlock, WirFunction};
 
     #[cfg(debug_assertions)]
     wir_log!(
@@ -222,8 +222,6 @@ fn transform_ast_node_to_wir(
     context: &mut WirTransformContext,
     string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
-    use crate::compiler::parsers::ast_nodes::NodeKind;
-    use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
 
     match &node.kind {
         NodeKind::VariableDeclaration(arg) => {
@@ -384,9 +382,7 @@ fn create_wir_function_from_ast(
     body: &[AstNode],
     context: &mut WirTransformContext,
     string_table: &mut crate::compiler::string_interning::StringTable,
-) -> Result<crate::compiler::wir::wir_nodes::WirFunction, CompileError> {
-    use crate::compiler::wir::wir_nodes::{Terminator, WirBlock, WirFunction};
-
+) -> Result<WirFunction, CompileError> {
     wir_log!("Creating WIR function '{}' with {} body nodes", name, body.len());
 
     // Check if this is an entry point function and validate signature
@@ -399,7 +395,7 @@ fn create_wir_function_from_ast(
             let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
             return_wir_transformation_error!(
                 format!("Entry point function '{}' should not have parameters, found {} parameters", name, signature.parameters.len()),
-                TextLocation::default(), {
+                ErrorLocation::default(), {
                     VariableName => func_name_static,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "Remove parameters from the entry point function - it's the module's starting function and cannot accept arguments",
@@ -411,7 +407,7 @@ fn create_wir_function_from_ast(
             let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
             return_wir_transformation_error!(
                 format!("Entry point function '{}' should not have return values, found {} return values", name, signature.returns.len()),
-                TextLocation::default(), {
+                ErrorLocation::default(), {
                     VariableName => func_name_static,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "Remove return values from the entry point function - it's the module's starting function and cannot return values",
@@ -568,11 +564,8 @@ fn transform_function_body(
 /// - `Ok(WasmType)`: Corresponding WASM type
 /// - `Err(CompileError)`: Unsupported type error
 fn convert_datatype_to_wasm_type(
-    data_type: &crate::compiler::datatypes::DataType,
-) -> Result<crate::compiler::wir::place::WasmType, CompileError> {
-    use crate::compiler::datatypes::DataType;
-    use crate::compiler::wir::place::WasmType;
-
+    data_type: &DataType,
+) -> Result<WasmType, CompileError> {
     match data_type {
         DataType::Int => Ok(WasmType::I32),
         DataType::Float => Ok(WasmType::F32),
@@ -582,7 +575,7 @@ fn convert_datatype_to_wasm_type(
             let type_str: &'static str = Box::leak(format!("{:?}", data_type).into_boxed_str());
             return_wir_transformation_error!(
                 format!("DataType to WasmType conversion not yet implemented for {:?}", data_type),
-                TextLocation::default(), {
+                ErrorLocation::default(), {
                     FoundType => type_str,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "This type is not yet supported in function signatures - this is a missing compiler feature",
@@ -667,10 +660,9 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
                 TextLocation::default()
             };
 
-            use crate::compiler::compiler_errors::ErrorType;
             return Err(CompileError {
                 msg: detailed_message,
-                location: error_location,
+                location: error_location.to_error_location(&string_table),
                 error_type: ErrorType::BorrowChecker,
                 metadata: std::collections::HashMap::new(),
             });

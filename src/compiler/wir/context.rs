@@ -4,7 +4,7 @@
 //! used during AST to WIR transformation. It manages variable scoping, place
 //! allocation, temporary variable tracking, and usage tracking for move detection.
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
 use crate::compiler::datatypes::DataType;
 
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -14,6 +14,8 @@ use crate::compiler::wir::{
 };
 
 use std::collections::HashMap;
+use crate::compiler::host_functions::registry::HostFunctionDef;
+use crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry;
 
 /// Function information for tracking function metadata and signatures during WIR transformation
 ///
@@ -139,10 +141,9 @@ pub struct WirTransformContext {
     next_block_id: u32,
 
     /// Host function imports used in this module
-    host_imports:
-        std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
+    host_imports: std::collections::HashSet<HostFunctionDef>,
     /// WASIX function registry for WASIX import mapping
-    wasix_registry: crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry,
+    wasix_registry: WasixFunctionRegistry,
 
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
@@ -240,7 +241,7 @@ impl WirTransformContext {
                 
                 Err(CompileError::new_rule_error(
                     error_msg,
-                    TextLocation::default()
+                    ErrorLocation::default()
                 ))
             }
         }

@@ -4,41 +4,44 @@
 
 [docs_styles.Navbar]
 
-[docs_styles.Header, basic.Center: [basic.Title: BASIC BS SYNTAX]]
+[docs_styles.Header, basic.Center: [basic.Title: LANGUAGE BASICS]]
 
 Every project needing to be split into multiple Wasm modules must have a config.bst file.
 
 If instead, you build or run a specific Beanstalk file,
-it will create a single Wasm module from that entry point.
+it will create a single Wasm module from that entry point and pull in all its dependencies.
 
-From the config file you can define another Beanstalk file as the entry point of a program.
+From the config file you can define a Beanstalk file as the entry point of a program.
 
-Web projects can be configured to have a directory based structure for each module.
+Web projects have their own structure and config file also.
 
-# Quick Synax Overview
+# Quick Synax Summary
+For developers coming from most other languages, 
+here are some key idiosyncrasies from other C-like languages to note:
+
 - Colon opens a scope, semicolon closes it. Semicolon does not end statements!
-- No use of square brackets for arrays, curly braces are used instead. 
-Square brackets are only used for templates.
+- Square brackets are NOT used for arrays, curly braces are used instead. 
+Square brackets are only used for string templates.
 - Equality and other logical operators use keywords like "is" and "not" 
 (you can't use == or ! for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit). 
-This comes before the type.
+This comes before the type if there is an explicit type declaration.
 - Double dashes for single line comments (--)
-- Reference semantics. All copies have to be explict unless they are used in part of a new expression. 
+- Immutable Reference semantics are the default for all stack and heap allocated types. 
+- All copies have to be explict unless they are used in part of a new expression. 
 Even for primitive types such as integers.
 
 4 spaces are recommended for indentation. 
 
-- Types use Upper_Snake_Case.
+- Types use UpperCamelCase
+- Constants use UPPER_SNAKE_CASE
 - Everything else uses regular_snake_case
 
 # Comments
-Comments use a double minus sign '--'.
-
+Comments use a double minus sign. 
 Documentation comments will eventually be created via special templates.
 
-[basic.Code: 
-
+```beanstalk
     -- normal comment
 
     [#docs():
@@ -46,7 +49,7 @@ Documentation comments will eventually be created via special templates.
 
         Woo
     ]
-]
+```
 
 # Variables
 Equals means assign. Tilde ~ means this is a mutable and can change.
@@ -56,7 +59,7 @@ All variables must be assigned a value when they are declared.
 ## Assignment
 
 ### Variables
-[basic.Code:
+```beanstalk
     int ~= 0
     float ~= 0.0
 
@@ -81,9 +84,9 @@ All variables must be assigned a value when they are declared.
         value = 1.2, 
         another_value = "hey"
     )
-]
+```
 
-[basic.Code:
+```beanstalk
     -- 64 bit immutable float
     number = 420.69
 
@@ -114,11 +117,11 @@ All variables must be assigned a value when they are declared.
     -- You can't use the '+' operator on strings,
     -- They are always concatenated using templates
     concatenated_strings = [string_slice, a_mutable_string]
-]
+```
 
 All copies are explicit and must use the 'copy' keyword in place of a type.
 
-[basic.Code:
+```beanstalk
     -- Create a new collection of integers
     a_collection ~= {1, 2, 3, 4, 5}
     
@@ -137,13 +140,13 @@ All copies are explicit and must use the 'copy' keyword in place of a type.
 
     a_collection.pull(a_collection.length() - 1)
     print(a_collection) -- {23.0}
-]
+```
 
 Expressions can span over multiple lines.
 
 But new statements must start after a newline.
 
-[basic.Code:
+```beanstalk
     -- Valid
     some_int =
         4 + 5 + 6 + 7 + 
@@ -153,7 +156,7 @@ But new statements must start after a newline.
     some_int =
         4 + (5 + 6) * 7
         + 8 / 9 + 10
-]
+```
 
 # Data Types
 All data type keywords contain methods from the standard library for common manipulation of types.
@@ -170,19 +173,19 @@ All data type keywords contain methods from the standard library for common mani
 ## String based Types
 These are all different ways to create strings.
 
-[basic.table(3): 
+```beanstalk
     [: Type] [: Description]
 
     [: string slice ] [: UTF-16 (For JS compatibility)]
 
     [: template ] [: The string templating syntax of Beanstalk for creating strings. See [@./templates: Templates] for more info!]
-]
+```
 
 # Strings and String slices
 String is the keyword for string types in Beanstalk. 
 Double quotes are automatically string slices. 
 
-[basic.Code: "Double quotes for a UTF-16 string slice"]
+`"Double quotes for a UTF-16 string slice"`
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 
@@ -192,7 +195,7 @@ Scenes are used instead of format strings. See [@./templates: Scenes] for more i
 The 'is' keyword is used to check equality, not '==''. 
 The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
-[basic.table(3):
+```beanstalk
     [: Operator] [: Description]          [: Precedence]
     [: `^`]        [: Exponent]            [: 4]
     [: `//`]       [: Root]                [: 4]
@@ -202,6 +205,6 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: %%]         [: Remainder (floored)]  [: 3]
     [: +]          [: Sum]                  [: 2]
     [: `-`]        [: Subtraction]          [: 2]
-]
+```
 
 [docs_styles.Footer]

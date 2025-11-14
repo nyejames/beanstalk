@@ -91,7 +91,7 @@ fn handle_connection(
     let mut status_line = "HTTP/1.1 404 NOT FOUND";
     let mut content_type = "text/html";
 
-    let mut messages = CompilerMessages::new(StringTable::new());
+    let mut messages = CompilerMessages::new();
 
     let request_line = buf_reader.lines().next().unwrap();
     match request_line {

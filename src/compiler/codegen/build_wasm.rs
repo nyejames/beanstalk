@@ -1,9 +1,11 @@
 use crate::compiler::codegen::wasm_encoding::WasmModule;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::wir::wir_nodes::ExportKind;
 use crate::{return_compiler_error, return_wasm_generation_error};
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::string_interning::StringTable;
 
 /// Basic WASM validation using wasmparser
 fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
@@ -90,7 +92,7 @@ pub fn new_wasm_module_with_registry(
 }
 
 /// Validate WIR structure before WASM compilation
-fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::string_interning::StringTable) -> Result<(), CompileError> {
+fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> Result<(), CompileError> {
     // Empty WIR is allowed - it creates a minimal WASM module
     // This is useful for testing and incremental compilation
 
@@ -102,10 +104,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
             if !function_names.insert(function_name) {
                 let function_name_static: &'static str = Box::leak(function_name.to_string().into_boxed_str());
                 return_wasm_generation_error!(
-                    string_table,
-                    crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-                    &format!("Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.", function_name),
-                    {
+                    format!("Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.", function_name),
+                    ErrorLocation::default(), {
                         CompilationStage => "WASM Generation",
                         VariableName => function_name_static,
                         PrimarySuggestion => "Rename one of the duplicate functions to have a unique name",
@@ -120,7 +120,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
     if memory_info.initial_pages > 65536 {
         return_wasm_generation_error!(
             string_table,
-            crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+            TextLocation::default(),
             &format!("WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).", memory_info.initial_pages),
             {
                 CompilationStage => "WASM Generation",
@@ -133,7 +133,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
         if max_pages > 65536 {
             return_wasm_generation_error!(
                 string_table,
-                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                TextLocation::default(),
                 &format!("WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).", max_pages),
                 {
                     CompilationStage => "WASM Generation",
@@ -146,7 +146,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
         if max_pages < memory_info.initial_pages {
             return_wasm_generation_error!(
                 string_table,
-                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                TextLocation::default(),
                 &format!("WIR memory max pages ({}) is less than initial pages ({}). Maximum memory pages must be greater than or equal to initial pages.", max_pages, memory_info.initial_pages),
                 {
                     CompilationStage => "WASM Generation",
@@ -162,7 +162,7 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &crate::compiler::
             if interface_def.methods.is_empty() {
                 return_wasm_generation_error!(
                     string_table,
-                    crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                    TextLocation::default(),
                     &format!("Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.", interface_id),
                     {
                         CompilationStage => "WASM Generation",
