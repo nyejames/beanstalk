@@ -1,12 +1,12 @@
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
-use crate::compiler::parsers::tokenizer::tokens::{CharPosition};
+use crate::compiler::parsers::tokenizer::tokens::CharPosition;
 use crate::compiler::string_interning::StringTable;
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::{env, fs};
-use std::path::{PathBuf};
 
 // The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
@@ -522,7 +522,7 @@ macro_rules! return_wasm_validation_error {
 /// lifetime analysis. These should include clear explanations of the conflict
 /// and suggestions for resolving it.
 ///
-/// Usage: `return_borrow_checker_error!(string_table, location, "Cannot borrow '{}' as mutable because it is already borrowed", var_name)`;
+/// Usage: `return_borrow_checker_error!("Cannot borrow '{}' as mutable because it is already borrowed", location, metadata)`;
 #[macro_export]
 macro_rules! return_borrow_checker_error {
     // New with metadata
@@ -992,7 +992,9 @@ pub fn print_formatted_error(e: CompileError) {
     let relative_dir = match env::current_dir() {
         Ok(dir) => {
             // Strip the actual header at the end of the path (.header extension)
-            e.location.scope.strip_prefix(dir)
+            e.location
+                .scope
+                .strip_prefix(dir)
                 .unwrap()
                 .to_string_lossy()
                 .to_string()

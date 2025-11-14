@@ -103,7 +103,6 @@ pub fn start_cli() {
 
         Command::Dev(ref path) => {
             println!("Starting dev server...");
-
             dev_server::start_dev_server(path, &flags);
         }
 

@@ -6,7 +6,8 @@ use crate::compiler::{
     wir::build_wir::{WIR, ast_to_wir},
     wir::wir_nodes::{BorrowError, WirFunction},
 };
-use crate::{borrow_log, wir_log};
+use crate::{borrow_log, return_borrow_checker_error, wir_log};
+use crate::compiler::compiler_errors::ErrorLocation;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// WASM Intermediate Representation (WIR) with simplified borrow checking
@@ -111,30 +112,19 @@ fn convert_borrow_errors_to_compile_errors(
     borrow_errors
         .iter()
         .map(|borrow_error| {
-            // Create detailed error message with function context
-            let detailed_message = format!(
-                "Borrow checking error: {}",
-                borrow_error.message
-            );
-
             // Use the error location if available, otherwise use a default location
             let error_location = if borrow_error.primary_location
                 != TextLocation::default()
             {
-                borrow_error.primary_location.clone()
+                borrow_error.primary_location.to_error_location(&string_table)
             } else {
                 // TODO: Map program points to source locations for better error reporting
-                TextLocation::default()
+                ErrorLocation::default()
             };
 
-            // Create compile error with borrow checker error type
-            use crate::compiler::compiler_errors::ErrorType;
-            CompileError {
-                msg: detailed_message,
-                location: error_location,
-                error_type: ErrorType::BorrowChecker,
-                file_path: std::path::PathBuf::new(),
-            }
+            return_borrow_checker_error!(
+                borrow_error.message, error_location, {}
+            )
         })
         .collect()
 }

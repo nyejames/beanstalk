@@ -1,9 +1,12 @@
 use crate::build_system::build_system::BuildTarget;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages, print_compiler_messages};
+use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::string_interning::StringTable;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, build, settings};
 use colour::{blue_ln, e_red_ln, green_ln_bold, print_bold, red_ln};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use std::{
@@ -11,10 +14,8 @@ use std::{
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
 };
-use std::collections::HashMap;
-use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::string_interning::StringTable;
 
+//noinspection HttpUrlsUsage
 pub fn start_dev_server(path: &Path, flags: &[Flag]) {
     let url = "127.0.0.1:6969";
     let listener = match TcpListener::bind(url) {
@@ -43,32 +44,29 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
         Some(BuildTarget::HtmlProject),
     );
 
+    if messages.errors.is_empty() {
+        print_bold!("Dev Server created on: ");
+        green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
+    } else {
+        print_compiler_messages(messages);
+        print_bold!("Dev Server failed to build the project 😞");
+        return;
+    }
+
     // TODO: Now separately build all the runtime hooks / project structure
 
     let mut modified = SystemTime::UNIX_EPOCH;
 
-    print_bold!("Dev Server created on: ");
-    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
-
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        match handle_connection(
-            stream,
-            &path,
-            &mut modified,
-            &project_config,
-            flags
-        ) {
+        match handle_connection(stream, &path, &mut modified, &project_config, flags) {
             Ok(warnings) => {
                 for warning in warnings {
                     e_red_ln!("{:?}", warning);
                 }
             }
-            // TODO: print warnings as well
             Err(messages) => {
-                for message in messages.errors {
-                    e_red_ln!("{:?}", message);
-                }
+                print_compiler_messages(messages);
             }
         }
     }
@@ -116,7 +114,7 @@ fn handle_connection(
                             HashMap::new(),
                         ));
                         return Err(messages);
-                    },
+                    }
                 };
                 status_line = "HTTP/1.1 200 OK";
 
@@ -143,13 +141,11 @@ fn handle_connection(
                                 .with_extension(BEANSTALK_FILE_EXTENSION)
                         }
                     }
-                    None => {
-                        match get_home_page_path(path, true, project_config) {
-                            Ok(p) => p,
-                            Err(e) => {
-                                messages.errors.push(e);
-                                return Err(messages);
-                            }
+                    None => match get_home_page_path(path, true, project_config) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            messages.errors.push(e);
+                            return Err(messages);
                         }
                     },
                 };
@@ -187,16 +183,14 @@ fn handle_connection(
                         project_config,
                         false,
                         flags,
-                        Some(BuildTarget::HtmlProject)
+                        Some(BuildTarget::HtmlProject),
                     );
 
                     if build_messages.errors.is_empty() {
-
                         status_line = "HTTP/1.1 205 Reset Content";
                     } else {
                         return Err(build_messages);
                     }
-
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }
@@ -280,7 +274,7 @@ fn handle_connection(
                 path,
                 format!("Error writing response: {:?}", e),
                 // TODO: add some metadata to this error
-                HashMap::new()
+                HashMap::new(),
             ));
             Err(messages)
         }
@@ -298,7 +292,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                 // TODO: add some metadata to this error
                 HashMap::new(),
             ));
-        },
+        }
     };
 
     if path_metadata.is_dir() {
@@ -311,7 +305,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                     // TODO: add some metadata to this error
                     HashMap::new(),
                 ));
-            },
+            }
         };
 
         for entry in entries {
@@ -336,7 +330,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                         // TODO: add some metadata to this error
                         HashMap::new(),
                     ));
-                },
+                }
             };
 
             let modified_time = match meta.modified() {
@@ -347,7 +341,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                         format!("Error getting the system time for hot reloading: {:?}", e),
                         // TODO: add some metadata to this error
                         HashMap::new(),
-                    ))
+                    ));
                 }
             };
 
@@ -372,7 +366,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                     format!("Error reading the file modification time metadata: {:?}", e),
                     // TODO: add some metadata to this error
                     HashMap::new(),
-                ))
+                ));
             }
         }
     }
@@ -399,7 +393,7 @@ fn get_home_page_path(
                 format!("Error trying to read the source directory path: {:?}", e),
                 // TODO: add some metadata to this error
                 HashMap::new(),
-            ))
+            ));
         }
     };
 
@@ -440,7 +434,7 @@ fn get_home_page_path(
                     format!("Error reading the source directory file: {:?}", e),
                     // TODO: add some metadata to this error
                     HashMap::new(),
-                ))
+                ));
             }
         };
     }
@@ -450,12 +444,14 @@ fn get_home_page_path(
         None => {
             Err(CompileError::new_file_error(
                 &root_src_path,
-                format!("No page found in {:?} directory",
-                        if source_folder {
-                            &project_config.src
-                        } else {
-                            &project_config.dev_folder
-                        }),
+                format!(
+                    "No page found in {:?} directory",
+                    if source_folder {
+                        &project_config.src
+                    } else {
+                        &project_config.dev_folder
+                    }
+                ),
                 // TODO: add some metadata to this error
                 HashMap::new(),
             ))
