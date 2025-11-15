@@ -22,7 +22,6 @@ use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::{ir_log, wir_log, return_wir_transformation_error};
 use crate::compiler::compiler_errors::{ErrorLocation, ErrorType};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::wir::place::WasmType;
 pub(crate) use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Export, ExportKind, Operand, Rvalue, Statement, Terminator, WirBlock, WirFunction, WIR};
 use crate::compiler::wir::wir_nodes::ProgramPoint;
@@ -141,7 +140,7 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
     wir_log!("Transferred {} host imports to WIR", context.get_host_imports().len());
 
     // Run borrow checking on the WIR
-    run_borrow_checking_on_wir(&mut wir)?;
+    run_borrow_checking_on_wir(&mut wir, string_table)?;
 
     Ok(wir)
 }
@@ -594,6 +593,7 @@ fn convert_datatype_to_wasm_type(
 /// # Parameters
 ///
 /// - `wir`: Mutable reference to WIR containing all functions to check
+/// - `string_table`: String table for converting TextLocation to ErrorLocation
 ///
 /// # Returns
 ///
@@ -621,7 +621,10 @@ fn convert_datatype_to_wasm_type(
 /// - ARC insertion points for shared ownership
 /// - Move vs. copy decisions for value transfers
 /// - Memory layout optimization based on lifetime analysis
-fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
+fn run_borrow_checking_on_wir(
+    wir: &mut WIR,
+    string_table: &crate::compiler::string_interning::StringTable,
+) -> Result<(), CompileError> {
     for function in &mut wir.functions {
         // Ensure events are generated for all statements and terminators
         regenerate_events_for_function(function);
@@ -629,9 +632,12 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
         // Extract borrow facts from the function
         let mut extractor = BorrowFactExtractor::new();
         extractor.extract_function(function).map_err(|e| {
+            let func_name_str: &'static str = Box::leak(
+                string_table.resolve(function.name).to_string().into_boxed_str()
+            );
             CompileError::compiler_error(&format!(
                 "Failed to extract borrow facts for function '{}': {}",
-                function.name, e
+                func_name_str, e
             ))
         })?;
 
@@ -640,9 +646,12 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
 
         // Run unified borrow checking
         let borrow_results = run_unified_borrow_checking(function, &extractor).map_err(|e| {
+            let func_name_str: &'static str = Box::leak(
+                string_table.resolve(function.name).to_string().into_boxed_str()
+            );
             CompileError::compiler_error(&format!(
                 "Borrow checking failed for function '{}': {}",
-                function.name, e
+                func_name_str, e
             ))
         })?;
 
@@ -651,18 +660,15 @@ fn run_borrow_checking_on_wir(wir: &mut WIR) -> Result<(), CompileError> {
             let first_error = &borrow_results.errors[0];
             let detailed_message = format!(
                 "Borrow checking error: {}",
-                first_error.message
+                first_error.msg
             );
 
-            let error_location = if first_error.primary_location != TextLocation::default() {
-                first_error.primary_location.clone()
-            } else {
-                TextLocation::default()
-            };
+            // Use the error location from the borrow checker error
+            let error_location = first_error.location.clone();
 
             return Err(CompileError {
                 msg: detailed_message,
-                location: error_location.to_error_location(&string_table),
+                location: error_location,
                 error_type: ErrorType::BorrowChecker,
                 metadata: std::collections::HashMap::new(),
             });

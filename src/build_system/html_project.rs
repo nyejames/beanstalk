@@ -7,7 +7,7 @@ use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::runtime::io::js_bindings::JsBindingsGenerator;
 use crate::settings::Config;
-use crate::{Flag, InputModule, Project};
+use crate::{Flag, InputModule, Project, return_config_error};
 
 pub struct HtmlProjectBuilder {
     target: BuildTarget,
@@ -112,6 +112,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
         Ok(Project {
             config: config.clone(),
             output_files,
+            warnings: Vec::new(),
         })
     }
 
@@ -122,31 +123,27 @@ impl ProjectBuilder for HtmlProjectBuilder {
     fn validate_config(&self, config: &Config) -> Result<(), CompileError> {
         // Validate HTML-specific configuration
         if config.dev_folder.as_os_str().is_empty() {
-            return Err(CompileError::new_config_error(
+            return_config_error!(
                 "HTML projects require a dev_folder to be specified",
-                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                crate::compiler::compiler_errors::ErrorLocation::default(),
                 {
-                    let mut map = std::collections::HashMap::new();
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Add 'dev_folder' field to your project configuration");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::SuggestedInsertion, "dev_folder = \"dev\"");
-                    map
+                    CompilationStage => "Configuration",
+                    PrimarySuggestion => "Add 'dev_folder' field to your project configuration",
+                    SuggestedInsertion => "dev_folder = \"dev\"",
                 }
-            ));
+            );
         }
 
         if config.release_folder.as_os_str().is_empty() {
-            return Err(CompileError::new_config_error(
+            return_config_error!(
                 "HTML projects require a release_folder to be specified",
-                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                crate::compiler::compiler_errors::ErrorLocation::default(),
                 {
-                    let mut map = std::collections::HashMap::new();
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Add 'release_folder' field to your project configuration");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::SuggestedInsertion, "release_folder = \"release\"");
-                    map
+                    CompilationStage => "Configuration",
+                    PrimarySuggestion => "Add 'release_folder' field to your project configuration",
+                    SuggestedInsertion => "release_folder = \"release\"",
                 }
-            ));
+            );
         }
 
         // Check for web-specific features in config

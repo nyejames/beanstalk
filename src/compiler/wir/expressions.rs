@@ -19,11 +19,12 @@ use crate::compiler::{
     parsers::{
         ast_nodes::{AstNode, NodeKind},
         expressions::expression::{Expression, ExpressionKind},
+        tokenizer::tokens::TextLocation,
     },
+    string_interning::StringTable,
 };
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 // Error handling macros
-use crate::{return_compiler_error, return_wir_transformation_error};
+use crate::return_wir_transformation_error;
 
 /// Convert an AST expression to a WIR rvalue with supporting statements
 ///
@@ -84,9 +85,10 @@ pub fn expression_to_rvalue_with_context(
             let variable_place = context
                 .lookup_variable(var_name)
                 .ok_or_else(|| {
+                    let error_location = location.clone().to_error_location(string_table);
                     CompileError::new_rule_error(
-                        format!("Undefined variable '{}'", name),
-                        location.clone(),
+                        format!("Undefined variable '{}'", var_name),
+                        error_location,
                     )
                 })?
                 .clone();
@@ -95,7 +97,7 @@ pub fn expression_to_rvalue_with_context(
         ExpressionKind::Template(template) => {
             // Use template transformation functions from templates module
             crate::compiler::wir::templates::transform_template_to_rvalue(
-                template, location, context,
+                template, location, string_table, context,
             )
         }
         ExpressionKind::Runtime(rpn_nodes) => {
@@ -104,9 +106,10 @@ pub fn expression_to_rvalue_with_context(
         }
         _ => {
             let expr_type_str: &'static str = Box::leak(format!("{:?}", expression.kind).into_boxed_str());
+            let error_location = location.clone().to_error_location(string_table);
             return_wir_transformation_error!(
                 format!("Expression kind {:?} not yet implemented in WIR transformation", expression.kind),
-                location.clone(), {
+                error_location, {
                     FoundType => expr_type_str,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "This expression type needs to be added to the WIR lowering implementation",
@@ -246,7 +249,7 @@ pub fn evaluate_rpn_to_wir_statements(
                 // Infer result type
                 let lhs_type = operand_to_datatype(&lhs, context)?;
                 let rhs_type = operand_to_datatype(&rhs, context)?;
-                let result_type = infer_binary_operation_result_type(&lhs_type, &rhs_type, op)?;
+                let result_type = infer_binary_operation_result_type(&lhs_type, &rhs_type, op, location, string_table)?;
 
                 // Create temporary for result
                 let result_place = context.create_temporary_place(&result_type);
@@ -259,7 +262,7 @@ pub fn evaluate_rpn_to_wir_statements(
                     Rvalue::StringConcat(lhs, rhs)
                 } else {
                     // Regular binary operation
-                    let wir_op = ast_operator_to_wir_binop(op)?;
+                    let wir_op = ast_operator_to_wir_binop(op, location, string_table)?;
                     Rvalue::BinaryOp(wir_op, lhs, rhs)
                 };
 
@@ -354,6 +357,8 @@ fn operand_to_datatype(
 /// # Parameters
 ///
 /// - `op`: AST operator to convert
+/// - `location`: Source location for error reporting
+/// - `string_table`: String table for error location conversion
 ///
 /// # Returns
 ///
@@ -361,6 +366,8 @@ fn operand_to_datatype(
 /// - `Err(CompileError)`: Unsupported operator error
 fn ast_operator_to_wir_binop(
     op: &crate::compiler::parsers::expressions::expression::Operator,
+    location: &TextLocation,
+    string_table: &StringTable,
 ) -> Result<BinOp, CompileError> {
     use crate::compiler::parsers::expressions::expression::Operator;
 
@@ -387,9 +394,10 @@ fn ast_operator_to_wir_binop(
         // Unsupported operators
         _ => {
             let op_str: &'static str = Box::leak(format!("{:?}", op).into_boxed_str());
+            let error_location = location.clone().to_error_location(string_table);
             return_wir_transformation_error!(
                 format!("Operator {:?} not yet supported in WIR transformation", op),
-                TextLocation::default(), {
+                error_location, {
                     FoundType => op_str,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "This operator needs to be added to the WIR binary operation mapping",
@@ -417,6 +425,8 @@ fn ast_operator_to_wir_binop(
 /// - `lhs_type`: Type of left operand
 /// - `rhs_type`: Type of right operand
 /// - `op`: Binary operator
+/// - `location`: Source location for error reporting
+/// - `string_table`: String table for error location conversion
 ///
 /// # Returns
 ///
@@ -426,6 +436,8 @@ fn infer_binary_operation_result_type(
     lhs_type: &DataType,
     rhs_type: &DataType,
     op: &crate::compiler::parsers::expressions::expression::Operator,
+    location: &TextLocation,
+    string_table: &StringTable,
 ) -> Result<DataType, CompileError> {
     use crate::compiler::parsers::expressions::expression::Operator;
 
@@ -464,9 +476,10 @@ fn infer_binary_operation_result_type(
         // Unsupported operators
         _ => {
             let op_str: &'static str = Box::leak(format!("{:?}", op).into_boxed_str());
+            let error_location = location.clone().to_error_location(string_table);
             return_wir_transformation_error!(
                 format!("Operator {:?} not supported for type inference", op),
-                TextLocation::default(), {
+                error_location, {
                     FoundType => op_str,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "This operator needs type inference rules to be implemented",

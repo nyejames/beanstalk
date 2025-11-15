@@ -7,7 +7,6 @@
 use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
 use crate::compiler::datatypes::DataType;
 
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::wir::{
     place::{Place, PlaceManager},
     wir_nodes::{Operand, WirFunction},

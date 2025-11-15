@@ -4,11 +4,9 @@ use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::{
     compiler_errors::CompileError,
     wir::build_wir::{WIR, ast_to_wir},
-    wir::wir_nodes::{BorrowError, WirFunction},
+    wir::wir_nodes::WirFunction,
 };
-use crate::{borrow_log, return_borrow_checker_error, wir_log};
-use crate::compiler::compiler_errors::ErrorLocation;
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::{borrow_log, wir_log};
 
 /// WASM Intermediate Representation (WIR) with simplified borrow checking
 ///
@@ -83,11 +81,9 @@ fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<Comp
             ))]
         })?;
 
-    // Step 3: Convert borrow errors to compile errors
+    // Step 3: Return borrow errors if any were detected
     if !borrow_results.errors.is_empty() {
-        let compile_errors =
-            convert_borrow_errors_to_compile_errors(&borrow_results.errors, function.id);
-        return Err(compile_errors);
+        return Err(borrow_results.errors);
     }
 
     // Log successful borrow checking for debugging
@@ -100,31 +96,4 @@ fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<Comp
     Ok(())
 }
 
-/// Convert borrow errors to compile errors with proper error types and locations
-///
-/// This function transforms borrow checker errors into the compiler's standard
-/// error format, preserving source location information and providing helpful
-/// error messages that explain Beanstalk's memory model.
-fn convert_borrow_errors_to_compile_errors(
-    borrow_errors: &[BorrowError],
-    function_id: u32,
-) -> Vec<CompileError> {
-    borrow_errors
-        .iter()
-        .map(|borrow_error| {
-            // Use the error location if available, otherwise use a default location
-            let error_location = if borrow_error.primary_location
-                != TextLocation::default()
-            {
-                borrow_error.primary_location.to_error_location(&string_table)
-            } else {
-                // TODO: Map program points to source locations for better error reporting
-                ErrorLocation::default()
-            };
 
-            return_borrow_checker_error!(
-                borrow_error.message, error_location, {}
-            )
-        })
-        .collect()
-}

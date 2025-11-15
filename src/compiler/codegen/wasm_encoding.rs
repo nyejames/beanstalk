@@ -40,7 +40,7 @@ use crate::compiler::wir::wir_nodes::{
     WirFunction,
 };
 use crate::{
-    return_compiler_error, return_wasm_validation_error,
+    return_compiler_error,
     return_wasm_generation_error,
 };
 use std::collections::{HashMap, HashSet};
@@ -1654,10 +1654,11 @@ impl WasmModule {
             param_types,
             result_types,
             local_map,
+            string_table,
         )?;
 
         // Finalize function registration
-        self.finalize_function_registration(wir_function, function);
+        self.finalize_function_registration(wir_function, function, string_table);
 
         Ok(())
     }
@@ -1702,6 +1703,7 @@ impl WasmModule {
         param_types: Vec<ValType>,
         result_types: Vec<ValType>,
         local_map: LocalMap,
+        string_table: &StringTable,
     ) -> Result<Function, CompileError> {
         // Analyze local variable requirements for wasm_locals
         let analyzer = LocalAnalyzer::analyze_function(wir_function);
@@ -1753,7 +1755,7 @@ impl WasmModule {
     }
 
     /// Finalize function registration and add to module
-    fn finalize_function_registration(&mut self, wir_function: &WirFunction, function: Function) {
+    fn finalize_function_registration(&mut self, wir_function: &WirFunction, function: Function, string_table: &StringTable) {
         // Generate enhanced metadata for named returns and references
         let metadata = self.generate_function_metadata(wir_function, string_table);
 
@@ -2356,10 +2358,9 @@ impl WasmModule {
                         }
                     }
                     _ => {
-                        return_unimplemented_feature_error!(
-                            &format!("Memory operation '{:?}'", op),
-                            None,
-                            Some("use basic memory operations for now")
+                        return_compiler_error!(
+                            "Memory operation '{:?}' not yet implemented - use basic memory operations for now",
+                            op
                         );
                     }
                 }
@@ -2553,7 +2554,7 @@ impl WasmModule {
         local_map: &LocalMap,
         registry: &HostFunctionRegistry,
     ) -> Result<(), CompileError> {
-        use RuntimeFunctionMapping;
+        use crate::compiler::host_functions::registry::RuntimeFunctionMapping;
 
         // Get runtime-specific mapping
         match registry.get_runtime_mapping(&host_function.name) {
@@ -4329,7 +4330,7 @@ impl WasmModule {
         host_func: &HostFunctionDef,
         registry: &HostFunctionRegistry,
     ) -> Result<(String, String), CompileError> {
-        use {RuntimeBackend, RuntimeFunctionMapping};
+        use crate::compiler::host_functions::registry::{RuntimeBackend, RuntimeFunctionMapping};
 
         // Get the runtime mapping based on current backend
         match registry.get_runtime_mapping(&host_func.name) {
@@ -4675,12 +4676,9 @@ impl WasmModule {
                 Self::unified_datatype_to_wasm_type(data_type)
             }
             _ => {
-                return_unimplemented_feature_error!(
-                    &format!("DataType '{:?}' in host function signatures", data_type),
-                    None,
-                    Some(
-                        "use basic types (Int, Float, Bool, String) for host function parameters and return values"
-                    )
+                return_compiler_error!(
+                    "DataType '{:?}' in host function signatures not yet implemented - use basic types (Int, Float, Bool, String) for host function parameters and return values",
+                    data_type
                 );
             }
         }
@@ -5776,7 +5774,7 @@ impl WasmModule {
         local_map: &LocalMap,
         registry: &HostFunctionRegistry,
     ) -> Result<(), CompileError> {
-        use RuntimeFunctionMapping;
+        use crate::compiler::host_functions::registry::RuntimeFunctionMapping;
 
         // Get runtime-specific mapping
         match registry.get_runtime_mapping(&host_function.name) {

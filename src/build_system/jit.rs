@@ -47,6 +47,7 @@ impl ProjectBuilder for JitProjectBuilder {
                 Ok(Project {
                     config: config.clone(),
                     output_files: vec![],
+                    warnings: compilation_result.warnings,
                 })
             },
             Err(e) => Err(CompilerMessages {

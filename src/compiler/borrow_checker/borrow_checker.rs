@@ -1,16 +1,107 @@
+//! # Unified Borrow Checker
+//!
+//! This module implements Polonius-style borrow checking for the Beanstalk compiler.
+//! It ensures memory safety by detecting borrow conflicts, use-after-move errors,
+//! and move-while-borrowed violations at compile time.
+//!
+//! ## Architecture
+//!
+//! The borrow checker uses a unified forward dataflow analysis that combines:
+//! - **Liveness Analysis**: Tracks which variables are live at each program point
+//! - **Loan Tracking**: Tracks active borrows (loans) through the program
+//! - **Move Tracking**: Tracks which values have been moved
+//! - **Conflict Detection**: Detects borrow conflicts immediately during analysis
+//!
+//! ## Error Handling
+//!
+//! The borrow checker creates [`CompileError`] instances directly using error macros
+//! from `compiler_errors.rs`. All errors include:
+//! - Precise error locations (when available)
+//! - Structured metadata for LLM/LSP integration
+//! - Helpful suggestions for resolving conflicts
+//! - Lifetime hints explaining the borrow rules
+//!
+//! ### Error Creation Pattern
+//!
+//! ```rust
+//! // Multiple mutable borrows
+//! let error = create_multiple_mutable_borrows_error!(
+//!     place,
+//!     existing_location,
+//!     new_location
+//! );
+//! self.errors.push(error);
+//!
+//! // Shared/mutable conflict
+//! let error = create_shared_mutable_conflict_error!(
+//!     place,
+//!     existing_kind,
+//!     new_kind,
+//!     existing_location,
+//!     new_location
+//! );
+//! self.errors.push(error);
+//!
+//! // Use after move
+//! let error = create_use_after_move_error!(
+//!     place,
+//!     move_location,
+//!     use_location
+//! );
+//! self.errors.push(error);
+//!
+//! // Move while borrowed
+//! let error = create_move_while_borrowed_error!(
+//!     place,
+//!     borrow_kind,
+//!     borrow_location,
+//!     move_location
+//! );
+//! self.errors.push(error);
+//! ```
+//!
+//! ## Location Tracking
+//!
+//! Currently, WIR doesn't track source locations for performance reasons. To add
+//! proper location tracking:
+//!
+//! 1. Add `location: TextLocation` field to `Loan` struct in `wir_nodes.rs`
+//! 2. Populate it during WIR generation in `build_wir.rs`
+//! 3. Convert to `ErrorLocation` using `text_location.to_error_location(string_table)`
+//!
+//! For now, errors use default locations but still provide helpful error messages
+//! with variable names and conflict descriptions.
+//!
+//! ## Borrow Checking Rules
+//!
+//! The checker enforces Beanstalk's memory safety rules:
+//! - **Multiple Shared Borrows**: ✅ Allowed
+//! - **Shared + Mutable**: ❌ Conflict
+//! - **Multiple Mutable**: ❌ Conflict
+//! - **Move While Borrowed**: ❌ Error
+//! - **Use After Move**: ❌ Error
+//!
+//! ## Performance
+//!
+//! The unified checker processes each program point once in forward order,
+//! combining all analyses for efficiency. Statistics are tracked for monitoring:
+//! - Program points processed
+//! - Conflicts detected
+//! - Time spent in each phase
+
 // Optimized imports - consolidated for better maintainability and reduced compilation overhead
 use crate::compiler::{
+    compiler_errors::{CompileError, ErrorLocation},
     wir::{
         place::Place,
         wir_nodes::{
-            BorrowError, BorrowErrorType, WirFunction, ProgramPoint, 
+            WirFunction, ProgramPoint, 
             Loan, LoanId, BorrowKind, PlaceState
         },
     },
 };
 use std::collections::{HashMap, HashSet};
 use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtractor, StateMapping};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Unified borrow checker that combines liveness, loan tracking, and conflict detection.
 ///
@@ -65,9 +156,9 @@ pub struct UnifiedBorrowChecker {
     /// Total number of loans (for bitset sizing)
     loan_count: usize,
     /// Detected borrow errors
-    errors: Vec<BorrowError>,
+    errors: Vec<CompileError>,
     /// Detected warnings
-    warnings: Vec<BorrowError>,
+    warnings: Vec<CompileError>,
     /// Statistics for performance monitoring
     statistics: UnifiedStatistics,
 }
@@ -92,9 +183,9 @@ pub struct UnifiedStatistics {
 #[derive(Debug)]
 pub struct UnifiedBorrowCheckResults {
     /// All detected errors (critical)
-    pub errors: Vec<BorrowError>,
+    pub errors: Vec<CompileError>,
     /// All detected warnings
-    pub warnings: Vec<BorrowError>,
+    pub warnings: Vec<CompileError>,
     /// Performance statistics
     pub statistics: UnifiedStatistics,
 }
@@ -570,11 +661,19 @@ impl UnifiedBorrowChecker {
             for used_place in &events.uses {
                 for moved_place in moved_places {
                     if may_alias(used_place, moved_place) {
-                        // Use the helper method for cleaner error creation
-                        let error = BorrowError::use_after_move(
+                        // NOTE: WIR currently doesn't track source locations for performance.
+                        // To add proper location tracking:
+                        // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+                        // 2. Populate it during WIR generation in build_wir.rs
+                        // 3. Use `location.to_error_location(string_table)` here
+                        // For now, using default locations which still provide helpful error messages.
+                        let move_location = ErrorLocation::default();
+                        let use_location = ErrorLocation::default();
+                        
+                        let error = crate::create_use_after_move_error!(
                             used_place.clone(),
-                            TextLocation::default(), // TODO: Track actual move location
-                            TextLocation::default(),
+                            move_location,
+                            use_location
                         );
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -664,23 +763,32 @@ impl UnifiedBorrowChecker {
         _point: ProgramPoint,
         loan_a: &Loan,
         loan_b: &Loan,
-    ) -> BorrowError {
-        // Use the builder pattern for cleaner error creation
+    ) -> CompileError {
+        // NOTE: WIR currently doesn't track source locations for performance.
+        // To add proper location tracking:
+        // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+        // 2. Populate it during WIR generation in build_wir.rs
+        // 3. Use `loan_a.location.to_error_location(string_table)` here
+        // For now, using default locations which still provide helpful error messages.
+        let existing_location = ErrorLocation::default();
+        let new_location = ErrorLocation::default();
+        
+        // Use the error macros for cleaner error creation
         match (&loan_a.kind, &loan_b.kind) {
             (BorrowKind::Mut, BorrowKind::Mut) => {
-                BorrowError::multiple_mutable_borrows(
+                crate::create_multiple_mutable_borrows_error!(
                     loan_a.owner.clone(),
-                    TextLocation::default(),
-                    TextLocation::default(),
+                    existing_location,
+                    new_location
                 )
             }
             _ => {
-                BorrowError::shared_mutable_conflict(
+                crate::create_shared_mutable_conflict_error!(
                     loan_a.owner.clone(),
                     loan_a.kind.clone(),
                     loan_b.kind.clone(),
-                    TextLocation::default(),
-                    TextLocation::default(),
+                    existing_location,
+                    new_location
                 )
             }
         }
@@ -692,13 +800,22 @@ impl UnifiedBorrowChecker {
         _point: ProgramPoint,
         moved_place: Place,
         loan: &Loan,
-    ) -> BorrowError {
-        // Use the helper method for cleaner error creation
-        BorrowError::move_while_borrowed(
+    ) -> CompileError {
+        // NOTE: WIR currently doesn't track source locations for performance.
+        // To add proper location tracking:
+        // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+        // 2. Populate it during WIR generation in build_wir.rs
+        // 3. Use `loan.location.to_error_location(string_table)` here
+        // For now, using default locations which still provide helpful error messages.
+        let borrow_location = ErrorLocation::default();
+        let move_location = ErrorLocation::default();
+        
+        // Use the error macro for cleaner error creation
+        crate::create_move_while_borrowed_error!(
             moved_place,
             loan.kind.clone(),
-            TextLocation::default(),
-            TextLocation::default(),
+            borrow_location,
+            move_location
         )
     }
 
@@ -866,11 +983,20 @@ impl UnifiedBorrowChecker {
                     }
                     
                     if has_conflicting_mutable_borrow {
-                        // Use the helper method for cleaner error creation
-                        let error = BorrowError::multiple_mutable_borrows(
+                        // NOTE: WIR currently doesn't track source locations for performance.
+                        // To add proper location tracking:
+                        // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+                        // 2. Populate it during WIR generation in build_wir.rs
+                        // 3. Use `loan.location.to_error_location(string_table)` here
+                        // For now, using default locations which still provide helpful error messages.
+                        let existing_location = ErrorLocation::default();
+                        let new_location = ErrorLocation::default();
+                        
+                        // Use the error macro for cleaner error creation
+                        let error = crate::create_multiple_mutable_borrows_error!(
                             loan.owner.clone(),
-                            TextLocation::default(),
-                            TextLocation::default(),
+                            existing_location,
+                            new_location
                         );
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -896,24 +1022,42 @@ impl UnifiedBorrowChecker {
                 match (&loan.kind, current_state) {
                     // Trying to create mutable borrow when place is already shared
                     (BorrowKind::Mut, PlaceState::Referenced) => {
-                        let error = BorrowError::shared_mutable_conflict(
+                        // NOTE: WIR currently doesn't track source locations for performance.
+                        // To add proper location tracking:
+                        // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+                        // 2. Populate it during WIR generation in build_wir.rs
+                        // 3. Use `loan.location.to_error_location(string_table)` here
+                        // For now, using default locations which still provide helpful error messages.
+                        let existing_location = ErrorLocation::default();
+                        let new_location = ErrorLocation::default();
+                        
+                        let error = crate::create_shared_mutable_conflict_error!(
                             loan.owner.clone(),
                             BorrowKind::Shared,
                             BorrowKind::Mut,
-                            TextLocation::default(),
-                            TextLocation::default(),
+                            existing_location,
+                            new_location
                         );
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
                     }
                     // Trying to create shared borrow when place is already mutably borrowed
                     (BorrowKind::Shared, PlaceState::Borrowed) => {
-                        let error = BorrowError::shared_mutable_conflict(
+                        // NOTE: WIR currently doesn't track source locations for performance.
+                        // To add proper location tracking:
+                        // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+                        // 2. Populate it during WIR generation in build_wir.rs
+                        // 3. Use `loan.location.to_error_location(string_table)` here
+                        // For now, using default locations which still provide helpful error messages.
+                        let existing_location = ErrorLocation::default();
+                        let new_location = ErrorLocation::default();
+                        
+                        let error = crate::create_shared_mutable_conflict_error!(
                             loan.owner.clone(),
                             BorrowKind::Mut,
                             BorrowKind::Shared,
-                            TextLocation::default(),
-                            TextLocation::default(),
+                            existing_location,
+                            new_location
                         );
                         self.errors.push(error);
                         self.statistics.conflicts_detected += 1;
@@ -938,11 +1082,20 @@ impl UnifiedBorrowChecker {
         for used_place in &events.uses {
             let current_state = state_mapping.get_place_state(used_place);
             if current_state == PlaceState::Moved {
-                // Use the helper method for cleaner error creation
-                let error = BorrowError::use_after_move(
+                // NOTE: WIR currently doesn't track source locations for performance.
+                // To add proper location tracking:
+                // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+                // 2. Populate it during WIR generation in build_wir.rs
+                // 3. Track move locations in state_mapping and use them here
+                // For now, using default locations which still provide helpful error messages.
+                let move_location = ErrorLocation::default();
+                let use_location = ErrorLocation::default();
+                
+                // Use the error macro for cleaner error creation
+                let error = crate::create_use_after_move_error!(
                     used_place.clone(),
-                    TextLocation::default(), // TODO: Track actual move location
-                    TextLocation::default(),
+                    move_location,
+                    use_location
                 );
                 self.errors.push(error);
                 self.statistics.conflicts_detected += 1;
@@ -970,12 +1123,21 @@ impl UnifiedBorrowChecker {
                     _ => BorrowKind::Shared, // Default fallback
                 };
                 
-                // Use the helper method for cleaner error creation
-                let error = BorrowError::move_while_borrowed(
+                // NOTE: WIR currently doesn't track source locations for performance.
+                // To add proper location tracking:
+                // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
+                // 2. Populate it during WIR generation in build_wir.rs
+                // 3. Track borrow and move locations in state_mapping and use them here
+                // For now, using default locations which still provide helpful error messages.
+                let borrow_location = ErrorLocation::default();
+                let move_location = ErrorLocation::default();
+                
+                // Use the error macro for cleaner error creation
+                let error = crate::create_move_while_borrowed_error!(
                     moved_place.clone(),
                     borrow_kind,
-                    TextLocation::default(),
-                    TextLocation::default(),
+                    borrow_location,
+                    move_location
                 );
                 self.errors.push(error);
                 self.statistics.conflicts_detected += 1;

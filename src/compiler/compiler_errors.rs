@@ -1,6 +1,139 @@
+//! # Compiler Error Handling System
+//!
+//! This module provides a unified error handling system for the Beanstalk compiler.
+//! All error types are consolidated here with structured metadata for LLM and LSP integration.
+//!
+//! ## Architecture
+//!
+//! The error system is built around three core types:
+//! - [`CompileError`]: The unified error type with owned data and structured metadata
+//! - [`ErrorLocation`]: Owned location information without string interning dependencies
+//! - [`ErrorMetaDataKey`]: Structured metadata keys for intelligent error analysis
+//!
+//! ## Error Types
+//!
+//! The compiler uses different error types for different failure categories:
+//! - **Syntax**: Malformed code that doesn't follow language syntax rules
+//! - **Type**: Type system violations and mismatches
+//! - **Rule**: Semantic errors like undefined variables or scope violations
+//! - **BorrowChecker**: Memory safety violations detected during lifetime analysis
+//! - **WirTransformation**: Failures during AST to WIR conversion (compiler bugs)
+//! - **WasmGeneration**: Failures during WIR to WASM codegen (compiler bugs)
+//! - **Compiler**: Internal compiler bugs (not user's fault)
+//! - **File**: File system errors
+//! - **Config**: Configuration file issues
+//! - **DevServer**: Development server issues
+//!
+//! ## Error Creation Macros
+//!
+//! The module provides convenient macros for creating errors with consistent patterns:
+//!
+//! ### User-Facing Errors
+//! - [`return_syntax_error!`]: For syntax violations in user code
+//! - [`return_type_error!`]: For type system violations
+//! - [`return_rule_error!`]: For semantic rule violations
+//! - [`return_borrow_checker_error!`]: For memory safety violations
+//!
+//! ### Compiler Bug Errors
+//! - [`return_compiler_error!`]: For internal compiler bugs
+//! - [`return_wir_transformation_error!`]: For WIR transformation failures
+//! - [`return_wasm_generation_error!`]: For WASM generation failures
+//!
+//! ### Specialized Borrow Checker Errors
+//! - [`create_multiple_mutable_borrows_error!`]: Multiple mutable borrow conflicts
+//! - [`create_shared_mutable_conflict_error!`]: Shared/mutable borrow conflicts
+//! - [`create_use_after_move_error!`]: Use after move violations
+//! - [`create_move_while_borrowed_error!`]: Move while borrowed violations
+//!
+//! ## Usage Examples
+//!
+//! ### Basic Error Creation
+//! ```rust
+//! // Syntax error with metadata
+//! return_syntax_error!(
+//!     "Expected ';' after statement",
+//!     location,
+//!     {
+//!         CompilationStage => "Parsing",
+//!         PrimarySuggestion => "Add a semicolon at the end of the statement"
+//!     }
+//! );
+//!
+//! // Simple error without metadata
+//! return_type_error!("Cannot add Int and String", location);
+//! ```
+//!
+//! ### Borrow Checker Errors
+//! ```rust
+//! // Multiple mutable borrows
+//! let error = create_multiple_mutable_borrows_error!(
+//!     place,
+//!     existing_location,
+//!     new_location
+//! );
+//! errors.push(error);
+//!
+//! // Or return immediately
+//! return_multiple_mutable_borrows_error!(place, existing_loc, new_loc);
+//! ```
+//!
+//! ### ErrorLocation Conversion
+//! ```rust
+//! // Convert from TextLocation (used in frontend)
+//! let error_location = text_location.to_error_location(string_table);
+//!
+//! // Use in error creation
+//! return_wir_transformation_error!(
+//!     format!("Cannot transform expression type {:?}", expr_type),
+//!     error_location,
+//!     {
+//!         CompilationStage => "WIR Transformation",
+//!         PrimarySuggestion => "This is a compiler bug - please report it"
+//!     }
+//! );
+//! ```
+//!
+//! ## Design Principles
+//!
+//! ### No StringTable Dependencies
+//! All error types use owned `String` and `PathBuf` data, eliminating the need to pass
+//! `StringTable` through the call stack. This simplifies error propagation and allows
+//! errors to be created and returned without additional context.
+//!
+//! ### Structured Metadata
+//! Errors include structured metadata via `ErrorMetaDataKey` for:
+//! - LLM integration: Enables intelligent code suggestions and fixes
+//! - LSP integration: Provides rich IDE diagnostics
+//! - User experience: Offers helpful suggestions and context
+//!
+//! ### Consistent Patterns
+//! All error macros follow consistent patterns:
+//! - Simple form: `macro!(message, location)`
+//! - Detailed form: `macro!(message, location, { metadata })`
+//! - Returning vs non-returning variants for flexibility
+//!
+//! ## Error Flow Through Compilation Pipeline
+//!
+//! ```text
+//! Source Code
+//!     ↓
+//! Tokenizer → Syntax Errors
+//!     ↓
+//! Parser → Syntax/Rule Errors
+//!     ↓
+//! AST Builder → Type/Rule Errors
+//!     ↓
+//! WIR Builder → WirTransformation Errors
+//!     ↓
+//! Borrow Checker → BorrowChecker Errors
+//!     ↓
+//! WASM Codegen → WasmGeneration Errors
+//!     ↓
+//! CompilerMessages (aggregated errors and warnings)
+//! ```
+
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
 use crate::compiler::parsers::tokenizer::tokens::CharPosition;
-use crate::compiler::string_interning::StringTable;
 use colour::{
     e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
 };
@@ -24,7 +157,7 @@ impl CompilerMessages {
     }
 }
 
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq, Clone)]
 pub enum ErrorMetaDataKey {
     VariableName,
     CompilationStage,
@@ -74,7 +207,7 @@ impl ErrorLocation {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CompileError {
     pub msg: String,
 
@@ -229,7 +362,7 @@ impl CompileError {
 // Adds more information to the CompileError
 // So it knows the file path (possible specific part of the line soon)
 // And the type of error
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum ErrorType {
     Syntax,
     Type,
@@ -868,24 +1001,54 @@ macro_rules! return_wir_transformation_error {
 /// WASM generation errors indicate failures during WIR to WASM codegen.
 /// These are typically compiler bugs in the WASM lowering or module generation.
 ///
-/// Usage: `return_wasm_generation_error!(format!("Failed to generate WASM export for function '{}'", func_name), location, { CompilationStage => "WASM Generation" })`;
+/// # Usage Examples
+///
+/// With metadata:
+/// ```ignore
+/// return_wasm_generation_error!(
+///     format!("Failed to generate WASM export for function '{}'", func_name),
+///     location,
+///     {
+///         CompilationStage => "WASM Generation",
+///         PrimarySuggestion => "This is a compiler bug - please report it"
+///     }
+/// );
+/// ```
+///
+/// Simple version without metadata:
+/// ```ignore
+/// return_wasm_generation_error!(
+///     "WASM validation failed",
+///     location
+/// );
+/// ```
 #[macro_export]
 macro_rules! return_wasm_generation_error {
+    // With metadata
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err(CompileError {
-            msg: $string_table.intern($msg),
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
             location: $location,
-            error_type: crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
             metadata: {
                 let mut map = std::collections::HashMap::new();
                 $(
                     map.insert(
-                        crate::compiler::compiler_errors::ErrorMetaDataKey::$key,
+                        $crate::compiler::compiler_errors::ErrorMetaDataKey::$key,
                         $value
                     );
                 )*
                 map
             },
+        })
+    };
+    // Simple version without metadata
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompileError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
         })
     };
 }

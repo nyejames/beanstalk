@@ -7,7 +7,7 @@ use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::Config;
-use crate::{Flag, InputModule, OutputFile, Project};
+use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
 
 pub struct EmbeddedProjectBuilder {
     target: BuildTarget,
@@ -171,6 +171,7 @@ auto_reload = true
         Ok(Project {
             config: config.clone(),
             output_files,
+            warnings: compilation_result.warnings,
         })
     }
 
@@ -200,17 +201,15 @@ auto_reload = true
 
         // Embedded projects should have a clear module name
         if config.name.is_empty() {
-            return Err(CompileError::new_config_error(
+            return_config_error!(
                 "Embedded projects require a project_name to be specified",
-                crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
+                crate::compiler::compiler_errors::ErrorLocation::default(),
                 {
-                    let mut map = std::collections::HashMap::new();
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Add 'name' field to your project configuration");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::SuggestedInsertion, "name = \"my_module\"");
-                    map
+                    CompilationStage => "Configuration",
+                    PrimarySuggestion => "Add 'name' field to your project configuration",
+                    SuggestedInsertion => "name = \"my_module\"",
                 }
-            ));
+            );
         }
 
         Ok(())

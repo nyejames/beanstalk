@@ -106,9 +106,10 @@ pub fn transform_ast_node_to_wir(
         }
         _ => {
             let node_type_str: &'static str = Box::leak(format!("{:?}", node.kind).into_boxed_str());
+            let error_location = node.location.clone().to_error_location(string_table);
             return_wir_transformation_error!(
                 format!("AST node type {:?} not yet implemented in WIR transformation", node.kind),
-                node.location.clone(), {
+                error_location, {
                     FoundType => node_type_str,
                     CompilationStage => "WIR Generation",
                     PrimarySuggestion => "This language feature needs WIR lowering support to be added to the compiler",
@@ -172,7 +173,20 @@ fn ast_mutation_to_wir(
     let place = context
         .lookup_variable(name)
         .ok_or_else(|| {
-            CompileError::new_rule_error(format!("Undefined variable '{}'", name), location.clone())
+            let error_location = location.clone().to_error_location(string_table);
+            let name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
+            CompileError {
+                msg: format!("Undefined variable '{}' in mutation", name),
+                location: error_location,
+                error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
+                metadata: {
+                    let mut map = std::collections::HashMap::new();
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, name_static);
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before attempting to mutate it");
+                    map
+                },
+            }
         })?
         .clone();
 
@@ -189,10 +203,20 @@ fn ast_mutation_to_wir(
                 let source_place = context
                     .lookup_variable(resolved_var_name)
                     .ok_or_else(|| {
-                        CompileError::new_rule_error(
-                            format!("Undefined variable '{}'", resolved_var_name),
-                            location.clone(),
-                        )
+                        let error_location = location.clone().to_error_location(string_table);
+                        let var_name_static: &'static str = Box::leak(resolved_var_name.to_string().into_boxed_str());
+                        CompileError {
+                            msg: format!("Undefined variable '{}' in mutable borrow", resolved_var_name),
+                            location: error_location,
+                            error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
+                            metadata: {
+                                let mut map = std::collections::HashMap::new();
+                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, var_name_static);
+                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a mutable borrow");
+                                map
+                            },
+                        }
                     })?
                     .clone();
 
@@ -221,10 +245,20 @@ fn ast_mutation_to_wir(
                 let source_place = context
                     .lookup_variable(resolved_var_name)
                     .ok_or_else(|| {
-                        CompileError::new_rule_error(
-                            format!("Undefined variable '{}'", resolved_var_name),
-                            location.clone(),
-                        )
+                        let error_location = location.clone().to_error_location(string_table);
+                        let var_name_static: &'static str = Box::leak(resolved_var_name.to_string().into_boxed_str());
+                        CompileError {
+                            msg: format!("Undefined variable '{}' in shared borrow", resolved_var_name),
+                            location: error_location,
+                            error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
+                            metadata: {
+                                let mut map = std::collections::HashMap::new();
+                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, var_name_static);
+                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a shared borrow");
+                                map
+                            },
+                        }
                     })?
                     .clone();
 

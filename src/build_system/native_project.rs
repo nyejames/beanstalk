@@ -47,6 +47,7 @@ impl ProjectBuilder for NativeProjectBuilder {
         Ok(Project {
             config: config.clone(),
             output_files,
+            warnings: compilation_result.warnings,
         })
     }
 

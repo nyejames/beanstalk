@@ -62,6 +62,73 @@
 //! // WIR is now ready for direct WASM lowering
 //! ```
 //!
+//! ## Error Handling
+//!
+//! The WIR transformation uses the unified error system from `compiler_errors.rs`:
+//!
+//! ### WIR Transformation Errors
+//!
+//! Use `return_wir_transformation_error!` for transformation failures:
+//!
+//! ```rust
+//! // With metadata
+//! return_wir_transformation_error!(
+//!     format!("Cannot transform expression type {:?}", expr_type),
+//!     error_location,
+//!     {
+//!         CompilationStage => "WIR Transformation",
+//!         PrimarySuggestion => "This is a compiler bug - please report it"
+//!     }
+//! );
+//!
+//! // Simple version
+//! return_wir_transformation_error!(
+//!     "Unsupported AST node type",
+//!     error_location
+//! );
+//! ```
+//!
+//! ### ErrorLocation Conversion
+//!
+//! WIR modules use `TextLocation` which must be converted to `ErrorLocation`:
+//!
+//! ```rust
+//! // Convert TextLocation to ErrorLocation
+//! let error_location = text_location.to_error_location(string_table);
+//!
+//! // Use in error creation
+//! return_wir_transformation_error!(message, error_location, { metadata });
+//! ```
+//!
+//! ### Error Handling Pattern
+//!
+//! All WIR transformation functions return `Result<T, CompileError>`:
+//!
+//! ```rust
+//! pub fn transform_ast_node_to_wir(
+//!     node: &AstNode,
+//!     context: &mut WirContext,
+//! ) -> Result<Vec<Statement>, CompileError> {
+//!     match node.node_type {
+//!         AstNodeType::Supported => {
+//!             // Transform successfully
+//!             Ok(statements)
+//!         }
+//!         AstNodeType::Unsupported => {
+//!             // Return error with helpful message
+//!             return_wir_transformation_error!(
+//!                 format!("Unsupported node type: {:?}", node.node_type),
+//!                 node.location.to_error_location(context.string_table),
+//!                 {
+//!                     CompilationStage => "WIR Transformation",
+//!                     PrimarySuggestion => "This feature is not yet implemented"
+//!                 }
+//!             )
+//!         }
+//!     }
+//! }
+//! ```
+//!
 //! ## Memory Safety Guarantees
 //!
 //! The WIR ensures memory safety through:

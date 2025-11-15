@@ -4,7 +4,6 @@ use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::wir::wir_nodes::ExportKind;
 use crate::{return_compiler_error, return_wasm_generation_error};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
 
 /// Basic WASM validation using wasmparser
@@ -119,9 +118,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> R
     let memory_info = &wir.type_info.memory_info;
     if memory_info.initial_pages > 65536 {
         return_wasm_generation_error!(
-            string_table,
-            TextLocation::default(),
-            &format!("WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).", memory_info.initial_pages),
+            format!("WIR specifies {} initial pages, but WASM maximum is 65536 pages (4GB).", memory_info.initial_pages),
+            ErrorLocation::default(),
             {
                 CompilationStage => "WASM Generation",
                 PrimarySuggestion => "Reduce the initial memory pages to 65536 or less",
@@ -132,9 +130,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> R
     if let Some(max_pages) = memory_info.max_pages {
         if max_pages > 65536 {
             return_wasm_generation_error!(
-                string_table,
-                TextLocation::default(),
-                &format!("WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).", max_pages),
+                format!("WIR specifies {} max pages, but WASM maximum is 65536 pages (4GB).", max_pages),
+                ErrorLocation::default(),
                 {
                     CompilationStage => "WASM Generation",
                     PrimarySuggestion => "Reduce the maximum memory pages to 65536 or less",
@@ -145,9 +142,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> R
         // Check that max pages is not less than initial pages
         if max_pages < memory_info.initial_pages {
             return_wasm_generation_error!(
-                string_table,
-                TextLocation::default(),
-                &format!("WIR memory max pages ({}) is less than initial pages ({}). Maximum memory pages must be greater than or equal to initial pages.", max_pages, memory_info.initial_pages),
+                format!("WIR memory max pages ({}) is less than initial pages ({}). Maximum memory pages must be greater than or equal to initial pages.", max_pages, memory_info.initial_pages),
+                ErrorLocation::default(),
                 {
                     CompilationStage => "WASM Generation",
                     PrimarySuggestion => "Increase max pages to be at least equal to initial pages",
@@ -161,9 +157,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> R
         for (interface_id, interface_def) in &wir.type_info.interface_info.interfaces {
             if interface_def.methods.is_empty() {
                 return_wasm_generation_error!(
-                    string_table,
-                    TextLocation::default(),
-                    &format!("Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.", interface_id),
+                    format!("Interface {} has no methods. Empty interfaces cannot be used for dynamic dispatch.", interface_id),
+                    ErrorLocation::default(),
                     {
                         CompilationStage => "WASM Generation",
                         PrimarySuggestion => "Add at least one method to the interface or remove it",

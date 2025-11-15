@@ -1,0 +1,2190 @@
+   Compiling beanstalk v0.0.1-alpha (/Users/aneirinjames/projects/beanstalk/beanstalk)
+warning: unused import: `crate::compiler::string_interning::StringTable`
+ --> src/build.rs:6:5
+  |
+6 | use crate::compiler::string_interning::StringTable;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `red_ln`
+ --> src/build.rs:9:80
+  |
+9 | use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, grey_ln, print_bold, red_ln};
+  |                                                                                ^^^^^^
+
+warning: unused import: `crate::compiler::compiler_errors::CompileError`
+ --> src/settings.rs:1:5
+  |
+1 | use crate::compiler::compiler_errors::CompileError;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::interned_path::InternedPath`
+ --> src/settings.rs:2:5
+  |
+2 | use crate::compiler::interned_path::InternedPath;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::ast::Ast`
+ --> src/settings.rs:3:5
+  |
+3 | use crate::compiler::parsers::ast::Ast;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::expressions::expression::ExpressionKind`
+ --> src/settings.rs:4:5
+  |
+4 | use crate::compiler::parsers::expressions::expression::ExpressionKind;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::tokenizer::tokens::TextLocation`
+ --> src/settings.rs:5:5
+  |
+5 | use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `return_config_error` and `return_type_error`
+ --> src/settings.rs:7:13
+  |
+7 | use crate::{return_config_error, return_type_error};
+  |             ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Path`
+ --> src/settings.rs:8:17
+  |
+8 | use std::path::{Path, PathBuf};
+  |                 ^^^^
+
+warning: unused import: `crate::compiler::string_interning::StringTable`
+ --> src/dev_server.rs:4:5
+  |
+4 | use crate::compiler::string_interning::StringTable;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::compiler_errors::CompileError`
+  --> src/compiler_tests/jit_runtime_tests.rs:1:5
+   |
+ 1 | use crate::compiler::compiler_errors::CompileError;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> src/lib.rs:10:5
+   |
+10 |     pub(crate) mod jit_runtime_tests;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `CapturedOutput`, `MemoryCleanup`, `clear_captured_output`, `execute_direct_jit_with_capture`, and `get_captured_output`
+  --> src/compiler_tests/jit_runtime_tests.rs:3:5
+   |
+ 3 |     execute_direct_jit_with_capture, get_captured_output, clear_captured_output,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^
+ 4 |     CapturedOutput, MemoryCleanup,
+   |     ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> src/lib.rs:10:5
+   |
+10 |     pub(crate) mod jit_runtime_tests;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `CompilationMode`, `CraneliftOptLevel`, `IoBackend`, and `RuntimeConfig`
+  --> src/compiler_tests/jit_runtime_tests.rs:6:22
+   |
+ 6 | use crate::runtime::{IoBackend, RuntimeConfig, CompilationMode, CraneliftOptLevel};
+   |                      ^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> src/lib.rs:10:5
+   |
+10 |     pub(crate) mod jit_runtime_tests;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::interned_path::InternedPath`
+  --> src/compiler_tests/string_interning_tests.rs:1:5
+   |
+ 1 | use crate::compiler::interned_path::InternedPath;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: if this is a test module, consider adding a `#[cfg(test)]` to the containing module
+  --> src/lib.rs:12:5
+   |
+12 |     pub(crate) mod string_interning_tests;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `jit::JitRuntime`
+  --> src/runtime/mod.rs:17:9
+   |
+17 | pub use jit::JitRuntime;
+   |         ^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::codegen::build_wasm::new_wasm_module`
+ --> src/build_system/core_build.rs:9:5
+  |
+9 | use crate::compiler::codegen::build_wasm::new_wasm_module;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::tokenizer`
+  --> src/build_system/repl.rs:15:5
+   |
+15 | use crate::compiler::parsers::tokenizer;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `StringId`
+ --> src/compiler/parsers/ast_nodes.rs:8:57
+  |
+8 | use crate::compiler::string_interning::{InternedString, StringId, StringTable};
+  |                                                         ^^^^^^^^
+
+warning: unused import: `crate::tokenizer::tokenizer::END_SCOPE_CHAR`
+  --> src/compiler/parsers/build_ast.rs:10:5
+   |
+10 | use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::PathBuf`
+  --> src/compiler/parsers/build_ast.rs:11:5
+   |
+11 | use std::path::PathBuf;
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::PathBuf`
+  --> src/compiler/parsers/expressions/eval_expression.rs:14:5
+   |
+14 | use std::path::PathBuf;
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Arg`
+ --> src/compiler/parsers/expressions/parse_expression.rs:6:43
+  |
+6 | use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+  |                                           ^^^
+
+warning: unused import: `FunctionSignature`
+  --> src/compiler/parsers/expressions/parse_expression.rs:10:55
+   |
+10 | use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
+   |                                                       ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `colour::green_ln`
+ --> src/compiler/parsers/tokenizer/tokenizer.rs:9:5
+  |
+9 | use colour::green_ln;
+  |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::ast::ScopeContext`
+ --> src/compiler/parsers/tokenizer/tokens.rs:5:5
+  |
+5 | use crate::compiler::parsers::ast::ScopeContext;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `colour::red_ln`
+ --> src/compiler/parsers/tokenizer/tokens.rs:6:5
+  |
+6 | use colour::red_ln;
+  |     ^^^^^^^^^^^^^^
+
+warning: unused imports: `PathBuf` and `Path`
+ --> src/compiler/parsers/tokenizer/tokens.rs:9:17
+  |
+9 | use std::path::{Path, PathBuf};
+  |                 ^^^^  ^^^^^^^
+
+warning: unused imports: `CompileError` and `ErrorMetaDataKey`
+ --> src/compiler/wir/wir_nodes.rs:2:40
+  |
+2 | use crate::compiler::compiler_errors::{CompileError, ErrorMetaDataKey};
+  |                                        ^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::tokenizer::tokens::TextLocation`
+ --> src/compiler/wir/wir_nodes.rs:3:5
+  |
+3 | use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::tokenizer::tokens::TextLocation`
+  --> src/compiler/wir/context.rs:10:5
+   |
+10 | use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `return_compiler_error`
+  --> src/compiler/wir/expressions.rs:27:13
+   |
+27 | use crate::{return_compiler_error, return_wir_transformation_error};
+   |             ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::return_wir_transformation_error`
+  --> src/compiler/wir/templates.rs:24:5
+   |
+24 | use crate::return_wir_transformation_error;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `CompilerMessages`
+ --> src/compiler/html5_codegen/generate_html.rs:1:54
+  |
+1 | use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+  |                                                      ^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::PathBuf`
+ --> src/compiler/html5_codegen/generate_html.rs:5:5
+  |
+5 | use std::path::PathBuf;
+  |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::compiler_warnings::CompilerWarning`
+ --> src/compiler/html5_codegen/generate_html.rs:6:5
+  |
+6 | use crate::compiler::compiler_warnings::CompilerWarning;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::ast_nodes::Arg`
+ --> src/compiler/basic_utility_functions.rs:1:5
+  |
+1 | use crate::compiler::parsers::ast_nodes::Arg;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::interned_path::InternedPath`
+ --> src/compiler/compiler_warnings.rs:4:5
+  |
+4 | use crate::compiler::interned_path::InternedPath;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::parsers::tokenizer::tokens::TextLocation`
+ --> src/compiler/compiler_warnings.rs:5:5
+  |
+5 | use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `InternedString`
+ --> src/compiler/datatypes.rs:4:41
+  |
+4 | use crate::compiler::string_interning::{InternedString, StringTable};
+  |                                         ^^^^^^^^^^^^^^
+
+warning: unused import: `return_wasm_generation_error`
+  --> src/compiler/codegen/wasm_encoding.rs:44:5
+   |
+44 |     return_wasm_generation_error,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `RuntimeBackend`
+    --> src/compiler/codegen/wasm_encoding.rs:4333:57
+     |
+4333 |         use crate::compiler::host_functions::registry::{RuntimeBackend, RuntimeFunctionMapping};
+     |                                                         ^^^^^^^^^^^^^^
+
+warning: unused import: `crate::compiler::compiler_errors::CompileError`
+ --> src/compiler/codegen/wat_to_wasm.rs:1:5
+  |
+1 | use crate::compiler::compiler_errors::CompileError;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::return_wat_err`
+ --> src/compiler/codegen/wat_to_wasm.rs:3:5
+  |
+3 | use crate::return_wat_err;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Path`
+   --> src/lib.rs:112:17
+    |
+112 | use std::path::{Path, PathBuf};
+    |                 ^^^^
+
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+   --> src/build_system/embedded_project.rs:141:34
+    |
+141 |         let compilation_result = core_build::compile_modules(modules, config, flags)?;
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^------------------------ argument #4 of type `&mut StringTable` is missing
+    |
+note: function defined here
+   --> src/build_system/core_build.rs:90:8
+    |
+ 90 | pub fn compile_modules(
+    |        ^^^^^^^^^^^^^^^
+...
+ 94 |     string_table: &mut StringTable,
+    |     ------------------------------
+help: provide the argument
+    |
+141 |         let compilation_result = core_build::compile_modules(modules, config, flags, /* &mut StringTable */)?;
+    |                                                                                    ++++++++++++++++++++++++
+
+error[E0063]: missing field `warnings` in initializer of `build::Project`
+   --> src/build_system/embedded_project.rs:171:12
+    |
+171 |         Ok(Project {
+    |            ^^^^^^^ missing `warnings`
+
+error[E0599]: no function or associated item named `new_config_error` found for struct `compiler_errors::CompileError` in the current scope
+   --> src/build_system/embedded_project.rs:203:38
+    |
+203 |             return Err(CompileError::new_config_error(
+    |                                      ^^^^^^^^^^^^^^^^ function or associated item not found in `compiler_errors::CompileError`
+    |
+   ::: src/compiler/compiler_errors.rs:211:1
+    |
+211 | pub struct CompileError {
+    | ----------------------- function or associated item `new_config_error` not found for this struct
+    |
+note: if you're trying to build a new `compiler_errors::CompileError` consider using one of the following associated functions:
+      compiler_errors::CompileError::new
+      compiler_errors::CompileError::new_syntax_error
+      compiler_errors::CompileError::new_rule_error
+      compiler_errors::CompileError::new_rule_error_with_metadata
+      and 5 others
+   --> src/compiler/compiler_errors.rs:226:5
+    |
+226 | /     pub fn new(
+227 | |         msg: impl Into<String>,
+228 | |         location: ErrorLocation,
+229 | |         error_type: ErrorType,
+230 | |     ) -> CompileError {
+    | |_____________________^
+...
+254 |       pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+264 |       pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+274 | /     pub fn new_rule_error_with_metadata(
+275 | |         msg: impl Into<String>,
+276 | |         location: ErrorLocation,
+277 | |         metadata: HashMap<ErrorMetaDataKey, &'static str>,
+278 | |     ) -> Self {
+    | |_____________^
+help: there is an associated function `new_file_error` with a similar name
+    |
+203 -             return Err(CompileError::new_config_error(
+203 +             return Err(CompileError::new_file_error(
+    |
+
+error[E0063]: missing field `warnings` in initializer of `build::Project`
+   --> src/build_system/html_project.rs:112:12
+    |
+112 |         Ok(Project {
+    |            ^^^^^^^ missing `warnings`
+
+error[E0599]: no function or associated item named `new_config_error` found for struct `compiler_errors::CompileError` in the current scope
+   --> src/build_system/html_project.rs:125:38
+    |
+125 |             return Err(CompileError::new_config_error(
+    |                                      ^^^^^^^^^^^^^^^^ function or associated item not found in `compiler_errors::CompileError`
+    |
+   ::: src/compiler/compiler_errors.rs:211:1
+    |
+211 | pub struct CompileError {
+    | ----------------------- function or associated item `new_config_error` not found for this struct
+    |
+note: if you're trying to build a new `compiler_errors::CompileError` consider using one of the following associated functions:
+      compiler_errors::CompileError::new
+      compiler_errors::CompileError::new_syntax_error
+      compiler_errors::CompileError::new_rule_error
+      compiler_errors::CompileError::new_rule_error_with_metadata
+      and 5 others
+   --> src/compiler/compiler_errors.rs:226:5
+    |
+226 | /     pub fn new(
+227 | |         msg: impl Into<String>,
+228 | |         location: ErrorLocation,
+229 | |         error_type: ErrorType,
+230 | |     ) -> CompileError {
+    | |_____________________^
+...
+254 |       pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+264 |       pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+274 | /     pub fn new_rule_error_with_metadata(
+275 | |         msg: impl Into<String>,
+276 | |         location: ErrorLocation,
+277 | |         metadata: HashMap<ErrorMetaDataKey, &'static str>,
+278 | |     ) -> Self {
+    | |_____________^
+help: there is an associated function `new_file_error` with a similar name
+    |
+125 -             return Err(CompileError::new_config_error(
+125 +             return Err(CompileError::new_file_error(
+    |
+
+error[E0599]: no function or associated item named `new_config_error` found for struct `compiler_errors::CompileError` in the current scope
+   --> src/build_system/html_project.rs:139:38
+    |
+139 |             return Err(CompileError::new_config_error(
+    |                                      ^^^^^^^^^^^^^^^^ function or associated item not found in `compiler_errors::CompileError`
+    |
+   ::: src/compiler/compiler_errors.rs:211:1
+    |
+211 | pub struct CompileError {
+    | ----------------------- function or associated item `new_config_error` not found for this struct
+    |
+note: if you're trying to build a new `compiler_errors::CompileError` consider using one of the following associated functions:
+      compiler_errors::CompileError::new
+      compiler_errors::CompileError::new_syntax_error
+      compiler_errors::CompileError::new_rule_error
+      compiler_errors::CompileError::new_rule_error_with_metadata
+      and 5 others
+   --> src/compiler/compiler_errors.rs:226:5
+    |
+226 | /     pub fn new(
+227 | |         msg: impl Into<String>,
+228 | |         location: ErrorLocation,
+229 | |         error_type: ErrorType,
+230 | |     ) -> CompileError {
+    | |_____________________^
+...
+254 |       pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+264 |       pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+    |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+274 | /     pub fn new_rule_error_with_metadata(
+275 | |         msg: impl Into<String>,
+276 | |         location: ErrorLocation,
+277 | |         metadata: HashMap<ErrorMetaDataKey, &'static str>,
+278 | |     ) -> Self {
+    | |_____________^
+help: there is an associated function `new_file_error` with a similar name
+    |
+139 -             return Err(CompileError::new_config_error(
+139 +             return Err(CompileError::new_file_error(
+    |
+
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+  --> src/build_system/jit.rs:40:34
+   |
+40 |         let compilation_result = core_build::compile_modules(modules, config, flags)?;
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^------------------------ argument #4 of type `&mut StringTable` is missing
+   |
+note: function defined here
+  --> src/build_system/core_build.rs:90:8
+   |
+90 | pub fn compile_modules(
+   |        ^^^^^^^^^^^^^^^
+...
+94 |     string_table: &mut StringTable,
+   |     ------------------------------
+help: provide the argument
+   |
+40 |         let compilation_result = core_build::compile_modules(modules, config, flags, /* &mut StringTable */)?;
+   |                                                                                    ++++++++++++++++++++++++
+
+error[E0063]: missing field `warnings` in initializer of `build::Project`
+  --> src/build_system/jit.rs:47:20
+   |
+47 |                 Ok(Project {
+   |                    ^^^^^^^ missing `warnings`
+
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+  --> src/build_system/native_project.rs:40:34
+   |
+40 |         let compilation_result = core_build::compile_modules(modules, config, flags)?;
+   |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^------------------------ argument #4 of type `&mut StringTable` is missing
+   |
+note: function defined here
+  --> src/build_system/core_build.rs:90:8
+   |
+90 | pub fn compile_modules(
+   |        ^^^^^^^^^^^^^^^
+...
+94 |     string_table: &mut StringTable,
+   |     ------------------------------
+help: provide the argument
+   |
+40 |         let compilation_result = core_build::compile_modules(modules, config, flags, /* &mut StringTable */)?;
+   |                                                                                    ++++++++++++++++++++++++
+
+error[E0063]: missing field `warnings` in initializer of `build::Project`
+  --> src/build_system/native_project.rs:47:12
+   |
+47 |         Ok(Project {
+   |            ^^^^^^^ missing `warnings`
+
+error[E0308]: mismatched types
+  --> src/build_system/native_project.rs:68:13
+   |
+68 |             TextLocation::default(),
+   |             ^^^^^^^^^^^^^^^^^^^^^^^ expected `ErrorLocation`, found `TextLocation`
+
+error[E0308]: mismatched types
+  --> src/build_system/repl.rs:92:31
+   |
+92 |         tokenize(source_code, source_path, TokenizeMode::TemplateHead, &mut string_table)?;
+   |         --------              ^^^^^^^^^^^ expected `&InternedPath`, found `&Path`
+   |         |
+   |         arguments to this function are incorrect
+   |
+   = note: expected reference `&InternedPath`
+              found reference `&std::path::Path`
+note: function defined here
+  --> src/compiler/parsers/tokenizer/tokenizer.rs:22:8
+   |
+22 | pub fn tokenize(
+   |        ^^^^^^^^
+23 |     source_code: &str,
+24 |     src_path: &InternedPath,
+   |     -----------------------
+
+error[E0308]: mismatched types
+   --> src/build_system/repl.rs:95:9
+    |
+ 93 |     let ast_context = ScopeContext::new(
+    |                       ----------------- arguments to this function are incorrect
+ 94 |         ContextKind::Template, 
+ 95 |         source_path.to_path_buf(), 
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^ expected `InternedPath`, found `PathBuf`
+    |
+note: associated function defined here
+   --> src/compiler/parsers/ast.rs:234:12
+    |
+234 |     pub fn new(
+    |            ^^^
+235 |         kind: ContextKind,
+236 |         scope: InternedPath,
+    |         -------------------
+
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+   --> src/build_system/repl.rs:102:24
+    |
+102 |     let mut template = Template::new(&mut tokenizer_output, &ast_context, None)?;
+    |                        ^^^^^^^^^^^^^------------------------------------------- argument #4 of type `&mut StringTable` is missing
+    |
+note: associated function defined here
+   --> src/compiler/parsers/statements/create_template_node.rs:28:12
+    |
+ 28 |     pub fn new(
+    |            ^^^
+...
+ 32 |         string_table: &mut StringTable,
+    |         ------------------------------
+help: provide the argument
+    |
+102 |     let mut template = Template::new(&mut tokenizer_output, &ast_context, None, /* &mut StringTable */)?;
+    |                                                                               ++++++++++++++++++++++++
+
+error[E0061]: this method takes 2 arguments but 1 argument was supplied
+   --> src/build_system/repl.rs:112:36
+    |
+112 |     let template_string = template.fold(&None)?;
+    |                                    ^^^^------- argument #2 of type `&StringTable` is missing
+    |
+note: method defined here
+   --> src/compiler/parsers/statements/create_template_node.rs:278:12
+    |
+278 |     pub fn fold(
+    |            ^^^^
+...
+281 |         string_table: &StringTable,
+    |         --------------------------
+help: provide the argument
+    |
+112 |     let template_string = template.fold(&None, /* &StringTable */)?;
+    |                                              ++++++++++++++++++++
+
+error[E0609]: no field `message` on type `&compiler_errors::CompileError`
+   --> src/compiler/wir/build_wir.rs:664:29
+    |
+664 |                 first_error.message
+    |                             ^^^^^^^ unknown field
+    |
+    = note: available fields are: `msg`, `location`, `error_type`, `metadata`
+
+error[E0609]: no field `primary_location` on type `&compiler_errors::CompileError`
+   --> src/compiler/wir/build_wir.rs:667:49
+    |
+667 |             let error_location = if first_error.primary_location != TextLocation::default() {
+    |                                                 ^^^^^^^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `msg`, `location`, `error_type`, `metadata`
+
+error[E0609]: no field `primary_location` on type `&compiler_errors::CompileError`
+   --> src/compiler/wir/build_wir.rs:668:29
+    |
+668 |                 first_error.primary_location.clone()
+    |                             ^^^^^^^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `msg`, `location`, `error_type`, `metadata`
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/context.rs:580:36
+     |
+ 580 |         self.function_names.insert(function.name.clone(), function.id);
+     |                             ------ ^^^^^^^^^^^^^^^^^^^^^ expected `String`, found `StringId`
+     |                             |
+     |                             arguments to this method are incorrect
+     |
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+help: try using a conversion method
+     |
+ 580 -         self.function_names.insert(function.name.clone(), function.id);
+ 580 +         self.function_names.insert(function.name.to_string(), function.id);
+     |
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/statements.rs:111:17
+    |
+111 |                 node.location.clone(), {
+    |                 ^^^^^^^^^^^^^^^^^^^^^ expected `ErrorLocation`, found `TextLocation`
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/statements.rs:183:102
+     |
+ 182 | ...     map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(name.to_string().into_boxed_str()));
+     |         ---                                                                          -------------------------------------------- this argument has type `&mut str`...
+     |         |
+     |         ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+ 183 | ...     map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+     |             ------ arguments to this method are incorrect                                ^^^^^^^^^^^^^^^^^^^^ types differ in mutability
+     |
+     = note: expected mutable reference `&mut _`
+                        found reference `&'static _`
+help: the return type of this call is `&'static str` due to the type of the argument passed
+    --> src/compiler/wir/statements.rs:183:21
+     |
+ 183 |                     map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+     |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^--------------------^
+     |                                                                                                      |
+     |                                                                                                      this argument influences the return type of `insert`
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/statements.rs:184:103
+     |
+ 182 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(name.to_string().into_boxed_str()));
+     |       ---                                                                          -------------------------------------------- this argument has type `&mut str`...
+     |       |
+     |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+ 183 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+ 184 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before attempting to mutate it");
+     |           ------ arguments to this method are incorrect                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ types differ in mutability
+     |
+     = note: expected mutable reference `&mut _`
+                        found reference `&'static _`
+help: the return type of this call is `&'static str` due to the type of the argument passed
+    --> src/compiler/wir/statements.rs:184:21
+     |
+ 184 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before attempting to mutate it");
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^----------------------------------------------------------------^
+     |                                                                                         |
+     |                                                                                         this argument influences the return type of `insert`
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/statements.rs:185:21
+    |
+182 | ...     map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(name.to_string().into_boxed_str()));
+    |         ---                                                                          -------------------------------------------- this argument has type `&mut str`...
+    |         |
+    |         ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+...
+185 | ...     map
+    |         ^^^ types differ in mutability
+    |
+    = note: expected struct `HashMap<_, &'static _>`
+               found struct `HashMap<_, &mut _>`
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/statements.rs:212:114
+     |
+ 211 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(resolved_var_name.to_string().into_boxed_str()));
+     |       ---                                                                          --------------------------------------------------------- this argument has type `&mut str`...
+     |       |
+     |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+ 212 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+     |           ------ arguments to this method are incorrect                                ^^^^^^^^^^^^^^^^^^^^ types differ in mutability
+     |
+     = note: expected mutable reference `&mut _`
+                        found reference `&'static _`
+help: the return type of this call is `&'static str` due to the type of the argument passed
+    --> src/compiler/wir/statements.rs:212:33
+     |
+ 212 | ...                   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+     |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^--------------------^
+     |                                                                                                        |
+     |                                                                                                        this argument influences the return type of `insert`
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/statements.rs:213:115
+     |
+ 211 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(resolved_var_name.to_string().into_boxed_str()));
+     |       ---                                                                          --------------------------------------------------------- this argument has type `&mut str`...
+     |       |
+     |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+ 212 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+ 213 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a mutable borrow");
+     |           ------ arguments to this method are incorrect                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ types differ in mutability
+     |
+     = note: expected mutable reference `&mut _`
+                        found reference `&'static _`
+help: the return type of this call is `&'static str` due to the type of the argument passed
+    --> src/compiler/wir/statements.rs:213:33
+     |
+ 213 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a mutable borrow");
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^------------------------------------------------------------------^
+     |                                                                                         |
+     |                                                                                         this argument influences the return type of `insert`
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/statements.rs:214:33
+    |
+211 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(resolved_var_name.to_string().into_boxed_str()));
+    |       ---                                                                          --------------------------------------------------------- this argument has type `&mut str`...
+    |       |
+    |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+...
+214 | ...   map
+    |       ^^^ types differ in mutability
+    |
+    = note: expected struct `HashMap<_, &'static _>`
+               found struct `HashMap<_, &mut _>`
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/statements.rs:253:114
+     |
+ 252 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(resolved_var_name.to_string().into_boxed_str()));
+     |       ---                                                                          --------------------------------------------------------- this argument has type `&mut str`...
+     |       |
+     |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+ 253 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+     |           ------ arguments to this method are incorrect                                ^^^^^^^^^^^^^^^^^^^^ types differ in mutability
+     |
+     = note: expected mutable reference `&mut _`
+                        found reference `&'static _`
+help: the return type of this call is `&'static str` due to the type of the argument passed
+    --> src/compiler/wir/statements.rs:253:33
+     |
+ 253 | ...                   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+     |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^--------------------^
+     |                                                                                                        |
+     |                                                                                                        this argument influences the return type of `insert`
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+
+error[E0308]: mismatched types
+    --> src/compiler/wir/statements.rs:254:115
+     |
+ 252 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(resolved_var_name.to_string().into_boxed_str()));
+     |       ---                                                                          --------------------------------------------------------- this argument has type `&mut str`...
+     |       |
+     |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+ 253 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
+ 254 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a shared borrow");
+     |           ------ arguments to this method are incorrect                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ types differ in mutability
+     |
+     = note: expected mutable reference `&mut _`
+                        found reference `&'static _`
+help: the return type of this call is `&'static str` due to the type of the argument passed
+    --> src/compiler/wir/statements.rs:254:33
+     |
+ 254 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a shared borrow");
+     |       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^-----------------------------------------------------------------^
+     |                                                                                         |
+     |                                                                                         this argument influences the return type of `insert`
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/statements.rs:255:33
+    |
+252 | ...   map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, Box::leak(resolved_var_name.to_string().into_boxed_str()));
+    |       ---                                                                          --------------------------------------------------------- this argument has type `&mut str`...
+    |       |
+    |       ... which causes `map` to have type `HashMap<ErrorMetaDataKey, &mut str>`
+...
+255 | ...   map
+    |       ^^^ types differ in mutability
+    |
+    = note: expected struct `HashMap<_, &'static _>`
+               found struct `HashMap<_, &mut _>`
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/templates.rs:77:9
+    |
+ 76 |     let template_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
+    |                                                         ---------------- arguments to this enum variant are incorrect
+ 77 |         "template_placeholder".to_string(),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `StringId`, found `String`
+    |
+note: tuple variant defined here
+   --> src/compiler/wir/wir_nodes.rs:831:5
+    |
+831 |     String(InternedString),
+    |     ^^^^^^
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/templates.rs:108:9
+    |
+107 |     let runtime_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
+    |                                                        ---------------- arguments to this enum variant are incorrect
+108 |         "runtime_template_placeholder".to_string(),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `StringId`, found `String`
+    |
+note: tuple variant defined here
+   --> src/compiler/wir/wir_nodes.rs:831:5
+    |
+831 |     String(InternedString),
+    |     ^^^^^^
+
+error[E0308]: mismatched types
+   --> src/compiler/wir/templates.rs:161:9
+    |
+160 |     let interpolated_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
+    |                                                             ---------------- arguments to this enum variant are incorrect
+161 |         "interpolated_template_placeholder".to_string(),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `StringId`, found `String`
+    |
+note: tuple variant defined here
+   --> src/compiler/wir/wir_nodes.rs:831:5
+    |
+831 |     String(InternedString),
+    |     ^^^^^^
+
+error[E0308]: arguments to this function are incorrect
+   --> src/compiler/wir/templates.rs:243:13
+    |
+243 |             crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+244 |                 expr, location, string_table, context,
+    |                                 ------------  ------- argument #4 of type `&mut StringTable` is missing
+    |                                 |
+    |                                 unexpected argument #3 of type `&StringTable`
+    |
+note: function defined here
+   --> src/compiler/wir/expressions.rs:57:8
+    |
+ 57 | pub fn expression_to_rvalue_with_context(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 61 |     string_table: &mut crate::compiler::string_interning::StringTable,
+    |     -----------------------------------------------------------------
+help: did you mean
+    |
+243 -             crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+244 -                 expr, location, string_table, context,
+245 -             )?;
+243 +             crate::compiler::wir::expressions::expression_to_rvalue_with_context(expr, location, context, /* &mut StringTable */)?;
+    |
+
+error[E0308]: arguments to this function are incorrect
+   --> src/compiler/wir/templates.rs:252:13
+    |
+252 |             crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+253 |                 expr, location, string_table, context,
+    |                                 ------------  ------- argument #4 of type `&mut StringTable` is missing
+    |                                 |
+    |                                 unexpected argument #3 of type `&StringTable`
+    |
+note: function defined here
+   --> src/compiler/wir/expressions.rs:57:8
+    |
+ 57 | pub fn expression_to_rvalue_with_context(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 61 |     string_table: &mut crate::compiler::string_interning::StringTable,
+    |     -----------------------------------------------------------------
+help: did you mean
+    |
+252 -             crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+253 -                 expr, location, string_table, context,
+254 -             )?;
+252 +             crate::compiler::wir::expressions::expression_to_rvalue_with_context(expr, location, context, /* &mut StringTable */)?;
+    |
+
+error[E0308]: arguments to this function are incorrect
+   --> src/compiler/wir/templates.rs:303:9
+    |
+303 |         crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+306 |             string_table,
+    |             ------------ unexpected argument #3 of type `&StringTable`
+307 |             context,
+    |             ------- argument #4 of type `&mut StringTable` is missing
+    |
+note: function defined here
+   --> src/compiler/wir/expressions.rs:57:8
+    |
+ 57 | pub fn expression_to_rvalue_with_context(
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+ 61 |     string_table: &mut crate::compiler::string_interning::StringTable,
+    |     -----------------------------------------------------------------
+help: did you mean
+    |
+303 ~         crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+304 +             &field.value,
+305 +             location,
+306 +             context,
+307 +             /* &mut StringTable */,
+308 ~         )?;
+    |
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:1904:21
+     |
+1903 |                 self.lower_wasix_host_call(
+     |                      --------------------- arguments to this method are incorrect
+1904 |                     function_name,
+     |                     ^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:5929:8
+     |
+5929 |     fn lower_wasix_host_call(
+     |        ^^^^^^^^^^^^^^^^^^^^^
+5930 |         &mut self,
+5931 |         function_name: &str,
+     |         -------------------
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2131:21
+     |
+2130 |                 self.lower_wasix_host_call_simple(
+     |                      ---------------------------- arguments to this method are incorrect
+2131 |                     function_name,
+     |                     ^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:2752:8
+     |
+2752 |     fn lower_wasix_host_call_simple(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2753 |         &mut self,
+2754 |         function_name: &str,
+     |         -------------------
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2474:36
+     |
+2474 |         if host_function.module == "wasix_32v1" {
+     |            --------------------    ^^^^^^^^^^^^ expected `StringId`, found `&str`
+     |            |
+     |            expected because this is `StringId`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2477:17
+     |
+2476 |             return self.lower_wasix_host_call_simple(
+     |                         ---------------------------- arguments to this method are incorrect
+2477 |                 &host_function.name,
+     |                 ^^^^^^^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:2752:8
+     |
+2752 |     fn lower_wasix_host_call_simple(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2753 |         &mut self,
+2754 |         function_name: &str,
+     |         -------------------
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2502:88
+     |
+2502 | ...                   let offset = self.string_manager.add_string_slice_constant(s);
+     |                                                        ------------------------- ^ expected `&str`, found `&StringId`
+     |                                                        |
+     |                                                        arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:420:12
+     |
+ 420 |     pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^            -----------
+
+error[E0599]: no method named `len` found for reference `&StringId` in the current scope
+    --> src/compiler/codegen/wasm_encoding.rs:2503:44
+     |
+2503 | ...                   let length = s.len() as i32;
+     |                                      ^^^ method not found in `&StringId`
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following traits define an item `len`, perhaps you need to implement one of them:
+             candidate #1: `ExactSizeIterator`
+             candidate #2: `cranelift_codegen::constant_hash::Table`
+             candidate #3: `cranelift_codegen::isa::aarch64::lower::isle::generated_code::Length`
+             candidate #4: `cranelift_codegen::isa::riscv64::lower::isle::generated_code::Length`
+             candidate #5: `cranelift_codegen::isa::x64::lower::isle::generated_code::Length`
+             candidate #6: `cranelift_codegen::opts::generated_code::Length`
+             candidate #7: `gimli::read::reader::Reader`
+             candidate #8: `gimli::read::reader::Reader`
+             candidate #9: `gimli::write::writer::Writer`
+             candidate #10: `nom::traits::AsChar`
+             candidate #11: `object::read::read_cache::ReadCacheOps`
+             candidate #12: `object::read::read_ref::ReadRef`
+             candidate #13: `object::read::read_ref::ReadRef`
+             candidate #14: `object::write::util::WritableBuffer`
+             candidate #15: `rayon::iter::IndexedParallelIterator`
+             candidate #16: `rayon::range::private::IndexedRangeInteger`
+             candidate #17: `rayon::range_inclusive::private::IndexedRangeInteger`
+             candidate #18: `ring::hkdf::KeyType`
+             candidate #19: `toml_edit::table::TableLike`
+             candidate #20: `typenum::type_operators::Len`
+             candidate #21: `winnow::stream::AsChar`
+
+error[E0277]: the trait bound `std::string::String: std::borrow::Borrow<StringId>` is not satisfied
+    --> src/compiler/codegen/wasm_encoding.rs:2528:18
+     |
+2528 |             .get(&host_function.name)
+     |              --- ^^^^^^^^^^^^^^^^^^^ the trait `std::borrow::Borrow<StringId>` is not implemented for `std::string::String`
+     |              |
+     |              required by a bound introduced by this call
+     |
+     = help: the following other types implement trait `std::borrow::Borrow<Borrowed>`:
+               `std::string::String` implements `std::borrow::Borrow<bstr::bstr::BStr>`
+               `std::string::String` implements `std::borrow::Borrow<str>`
+note: required by a bound in `HashMap::<K, V, S>::get`
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:911:12
+     |
+ 909 |     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+     |            --- required by a bound in this associated function
+ 910 |     where
+ 911 |         K: Borrow<Q>,
+     |            ^^^^^^^^^ required by this bound in `HashMap::<K, V, S>::get`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2563:42
+     |
+2563 |                 if host_function.name == "print" || host_function.name == "template_output" {
+     |                    ------------------    ^^^^^^^ expected `StringId`, found `&str`
+     |                    |
+     |                    expected because this is `StringId`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2563:75
+     |
+2563 |                 if host_function.name == "print" || host_function.name == "template_output" {
+     |                                                     ------------------    ^^^^^^^^^^^^^^^^^ expected `StringId`, found `&str`
+     |                                                     |
+     |                                                     expected because this is `StringId`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2614:88
+     |
+2614 | ...                   let offset = self.string_manager.add_string_slice_constant(s);
+     |                                                        ------------------------- ^ expected `&str`, found `&StringId`
+     |                                                        |
+     |                                                        arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:420:12
+     |
+ 420 |     pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^            -----------
+
+error[E0599]: no method named `len` found for reference `&StringId` in the current scope
+    --> src/compiler/codegen/wasm_encoding.rs:2615:44
+     |
+2615 | ...                   let length = s.len() as i32;
+     |                                      ^^^ method not found in `&StringId`
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following traits define an item `len`, perhaps you need to implement one of them:
+             candidate #1: `ExactSizeIterator`
+             candidate #2: `cranelift_codegen::constant_hash::Table`
+             candidate #3: `cranelift_codegen::isa::aarch64::lower::isle::generated_code::Length`
+             candidate #4: `cranelift_codegen::isa::riscv64::lower::isle::generated_code::Length`
+             candidate #5: `cranelift_codegen::isa::x64::lower::isle::generated_code::Length`
+             candidate #6: `cranelift_codegen::opts::generated_code::Length`
+             candidate #7: `gimli::read::reader::Reader`
+             candidate #8: `gimli::read::reader::Reader`
+             candidate #9: `gimli::write::writer::Writer`
+             candidate #10: `nom::traits::AsChar`
+             candidate #11: `object::read::read_cache::ReadCacheOps`
+             candidate #12: `object::read::read_ref::ReadRef`
+             candidate #13: `object::read::read_ref::ReadRef`
+             candidate #14: `object::write::util::WritableBuffer`
+             candidate #15: `rayon::iter::IndexedParallelIterator`
+             candidate #16: `rayon::range::private::IndexedRangeInteger`
+             candidate #17: `rayon::range_inclusive::private::IndexedRangeInteger`
+             candidate #18: `ring::hkdf::KeyType`
+             candidate #19: `toml_edit::table::TableLike`
+             candidate #20: `typenum::type_operators::Len`
+             candidate #21: `winnow::stream::AsChar`
+
+error[E0277]: the trait bound `std::string::String: std::borrow::Borrow<StringId>` is not satisfied
+    --> src/compiler/codegen/wasm_encoding.rs:2640:18
+     |
+2640 |             .get(&host_function.name)
+     |              --- ^^^^^^^^^^^^^^^^^^^ the trait `std::borrow::Borrow<StringId>` is not implemented for `std::string::String`
+     |              |
+     |              required by a bound introduced by this call
+     |
+     = help: the following other types implement trait `std::borrow::Borrow<Borrowed>`:
+               `std::string::String` implements `std::borrow::Borrow<bstr::bstr::BStr>`
+               `std::string::String` implements `std::borrow::Borrow<str>`
+note: required by a bound in `HashMap::<K, V, S>::get`
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:911:12
+     |
+ 909 |     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+     |            --- required by a bound in this associated function
+ 910 |     where
+ 911 |         K: Borrow<Q>,
+     |            ^^^^^^^^^ required by this bound in `HashMap::<K, V, S>::get`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2696:75
+     |
+2696 |         let string_offset = self.string_manager.add_string_slice_constant(&string_content);
+     |                                                 ------------------------- ^^^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |                                                 |
+     |                                                 arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:420:12
+     |
+ 420 |     pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^            -----------
+
+error[E0599]: no method named `len` found for struct `StringId` in the current scope
+    --> src/compiler/codegen/wasm_encoding.rs:2697:41
+     |
+2697 |         let string_len = string_content.len() as u32;
+     |                                         ^^^ method not found in `StringId`
+     |
+    ::: src/compiler/string_interning.rs:6:1
+     |
+   6 | pub struct StringId(u32);
+     | ------------------- method `len` not found for this struct
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following traits define an item `len`, perhaps you need to implement one of them:
+             candidate #1: `ExactSizeIterator`
+             candidate #2: `cranelift_codegen::constant_hash::Table`
+             candidate #3: `cranelift_codegen::isa::aarch64::lower::isle::generated_code::Length`
+             candidate #4: `cranelift_codegen::isa::riscv64::lower::isle::generated_code::Length`
+             candidate #5: `cranelift_codegen::isa::x64::lower::isle::generated_code::Length`
+             candidate #6: `cranelift_codegen::opts::generated_code::Length`
+             candidate #7: `gimli::read::reader::Reader`
+             candidate #8: `gimli::read::reader::Reader`
+             candidate #9: `gimli::write::writer::Writer`
+             candidate #10: `nom::traits::AsChar`
+             candidate #11: `object::read::read_cache::ReadCacheOps`
+             candidate #12: `object::read::read_ref::ReadRef`
+             candidate #13: `object::read::read_ref::ReadRef`
+             candidate #14: `object::write::util::WritableBuffer`
+             candidate #15: `rayon::iter::IndexedParallelIterator`
+             candidate #16: `rayon::range::private::IndexedRangeInteger`
+             candidate #17: `rayon::range_inclusive::private::IndexedRangeInteger`
+             candidate #18: `ring::hkdf::KeyType`
+             candidate #19: `toml_edit::table::TableLike`
+             candidate #20: `typenum::type_operators::Len`
+             candidate #21: `winnow::stream::AsChar`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:2792:49
+     |
+2792 |                 self.lower_wasix_print_constant(content, function)
+     |                      -------------------------- ^^^^^^^ expected `&str`, found `&StringId`
+     |                      |
+     |                      arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:2808:8
+     |
+2808 |     fn lower_wasix_print_constant(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^
+2809 |         &mut self,
+2810 |         string_content: &str,
+     |         --------------------
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:3097:76
+     |
+3097 |                 let offset = self.string_manager.add_string_slice_constant(value);
+     |                                                  ------------------------- ^^^^^ expected `&str`, found `&StringId`
+     |                                                  |
+     |                                                  arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:420:12
+     |
+ 420 |     pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^            -----------
+
+error[E0599]: no method named `len` found for reference `&StringId` in the current scope
+    --> src/compiler/codegen/wasm_encoding.rs:3110:47
+     |
+3110 |                 let default_capacity = (value.len() as u32).max(32); // At least 32 bytes capacity
+     |                                               ^^^ method not found in `&StringId`
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following traits define an item `len`, perhaps you need to implement one of them:
+             candidate #1: `ExactSizeIterator`
+             candidate #2: `cranelift_codegen::constant_hash::Table`
+             candidate #3: `cranelift_codegen::isa::aarch64::lower::isle::generated_code::Length`
+             candidate #4: `cranelift_codegen::isa::riscv64::lower::isle::generated_code::Length`
+             candidate #5: `cranelift_codegen::isa::x64::lower::isle::generated_code::Length`
+             candidate #6: `cranelift_codegen::opts::generated_code::Length`
+             candidate #7: `gimli::read::reader::Reader`
+             candidate #8: `gimli::read::reader::Reader`
+             candidate #9: `gimli::write::writer::Writer`
+             candidate #10: `nom::traits::AsChar`
+             candidate #11: `object::read::read_cache::ReadCacheOps`
+             candidate #12: `object::read::read_ref::ReadRef`
+             candidate #13: `object::read::read_ref::ReadRef`
+             candidate #14: `object::write::util::WritableBuffer`
+             candidate #15: `rayon::iter::IndexedParallelIterator`
+             candidate #16: `rayon::range::private::IndexedRangeInteger`
+             candidate #17: `rayon::range_inclusive::private::IndexedRangeInteger`
+             candidate #18: `ring::hkdf::KeyType`
+             candidate #19: `toml_edit::table::TableLike`
+             candidate #20: `typenum::type_operators::Len`
+             candidate #21: `winnow::stream::AsChar`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:3113:46
+     |
+3113 |                     .allocate_mutable_string(value, default_capacity);
+     |                      ----------------------- ^^^^^ expected `&str`, found `&StringId`
+     |                      |
+     |                      arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:460:12
+     |
+ 460 |     pub fn allocate_mutable_string(&mut self, initial_value: &str, capacity: u32) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^            -------------------
+
+error[E0308]: `if` and `else` have incompatible types
+    --> src/compiler/codegen/wasm_encoding.rs:4293:17
+     |
+4290 |               let (module_name, import_name) = if let Some(reg) = registry {
+     |  ______________________________________________-
+4291 | |                 self.get_runtime_specific_mapping(host_func, reg)?
+     | |                 -------------------------------------------------- expected because of this
+4292 | |             } else {
+4293 | |                 (host_func.module.clone(), host_func.import_name.clone())
+     | |                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `(String, String)`, found `(StringId, StringId)`
+4294 | |             };
+     | |_____________- `if` and `else` have incompatible types
+     |
+     = note: expected tuple `(std::string::String, std::string::String)`
+                found tuple `(StringId, StringId)`
+
+error[E0061]: this method takes 1 argument but 0 arguments were supplied
+    --> src/compiler/codegen/wasm_encoding.rs:4298:57
+     |
+4298 |                 self.create_wasm_param_types(&host_func.params_to_signature().parameters)?;
+     |                                                         ^^^^^^^^^^^^^^^^^^^-- argument #1 of type `&mut StringTable` is missing
+     |
+note: method defined here
+    --> src/compiler/host_functions/registry.rs:187:12
+     |
+ 187 |     pub fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {
+     |            ^^^^^^^^^^^^^^^^^^^        ------------------------------
+help: provide the argument
+     |
+4298 |                 self.create_wasm_param_types(&host_func.params_to_signature(/* &mut StringTable */).parameters)?;
+     |                                                                             ++++++++++++++++++++++
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:4313:25
+     |
+4313 |                 .insert(host_func.name.clone(), self.function_count);
+     |                  ------ ^^^^^^^^^^^^^^^^^^^^^^ expected `String`, found `StringId`
+     |                  |
+     |                  arguments to this method are incorrect
+     |
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+help: try using a conversion method
+     |
+4313 -                 .insert(host_func.name.clone(), self.function_count);
+4313 +                 .insert(host_func.name.to_string(), self.function_count);
+     |
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:4317:25
+     |
+4317 |                 .insert(host_func.name.clone(), self.function_count);
+     |                  ------ ^^^^^^^^^^^^^^^^^^^^^^ expected `String`, found `StringId`
+     |                  |
+     |                  arguments to this method are incorrect
+     |
+note: method defined here
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:1207:12
+     |
+1207 |     pub fn insert(&mut self, k: K, v: V) -> Option<V> {
+     |            ^^^^^^
+help: try using a conversion method
+     |
+4317 -                 .insert(host_func.name.clone(), self.function_count);
+4317 +                 .insert(host_func.name.to_string(), self.function_count);
+     |
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:4347:21
+     |
+4347 |                 Ok((host_func.module.clone(), host_func.import_name.clone()))
+     |                     ^^^^^^^^^^^^^^^^^^^^^^^^ expected `String`, found `StringId`
+     |
+help: try using a conversion method
+     |
+4347 -                 Ok((host_func.module.clone(), host_func.import_name.clone()))
+4347 +                 Ok((host_func.module.to_string(), host_func.import_name.clone()))
+     |
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:4347:47
+     |
+4347 |                 Ok((host_func.module.clone(), host_func.import_name.clone()))
+     |                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `String`, found `StringId`
+     |
+help: try using a conversion method
+     |
+4347 -                 Ok((host_func.module.clone(), host_func.import_name.clone()))
+4347 +                 Ok((host_func.module.clone(), host_func.import_name.to_string()))
+     |
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5620:76
+     |
+5620 |                 let offset = self.string_manager.add_string_slice_constant(value);
+     |                                                  ------------------------- ^^^^^ expected `&str`, found `&StringId`
+     |                                                  |
+     |                                                  arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:420:12
+     |
+ 420 |     pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^            -----------
+
+error[E0599]: no method named `len` found for reference `&StringId` in the current scope
+    --> src/compiler/codegen/wasm_encoding.rs:5625:47
+     |
+5625 |                 let default_capacity = (value.len() as u32).max(32);
+     |                                               ^^^ method not found in `&StringId`
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following traits define an item `len`, perhaps you need to implement one of them:
+             candidate #1: `ExactSizeIterator`
+             candidate #2: `cranelift_codegen::constant_hash::Table`
+             candidate #3: `cranelift_codegen::isa::aarch64::lower::isle::generated_code::Length`
+             candidate #4: `cranelift_codegen::isa::riscv64::lower::isle::generated_code::Length`
+             candidate #5: `cranelift_codegen::isa::x64::lower::isle::generated_code::Length`
+             candidate #6: `cranelift_codegen::opts::generated_code::Length`
+             candidate #7: `gimli::read::reader::Reader`
+             candidate #8: `gimli::read::reader::Reader`
+             candidate #9: `gimli::write::writer::Writer`
+             candidate #10: `nom::traits::AsChar`
+             candidate #11: `object::read::read_cache::ReadCacheOps`
+             candidate #12: `object::read::read_ref::ReadRef`
+             candidate #13: `object::read::read_ref::ReadRef`
+             candidate #14: `object::write::util::WritableBuffer`
+             candidate #15: `rayon::iter::IndexedParallelIterator`
+             candidate #16: `rayon::range::private::IndexedRangeInteger`
+             candidate #17: `rayon::range_inclusive::private::IndexedRangeInteger`
+             candidate #18: `ring::hkdf::KeyType`
+             candidate #19: `toml_edit::table::TableLike`
+             candidate #20: `typenum::type_operators::Len`
+             candidate #21: `winnow::stream::AsChar`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5628:46
+     |
+5628 |                     .allocate_mutable_string(value, default_capacity);
+     |                      ----------------------- ^^^^^ expected `&str`, found `&StringId`
+     |                      |
+     |                      arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:460:12
+     |
+ 460 |     pub fn allocate_mutable_string(&mut self, initial_value: &str, capacity: u32) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^            -------------------
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5730:45
+     |
+5730 |         if self.wasix_registry.has_function(&host_func.name) {
+     |                                ------------ ^^^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |                                |
+     |                                arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/host_functions/wasix_registry.rs:169:12
+     |
+ 169 |     pub fn has_function(&self, beanstalk_name: &str) -> bool {
+     |            ^^^^^^^^^^^^        --------------------
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5732:17
+     |
+5731 |             return self.lower_wasix_host_call(
+     |                         --------------------- arguments to this method are incorrect
+5732 |                 &host_func.name,
+     |                 ^^^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:5929:8
+     |
+5929 |     fn lower_wasix_host_call(
+     |        ^^^^^^^^^^^^^^^^^^^^^
+5930 |         &mut self,
+5931 |         function_name: &str,
+     |         -------------------
+
+error[E0277]: the trait bound `std::string::String: std::borrow::Borrow<StringId>` is not satisfied
+    --> src/compiler/codegen/wasm_encoding.rs:5747:67
+     |
+5747 |         if let Some(&func_index) = self.host_function_indices.get(&host_func.name) {
+     |                                                               --- ^^^^^^^^^^^^^^^ the trait `std::borrow::Borrow<StringId>` is not implemented for `std::string::String`
+     |                                                               |
+     |                                                               required by a bound introduced by this call
+     |
+     = help: the following other types implement trait `std::borrow::Borrow<Borrowed>`:
+               `std::string::String` implements `std::borrow::Borrow<bstr::bstr::BStr>`
+               `std::string::String` implements `std::borrow::Borrow<str>`
+note: required by a bound in `HashMap::<K, V, S>::get`
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:911:12
+     |
+ 909 |     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+     |            --- required by a bound in this associated function
+ 910 |     where
+ 911 |         K: Borrow<Q>,
+     |            ^^^^^^^^^ required by this bound in `HashMap::<K, V, S>::get`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5783:42
+     |
+5783 |                 if host_function.name == "print" {
+     |                    ------------------    ^^^^^^^ expected `StringId`, found `&str`
+     |                    |
+     |                    expected because this is `StringId`
+
+error[E0277]: the trait bound `std::string::String: std::borrow::Borrow<StringId>` is not satisfied
+    --> src/compiler/codegen/wasm_encoding.rs:5819:67
+     |
+5819 |         if let Some(&func_index) = self.host_function_indices.get(&host_function.name) {
+     |                                                               --- ^^^^^^^^^^^^^^^^^^^ the trait `std::borrow::Borrow<StringId>` is not implemented for `std::string::String`
+     |                                                               |
+     |                                                               required by a bound introduced by this call
+     |
+     = help: the following other types implement trait `std::borrow::Borrow<Borrowed>`:
+               `std::string::String` implements `std::borrow::Borrow<bstr::bstr::BStr>`
+               `std::string::String` implements `std::borrow::Borrow<str>`
+note: required by a bound in `HashMap::<K, V, S>::get`
+    --> /Users/aneirinjames/.rustup/toolchains/stable-aarch64-apple-darwin/lib/rustlib/src/rust/library/std/src/collections/hash/map.rs:911:12
+     |
+ 909 |     pub fn get<Q: ?Sized>(&self, k: &Q) -> Option<&V>
+     |            --- required by a bound in this associated function
+ 910 |     where
+ 911 |         K: Borrow<Q>,
+     |            ^^^^^^^^^ required by this bound in `HashMap::<K, V, S>::get`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5869:75
+     |
+5869 |         let string_offset = self.string_manager.add_string_slice_constant(&string_content);
+     |                                                 ------------------------- ^^^^^^^^^^^^^^^ expected `&str`, found `&StringId`
+     |                                                 |
+     |                                                 arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:420:12
+     |
+ 420 |     pub fn add_string_slice_constant(&mut self, value: &str) -> u32 {
+     |            ^^^^^^^^^^^^^^^^^^^^^^^^^            -----------
+
+error[E0599]: no method named `len` found for struct `StringId` in the current scope
+    --> src/compiler/codegen/wasm_encoding.rs:5870:41
+     |
+5870 |         let string_len = string_content.len() as u32;
+     |                                         ^^^ method not found in `StringId`
+     |
+    ::: src/compiler/string_interning.rs:6:1
+     |
+   6 | pub struct StringId(u32);
+     | ------------------- method `len` not found for this struct
+     |
+     = help: items from traits can only be used if the trait is implemented and in scope
+     = note: the following traits define an item `len`, perhaps you need to implement one of them:
+             candidate #1: `ExactSizeIterator`
+             candidate #2: `cranelift_codegen::constant_hash::Table`
+             candidate #3: `cranelift_codegen::isa::aarch64::lower::isle::generated_code::Length`
+             candidate #4: `cranelift_codegen::isa::riscv64::lower::isle::generated_code::Length`
+             candidate #5: `cranelift_codegen::isa::x64::lower::isle::generated_code::Length`
+             candidate #6: `cranelift_codegen::opts::generated_code::Length`
+             candidate #7: `gimli::read::reader::Reader`
+             candidate #8: `gimli::read::reader::Reader`
+             candidate #9: `gimli::write::writer::Writer`
+             candidate #10: `nom::traits::AsChar`
+             candidate #11: `object::read::read_cache::ReadCacheOps`
+             candidate #12: `object::read::read_ref::ReadRef`
+             candidate #13: `object::read::read_ref::ReadRef`
+             candidate #14: `object::write::util::WritableBuffer`
+             candidate #15: `rayon::iter::IndexedParallelIterator`
+             candidate #16: `rayon::range::private::IndexedRangeInteger`
+             candidate #17: `rayon::range_inclusive::private::IndexedRangeInteger`
+             candidate #18: `ring::hkdf::KeyType`
+             candidate #19: `toml_edit::table::TableLike`
+             candidate #20: `typenum::type_operators::Len`
+             candidate #21: `winnow::stream::AsChar`
+
+error[E0308]: mismatched types
+    --> src/compiler/codegen/wasm_encoding.rs:5976:58
+     |
+5976 |                 self.lower_wasix_print_constant_enhanced(content, function_builder)
+     |                      ----------------------------------- ^^^^^^^ expected `&str`, found `&StringId`
+     |                      |
+     |                      arguments to this method are incorrect
+     |
+     = note: expected reference `&str`
+                found reference `&StringId`
+note: method defined here
+    --> src/compiler/codegen/wasm_encoding.rs:5992:8
+     |
+5992 |     fn lower_wasix_print_constant_enhanced(
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+5993 |         &mut self,
+5994 |         string_content: &str,
+     |         --------------------
+
+warning: unused variable: `config_source_code`
+   --> src/build.rs:139:32
+    |
+139 |         CompileType::MultiFile(config_source_code) => {
+    |                                ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_config_source_code`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `config_path`
+   --> src/build.rs:140:17
+    |
+140 |             let config_path = entry_dir.join(settings::CONFIG_FILE_NAME);
+    |                 ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_config_path`
+
+warning: unused variable: `module`
+   --> src/runtime/jit.rs:191:5
+    |
+191 |     module: &Module,
+    |     ^^^^^^ help: if this is intentional, prefix it with an underscore: `_module`
+
+warning: unused variable: `wasm_bytes`
+   --> src/runtime/jit.rs:192:5
+    |
+192 |     wasm_bytes: &[u8],
+    |     ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_wasm_bytes`
+
+warning: unused variable: `time`
+  --> src/build_system/core_build.rs:96:9
+   |
+96 |     let time = Instant::now();
+   |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> src/build_system/core_build.rs:146:9
+    |
+146 |     let time = Instant::now();
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `time`
+   --> src/build_system/core_build.rs:163:9
+    |
+163 |     let time = Instant::now();
+    |         ^^^^ help: if this is intentional, prefix it with an underscore: `_time`
+
+warning: unused variable: `exported_declarations`
+   --> src/build_system/core_build.rs:245:29
+    |
+245 | fn extract_required_imports(exported_declarations: &[Arg]) -> Vec<ExternalImport> {
+    |                             ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_exported_declarations`
+
+warning: variable does not need to be mutable
+  --> src/compiler/parsers/ast.rs:35:13
+   |
+35 |         let mut external_exports: Vec<Arg> = Vec::new();
+   |             ----^^^^^^^^^^^^^^^^
+   |             |
+   |             help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+  --> src/compiler/parsers/ast.rs:62:25
+   |
+62 |                     let mut context = ScopeContext::new(
+   |                         ----^^^^^^^
+   |                         |
+   |                         help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/build_ast.rs:246:21
+    |
+246 | /                     return_rule_error!(
+247 | |                         "Return statements can only be used inside functions",
+248 | |                         token_stream.current_location().to_error_location(&string_table), {}
+249 | |                     )
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/build_ast.rs:273:25
+    |
+273 | /                         return_syntax_error!(
+274 | |                             "Unexpected scope close. Expressions are not terminated like this.
+275 | |                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler bug.",
+276 | |                             token_stream.current_location().to_error_location(&string_table), {
+...   |
+279 | |                         );
+    | |_________________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/build_ast.rs:282:25
+    |
+282 | /                         return_syntax_error!(
+283 | |                             "Unexpected use of ';' inside a template. Templates are not closed with ';'.
+284 | |                             If you are seeing this error, this might be a compiler bug instead.",
+285 | |                             token_stream.current_location().to_error_location(&string_table), {
+...   |
+288 | |                         )
+    | |_________________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused variable: `var_name_static`
+   --> src/compiler/parsers/build_ast.rs:390:25
+    |
+390 |                     let var_name_static: &'static str = Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
+    |                         ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_var_name_static`
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/collections.rs:41:21
+    |
+ 41 | /                     return_syntax_error!(
+ 42 | |                         "Expected a collection item after the comma",
+ 43 | |                         token_stream.current_location().to_error_location(&string_table),
+ 44 | |                         {}
+ 45 | |                     )
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/collections.rs:54:21
+    |
+ 54 | /                     return_syntax_error!(
+ 55 | |                         "Expected a collection item after the comma",
+ 56 | |                         token_stream.current_location().to_error_location(&string_table), {}
+ 57 | |                     )
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/create_template_node.rs:192:21
+    |
+192 | / ...   return_syntax_error!(
+193 | | ...       format!("Invalid Token Used Inside template body when creating template node. Token: {:?}", token_stream.current_token_kind()),
+194 | | ...       token_stream.current_location().to_error_location(&string_table), {}
+195 | | ...   )
+    | |_______- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/create_template_node.rs:243:17
+    |
+243 | /                 return_syntax_error!(
+244 | |                     "Can't use slots in the template head. Token",
+245 | |                     self.location.to_owned().to_error_location(&string_table), {}
+246 | |                 )
+    | |_________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused variable: `args`
+   --> src/compiler/parsers/statements/create_template_node.rs:495:56
+    |
+495 |                         ExpressionKind::StructInstance(args) => {}
+    |                                                        ^^^^ help: if this is intentional, prefix it with an underscore: `_args`
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/create_template_node.rs:442:17
+    |
+442 | /                 return_syntax_error!(
+443 | |                     format!("Expected a comma before the next token in the template head. Token: {:?}", token),
+444 | |                     token_stream.current_location().to_error_location(&string_table), {}
+445 | |                 )
+    | |_________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/create_template_node.rs:518:21
+    |
+518 | /                     return_syntax_error!(
+519 | |                         format!("Cannot declare new variables inside of a template head. Variable '{}' is not declared.
+520 | |                         \n Here are all the variables in scope: {:#?}", name, context.declarations),
+521 | |                         token_stream.current_location().to_error_location(&string_table), {}
+522 | |                     )
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/create_template_node.rs:568:17
+    |
+568 | /                 return_syntax_error!(
+569 | |                     "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
+570 | |                     token_stream.current_location().to_error_location(&string_table), {}
+571 | |                 )
+    | |_________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/parsers/statements/create_template_node.rs:580:17
+    |
+580 | /                 return_syntax_error!(
+581 | |                     format!("Invalid Token Used Inside template head when creating template node. Token: {:?}", token),
+582 | |                     token_stream.current_location().to_error_location(&string_table), {}
+583 | |                 )
+    | |_________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused variable: `name`
+   --> src/compiler/parsers/statements/functions.rs:191:35
+    |
+191 |                 TokenKind::Symbol(name) => {
+    |                                   ^^^^ help: if this is intentional, prefix it with an underscore: `_name`
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:413:21
+    |
+413 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:63:21
+    |
+ 63 | / ...   return_syntax_error!(
+ 64 | | ...       format!(
+ 65 | | ...           "Not enough nodes on the stack for the {} operator when parsing an expression. Starting Stack: {:?}. Stack being folded: {:...
+ 66 | | ...           op.to_str(),
+...   |
+ 70 | | ...       node.location.to_owned().to_error_location(&string_table), {}
+ 71 | | ...   )
+    | |_______- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_syntax_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:157:26
+    |
+157 |                       _ => return_rule_error!(
+    |  __________________________-
+158 | |                         format!("Can't perform operation {} on floats", op.to_str()),
+159 | |                         self.location.to_owned().to_error_location(&string_table), {}
+160 | |                     ),
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:173:29
+    |
+173 | / ...                   return_rule_error!(
+174 | | ...                       "Can't divide by zero",
+175 | | ...                       self.location.to_owned().to_error_location(&string_table), {}
+176 | | ...                   )
+    | |_______________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:183:29
+    |
+183 | / ...                   return_rule_error!(
+184 | | ...                       "Can't modulus by zero",
+185 | | ...                       self.location.to_owned().to_error_location(&string_table), {}
+186 | | ...                   )
+    | |_______________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:224:26
+    |
+224 |                       _ => return_rule_error!(
+    |  __________________________-
+225 | |                         format!("Can't perform operation {} on integers", op.to_str()),
+226 | |                         self.location.to_owned().to_error_location(&string_table), {}
+227 | |                     ),
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:237:22
+    |
+237 |                   _ => return_rule_error!(
+    |  ______________________-
+238 | |                     format!("Can't perform operation {} on booleans", op.to_str()),
+239 | |                     self.location.to_owned().to_error_location(&string_table), {}
+240 | |                 ),
+    | |_________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: variable does not need to be mutable
+   --> src/compiler/compiler_errors.rs:473:21
+    |
+473 |                   let mut map = std::collections::HashMap::new();
+    |                       ----^^^
+    |                       |
+    |                       help: remove this `mut`
+    |
+   ::: src/compiler/optimizers/constant_folding.rs:255:26
+    |
+255 |                       _ => return_rule_error!(
+    |  __________________________-
+256 | |                         format!("Can't perform operation {} on strings",
+257 | |                         op.to_str()),
+258 | |                         self.location.to_owned().to_error_location(&string_table), {}
+259 | |                     ),
+    | |_____________________- in this macro invocation
+    |
+    = note: this warning originates in the macro `return_rule_error` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused variable: `move_location`
+   --> src/compiler/borrow_checker/borrow_checker.rs:670:29
+    |
+670 |                         let move_location = ErrorLocation::default();
+    |                             ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_move_location`
+
+warning: unused variable: `existing_location`
+   --> src/compiler/borrow_checker/borrow_checker.rs:773:13
+    |
+773 |         let existing_location = ErrorLocation::default();
+    |             ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_existing_location`
+
+warning: unused variable: `borrow_location`
+   --> src/compiler/borrow_checker/borrow_checker.rs:810:13
+    |
+810 |         let borrow_location = ErrorLocation::default();
+    |             ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_borrow_location`
+
+warning: unused variable: `existing_location`
+   --> src/compiler/borrow_checker/borrow_checker.rs:992:29
+    |
+992 |                         let existing_location = ErrorLocation::default();
+    |                             ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_existing_location`
+
+warning: unused variable: `existing_location`
+    --> src/compiler/borrow_checker/borrow_checker.rs:1031:29
+     |
+1031 |                         let existing_location = ErrorLocation::default();
+     |                             ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_existing_location`
+
+warning: unused variable: `existing_location`
+    --> src/compiler/borrow_checker/borrow_checker.rs:1052:29
+     |
+1052 |                         let existing_location = ErrorLocation::default();
+     |                             ^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_existing_location`
+
+warning: unused variable: `move_location`
+    --> src/compiler/borrow_checker/borrow_checker.rs:1091:21
+     |
+1091 |                 let move_location = ErrorLocation::default();
+     |                     ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_move_location`
+
+warning: unused variable: `borrow_location`
+    --> src/compiler/borrow_checker/borrow_checker.rs:1132:21
+     |
+1132 |                 let borrow_location = ErrorLocation::default();
+     |                     ^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_borrow_location`
+
+warning: unused variable: `i`
+   --> src/compiler/borrow_checker/extract.rs:659:18
+    |
+659 |             for (i, loan) in self.loans.iter().enumerate() {
+    |                  ^
+    |
+help: if this is intentional, prefix it with an underscore
+    |
+659 |             for (_i, loan) in self.loans.iter().enumerate() {
+    |                  +
+help: you might have meant to pattern match on the similarly named constant `CHUNK_SIZE`
+    |
+659 -             for (i, loan) in self.loans.iter().enumerate() {
+659 +             for (compiler::borrow_checker::extract::BitSet::is_empty_fast::CHUNK_SIZE, loan) in self.loans.iter().enumerate() {
+    |
+
+warning: unused variable: `loan`
+   --> src/compiler/borrow_checker/extract.rs:659:21
+    |
+659 |             for (i, loan) in self.loans.iter().enumerate() {
+    |                     ^^^^ help: if this is intentional, prefix it with an underscore: `_loan`
+
+warning: unused variable: `program_point`
+   --> src/compiler/borrow_checker/extract.rs:744:14
+    |
+744 |         for (program_point, gen_set) in &self.gen_sets {
+    |              ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_program_point`
+
+warning: unused variable: `header`
+    --> src/compiler/compiler_errors.rs:1128:9
+     |
+1128 |     let header = actual_file.file_name().unwrap().to_string_lossy();
+     |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_header`
+
+warning: unused variable: `string_table`
+  --> src/compiler/compiler_warnings.rs:37:9
+   |
+37 |         string_table: &mut StringTable,
+   |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_string_table`
+
+warning: unused variable: `string_len`
+   --> src/compiler/string_interning.rs:167:13
+    |
+167 |         let string_len = s.len();
+    |             ^^^^^^^^^^
+    |
+help: if this is intentional, prefix it with an underscore
+    |
+167 |         let _string_len = s.len();
+    |             +
+help: you might have meant to pattern match on the similarly named constant `CHUNK_SIZE`
+    |
+167 -         let string_len = s.len();
+167 +         let compiler::borrow_checker::extract::BitSet::is_empty_fast::CHUNK_SIZE = s.len();
+    |
+
+warning: unused variable: `wasm_type`
+   --> src/compiler/codegen/wasm_encoding.rs:892:14
+    |
+892 |         for (wasm_type, wir_locals) in locals_by_type {
+    |              ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_wasm_type`
+
+warning: unused variable: `start_index`
+    --> src/compiler/codegen/wasm_encoding.rs:1422:21
+     |
+1422 |         if let Some(start_index) = start_function_index {
+     |                     ^^^^^^^^^^^
+     |
+help: if this is intentional, prefix it with an underscore
+     |
+1422 |         if let Some(_start_index) = start_function_index {
+     |                     +
+help: you might have meant to pattern match on the similarly named constant `MAX_STRING_SIZE`
+     |
+1422 -         if let Some(start_index) = start_function_index {
+1422 +         if let Some(runtime::jit::read_string_from_memory::MAX_STRING_SIZE) = start_function_index {
+     |
+
+warning: unused variable: `string_table`
+  --> src/compiler/codegen/wat_to_wasm.rs:10:13
+   |
+10 |     let mut string_table = StringTable::new();
+   |             ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_string_table`
+
+warning: variable does not need to be mutable
+  --> src/compiler/codegen/wat_to_wasm.rs:10:9
+   |
+10 |     let mut string_table = StringTable::new();
+   |         ----^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+
+warning: unused variable: `beanstalk_name`
+    --> src/compiler/host_functions/wasix_registry.rs:2526:14
+     |
+2526 |         for (beanstalk_name, wasix_function) in &self.functions {
+     |              ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_beanstalk_name`
+
+warning: variable does not need to be mutable
+   --> src/lib.rs:155:13
+    |
+155 |         let mut string_table = StringTable::new();
+    |             ----^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+Some errors have detailed explanations: E0061, E0063, E0277, E0308, E0599, E0609.
+For more information about an error, try `rustc --explain E0061`.
+warning: `beanstalk` (lib) generated 95 warnings
+error: could not compile `beanstalk` (lib) due to 70 previous errors; 95 warnings emitted
