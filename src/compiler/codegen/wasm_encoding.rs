@@ -29,9 +29,11 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::host_functions::registry::HostFunctionDef;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::host_functions::wasix_registry::{
     WasixFunctionDef, WasixFunctionRegistry, create_wasix_registry,
 };
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::wir::place::{
     FieldSize, MemoryBase, Place, ProjectionElem, TypeSize, WasmType,
 };
@@ -42,8 +44,9 @@ use crate::compiler::wir::wir_nodes::{
 use crate::return_compiler_error;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
-use crate::compiler::string_interning::StringTable;
+
+const ENTRY_POINT_FUNCTION_NAME: &str = "_start";
+const MAIN_FUNCTION_NAME: &str = "main";
 
 /// Function builder that leverages wasm_encoder's built-in validation and control flow management
 ///
@@ -190,7 +193,8 @@ impl FunctionBuilder {
                 // Validate that we're in an if frame
                 if let Some(frame) = self.control_stack.last_mut() {
                     if frame.frame_type != ControlFrameType::If {
-                        let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+                        let function_name_static: &'static str =
+                            Box::leak(self.function_name.clone().into_boxed_str());
                         return_compiler_error!(
                             "WASM validation error in function '{}': else instruction without matching if",
                             self.function_name ; {
@@ -202,7 +206,8 @@ impl FunctionBuilder {
                     }
                     frame.frame_type = ControlFrameType::Else;
                 } else {
-                    let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+                    let function_name_static: &'static str =
+                        Box::leak(self.function_name.clone().into_boxed_str());
                     return_compiler_error!(
                         "WASM validation error in function '{}': else instruction with empty control stack",
                         self.function_name ; {
@@ -220,7 +225,8 @@ impl FunctionBuilder {
                     if frame.frame_type == ControlFrameType::Function
                         && self.control_stack.is_empty()
                     {
-                        let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+                        let function_name_static: &'static str =
+                            Box::leak(self.function_name.clone().into_boxed_str());
                         return_compiler_error!(
                             "WASM validation error in function '{}': attempting to end function frame",
                             self.function_name ; {
@@ -231,7 +237,8 @@ impl FunctionBuilder {
                         );
                     }
                 } else {
-                    let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+                    let function_name_static: &'static str =
+                        Box::leak(self.function_name.clone().into_boxed_str());
                     return_compiler_error!(
                         "WASM validation error in function '{}': end instruction with empty control stack",
                         self.function_name ; {
@@ -295,7 +302,8 @@ impl FunctionBuilder {
 
         // Validate parameter count doesn't exceed WASM limits
         if self.param_types.len() > 1000 {
-            let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+            let function_name_static: &'static str =
+                Box::leak(self.function_name.clone().into_boxed_str());
             return_compiler_error!(
                 "Function '{}' has too many parameters ({}). WASM functions are limited to 1000 parameters.",
                 self.function_name,
@@ -309,7 +317,8 @@ impl FunctionBuilder {
 
         // Validate return type count doesn't exceed WASM limits
         if self.result_types.len() > 1000 {
-            let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+            let function_name_static: &'static str =
+                Box::leak(self.function_name.clone().into_boxed_str());
             return_compiler_error!(
                 "Function '{}' has too many return values ({}). WASM functions are limited to 1000 return values.",
                 self.function_name,
@@ -345,7 +354,8 @@ impl FunctionBuilder {
     fn validate_control_frames(&self) -> Result<(), CompileError> {
         // Should only have the function frame remaining
         if self.control_stack.len() != 1 {
-            let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+            let function_name_static: &'static str =
+                Box::leak(self.function_name.clone().into_boxed_str());
             return_compiler_error!(
                 "WASM validation error in function '{}': {} control frames remain unclosed",
                 self.function_name,
@@ -359,7 +369,8 @@ impl FunctionBuilder {
 
         if let Some(frame) = self.control_stack.first() {
             if frame.frame_type != ControlFrameType::Function {
-                let function_name_static: &'static str = Box::leak(self.function_name.clone().into_boxed_str());
+                let function_name_static: &'static str =
+                    Box::leak(self.function_name.clone().into_boxed_str());
                 return_compiler_error!(
                     "WASM validation error in function '{}': expected function frame, found {:?}",
                     self.function_name,
@@ -437,9 +448,9 @@ impl StringManager {
         offset
     }
 
-    /// Add a string constant and return its offset in linear memory (legacy method)
+    /// Add a string constant and return its offset in linear memory
     ///
-    /// This method is kept for backward compatibility and delegates to add_string_slice_constant
+    /// This method delegates to add_string_slice_constant for consistency
     pub fn add_string_constant(&mut self, value: &str) -> u32 {
         self.add_string_slice_constant(value)
     }
@@ -989,7 +1000,7 @@ pub struct WasmModule {
     pub function_count: u32,
     pub type_count: u32,
     global_count: u32,
-    
+
     // Track exported names to prevent duplicates
     exported_names: HashSet<String>,
 }
@@ -1151,10 +1162,10 @@ impl WasmModule {
     }
 
     /// Load a string argument for host function calls - consolidates duplicate string loading logic
-    /// 
+    ///
     /// For string/template types, this pushes both pointer and length onto the stack.
     /// For constant strings, it adds them to the data section and pushes the offset and length.
-    /// For variable strings, it loads the pointer and pushes a placeholder length (TODO: implement proper length loading).
+    /// For variable strings, it loads the pointer and length from memory.
     fn emit_memory_load(function: &mut Function, wasm_type: &WasmType, offset: u32) {
         let mem_arg = MemArg {
             offset: offset.into(),
@@ -1255,7 +1266,7 @@ impl WasmModule {
 
     /// Create a new WasmModule from WIR with host function registry access
     pub fn from_wir_with_registry(
-        wir: &WIR, 
+        wir: &WIR,
         registry: Option<&HostFunctionRegistry>,
         string_table: &mut StringTable,
     ) -> Result<WasmModule, CompileError> {
@@ -1276,7 +1287,11 @@ impl WasmModule {
         });
 
         // Generate WASM import section for host functions with registry-aware mapping
-        module.encode_host_function_imports_with_registry(&wir.host_imports, registry, string_table)?;
+        module.encode_host_function_imports_with_registry(
+            &wir.host_imports,
+            registry,
+            string_table,
+        )?;
 
         // Generate WASIX import section for WASIX functions
         module.add_wasix_imports()?;
@@ -1288,15 +1303,17 @@ impl WasmModule {
 
         // Process functions with error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
-            module.compile_function(function, string_table).map_err(|mut error| {
-                // Add context about which function failed
-                let function_name = string_table.resolve(function.name);
-                error.msg = format!(
-                    "Failed to compile function '{}' (index {}): {}",
-                    function_name, index, error.msg
-                );
-                error
-            })?;
+            module
+                .compile_function(function, string_table)
+                .map_err(|mut error| {
+                    // Add context about which function failed
+                    let function_name = string_table.resolve(function.name);
+                    error.msg = format!(
+                        "Failed to compile function '{}' (index {}): {}",
+                        function_name, index, error.msg
+                    );
+                    error
+                })?;
         }
 
         // Export entry point functions correctly, passing the import count
@@ -1313,8 +1330,8 @@ impl WasmModule {
 
     /// Set the host function registry for runtime-specific mappings
     pub fn set_host_function_registry(
-        &mut self, 
-        registry: &HostFunctionRegistry
+        &mut self,
+        registry: &HostFunctionRegistry,
     ) -> Result<(), CompileError> {
         self.host_registry = Some(registry.clone());
         Ok(())
@@ -1330,37 +1347,42 @@ impl WasmModule {
     /// This method implements subtask 3.3: Fix entry point export generation
     /// It ensures entry point functions are exported correctly and validates
     /// that only one start function is exported per module.
-    pub fn export_entry_point_functions_with_import_count(&mut self, wir: &WIR, import_count: u32, string_table: &StringTable) -> Result<(), CompileError> {
+    pub fn export_entry_point_functions_with_import_count(
+        &mut self,
+        wir: &WIR,
+        import_count: u32,
+        string_table: &StringTable,
+    ) -> Result<(), CompileError> {
         let mut entry_point_count = 0;
         let mut start_function_index: Option<u32> = None;
 
         // Look for entry point functions in WIR
         for (index, wir_function) in wir.functions.iter().enumerate() {
             let mut exported = false;
-            
+
             // Check if this function is marked as an entry point in WIR exports
             if let Some(export) = wir.exports.get(&wir_function.name) {
                 if export.kind == crate::compiler::wir::wir_nodes::ExportKind::Function {
                     // Resolve interned strings for comparison
                     let function_name = string_table.resolve(wir_function.name);
                     let export_name = string_table.resolve(export.name);
-                    
+
                     // Check if this is the entry point by looking for specific naming patterns
                     // Entry points are typically named "main", "_start", or marked specially in the WIR
-                    let is_entry_point = function_name == "main" || 
-                                        function_name == "_start" ||
-                                        function_name.contains("entry") ||
-                                        export_name == "_start"; // WASM start function convention
+                    let is_entry_point = function_name == MAIN_FUNCTION_NAME
+                        || function_name == ENTRY_POINT_FUNCTION_NAME
+                        || function_name.contains("entry")
+                        || export_name == ENTRY_POINT_FUNCTION_NAME; // WASM start function convention
 
                     if is_entry_point {
                         entry_point_count += 1;
                         // FIXED: Add import_count to get the correct WASM function index
                         // Imports come first in the function index space, then defined functions
                         let function_index = import_count + (index as u32);
-                        
+
                         // Export the entry point function
                         self.add_function_export(export_name, function_index)?;
-                        
+
                         // Mark as start function for WASM module
                         start_function_index = Some(function_index);
                         exported = true;
@@ -1373,14 +1395,17 @@ impl WasmModule {
                     }
                 }
             }
-            
+
             // Handle implicit main/_start function export only if not already exported
             let function_name = string_table.resolve(wir_function.name);
-            if !exported && (function_name == "main" || function_name == "_start") {
+            if !exported
+                && (function_name == MAIN_FUNCTION_NAME
+                    || function_name == ENTRY_POINT_FUNCTION_NAME)
+            {
                 entry_point_count += 1;
                 // FIXED: Add import_count to get the correct WASM function index
                 let function_index = import_count + (index as u32);
-                
+
                 // Use the function's actual name for the export
                 self.add_function_export(function_name, function_index)?;
                 start_function_index = Some(function_index);
@@ -1611,7 +1636,7 @@ impl WasmModule {
         });
 
         // Generate WASM import section for host functions
-        module.encode_host_function_imports(&wir.host_imports)?;
+        module.encode_host_function_imports(&wir.host_imports, string_table)?;
 
         // Process functions
         for function in &wir.functions {
@@ -1622,7 +1647,11 @@ impl WasmModule {
     }
 
     /// Compile a WIR function to WASM with wasm_encoder integration
-    pub fn compile_function(&mut self, wir_function: &WirFunction, string_table: &StringTable) -> Result<(), CompileError> {
+    pub fn compile_function(
+        &mut self,
+        wir_function: &WirFunction,
+        string_table: &StringTable,
+    ) -> Result<(), CompileError> {
         // Register the function in the function registry
         let function_name = string_table.resolve(wir_function.name);
         self.function_registry
@@ -1702,14 +1731,23 @@ impl WasmModule {
         );
 
         // Compile function body using enhanced builder
-        self.compile_function_body(wir_function, &mut function_builder, &local_map, string_table)?;
+        self.compile_function_body(
+            wir_function,
+            &mut function_builder,
+            &local_map,
+            string_table,
+        )?;
 
         // Finalize function with wasm_encoder validation
         function_builder.finalize()
     }
 
     /// Generate enhanced function metadata for named returns and references
-    fn generate_function_metadata(&self, wir_function: &WirFunction, string_table: &StringTable) -> FunctionMetadata {
+    fn generate_function_metadata(
+        &self,
+        wir_function: &WirFunction,
+        string_table: &StringTable,
+    ) -> FunctionMetadata {
         let mut return_info = Vec::new();
 
         for (i, return_arg) in wir_function.return_args.iter().enumerate() {
@@ -1738,7 +1776,12 @@ impl WasmModule {
     }
 
     /// Finalize function registration and add to module
-    fn finalize_function_registration(&mut self, wir_function: &WirFunction, function: Function, string_table: &StringTable) {
+    fn finalize_function_registration(
+        &mut self,
+        wir_function: &WirFunction,
+        function: Function,
+        string_table: &StringTable,
+    ) {
         // Generate enhanced metadata for named returns and references
         let metadata = self.generate_function_metadata(wir_function, string_table);
 
@@ -1836,7 +1879,14 @@ impl WasmModule {
                 destination,
             } => {
                 // WIR-faithful function call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
-                self.lower_wir_call(func, args, destination, function_builder, local_map, string_table)
+                self.lower_wir_call(
+                    func,
+                    args,
+                    destination,
+                    function_builder,
+                    local_map,
+                    string_table,
+                )
             }
             Statement::HostCall {
                 function: host_func,
@@ -1896,11 +1946,11 @@ impl WasmModule {
 
                 // Create WASM if/else block structure
                 // The condition is already on the stack from lower_operand
-                
+
                 // Determine block type based on whether branches produce values
                 // For now, use empty block type (no return value)
                 let block_type = wasm_encoder::BlockType::Empty;
-                
+
                 // Emit if instruction
                 function_builder.instruction(&Instruction::If(block_type))?;
 
@@ -1912,7 +1962,7 @@ impl WasmModule {
                 // Emit else instruction if there are else statements
                 if !else_statements.is_empty() {
                     function_builder.instruction(&Instruction::Else)?;
-                    
+
                     // Lower else block statements
                     for stmt in else_statements {
                         self.lower_statement(stmt, function_builder, local_map, string_table)?;
@@ -2054,8 +2104,6 @@ impl WasmModule {
         }
     }
 
-    /// Legacy method for compatibility - delegates to enhanced version
-
     /// Lower WIR assignment statement (≤3 WASM instructions)
     fn lower_wir_constant(
         &mut self,
@@ -2088,7 +2136,9 @@ impl WasmModule {
             Constant::String(value) => {
                 // String slice constants: immutable pointer to string data in data section
                 let string_content = string_table.resolve(*value);
-                let offset = self.string_manager.add_string_slice_constant(string_content);
+                let offset = self
+                    .string_manager
+                    .add_string_slice_constant(string_content);
                 Self::emit_i32_const(function, offset as i32);
 
                 #[cfg(feature = "verbose_codegen_logging")]
@@ -2615,8 +2665,6 @@ impl WasmModule {
         }
     }
 
-    /// Legacy method for compatibility - delegates to enhanced version
-
     /// Ensure function has proper termination
     ///
     /// WASM functions must end with a terminating instruction (return, unreachable, etc.)
@@ -2705,11 +2753,11 @@ impl WasmModule {
             );
             return Ok(function_index);
         }
-        
+
         // Add export entry to export section
         self.export_section
             .export(name, ExportKind::Func, function_index);
-        
+
         // Track this export name
         self.exported_names.insert(name.to_string());
 
@@ -2801,13 +2849,13 @@ impl WasmModule {
             } else {
                 (
                     string_table.resolve(host_func.module).to_string(),
-                    string_table.resolve(host_func.import_name).to_string()
+                    string_table.resolve(host_func.import_name).to_string(),
                 )
             };
 
             // Create WASM function type signature from host function definition
-            let param_types =
-                self.create_wasm_param_types(&host_func.params_to_signature(string_table).parameters)?;
+            let param_types = self
+                .create_wasm_param_types(&host_func.params_to_signature(string_table).parameters)?;
             let result_types = self.create_wasm_result_types(&host_func.return_types)?;
 
             // Add function type to type section
@@ -2821,12 +2869,16 @@ impl WasmModule {
             );
 
             // Register function index for calls - host functions come before regular functions
-            self.host_function_indices
-                .insert(string_table.resolve(host_func.name).to_string(), self.function_count);
+            self.host_function_indices.insert(
+                string_table.resolve(host_func.name).to_string(),
+                self.function_count,
+            );
 
             // Also register in the main function registry for unified lookup
-            self.function_registry
-                .insert(string_table.resolve(host_func.name).to_string(), self.function_count);
+            self.function_registry.insert(
+                string_table.resolve(host_func.name).to_string(),
+                self.function_count,
+            );
 
             // Increment counters
             self.function_count += 1;
@@ -2859,7 +2911,7 @@ impl WasmModule {
                 // Use original host function mapping as fallback (need to resolve StringId)
                 Ok((
                     string_table.resolve(host_func.module).to_string(),
-                    string_table.resolve(host_func.import_name).to_string()
+                    string_table.resolve(host_func.import_name).to_string(),
                 ))
             }
         }
@@ -2983,11 +3035,8 @@ impl WasmModule {
                 module, name, self.function_count
             );
 
-            self.import_section.import(
-                &module,
-                &name,
-                EntityType::Function(self.type_count),
-            );
+            self.import_section
+                .import(&module, &name, EntityType::Function(self.type_count));
 
             // Update the WASIX registry with the function index
             if let Some(mut_wasix_func) = self.wasix_registry.get_function_mut(&beanstalk_name) {
@@ -3261,12 +3310,7 @@ impl WasmModule {
 
         // Assign to place
         let place_type = place.wasm_type();
-        self.lower_place_assignment_with_type(
-            place,
-            &place_type,
-            function_builder,
-            local_map,
-        )?;
+        self.lower_place_assignment_with_type(place, &place_type, function_builder, local_map)?;
 
         Ok(())
     }
@@ -3471,7 +3515,9 @@ impl WasmModule {
             Operand::Copy(place) | Operand::Move(place) => {
                 self.lower_place_access(place, function_builder, local_map)
             }
-            Operand::Constant(constant) => self.lower_constant(constant, function_builder, string_table),
+            Operand::Constant(constant) => {
+                self.lower_constant(constant, function_builder, string_table)
+            }
             Operand::FunctionRef(func_index) => {
                 function_builder.instruction(&Instruction::I32Const(*func_index as i32))?;
                 Ok(())
@@ -3869,11 +3915,23 @@ impl WasmModule {
                 // Use WASIX fd_write generation for print calls
                 let function_name = string_table.resolve(host_function.name);
                 if function_name == "print" {
-                    return self.generate_wasix_fd_write_call(args, function_builder, local_map, string_table);
+                    return self.generate_wasix_fd_write_call(
+                        args,
+                        function_builder,
+                        local_map,
+                        string_table,
+                    );
                 }
-                
+
                 // For other WASIX functions, use standard call lowering
-                self.lower_standard_host_call(host_function, args, destination, function_builder, local_map, string_table)
+                self.lower_standard_host_call(
+                    host_function,
+                    args,
+                    destination,
+                    function_builder,
+                    local_map,
+                    string_table,
+                )
             }
             Some(RuntimeFunctionMapping::JavaScript(_js_func)) => {
                 // Use JavaScript binding (not implemented yet)
@@ -3885,7 +3943,14 @@ impl WasmModule {
             }
             Some(RuntimeFunctionMapping::Native(_)) | None => {
                 // Use standard host function call
-                self.lower_standard_host_call(host_function, args, destination, function_builder, local_map, string_table)
+                self.lower_standard_host_call(
+                    host_function,
+                    args,
+                    destination,
+                    function_builder,
+                    local_map,
+                    string_table,
+                )
             }
         }
     }
@@ -3927,7 +3992,7 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Generate WASIX fd_write call for print statements 
+    /// Generate WASIX fd_write call for print statements
     fn generate_wasix_fd_write_call(
         &mut self,
         args: &[Operand],
@@ -3960,14 +4025,17 @@ impl WasmModule {
         // Resolve StringId to &str
         let string_content_str = string_table.resolve(string_content);
         // Add string data to linear memory allocation
-        let string_offset = self.string_manager.add_string_slice_constant(string_content_str);
+        let string_offset = self
+            .string_manager
+            .add_string_slice_constant(string_content_str);
         let string_len = string_content_str.len() as u32;
 
         // Skip the 4-byte length prefix to get to the actual string data
         let string_ptr = string_offset + 4;
 
         // Implement string-to-IOVec conversion for WASIX calls
-        let iovec = crate::compiler::host_functions::wasix_registry::IOVec::new(string_ptr, string_len);
+        let iovec =
+            crate::compiler::host_functions::wasix_registry::IOVec::new(string_ptr, string_len);
 
         // Add IOVec structure to data section with proper WASIX alignment
         let iovec_bytes = iovec.to_bytes();
@@ -4030,7 +4098,9 @@ impl WasmModule {
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match function_name {
-            "print" | "template_output" => self.lower_wasix_print(args, destination, function_builder, local_map, string_table),
+            "print" | "template_output" => {
+                self.lower_wasix_print(args, destination, function_builder, local_map, string_table)
+            }
             _ => {
                 return_compiler_error!(
                     "Unsupported WASIX function: {}. Only 'print' and 'template_output' are currently implemented.",
@@ -4092,7 +4162,6 @@ impl WasmModule {
         string_content: &str,
         function_builder: &mut FunctionBuilder,
     ) -> Result<(), CompileError> {
-
         // Add string data to WASM data section with proper alignment
         let string_offset = self.string_manager.add_string_constant(&string_content);
         let string_len = string_content.len() as u32;
@@ -4165,27 +4234,27 @@ impl WasmModule {
         // Load the string pointer from the variable
         // The place contains a pointer to: [length: u32][data: bytes]
         self.lower_place_access(place, function_builder, local_map)?;
-        
+
         // Stack: [string_ptr]
         // Duplicate for later use
         function_builder.instruction(&Instruction::LocalTee(0))?; // Save string_ptr in local 0
-        
+
         // Read the length (first 4 bytes)
         function_builder.instruction(&Instruction::I32Load(MemArg {
             offset: 0,
             align: 2, // 4-byte alignment
             memory_index: 0,
         }))?;
-        
+
         // Stack: [length]
         function_builder.instruction(&Instruction::LocalSet(1))?; // Save length in local 1
-        
+
         // Calculate data pointer (string_ptr + 4)
         function_builder.instruction(&Instruction::LocalGet(0))?;
         function_builder.instruction(&Instruction::I32Const(4))?;
         function_builder.instruction(&Instruction::I32Add)?;
         function_builder.instruction(&Instruction::LocalSet(2))?; // Save data_ptr in local 2
-        
+
         // Now we need to create an IOVec structure at runtime
         // Allocate IOVec space (8 bytes: ptr + len)
         let iovec_ptr = match self.wasix_memory_manager.allocate_iovec_array(1) {
@@ -4194,7 +4263,7 @@ impl WasmModule {
                 return_compiler_error!("WASIX IOVec allocation failed: {}", e);
             }
         };
-        
+
         // Write data_ptr to IOVec (first 4 bytes)
         function_builder.instruction(&Instruction::I32Const(iovec_ptr as i32))?;
         function_builder.instruction(&Instruction::LocalGet(2))?; // data_ptr
@@ -4203,7 +4272,7 @@ impl WasmModule {
             align: 2,
             memory_index: 0,
         }))?;
-        
+
         // Write length to IOVec (next 4 bytes)
         function_builder.instruction(&Instruction::I32Const(iovec_ptr as i32 + 4))?;
         function_builder.instruction(&Instruction::LocalGet(1))?; // length
@@ -4212,7 +4281,7 @@ impl WasmModule {
             align: 2,
             memory_index: 0,
         }))?;
-        
+
         // Allocate space for nwritten result
         let nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
             Ok(ptr) => ptr,
@@ -4220,17 +4289,17 @@ impl WasmModule {
                 return_compiler_error!("WASIX nwritten allocation failed: {}", e);
             }
         };
-        
+
         // Call fd_write(fd=1, iovs=iovec_ptr, iovs_len=1, nwritten=nwritten_ptr)
         function_builder.instruction(&Instruction::I32Const(1))?; // stdout fd
         function_builder.instruction(&Instruction::I32Const(iovec_ptr as i32))?;
         function_builder.instruction(&Instruction::I32Const(1))?; // iovs_len
         function_builder.instruction(&Instruction::I32Const(nwritten_ptr as i32))?;
         function_builder.instruction(&Instruction::Call(fd_write_func_index))?;
-        
+
         // Drop the return value (errno)
         function_builder.instruction(&Instruction::Drop)?;
-        
+
         Ok(())
     }
 
@@ -4259,7 +4328,13 @@ impl WasmModule {
             #[cfg(feature = "verbose_codegen_logging")]
             println!("WASM: Generating native WASIX call for '{}'", function_name);
 
-            self.generate_native_function_call(function_name, args, function_builder, local_map, string_table)
+            self.generate_native_function_call(
+                function_name,
+                args,
+                function_builder,
+                local_map,
+                string_table,
+            )
         } else {
             // Fallback to import-based call
             #[cfg(feature = "verbose_codegen_logging")]
@@ -4268,7 +4343,13 @@ impl WasmModule {
                 function_name
             );
 
-            self.generate_import_based_call(function_name, args, function_builder, local_map, string_table)
+            self.generate_import_based_call(
+                function_name,
+                args,
+                function_builder,
+                local_map,
+                string_table,
+            )
         }
     }
 

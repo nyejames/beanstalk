@@ -1,10 +1,10 @@
 use crate::compiler::codegen::wasm_encoding::WasmModule;
 use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::wir::build_wir::WIR;
 use crate::compiler::wir::wir_nodes::ExportKind;
 use crate::{return_compiler_error, return_wasm_generation_error};
-use crate::compiler::string_interning::StringTable;
 
 /// Basic WASM validation using wasmparser
 fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
@@ -23,12 +23,11 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
     }
 }
 
-/// Simplified WIR-to-WASM compilation entry point
+/// WIR-to-WASM compilation entry point
 ///
-/// This function provides direct WIR → WASM lowering with minimal overhead.
-/// Complex validation and performance tracking have been removed to focus
-/// on core functionality until borrow checking is complete.
-pub fn new_wasm_module(wir: WIR, string_table: &mut crate::compiler::string_interning::StringTable) -> Result<Vec<u8>, CompileError> {
+/// This function provides direct WIR → WASM lowering with minimal overhead,
+/// focusing on core functionality and correctness.
+pub fn new_wasm_module(wir: WIR, string_table: &mut StringTable) -> Result<Vec<u8>, CompileError> {
     new_wasm_module_with_registry(wir, None, string_table)
 }
 
@@ -37,9 +36,9 @@ pub fn new_wasm_module(wir: WIR, string_table: &mut crate::compiler::string_inte
 /// This function provides direct WIR → WASM lowering with access to the host function registry
 /// for proper runtime-specific function mapping during codegen.
 pub fn new_wasm_module_with_registry(
-    wir: WIR, 
+    wir: WIR,
     registry: Option<&HostFunctionRegistry>,
-    string_table: &mut crate::compiler::string_interning::StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir, string_table)?;
@@ -58,6 +57,7 @@ pub fn new_wasm_module_with_registry(
                     .iter()
                     .position(|f| f.name == wir_function.name)
                     .unwrap() as u32;
+
                 let export_name = string_table.resolve(export.name);
                 let _ = module.add_function_export(export_name, function_index);
             }
@@ -91,7 +91,10 @@ pub fn new_wasm_module_with_registry(
 }
 
 /// Validate WIR structure before WASM compilation
-fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> Result<(), CompileError> {
+fn validate_wir_for_wasm_compilation(
+    wir: &WIR,
+    string_table: &StringTable,
+) -> Result<(), CompileError> {
     // Empty WIR is allowed - it creates a minimal WASM module
     // This is useful for testing and incremental compilation
 
@@ -101,7 +104,8 @@ fn validate_wir_for_wasm_compilation(wir: &WIR, string_table: &StringTable) -> R
         for function in &wir.functions {
             let function_name = string_table.resolve(function.name);
             if !function_names.insert(function_name) {
-                let function_name_static: &'static str = Box::leak(function_name.to_string().into_boxed_str());
+                let function_name_static: &'static str =
+                    Box::leak(function_name.to_string().into_boxed_str());
                 return_wasm_generation_error!(
                     format!("Duplicate function name '{}' in WIR. Function names must be unique for WASM generation.", function_name),
                     ErrorLocation::default(), {

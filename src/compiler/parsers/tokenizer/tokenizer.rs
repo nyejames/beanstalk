@@ -6,6 +6,7 @@ use crate::compiler::parsers::tokenizer::tokens::{
 };
 use crate::compiler::string_interning::StringTable;
 use crate::{return_syntax_error, settings, token_log};
+use colour::green_ln;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -93,7 +94,7 @@ pub fn get_token_kind(
 
             token_value.push(ch);
         }
-        
+
         // If we reach here, the raw string was not terminated
         return_syntax_error!(
             "Unterminated raw string literal - missing closing backtick",
@@ -643,7 +644,10 @@ fn is_valid_identifier(s: &str) -> bool {
 // A block that starts with an open parenthesis and ends with a close parenthesis
 // Everything in between is returned as a string
 // Throws an error if there is no starting parenthesis or ending parenthesis
-pub fn string_block(stream: &mut TokenStream, string_table: &StringTable) -> Result<String, CompileError> {
+pub fn string_block(
+    stream: &mut TokenStream,
+    string_table: &StringTable,
+) -> Result<String, CompileError> {
     let mut string_value = String::new();
 
     while let Some(ch) = stream.peek() {
@@ -774,7 +778,10 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
 
-fn tokenize_path(stream: &mut TokenStream, string_table: &StringTable) -> Result<PathBuf, CompileError> {
+fn tokenize_path(
+    stream: &mut TokenStream,
+    string_table: &StringTable,
+) -> Result<PathBuf, CompileError> {
     let mut import_path = String::new();
     let mut break_on_whitespace = true;
 

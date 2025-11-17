@@ -314,7 +314,7 @@ impl CompileError {
         }
     }
 
-    /// Create a file system error from a Path (legacy method without metadata)
+    /// Create a file system error from a Path
     pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
         CompileError {
             msg: msg.into(),
@@ -410,7 +410,7 @@ macro_rules! return_syntax_error {
             location: $loc,
             error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
             metadata: {
-                let map = std::collections::HashMap::new();
+                let mut map = std::collections::HashMap::new();
                 $(
                     map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value);
                 )*
@@ -470,7 +470,7 @@ macro_rules! return_rule_error {
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Rule,
             metadata: {
-                let map = std::collections::HashMap::new();
+                let mut map = std::collections::HashMap::new();
                 $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
                 map
             },
@@ -503,7 +503,7 @@ macro_rules! return_file_error {
             },
         ));
     }};
-    // Legacy usage without metadata (for backward compatibility)
+    // Simplified usage without metadata
     ($path:expr, $msg:expr) => {{
         return Err($crate::compiler::compiler_errors::CompileError::file_error(
             $path, $msg,

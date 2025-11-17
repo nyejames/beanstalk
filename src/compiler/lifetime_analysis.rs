@@ -252,9 +252,9 @@ impl LifetimeAnalyzer {
             .retain(|_, &mut last_block| last_block != block_id);
     }
 
-    // Compatibility methods for BlockManager interface
+    // Block management methods
 
-    /// Enter a block (for compatibility with old BlockManager interface)
+    /// Enter a block
     pub fn enter_block(&mut self, block_id: u32) {
         self.block_stack.push(block_id);
         self.block_variable_usage.insert(block_id, HashSet::new());
@@ -262,17 +262,17 @@ impl LifetimeAnalyzer {
             .insert(block_id, HashSet::new());
     }
 
-    /// Exit a block (for compatibility with old BlockManager interface)
+    /// Exit a block
     pub fn exit_block(&mut self) -> Option<u32> {
         self.block_stack.pop()
     }
 
-    /// Get current block (for compatibility with old BlockManager interface)
+    /// Get current block
     pub fn current_block(&self) -> Option<u32> {
         self.block_stack.last().copied()
     }
 
-    /// Track variable definition in current block (compatibility method)
+    /// Track variable definition in current block
     pub fn track_variable_definition_current(&mut self, variable_id: u32) {
         if let Some(current_block) = self.current_block() {
             if let Some(definitions) = self.block_variable_definitions.get_mut(&current_block) {
@@ -281,7 +281,7 @@ impl LifetimeAnalyzer {
         }
     }
 
-    /// Track variable use in current block (compatibility method)
+    /// Track variable use in current block
     pub fn track_variable_use_current(&mut self, variable_id: u32) {
         if let Some(current_block) = self.current_block() {
             if let Some(usage) = self.block_variable_usage.get_mut(&current_block) {

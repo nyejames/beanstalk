@@ -216,8 +216,8 @@ pub fn create_wasix_registry() -> Result<WasixFunctionRegistry, CompileError> {
 }
 
 /// Native implementation of WASIX fd_write function
-/// This function will be called by the JIT runtime with proper memory access
-/// For now, this is a placeholder that will be properly implemented when integrated with JIT
+/// This function is called by the JIT runtime with proper memory access
+/// Full implementation requires JIT runtime integration
 fn native_fd_write(_context: &mut WasixContext, _args: &[Value]) -> Result<Vec<Value>, WasixError> {
     // This is a placeholder implementation
     // The actual implementation will be done in the JIT runtime where we have access to memory and store
@@ -262,7 +262,7 @@ fn validate_wasix_function_def(function: &WasixFunctionDef) -> Result<(), Compil
         | "wasix_snapshot_preview1"
         | "wasi_snapshot_preview1"
         | "wasi_unstable" => {
-            // Valid WASIX module names (including legacy WASI for compatibility)
+            // Valid WASIX module names (including older WASI versions)
         }
         _ => {
             return_compiler_error!(
@@ -316,18 +316,18 @@ impl std::hash::Hash for WasixFunctionDef {
     }
 }
 
-/// WASIX-specific error types with enhanced error information
+/// WASIX-specific error types
 #[derive(Debug, Clone)]
 pub enum WasixError {
-    /// Invalid file descriptor (legacy format for compatibility)
+    /// Invalid file descriptor
     InvalidFileDescriptor(u32),
-    /// Memory out of bounds (legacy format for compatibility)
+    /// Memory out of bounds
     MemoryOutOfBounds,
-    /// Invalid argument count (legacy format for compatibility)
+    /// Invalid argument count
     InvalidArgumentCount,
-    /// WASIX environment error (legacy format for compatibility)
+    /// WASIX environment error
     EnvironmentError(String),
-    /// Native function not found (legacy format for compatibility)
+    /// Native function not found
     NativeFunctionNotFound(String),
     /// Enhanced invalid file descriptor with context
     InvalidFileDescriptorWithContext {
@@ -400,14 +400,14 @@ impl WasixError {
     /// Returns the appropriate errno value for WASIX function returns
     pub fn to_errno(&self) -> u32 {
         match self {
-            // Legacy error formats (for compatibility)
+            // Basic error formats
             WasixError::InvalidFileDescriptor(_) => 9, // EBADF - Bad file descriptor
             WasixError::MemoryOutOfBounds => 14,       // EFAULT - Bad address
             WasixError::InvalidArgumentCount => 22,    // EINVAL - Invalid argument
             WasixError::EnvironmentError(_) => 5,      // EIO - Input/output error
             WasixError::NativeFunctionNotFound(_) => 38, // ENOSYS - Function not implemented
 
-            // Enhanced error formats
+            // Error formats with context
             WasixError::InvalidFileDescriptorWithContext { .. } => 9, // EBADF - Bad file descriptor
             WasixError::MemoryOutOfBoundsWithContext { .. } => 14,    // EFAULT - Bad address
             WasixError::InvalidArgumentCountWithContext { .. } => 22, // EINVAL - Invalid argument
@@ -492,7 +492,7 @@ impl WasixError {
 impl std::fmt::Display for WasixError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            // Legacy error formats (for compatibility)
+            // Basic error formats
             WasixError::InvalidFileDescriptor(fd) => {
                 write!(
                     f,
@@ -2379,11 +2379,11 @@ impl WasixMemoryManager {
         (self.total_allocated_size() as f32 / self.max_memory_size as f32) * 100.0
     }
 }
-/// Convert WasixError to CompileError with enhanced error messages and context
+/// Convert WasixError to CompileError with detailed error messages and context
 impl From<WasixError> for CompileError {
     fn from(error: WasixError) -> Self {
         match error {
-            // Legacy error formats (for compatibility)
+            // Basic error formats
             WasixError::InvalidFileDescriptor(fd) => CompileError::compiler_error(&format!(
                 "WASIX operation failed: Invalid file descriptor {}. WASIX supports stdout (1), stderr (2), and stdin (0). This may indicate a bug in WASIX function call generation.",
                 fd

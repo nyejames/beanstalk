@@ -130,7 +130,7 @@ pub fn execute_direct_jit_with_capture(
 
     // Wasmer automatically runs the start section (if present) when instantiating the module above.
     // So if instantiation succeeded, the start section has already run.
-    // Now, optionally call 'main' or '_start' if present (for non-WASIX or legacy modules).
+    // Now, optionally call 'main' or '_start' if present (for non-WASIX modules).
     #[cfg(feature = "verbose_codegen_logging")]
     println!("JIT: Looking for main function...");
     if let Ok(main_func) = instance.exports.get_function("main") {
@@ -1101,7 +1101,7 @@ fn setup_native_imports_with_capture(
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
-    // Create native print function that directly outputs to stdout or captures (legacy support)
+    // Create native print function that directly outputs to stdout or captures
     let print_func = Function::new_typed(
         store,
         move |text_ptr: i32, text_len: i32| -> i32 {
@@ -1162,7 +1162,7 @@ fn setup_native_imports_with_capture(
         },
     );
 
-    // Add print function to beanstalk_io module (legacy support)
+    // Add print function to beanstalk_io module
     imports.define("beanstalk_io", "print", print_func);
 
     #[cfg(feature = "verbose_codegen_logging")]

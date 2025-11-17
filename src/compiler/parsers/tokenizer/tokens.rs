@@ -2,10 +2,11 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::string_interning::{InternedString, StringTable};
 
+use crate::compiler::compiler_errors::ErrorLocation;
+use colour::red_ln;
 use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::str::Chars;
-use crate::compiler::compiler_errors::ErrorLocation;
 
 #[derive(Debug, PartialEq)]
 pub enum TokenizeMode {
@@ -75,7 +76,6 @@ impl TextLocation {
             end_pos: self.end_pos,
         }
     }
-
 }
 
 impl PartialOrd for TextLocation {

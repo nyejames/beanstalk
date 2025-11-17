@@ -13,18 +13,20 @@ use crate::compiler::wir::context::WirTransformContext;
 // Core compiler imports - consolidated for clarity
 use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking;
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
-use crate::compiler::{
-    compiler_errors::CompileError,
-};
+use crate::compiler::compiler_errors::CompileError;
 // Error handling macros - grouped for maintainability
-use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use crate::{ir_log, wir_log, return_wir_transformation_error};
 use crate::compiler::compiler_errors::{ErrorLocation, ErrorType};
+use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
+use crate::compiler::parsers::expressions::expression::ExpressionKind;
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::wir::place::WasmType;
-pub(crate) use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Export, ExportKind, Operand, Rvalue, Statement, Terminator, WirBlock, WirFunction, WIR};
 use crate::compiler::wir::wir_nodes::ProgramPoint;
+pub(crate) use crate::compiler::wir::wir_nodes::{
+    BorrowKind, Constant, Export, ExportKind, Operand, Rvalue, Statement, Terminator, WIR,
+    WirBlock, WirFunction,
+};
+use crate::{ir_log, return_wir_transformation_error, wir_log};
 
 /// Main entry point: Transform AST to WIR with borrow checking
 ///
@@ -61,7 +63,12 @@ use crate::compiler::wir::wir_nodes::ProgramPoint;
 /// - All places map to WASM locals or linear memory locations
 /// - All operations correspond to WASM instruction sequences
 /// - Function calls are prepared for WASM function tables
-pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_interning::StringTable) -> Result<WIR, CompileError> {
+///
+///
+const MAIN_ENTRY_POINT_FUNC_NAME: &str = "_start";
+const MAIN_FUNCTION_NAME: &str = "_main";
+
+pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut StringTable) -> Result<WIR, CompileError> {
     let mut context = WirTransformContext::new();
     let mut wir = WIR::new();
 
@@ -71,25 +78,34 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
 
     for node in ast {
         match &node.kind {
-            crate::compiler::parsers::ast_nodes::NodeKind::Function(name, signature, body) => {
+            NodeKind::Function(name, signature, body) => {
                 // Resolve the function name first
                 let func_name = string_table.resolve(*name).to_string();
-                
+
                 // Transform function definition and add to WIR
-                let wir_function = create_wir_function_from_ast(&func_name, signature, body, &mut context, string_table)?;
-                
+                let wir_function = create_wir_function_from_ast(
+                    &func_name,
+                    signature,
+                    body,
+                    &mut context,
+                    string_table,
+                )?;
+
                 // Check if this is an entry point function and add export
-                if func_name == "_start" {
-                    let start_name = string_table.intern("_start");
-                    wir.exports.insert(start_name, Export {
-                        name: start_name,
-                        kind: ExportKind::Function,
-                        index: wir.functions.len() as u32, // Function index in the WIR
-                    });
+                let entry_point_string = string_table.intern(MAIN_ENTRY_POINT_FUNC_NAME);
+                if func_name == MAIN_ENTRY_POINT_FUNC_NAME {
+                    wir.exports.insert(
+                        entry_point_string,
+                        Export {
+                            name: entry_point_string,
+                            kind: ExportKind::Function,
+                            index: wir.functions.len() as u32, // Function index in the WIR
+                        },
+                    );
                     #[cfg(debug_assertions)]
                     wir_log!("Added export for entry point function '{}'", name);
                 }
-                
+
                 functions.push(wir_function);
             }
             _ => {
@@ -106,9 +122,9 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
     // Create a main function for any remaining top-level statements
     // Only create if we don't already have an entry point function
     if !other_statements.is_empty() {
-        let start_name = string_table.intern("_start");
+        let start_name = string_table.intern(MAIN_ENTRY_POINT_FUNC_NAME);
         let has_entry_point = wir.exports.contains_key(&start_name);
-        
+
         if has_entry_point {
             // If we already have an entry point, don't create another main function
             // This prevents duplicate exports
@@ -116,18 +132,22 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
             wir_log!("Skipping main function creation - entry point already exists");
         } else {
             // Create main function and export it as _start
-            let mut main_function = create_main_function_from_ast(&other_statements, &mut context, string_table)?;
-            
+            let mut main_function =
+                create_main_function_from_ast(&other_statements, &mut context, string_table)?;
+
             // Rename to _start to match WASM convention
             main_function.name = start_name;
-            
+
             // Add export for the entry point
-            wir.exports.insert(start_name, Export {
-                name: start_name,
-                kind: ExportKind::Function,
-                index: wir.functions.len() as u32,
-            });
-            
+            wir.exports.insert(
+                start_name,
+                Export {
+                    name: start_name,
+                    kind: ExportKind::Function,
+                    index: wir.functions.len() as u32,
+                },
+            );
+
             wir.add_function(main_function);
             #[cfg(debug_assertions)]
             wir_log!("Created _start function from top-level statements");
@@ -137,7 +157,10 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
     // Transfer host imports from context to WIR
     wir.add_host_imports(&context.get_host_imports());
     #[cfg(debug_assertions)]
-    wir_log!("Transferred {} host imports to WIR", context.get_host_imports().len());
+    wir_log!(
+        "Transferred {} host imports to WIR",
+        context.get_host_imports().len()
+    );
 
     // Run borrow checking on the WIR
     run_borrow_checking_on_wir(&mut wir, string_table)?;
@@ -155,9 +178,8 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_
 fn create_main_function_from_ast(
     ast: &Vec<AstNode>,
     context: &mut WirTransformContext,
-    string_table: &mut crate::compiler::string_interning::StringTable,
+    string_table: &mut StringTable,
 ) -> Result<WirFunction, CompileError> {
-
     #[cfg(debug_assertions)]
     wir_log!(
         "create_main_function_from_ast called with {} AST nodes",
@@ -165,10 +187,9 @@ fn create_main_function_from_ast(
     );
 
     // Create the main function
-    let main_name = string_table.intern("main");
     let mut main_function = WirFunction::new(
         0, // function ID
-        main_name,
+        string_table.intern(MAIN_FUNCTION_NAME),
         vec![], // no parameters
         vec![], // no return types for now
         vec![], // no return args for now
@@ -183,16 +204,16 @@ fn create_main_function_from_ast(
     for node in ast {
         #[cfg(debug_assertions)]
         wir_log!("Processing AST node: {:?}", node.kind);
-        
+
         let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
-        
+
         #[cfg(debug_assertions)]
         wir_log!(
             "Generated {} WIR statements for node {:?}",
             node_statements.len(),
             node.kind
         );
-        
+
         statements.extend(node_statements);
     }
 
@@ -219,9 +240,8 @@ fn create_main_function_from_ast(
 fn transform_ast_node_to_wir(
     node: &AstNode,
     context: &mut WirTransformContext,
-    string_table: &mut crate::compiler::string_interning::StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
-
     match &node.kind {
         NodeKind::VariableDeclaration(arg) => {
             // Create a place for the variable
@@ -380,15 +400,19 @@ fn create_wir_function_from_ast(
     signature: &crate::compiler::parsers::statements::functions::FunctionSignature,
     body: &[AstNode],
     context: &mut WirTransformContext,
-    string_table: &mut crate::compiler::string_interning::StringTable,
+    string_table: &mut StringTable,
 ) -> Result<WirFunction, CompileError> {
-    wir_log!("Creating WIR function '{}' with {} body nodes", name, body.len());
+    wir_log!(
+        "Creating WIR function '{}' with {} body nodes",
+        name,
+        body.len()
+    );
 
     // Check if this is an entry point function and validate signature
-    let is_entry_point = name == "_start";
+    let is_entry_point = name == MAIN_ENTRY_POINT_FUNC_NAME;
     if is_entry_point {
         wir_log!("Function '{}' detected as entry point", name);
-        
+
         // Validate entry point signature - should have no parameters and no returns
         if !signature.parameters.is_empty() {
             let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
@@ -401,7 +425,7 @@ fn create_wir_function_from_ast(
                 }
             );
         }
-        
+
         if !signature.returns.is_empty() {
             let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
             return_wir_transformation_error!(
@@ -471,11 +495,11 @@ fn create_wir_function_from_ast(
     Ok(wir_function)
 }
 
-/// Transform a function AST node to WIR statements (legacy compatibility)
+/// Transform a function AST node to WIR statements
 ///
-/// This function is kept for compatibility with the existing transform_ast_node_to_wir
-/// function. It delegates to create_wir_function_from_ast but doesn't return the function
-/// since it can't be added to the WIR from this context.
+/// This function handles function nodes encountered in statement context.
+/// It delegates to create_wir_function_from_ast but doesn't return the function
+/// since functions are handled at the module level.
 ///
 /// # Parameters
 ///
@@ -494,8 +518,11 @@ fn transform_function_node(
     _body: &[AstNode],
     _context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
-    wir_log!("Function '{}' encountered in statement context - this should be handled at module level", _name);
-    
+    wir_log!(
+        "Function '{}' encountered in statement context - this should be handled at module level",
+        _name
+    );
+
     // For now, return empty statements since functions should be handled at the module level
     // In a complete implementation, this might create a function reference or similar
     Ok(vec![])
@@ -524,7 +551,7 @@ fn transform_function_node(
 fn transform_function_body(
     body: &[AstNode],
     context: &mut WirTransformContext,
-    string_table: &mut crate::compiler::string_interning::StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     // Pre-allocate with estimated capacity (assume ~2 statements per AST node on average)
     let mut statements = Vec::with_capacity(body.len() * 2);
@@ -533,8 +560,12 @@ fn transform_function_body(
     context.enter_scope();
 
     for (_node_index, node) in body.iter().enumerate() {
-        wir_log!("Processing function body node {}: {:?}", _node_index, node.kind);
-        
+        wir_log!(
+            "Processing function body node {}: {:?}",
+            _node_index,
+            node.kind
+        );
+
         let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
         wir_log!(
             "Generated {} WIR statements for function body node {}",
@@ -562,9 +593,7 @@ fn transform_function_body(
 ///
 /// - `Ok(WasmType)`: Corresponding WASM type
 /// - `Err(CompileError)`: Unsupported type error
-fn convert_datatype_to_wasm_type(
-    data_type: &DataType,
-) -> Result<WasmType, CompileError> {
+fn convert_datatype_to_wasm_type(data_type: &DataType) -> Result<WasmType, CompileError> {
     match data_type {
         DataType::Int => Ok(WasmType::I32),
         DataType::Float => Ok(WasmType::F32),
@@ -623,7 +652,7 @@ fn convert_datatype_to_wasm_type(
 /// - Memory layout optimization based on lifetime analysis
 fn run_borrow_checking_on_wir(
     wir: &mut WIR,
-    string_table: &crate::compiler::string_interning::StringTable,
+    string_table: &StringTable,
 ) -> Result<(), CompileError> {
     for function in &mut wir.functions {
         // Ensure events are generated for all statements and terminators
@@ -633,7 +662,10 @@ fn run_borrow_checking_on_wir(
         let mut extractor = BorrowFactExtractor::new();
         extractor.extract_function(function).map_err(|e| {
             let func_name_str: &'static str = Box::leak(
-                string_table.resolve(function.name).to_string().into_boxed_str()
+                string_table
+                    .resolve(function.name)
+                    .to_string()
+                    .into_boxed_str(),
             );
             CompileError::compiler_error(&format!(
                 "Failed to extract borrow facts for function '{}': {}",
@@ -647,7 +679,10 @@ fn run_borrow_checking_on_wir(
         // Run unified borrow checking
         let borrow_results = run_unified_borrow_checking(function, &extractor).map_err(|e| {
             let func_name_str: &'static str = Box::leak(
-                string_table.resolve(function.name).to_string().into_boxed_str()
+                string_table
+                    .resolve(function.name)
+                    .to_string()
+                    .into_boxed_str(),
             );
             CompileError::compiler_error(&format!(
                 "Borrow checking failed for function '{}': {}",
@@ -658,10 +693,7 @@ fn run_borrow_checking_on_wir(
         // Handle borrow checking errors with proper diagnostics
         if !borrow_results.errors.is_empty() {
             let first_error = &borrow_results.errors[0];
-            let detailed_message = format!(
-                "Borrow checking error: {}",
-                first_error.msg
-            );
+            let detailed_message = format!("Borrow checking error: {}", first_error.msg);
 
             // Use the error location from the borrow checker error
             let error_location = first_error.location.clone();

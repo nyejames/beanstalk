@@ -656,7 +656,7 @@ impl BorrowFactExtractor {
                 "Generated {} loans for function '{}'",
                 self.loan_count, function.name
             );
-            for (compiler::borrow_checker::extract::BitSet::is_empty_fast::CHUNK_SIZE, loan) in self.loans.iter().enumerate() {
+            for (_chunk_size, loan) in self.loans.iter().enumerate() {
                 borrow_log!(
                     "  Loan {}: {:?} borrow of {:?} at {:?}",
                     i, loan.kind, loan.owner, loan.origin_stmt
@@ -766,7 +766,7 @@ impl BorrowFactExtractor {
             self.kill_sets.insert(program_point, empty_bitset.clone());
         }
 
-        // Populate kill sets from moves and reassigns using legacy event generation (TODO: optimize)
+        // Populate kill sets from moves and reassigns using event generation
         for program_point in function.get_program_points_in_order() {
             if let Some(events) = function.generate_events(&program_point) {
                 // Fast path: if no moves or reassigns, skip processing
@@ -774,7 +774,7 @@ impl BorrowFactExtractor {
                     continue;
                 }
 
-                // Collect places that need to be processed (legacy approach using may_alias)
+                // Collect places that need to be processed
                 let mut places_to_kill =
                     Vec::with_capacity(events.moves.len() + events.reassigns.len());
                 places_to_kill.extend(events.moves.iter());

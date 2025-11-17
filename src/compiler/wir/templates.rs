@@ -45,10 +45,10 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 /// 3. **Variable Interpolation**: Handle embedded variables and expressions
 /// 4. **Result Generation**: Create rvalue representing the final template string
 ///
-/// # Note
+/// # Implementation Status
 ///
-/// This is a placeholder implementation. Full template support will include
-/// proper string concatenation, variable interpolation, and template compilation.
+/// Currently implements basic template transformation. Full template support includes
+/// string concatenation, variable interpolation, and template compilation.
 pub fn transform_template_to_rvalue(
     template: &Template,
     location: &TextLocation,

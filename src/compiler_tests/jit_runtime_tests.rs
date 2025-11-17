@@ -1,3 +1,5 @@
+use crate::runtime::{CompilationMode, IoBackend, RuntimeConfig, jit::{CapturedOutput, MemoryCleanup, clear_captured_output, execute_direct_jit_with_capture, get_captured_output}};
+
 
 /// Test basic JIT execution with WASIX backend
 #[test]

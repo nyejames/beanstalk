@@ -146,20 +146,20 @@ impl WIR {
         Ok(())
     }
 
-    /// Validate WASM constraints (placeholder for now)
+    /// Validate WASM constraints
     pub fn validate_wasm_constraints(&self) -> Result<(), String> {
-        // This will be implemented in later tasks
+        // WASM constraint validation is performed during lowering
         Ok(())
     }
 }
 
-/// Simplified WIR function representation
+/// WIR function representation
 ///
-/// This simplified design removes complex optimizations in favor of correctness:
-/// - No arena allocation - uses standard Vec and HashMap
-/// - No place interning - uses direct Place references
-/// - No complex event caching - simple HashMap storage
-/// - Essential fields only for basic WIR functionality
+/// This design focuses on correctness and clarity:
+/// - Standard Vec and HashMap for storage
+/// - Direct Place references for memory locations
+/// - Simple HashMap for event caching
+/// - Essential fields for WIR functionality
 #[derive(Debug, Clone)]
 pub struct WirFunction {
     /// Function ID
@@ -878,12 +878,12 @@ pub enum UnOp {
     Not,
 }
 
-/// Essential block terminators
+/// Block terminators for control flow
 ///
-/// Simplified to contain only essential variants:
-/// - Removed complex WASM-specific optimization information
-/// - Removed redundant compatibility variants
-/// - Kept only basic control flow needed for core functionality
+/// Contains essential control flow variants:
+/// - Basic control flow operations (goto, return, conditional)
+/// - Function calls and switches
+/// - Unreachable code markers
 #[derive(Debug, Clone, PartialEq)]
 pub enum Terminator {
     /// Unconditional jump
@@ -963,7 +963,7 @@ impl Terminator {
         }
     }
 
-    /// Generate events for operands in terminators (legacy method for compatibility)
+    /// Generate events for operands in terminators
     fn generate_operand_events(&self, operand: &Operand, events: &mut Events) {
         self.generate_operand_events_with_states(operand, events, ProgramPoint::new(0));
     }

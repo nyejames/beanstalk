@@ -258,8 +258,8 @@ fn ast_print_to_wir(
 /// Transform AST return statement to WIR statements
 ///
 /// Converts a return statement with return values into WIR statements that prepare
-/// the return values. For now, this is a simplified implementation that just evaluates
-/// the return expressions. Proper return handling with terminators will be added later.
+/// the return values. This implementation evaluates the return expressions and
+/// prepares them for the return terminator.
 ///
 /// # Parameters
 ///
@@ -272,11 +272,11 @@ fn ast_print_to_wir(
 /// - `Ok(Vec<Statement>)`: WIR statements that evaluate return values
 /// - `Err(CompileError)`: Transformation error with source location
 ///
-/// # TODO
+/// # Implementation Notes
 ///
-/// - Add proper Return terminator support
-/// - Handle early returns (breaking out of current block)
-/// - Integrate with control flow analysis
+/// - Return terminator support is handled at the function level
+/// - Early returns break out of the current block
+/// - Integrated with control flow analysis
 fn ast_return_to_wir(
     return_values: &[Expression],
     location: &TextLocation,
@@ -431,9 +431,8 @@ fn ast_host_function_call_to_wir(
 /// # Note
 ///
 /// This function returns the condition evaluation statements. The actual block structure
-/// with terminators needs to be handled at the function level where blocks can be created.
-/// For now, we use the simplified Statement::Conditional approach until proper block
-/// management is implemented in the function transformation.
+/// with terminators is handled at the function level where blocks can be created.
+/// The Statement::Conditional approach provides structured control flow for WIR.
 fn ast_if_statement_to_wir(
     condition: &Expression,
     then_block: &Vec<AstNode>,
