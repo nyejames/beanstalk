@@ -410,7 +410,7 @@ macro_rules! return_syntax_error {
             location: $loc,
             error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
             metadata: {
-                let mut map = std::collections::HashMap::new();
+                let map = std::collections::HashMap::new();
                 $(
                     map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value);
                 )*
@@ -470,7 +470,7 @@ macro_rules! return_rule_error {
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Rule,
             metadata: {
-                let mut map = std::collections::HashMap::new();
+                let map = std::collections::HashMap::new();
                 $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
                 map
             },

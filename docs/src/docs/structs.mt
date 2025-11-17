@@ -1,14 +1,17 @@
-[Navbar]
+[#import(@libs/html/basic)]
+[#import(@styles/docs_styles)]
+[#import(@./components)]
 
-[Header center: [title(1): STRUCTS]]
-[Page:
+[docs_styles.Navbar]
+
+[docs_styles.Header, basic.Center: [basic.Title: STRUCTS]]
 
 # Structs
 Structs are a collection of fields.
 
 They can implement methods by defining a function that takes an instance of the Struct as its first argument.
 
-[#Code:
+```beanstalk
     -- Define a new object
     -- To create a new instance of this object, it must have 2 parameters passed in,
     -- a string and an integer
@@ -37,6 +40,26 @@ They can implement methods by defining a function that takes an instance of the 
 
     vec = Vector2(12, 87)
     vec.reset()
-]
+```
+
+## Constructor methods
+You can explicitly define a default method for a struct by providing an anonymous function as one of the struct's parameters.
+
+```beanstalk
+    User:
+        |
+            new_name String, 
+            new_preferences Preferences,
+        |:
+            name = new_name
+            preferences = new_preferences
+        ;
+
+        name String,
+        preferences Preferences,
+    ;
+```
+
+
 
 [Footer]

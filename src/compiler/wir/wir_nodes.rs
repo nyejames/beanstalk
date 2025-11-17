@@ -1,5 +1,4 @@
 // Optimized import structure - grouped by module for clarity
-use crate::compiler::compiler_errors::{CompileError, ErrorMetaDataKey};
 use crate::compiler::wir::place::{Place, WasmType};
 use crate::compiler::string_interning::InternedString;
 use std::collections::HashMap;

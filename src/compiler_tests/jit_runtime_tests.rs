@@ -1,9 +1,3 @@
-use crate::compiler::compiler_errors::CompileError;
-use crate::runtime::jit::{
-    execute_direct_jit_with_capture, get_captured_output, clear_captured_output,
-    CapturedOutput, MemoryCleanup,
-};
-use crate::runtime::{IoBackend, RuntimeConfig, CompilationMode, CraneliftOptLevel};
 
 /// Test basic JIT execution with WASIX backend
 #[test]

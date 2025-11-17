@@ -12,7 +12,6 @@ use std::io::{self, Write};
 use std::path::Path;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler::parsers::tokenizer;
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
 
@@ -83,23 +82,27 @@ fn compile_beanstalk_to_string(
     source_path: &Path,
 ) -> Result<String, CompileError> {
     use crate::compiler::string_interning::StringTable;
+    use crate::compiler::interned_path::InternedPath;
 
     // Create a string table for this compilation
     let mut string_table = StringTable::new();
 
+    // Convert path to interned path
+    let interned_path = InternedPath::from_path_buf(source_path, &mut string_table);
+
     // Tokenize the source code
     let mut tokenizer_output =
-        tokenize(source_code, source_path, TokenizeMode::TemplateHead, &mut string_table)?;
+        tokenize(source_code, &interned_path, TokenizeMode::TemplateHead, &mut string_table)?;
     let ast_context = ScopeContext::new(
         ContextKind::Template, 
-        source_path.to_path_buf(), 
+        interned_path, 
         &[],
         HostFunctionRegistry::new(),
         Vec::new(),
     );
 
     // Build Template
-    let mut template = Template::new(&mut tokenizer_output, &ast_context, None)?;
+    let mut template = Template::new(&mut tokenizer_output, &ast_context, None, &mut string_table)?;
 
     // TODO: put all this into an AST block, then lower it to wasm and run it
     // There is currently no codegen for templates.
@@ -109,7 +112,7 @@ fn compile_beanstalk_to_string(
     // For now, this will be able to return a string if it can be folded at compile time
     // If not, it will throw an error.
     // Since the repl is purely inside the string template, new variables or functions can't be used anyway.
-    let template_string = template.fold(&None)?;
+    let template_string = template.fold(&None, &string_table)?;
 
     Ok(template_string)
 }

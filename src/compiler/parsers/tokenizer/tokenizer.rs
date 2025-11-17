@@ -6,7 +6,6 @@ use crate::compiler::parsers::tokenizer::tokens::{
 };
 use crate::compiler::string_interning::StringTable;
 use crate::{return_syntax_error, settings, token_log};
-use colour::green_ln;
 use std::collections::HashSet;
 use std::path::PathBuf;
 

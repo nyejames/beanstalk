@@ -3,10 +3,9 @@ use crate::build_system::build_system::{
 };
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{Flag, return_file_error, settings};
-use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, grey_ln, print_bold, red_ln};
+use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, grey_ln, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;

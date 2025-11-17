@@ -2,11 +2,8 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::string_interning::{InternedString, StringTable};
 
-use crate::compiler::parsers::ast::ScopeContext;
-use colour::red_ln;
 use std::cmp::Ordering;
 use std::iter::Peekable;
-use std::path::{Path, PathBuf};
 use std::str::Chars;
 use crate::compiler::compiler_errors::ErrorLocation;
 

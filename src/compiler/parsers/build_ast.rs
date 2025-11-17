@@ -7,8 +7,6 @@ use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
-use crate::tokenizer::tokenizer::END_SCOPE_CHAR;
-use std::path::PathBuf;
 
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::branching::create_branch;

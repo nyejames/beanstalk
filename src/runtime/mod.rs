@@ -14,7 +14,6 @@ pub mod io {
     pub mod native;
 }
 pub mod jit;
-pub use jit::JitRuntime;
 pub mod memory_utils;
 
 use crate::compiler::compiler_errors::CompileError;

@@ -20,9 +20,6 @@ use crate::compiler::{
 };
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
-// Error handling macros
-use crate::return_wir_transformation_error;
-
 /// Transform a Beanstalk template expression to WIR rvalue
 ///
 /// Converts Beanstalk's template syntax into WIR statements and rvalues for
@@ -55,7 +52,7 @@ use crate::return_wir_transformation_error;
 pub fn transform_template_to_rvalue(
     template: &Template,
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     // For now, implement basic template transformation
@@ -73,8 +70,9 @@ pub fn transform_template_to_rvalue(
 
     // For now, create a simple string constant as placeholder
     // This will be expanded to handle proper template compilation
+    let placeholder_id = string_table.intern("template_placeholder");
     let template_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
-        "template_placeholder".to_string(),
+        placeholder_id,
     )));
 
     statements.push(Statement::Assign {
@@ -87,9 +85,9 @@ pub fn transform_template_to_rvalue(
 
 /// Transform runtime template to rvalue
 pub fn transform_runtime_template_to_rvalue(
-    template: &Template,
+    _template: &Template,
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     // Runtime templates need to be evaluated at runtime
@@ -99,13 +97,14 @@ pub fn transform_runtime_template_to_rvalue(
     let result_place = context.create_temporary_place(&DataType::Template);
 
     // Transform template for runtime evaluation
-    let runtime_statements = transform_template_for_runtime(template, location, string_table, context)?;
+    let runtime_statements = transform_template_for_runtime(_template, location, string_table, context)?;
     statements.extend(runtime_statements);
 
     // Create runtime template evaluation call
     // This is a placeholder - actual implementation would call template runtime functions
+    let placeholder_id = string_table.intern("runtime_template_placeholder");
     let runtime_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
-        "runtime_template_placeholder".to_string(),
+        placeholder_id,
     )));
 
     statements.push(Statement::Assign {
@@ -121,7 +120,7 @@ pub fn transform_template_with_variable_interpolation(
     template: &Template,
     variables: &[String],
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     let mut statements = Vec::new();
@@ -129,27 +128,14 @@ pub fn transform_template_with_variable_interpolation(
 
     // Handle variable interpolation in templates
     for variable_name in variables {
-        let variable_place = context
-            .lookup_variable(variable_name)
-            .ok_or_else(|| {
-                let error_location = location.to_error_location(string_table);
-                let var_name_static: &'static str = Box::leak(variable_name.clone().into_boxed_str());
-                CompileError {
-                    msg: format!(
-                        "Undefined variable '{}' in template interpolation",
-                        variable_name
-                    ),
-                    location: error_location,
-                    error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
-                    metadata: {
-                        let mut map = std::collections::HashMap::new();
-                        map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, var_name_static);
-                        map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
-                        map
-                    },
-                }
-            })?
-            .clone();
+        // Use consolidated helper for variable lookup
+        let variable_place = crate::compiler::wir::utilities::lookup_variable_or_error(
+            context,
+            variable_name,
+            location,
+            string_table,
+            "template interpolation",
+        )?;
 
         // Create string coercion for the variable
         let coercion_statements = create_string_coercion(&variable_place, location, string_table, context)?;
@@ -157,8 +143,9 @@ pub fn transform_template_with_variable_interpolation(
     }
 
     // Create interpolated template result
+    let placeholder_id = string_table.intern("interpolated_template_placeholder");
     let interpolated_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
-        "interpolated_template_placeholder".to_string(),
+        placeholder_id,
     )));
 
     statements.push(Statement::Assign {
@@ -173,7 +160,7 @@ pub fn transform_template_with_variable_interpolation(
 pub fn transform_struct_literal_to_statements_and_rvalue(
     fields: &[crate::compiler::parsers::ast_nodes::Arg],
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     let mut statements = Vec::new();
@@ -198,7 +185,7 @@ pub fn transform_struct_literal_to_statements_and_rvalue(
 pub fn transform_struct_literal_to_rvalue(
     fields: &[crate::compiler::parsers::ast_nodes::Arg],
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
     let (_, rvalue) = transform_struct_literal_to_statements_and_rvalue(fields, location, string_table, context)?;
@@ -209,7 +196,7 @@ pub fn transform_struct_literal_to_rvalue(
 fn create_string_coercion(
     place: &Place,
     _location: &TextLocation,
-    _string_table: &StringTable,
+    _string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
@@ -232,7 +219,7 @@ fn create_string_coercion(
 fn transform_template_content(
     content: &crate::compiler::parsers::statements::template::TemplateContent,
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
@@ -241,7 +228,7 @@ fn transform_template_content(
     for expr in &content.before {
         let (expr_statements, _) =
             crate::compiler::wir::expressions::expression_to_rvalue_with_context(
-                expr, location, string_table, context,
+                expr, location, context, string_table,
             )?;
         statements.extend(expr_statements);
     }
@@ -250,7 +237,7 @@ fn transform_template_content(
     for expr in &content.after {
         let (expr_statements, _) =
             crate::compiler::wir::expressions::expression_to_rvalue_with_context(
-                expr, location, string_table, context,
+                expr, location, context, string_table,
             )?;
         statements.extend(expr_statements);
     }
@@ -262,7 +249,7 @@ fn transform_template_content(
 fn transform_template_for_runtime(
     template: &Template,
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
@@ -282,7 +269,7 @@ fn transform_struct_field_assignment(
     field: &crate::compiler::parsers::ast_nodes::Arg,
     struct_place: &Place,
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::new();
@@ -303,8 +290,8 @@ fn transform_struct_field_assignment(
         crate::compiler::wir::expressions::expression_to_rvalue_with_context(
             &field.value,
             location,
-            string_table,
             context,
+            string_table,
         )?;
     statements.extend(value_statements);
 
@@ -320,7 +307,7 @@ fn transform_struct_field_assignment(
 pub fn extract_string_from_template(
     template: &Template,
     location: &TextLocation,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<(Vec<Statement>, String), CompileError> {
     // Extract compile-time string from template if possible

@@ -1,8 +1,6 @@
 use colour::yellow_ln_bold;
 use std::path::PathBuf;
 use crate::compiler::compiler_errors::ErrorLocation;
-use crate::compiler::interned_path::InternedPath;
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
 
 #[derive(Clone, Debug)]

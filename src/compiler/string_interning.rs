@@ -164,7 +164,7 @@ impl StringTable {
         // Each duplicate string would have cost: String struct (24 bytes) + content
         // Now it costs: StringId (4 bytes)
         // So we save: 20 bytes + content length for each future duplicate
-        let string_len = s.len();
+        let compiler::borrow_checker::extract::BitSet::is_empty_fast::CHUNK_SIZE = s.len();
         
         // Store the string and create the mapping
         self.strings.push(s.to_owned());

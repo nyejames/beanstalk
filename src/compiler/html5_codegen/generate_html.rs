@@ -1,9 +1,7 @@
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::io::js_bindings::JsBindingsGenerator;
 use crate::settings::HTMLMeta;
 use std::fs;
-use std::path::PathBuf;
-use crate::compiler::compiler_warnings::CompilerWarning;
 
 #[allow(dead_code)]
 pub fn create_html_boilerplate(

@@ -37,7 +37,9 @@ impl ProjectBuilder for JitProjectBuilder {
         }
 
         // Use the core build pipeline to compile to WASM
-        let compilation_result = core_build::compile_modules(modules, config, flags)?;
+        // Create string table for compilation
+        let mut string_table = crate::compiler::string_interning::StringTable::new();
+        let compilation_result = core_build::compile_modules(modules, config, flags, &mut string_table)?;
 
         // Execute the WASM directly using JIT
         match execute_direct_jit(&compilation_result.wasm_bytes, &config.runtime) {

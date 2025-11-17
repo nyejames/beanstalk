@@ -5,7 +5,7 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler::string_interning::{InternedString, StringId, StringTable};
+use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 

@@ -82,16 +82,14 @@ pub fn expression_to_rvalue_with_context(
         },
         ExpressionKind::Reference(name) => {
             let var_name = string_table.resolve(*name);
-            let variable_place = context
-                .lookup_variable(var_name)
-                .ok_or_else(|| {
-                    let error_location = location.clone().to_error_location(string_table);
-                    CompileError::new_rule_error(
-                        format!("Undefined variable '{}'", var_name),
-                        error_location,
-                    )
-                })?
-                .clone();
+            // Use consolidated helper for variable lookup
+            let variable_place = crate::compiler::wir::utilities::lookup_variable_or_error(
+                context,
+                var_name,
+                location,
+                string_table,
+                "expression",
+            )?;
             Ok((vec![], Rvalue::Use(Operand::Copy(variable_place))))
         }
         ExpressionKind::Template(template) => {
@@ -295,35 +293,21 @@ pub fn evaluate_rpn_to_wir_statements(
 }
 
 /// Convert operand to its data type
+///
+/// Uses consolidated wasm_type_to_datatype helper for consistent type conversion.
 fn operand_to_datatype(
     operand: &Operand,
     _context: &WirTransformContext,
 ) -> Result<DataType, CompileError> {
     match operand {
         Operand::Copy(place) | Operand::Move(place) => {
-            // Extract type from place - this is a simplified implementation
+            // Extract type from place using consolidated helper
             match place {
                 Place::Local { wasm_type, .. } => {
-                    // Convert WasmType to DataType
-                    match wasm_type {
-                        crate::compiler::wir::place::WasmType::I32 => Ok(DataType::Int),
-                        crate::compiler::wir::place::WasmType::F32 => Ok(DataType::Float),
-                        crate::compiler::wir::place::WasmType::I64 => Ok(DataType::Int),
-                        crate::compiler::wir::place::WasmType::F64 => Ok(DataType::Float),
-                        crate::compiler::wir::place::WasmType::ExternRef => Ok(DataType::String), // External references default to string
-                        crate::compiler::wir::place::WasmType::FuncRef => Ok(DataType::Int), // Function references default to int
-                    }
+                    Ok(crate::compiler::wir::utilities::wasm_type_to_datatype(wasm_type))
                 }
                 Place::Global { wasm_type, .. } => {
-                    // Convert WasmType to DataType
-                    match wasm_type {
-                        crate::compiler::wir::place::WasmType::I32 => Ok(DataType::Int),
-                        crate::compiler::wir::place::WasmType::F32 => Ok(DataType::Float),
-                        crate::compiler::wir::place::WasmType::I64 => Ok(DataType::Int),
-                        crate::compiler::wir::place::WasmType::F64 => Ok(DataType::Float),
-                        crate::compiler::wir::place::WasmType::ExternRef => Ok(DataType::String), // External references default to string
-                        crate::compiler::wir::place::WasmType::FuncRef => Ok(DataType::Int), // Function references default to int
-                    }
+                    Ok(crate::compiler::wir::utilities::wasm_type_to_datatype(wasm_type))
                 }
                 _ => Ok(DataType::Int), // Default fallback
             }

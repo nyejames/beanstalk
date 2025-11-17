@@ -10,8 +10,11 @@ use crate::compiler::wir::context::WirTransformContext;
 // Import expression functions from expressions module
 use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
 
+// Import utility functions
+use crate::compiler::wir::utilities::{create_borrow_rvalue, lookup_variable_or_error};
+
 // Import WIR types
-use crate::compiler::wir::wir_nodes::{BorrowKind, Constant, Operand, Rvalue, Statement};
+use crate::compiler::wir::wir_nodes::{Constant, Operand, Statement};
 
 // Core compiler imports
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
@@ -158,6 +161,7 @@ fn ast_declaration_to_wir(
 /// # Performance Optimization
 ///
 /// Pre-allocates statement vector with estimated capacity to reduce reallocations.
+/// Uses consolidated helper functions to reduce code duplication.
 fn ast_mutation_to_wir(
     name: &str,
     value: &Expression,
@@ -169,113 +173,13 @@ fn ast_mutation_to_wir(
     // Pre-allocate with capacity for expression statements + assignment (typically 2-4 statements)
     let mut statements = Vec::with_capacity(4);
 
-    // Look up the variable
-    let place = context
-        .lookup_variable(name)
-        .ok_or_else(|| {
-            let error_location = location.clone().to_error_location(string_table);
-            let name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
-            CompileError {
-                msg: format!("Undefined variable '{}' in mutation", name),
-                location: error_location,
-                error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
-                metadata: {
-                    let mut map = std::collections::HashMap::new();
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, name_static);
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before attempting to mutate it");
-                    map
-                },
-            }
-        })?
-        .clone();
+    // Look up the variable using consolidated helper
+    let place = lookup_variable_or_error(context, name, location, string_table, "mutation")?;
 
-    // Handle mutable assignments (~=) vs regular assignments (=)
-    let rvalue = if is_mutable {
-        // For mutable assignments (~=), check if the value is a variable reference
-        // If so, create a mutable borrow; otherwise, use the expression value
-        match &value.kind {
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
-                var_name,
-            ) => {
-                // This is a mutable borrow: x ~= y
-                let resolved_var_name = string_table.resolve(*var_name);
-                let source_place = context
-                    .lookup_variable(resolved_var_name)
-                    .ok_or_else(|| {
-                        let error_location = location.clone().to_error_location(string_table);
-                        let var_name_static: &'static str = Box::leak(resolved_var_name.to_string().into_boxed_str());
-                        CompileError {
-                            msg: format!("Undefined variable '{}' in mutable borrow", resolved_var_name),
-                            location: error_location,
-                            error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
-                            metadata: {
-                                let mut map = std::collections::HashMap::new();
-                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, var_name_static);
-                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
-                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a mutable borrow");
-                                map
-                            },
-                        }
-                    })?
-                    .clone();
-
-                Rvalue::Ref {
-                    place: source_place,
-                    borrow_kind: BorrowKind::Mut,
-                }
-            }
-            _ => {
-                // For non-reference expressions, convert normally
-                let (expr_statements, rvalue) =
-                    expression_to_rvalue_with_context(value, location, context, string_table)?;
-                statements.extend(expr_statements);
-                rvalue
-            }
-        }
-    } else {
-        // For regular assignments (=), check if the value is a variable reference
-        // If so, create a shared borrow; otherwise, use the expression value
-        match &value.kind {
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
-                var_name,
-            ) => {
-                // This is a shared borrow: x = y
-                let resolved_var_name = string_table.resolve(*var_name);
-                let source_place = context
-                    .lookup_variable(resolved_var_name)
-                    .ok_or_else(|| {
-                        let error_location = location.clone().to_error_location(string_table);
-                        let var_name_static: &'static str = Box::leak(resolved_var_name.to_string().into_boxed_str());
-                        CompileError {
-                            msg: format!("Undefined variable '{}' in shared borrow", resolved_var_name),
-                            location: error_location,
-                            error_type: crate::compiler::compiler_errors::ErrorType::WirTransformation,
-                            metadata: {
-                                let mut map = std::collections::HashMap::new();
-                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::VariableName, var_name_static);
-                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "WIR Transformation");
-                                map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Ensure the variable is declared before creating a shared borrow");
-                                map
-                            },
-                        }
-                    })?
-                    .clone();
-
-                Rvalue::Ref {
-                    place: source_place,
-                    borrow_kind: BorrowKind::Shared,
-                }
-            }
-            _ => {
-                // For non-reference expressions, convert normally
-                let (expr_statements, rvalue) =
-                    expression_to_rvalue_with_context(value, location, context, string_table)?;
-                statements.extend(expr_statements);
-                rvalue
-            }
-        }
-    };
+    // Create borrow rvalue using consolidated helper
+    let (borrow_statements, rvalue) =
+        create_borrow_rvalue(value, is_mutable, location, context, string_table)?;
+    statements.extend(borrow_statements);
 
     // Create assignment statement
     statements.push(Statement::Assign { place, rvalue });

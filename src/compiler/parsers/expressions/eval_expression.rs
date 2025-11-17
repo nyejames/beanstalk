@@ -11,7 +11,6 @@ use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
     return_compiler_error, return_syntax_error,
 };
-use std::path::PathBuf;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /**

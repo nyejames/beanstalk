@@ -6,7 +6,6 @@
 // - WIR generation
 // - WASM generation
 
-use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};

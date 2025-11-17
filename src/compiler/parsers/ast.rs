@@ -32,7 +32,7 @@ impl Ast {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
             Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
-        let mut external_exports: Vec<Arg> = Vec::new();
+        let external_exports: Vec<Arg> = Vec::new();
         let mut warnings: Vec<CompilerWarning> = Vec::new();
         let mut entry_path = None;
 
@@ -59,7 +59,7 @@ impl Ast {
             match header.kind {
                 HeaderKind::Function(signature, tokens) => {
                     // Function parameters should be available in the function body scope
-                    let mut context = ScopeContext::new(
+                    let context = ScopeContext::new(
                         ContextKind::Function,
                         header.path.to_owned(),
                         &signature.parameters,

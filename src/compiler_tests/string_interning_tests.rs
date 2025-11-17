@@ -1,4 +1,3 @@
-use crate::compiler::interned_path::InternedPath;
 
 #[cfg(test)]
 mod tests {

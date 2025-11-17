@@ -5,10 +5,10 @@
 
 use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages, ErrorLocation};
+use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 pub struct NativeProjectBuilder {
     target: BuildTarget,
@@ -36,8 +36,11 @@ impl ProjectBuilder for NativeProjectBuilder {
             });
         }
 
+        // Create string table for compilation
+        let mut string_table = StringTable::new();
+
         // Use the core build pipeline
-        let compilation_result = core_build::compile_modules(modules, config, flags)?;
+        let compilation_result = core_build::compile_modules(modules, config, flags, &mut string_table)?;
 
         // For native projects, we produce a single WASM file
         let output_files = vec![OutputFile::Wasm(compilation_result.wasm_bytes)];
@@ -66,7 +69,7 @@ impl ProjectBuilder for NativeProjectBuilder {
         let target_str: &'static str = Box::leak(format!("{:?}", &self.target).into_boxed_str());
         return_config_error!(
             format!("Wrong target specified in project config: {:?}", &self.target),
-            TextLocation::default(),
+            ErrorLocation::default(),
             {
                 CompilationStage => "Configuration",
                 PrimarySuggestion => "Use BuildTarget::Native for native projects",

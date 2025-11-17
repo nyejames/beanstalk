@@ -1,13 +1,11 @@
-use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::string_interning::StringTable;
-use crate::return_wat_err;
 use std::fs;
 use std::path::{Path, PathBuf};
 use wat::parse_file;
 
 pub fn compile_wat_file(src_path: &Path) -> Result<(), String> {
     // Create a temporary string table for error reporting
-    let mut string_table = StringTable::new();
+    let string_table = StringTable::new();
 
     let wasm = parse_file(src_path);
     match wasm {

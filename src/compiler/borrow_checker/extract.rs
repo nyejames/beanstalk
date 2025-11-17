@@ -656,7 +656,7 @@ impl BorrowFactExtractor {
                 "Generated {} loans for function '{}'",
                 self.loan_count, function.name
             );
-            for (i, loan) in self.loans.iter().enumerate() {
+            for (compiler::borrow_checker::extract::BitSet::is_empty_fast::CHUNK_SIZE, loan) in self.loans.iter().enumerate() {
                 borrow_log!(
                     "  Loan {}: {:?} borrow of {:?} at {:?}",
                     i, loan.kind, loan.owner, loan.origin_stmt

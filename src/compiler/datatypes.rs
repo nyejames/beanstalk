@@ -1,7 +1,7 @@
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::StringTable;
 use std::fmt::Display;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 

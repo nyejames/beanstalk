@@ -6,6 +6,7 @@
 
 use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
 use crate::compiler::datatypes::DataType;
+use crate::compiler::string_interning::StringTable;
 
 use crate::compiler::wir::{
     place::{Place, PlaceManager},
@@ -575,8 +576,10 @@ impl WirTransformContext {
     /// # Parameters
     ///
     /// - `function`: WIR function to add
-    pub fn add_function(&mut self, function: WirFunction) {
-        self.function_names.insert(function.name.clone(), function.id);
+    /// - `string_table`: String table for resolving interned strings
+    pub fn add_function(&mut self, function: WirFunction, string_table: &StringTable) {
+        let function_name = string_table.resolve(function.name);
+        self.function_names.insert(function_name.to_string(), function.id);
         // Note: In a full implementation, we would store the function somewhere
         // For now, we just track the name-to-ID mapping
     }

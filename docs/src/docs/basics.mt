@@ -80,6 +80,7 @@ All variables must be assigned a value when they are declared.
         value Float,
         another_value String,
     ;
+    
     instance ~= Struct(
         value = 1.2, 
         another_value = "hey"

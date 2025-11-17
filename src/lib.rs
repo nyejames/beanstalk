@@ -109,7 +109,7 @@ use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 // Re-export types for the build system
 use crate::compiler::compiler_warnings::CompilerWarning;
@@ -152,7 +152,7 @@ pub struct Compiler<'a> {
 
 impl<'a> Compiler<'a> {
     pub fn new(project_config: &'a Config, host_function_registry: HostFunctionRegistry) -> Self {
-        let mut string_table = StringTable::new();
+        let string_table = StringTable::new();
 
         Self {
             project_config,
