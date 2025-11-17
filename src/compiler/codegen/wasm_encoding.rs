@@ -45,12 +45,12 @@ use wasm_encoder::*;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::string_interning::StringTable;
 
-/// Enhanced function builder that leverages wasm_encoder's built-in validation and control flow management
+/// Function builder that leverages wasm_encoder's built-in validation and control flow management
 ///
 /// This builder provides type-safe WASM generation with automatic validation and proper control frame management.
 /// It addresses the "control frames remain" error by ensuring all control structures are properly opened and closed.
 #[derive(Debug)]
-pub struct EnhancedFunctionBuilder {
+pub struct FunctionBuilder {
     /// The underlying wasm_encoder Function
     function: Function,
     /// Function signature information for validation
@@ -109,7 +109,7 @@ pub enum ControlFrameType {
     Loop,
 }
 
-impl EnhancedFunctionBuilder {
+impl FunctionBuilder {
     /// Create a new enhanced function builder
     pub fn new(
         locals: Vec<(u32, ValType)>,
@@ -979,7 +979,7 @@ pub struct WasmModule {
     // Source location tracking for error reporting
     function_source_map: HashMap<u32, FunctionSourceInfo>,
 
-    // Enhanced function metadata for named returns and references
+    // Function metadata for named returns and references
     function_metadata: HashMap<String, FunctionMetadata>,
 
     // Host function registry for runtime-specific mappings
@@ -1009,7 +1009,7 @@ pub struct FunctionSourceInfo {
     pub instruction_locations: Vec<SourceLocationInfo>,
 }
 
-/// Enhanced function metadata for named returns and references
+/// Function metadata for named returns and references
 #[derive(Debug, Clone)]
 pub struct FunctionMetadata {
     /// Function name
@@ -1140,24 +1140,6 @@ impl WasmModule {
     }
 
     /// Generate array index calculation - consolidates duplicate index * element_size patterns
-    fn emit_array_index_calculation(
-        &mut self,
-        function: &mut Function,
-        index_place: &Place,
-        element_size: u32,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        // Load index value
-        self.lower_place_access(index_place, function, local_map)?;
-        // Multiply by element size
-        Self::emit_i32_const(function, element_size as i32);
-        function.instruction(&Instruction::I32Mul);
-        // Add to base address (base should already be on stack)
-        function.instruction(&Instruction::I32Add);
-        Ok(())
-    }
-
-    /// Generate default value for WASM type - consolidates duplicate default value patterns
     fn emit_default_value_for_type(function: &mut Function, val_type: ValType) {
         match val_type {
             ValType::I32 => Self::emit_i32_const(function, 0),
@@ -1173,106 +1155,6 @@ impl WasmModule {
     /// For string/template types, this pushes both pointer and length onto the stack.
     /// For constant strings, it adds them to the data section and pushes the offset and length.
     /// For variable strings, it loads the pointer and pushes a placeholder length (TODO: implement proper length loading).
-    fn load_string_argument(
-        &mut self,
-        arg: &Operand,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        match arg {
-            Operand::Constant(Constant::String(s)) => {
-                // Resolve StringId to &str
-                let s_str = string_table.resolve(*s);
-                // Add string to data section and get offset
-                let offset = self.string_manager.add_string_slice_constant(s_str);
-                let length = s_str.len() as i32;
-                
-                // Push pointer
-                function.instruction(&Instruction::I32Const(offset as i32));
-                // Push length
-                function.instruction(&Instruction::I32Const(length));
-            }
-            _ => {
-                // For other operand types, lower normally and assume it's a pointer
-                // Then we need to load the length somehow - for now, just push 0
-                self.lower_operand(arg, function, local_map, string_table)?;
-                function.instruction(&Instruction::I32Const(0)); // TODO: Get actual length
-            }
-        }
-        Ok(())
-    }
-
-    /// Load host function arguments onto the stack - consolidates duplicate argument loading logic
-    /// 
-    /// This handles both regular arguments and string/template arguments which require
-    /// special handling (pointer + length).
-    fn load_host_function_arguments(
-        &mut self,
-        host_function: &HostFunctionDef,
-        args: &[Operand],
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        for (arg_index, arg) in args.iter().enumerate() {
-            // Check if this parameter is a string/template type
-            let param_type = if arg_index < host_function.parameters.len() {
-                &host_function.parameters[arg_index].data_type
-            } else {
-                // If we don't have parameter info, infer from operand
-                &DataType::Int // Default fallback
-            };
-
-            match param_type {
-                DataType::String | DataType::Template => {
-                    // For string/template types, use the consolidated string loading helper
-                    self.load_string_argument(arg, function, local_map, string_table)?;
-                }
-                _ => {
-                    // For non-string types, lower normally
-                    self.lower_operand(arg, function, local_map, string_table)?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Generate host function call instruction - consolidates duplicate call generation logic
-    fn generate_host_function_call(
-        &self,
-        host_function_name: &str,
-        function: &mut Function,
-    ) -> Result<(), CompileError> {
-        let func_index = self
-            .host_function_indices
-            .get(host_function_name)
-            .ok_or_else(|| {
-                CompileError::compiler_error(&format!(
-                    "Host function '{}' not found in import table",
-                    host_function_name
-                ))
-            })?;
-
-        function.instruction(&Instruction::Call(*func_index));
-        Ok(())
-    }
-
-    /// Store function call result to destination place - consolidates duplicate result storage logic
-    fn store_function_result(
-        &mut self,
-        destination: &Option<Place>,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        if let Some(dest_place) = destination {
-            let return_type = dest_place.wasm_type();
-            self.lower_place_assignment_with_type(dest_place, &return_type, function, local_map)?;
-        }
-        Ok(())
-    }
-
-    /// Generate memory load instruction with proper alignment
     fn emit_memory_load(function: &mut Function, wasm_type: &WasmType, offset: u32) {
         let mem_arg = MemArg {
             offset: offset.into(),
@@ -1367,7 +1249,7 @@ impl WasmModule {
     }
 
     /// Create a new WasmModule from WIR with comprehensive error handling and validation
-    pub fn from_wir(wir: &WIR, string_table: &StringTable) -> Result<WasmModule, CompileError> {
+    pub fn from_wir(wir: &WIR, string_table: &mut StringTable) -> Result<WasmModule, CompileError> {
         Self::from_wir_with_registry(wir, None, string_table)
     }
 
@@ -1375,7 +1257,7 @@ impl WasmModule {
     pub fn from_wir_with_registry(
         wir: &WIR, 
         registry: Option<&HostFunctionRegistry>,
-        string_table: &StringTable,
+        string_table: &mut StringTable,
     ) -> Result<WasmModule, CompileError> {
         let mut module = WasmModule::new();
 
@@ -1404,7 +1286,7 @@ impl WasmModule {
         // Imports come first in the WASM function index space, then defined functions
         let import_count = module.function_count;
 
-        // Process functions with enhanced error context and validation
+        // Process functions with error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
             module.compile_function(function, string_table).map_err(|mut error| {
                 // Add context about which function failed
@@ -1739,7 +1621,7 @@ impl WasmModule {
         Ok(module)
     }
 
-    /// Compile a WIR function to WASM with enhanced wasm_encoder integration
+    /// Compile a WIR function to WASM with wasm_encoder integration
     pub fn compile_function(&mut self, wir_function: &WirFunction, string_table: &StringTable) -> Result<(), CompileError> {
         // Register the function in the function registry
         let function_name = string_table.resolve(wir_function.name);
@@ -1812,7 +1694,7 @@ impl WasmModule {
 
         // Create enhanced function builder with wasm_encoder integration
         let function_name = string_table.resolve(wir_function.name);
-        let mut function_builder = EnhancedFunctionBuilder::new(
+        let mut function_builder = FunctionBuilder::new(
             wasm_locals,
             param_types,
             result_types,
@@ -1903,25 +1785,25 @@ impl WasmModule {
         }
     }
 
-    /// Compile function body using enhanced wasm_encoder integration
+    /// Compile function body using wasm_encoder integration
     fn compile_function_body(
         &mut self,
         wir_function: &WirFunction,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
-        // Lower each block with enhanced control flow tracking
+        // Lower each block with control flow tracking
         for (block_index, block) in wir_function.blocks.iter().enumerate() {
             function_builder.begin_block(block_index as u32)?;
 
             // Lower statements
             for statement in &block.statements {
-                self.lower_statement_enhanced(statement, function_builder, local_map, string_table)?;
+                self.lower_statement(statement, function_builder, local_map, string_table)?;
             }
 
-            // Lower terminator with enhanced control flow validation
-            self.lower_terminator_enhanced(&block.terminator, function_builder, local_map, string_table)?;
+            // Lower terminator with control flow validation
+            self.lower_terminator(&block.terminator, function_builder, local_map, string_table)?;
 
             function_builder.end_block()?;
         }
@@ -1930,46 +1812,17 @@ impl WasmModule {
     }
 
     /// Lower a WIR block to WASM instructions
-    fn lower_block_to_wasm(
-        &mut self,
-        block: &crate::compiler::wir::wir_nodes::WirBlock,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Lower each statement
-        for statement in &block.statements {
-            self.lower_statement(statement, function, local_map, string_table)?;
-        }
-
-        // Lower the terminator
-
-        self.lower_terminator(&block.terminator, function, local_map, string_table)?;
-
-        Ok(())
-    }
-
-    /// Lower a WIR statement to WASM instructions with enhanced validation (WIR-faithful implementation)
-    ///
-    /// This method implements direct WIR-to-WASM lowering following the WIR design principle:
-    /// Each WIR statement maps to ≤3 WASM instructions for efficient compilation.
-    ///
-    /// ## WIR Statement Mapping
-    /// - `Assign`: rvalue evaluation + place assignment (≤3 instructions)
-    /// - `Call`: argument loading + call instruction + result storage (≤3 instructions)
-    /// - `HostCall`: argument loading + call instruction + result storage (≤3 instructions)
-    /// - `Nop`: no instructions (0 instructions)
-    fn lower_statement_enhanced(
+    fn lower_statement(
         &mut self,
         statement: &Statement,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match statement {
             Statement::Assign { place, rvalue } => {
                 // Beanstalk-aware assignment: handles both regular and mutable (~) assignments
-                self.lower_beanstalk_aware_assignment_enhanced(
+                self.lower_beanstalk_aware_assignment(
                     place,
                     rvalue,
                     function_builder,
@@ -1983,7 +1836,7 @@ impl WasmModule {
                 destination,
             } => {
                 // WIR-faithful function call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
-                self.lower_wir_call_enhanced(func, args, destination, function_builder, local_map, string_table)
+                self.lower_wir_call(func, args, destination, function_builder, local_map, string_table)
             }
             Statement::HostCall {
                 function: host_func,
@@ -1991,7 +1844,7 @@ impl WasmModule {
                 destination,
             } => {
                 // WIR-faithful host call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
-                self.lower_wir_host_call_enhanced(
+                self.lower_wir_host_call(
                     host_func,
                     args,
                     destination,
@@ -2006,8 +1859,9 @@ impl WasmModule {
                 destination,
             } => {
                 // WASIX function call: handled by WASIX registry
+                let function_name_str = string_table.resolve(*function_name);
                 self.lower_wasix_host_call(
-                    function_name,
+                    function_name_str,
                     args,
                     destination,
                     function_builder,
@@ -2038,10 +1892,10 @@ impl WasmModule {
                 else_statements,
             } => {
                 // Lower the condition operand to get it on the stack
-                self.lower_operand_enhanced(condition, function_builder, local_map, string_table)?;
+                self.lower_operand(condition, function_builder, local_map, string_table)?;
 
                 // Create WASM if/else block structure
-                // The condition is already on the stack from lower_operand_enhanced
+                // The condition is already on the stack from lower_operand
                 
                 // Determine block type based on whether branches produce values
                 // For now, use empty block type (no return value)
@@ -2052,7 +1906,7 @@ impl WasmModule {
 
                 // Lower then block statements
                 for stmt in then_statements {
-                    self.lower_statement_enhanced(stmt, function_builder, local_map, string_table)?;
+                    self.lower_statement(stmt, function_builder, local_map, string_table)?;
                 }
 
                 // Emit else instruction if there are else statements
@@ -2061,7 +1915,7 @@ impl WasmModule {
                     
                     // Lower else block statements
                     for stmt in else_statements {
-                        self.lower_statement_enhanced(stmt, function_builder, local_map, string_table)?;
+                        self.lower_statement(stmt, function_builder, local_map, string_table)?;
                     }
                 }
 
@@ -2089,11 +1943,11 @@ impl WasmModule {
                 );
 
                 // Load receiver as first argument
-                self.lower_operand_enhanced(receiver, function_builder, local_map, string_table)?;
+                self.lower_operand(receiver, function_builder, local_map, string_table)?;
 
                 // Load remaining arguments
                 for arg in args {
-                    self.lower_operand_enhanced(arg, function_builder, local_map, string_table)?;
+                    self.lower_operand(arg, function_builder, local_map, string_table)?;
                 }
 
                 // For now, generate a placeholder call (will be replaced with vtable dispatch)
@@ -2103,7 +1957,7 @@ impl WasmModule {
                 // Store result if destination exists
                 if let Some(dest_place) = destination {
                     let return_type = dest_place.wasm_type();
-                    self.lower_place_assignment_with_type_enhanced(
+                    self.lower_place_assignment_with_type(
                         dest_place,
                         &return_type,
                         function_builder,
@@ -2115,7 +1969,7 @@ impl WasmModule {
             }
             Statement::Alloc { place, size, .. } => {
                 // Memory allocation: size → alloc → place (≤3 instructions)
-                self.lower_operand_enhanced(size, function_builder, local_map, string_table)?;
+                self.lower_operand(size, function_builder, local_map, string_table)?;
 
                 // For now, use a simple linear memory allocation strategy
                 // This will be enhanced when proper memory management is implemented
@@ -2123,7 +1977,7 @@ impl WasmModule {
                 function_builder.instruction(&Instruction::I32Add)?; // Add size to get allocation
 
                 let alloc_type = WasmType::I32; // Allocation returns pointer (i32)
-                self.lower_place_assignment_with_type_enhanced(
+                self.lower_place_assignment_with_type(
                     place,
                     &alloc_type,
                     function_builder,
@@ -2139,12 +1993,12 @@ impl WasmModule {
             }
             Statement::Store { place, value, .. } => {
                 // Memory store: value → address → store (≤3 instructions)
-                self.lower_operand_enhanced(value, function_builder, local_map, string_table)?;
+                self.lower_operand(value, function_builder, local_map, string_table)?;
 
                 // Generate address for the place
                 match place {
                     Place::Memory { base, offset, .. } => {
-                        self.lower_memory_base_address_enhanced(base, function_builder)?;
+                        self.lower_memory_base_address(base, function_builder)?;
                         if offset.0 > 0 {
                             function_builder
                                 .instruction(&Instruction::I32Const(offset.0 as i32))?;
@@ -2179,7 +2033,7 @@ impl WasmModule {
             } => {
                 // Memory operations: operand → operation → result (≤3 instructions)
                 if let Some(op) = operand {
-                    self.lower_operand_enhanced(op, function_builder, local_map, string_table)?;
+                    self.lower_operand(op, function_builder, local_map, string_table)?;
                 }
 
                 // For now, placeholder memory operation
@@ -2187,7 +2041,7 @@ impl WasmModule {
 
                 if let Some(res) = result {
                     let result_type = res.wasm_type();
-                    self.lower_place_assignment_with_type_enhanced(
+                    self.lower_place_assignment_with_type(
                         res,
                         &result_type,
                         function_builder,
@@ -2201,901 +2055,8 @@ impl WasmModule {
     }
 
     /// Legacy method for compatibility - delegates to enhanced version
-    fn lower_statement(
-        &mut self,
-        statement: &Statement,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        match statement {
-            Statement::Assign { place, rvalue } => {
-                // Beanstalk-aware assignment: handles both regular and mutable (~) assignments
-                self.lower_beanstalk_aware_assignment(place, rvalue, function, local_map, string_table)
-            }
-            Statement::Call {
-                func,
-                args,
-                destination,
-            } => {
-                // WIR-faithful function call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
-                self.lower_wir_call(func, args, destination, function, local_map, string_table)
-            }
-            Statement::HostCall {
-                function: host_func,
-                args,
-                destination,
-            } => {
-                // WIR-faithful host call: args → call → result (≤3 instructions per arg + 1 call + 1 store)
-                self.lower_wir_host_call(host_func, args, destination, function, local_map, string_table)
-            }
-            Statement::WasixCall {
-                function_name,
-                args,
-                destination,
-            } => {
-                // WASIX function call: handled by WASIX registry (simplified version)
-                self.lower_wasix_host_call_simple(
-                    function_name,
-                    args,
-                    destination,
-                    function,
-                    local_map,
-                    string_table,
-                )
-            }
-            Statement::MarkFieldInitialized { .. } => {
-                // Field initialization tracking - no WASM instructions needed
-                // This is handled at compile time for validation
-                Ok(())
-            }
-            Statement::ValidateStructInitialization {
-                struct_place,
-                struct_type,
-            } => {
-                // Struct validation - generate runtime check if needed
-                self.lower_struct_validation_simple(
-                    struct_place,
-                    struct_type,
-                    function,
-                    &mut local_map.clone(),
-                )
-            }
-            Statement::Conditional {
-                condition,
-                then_statements,
-                else_statements,
-            } => {
-                // Lower the condition operand to get it on the stack
-                self.lower_operand(condition, function, local_map, string_table)?;
-
-                // Create WASM if/else block structure
-                // The condition is already on the stack from lower_operand
-                
-                // Determine block type based on whether branches produce values
-                // For now, use empty block type (no return value)
-                let block_type = wasm_encoder::BlockType::Empty;
-                
-                // Emit if instruction
-                function.instruction(&Instruction::If(block_type));
-
-                // Lower then block statements
-                for stmt in then_statements {
-                    self.lower_statement(stmt, function, local_map, string_table)?;
-                }
-
-                // Emit else instruction if there are else statements
-                if !else_statements.is_empty() {
-                    function.instruction(&Instruction::Else);
-                    
-                    // Lower else block statements
-                    for stmt in else_statements {
-                        self.lower_statement(stmt, function, local_map, string_table)?;
-                    }
-                }
-
-                // End the if/else block
-                function.instruction(&Instruction::End);
-
-                Ok(())
-            }
-            Statement::Nop => {
-                // No-op generates no instructions (0 instructions)
-                Ok(())
-            }
-            Statement::InterfaceCall {
-                interface_id: _,
-                method_id: _,
-                receiver,
-                args,
-                destination,
-            } => {
-                // Interface calls are lowered to indirect calls through vtables
-                // For now, treat as regular function calls until vtable system is implemented
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Interface call lowered as direct call (vtable dispatch not yet implemented)"
-                );
-
-                // Load receiver as first argument
-                self.lower_operand(receiver, function, local_map, string_table)?;
-
-                // Load remaining arguments
-                for arg in args {
-                    self.lower_operand(arg, function, local_map, string_table)?;
-                }
-
-                // For now, generate a placeholder call (will be replaced with vtable dispatch)
-                // This maintains the WIR principle of direct lowering
-                function.instruction(&Instruction::Call(0)); // Placeholder function index
-
-                // Store result if destination exists
-                if let Some(dest_place) = destination {
-                    let return_type = dest_place.wasm_type();
-                    self.lower_place_assignment_with_type(
-                        dest_place,
-                        &return_type,
-                        function,
-                        local_map,
-                    )?;
-                }
-
-                Ok(())
-            }
-            Statement::Alloc { place, size, .. } => {
-                // Memory allocation: size → alloc → place (≤3 instructions)
-                self.lower_operand(size, function, local_map, string_table)?;
-
-                // For now, use a simple linear memory allocation strategy
-                // This will be enhanced when proper memory management is implemented
-                function.instruction(&Instruction::I32Const(0)); // Base memory address
-                function.instruction(&Instruction::I32Add); // Add size to get allocation
-
-                let alloc_type = WasmType::I32; // Allocation returns pointer (i32)
-                self.lower_place_assignment_with_type(place, &alloc_type, function, local_map)?;
-
-                Ok(())
-            }
-            Statement::Dealloc { place: _ } => {
-                // Deallocation: for now, this is a no-op in linear memory model
-                // Future enhancement: integrate with proper memory management
-                Ok(())
-            }
-            Statement::Store { place, value, .. } => {
-                // Memory store: value → address → store (≤3 instructions)
-                self.lower_operand(value, function, local_map, string_table)?;
-
-                // Generate address for the place
-                match place {
-                    Place::Memory { base, offset, .. } => {
-                        self.lower_memory_base_address(base, function)?;
-                        if offset.0 > 0 {
-                            function.instruction(&Instruction::I32Const(offset.0 as i32));
-                            function.instruction(&Instruction::I32Add);
-                        }
-
-                        // Store with appropriate instruction based on value type
-                        let value_type = self.get_operand_wasm_type(value)?;
-                        match value_type {
-                            WasmType::I32 => {
-                                function.instruction(&Instruction::I32Store(MemArg {
-                                    offset: 0,
-                                    align: 2,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::I64 => {
-                                function.instruction(&Instruction::I64Store(MemArg {
-                                    offset: 0,
-                                    align: 3,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::F32 => {
-                                function.instruction(&Instruction::F32Store(MemArg {
-                                    offset: 0,
-                                    align: 2,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::F64 => {
-                                function.instruction(&Instruction::F64Store(MemArg {
-                                    offset: 0,
-                                    align: 3,
-                                    memory_index: 0,
-                                }));
-                            }
-                            _ => return_compiler_error!("Unsupported store type: {:?}", value_type ; {
-                                CompilationStage => "WASM Encoding",
-                                PrimarySuggestion => "Use a supported WASM type (I32, I64, F32, F64)",
-                            }),
-                        }
-                    }
-                    _ => {
-                        // For other place types, use the standard assignment lowering
-                        let value_type = self.get_operand_wasm_type(value)?;
-                        self.lower_place_assignment_with_type(
-                            place,
-                            &value_type,
-                            function,
-                            local_map,
-                        )?;
-                    }
-                }
-
-                Ok(())
-            }
-            Statement::Drop { place: _ } => {
-                // Drop operations are handled by the borrow checker
-                // In WASM, this is typically a no-op for basic types
-                Ok(())
-            }
-            Statement::MemoryOp {
-                op,
-                operand,
-                result,
-            } => {
-                // WASM-specific memory operations
-                match op {
-                    MemoryOpKind::Size => {
-                        function.instruction(&Instruction::MemorySize(0));
-                        if let Some(dest) = result {
-                            let result_type = WasmType::I32;
-                            self.lower_place_assignment_with_type(
-                                dest,
-                                &result_type,
-                                function,
-                                local_map,
-                            )?;
-                        }
-                    }
-                    MemoryOpKind::Grow => {
-                        if let Some(operand) = operand {
-                            self.lower_operand(operand, function, local_map, string_table)?;
-                        } else {
-                            function.instruction(&Instruction::I32Const(1)); // Default: grow by 1 page
-                        }
-                        function.instruction(&Instruction::MemoryGrow(0));
-                        if let Some(dest) = result {
-                            let result_type = WasmType::I32;
-                            self.lower_place_assignment_with_type(
-                                dest,
-                                &result_type,
-                                function,
-                                local_map,
-                            )?;
-                        }
-                    }
-                    _ => {
-                        return_compiler_error!(
-                            "Memory operation '{:?}' not yet implemented - use basic memory operations for now",
-                            op
-                        );
-                    }
-                }
-                Ok(())
-            }
-        }
-    }
 
     /// Lower WIR assignment statement (≤3 WASM instructions)
-    fn lower_wir_assign(
-        &mut self,
-        place: &Place,
-        rvalue: &Rvalue,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Step 1: Evaluate rvalue and put result on stack (≤2 instructions)
-        self.lower_rvalue(rvalue, function, local_map, string_table)?;
-
-        // Step 2: Validate type consistency between place and value
-        let value_type = self.get_rvalue_wasm_type(rvalue)?;
-        let place_type = place.wasm_type();
-
-        if value_type != place_type {
-            return_compiler_error!(
-                "Type mismatch in assignment: place expects {:?} but rvalue provides {:?}. Place: {:?}, Rvalue: {:?}",
-                place_type,
-                value_type,
-                place,
-                rvalue ; {
-                    CompilationStage => "WASM Encoding",
-                    ExpectedType => "place type",
-                    FoundType => "rvalue type",
-                    PrimarySuggestion => "Ensure WIR type inference produces consistent types",
-                }
-            );
-        }
-
-        // Step 3: Store stack value to place (≤1 instruction for locals/globals)
-        self.lower_place_assignment_with_type(place, &value_type, function, local_map)?;
-
-        Ok(())
-    }
-
-    /// Lower WIR function call statement (direct WASM call)
-    fn lower_wir_call(
-        &mut self,
-        func: &Operand,
-        args: &[Operand],
-        destination: &Option<Place>,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Step 1: Load all arguments onto stack (1 instruction per arg)
-        for arg in args {
-            self.lower_operand(arg, function, local_map, string_table)?;
-        }
-
-        // Step 2: Generate call instruction (1 instruction)
-        match func {
-            Operand::FunctionRef(func_index) => {
-                function.instruction(&Instruction::Call(*func_index));
-            }
-            Operand::Constant(Constant::Function(func_index)) => {
-                function.instruction(&Instruction::Call(*func_index));
-            }
-            _ => {
-                return_compiler_error!(
-                    "WIR function calls must use direct function references, found: {:?}",
-                    func ; {
-                        CompilationStage => "WASM Encoding",
-                        PrimarySuggestion => "Use Operand::FunctionRef or Operand::Constant(Constant::Function) for function calls",
-                        ExpectedType => "FunctionRef",
-                    }
-                );
-            }
-        }
-
-        // Step 3: Store result if destination exists (1 instruction)
-        if let Some(dest_place) = destination {
-            let return_type = dest_place.wasm_type();
-            self.lower_place_assignment_with_type(dest_place, &return_type, function, local_map)?;
-        }
-
-        Ok(())
-    }
-
-    /// Lower WIR host function call statement (direct WASM call to imported function)
-    fn lower_wir_host_call(
-        &mut self,
-        host_function: &HostFunctionDef,
-        args: &[Operand],
-        destination: &Option<Place>,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Check for runtime-specific mapping if registry is available
-        if let Some(registry) = self.host_registry.clone() {
-            return self.lower_host_call_with_registry(
-                host_function,
-                args,
-                destination,
-                function,
-                local_map,
-                &registry,
-                string_table,
-            );
-        }
-
-        // Fallback to original logic if no registry available
-        // Check if this is a WASIX function (identified by module name)
-        let module_name = string_table.resolve(host_function.module);
-        if module_name == "wasix_32v1" {
-            // This is a WASIX function - handle it specially
-            let function_name = string_table.resolve(host_function.name);
-            return self.lower_wasix_host_call_simple(
-                function_name,
-                args,
-                destination,
-                function,
-                local_map,
-                string_table,
-            );
-        }
-
-        // Step 1: Load all arguments onto stack using consolidated helper
-        self.load_host_function_arguments(host_function, args, function, local_map, string_table)?;
-
-        // Step 2: Generate call instruction to imported host function using consolidated helper
-        let host_function_name = string_table.resolve(host_function.name);
-        self.generate_host_function_call(host_function_name, function)?;
-
-        // Step 3: Store result if destination exists using consolidated helper
-        self.store_function_result(destination, function, local_map)?;
-
-        Ok(())
-    }
-
-    /// Lower host function call with registry-aware runtime mapping
-    fn lower_host_call_with_registry(
-        &mut self,
-        host_function: &HostFunctionDef,
-        args: &[Operand],
-        destination: &Option<Place>,
-        function: &mut Function,
-        local_map: &LocalMap,
-        registry: &HostFunctionRegistry,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        use crate::compiler::host_functions::registry::RuntimeFunctionMapping;
-
-        // Get runtime-specific mapping
-        match registry.get_runtime_mapping(&host_function.name) {
-            Some(RuntimeFunctionMapping::Wasix(wasix_func)) => {
-                // Use WASIX fd_write generation for print and template_output calls
-                let function_name = string_table.resolve(host_function.name);
-                if function_name == "print" || function_name == "template_output" {
-                    return self.generate_wasix_fd_write_call(args, function, local_map, string_table);
-                }
-                
-                // For other WASIX functions, use standard call lowering
-                self.lower_standard_host_call(host_function, args, destination, function, local_map, string_table)
-            }
-            Some(RuntimeFunctionMapping::JavaScript(_js_func)) => {
-                // Use JavaScript binding (not implemented yet)
-                let function_name = string_table.resolve(host_function.name);
-                return_compiler_error!(
-                    "JavaScript runtime mappings not yet implemented for host function '{}'",
-                    function_name ; {
-                        CompilationStage => "WASM Encoding",
-                        PrimarySuggestion => "Use WASIX or native runtime mappings instead",
-                        AlternativeSuggestion => "Implement JavaScript binding support in the WASM backend",
-                    }
-                );
-            }
-            Some(RuntimeFunctionMapping::Native(_)) | None => {
-                // Use standard host function call
-                self.lower_standard_host_call(host_function, args, destination, function, local_map, string_table)
-            }
-        }
-    }
-
-    /// Lower standard host function call (non-WASIX)
-    fn lower_standard_host_call(
-        &mut self,
-        host_function: &HostFunctionDef,
-        args: &[Operand],
-        destination: &Option<Place>,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Step 1: Load all arguments onto stack using consolidated helper
-        self.load_host_function_arguments(host_function, args, function, local_map, string_table)?;
-
-        // Step 2: Generate call instruction to imported host function using consolidated helper
-        let host_function_name = string_table.resolve(host_function.name);
-        self.generate_host_function_call(host_function_name, function)?;
-
-        // Step 3: Store result if destination exists using consolidated helper
-        self.store_function_result(destination, function, local_map)?;
-
-        Ok(())
-    }
-
-    /// Generate WASIX fd_write call for print statements
-    ///
-    /// This method implements subtask 3.2: string-to-IOVec conversion for WASIX calls
-    /// It converts a Beanstalk print() call into a WASIX fd_write call by:
-    /// 1. Adding string data to linear memory with proper alignment
-    /// 2. Creating IOVec structure pointing to string data
-    /// 3. Generating WASM instruction sequence for WASIX fd_write call
-    /// 4. Handling WASIX calling conventions and return values
-    fn generate_wasix_fd_write_call(
-        &mut self,
-        args: &[Operand],
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Validate arguments - print() should have exactly one string argument
-        if args.len() != 1 {
-            return_compiler_error!(
-                "print() function expects exactly 1 argument, got {}. This should be caught during type checking.",
-                args.len()
-            );
-        }
-
-        let string_arg = &args[0];
-
-        // Extract string content from the operand
-        let string_id = match string_arg {
-            Operand::Constant(Constant::String(content)) => *content,
-            _ => {
-                // For non-constant strings, we need to handle them differently
-                // For now, this is a limitation - we only support string literals
-                return_compiler_error!(
-                    "WASIX print() currently only supports string literals. Variable string printing not yet implemented."
-                );
-            }
-        };
-
-        // Resolve the string from the string table
-        let string_content = string_table.resolve(string_id);
-
-        // Step 1: Add string data to linear memory allocation
-        let string_offset = self.string_manager.add_string_slice_constant(string_content);
-        let string_len = string_content.len() as u32;
-
-        // Skip the 4-byte length prefix to get to the actual string data
-        let string_ptr = string_offset + 4;
-
-        // Step 2: Implement string-to-IOVec conversion for WASIX calls
-        let iovec = crate::compiler::host_functions::wasix_registry::IOVec::new(string_ptr, string_len);
-
-        // Add IOVec structure to data section with proper WASIX alignment
-        let iovec_bytes = iovec.to_bytes();
-        let iovec_offset = self.string_manager.add_raw_data(&iovec_bytes);
-
-        // Allocate space for nwritten result with WASIX alignment
-        let nwritten_bytes = [0u8; 4]; // Initialize to 0
-        let nwritten_offset = self.string_manager.add_raw_data(&nwritten_bytes);
-
-        // Get the WASIX fd_write function index
-        let wasix_function = match self.wasix_registry.get_function("print") {
-            Some(func) => func,
-            None => {
-                return_compiler_error!(
-                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
-                );
-            }
-        };
-
-        let fd_write_func_index = wasix_function.get_function_index()?;
-
-        // Step 3: Generate WASM instruction sequence for WASIX fd_write call
-        // Handle WASIX calling conventions: fd_write(fd: i32, iovs: i32, iovs_len: i32, nwritten: i32) -> i32
-
-        // Load stdout file descriptor (constant 1) onto WASM stack
-        function.instruction(&Instruction::I32Const(1));
-
-        // Load IOVec pointer (offset in linear memory where IOVec structure is stored)
-        function.instruction(&Instruction::I32Const(iovec_offset as i32));
-
-        // Load IOVec count (1 for single string argument)
-        function.instruction(&Instruction::I32Const(1));
-
-        // Load nwritten result pointer (where fd_write will store bytes written)
-        function.instruction(&Instruction::I32Const(nwritten_offset as i32));
-
-        // Generate call instruction to imported fd_write function
-        function.instruction(&Instruction::Call(fd_write_func_index));
-
-        // Step 4: Handle WASIX return values
-        // fd_write returns errno (0 for success, non-zero for error)
-        // For now, we'll just drop the return value, but this provides foundation for error handling
-        function.instruction(&Instruction::Drop);
-
-        Ok(())
-    }
-
-    /// Lower WASIX host function call (simplified version for Function)
-    fn lower_wasix_host_call_simple(
-        &mut self,
-        function_name: &str,
-        args: &[Operand],
-        _destination: &Option<Place>,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        match function_name {
-            "print" | "template_output" => self.lower_wasix_print_simple(args, function, local_map, string_table),
-            _ => {
-                return_compiler_error!(
-                    "Unsupported WASIX function: {}. Only 'print' and 'template_output' are currently implemented.",
-                    function_name
-                );
-            }
-        }
-    }
-
-    /// Lower print() function to WASIX fd_write call (simplified version for Function)
-    fn lower_wasix_print_simple(
-        &mut self,
-        args: &[Operand],
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Validate arguments - print() should have exactly one string argument
-        if args.len() != 1 {
-            return_compiler_error!(
-                "print() function expects exactly 1 argument, got {}. This should be caught during type checking.",
-                args.len()
-            );
-        }
-
-        let string_arg = &args[0];
-
-        // Check if this is a constant string or a variable
-        match string_arg {
-            Operand::Constant(Constant::String(content)) => {
-                // String literal - resolve StringId to &str and use the existing implementation
-                let string_content = string_table.resolve(*content);
-                self.lower_wasix_print_constant(string_content, function)
-            }
-            Operand::Copy(place) | Operand::Move(place) => {
-                // String variable - use runtime implementation
-                self.lower_wasix_print_variable(place, function, local_map)
-            }
-            _ => {
-                return_compiler_error!(
-                    "print() argument must be a string literal or string variable, got {:?}",
-                    string_arg
-                );
-            }
-        }
-    }
-
-    /// Print a constant string literal (compile-time known)
-    fn lower_wasix_print_constant(
-        &mut self,
-        string_content: &str,
-        function: &mut Function,
-    ) -> Result<(), CompileError> {
-
-        // Get the WASIX fd_write function index
-        let wasix_function = match self.wasix_registry.get_function("print") {
-            Some(func) => func,
-            None => {
-                return_compiler_error!(
-                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
-                );
-            }
-        };
-
-        let fd_write_func_index = wasix_function.get_function_index()?;
-
-        // Add string data to WASM data section with proper alignment
-        let string_offset = self.string_manager.add_string_constant(&string_content);
-        let string_len = string_content.len() as u32;
-
-        // FIXED: Use the StringManager offset (where data actually exists) instead of WasixMemoryManager
-        // The StringManager writes actual string data to the WASM data section
-        // Skip the 4-byte length prefix to get to the actual string data
-        let string_ptr = string_offset + 4;
-
-        // Create IOVec structure with WASIX alignment (8-byte aligned)
-        let _iovec_ptr = match self.wasix_memory_manager.allocate_iovec_array(1) {
-            Ok(ptr) => ptr,
-            Err(e) => {
-                return_compiler_error!("WASIX IOVec allocation failed: {}", e);
-            }
-        };
-        let iovec =
-            crate::compiler::host_functions::wasix_registry::IOVec::new(string_ptr, string_len);
-
-        // Add IOVec structure to data section with proper WASIX alignment
-        let iovec_bytes = iovec.to_bytes();
-        let iovec_offset = self.add_raw_data_to_section(&iovec_bytes);
-
-        // Allocate space for nwritten result with WASIX alignment
-        let _nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
-            Ok(ptr) => ptr,
-            Err(e) => {
-                return_compiler_error!("WASIX nwritten allocation failed: {}", e);
-            }
-        };
-        let nwritten_bytes = [0u8; 4]; // Initialize to 0
-        let nwritten_offset = self.add_raw_data_to_section(&nwritten_bytes);
-
-        // Generate WASM instruction sequence for fd_write call
-        // Load stdout file descriptor (constant 1) onto WASM stack
-        function.instruction(&Instruction::I32Const(1));
-
-        // Load IOVec pointer (offset in linear memory where IOVec structure is stored)
-        function.instruction(&Instruction::I32Const(iovec_offset as i32));
-
-        // Load IOVec count (1 for single string argument)
-        function.instruction(&Instruction::I32Const(1));
-
-        // Load nwritten result pointer (where fd_write will store bytes written)
-        function.instruction(&Instruction::I32Const(nwritten_offset as i32));
-
-        // Generate call instruction to imported fd_write function
-        function.instruction(&Instruction::Call(fd_write_func_index));
-
-        // Handle the return value (errno) for basic error detection
-        // Store errno in a local variable for potential error checking
-        // For now, we'll just drop it, but this provides the foundation for error handling
-        function.instruction(&Instruction::Drop);
-
-        Ok(())
-    }
-
-    /// Print a string variable (runtime value)
-    fn lower_wasix_print_variable(
-        &mut self,
-        place: &Place,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        // Get the WASIX fd_write function index
-        let wasix_function = match self.wasix_registry.get_function("print") {
-            Some(func) => func,
-            None => {
-                return_compiler_error!(
-                    "WASIX function 'print' not found in registry. This should be registered during module initialization."
-                );
-            }
-        };
-
-        let fd_write_func_index = wasix_function.get_function_index()?;
-
-        // Load the string pointer from the variable
-        // The place contains a pointer to: [length: u32][data: bytes]
-        self.lower_place_access(place, function, local_map)?;
-        
-        // Stack: [string_ptr]
-        // Duplicate for later use
-        function.instruction(&Instruction::LocalTee(0)); // Save string_ptr in local 0
-        
-        // Read the length (first 4 bytes)
-        function.instruction(&Instruction::I32Load(MemArg {
-            offset: 0,
-            align: 2, // 4-byte alignment
-            memory_index: 0,
-        }));
-        
-        // Stack: [length]
-        function.instruction(&Instruction::LocalSet(1)); // Save length in local 1
-        
-        // Calculate data pointer (string_ptr + 4)
-        function.instruction(&Instruction::LocalGet(0));
-        function.instruction(&Instruction::I32Const(4));
-        function.instruction(&Instruction::I32Add);
-        function.instruction(&Instruction::LocalSet(2)); // Save data_ptr in local 2
-        
-        // Now we need to create an IOVec structure at runtime
-        // Allocate IOVec space (8 bytes: ptr + len)
-        let iovec_ptr = match self.wasix_memory_manager.allocate_iovec_array(1) {
-            Ok(ptr) => ptr,
-            Err(e) => {
-                return_compiler_error!("WASIX IOVec allocation failed: {}", e);
-            }
-        };
-        
-        // Write data_ptr to IOVec (first 4 bytes)
-        function.instruction(&Instruction::I32Const(iovec_ptr as i32));
-        function.instruction(&Instruction::LocalGet(2)); // data_ptr
-        function.instruction(&Instruction::I32Store(MemArg {
-            offset: 0,
-            align: 2,
-            memory_index: 0,
-        }));
-        
-        // Write length to IOVec (next 4 bytes)
-        function.instruction(&Instruction::I32Const(iovec_ptr as i32 + 4));
-        function.instruction(&Instruction::LocalGet(1)); // length
-        function.instruction(&Instruction::I32Store(MemArg {
-            offset: 0,
-            align: 2,
-            memory_index: 0,
-        }));
-        
-        // Allocate space for nwritten result
-        let nwritten_ptr = match self.wasix_memory_manager.allocate(4, 4) {
-            Ok(ptr) => ptr,
-            Err(e) => {
-                return_compiler_error!("WASIX nwritten allocation failed: {}", e);
-            }
-        };
-        
-        // Call fd_write(fd=1, iovs=iovec_ptr, iovs_len=1, nwritten=nwritten_ptr)
-        function.instruction(&Instruction::I32Const(1)); // stdout fd
-        function.instruction(&Instruction::I32Const(iovec_ptr as i32));
-        function.instruction(&Instruction::I32Const(1)); // iovs_len
-        function.instruction(&Instruction::I32Const(nwritten_ptr as i32));
-        function.instruction(&Instruction::Call(fd_write_func_index));
-        
-        // Drop the return value (errno)
-        function.instruction(&Instruction::Drop);
-        
-        Ok(())
-    }
-
-    /// Lower a WIR rvalue to WASM instructions
-    fn lower_rvalue(
-        &mut self,
-        rvalue: &Rvalue,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        match rvalue {
-            Rvalue::Use(operand) => self.lower_operand(operand, function, local_map, string_table),
-            Rvalue::BinaryOp(op, left, right) => {
-                // Determine the WASM type from the operands
-                let wasm_type = self.get_operand_wasm_type(left)?;
-                self.lower_operand(left, function, local_map, string_table)?;
-                self.lower_operand(right, function, local_map, string_table)?;
-                self.lower_binary_op(op, &wasm_type, function)
-            }
-            Rvalue::UnaryOp(op, operand) => {
-                self.lower_operand(operand, function, local_map, string_table)?;
-                self.lower_unary_op(op, function)
-            }
-            Rvalue::Ref { place, borrow_kind } => {
-                // Implement Beanstalk's implicit borrowing semantics in WASM
-                self.lower_beanstalk_reference(place, borrow_kind, function, local_map)
-            }
-            Rvalue::StringConcat(left, right) => {
-                // String concatenation: load both operands and call string concat helper
-                self.lower_operand(left, function, local_map, string_table)?;
-                self.lower_operand(right, function, local_map, string_table)?;
-                // For now, just leave both values on the stack
-                // TODO: Implement actual string concatenation via runtime helper
-                Ok(())
-            }
-        }
-    }
-
-    /// Lower a WIR operand to WASM instructions (WIR-faithful operand lowering)
-    ///
-    /// This method implements direct WIR operand lowering following WIR design principles:
-    /// - Operand::Copy → place access (≤3 instructions)
-    /// - Operand::Move → place access + ownership semantics (≤3 instructions)
-    /// - Operand::Constant → immediate value (1 instruction)
-    /// - Operand::FunctionRef → function index constant (1 instruction)
-    /// - Operand::GlobalRef → global access (1 instruction)
-    fn lower_operand(
-        &mut self,
-        operand: &Operand,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        match operand {
-            Operand::Constant(constant) => {
-                // Direct constant lowering (1 instruction)
-                self.lower_wir_constant(constant, function, string_table)
-            }
-            Operand::Copy(place) => {
-                // Copy operation: non-consuming read from place (≤3 instructions)
-                self.lower_wir_copy(place, function, local_map)
-            }
-            Operand::Move(place) => {
-                // Move operation: consuming read from place (≤3 instructions)
-                self.lower_wir_move(place, function, local_map)
-            }
-            Operand::FunctionRef(func_index) => {
-                // Function reference as WASM function index (1 instruction)
-                function.instruction(&Instruction::I32Const(*func_index as i32));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASM: function reference {} as i32.const", func_index);
-
-                Ok(())
-            }
-            Operand::GlobalRef(global_index) => {
-                // Global reference: load global value (1 instruction)
-                let wasm_global = local_map.get_global(*global_index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "WIR global reference {} not mapped to WASM global",
-                        global_index
-                    ))
-                })?;
-
-                function.instruction(&Instruction::GlobalGet(wasm_global));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: global.get {} (WIR global ref {} → WASM global {})",
-                    wasm_global, global_index, wasm_global
-                );
-
-                Ok(())
-            }
-        }
-    }
-
-    /// Lower WIR constant to WASM immediate instruction
     fn lower_wir_constant(
         &mut self,
         constant: &Constant,
@@ -3179,140 +2140,6 @@ impl WasmModule {
     }
 
     /// Lower WIR copy operand (non-consuming place access)
-    fn lower_wir_copy(
-        &mut self,
-        place: &Place,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        // Copy operation: read value from place without consuming it
-        // This maps directly to place access in WASM
-        self.lower_place_access(place, function, local_map)?;
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: copy from place {:?}", place);
-
-        Ok(())
-    }
-
-    /// Lower WIR move operand (consuming place access)
-    fn lower_wir_move(
-        &mut self,
-        place: &Place,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        // Move operation: read value from place and consume it
-        // For basic WASM types, this is identical to copy at the instruction level
-        // The borrow checker ensures move semantics are respected at the WIR level
-        self.lower_place_access(place, function, local_map)?;
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: move from place {:?} (ownership transfer)", place);
-
-        // Future enhancement: For complex types, this could generate additional
-        // instructions to invalidate the source place or update reference counts
-
-        Ok(())
-    }
-
-    /// Lower place access to WASM instructions (WIR-faithful place resolution)
-    ///
-    /// This method implements the core WIR place resolution system that maps WIR places
-    /// directly to WASM memory operations. Each place type maps to specific WASM instructions:
-    /// - Place::Local → local.get (1 instruction)
-    /// - Place::Global → global.get (1 instruction)  
-    /// - Place::Memory → address calculation + memory.load (≤3 instructions)
-    /// - Place::Projection → base access + projection calculation (≤3 instructions)
-    fn lower_place_access(
-        &mut self,
-        place: &Place,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        match place {
-            Place::Local {
-                index,
-                wasm_type: _,
-            } => {
-                // Direct WASM local access (1 instruction)
-                let wasm_local = local_map.get_local(*index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "WIR local {} not mapped to WASM local. Check local variable analysis.",
-                        index
-                    ))
-                })?;
-
-                function.instruction(&Instruction::LocalGet(wasm_local));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: local.get {} (WIR local {} → WASM local {})",
-                    wasm_local, index, wasm_local
-                );
-
-                Ok(())
-            }
-
-            Place::Global {
-                index,
-                wasm_type: _,
-            } => {
-                // Direct WASM global access (1 instruction)
-                let wasm_global = local_map.get_global(*index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "WIR global {} not mapped to WASM global. Check global variable setup.",
-                        index
-                    ))
-                })?;
-
-                function.instruction(&Instruction::GlobalGet(wasm_global));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: global.get {} (WIR global {} → WASM global {})",
-                    wasm_global, index, wasm_global
-                );
-
-                Ok(())
-            }
-
-            Place::Memory { base, offset, size } => {
-                // WASM linear memory access (≤3 instructions: base + offset + load)
-                self.lower_memory_base_address(base, function)?;
-
-                // Add offset if non-zero (1 instruction)
-                Self::emit_memory_offset(function, offset.0);
-
-                // Generate type-appropriate load instruction (1 instruction)
-                self.generate_memory_load_instruction(size, function)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: memory load at offset {} with size {:?}",
-                    offset.0, size
-                );
-
-                Ok(())
-            }
-
-            Place::Projection { base, elem } => {
-                // Projection access: base + element calculation (≤3 instructions total)
-                self.lower_place_access(base, function, local_map)?;
-                self.lower_projection_element_access(elem, function, local_map)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: projection access - base: {:?}, elem: {:?}",
-                    base, elem
-                );
-
-                Ok(())
-            }
-        }
-    }
-
-    /// Generate memory load instruction based on type size
     fn generate_memory_load_instruction(
         &self,
         size: &TypeSize,
@@ -3368,297 +2195,8 @@ impl WasmModule {
     }
 
     /// Lower memory base address calculation
-    fn lower_memory_base_address(
-        &mut self,
-        base: &MemoryBase,
-        function: &mut Function,
-    ) -> Result<(), CompileError> {
-        match base {
-            MemoryBase::LinearMemory => {
-                // Linear memory starts at offset 0
-                Self::emit_i32_const(function, 0);
-                Ok(())
-            }
-            MemoryBase::Stack => {
-                // Stack-based memory should be handled as locals, not memory operations
-                return_compiler_error!(
-                    "Stack-based memory access should use Place::Local, not Place::Memory" ; {
-                        CompilationStage => "WASM Encoding",
-                        PrimarySuggestion => "Use Place::Local for stack-allocated variables",
-                        AlternativeSuggestion => "Convert stack memory access to local variable access in WIR generation",
-                    }
-                );
-            }
-            MemoryBase::Heap { alloc_id, size: _ } => {
-                // Heap allocation - for now, use linear memory with allocation ID as offset
-                // Future enhancement: proper heap management with allocation tracking
-                Self::emit_i32_const(function, *alloc_id as i32 * 1024); // Simple allocation strategy
-                Ok(())
-            }
-        }
-    }
 
     /// Lower projection element access for field/index operations
-    fn lower_projection_element_access(
-        &mut self,
-        elem: &ProjectionElem,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        match elem {
-            ProjectionElem::Field {
-                index: _,
-                offset,
-                size,
-            } => {
-                // Field access: add field offset to base address
-                if offset.0 > 0 {
-                    function.instruction(&Instruction::I32Const(offset.0 as i32));
-                    function.instruction(&Instruction::I32Add);
-                }
-
-                // Generate appropriate load instruction based on field size
-                match size {
-                    FieldSize::Fixed(1) => {
-                        function.instruction(&Instruction::I32Load8U(MemArg {
-                            offset: 0,
-                            align: 0, // 1-byte alignment
-                            memory_index: 0,
-                        }));
-                    }
-                    FieldSize::Fixed(2) => {
-                        function.instruction(&Instruction::I32Load16U(MemArg {
-                            offset: 0,
-                            align: 1, // 2-byte alignment
-                            memory_index: 0,
-                        }));
-                    }
-                    FieldSize::Fixed(4) => {
-                        function.instruction(&Instruction::I32Load(MemArg {
-                            offset: 0,
-                            align: 2, // 4-byte alignment
-                            memory_index: 0,
-                        }));
-                    }
-                    FieldSize::Fixed(8) => {
-                        function.instruction(&Instruction::I64Load(MemArg {
-                            offset: 0,
-                            align: 3, // 8-byte alignment
-                            memory_index: 0,
-                        }));
-                    }
-                    FieldSize::WasmType(wasm_type) => {
-                        match wasm_type {
-                            WasmType::I32 => {
-                                function.instruction(&Instruction::I32Load(MemArg {
-                                    offset: 0,
-                                    align: 2,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::I64 => {
-                                function.instruction(&Instruction::I64Load(MemArg {
-                                    offset: 0,
-                                    align: 3,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::F32 => {
-                                function.instruction(&Instruction::F32Load(MemArg {
-                                    offset: 0,
-                                    align: 2,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::F64 => {
-                                function.instruction(&Instruction::F64Load(MemArg {
-                                    offset: 0,
-                                    align: 3,
-                                    memory_index: 0,
-                                }));
-                            }
-                            WasmType::ExternRef | WasmType::FuncRef => {
-                                // References are stored as i32 pointers
-                                function.instruction(&Instruction::I32Load(MemArg {
-                                    offset: 0,
-                                    align: 2,
-                                    memory_index: 0,
-                                }));
-                            }
-                        }
-                    }
-                    FieldSize::Variable => {
-                        // Variable size fields are typically pointers to the actual data
-                        function.instruction(&Instruction::I32Load(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    FieldSize::Fixed(size) => {
-                        // Handle other fixed sizes by defaulting to appropriate instruction
-                        if *size <= 4 {
-                            function.instruction(&Instruction::I32Load(MemArg {
-                                offset: 0,
-                                align: 2,
-                                memory_index: 0,
-                            }));
-                        } else {
-                            function.instruction(&Instruction::I64Load(MemArg {
-                                offset: 0,
-                                align: 3,
-                                memory_index: 0,
-                            }));
-                        }
-                    }
-                }
-                Ok(())
-            }
-            ProjectionElem::Index {
-                index,
-                element_size,
-            } => {
-                // Array indexing: base + (index * element_size)
-                self.emit_array_index_calculation(function, index, *element_size, local_map)?;
-                Ok(())
-            }
-            ProjectionElem::Length => {
-                // Length field access - typically at offset 0 for arrays/strings
-                function.instruction(&Instruction::I32Load(MemArg {
-                    offset: 0,
-                    align: 2,
-                    memory_index: 0,
-                }));
-                Ok(())
-            }
-            ProjectionElem::Data => {
-                // Data pointer access - typically after length field
-                Self::emit_memory_offset(function, 4); // Skip length field (4 bytes)
-                Ok(())
-            }
-            ProjectionElem::Deref => {
-                // Dereference: load value from address on stack
-                function.instruction(&Instruction::I32Load(MemArg {
-                    offset: 0,
-                    align: 2,
-                    memory_index: 0,
-                }));
-                Ok(())
-            }
-        }
-    }
-
-    /// Lower place assignment to WASM instructions (WIR-faithful place assignment)
-    ///
-    /// This method implements WIR place assignment that maps directly to WASM store operations:
-    /// - Place::Local → local.set (1 instruction)
-    /// - Place::Global → global.set (1 instruction)
-    /// - Place::Memory → address calculation + memory.store (≤3 instructions)
-    /// - Place::Projection → base + projection + store (≤3 instructions)
-    fn lower_place_assignment_with_type(
-        &mut self,
-        place: &Place,
-        value_type: &WasmType,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        match place {
-            Place::Local {
-                index,
-                wasm_type: _,
-            } => {
-                // Direct WASM local assignment (1 instruction)
-                let wasm_local = local_map.get_local(*index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "WIR local {} not mapped to WASM local for assignment",
-                        index
-                    ))
-                })?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: About to generate local.set {} (WIR local {} → WASM local {}, value_type: {:?}, place_type: {:?})",
-                    wasm_local,
-                    index,
-                    wasm_local,
-                    value_type,
-                    place.wasm_type()
-                );
-
-                function.instruction(&Instruction::LocalSet(wasm_local));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Generated local.set {} (WIR local {} → WASM local {})",
-                    wasm_local, index, wasm_local
-                );
-
-                Ok(())
-            }
-
-            Place::Global {
-                index,
-                wasm_type: _,
-            } => {
-                // Direct WASM global assignment (1 instruction)
-                let wasm_global = local_map.get_global(*index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "WIR global {} not mapped to WASM global for assignment",
-                        index
-                    ))
-                })?;
-
-                function.instruction(&Instruction::GlobalSet(wasm_global));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: global.set {} (WIR global {} → WASM global {})",
-                    wasm_global, index, wasm_global
-                );
-
-                Ok(())
-            }
-
-            Place::Memory { base, offset, size } => {
-                // WASM linear memory assignment (≤3 instructions: base + offset + store)
-                self.lower_memory_base_address(base, function)?;
-
-                // Add offset if non-zero (1 instruction)
-                Self::emit_memory_offset(function, offset.0);
-
-                // Generate type-appropriate store instruction (1 instruction)
-                self.generate_memory_store_instruction(value_type, size, function)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: memory store at offset {} with type {:?} and size {:?}",
-                    offset.0, value_type, size
-                );
-
-                Ok(())
-            }
-
-            Place::Projection { base, elem } => {
-                // Projection assignment: calculate final address then store
-                self.lower_place_access(base, function, local_map)?;
-                self.lower_projection_element_access(elem, function, local_map)?;
-
-                // Generate store instruction based on projection element type
-                let elem_type = elem.wasm_type();
-                self.generate_memory_store_instruction(&elem_type, &TypeSize::Word, function)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: projection assignment - base: {:?}, elem: {:?}",
-                    base, elem
-                );
-
-                Ok(())
-            }
-        }
-    }
-
-    /// Generate memory store instruction based on value type and size
     fn generate_memory_store_instruction(
         &self,
         value_type: &WasmType,
@@ -3762,55 +2300,6 @@ impl WasmModule {
     }
 
     /// Get the WASM type of an rvalue for type-aware instruction generation
-    fn get_rvalue_wasm_type(&self, rvalue: &Rvalue) -> Result<WasmType, CompileError> {
-        match rvalue {
-            Rvalue::Use(operand) => self.get_operand_wasm_type(operand),
-            Rvalue::BinaryOp(_, left, _) => {
-                // Binary operations preserve the type of their operands
-                self.get_operand_wasm_type(left)
-            }
-            Rvalue::UnaryOp(_, operand) => {
-                // Unary operations preserve the type of their operand
-                self.get_operand_wasm_type(operand)
-            }
-            Rvalue::Ref { .. } => {
-                // References are pointers (i32)
-                Ok(WasmType::I32)
-            }
-            Rvalue::StringConcat(_, _) => {
-                // String concatenation results in a string pointer (i32)
-                Ok(WasmType::I32)
-            }
-        }
-    }
-
-    /// Get the WASM type of an operand for type-aware instruction generation
-    fn get_operand_wasm_type(&self, operand: &Operand) -> Result<WasmType, CompileError> {
-        match operand {
-            Operand::Constant(constant) => {
-                match constant {
-                    Constant::I32(_) => Ok(WasmType::I32),
-                    Constant::I64(_) => Ok(WasmType::I64),
-                    Constant::F32(_) => Ok(WasmType::F32),
-                    Constant::F64(_) => Ok(WasmType::F64),
-                    Constant::Bool(_) => Ok(WasmType::I32), // Booleans are i32 in WASM
-                    Constant::String(_) => Ok(WasmType::I32), // String pointers are i32
-                    _ => return_compiler_error!(
-                        "Unsupported constant type for WASM type determination: {:?}",
-                        constant ; {
-                            CompilationStage => "WASM Encoding",
-                            PrimarySuggestion => "Use a supported constant type (I32, I64, F32, F64, Bool, String)",
-                        }
-                    ),
-                }
-            }
-            Operand::Copy(place) | Operand::Move(place) => Ok(place.wasm_type()),
-            Operand::FunctionRef(_) => Ok(WasmType::I32), // Function references are i32 indices
-            Operand::GlobalRef(_) => Ok(WasmType::I32),   // Global references are i32 indices
-        }
-    }
-
-    /// Lower binary operations to WASM instructions with type awareness
     fn lower_binary_op(
         &self,
         op: &BinOp,
@@ -4087,18 +2576,18 @@ impl WasmModule {
     /// It generates proper WASM if/else/end instruction sequences with correct
     /// block types and stack discipline.
 
-    /// Lower a WIR terminator to WASM control flow instructions with enhanced validation
-    fn lower_terminator_enhanced(
+    /// Lower a WIR terminator to WASM control flow instructions with validation
+    fn lower_terminator(
         &mut self,
         terminator: &Terminator,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match terminator {
             Terminator::Goto { target } => {
                 // Beanstalk scope semantics: goto represents control flow between scopes
-                self.lower_beanstalk_goto_enhanced(*target, function_builder, local_map)
+                self.lower_beanstalk_goto(*target, function_builder, local_map)
             }
             Terminator::If {
                 condition,
@@ -4106,7 +2595,7 @@ impl WasmModule {
                 else_block,
             } => {
                 // Beanstalk conditional with scope semantics (: and ;)
-                self.lower_beanstalk_if_terminator_enhanced(
+                self.lower_beanstalk_if_terminator(
                     condition,
                     *then_block,
                     *else_block,
@@ -4117,7 +2606,7 @@ impl WasmModule {
             }
             Terminator::Return { values } => {
                 // Beanstalk return with proper scope closing
-                self.lower_beanstalk_return_enhanced(values, function_builder, local_map, string_table)
+                self.lower_beanstalk_return(values, function_builder, local_map, string_table)
             }
             Terminator::Unreachable => {
                 function_builder.instruction(&Instruction::Unreachable)?;
@@ -4127,51 +2616,6 @@ impl WasmModule {
     }
 
     /// Legacy method for compatibility - delegates to enhanced version
-    pub fn lower_terminator(
-        &mut self,
-        terminator: &Terminator,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Create a temporary enhanced builder for legacy compatibility
-        let mut temp_builder = EnhancedFunctionBuilder::new(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            "legacy_function".to_string(),
-        );
-
-        // Lower using enhanced method
-        self.lower_terminator_enhanced(terminator, &mut temp_builder, local_map, string_table)?;
-
-        // Extract instructions from temp builder (this is a simplified approach)
-        // In practice, the legacy method should be phased out
-        match terminator {
-            Terminator::Goto { .. } => {
-                function.instruction(&Instruction::Nop); // Placeholder
-            }
-            Terminator::If { condition, .. } => {
-                self.lower_operand(condition, function, local_map, string_table)?;
-                function.instruction(&Instruction::If(BlockType::Empty));
-                function.instruction(&Instruction::Nop); // Then block placeholder
-                function.instruction(&Instruction::Else);
-                function.instruction(&Instruction::Nop); // Else block placeholder
-                function.instruction(&Instruction::End);
-            }
-            Terminator::Return { values } => {
-                for value in values {
-                    self.lower_operand(value, function, local_map, string_table)?;
-                }
-                function.instruction(&Instruction::Return);
-            }
-            Terminator::Unreachable => {
-                function.instruction(&Instruction::Unreachable);
-            }
-        }
-
-        Ok(())
-    }
 
     /// Ensure function has proper termination
     ///
@@ -4299,6 +2743,32 @@ impl WasmModule {
         println!("WASM: Exported memory '{}'", name);
 
         Ok(())
+    }
+
+    /// Finish building the WASM module and return the compiled bytes
+    pub fn finish(mut self) -> Vec<u8> {
+        // Populate data section with string constants
+        if self.string_manager.get_data_size() > 0 {
+            let string_data = self.string_manager.get_data_section();
+            self.data_section.active(
+                0,                        // Memory index 0
+                &ConstExpr::i32_const(0), // Start at offset 0 in linear memory
+                string_data.iter().copied(),
+            );
+        }
+
+        let mut module = Module::new();
+
+        module.section(&self.type_section);
+        module.section(&self.import_section);
+        module.section(&self.function_section);
+        module.section(&self.memory_section);
+        module.section(&self.global_section);
+        module.section(&self.export_section);
+        module.section(&self.code_section);
+        module.section(&self.data_section);
+
+        module.finish()
     }
 
     /// Generate WASM import section entries for host functions used in WIR
@@ -4740,148 +3210,6 @@ impl WasmModule {
     /// since WASM doesn't have explicit reference types for local variables.
     /// The borrow checking is handled at the WIR level, and WASM generation assumes
     /// the borrowing rules have been validated.
-    fn lower_beanstalk_reference(
-        &mut self,
-        place: &Place,
-        borrow_kind: &crate::compiler::wir::wir_nodes::BorrowKind,
-        function: &mut Function,
-        local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        use crate::compiler::wir::wir_nodes::BorrowKind;
-
-        match borrow_kind {
-            BorrowKind::Shared => {
-                // Shared reference: read-only access to the place
-                // In WASM, this is just a regular value load since WASM doesn't have
-                // explicit shared reference types for locals/globals
-                self.lower_place_access(place, function, local_map)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Beanstalk shared reference (implicit borrow) to place: {:?}",
-                    place
-                );
-
-                Ok(())
-            }
-            BorrowKind::Mut => {
-                // Mutable reference: exclusive access to the place
-                // In WASM, this is also a regular value load, but the borrow checker
-                // ensures exclusive access at the WIR level
-                self.lower_place_access(place, function, local_map)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Beanstalk mutable reference (explicit ~) to place: {:?}",
-                    place
-                );
-
-                Ok(())
-            }
-        }
-    }
-
-    /// Handle Beanstalk mutability syntax in WASM generation
-    ///
-    /// Processes Beanstalk's `~` syntax for mutable operations:
-    /// - `x ~= y` creates mutable assignment with proper WASM local.set/global.set
-    /// - Ensures mutable assignments generate correct WASM operations
-    /// - Implements proper WASM memory access for mutable vs immutable data
-    fn lower_beanstalk_mutable_assignment(
-        &mut self,
-        place: &Place,
-        rvalue: &Rvalue,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Step 1: Evaluate the rvalue (what we're assigning)
-        self.lower_rvalue(rvalue, function, local_map, string_table)?;
-
-        // Step 2: Store to the mutable place with appropriate WASM instruction
-        match place {
-            Place::Local {
-                index,
-                wasm_type: _,
-            } => {
-                let wasm_local = local_map.get_local(*index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "Beanstalk mutable assignment: WIR local {} not mapped to WASM local",
-                        index
-                    ))
-                })?;
-
-                // Generate mutable local assignment
-                function.instruction(&Instruction::LocalSet(wasm_local));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Beanstalk mutable assignment (~=) to local {} (WASM local {})",
-                    index, wasm_local
-                );
-
-                Ok(())
-            }
-            Place::Global {
-                index,
-                wasm_type: _,
-            } => {
-                let wasm_global = local_map.get_global(*index).ok_or_else(|| {
-                    CompileError::compiler_error(&format!(
-                        "Beanstalk mutable assignment: WIR global {} not mapped to WASM global",
-                        index
-                    ))
-                })?;
-
-                // Generate mutable global assignment
-                function.instruction(&Instruction::GlobalSet(wasm_global));
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Beanstalk mutable assignment (~=) to global {} (WASM global {})",
-                    index, wasm_global
-                );
-
-                Ok(())
-            }
-            Place::Memory { base, offset, size } => {
-                // For memory locations, we need to calculate the address and store
-                self.lower_memory_base_address(base, function)?;
-
-                // Add offset if non-zero
-                if offset.0 > 0 {
-                    function.instruction(&Instruction::I32Const(offset.0 as i32));
-                    function.instruction(&Instruction::I32Add);
-                }
-
-                // Generate appropriate store instruction based on size
-                // We need to determine the WASM type from the place
-                let wasm_type = place.wasm_type();
-                self.generate_memory_store_instruction(&wasm_type, size, function)?;
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Beanstalk mutable assignment (~=) to memory at offset {} with size {:?}",
-                    offset.0, size
-                );
-
-                Ok(())
-            }
-            Place::Projection { base, elem } => {
-                // Handle mutable assignment to projected places (struct fields, array elements)
-                return_compiler_error!(
-                    "Beanstalk mutable assignment to projections not yet implemented: {:?}.{:?}",
-                    base,
-                    elem
-                );
-            }
-        }
-    }
-
-    /// Detect if an assignment involves Beanstalk mutability syntax
-    ///
-    /// This method analyzes the rvalue to determine if it represents a mutable operation
-    /// that should use Beanstalk's `~` syntax semantics in WASM generation.
     fn is_beanstalk_mutable_assignment(&self, rvalue: &Rvalue) -> bool {
         match rvalue {
             Rvalue::Ref { borrow_kind, .. } => {
@@ -4900,345 +3228,40 @@ impl WasmModule {
     ///
     /// This method extends the basic assignment lowering to properly handle
     /// Beanstalk's `~` mutability syntax and generate appropriate WASM instructions.
-    fn lower_beanstalk_aware_assignment(
-        &mut self,
-        place: &Place,
-        rvalue: &Rvalue,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        if self.is_beanstalk_mutable_assignment(rvalue) {
-            // Use specialized mutable assignment handling
-            self.lower_beanstalk_mutable_assignment(place, rvalue, function, local_map, string_table)
-        } else {
-            // Use standard assignment handling
-            self.lower_wir_assign(place, rvalue, function, local_map, string_table)
-        }
-    }
 
     /// Lower Beanstalk goto with proper scope semantics
     ///
     /// Beanstalk's goto represents control flow between scopes defined by `:` and `;`.
     /// In WASM, this maps to branch instructions with proper block structure.
-    fn lower_beanstalk_goto(
-        &mut self,
-        _target: u32,
-        _function: &mut Function,
-        _local_map: &LocalMap,
-    ) -> Result<(), CompileError> {
-        // For single-block functions, goto at the end should fall through
-        // For multi-block functions, generate proper branch instruction
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!(
-            "WASM: Beanstalk goto to block {} (scope transition)",
-            _target
-        );
-
-        // TODO: When multi-block support is added, generate proper br instruction
-        // function.instruction(&Instruction::Br(target));
-
-        Ok(())
-    }
 
     /// Lower Beanstalk if terminator with scope semantics
     ///
     /// Beanstalk conditionals use `:` to open scope and `;` to close scope.
     /// This maps to WASM's structured control flow with proper block nesting.
-    fn lower_beanstalk_if_terminator(
-        &mut self,
-        condition: &Operand,
-        _then_block: u32,
-        _else_block: u32,
-        _function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Validate condition type (must be boolean/i32)
-        let condition_type = self.get_operand_wasm_type(condition)?;
-        if !matches!(condition_type, WasmType::I32) {
-            return_compiler_error!(
-                "Beanstalk if condition must be boolean (i32 in WASM), found {:?}",
-                condition_type
-            );
-        }
-
-        // Load condition onto stack
-        self.lower_operand(condition, _function, local_map, string_table)?;
-
-        // Generate Beanstalk-style structured control flow
-        // `:` opens scope → WASM if instruction
-        _function.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!(
-            "WASM: Beanstalk if scope opened (:) - then block {}",
-            _then_block
-        );
-
-        // Then block content (placeholder for now)
-        _function.instruction(&Instruction::Nop); // Placeholder for then block
-
-        _function.instruction(&Instruction::Else);
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Beanstalk else scope - else block {}", _else_block);
-
-        // Else block content (placeholder for now)
-        _function.instruction(&Instruction::Nop); // Placeholder for else block
-
-        // `;` closes scope → WASM end instruction
-        _function.instruction(&Instruction::End);
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Beanstalk if scope closed (;)");
-
-        Ok(())
-    }
 
     /// Lower Beanstalk return with proper scope closing
     ///
     /// Beanstalk returns must properly close any open scopes before returning.
     /// This ensures proper WASM control flow and scope management.
-    fn lower_beanstalk_return(
-        &mut self,
-        values: &[Operand],
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Load return values onto the stack
-        for value in values {
-            self.lower_operand(value, function, local_map, string_table)?;
-        }
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!(
-            "WASM: Beanstalk return with {} values (closing all scopes)",
-            values.len()
-        );
-
-        // Generate return instruction (automatically closes all scopes in WASM)
-        function.instruction(&Instruction::Return);
-
-        Ok(())
-    }
 
     /// Handle Beanstalk error handling syntax (!err:)
     ///
     /// Beanstalk's `!err:` syntax creates error handling scopes that map to
     /// WASM's structured exception handling or control flow patterns.
-    fn lower_beanstalk_error_handling(
-        &mut self,
-        error_condition: &Operand,
-        _error_handler_block: u32,
-        _success_block: u32,
-        function: &mut Function,
-        local_map: &LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Load error condition (typically a result or error flag)
-        self.lower_operand(error_condition, function, local_map, string_table)?;
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Beanstalk error handling (!err:) - checking error condition");
-
-        // Generate conditional branch based on error condition
-        // If error condition is true (non-zero), branch to error handler
-        function.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-
-        // Error handler block (!err: scope)
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!(
-            "WASM: Beanstalk error handler scope - block {}",
-            _error_handler_block
-        );
-
-        function.instruction(&Instruction::Nop); // Placeholder for error handler
-
-        function.instruction(&Instruction::Else);
-
-        // Success block (normal execution path)
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Beanstalk success path - block {}", _success_block);
-
-        function.instruction(&Instruction::Nop); // Placeholder for success path
-
-        // Close error handling scope
-        function.instruction(&Instruction::End);
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASM: Beanstalk error handling scope closed");
-
-        Ok(())
-    }
-
-    /// Generate the final WASM module bytes
-    pub fn finish(mut self) -> Vec<u8> {
-        // Populate data section with string constants
-        if self.string_manager.get_data_size() > 0 {
-            let string_data = self.string_manager.get_data_section();
-            self.data_section.active(
-                0,                        // Memory index 0
-                &ConstExpr::i32_const(0), // Start at offset 0 in linear memory
-                string_data.iter().copied(),
-            );
-        }
-
-        let mut module = Module::new();
-
-        module.section(&self.type_section);
-        module.section(&self.import_section);
-        module.section(&self.function_section);
-        module.section(&self.memory_section);
-        module.section(&self.global_section);
-        module.section(&self.export_section);
-        module.section(&self.code_section);
-        module.section(&self.data_section);
-
-        module.finish()
-    }
-
-    /// Validate and finish building the WASM module with comprehensive error handling
-    pub fn finish_with_validation(self) -> Result<Vec<u8>, CompileError> {
-        // Validate before generating final bytes
-        self.validate_with_wasm_encoder()?;
-
-        // Generate the final WASM bytes
-        let wasm_bytes = self.finish();
-
-        // Double-check validation on final bytes
-        match wasmparser::validate(&wasm_bytes) {
-            Ok(_) => {
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Final module validation passed! Generated {} bytes",
-                    wasm_bytes.len()
-                );
-                Ok(wasm_bytes)
-            }
-            Err(wasm_error) => {
-                // Create a temporary module for error mapping since self was consumed
-                let temp_module = WasmModule::new();
-                temp_module.map_wasm_validation_error(&wasm_error)
-            }
-        }
-    }
-
-    /// Register a function name with its index
-    pub fn register_function(&mut self, name: String, index: u32) {
-        self.function_registry.insert(name, index);
-    }
-
-    /// Get all registered functions
-    pub fn get_all_functions(&self) -> &HashMap<String, u32> {
-        &self.function_registry
-    }
-
-    /// Provide actionable suggestions for common WASM validation errors
-    pub fn get_error_suggestions(&self, error_message: &str) -> Vec<String> {
-        let mut suggestions = Vec::new();
-
-        if error_message.contains("control frames remain") {
-            suggestions.push(
-                "Check that every ':' (scope open) has a matching ';' (scope close)".to_string(),
-            );
-            suggestions.push(
-                "Ensure all if statements have proper else clauses or end with ';'".to_string(),
-            );
-            suggestions.push(
-                "Verify that function definitions end with proper return statements".to_string(),
-            );
-        }
-
-        if error_message.contains("type mismatch") {
-            suggestions.push("Check that variable assignments use compatible types".to_string());
-            suggestions
-                .push("Ensure function return types match the declared signature".to_string());
-            suggestions.push("Verify that arithmetic operations use numeric types".to_string());
-        }
-
-        if error_message.contains("invalid function index") {
-            suggestions
-                .push("Check that all function calls use correct function names".to_string());
-            suggestions.push("Ensure functions are defined before they are called".to_string());
-            suggestions.push("Verify that imported functions are properly declared".to_string());
-        }
-
-        if error_message.contains("invalid local index") {
-            suggestions.push("Check that all variables are declared before use".to_string());
-            suggestions.push("Ensure variable names are spelled correctly".to_string());
-            suggestions.push("Verify that variables are in the correct scope".to_string());
-        }
-
-        if suggestions.is_empty() {
-            suggestions.push("Review your Beanstalk code for syntax errors".to_string());
-            suggestions.push("Check the compiler documentation for language features".to_string());
-            suggestions.push(
-                "Consider reporting this as a compiler bug if the code looks correct".to_string(),
-            );
-        }
-
-        suggestions
-    }
-
-    /// Generate a comprehensive error report with context and suggestions
-    pub fn generate_error_report(&self, wasm_error: &wasmparser::BinaryReaderError) -> String {
-        let source_context = self.find_source_context_for_wasm_error(wasm_error);
-        let suggestions = self.get_error_suggestions(wasm_error.message());
-
-        let mut report = String::new();
-
-        // Error header
-        report.push_str(&format!(
-            "WASM Validation Error: {}\n",
-            wasm_error.message()
-        ));
-
-        // Source context
-        if let Some(ctx) = source_context {
-            report.push_str(&format!(
-                "Location: {} around line {}\n",
-                ctx.context, ctx.line
-            ));
-            if let Some(ref file) = ctx.source_file {
-                report.push_str(&format!("File: {}\n", file));
-            }
-            if !ctx.context.is_empty() {
-                report.push_str(&format!("Context: {}\n", ctx.context));
-            }
-        }
-
-        // Debug information
-        report.push_str(&format!("WASM Offset: 0x{:x}\n", wasm_error.offset()));
-
-        // Suggestions
-        report.push_str("\nSuggestions:\n");
-        for (i, suggestion) in suggestions.iter().enumerate() {
-            report.push_str(&format!("  {}. {}\n", i + 1, suggestion));
-        }
-
-        report
-    }
-
-    // Enhanced helper methods for wasm_encoder integration
-
-    /// Enhanced Beanstalk-aware assignment with validation
-    fn lower_beanstalk_aware_assignment_enhanced(
+    fn lower_beanstalk_aware_assignment(
         &mut self,
         place: &Place,
         rvalue: &Rvalue,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Lower rvalue to stack
-        self.lower_rvalue_enhanced(rvalue, function_builder, local_map, string_table)?;
+        self.lower_rvalue(rvalue, function_builder, local_map, string_table)?;
 
         // Assign to place
         let place_type = place.wasm_type();
-        self.lower_place_assignment_with_type_enhanced(
+        self.lower_place_assignment_with_type(
             place,
             &place_type,
             function_builder,
@@ -5248,25 +3271,25 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Enhanced rvalue lowering with validation
-    fn lower_rvalue_enhanced(
+    /// Rvalue lowering with validation
+    fn lower_rvalue(
         &mut self,
         rvalue: &Rvalue,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match rvalue {
             Rvalue::Use(operand) => {
-                self.lower_operand_enhanced(operand, function_builder, local_map, string_table)
+                self.lower_operand(operand, function_builder, local_map, string_table)
             }
             Rvalue::BinaryOp(op, left, right) => {
-                self.lower_operand_enhanced(left, function_builder, local_map, string_table)?;
-                self.lower_operand_enhanced(right, function_builder, local_map, string_table)?;
+                self.lower_operand(left, function_builder, local_map, string_table)?;
+                self.lower_operand(right, function_builder, local_map, string_table)?;
 
                 // Determine the correct WASM instruction based on operand types
-                let left_type = self.get_operand_wasm_type_enhanced(left, local_map)?;
-                let right_type = self.get_operand_wasm_type_enhanced(right, local_map)?;
+                let left_type = self.get_operand_wasm_type(left, local_map)?;
+                let right_type = self.get_operand_wasm_type(right, local_map)?;
 
                 // For now, assume both operands have the same type (type checking should ensure this)
                 let operand_type = if left_type == right_type {
@@ -5378,10 +3401,10 @@ impl WasmModule {
                 Ok(())
             }
             Rvalue::UnaryOp(op, operand) => {
-                self.lower_operand_enhanced(operand, function_builder, local_map, string_table)?;
+                self.lower_operand(operand, function_builder, local_map, string_table)?;
 
                 // Determine the correct WASM instruction based on operand type
-                let operand_type = self.get_operand_wasm_type_enhanced(operand, local_map)?;
+                let operand_type = self.get_operand_wasm_type(operand, local_map)?;
 
                 match (op, &operand_type) {
                     (UnOp::Not, &WasmType::I32) => {
@@ -5423,12 +3446,12 @@ impl WasmModule {
             }
             Rvalue::Ref { place, .. } => {
                 // For references, load the place value
-                self.lower_place_access_enhanced(place, function_builder, local_map)
+                self.lower_place_access(place, function_builder, local_map)
             }
             Rvalue::StringConcat(left, right) => {
                 // String concatenation: load both operands
-                self.lower_operand_enhanced(left, function_builder, local_map, string_table)?;
-                self.lower_operand_enhanced(right, function_builder, local_map, string_table)?;
+                self.lower_operand(left, function_builder, local_map, string_table)?;
+                self.lower_operand(right, function_builder, local_map, string_table)?;
                 // For now, just leave both values on the stack
                 // TODO: Implement actual string concatenation via runtime helper
                 Ok(())
@@ -5436,19 +3459,19 @@ impl WasmModule {
         }
     }
 
-    /// Enhanced operand lowering with validation
-    fn lower_operand_enhanced(
+    /// Operand lowering with validation
+    fn lower_operand(
         &mut self,
         operand: &Operand,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match operand {
             Operand::Copy(place) | Operand::Move(place) => {
-                self.lower_place_access_enhanced(place, function_builder, local_map)
+                self.lower_place_access(place, function_builder, local_map)
             }
-            Operand::Constant(constant) => self.lower_constant_enhanced(constant, function_builder, string_table),
+            Operand::Constant(constant) => self.lower_constant(constant, function_builder, string_table),
             Operand::FunctionRef(func_index) => {
                 function_builder.instruction(&Instruction::I32Const(*func_index as i32))?;
                 Ok(())
@@ -5464,11 +3487,11 @@ impl WasmModule {
         }
     }
 
-    /// Enhanced place access with validation
-    fn lower_place_access_enhanced(
+    /// Place access with validation
+    fn lower_place_access(
         &mut self,
         place: &Place,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match place {
@@ -5489,7 +3512,7 @@ impl WasmModule {
                 }
             }
             Place::Memory { base, offset, .. } => {
-                self.lower_memory_base_address_enhanced(base, function_builder)?;
+                self.lower_memory_base_address(base, function_builder)?;
                 if offset.0 > 0 {
                     function_builder.instruction(&Instruction::I32Const(offset.0 as i32))?;
                     function_builder.instruction(&Instruction::I32Add)?;
@@ -5502,7 +3525,7 @@ impl WasmModule {
                 Ok(())
             }
             Place::Projection { base, elem } => {
-                self.lower_place_access_enhanced(base, function_builder, local_map)?;
+                self.lower_place_access(base, function_builder, local_map)?;
 
                 match elem {
                     ProjectionElem::Field { offset, .. } => {
@@ -5518,7 +3541,7 @@ impl WasmModule {
                         }))?;
                     }
                     ProjectionElem::Index { index, .. } => {
-                        self.lower_place_access_enhanced(index, function_builder, local_map)?;
+                        self.lower_place_access(index, function_builder, local_map)?;
                         function_builder.instruction(&Instruction::I32Const(4))?; // Assume 4-byte elements
                         function_builder.instruction(&Instruction::I32Mul)?;
                         function_builder.instruction(&Instruction::I32Add)?;
@@ -5558,12 +3581,12 @@ impl WasmModule {
         }
     }
 
-    /// Enhanced place assignment with validation
-    fn lower_place_assignment_with_type_enhanced(
+    /// Place assignment with validation
+    fn lower_place_assignment_with_type(
         &mut self,
         place: &Place,
         _wasm_type: &WasmType,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         match place {
@@ -5585,7 +3608,7 @@ impl WasmModule {
             }
             Place::Memory { base, offset, .. } => {
                 // For memory stores, we need the address on the stack first
-                self.lower_memory_base_address_enhanced(base, function_builder)?;
+                self.lower_memory_base_address(base, function_builder)?;
                 if offset.0 > 0 {
                     function_builder.instruction(&Instruction::I32Const(offset.0 as i32))?;
                     function_builder.instruction(&Instruction::I32Add)?;
@@ -5608,8 +3631,8 @@ impl WasmModule {
         }
     }
 
-    /// Get the WASM type of an operand for enhanced type checking
-    fn get_operand_wasm_type_enhanced(
+    /// Get the WASM type of an operand for type checking
+    fn get_operand_wasm_type(
         &self,
         operand: &Operand,
         local_map: &LocalMap,
@@ -5643,11 +3666,11 @@ impl WasmModule {
         }
     }
 
-    /// Enhanced constant lowering with validation
-    fn lower_constant_enhanced(
+    /// Constant lowering with validation
+    fn lower_constant(
         &mut self,
         constant: &Constant,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         match constant {
@@ -5700,11 +3723,11 @@ impl WasmModule {
         }
     }
 
-    /// Enhanced memory base address lowering
-    fn lower_memory_base_address_enhanced(
+    /// Memory base address lowering
+    fn lower_memory_base_address(
         &mut self,
         base: &MemoryBase,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
     ) -> Result<(), CompileError> {
         match base {
             MemoryBase::LinearMemory => {
@@ -5723,19 +3746,19 @@ impl WasmModule {
         }
     }
 
-    /// Enhanced function call lowering
-    fn lower_wir_call_enhanced(
+    /// Function call lowering
+    fn lower_wir_call(
         &mut self,
         func: &Operand,
         args: &[Operand],
         destination: &Option<Place>,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Load arguments
         for arg in args {
-            self.lower_operand_enhanced(arg, function_builder, local_map, string_table)?;
+            self.lower_operand(arg, function_builder, local_map, string_table)?;
         }
 
         // Generate call instruction
@@ -5751,7 +3774,7 @@ impl WasmModule {
         // Store result if destination exists
         if let Some(dest_place) = destination {
             let return_type = dest_place.wasm_type();
-            self.lower_place_assignment_with_type_enhanced(
+            self.lower_place_assignment_with_type(
                 dest_place,
                 &return_type,
                 function_builder,
@@ -5762,19 +3785,19 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Enhanced host function call lowering
-    fn lower_wir_host_call_enhanced(
+    /// Host function call lowering
+    fn lower_wir_host_call(
         &mut self,
         host_func: &HostFunctionDef,
         args: &[Operand],
         destination: &Option<Place>,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Check for runtime-specific mapping if registry is available
         if let Some(registry) = self.host_registry.clone() {
-            return self.lower_host_call_with_registry_enhanced(
+            return self.lower_host_call_with_registry(
                 host_func,
                 args,
                 destination,
@@ -5802,7 +3825,7 @@ impl WasmModule {
         // Fall back to regular host function handling
         // Load arguments
         for arg in args {
-            self.lower_operand_enhanced(arg, function_builder, local_map, string_table)?;
+            self.lower_operand(arg, function_builder, local_map, string_table)?;
         }
 
         // Generate host call instruction
@@ -5816,7 +3839,7 @@ impl WasmModule {
         // Store result if destination exists
         if let Some(dest_place) = destination {
             let return_type = dest_place.wasm_type();
-            self.lower_place_assignment_with_type_enhanced(
+            self.lower_place_assignment_with_type(
                 dest_place,
                 &return_type,
                 function_builder,
@@ -5827,13 +3850,13 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Enhanced host function call lowering with registry-aware runtime mapping
-    fn lower_host_call_with_registry_enhanced(
+    /// Host function call lowering with registry-aware runtime mapping
+    fn lower_host_call_with_registry(
         &mut self,
         host_function: &HostFunctionDef,
         args: &[Operand],
         destination: &Option<Place>,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         registry: &HostFunctionRegistry,
         string_table: &StringTable,
@@ -5846,11 +3869,11 @@ impl WasmModule {
                 // Use WASIX fd_write generation for print calls
                 let function_name = string_table.resolve(host_function.name);
                 if function_name == "print" {
-                    return self.generate_wasix_fd_write_call_enhanced(args, function_builder, local_map, string_table);
+                    return self.generate_wasix_fd_write_call(args, function_builder, local_map, string_table);
                 }
                 
                 // For other WASIX functions, use standard call lowering
-                self.lower_standard_host_call_enhanced(host_function, args, destination, function_builder, local_map, string_table)
+                self.lower_standard_host_call(host_function, args, destination, function_builder, local_map, string_table)
             }
             Some(RuntimeFunctionMapping::JavaScript(_js_func)) => {
                 // Use JavaScript binding (not implemented yet)
@@ -5862,24 +3885,24 @@ impl WasmModule {
             }
             Some(RuntimeFunctionMapping::Native(_)) | None => {
                 // Use standard host function call
-                self.lower_standard_host_call_enhanced(host_function, args, destination, function_builder, local_map, string_table)
+                self.lower_standard_host_call(host_function, args, destination, function_builder, local_map, string_table)
             }
         }
     }
 
-    /// Enhanced standard host function call lowering
-    fn lower_standard_host_call_enhanced(
+    /// Standard host function call lowering
+    fn lower_standard_host_call(
         &mut self,
         host_function: &HostFunctionDef,
         args: &[Operand],
         destination: &Option<Place>,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Load arguments
         for arg in args {
-            self.lower_operand_enhanced(arg, function_builder, local_map, string_table)?;
+            self.lower_operand(arg, function_builder, local_map, string_table)?;
         }
 
         // Generate host call instruction
@@ -5893,7 +3916,7 @@ impl WasmModule {
         // Store result if destination exists
         if let Some(dest_place) = destination {
             let return_type = dest_place.wasm_type();
-            self.lower_place_assignment_with_type_enhanced(
+            self.lower_place_assignment_with_type(
                 dest_place,
                 &return_type,
                 function_builder,
@@ -5904,11 +3927,11 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Generate WASIX fd_write call for print statements (enhanced version)
-    fn generate_wasix_fd_write_call_enhanced(
+    /// Generate WASIX fd_write call for print statements 
+    fn generate_wasix_fd_write_call(
         &mut self,
         args: &[Operand],
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
@@ -6002,7 +4025,7 @@ impl WasmModule {
         function_name: &str,
         args: &[Operand],
         destination: &Option<Place>,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
@@ -6028,7 +4051,7 @@ impl WasmModule {
         &mut self,
         args: &[Operand],
         _destination: &Option<Place>,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
@@ -6048,11 +4071,11 @@ impl WasmModule {
                 // Resolve StringId to &str
                 let content_str = string_table.resolve(*content);
                 // String literal - use the existing implementation
-                self.lower_wasix_print_constant_enhanced(content_str, function_builder)
+                self.lower_wasix_print_constant(content_str, function_builder)
             }
             Operand::Copy(place) | Operand::Move(place) => {
                 // String variable - use runtime implementation
-                self.lower_wasix_print_variable_enhanced(place, function_builder, local_map)
+                self.lower_wasix_print_variable(place, function_builder, local_map)
             }
             _ => {
                 return_compiler_error!(
@@ -6063,11 +4086,11 @@ impl WasmModule {
         }
     }
 
-    /// Print a constant string literal using EnhancedFunctionBuilder
-    fn lower_wasix_print_constant_enhanced(
+    /// Print a constant string literal using FunctionBuilder
+    fn lower_wasix_print_constant(
         &mut self,
         string_content: &str,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
     ) -> Result<(), CompileError> {
 
         // Add string data to WASM data section with proper alignment
@@ -6120,11 +4143,11 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Print a string variable using EnhancedFunctionBuilder
-    fn lower_wasix_print_variable_enhanced(
+    /// Print a string variable using FunctionBuilder
+    fn lower_wasix_print_variable(
         &mut self,
         place: &Place,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         // Get the WASIX fd_write function index
@@ -6141,7 +4164,7 @@ impl WasmModule {
 
         // Load the string pointer from the variable
         // The place contains a pointer to: [length: u32][data: bytes]
-        self.lower_place_access_enhanced(place, function_builder, local_map)?;
+        self.lower_place_access(place, function_builder, local_map)?;
         
         // Stack: [string_ptr]
         // Duplicate for later use
@@ -6220,7 +4243,7 @@ impl WasmModule {
         &mut self,
         function_name: &str,
         args: &[Operand],
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
@@ -6258,13 +4281,13 @@ impl WasmModule {
         &mut self,
         function_name: &str,
         args: &[Operand],
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Load arguments onto the WASM stack
         for arg in args {
-            self.lower_operand_enhanced(arg, function_builder, local_map, string_table)?;
+            self.lower_operand(arg, function_builder, local_map, string_table)?;
         }
 
         // Get the function index for the native call
@@ -6297,13 +4320,13 @@ impl WasmModule {
         &mut self,
         function_name: &str,
         args: &[Operand],
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Load arguments onto the WASM stack
         for arg in args {
-            self.lower_operand_enhanced(arg, function_builder, local_map, string_table)?;
+            self.lower_operand(arg, function_builder, local_map, string_table)?;
         }
 
         // Get the function index for the import-based call
@@ -6335,7 +4358,7 @@ impl WasmModule {
         iovec_offset: u32,
         nwritten_offset: u32,
         fd_write_func_index: u32,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
     ) -> Result<(), CompileError> {
         // Load stdout file descriptor (constant 1) onto WASM stack
         function_builder.instruction(&Instruction::I32Const(1))?;
@@ -6382,7 +4405,7 @@ impl WasmModule {
         &mut self,
         call_context: &crate::compiler::host_functions::wasix_registry::WasixCallContext,
         fd_write_func_index: u32,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
     ) -> Result<(), CompileError> {
         // Load stdout file descriptor (constant 1) onto WASM stack
         function_builder.instruction(&Instruction::I32Const(1))?;
@@ -6415,11 +4438,11 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Enhanced Beanstalk goto lowering
-    fn lower_beanstalk_goto_enhanced(
+    /// Beanstalk goto lowering
+    fn lower_beanstalk_goto(
         &mut self,
         _target: u32,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         _local_map: &LocalMap,
     ) -> Result<(), CompileError> {
         // For now, goto is implemented as a no-op
@@ -6428,18 +4451,18 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Enhanced Beanstalk if terminator lowering with proper control flow validation
-    fn lower_beanstalk_if_terminator_enhanced(
+    /// Beanstalk if terminator lowering with proper control flow validation
+    fn lower_beanstalk_if_terminator(
         &mut self,
         condition: &Operand,
         _then_block: u32,
         _else_block: u32,
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Load condition
-        self.lower_operand_enhanced(condition, function_builder, local_map, string_table)?;
+        self.lower_operand(condition, function_builder, local_map, string_table)?;
 
         // Generate if instruction with proper control frame tracking
         function_builder.instruction(&Instruction::If(BlockType::Empty))?;
@@ -6457,17 +4480,17 @@ impl WasmModule {
         Ok(())
     }
 
-    /// Enhanced Beanstalk return lowering
-    fn lower_beanstalk_return_enhanced(
+    /// Beanstalk return lowering
+    fn lower_beanstalk_return(
         &mut self,
         values: &[Operand],
-        function_builder: &mut EnhancedFunctionBuilder,
+        function_builder: &mut FunctionBuilder,
         local_map: &LocalMap,
         string_table: &StringTable,
     ) -> Result<(), CompileError> {
         // Load return values
         for value in values {
-            self.lower_operand_enhanced(value, function_builder, local_map, string_table)?;
+            self.lower_operand(value, function_builder, local_map, string_table)?;
         }
 
         // Generate return instruction
@@ -6481,7 +4504,7 @@ impl WasmModule {
         &mut self,
         _struct_place: &Place,
         _struct_type: &DataType,
-        _function_builder: &mut EnhancedFunctionBuilder,
+        _function_builder: &mut FunctionBuilder,
         _local_map: &mut LocalMap,
     ) -> Result<(), CompileError> {
         // For now, struct validation is handled at compile time
@@ -6501,245 +4524,6 @@ impl WasmModule {
         // For now, struct validation is handled at compile time
         // In a more complete implementation, this could generate runtime checks
         // for uninitialized fields if needed
-        Ok(())
-    }
-
-    /// Generate WASM instructions for struct field access with proper memory layout
-    fn lower_struct_field_access(
-        &mut self,
-        base_place: &Place,
-        field_offset: u32,
-        field_size: &FieldSize,
-        function: &mut Function,
-        local_map: &mut LocalMap,
-    ) -> Result<(), CompileError> {
-        // Load base address of the struct
-        self.lower_place_access(base_place, function, local_map)?;
-
-        // Add field offset if non-zero
-        if field_offset > 0 {
-            function.instruction(&Instruction::I32Const(field_offset as i32));
-            function.instruction(&Instruction::I32Add);
-        }
-
-        // Generate appropriate load instruction based on field size
-        match field_size {
-            FieldSize::Fixed(1) => {
-                function.instruction(&Instruction::I32Load8U(MemArg {
-                    offset: 0,
-                    align: 0, // 1-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(2) => {
-                function.instruction(&Instruction::I32Load16U(MemArg {
-                    offset: 0,
-                    align: 1, // 2-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(4) => {
-                function.instruction(&Instruction::I32Load(MemArg {
-                    offset: 0,
-                    align: 2, // 4-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(8) => {
-                function.instruction(&Instruction::I64Load(MemArg {
-                    offset: 0,
-                    align: 3, // 8-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::WasmType(wasm_type) => {
-                match wasm_type {
-                    WasmType::I32 => {
-                        function.instruction(&Instruction::I32Load(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::I64 => {
-                        function.instruction(&Instruction::I64Load(MemArg {
-                            offset: 0,
-                            align: 3,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::F32 => {
-                        function.instruction(&Instruction::F32Load(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::F64 => {
-                        function.instruction(&Instruction::F64Load(MemArg {
-                            offset: 0,
-                            align: 3,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::ExternRef | WasmType::FuncRef => {
-                        // References are stored as i32 pointers
-                        function.instruction(&Instruction::I32Load(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                }
-            }
-            FieldSize::Variable => {
-                // Variable size fields are typically pointers to the actual data
-                function.instruction(&Instruction::I32Load(MemArg {
-                    offset: 0,
-                    align: 2,
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(size) => {
-                // Handle other fixed sizes by defaulting to appropriate instruction
-                if *size <= 4 {
-                    function.instruction(&Instruction::I32Load(MemArg {
-                        offset: 0,
-                        align: 2,
-                        memory_index: 0,
-                    }));
-                } else {
-                    function.instruction(&Instruction::I64Load(MemArg {
-                        offset: 0,
-                        align: 3,
-                        memory_index: 0,
-                    }));
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Generate WASM instructions for struct field assignment with proper memory layout
-    fn lower_struct_field_assignment(
-        &mut self,
-        base_place: &Place,
-        field_offset: u32,
-        field_size: &FieldSize,
-        value_operand: &Operand,
-        function: &mut Function,
-        local_map: &mut LocalMap,
-        string_table: &StringTable,
-    ) -> Result<(), CompileError> {
-        // Load base address of the struct
-        self.lower_place_access(base_place, function, local_map)?;
-
-        // Add field offset if non-zero
-        if field_offset > 0 {
-            function.instruction(&Instruction::I32Const(field_offset as i32));
-            function.instruction(&Instruction::I32Add);
-        }
-
-        // Load the value to store
-        self.lower_operand(value_operand, function, local_map, string_table)?;
-
-        // Generate appropriate store instruction based on field size
-        match field_size {
-            FieldSize::Fixed(1) => {
-                function.instruction(&Instruction::I32Store8(MemArg {
-                    offset: 0,
-                    align: 0, // 1-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(2) => {
-                function.instruction(&Instruction::I32Store16(MemArg {
-                    offset: 0,
-                    align: 1, // 2-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(4) => {
-                function.instruction(&Instruction::I32Store(MemArg {
-                    offset: 0,
-                    align: 2, // 4-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(8) => {
-                function.instruction(&Instruction::I64Store(MemArg {
-                    offset: 0,
-                    align: 3, // 8-byte alignment
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::WasmType(wasm_type) => {
-                match wasm_type {
-                    WasmType::I32 => {
-                        function.instruction(&Instruction::I32Store(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::I64 => {
-                        function.instruction(&Instruction::I64Store(MemArg {
-                            offset: 0,
-                            align: 3,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::F32 => {
-                        function.instruction(&Instruction::F32Store(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::F64 => {
-                        function.instruction(&Instruction::F64Store(MemArg {
-                            offset: 0,
-                            align: 3,
-                            memory_index: 0,
-                        }));
-                    }
-                    WasmType::ExternRef | WasmType::FuncRef => {
-                        // References are stored as i32 pointers
-                        function.instruction(&Instruction::I32Store(MemArg {
-                            offset: 0,
-                            align: 2,
-                            memory_index: 0,
-                        }));
-                    }
-                }
-            }
-            FieldSize::Variable => {
-                // Variable size fields are typically pointers to the actual data
-                function.instruction(&Instruction::I32Store(MemArg {
-                    offset: 0,
-                    align: 2,
-                    memory_index: 0,
-                }));
-            }
-            FieldSize::Fixed(size) => {
-                // Handle other fixed sizes by defaulting to appropriate instruction
-                if *size <= 4 {
-                    function.instruction(&Instruction::I32Store(MemArg {
-                        offset: 0,
-                        align: 2,
-                        memory_index: 0,
-                    }));
-                } else {
-                    function.instruction(&Instruction::I64Store(MemArg {
-                        offset: 0,
-                        align: 3,
-                        memory_index: 0,
-                    }));
-                }
-            }
-        }
-
         Ok(())
     }
 }

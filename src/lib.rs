@@ -277,7 +277,7 @@ impl<'a> Compiler<'a> {
     ///        BACKEND
     ///    (Wasm Generation)
     /// -----------------------
-    pub fn ir_to_wasm(&self, wir: WIR) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(wir, &self.string_table)
+    pub fn ir_to_wasm(&mut self, wir: WIR) -> Result<Vec<u8>, CompileError> {
+        new_wasm_module(wir, &mut self.string_table)
     }
 }

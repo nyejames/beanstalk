@@ -28,7 +28,7 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
 /// This function provides direct WIR → WASM lowering with minimal overhead.
 /// Complex validation and performance tracking have been removed to focus
 /// on core functionality until borrow checking is complete.
-pub fn new_wasm_module(wir: WIR, string_table: &crate::compiler::string_interning::StringTable) -> Result<Vec<u8>, CompileError> {
+pub fn new_wasm_module(wir: WIR, string_table: &mut crate::compiler::string_interning::StringTable) -> Result<Vec<u8>, CompileError> {
     new_wasm_module_with_registry(wir, None, string_table)
 }
 
@@ -39,7 +39,7 @@ pub fn new_wasm_module(wir: WIR, string_table: &crate::compiler::string_internin
 pub fn new_wasm_module_with_registry(
     wir: WIR, 
     registry: Option<&HostFunctionRegistry>,
-    string_table: &crate::compiler::string_interning::StringTable,
+    string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir, string_table)?;
