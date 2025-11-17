@@ -278,6 +278,6 @@ impl<'a> Compiler<'a> {
     ///    (Wasm Generation)
     /// -----------------------
     pub fn ir_to_wasm(&mut self, wir: WIR) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(wir, &mut self.string_table)
+        new_wasm_module(wir, self.string_table.clone())
     }
 }

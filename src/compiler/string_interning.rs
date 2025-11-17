@@ -95,7 +95,7 @@ pub struct DebugInfo {
 /// - O(1) string resolution by ID
 /// - Memory deduplication for repeated strings
 /// - Type-safe string IDs to prevent mixing with other integers
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StringTable {
     /// Primary storage: ID → String mapping for fast resolution
     strings: Vec<String>,

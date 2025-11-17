@@ -972,6 +972,9 @@ pub struct WasmModule {
     code_section: CodeSection,
     data_section: DataSection,
 
+    // String table for resolving interned string identifiers
+    string_table: StringTable,
+
     // String constant management
     string_manager: StringManager,
 
@@ -1044,7 +1047,7 @@ pub struct ReturnParameterInfo {
 
 impl Default for WasmModule {
     fn default() -> Self {
-        Self::new()
+        Self::new(StringTable::new())
     }
 }
 
@@ -1233,7 +1236,7 @@ impl WasmModule {
 }
 
 impl WasmModule {
-    pub fn new() -> Self {
+    pub fn new(string_table: StringTable) -> Self {
         Self {
             type_section: TypeSection::new(),
             import_section: ImportSection::new(),
@@ -1243,6 +1246,7 @@ impl WasmModule {
             export_section: ExportSection::new(),
             code_section: CodeSection::new(),
             data_section: DataSection::new(),
+            string_table,
             string_manager: StringManager::new(),
             function_registry: HashMap::new(),
             host_function_indices: HashMap::new(),
@@ -1260,7 +1264,7 @@ impl WasmModule {
     }
 
     /// Create a new WasmModule from WIR with comprehensive error handling and validation
-    pub fn from_wir(wir: &WIR, string_table: &mut StringTable) -> Result<WasmModule, CompileError> {
+    pub fn from_wir(wir: &WIR, string_table: StringTable) -> Result<WasmModule, CompileError> {
         Self::from_wir_with_registry(wir, None, string_table)
     }
 
@@ -1268,9 +1272,9 @@ impl WasmModule {
     pub fn from_wir_with_registry(
         wir: &WIR,
         registry: Option<&HostFunctionRegistry>,
-        string_table: &mut StringTable,
+        string_table: StringTable,
     ) -> Result<WasmModule, CompileError> {
-        let mut module = WasmModule::new();
+        let mut module = WasmModule::new(string_table);
 
         // Store registry reference for use during compilation
         if let Some(reg) = registry {
@@ -1286,11 +1290,16 @@ impl WasmModule {
             page_size_log2: None,
         });
 
+        // Temporarily take ownership of string_table to work around borrow checker
+        // This is a temporary solution until methods are refactored to use self.string_table
+        let mut string_table_temp = module.string_table.clone();
+        // Note: We keep the original in module.string_table for resolve_string() calls
+        
         // Generate WASM import section for host functions with registry-aware mapping
         module.encode_host_function_imports_with_registry(
             &wir.host_imports,
             registry,
-            string_table,
+            &mut string_table_temp,
         )?;
 
         // Generate WASIX import section for WASIX functions
@@ -1303,11 +1312,11 @@ impl WasmModule {
 
         // Process functions with error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
+            let function_name = string_table_temp.resolve(function.name).to_string();
             module
-                .compile_function(function, string_table)
+                .compile_function(function, &string_table_temp)
                 .map_err(|mut error| {
                     // Add context about which function failed
-                    let function_name = string_table.resolve(function.name);
                     error.msg = format!(
                         "Failed to compile function '{}' (index {}): {}",
                         function_name, index, error.msg
@@ -1317,7 +1326,7 @@ impl WasmModule {
         }
 
         // Export entry point functions correctly, passing the import count
-        module.export_entry_point_functions_with_import_count(&wir, import_count, string_table)?;
+        module.export_entry_point_functions_with_import_count(&wir, import_count, &string_table_temp)?;
 
         // Export memory for WASIX access
         module.add_memory_export("memory")?;
@@ -1340,6 +1349,11 @@ impl WasmModule {
     /// Get the host function registry if available
     pub fn get_host_function_registry(&self) -> Option<&HostFunctionRegistry> {
         self.host_registry.as_ref()
+    }
+
+    /// Resolve an interned string ID to its string value
+    pub fn resolve_string(&self, string_id: crate::compiler::string_interning::InternedString) -> &str {
+        self.string_table.resolve(string_id)
     }
 
     /// Export entry point functions correctly in WASM modules with explicit import count

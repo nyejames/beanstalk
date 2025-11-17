@@ -27,7 +27,7 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
 ///
 /// This function provides direct WIR → WASM lowering with minimal overhead,
 /// focusing on core functionality and correctness.
-pub fn new_wasm_module(wir: WIR, string_table: &mut StringTable) -> Result<Vec<u8>, CompileError> {
+pub fn new_wasm_module(wir: WIR, string_table: StringTable) -> Result<Vec<u8>, CompileError> {
     new_wasm_module_with_registry(wir, None, string_table)
 }
 
@@ -38,10 +38,10 @@ pub fn new_wasm_module(wir: WIR, string_table: &mut StringTable) -> Result<Vec<u
 pub fn new_wasm_module_with_registry(
     wir: WIR,
     registry: Option<&HostFunctionRegistry>,
-    string_table: &mut StringTable,
+    mut string_table: StringTable,
 ) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
-    validate_wir_for_wasm_compilation(&wir, string_table)?;
+    validate_wir_for_wasm_compilation(&wir, &string_table)?;
 
     // Create WASM module from WIR with registry access
     let mut module = WasmModule::from_wir_with_registry(&wir, registry, string_table)?;
@@ -58,21 +58,21 @@ pub fn new_wasm_module_with_registry(
                     .position(|f| f.name == wir_function.name)
                     .unwrap() as u32;
 
-                let export_name = string_table.resolve(export.name);
-                let _ = module.add_function_export(export_name, function_index);
+                let export_name = module.resolve_string(export.name).to_string();
+                let _ = module.add_function_export(&export_name, function_index);
             }
         }
     }
 
     // Handle other exports
     for (export_name_id, export) in &wir.exports {
-        let export_name = string_table.resolve(*export_name_id);
+        let export_name = module.resolve_string(*export_name_id).to_string();
         match export.kind {
             ExportKind::Global => {
-                let _ = module.add_global_export(export_name, export.index);
+                let _ = module.add_global_export(&export_name, export.index);
             }
             ExportKind::Memory => {
-                module.add_memory_export(export_name)?;
+                module.add_memory_export(&export_name)?;
             }
             ExportKind::Table => {
                 // Table exports handled by interface support
