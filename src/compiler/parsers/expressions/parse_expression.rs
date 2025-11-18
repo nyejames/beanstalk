@@ -395,9 +395,9 @@ pub fn create_expression(
                         return Ok(Expression::template(template, ownership.to_owned()));
                     }
 
-                    TemplateType::CompileTimeString => {
+                    TemplateType::String => {
                         let folded_string = template.fold(&None, string_table)?;
-                        let interned = string_table.get_or_intern(folded_string);
+                        let interned = folded_string;
 
                         return Ok(Expression::string_slice(
                             interned,

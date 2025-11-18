@@ -8,17 +8,21 @@
 use crate::compiler::wir::context::WirTransformContext;
 
 // Import WIR types
-use crate::compiler::wir::place::{Place, ProjectionElem};
+use crate::compiler::wir::place::{Place, ProjectionElem, FieldOffset, FieldSize};
 use crate::compiler::wir::wir_nodes::{Constant, Operand, Rvalue, Statement};
 
+// Import utility functions
+use crate::compiler::wir::utilities::lookup_variable_or_error;
+
+// Import expression transformation
+use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
+
 // Core compiler imports
-use crate::compiler::{
-    compiler_errors::CompileError,
-    datatypes::DataType,
-    parsers::{statements::create_template_node::Template},
-    string_interning::StringTable,
-};
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler::{
+    compiler_errors::CompileError, datatypes::DataType,
+    parsers::statements::create_template_node::Template, string_interning::StringTable,
+};
 
 /// Transform a Beanstalk template expression to WIR rvalue
 ///
@@ -55,8 +59,8 @@ pub fn transform_template_to_rvalue(
     string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
-    // For now, implement basic template transformation
-    // This will be expanded based on the template system requirements
+    // TODO
+    // This should bascically create a function that returns the constructed string at runtime
 
     // Create a temporary place for the template result
     let result_place = context.create_temporary_place(&DataType::Template);
@@ -65,16 +69,14 @@ pub fn transform_template_to_rvalue(
     let mut statements = Vec::new();
 
     // Handle template content transformation
-    let content_statements = transform_template_content(&template.content, location, string_table, context)?;
+    let content_statements =
+        transform_template_content(&template.content, location, string_table, context)?;
     statements.extend(content_statements);
+    
+    // Temporary placeholder for template result
+    let template_rvalue = Rvalue::Use(Operand::Copy(result_place.clone()));
 
-    // For now, create a simple string constant as placeholder
-    // This will be expanded to handle proper template compilation
-    let placeholder_id = string_table.intern("template_placeholder");
-    let template_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
-        placeholder_id,
-    )));
-
+    // TODO
     statements.push(Statement::Assign {
         place: result_place.clone(),
         rvalue: template_rvalue,
@@ -97,15 +99,14 @@ pub fn transform_runtime_template_to_rvalue(
     let result_place = context.create_temporary_place(&DataType::Template);
 
     // Transform template for runtime evaluation
-    let runtime_statements = transform_template_for_runtime(_template, location, string_table, context)?;
+    let runtime_statements =
+        transform_template_for_runtime(_template, location, string_table, context)?;
     statements.extend(runtime_statements);
 
     // Create runtime template evaluation call
     // This is a placeholder - actual implementation would call template runtime functions
     let placeholder_id = string_table.intern("runtime_template_placeholder");
-    let runtime_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
-        placeholder_id,
-    )));
+    let runtime_rvalue = Rvalue::Use(Operand::Constant(Constant::String(placeholder_id)));
 
     statements.push(Statement::Assign {
         place: result_place.clone(),
@@ -129,7 +130,7 @@ pub fn transform_template_with_variable_interpolation(
     // Handle variable interpolation in templates
     for variable_name in variables {
         // Use consolidated helper for variable lookup
-        let variable_place = crate::compiler::wir::utilities::lookup_variable_or_error(
+        let variable_place = lookup_variable_or_error(
             context,
             variable_name,
             location,
@@ -138,15 +139,14 @@ pub fn transform_template_with_variable_interpolation(
         )?;
 
         // Create string coercion for the variable
-        let coercion_statements = create_string_coercion(&variable_place, location, string_table, context)?;
+        let coercion_statements =
+            create_string_coercion(&variable_place, location, string_table, context)?;
         statements.extend(coercion_statements);
     }
 
     // Create interpolated template result
     let placeholder_id = string_table.intern("interpolated_template_placeholder");
-    let interpolated_rvalue = Rvalue::Use(Operand::Constant(Constant::String(
-        placeholder_id,
-    )));
+    let interpolated_rvalue = Rvalue::Use(Operand::Constant(Constant::String(placeholder_id)));
 
     statements.push(Statement::Assign {
         place: result_place.clone(),
@@ -173,8 +173,13 @@ pub fn transform_struct_literal_to_statements_and_rvalue(
 
     // Transform each field assignment
     for field in fields {
-        let field_statements =
-            transform_struct_field_assignment(field, &struct_place, location, string_table, context)?;
+        let field_statements = transform_struct_field_assignment(
+            field,
+            &struct_place,
+            location,
+            string_table,
+            context,
+        )?;
         statements.extend(field_statements);
     }
 
@@ -188,7 +193,8 @@ pub fn transform_struct_literal_to_rvalue(
     string_table: &mut StringTable,
     context: &mut WirTransformContext,
 ) -> Result<Rvalue, CompileError> {
-    let (_, rvalue) = transform_struct_literal_to_statements_and_rvalue(fields, location, string_table, context)?;
+    let (_, rvalue) =
+        transform_struct_literal_to_statements_and_rvalue(fields, location, string_table, context)?;
     Ok(rvalue)
 }
 
@@ -227,8 +233,11 @@ fn transform_template_content(
     // Transform before expressions
     for expr in &content.before {
         let (expr_statements, _) =
-            crate::compiler::wir::expressions::expression_to_rvalue_with_context(
-                expr, location, context, string_table,
+            expression_to_rvalue_with_context(
+                expr,
+                location,
+                context,
+                string_table,
             )?;
         statements.extend(expr_statements);
     }
@@ -236,8 +245,11 @@ fn transform_template_content(
     // Transform after expressions
     for expr in &content.after {
         let (expr_statements, _) =
-            crate::compiler::wir::expressions::expression_to_rvalue_with_context(
-                expr, location, context, string_table,
+            expression_to_rvalue_with_context(
+                expr,
+                location,
+                context,
+                string_table,
             )?;
         statements.extend(expr_statements);
     }
@@ -255,7 +267,8 @@ fn transform_template_for_runtime(
     let mut statements = Vec::new();
 
     // Transform template content for runtime
-    let content_statements = transform_template_content(&template.content, location, string_table, context)?;
+    let content_statements =
+        transform_template_content(&template.content, location, string_table, context)?;
     statements.extend(content_statements);
 
     // Add runtime template evaluation setup
@@ -280,14 +293,14 @@ fn transform_struct_field_assignment(
         base: Box::new(struct_place.clone()),
         elem: ProjectionElem::Field {
             index: 0, // Placeholder - should be resolved from struct definition
-            offset: crate::compiler::wir::place::FieldOffset(0),
-            size: crate::compiler::wir::place::FieldSize::Fixed(4), // Placeholder - 4 bytes
+            offset: FieldOffset(0),
+            size: FieldSize::Fixed(4), // Placeholder - 4 bytes
         },
     };
 
     // Transform field value
     let (value_statements, value_rvalue) =
-        crate::compiler::wir::expressions::expression_to_rvalue_with_context(
+        expression_to_rvalue_with_context(
             &field.value,
             location,
             context,
@@ -313,7 +326,8 @@ pub fn extract_string_from_template(
     // Extract compile-time string from template if possible
     // This is a placeholder implementation
 
-    let statements = transform_template_content(&template.content, location, string_table, context)?;
+    let statements =
+        transform_template_content(&template.content, location, string_table, context)?;
     let extracted_string = "extracted_template_string".to_string();
 
     Ok((statements, extracted_string))

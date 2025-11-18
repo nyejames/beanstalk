@@ -12,7 +12,14 @@ use crate::compiler::wir::context::WirTransformContext;
 use crate::compiler::wir::place::Place;
 use crate::compiler::wir::wir_nodes::{BinOp, Constant, Operand, Rvalue, Statement};
 
+// Import utility functions
+use crate::compiler::wir::utilities::{lookup_variable_or_error, wasm_type_to_datatype};
+
+// Import template transformation
+use crate::compiler::wir::templates::transform_template_to_rvalue;
+
 // Core compiler imports
+use crate::compiler::parsers::statements::template::TemplateType;
 use crate::compiler::{
     compiler_errors::CompileError,
     datatypes::DataType,
@@ -58,7 +65,7 @@ pub fn expression_to_rvalue_with_context(
     expression: &Expression,
     location: &TextLocation,
     context: &mut WirTransformContext,
-    string_table: &mut crate::compiler::string_interning::StringTable,
+    string_table: &mut StringTable,
 ) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     match &expression.kind {
         ExpressionKind::Int(value) => Ok((
@@ -79,11 +86,11 @@ pub fn expression_to_rvalue_with_context(
                 vec![],
                 Rvalue::Use(Operand::Constant(Constant::String(*value))),
             ))
-        },
+        }
         ExpressionKind::Reference(name) => {
             let var_name = string_table.resolve(*name);
             // Use consolidated helper for variable lookup
-            let variable_place = crate::compiler::wir::utilities::lookup_variable_or_error(
+            let variable_place = lookup_variable_or_error(
                 context,
                 var_name,
                 location,
@@ -93,17 +100,32 @@ pub fn expression_to_rvalue_with_context(
             Ok((vec![], Rvalue::Use(Operand::Copy(variable_place))))
         }
         ExpressionKind::Template(template) => {
-            // Use template transformation functions from templates module
-            crate::compiler::wir::templates::transform_template_to_rvalue(
-                template, location, string_table, context,
-            )
+            if template.kind == TemplateType::String {
+                let string = template.fold(&None, string_table)?;
+                // value is already an InternedString from the AST
+                Ok((
+                    vec![],
+                    Rvalue::Use(Operand::Constant(Constant::String(string))),
+                ))
+            } else {
+                // Use template transformation functions from templates module
+                transform_template_to_rvalue(
+                    &template,
+                    location,
+                    string_table,
+                    context,
+                )
+            }
         }
+
         ExpressionKind::Runtime(rpn_nodes) => {
             // Handle runtime expressions (RPN evaluation)
-            evaluate_rpn_to_wir_statements(rpn_nodes, location, context, string_table)
+            evaluate_rpn_to_wir_statements(&rpn_nodes, location, context, string_table)
         }
+
         _ => {
-            let expr_type_str: &'static str = Box::leak(format!("{:?}", expression.kind).into_boxed_str());
+            let expr_type_str: &'static str =
+                Box::leak(format!("{:?}", expression.kind).into_boxed_str());
             let error_location = location.clone().to_error_location(string_table);
             return_wir_transformation_error!(
                 format!("Expression kind {:?} not yet implemented in WIR transformation", expression.kind),
@@ -148,7 +170,8 @@ pub fn expression_to_operand_with_context(
     context: &mut WirTransformContext,
     string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<(Vec<Statement>, Operand), CompileError> {
-    let (statements, rvalue) = expression_to_rvalue_with_context(expression, location, context, string_table)?;
+    let (statements, rvalue) =
+        expression_to_rvalue_with_context(expression, location, context, string_table)?;
 
     match rvalue {
         Rvalue::Use(operand) => Ok((statements, operand)),
@@ -165,7 +188,6 @@ pub fn expression_to_operand_with_context(
         }
     }
 }
-
 
 /// Evaluate RPN (Reverse Polish Notation) expression to WIR statements
 ///
@@ -215,10 +237,10 @@ pub fn evaluate_rpn_to_wir_statements(
     // Validate input
     if rpn_nodes.is_empty() {
         return Err(CompileError::compiler_error(
-            "Empty RPN expression - this indicates a bug in the AST-to-RPN conversion"
+            "Empty RPN expression - this indicates a bug in the AST-to-RPN conversion",
         ));
     }
-    
+
     // Pre-allocate vectors with estimated capacity to reduce reallocations
     // Assume ~1 statement per node and stack depth of ~nodes/2
     let mut statements = Vec::with_capacity(rpn_nodes.len());
@@ -228,17 +250,22 @@ pub fn evaluate_rpn_to_wir_statements(
         match &node.kind {
             NodeKind::Expression(expr) => {
                 // Convert expression to operand and push to stack
-                let (expr_statements, operand) =
-                    expression_to_operand_with_context(expr, &node.location, context, string_table)?;
+                let (expr_statements, operand) = expression_to_operand_with_context(
+                    expr,
+                    &node.location,
+                    context,
+                    string_table,
+                )?;
                 statements.extend(expr_statements);
                 operand_stack.push(operand);
             }
             NodeKind::Operator(op) => {
                 // Process binary operator
                 if operand_stack.len() < 2 {
-                    return Err(CompileError::compiler_error(
-                        format!("Insufficient operands for binary operator - RPN evaluation stack has {} operands but needs 2. This indicates a bug in the AST-to-RPN conversion", operand_stack.len())
-                    ));
+                    return Err(CompileError::compiler_error(format!(
+                        "Insufficient operands for binary operator - RPN evaluation stack has {} operands but needs 2. This indicates a bug in the AST-to-RPN conversion",
+                        operand_stack.len()
+                    )));
                 }
 
                 let rhs = operand_stack.pop().unwrap();
@@ -247,15 +274,22 @@ pub fn evaluate_rpn_to_wir_statements(
                 // Infer result type
                 let lhs_type = operand_to_datatype(&lhs, context)?;
                 let rhs_type = operand_to_datatype(&rhs, context)?;
-                let result_type = infer_binary_operation_result_type(&lhs_type, &rhs_type, op, location, string_table)?;
+                let result_type = infer_binary_operation_result_type(
+                    &lhs_type,
+                    &rhs_type,
+                    op,
+                    location,
+                    string_table,
+                )?;
 
                 // Create temporary for result
                 let result_place = context.create_temporary_place(&result_type);
 
                 // Check if this is string concatenation
                 use crate::compiler::parsers::expressions::expression::Operator;
-                let rvalue = if matches!(op, Operator::Add) && 
-                              (lhs_type == DataType::String || rhs_type == DataType::String) {
+                let rvalue = if matches!(op, Operator::Add)
+                    && (lhs_type == DataType::String || rhs_type == DataType::String)
+                {
                     // String concatenation
                     Rvalue::StringConcat(lhs, rhs)
                 } else {
@@ -274,18 +308,20 @@ pub fn evaluate_rpn_to_wir_statements(
                 operand_stack.push(Operand::Copy(result_place));
             }
             _ => {
-                return Err(CompileError::compiler_error(
-                    format!("Unexpected node type in RPN expression: {:?}. RPN expressions should only contain Expression and Operator nodes. This indicates a bug in the AST-to-RPN conversion", node.kind)
-                ));
+                return Err(CompileError::compiler_error(format!(
+                    "Unexpected node type in RPN expression: {:?}. RPN expressions should only contain Expression and Operator nodes. This indicates a bug in the AST-to-RPN conversion",
+                    node.kind
+                )));
             }
         }
     }
 
     // The final result should be the only operand left on the stack
     if operand_stack.len() != 1 {
-        return Err(CompileError::compiler_error(
-            format!("Invalid RPN expression: expected 1 result operand on stack, got {}. This indicates a bug in the RPN evaluation or AST-to-RPN conversion", operand_stack.len())
-        ));
+        return Err(CompileError::compiler_error(format!(
+            "Invalid RPN expression: expected 1 result operand on stack, got {}. This indicates a bug in the RPN evaluation or AST-to-RPN conversion",
+            operand_stack.len()
+        )));
     }
 
     let result_operand = operand_stack.pop().unwrap();
@@ -303,12 +339,12 @@ fn operand_to_datatype(
         Operand::Copy(place) | Operand::Move(place) => {
             // Extract type from place using consolidated helper
             match place {
-                Place::Local { wasm_type, .. } => {
-                    Ok(crate::compiler::wir::utilities::wasm_type_to_datatype(wasm_type))
-                }
-                Place::Global { wasm_type, .. } => {
-                    Ok(crate::compiler::wir::utilities::wasm_type_to_datatype(wasm_type))
-                }
+                Place::Local { wasm_type, .. } => Ok(
+                    wasm_type_to_datatype(wasm_type),
+                ),
+                Place::Global { wasm_type, .. } => Ok(
+                    wasm_type_to_datatype(wasm_type),
+                ),
                 _ => Ok(DataType::Int), // Default fallback
             }
         }
@@ -362,19 +398,19 @@ fn ast_operator_to_wir_binop(
         Operator::Multiply => Ok(BinOp::Mul),
         Operator::Divide => Ok(BinOp::Div),
         Operator::Modulus => Ok(BinOp::Rem),
-        
+
         // Comparison operators (essential for if conditions)
         Operator::Equality => Ok(BinOp::Eq),
         Operator::LessThan => Ok(BinOp::Lt),
         Operator::LessThanOrEqual => Ok(BinOp::Le),
         Operator::GreaterThan => Ok(BinOp::Gt),
         Operator::GreaterThanOrEqual => Ok(BinOp::Ge),
-        
+
         // Logical operators
         Operator::And => Ok(BinOp::And),
         Operator::Or => Ok(BinOp::Or),
         Operator::Not => Ok(BinOp::Ne), // Boolean negation mapped to Ne
-        
+
         // Unsupported operators
         _ => {
             let op_str: &'static str = Box::leak(format!("{:?}", op).into_boxed_str());
@@ -387,7 +423,7 @@ fn ast_operator_to_wir_binop(
                     PrimarySuggestion => "This operator needs to be added to the WIR binary operation mapping",
                 }
             );
-        },
+        }
     }
 }
 
@@ -427,12 +463,18 @@ fn infer_binary_operation_result_type(
 
     match op {
         // Arithmetic operations preserve the operand type
-        Operator::Add | Operator::Subtract | Operator::Multiply | Operator::Divide | Operator::Modulus => {
+        Operator::Add
+        | Operator::Subtract
+        | Operator::Multiply
+        | Operator::Divide
+        | Operator::Modulus => {
             // Special case: String concatenation
-            if matches!(op, Operator::Add) && (lhs_type == &DataType::String || rhs_type == &DataType::String) {
+            if matches!(op, Operator::Add)
+                && (lhs_type == &DataType::String || rhs_type == &DataType::String)
+            {
                 return Ok(DataType::String);
             }
-            
+
             // For matching types, preserve the type
             if lhs_type == rhs_type {
                 Ok(lhs_type.clone())
@@ -442,21 +484,17 @@ fn infer_binary_operation_result_type(
                 Ok(DataType::Int)
             }
         }
-        
+
         // Comparison operations always return boolean
         Operator::Equality
         | Operator::LessThan
         | Operator::LessThanOrEqual
         | Operator::GreaterThan
-        | Operator::GreaterThanOrEqual => {
-            Ok(DataType::Bool)
-        }
-        
+        | Operator::GreaterThanOrEqual => Ok(DataType::Bool),
+
         // Logical operations always return boolean
-        Operator::And | Operator::Or | Operator::Not => {
-            Ok(DataType::Bool)
-        }
-        
+        Operator::And | Operator::Or | Operator::Not => Ok(DataType::Bool),
+
         // Unsupported operators
         _ => {
             let op_str: &'static str = Box::leak(format!("{:?}", op).into_boxed_str());
@@ -469,6 +507,6 @@ fn infer_binary_operation_result_type(
                     PrimarySuggestion => "This operator needs type inference rules to be implemented",
                 }
             );
-        },
+        }
     }
 }

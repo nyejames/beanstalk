@@ -154,22 +154,42 @@ pub fn new_arg(
 
         TokenKind::Colon => {
             let struct_def = create_struct_definition(token_stream, context, string_table)?;
-            
+
             return Ok(Arg {
                 id,
                 value: Expression::struct_definition(
-                    struct_def, 
-                    token_stream.current_location(), 
-                    ownership
+                    struct_def,
+                    token_stream.current_location(),
+                    ownership,
                 ),
             });
         }
 
-        // Anything else is a syntax error
+        // SYNTAX ERRORS
+        // Probably a missing reference or import
+        TokenKind::Dot
+        | TokenKind::AddAssign
+        | TokenKind::SubtractAssign
+        | TokenKind::DivideAssign
+        | TokenKind::MultiplyAssign => {
+            return_syntax_error!(
+                format!(
+                    "{} is undefined. Can't use {:?} after an undefined variable. Either define this variable first, import it or make sure its in scope.",
+                    string_table.resolve(id),
+                    token_stream.tokens[token_stream.index].kind
+                ),
+                token_stream.current_location().to_error_location(string_table), {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Make sure to import or define this variable before using it.",
+                }
+            )
+        }
+        
+        // Other kinds of syntax errors
         _ => {
             return_syntax_error!(
                 format!(
-                    "Invalid operator: {:?} after new variable declaration. Expect a type or assignment operator.",
+                    "Invalid token: {:?} after new variable declaration. Expect a type or assignment operator.",
                     token_stream.tokens[token_stream.index].kind
                 ),
                 token_stream.current_location().to_error_location(string_table), {
@@ -233,7 +253,6 @@ pub fn new_arg(
         // TokenKind::TypeParameterBracket => {
         //     // TODO
         // }
-
         TokenKind::OpenParenthesis => {
             token_stream.advance();
             create_expression(

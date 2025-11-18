@@ -151,9 +151,11 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(project_config: &'a Config, host_function_registry: HostFunctionRegistry) -> Self {
-        let string_table = StringTable::new();
-
+    pub fn new(
+        project_config: &'a Config,
+        host_function_registry: HostFunctionRegistry,
+        string_table: StringTable,
+    ) -> Self {
         Self {
             project_config,
             host_function_registry,
@@ -193,21 +195,18 @@ impl<'a> Compiler<'a> {
     pub fn source_to_tokens(
         &mut self,
         source_code: &str,
-        module_path: &InternedPath,
+        module_path: &PathBuf,
     ) -> Result<FileTokens, CompileError> {
         let tokenizer_mode = match self.project_config.project_type {
             ProjectType::Repl => TokenizeMode::TemplateHead,
             _ => TokenizeMode::Normal,
         };
 
-        match tokenize(
-            source_code,
-            module_path,
-            tokenizer_mode,
-            &mut self.string_table,
-        ) {
+        let interned_path = &InternedPath::from_path_buf(module_path, &mut self.string_table);
+
+        match tokenize(source_code, interned_path, tokenizer_mode, &mut self.string_table) {
             Ok(tokens) => Ok(tokens),
-            Err(e) => Err(e.with_file_path(module_path.to_path_buf(self.string_table()))),
+            Err(e) => Err(e.with_file_path(module_path.to_owned())),
         }
     }
 

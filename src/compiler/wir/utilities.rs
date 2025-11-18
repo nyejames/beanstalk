@@ -6,7 +6,7 @@
 
 use crate::compiler::wir::context::WirTransformContext;
 use crate::compiler::wir::place::{Place, WasmType};
-use crate::compiler::wir::wir_nodes::{BorrowKind, Rvalue};
+use crate::compiler::wir::wir_nodes::{BorrowKind, Rvalue, Statement};
 use crate::compiler::{
     compiler_errors::{CompileError, ErrorMetaDataKey, ErrorType},
     datatypes::DataType,
@@ -117,7 +117,7 @@ pub fn create_borrow_rvalue(
     location: &TextLocation,
     context: &mut WirTransformContext,
     string_table: &mut StringTable,
-) -> Result<(Vec<crate::compiler::wir::wir_nodes::Statement>, Rvalue), CompileError> {
+) -> Result<(Vec<Statement>, Rvalue), CompileError> {
     use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
 
     match &value.kind {

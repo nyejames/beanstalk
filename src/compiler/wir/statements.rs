@@ -220,7 +220,7 @@ fn ast_function_call_to_wir(
     // Create function call statement
     // TODO: Properly resolve function name to operand
     let interned_name = string_table.intern(name);
-    let func_operand = Operand::Constant(crate::compiler::wir::wir_nodes::Constant::String(
+    let func_operand = Operand::Constant(Constant::String(
         interned_name,
     ));
     statements.push(Statement::Call {

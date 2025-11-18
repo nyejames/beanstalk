@@ -138,9 +138,9 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
             });
         }
 
-        // Create string table for compilation
+        // Create a string table for compilation
         let mut string_table = crate::compiler::string_interning::StringTable::new();
-        let compilation_result = core_build::compile_modules(modules, config, flags, &mut string_table)?;
+        let compilation_result = core_build::compile_modules(modules, config, flags)?;
 
         let mut output_files = vec![OutputFile::Wasm(compilation_result.wasm_bytes.clone())];
 
@@ -195,7 +195,7 @@ auto_reload = true
                             map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Configuration");
                             map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Create the IO configuration file or update the path in your build configuration");
                             map
-                        }
+                        },
                     ));
                 }
             }

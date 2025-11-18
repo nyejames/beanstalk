@@ -3,11 +3,9 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::statements::template::{
-    Style, TemplateContent, TemplateControlFlow, TemplateType,
-};
+use crate::compiler::parsers::statements::template::{Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
-use crate::compiler::string_interning::StringTable;
+use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::compiler::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
@@ -107,7 +105,7 @@ impl Template {
                     )?;
 
                     match nested_template.kind {
-                        TemplateType::CompileTimeString => {
+                        TemplateType::String => {
                             ast_log!("Found a compile time template inside a template. Folding...");
                             let inherited_style = template
                                 .style
@@ -115,9 +113,9 @@ impl Template {
                                 .as_ref()
                                 .map(|style| *style.to_owned());
 
-                            let folded_child =
+                            let interned_child =
                                 nested_template.fold(&inherited_style, string_table)?;
-                            let interned_child = string_table.get_or_intern(folded_child);
+
                             template.content.add(
                                 Expression::string_slice(
                                     interned_child,
@@ -190,8 +188,14 @@ impl Template {
 
                 _ => {
                     return_syntax_error!(
-                        format!("Invalid Token Used Inside template body when creating template node. Token: {:?}", token_stream.current_token_kind()),
-                        token_stream.current_location().to_error_location(&string_table), {}
+                        format!(
+                            "Invalid Token Used Inside template body when creating template node. Token: {:?}",
+                            token_stream.current_token_kind()
+                        ),
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table),
+                        {}
                     )
                 }
             }
@@ -200,7 +204,7 @@ impl Template {
         }
 
         if foldable {
-            template.kind = TemplateType::CompileTimeString;
+            template.kind = TemplateType::String;
             return Ok(template);
         };
 
@@ -242,10 +246,11 @@ impl Template {
                 // Error, can't use slots in the scene head (would be empty square brackets)
                 return_syntax_error!(
                     "Can't use slots in the template head. Token",
-                    self.location.to_owned().to_error_location(&string_table), {}
+                    self.location.to_owned().to_error_location(&string_table),
+                    {}
                 )
             }
-            TemplateType::CompileTimeString => {
+            TemplateType::String => {
                 // All good, keep going
             }
         }
@@ -276,12 +281,13 @@ impl Template {
     }
 
     pub fn fold(
-        &mut self,
+        &self,
         inherited_style: &Option<Style>,
-        string_table: &StringTable,
-    ) -> Result<String, CompileError> {
+        string_table: &mut StringTable,
+    ) -> Result<InternedString, CompileError> {
         // Now we start combining everything into one string
         let mut final_string = String::with_capacity(3);
+        let mut formatter:  Option<Formatter> = self.style.formatter.to_owned();
 
         // Format. How will the content be parsed at compile time?
         if let Some(style) = inherited_style {
@@ -289,7 +295,7 @@ impl Template {
             // But children with a lower precedence than the parent should reset their format to None.
             // This is because the parent will already parse that formatting over all its children.
             if style.formatter_precedence > self.style.formatter_precedence {
-                self.style.formatter = None;
+                formatter = None;
 
             // If the child has a higher precedence format that the parent,
             // Then it inserts special characters around it that indicate to the parent that any formatting should be skipped here.
@@ -359,7 +365,7 @@ impl Template {
         // This character indicates to the parent that it should skip formatting this content.
 
         // Otherwise, we parse the content if there is a compile time formatter
-        if let Some(formatter) = &self.style.formatter {
+        if let Some(formatter) = &formatter {
             formatter.formatter.format(&mut final_string);
 
             if inherited_style.is_some() {
@@ -369,7 +375,7 @@ impl Template {
 
         ast_log!("Folded template into: {:?}", final_string);
 
-        Ok(final_string)
+        Ok(string_table.intern(&final_string))
     }
 }
 
@@ -440,8 +446,14 @@ pub fn parse_template_head(
         if !comma_separator {
             if token != TokenKind::Comma {
                 return_syntax_error!(
-                    format!("Expected a comma before the next token in the template head. Token: {:?}", token),
-                    token_stream.current_location().to_error_location(&string_table), {}
+                    format!(
+                        "Expected a comma before the next token in the template head. Token: {:?}",
+                        token
+                    ),
+                    token_stream
+                        .current_location()
+                        .to_error_location(&string_table),
+                    {}
                 )
             }
 
@@ -466,7 +478,11 @@ pub fn parse_template_head(
                 // This has to be done eagerly here as any previous scene or style passed into the scene head will add to this
                 match template.style.unlocked_templates.to_owned().get(&name) {
                     Some(ExpressionKind::Template(inserted_template)) => {
-                        template.insert_template_into_head(inserted_template, foldable, &string_table)?;
+                        template.insert_template_into_head(
+                            inserted_template,
+                            foldable,
+                            &string_table,
+                        )?;
                     }
 
                     // Constant inherited
@@ -487,7 +503,11 @@ pub fn parse_template_head(
                     match &arg.value.kind {
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
-                            template.insert_template_into_head(&*inserted_template, foldable, &string_table)?;
+                            template.insert_template_into_head(
+                                &*inserted_template,
+                                foldable,
+                                &string_table,
+                            )?;
                         }
 
                         // TODO: Special stuff for Types (structs)
@@ -567,7 +587,10 @@ pub fn parse_template_head(
                 // Multiple commas in succession
                 return_syntax_error!(
                     "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
-                    token_stream.current_location().to_error_location(&string_table), {}
+                    token_stream
+                        .current_location()
+                        .to_error_location(&string_table),
+                    {}
                 )
             }
 
@@ -578,8 +601,14 @@ pub fn parse_template_head(
 
             _ => {
                 return_syntax_error!(
-                    format!("Invalid Token Used Inside template head when creating template node. Token: {:?}", token),
-                    token_stream.current_location().to_error_location(&string_table), {}
+                    format!(
+                        "Invalid Token Used Inside template head when creating template node. Token: {:?}",
+                        token
+                    ),
+                    token_stream
+                        .current_location()
+                        .to_error_location(&string_table),
+                    {}
                 )
             }
         }

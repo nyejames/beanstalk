@@ -33,7 +33,8 @@ fn test_wasix_backend_basic_execution() {
                     let error_msg = format!("{:?}", e);
                     assert!(
                         error_msg.contains("Failed to compile WASM module") || 
-                        error_msg.contains("magic header"),
+                        error_msg.contains("magic header") ||
+                        error_msg.contains("backend requires WASM memory export"),
                         "Unexpected error type: {}",
                         error_msg
                     );

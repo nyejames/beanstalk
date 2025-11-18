@@ -6,7 +6,7 @@ use crate::compiler::string_interning::InternedString;
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {
     StringFunction,
-    CompileTimeString,
+    String,
     Slot,
     Comment,
 }

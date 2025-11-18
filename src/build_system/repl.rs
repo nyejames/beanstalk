@@ -6,14 +6,14 @@
 // Function templates are not yet supported
 
 use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::create_template_node::Template;
+use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
+use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
-use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
-use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
 
 /// Start the REPL session
 pub fn start_repl_session() {
@@ -81,8 +81,8 @@ fn compile_beanstalk_to_string(
     source_code: &str,
     source_path: &Path,
 ) -> Result<String, CompileError> {
-    use crate::compiler::string_interning::StringTable;
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::string_interning::StringTable;
 
     // Create a string table for this compilation
     let mut string_table = StringTable::new();
@@ -91,11 +91,15 @@ fn compile_beanstalk_to_string(
     let interned_path = InternedPath::from_path_buf(source_path, &mut string_table);
 
     // Tokenize the source code
-    let mut tokenizer_output =
-        tokenize(source_code, &interned_path, TokenizeMode::TemplateHead, &mut string_table)?;
+    let mut tokenizer_output = tokenize(
+        source_code,
+        &interned_path,
+        TokenizeMode::TemplateHead,
+        &mut string_table,
+    )?;
     let ast_context = ScopeContext::new(
-        ContextKind::Template, 
-        interned_path, 
+        ContextKind::Template,
+        interned_path,
         &[],
         HostFunctionRegistry::new(),
         Vec::new(),
@@ -112,7 +116,9 @@ fn compile_beanstalk_to_string(
     // For now, this will be able to return a string if it can be folded at compile time
     // If not, it will throw an error.
     // Since the repl is purely inside the string template, new variables or functions can't be used anyway.
-    let template_string = template.fold(&None, &string_table)?;
+    
+    // This is super gross as we are interning then resolving immediately
+    let template_string = template.fold(&None, &mut string_table)?;
 
-    Ok(template_string)
+    Ok(string_table.resolve(template_string).to_string())
 }

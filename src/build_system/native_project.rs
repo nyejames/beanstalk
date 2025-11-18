@@ -36,11 +36,8 @@ impl ProjectBuilder for NativeProjectBuilder {
             });
         }
 
-        // Create string table for compilation
-        let mut string_table = StringTable::new();
-
         // Use the core build pipeline
-        let compilation_result = core_build::compile_modules(modules, config, flags, &mut string_table)?;
+        let compilation_result = core_build::compile_modules(modules, config, flags)?;
 
         // For native projects, we produce a single WASM file
         let output_files = vec![OutputFile::Wasm(compilation_result.wasm_bytes)];
@@ -65,7 +62,7 @@ impl ProjectBuilder for NativeProjectBuilder {
             // The list of valid target types is built into Cranelift itself so should always be supported here
             return Ok(());
         }
-        
+
         let target_str: &'static str = Box::leak(format!("{:?}", &self.target).into_boxed_str());
         return_config_error!(
             format!("Wrong target specified in project config: {:?}", &self.target),

@@ -113,7 +113,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
                         expected_failures += 1;
                         for error in messages.errors {
                             yellow_ln!("{}", error_type_to_str(&error.error_type));
-                            print_formatted_error(error);
+                            // print_formatted_error(error);
                         }
                         if !messages.warnings.is_empty() {
                             yellow_ln!("With {} warnings", messages.warnings.len().to_string());

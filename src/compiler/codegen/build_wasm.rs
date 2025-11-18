@@ -38,12 +38,12 @@ pub fn new_wasm_module(wir: WIR, string_table: StringTable) -> Result<Vec<u8>, C
 pub fn new_wasm_module_with_registry(
     wir: WIR,
     registry: Option<&HostFunctionRegistry>,
-    mut string_table: StringTable,
+    string_table: StringTable,
 ) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir, &string_table)?;
 
-    // Create WASM module from WIR with registry access
+    // Create WASM module from WIR with registry access (transfers ownership of string_table)
     let mut module = WasmModule::from_wir_with_registry(&wir, registry, string_table)?;
 
     // Handle exports (functions are already compiled in from_wir)

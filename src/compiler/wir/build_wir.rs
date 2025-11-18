@@ -9,6 +9,7 @@
 use crate::compiler::wir::context::WirTransformContext;
 
 // Import statement functions from statements module
+use crate::compiler::wir::statements::transform_ast_node_to_wir as transform_statement_to_wir;
 
 // Core compiler imports - consolidated for clarity
 use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking;
@@ -374,7 +375,7 @@ fn transform_ast_node_to_wir(
         _ => {
             // For other node types, delegate to the statements module
             // This ensures all node types are properly handled
-            crate::compiler::wir::statements::transform_ast_node_to_wir(node, context, string_table)
+            transform_statement_to_wir(node, context, string_table)
         }
     }
 }

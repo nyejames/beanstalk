@@ -90,28 +90,28 @@ pub fn compile_modules(
     modules: Vec<InputModule>,
     config: &Config,
     flags: &[Flag],
-    string_table: &mut StringTable,
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
 
+    // Create a new string table for interning strings
+    let mut string_table = StringTable::new();
+
     // Create a builtin host function registry with print and other host functions
-    let host_registry = create_builtin_registry(string_table).map_err(|e| CompilerMessages {
-        errors: vec![e],
-        warnings: Vec::new(),
-    })?;
-    let mut compiler = Compiler::new(config, host_registry);
+    let host_registry =
+        create_builtin_registry(&mut string_table).map_err(|e| CompilerMessages {
+            errors: vec![e],
+            warnings: Vec::new(),
+        })?;
+
+    // Create the compiler instance
+    let mut compiler = Compiler::new(config, host_registry, string_table);
 
     // ----------------------------------
     //         Token generation
     // ----------------------------------
     let tokenizer_result: Vec<Result<FileTokens, CompileError>> = modules
         .iter()
-        .map(|module| {
-            compiler.source_to_tokens(
-                &module.source_code,
-                &InternedPath::from_path_buf(&module.source_path, string_table),
-            )
-        })
+        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
 
     // Check for any errors first
@@ -322,20 +322,11 @@ fn get_standard_io_imports() -> Vec<ExternalImport> {
     ]
 }
 
-/// Extract exported functions from the compilation
-fn extract_exported_functions(exported_declarations: &[Arg]) -> Vec<StringId> {
-    exported_declarations
-        .iter()
-        .map(|arg| arg.id.clone())
-        .collect()
-}
-
 /// Compile a single module (for simple cases)
 pub fn compile_single_module(
     module: InputModule,
     config: &Config,
     flags: &[Flag],
-    string_table: &mut StringTable,
 ) -> Result<CompilationResult, CompilerMessages> {
-    compile_modules(vec![module], config, flags, string_table)
+    compile_modules(vec![module], config, flags)
 }

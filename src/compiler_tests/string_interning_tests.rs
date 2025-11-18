@@ -194,7 +194,7 @@ mod tests {
 
         let config = Config::default();
         let host_registry = HostFunctionRegistry::new();
-        let mut compiler = Compiler::new(&config, host_registry);
+        let mut compiler = Compiler::new(&config, host_registry, StringTable::new());
 
         // Test string interning through compiler
         let id1 = compiler.intern_string("test_identifier");
@@ -228,7 +228,7 @@ mod tests {
 
         let config = Config::default();
         let host_registry = HostFunctionRegistry::new();
-        let mut compiler = Compiler::new(&config, host_registry);
+        let mut compiler = Compiler::new(&config, host_registry, StringTable::new());
 
         // Intern strings and store IDs
         let ids: Vec<_> = (0..10)

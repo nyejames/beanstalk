@@ -1103,13 +1103,11 @@ pub fn print_formatted_error(e: CompileError) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => {
-            // Strip the actual header at the end of the path (.header extension)
-            e.location
-                .scope
-                .strip_prefix(dir)
-                .unwrap()
-                .to_string_lossy()
-                .to_string()
+            // Strip the path to the current directory from the front
+            match e.location.scope.strip_prefix(dir) {
+                Ok(path) => path.to_string_lossy().to_string(),
+                Err(_) => e.location.scope.to_string_lossy().to_string(),
+            }
         }
         Err(err) => {
             red_ln!(
@@ -1125,7 +1123,6 @@ pub fn print_formatted_error(e: CompileError) {
     // Read the file and get the actual line as a string from the code
     // Strip the actual header at the end of the path (.header extension)
     let mut actual_file = e.location.scope;
-    let header = actual_file.file_name().unwrap().to_string_lossy();
     if actual_file.ends_with(".header") {
         actual_file = match actual_file.ancestors().nth(1) {
             Some(p) => p.to_path_buf(),
