@@ -166,6 +166,31 @@ pub fn parse_headers_in_file(
             TokenKind::Symbol(name_id) => {
                 // No need to resolve the name since we use StringId directly
 
+                // Check if this is a duplicate definition by looking ahead
+                if host_function_registry.get_function(&name_id).is_none()
+                    && encountered_symbols.contains(&name_id)
+                {
+                    // Check if this looks like a duplicate function/struct definition
+                    // by looking ahead to see if there's a type parameter bracket
+                    let next_token = token_stream.current_token();
+                    if matches!(next_token.kind, TokenKind::TypeParameterBracket) {
+                        // This looks like a duplicate function or struct definition
+                        let name_str = string_table.resolve(name_id);
+                        let mut error = CompileError::new_rule_error(
+                            format!(
+                                "Duplicate definition of '{}'. A function or struct with this name already exists in this file.",
+                                name_str
+                            ),
+                            current_location.to_error_location(string_table),
+                        );
+                        error.new_metadata_entry(
+                            ErrorMetaDataKey::PrimarySuggestion,
+                            "Rename one of the definitions to avoid the conflict"
+                        );
+                        return Err(error.with_file_path(token_stream.src_path.to_path_buf(string_table)));
+                    }
+                }
+
                 // If this is also not a host registry function,
                 // Then it's a new symbol and should be parsed as a header
                 if host_function_registry.get_function(&name_id).is_none()

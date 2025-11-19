@@ -190,4 +190,55 @@ mod tests {
 
         assert_eq!(component_strings, vec!["src", "compiler"]);
     }
+
+    #[test]
+    fn test_extract_header_name_with_header_suffix() {
+        let mut string_table = StringTable::new();
+        let path_buf = PathBuf::from("tests/cases/success/basic_function.bst/simple_function.header");
+        let interned_path = InternedPath::from_path_buf(&path_buf, &mut string_table);
+
+        let simple_name = interned_path.extract_header_name(&mut string_table);
+        assert!(simple_name.is_some());
+        assert_eq!(
+            string_table.resolve(simple_name.unwrap()),
+            "simple_function"
+        );
+    }
+
+    #[test]
+    fn test_extract_header_name_without_header_suffix() {
+        let mut string_table = StringTable::new();
+        let path_buf = PathBuf::from("file.bst/no_suffix");
+        let interned_path = InternedPath::from_path_buf(&path_buf, &mut string_table);
+
+        let simple_name = interned_path.extract_header_name(&mut string_table);
+        assert!(simple_name.is_some());
+        assert_eq!(
+            string_table.resolve(simple_name.unwrap()),
+            "no_suffix"
+        );
+    }
+
+    #[test]
+    fn test_extract_header_name_empty_path() {
+        let mut string_table = StringTable::new();
+        let interned_path = InternedPath::new();
+
+        let simple_name = interned_path.extract_header_name(&mut string_table);
+        assert!(simple_name.is_none());
+    }
+
+    #[test]
+    fn test_extract_header_name_multi_component_path() {
+        let mut string_table = StringTable::new();
+        let path_buf = PathBuf::from("src/utils/math.bst/add.header");
+        let interned_path = InternedPath::from_path_buf(&path_buf, &mut string_table);
+
+        let simple_name = interned_path.extract_header_name(&mut string_table);
+        assert!(simple_name.is_some());
+        assert_eq!(
+            string_table.resolve(simple_name.unwrap()),
+            "add"
+        );
+    }
 }
