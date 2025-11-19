@@ -36,22 +36,40 @@ impl Ast {
         let mut warnings: Vec<CompilerWarning> = Vec::new();
         let mut entry_path = None;
 
-        // First pass: collect all function signatures to register them in scope
-        let mut function_declarations: Vec<Arg> = Vec::new();
+        // First pass: collect all function signatures and struct definitions to register them in scope
+        let mut declarations: Vec<Arg> = Vec::new();
         for header in &sorted_headers {
-            if let HeaderKind::Function(signature, _) = &header.kind {
-                // Create an Arg representing this function for scope registration
-                let interned_name = header.path.to_interned_string(string_table);
-                let func_arg = Arg {
-                    id: interned_name,
-                    value: Expression {
-                        kind: ExpressionKind::None,
-                        data_type: DataType::Function(signature.clone()),
-                        ownership: Ownership::ImmutableOwned,
-                        location: header.name_location.clone(),
-                    },
-                };
-                function_declarations.push(func_arg);
+            match &header.kind {
+                HeaderKind::Function(signature, _) => {
+                    // Create an Arg representing this function for scope registration
+                    let interned_name = header.path.to_interned_string(string_table);
+                    let func_arg = Arg {
+                        id: interned_name,
+                        value: Expression {
+                            kind: ExpressionKind::None,
+                            data_type: DataType::Function(signature.clone()),
+                            ownership: Ownership::ImmutableOwned,
+                            location: header.name_location.clone(),
+                        },
+                    };
+                    declarations.push(func_arg);
+                }
+
+                HeaderKind::Struct(definition) => {
+                    // Create an Arg representing this struct for scope registration
+                    let interned_name = header.path.to_interned_string(string_table);
+                    let struct_arg = Arg {
+                        id: interned_name,
+                        value: Expression {
+                            kind: ExpressionKind::None,
+                            data_type: DataType::Parameters(definition.clone()),
+                            ownership: Ownership::ImmutableOwned,
+                            location: header.name_location.clone(),
+                        },
+                    };
+                    declarations.push(struct_arg);
+                }
+                _ => {}
             }
         }
 
@@ -98,7 +116,7 @@ impl Ast {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
-                        &function_declarations,
+                        &declarations,
                         host_registry.clone(),
                         Vec::new(),
                     );
@@ -138,7 +156,7 @@ impl Ast {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
-                        &function_declarations,
+                        &declarations,
                         host_registry.clone(),
                         Vec::new(),
                     );
@@ -255,7 +273,12 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_function(&self, id: StringId, signature: FunctionSignature, string_table: &mut StringTable) -> ScopeContext {
+    pub fn new_child_function(
+        &self,
+        id: StringId,
+        signature: FunctionSignature,
+        string_table: &mut StringTable,
+    ) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.returns = signature.returns.to_owned();

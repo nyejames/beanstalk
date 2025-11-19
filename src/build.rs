@@ -224,11 +224,11 @@ pub fn build_project_files(
             let duration = start.elapsed();
 
             // Show build results
-            println!("Build completed successfully");
-            println!("Generated {} output file(s)", project.output_files.len());
+            print!("\nBuild completed successfully in: ");
+            // println!("Generated {} output file(s)", project.output_files.len());
 
-            grey_ln!("------------------------------------");
-            print!("\nProject built in: ");
+            // grey_ln!("------------------------------------");
+            // print!("\nProject built in: ");
             green_ln_bold!("{:?}", duration);
 
             messages.warnings.extend(project.warnings);

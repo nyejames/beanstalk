@@ -82,7 +82,7 @@ pub fn parse_headers(
         }
     }
 
-    if errors.len() > 0 {
+    if !errors.is_empty() {
         return Err(errors);
     }
 
@@ -99,10 +99,10 @@ pub fn parse_headers(
             .collect();
 
         let first_path_str: &'static str = Box::leak(
-            format!("{:?}", entry_points[0].path.to_string(string_table)).into_boxed_str()
+            format!("{:?}", entry_points[0].path.to_string(string_table)).into_boxed_str(),
         );
         let second_path_str: &'static str = Box::leak(
-            format!("{:?}", entry_points[1].path.to_string(string_table)).into_boxed_str()
+            format!("{:?}", entry_points[1].path.to_string(string_table)).into_boxed_str(),
         );
 
         return Err(vec![CompileError::new_rule_error_with_metadata(
@@ -110,14 +110,23 @@ pub fn parse_headers(
                 "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {}, Second entry point: {}",
                 first_path_str, second_path_str
             ),
-            entry_points[1].name_location.to_owned().to_error_location(string_table),
+            entry_points[1]
+                .name_location
+                .to_owned()
+                .to_error_location(string_table),
             {
                 let mut map = HashMap::new();
-                map.insert(ErrorMetaDataKey::CompilationStage, "Module Dependency Resolution");
-                map.insert(ErrorMetaDataKey::PrimarySuggestion, "Ensure only one file is designated as the entry point for the module");
+                map.insert(
+                    ErrorMetaDataKey::CompilationStage,
+                    "Module Dependency Resolution",
+                );
+                map.insert(
+                    ErrorMetaDataKey::PrimarySuggestion,
+                    "Ensure only one file is designated as the entry point for the module",
+                );
                 map.insert(ErrorMetaDataKey::SuggestedLocation, second_path_str);
                 map
-            }
+            },
         )]);
     }
 
@@ -160,7 +169,7 @@ pub fn parse_headers_in_file(
                 // If this is also not a host registry function,
                 // Then it's a new symbol and should be parsed as a header
                 if host_function_registry.get_function(&name_id).is_none()
-                    && encountered_symbols.get(&name_id).is_none()
+                    && !encountered_symbols.contains(&name_id)
                 {
                     // Every time we encounter a new symbol,
                     // we check if it fits into one of the Header categories.
@@ -173,7 +182,7 @@ pub fn parse_headers_in_file(
                         // Since this is a new scope,
                         // We don't want to add any imports from the header's scope to the global imports.
                         &file_imports,
-                        &host_function_registry,
+                        host_function_registry,
                         string_table,
                     )?;
 
@@ -199,7 +208,9 @@ pub fn parse_headers_in_file(
                         next_statement_exported = false;
                         warnings.push(CompilerWarning::new(
                             "You can't export a reference to a variable, only new declarations.",
-                            token_stream.current_location().to_error_location(string_table),
+                            token_stream
+                                .current_location()
+                                .to_error_location(string_table),
                             WarningKind::PointlessExport,
                             token_stream.src_path.to_path_buf(string_table),
                         ))
@@ -222,7 +233,9 @@ pub fn parse_headers_in_file(
                 } else {
                     warnings.push(CompilerWarning::new(
                         "Expected variable declaration after an export",
-                        token_stream.current_location().to_error_location(string_table),
+                        token_stream
+                            .current_location()
+                            .to_error_location(string_table),
                         WarningKind::PointlessExport,
                         token_stream.src_path.to_path_buf(string_table),
                     ))
@@ -247,6 +260,13 @@ pub fn parse_headers_in_file(
     } else {
         HeaderKind::ImplicitMain(main_function_body)
     };
+
+    // The implicit main function also depends on other headers in this file.
+    // So it can use and call any functions or structs defined in this file.
+    // TODO: create a list of actual dependencies (what is actually used) based on what is referenced in the main function body.
+    for header in headers.iter() {
+        main_function_dependencies.insert(header.path.to_owned());
+    }
 
     headers.push(Header {
         path: token_stream.src_path.to_owned(),
@@ -276,65 +296,49 @@ fn create_header(
     // Starts at the first token after the declaration symbol
     let current_token = token_stream.current_token_kind().to_owned();
 
-    match current_token {
-        // -----------------------------
-        //      NEW FUNCTION HEADER
-        // -----------------------------
-        TokenKind::TypeParameterBracket => {
-            let empty_context = ScopeContext::new(
-                ContextKind::Module,
-                path.to_owned(),
-                &[],
-                host_registry.to_owned(),
-                Vec::new(),
-            );
+    if current_token == TokenKind::TypeParameterBracket {
+        let empty_context = ScopeContext::new(
+            ContextKind::Module,
+            path.to_owned(),
+            &[],
+            host_registry.to_owned(),
+            Vec::new(),
+        );
 
-            let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
+        let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
 
-            let mut scopes_opened = 1;
-            let mut scopes_closed = 0;
-            let mut function_body = Vec::new();
+        let mut scopes_opened = 1;
+        let mut scopes_closed = 0;
+        let mut function_body = Vec::new();
 
-            // FunctionSignature::new leaves us at the first token of the function body
-            // Don't advance before the first iteration
-            while scopes_opened > scopes_closed {
-                match token_stream.current_token_kind() {
-                    TokenKind::End => {
-                        scopes_closed += 1;
-                        if scopes_opened > scopes_closed {
-                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                        }
-                    }
-                    TokenKind::Colon => {
-                        scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-                    TokenKind::Symbol(name_id) => {
-                        if let Some(path) = file_imports.get(name_id) {
-                            dependencies.insert(path.to_owned());
-                        }
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-                    _ => {
+        // FunctionSignature::new leaves us at the first token of the function body
+        // Don't advance before the first iteration
+        while scopes_opened > scopes_closed {
+            match token_stream.current_token_kind() {
+                TokenKind::End => {
+                    scopes_closed += 1;
+                    if scopes_opened > scopes_closed {
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                 }
-                token_stream.advance();
+                TokenKind::Colon => {
+                    scopes_opened += 1;
+                    function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                }
+                TokenKind::Symbol(name_id) => {
+                    if let Some(path) = file_imports.get(name_id) {
+                        dependencies.insert(path.to_owned());
+                    }
+                    function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                }
+                _ => {
+                    function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                }
             }
-
-            kind = HeaderKind::Function(signature, function_body);
+            token_stream.advance();
         }
 
-        // TODO
-        // -----------------------------
-        //      NEW STRUCT HEADER
-        // -----------------------------
-
-        // -----------------------------
-        //      MAIN FUNCTION ONLY
-        // -----------------------------
-        // Just return without parsing anything
-        _ => {}
+        kind = HeaderKind::Function(signature, function_body);
     }
 
     Ok(Header {

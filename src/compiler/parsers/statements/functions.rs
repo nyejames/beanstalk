@@ -5,7 +5,7 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::statements::structs::create_struct_definition;
+use crate::compiler::parsers::statements::structs::{create_struct_definition, parse_parameters};
 use crate::compiler::string_interning::{StringId, StringTable};
 
 use crate::compiler::parsers::ast::ScopeContext;
@@ -27,9 +27,13 @@ impl FunctionSignature {
         context: &ScopeContext,
         string_table: &mut StringTable,
     ) -> Result<Self, CompileError> {
-        let parameters: Vec<Arg> = create_struct_definition(token_stream, context, string_table)?;
+        // Should start at the Colon
+        // Need to skip it,
+        token_stream.advance();
 
-        // create_struct_definition already advances past the closing bracket
+        let parameters = parse_parameters(token_stream, context, &mut true, string_table, false)?;
+
+        // create_struct_definition already advances past the closing |,
         // So we're now at the Arrow or Colon token
         match token_stream.current_token_kind() {
             TokenKind::Arrow => {}

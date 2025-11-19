@@ -3,10 +3,10 @@ use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::return_syntax_error;
-use crate::{CompileError, ast_log};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::return_syntax_error;
+use crate::{CompileError, ast_log};
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as
@@ -32,7 +32,9 @@ pub fn parse_parameters(
     context: &ScopeContext,
     pure: &mut bool,
     string_table: &mut StringTable,
-    is_definition: bool,
+
+    // False for function definitions, true for struct definitions
+    is_struct: bool,
 ) -> Result<Vec<Arg>, CompileError> {
     let mut args: Vec<Arg> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -42,14 +44,15 @@ pub fn parse_parameters(
             // Return the args if the closing token is found
             // Don't skip the closing token
             TokenKind::TypeParameterBracket => {
-                if !is_definition {
+                if !is_struct {
+                    token_stream.advance();
                     return Ok(args);
                 }
 
                 if !next_in_list {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream.current_location().to_error_location(string_table),
                         {
                             CompilationStage => "Struct/Parameter Parsing",
                             PrimarySuggestion => "Add ',' between struct fields or function parameters",
@@ -62,12 +65,12 @@ pub fn parse_parameters(
             }
 
             TokenKind::End => {
-                if is_definition {
-                    return Ok(args)
+                if is_struct {
+                    return Ok(args);
                 }
                 return_syntax_error!(
                     "Unexpected end to this scope while parsing function parameters",
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Add closing bracket '|' for function parameters",
@@ -80,7 +83,7 @@ pub fn parse_parameters(
                 if !next_in_list {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream.current_location().to_error_location(string_table),
                         {
                             CompilationStage => "Struct/Parameter Parsing",
                             PrimarySuggestion => "Add ',' between struct fields or function parameters",
@@ -91,7 +94,7 @@ pub fn parse_parameters(
 
                 // Create a new variable
                 // TODO: This needs to be updated to use string table when available
-                let argument = new_parameter(token_stream, arg_name, &context, string_table)?;
+                let argument = new_parameter(token_stream, arg_name, context, string_table)?;
 
                 if argument.value.ownership.is_mutable() {
                     *pure = false;
@@ -111,7 +114,7 @@ pub fn parse_parameters(
             TokenKind::Eof => {
                 return_syntax_error!(
                     "Unexpected end of file. Type definition is missing a closing bracket. Expected: '|'",
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Add closing bracket '|' to complete the type definition",
@@ -126,7 +129,7 @@ pub fn parse_parameters(
                         "Unexpected token used in function arguments: {:?}",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Struct/Parameter Parsing",
                         PrimarySuggestion => "Use valid parameter syntax: name Type or name ~Type for mutable",
@@ -205,7 +208,7 @@ pub fn new_parameter(
                     token_stream.tokens[token_stream.index].kind,
                     string_table.resolve(name)
                 ),
-                token_stream.current_location().to_error_location(&string_table),
+                token_stream.current_location().to_error_location(string_table),
                 {
                     CompilationStage => "Parameter Type Parsing",
                     PrimarySuggestion => "Add a type declaration (Int, String, Float, Bool) after the parameter name",
@@ -246,7 +249,7 @@ pub fn new_parameter(
                     "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
                     token_stream.current_token_kind()
                 ),
-                token_stream.current_location().to_error_location(&string_table),
+                token_stream.current_location().to_error_location(string_table),
                 {
                     CompilationStage => "Parameter Parsing",
                     PrimarySuggestion => "Check that all referenced variables are declared before use",
@@ -262,9 +265,23 @@ pub fn new_parameter(
     let parsed_expr = match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {
             token_stream.advance();
-            create_expression(token_stream, context, &mut data_type, &ownership, true, string_table)?
+            create_expression(
+                token_stream,
+                context,
+                &mut data_type,
+                &ownership,
+                true,
+                string_table,
+            )?
         }
-        _ => create_expression(token_stream, context, &mut data_type, &ownership, false, string_table)?,
+        _ => create_expression(
+            token_stream,
+            context,
+            &mut data_type,
+            &ownership,
+            false,
+            string_table,
+        )?,
     };
 
     ast_log!(

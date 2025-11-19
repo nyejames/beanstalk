@@ -204,7 +204,12 @@ impl<'a> Compiler<'a> {
 
         let interned_path = &InternedPath::from_path_buf(module_path, &mut self.string_table);
 
-        match tokenize(source_code, interned_path, tokenizer_mode, &mut self.string_table) {
+        match tokenize(
+            source_code,
+            interned_path,
+            tokenizer_mode,
+            &mut self.string_table,
+        ) {
             Ok(tokens) => Ok(tokens),
             Err(e) => Err(e.with_file_path(module_path.to_owned())),
         }
@@ -234,13 +239,13 @@ impl<'a> Compiler<'a> {
         )
     }
 
-    /// Every dependency needed for each file should be known before its headers are parsed.
-    /// This is so structs that contain imported structs can know the shape of the imported structs first.
     /// ---------------------------
     ///     DEPENDENCY SORTING
     /// ---------------------------
     /// Now, as we parse the headers and combine the files,
     /// the types of each dependency will be known.
+    /// Every dependency needed for each file should be known before its headers are parsed.
+    /// This is so structs that contain imported structs can know the shape of the imports first.
     /// This section answers the following question:
     /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
     pub fn sort_headers(&mut self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
