@@ -1,12 +1,10 @@
 use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::parsers::tokens::TextLocation;
 
 use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::html5_codegen::js_parser::combine_vec_to_js;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
-use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse_template};
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
     return_type_error, settings::BS_VAR_PREFIX,
@@ -15,20 +13,13 @@ use crate::{
 pub const JS_INDENT: &str = "    ";
 
 pub struct ParserOutput {
-    // For web this would be what's written the HTML file
+    // For web this would be what's written to the HTML file
     pub content_output: String,
 
     // This is JS atm, but will be Wasm in the future
-    pub code_module: String,
-    // Eventually will have a separate "bindings" string
-    // This will be glue code specific to the target output environment
-    // For web this will just be the JS that will glue the Wasm modules together
-    // pub bindings: String,
+    pub js: String,
 
-    // May not ever use.
-    // Might just stick with inlined styles.
-    // Classes can be used for more complex built-in styling that will go in the standard HTML project CSS reset file.
-    // pub css: String,
+    pub css: String,
 }
 
 #[derive(PartialEq)]
@@ -41,16 +32,12 @@ pub enum Target {
 }
 
 // Parse ast into valid WAT, JS, HTML and CSS
-pub fn parse(
+pub fn parse_to_html5(
     ast: &[AstNode],
     indentation: &str,
     target: &Target,
 ) -> Result<ParserOutput, CompileError> {
     let mut code_module = String::new();
-    // let mut types = TypeSection::new();
-    // let mut wasm_export_section = ExportSection::new();
-    // let mut type_index = 0;
-
     let mut content_output = String::new();
     let mut css = String::new();
     // let mut page_title = String::new();
@@ -61,14 +48,7 @@ pub fn parse(
 
     // Parse HTML
     for node in ast {
-        // code_module.push('\n');
-
         match &node.kind {
-            // Scenes at the top level of a block
-            // MAY NOT DO THIS ANY MORE.
-            // Possibly a new file type for scene-specific top-level stuff.
-            // And a different way of injecting HTML into DOM from normal BS
-            // that makes a lot more sense
             NodeKind::Reference(expr) => {
                 //     code_module.push_str(&format!("\n{indentation}"));
                 //     let top_level_scene_format = match target {
@@ -190,13 +170,13 @@ pub fn parse(
                                 func.push_str(") {");
 
                                 // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
-                                let func_body =
-                                    parse(body, &format!("{indentation}{JS_INDENT}"), target)?;
+                                let func_body = parse_to_html5(
+                                    body,
+                                    &format!("{indentation}{JS_INDENT}"),
+                                    target,
+                                )?;
 
-                                func.push_str(&format!(
-                                    "{}\n{indentation}}}\n",
-                                    func_body.code_module
-                                ));
+                                func.push_str(&format!("{}\n{indentation}}}\n", func_body.js));
 
                                 code_module.push_str(&func);
                             }
@@ -244,12 +224,12 @@ pub fn parse(
                 code_module.push_str(&format!(
                     "if ({}) {{\n{}\n{indentation}}}\n{indentation}",
                     expression_to_js(condition, "")?,
-                    parse(
+                    parse_to_html5(
                         &if_block_body.ast,
                         &format!("{indentation}{JS_INDENT}"),
                         target
                     )?
-                    .code_module
+                    .js
                 ));
             }
 
@@ -278,7 +258,7 @@ pub fn parse(
                     expression_to_js(iterated_item, "")?,
                     length_access,
                     index.name,
-                    parse(&loop_body.ast, &format!("{indentation}{JS_INDENT}"), target)?.code_module
+                    parse_to_html5(&loop_body.ast, &format!("{indentation}{JS_INDENT}"), target)?.js
                 ));
             }
 
@@ -288,8 +268,8 @@ pub fn parse(
                 code_module.push_str(&format!(
                     "while ({}) {{\n{}\n{indentation}}}\n{indentation}",
                     expression_to_js(condition, "")?,
-                    parse(&loop_body.ast, &format!("{indentation}{JS_INDENT}"), target)?
-                        .code_module
+                    parse_to_html5(&loop_body.ast, &format!("{indentation}{JS_INDENT}"), target)?
+                        .js
                 ));
             }
 
@@ -313,6 +293,6 @@ pub fn parse(
 
     Ok(ParserOutput {
         content_output,
-        code_module,
+        js: code_module,
     })
 }

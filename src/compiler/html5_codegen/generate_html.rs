@@ -3,7 +3,6 @@ use crate::runtime::io::js_bindings::JsBindingsGenerator;
 use crate::settings::HTMLMeta;
 use std::fs;
 
-#[allow(dead_code)]
 pub fn create_html_boilerplate(
     meta_tags: &HTMLMeta,
     release_build: bool,
@@ -35,15 +34,14 @@ pub fn create_html_boilerplate(
             .replace("theme-color-light", &meta_tags.theme_color_light)
             .replace("theme-color-dark", &meta_tags.theme_color_dark)),
 
-        Err(ref err) => Err (CompileError::compiler_error(
-            &format!("Error reading boilerplate HTML file: {:?}",
-            err)
-        ))
+        Err(ref err) => Err(CompileError::compiler_error(&format!(
+            "Error reading boilerplate HTML file: {:?}",
+            err
+        ))),
     }
 }
 
 /// Create the HTML boilerplate with integrated JS bindings for WASM
-#[allow(dead_code)]
 pub fn create_html_with_js_bindings(
     meta_tags: &HTMLMeta,
     wasm_module_name: &str,

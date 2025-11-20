@@ -2,14 +2,13 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::compiler_errors::ErrorType;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::html5_codegen::web_parser::JS_INDENT;
-use crate::compiler::html5_codegen::web_parser::{Target, parse};
+use crate::compiler::html5_codegen::web_parser::{Target, parse_to_html5};
 use crate::compiler::parsers::ast_nodes::NodeKind;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse_template};
 use crate::compiler::parsers::tokens::TextLocation;
 use crate::return_compiler_error;
 use crate::settings::BS_VAR_PREFIX;
-
 
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(
@@ -205,9 +204,9 @@ pub fn expression_to_js(expr: &Expression, indentation: &str) -> Result<String, 
             func.push_str(") => {\n");
 
             // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
-            let func_body = parse(body, indentation, &Target::JS)?;
+            let func_body = parse_to_html5(body, indentation, &Target::JS)?;
 
-            func.push_str(&format!("{}\n}}\n", func_body.code_module));
+            func.push_str(&format!("{}\n}}\n", func_body.js));
 
             js.push_str(&func);
         }

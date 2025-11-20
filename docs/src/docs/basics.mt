@@ -1,10 +1,12 @@
-[#import(@libs/html/basic)]
-[#import(@styles/docs_styles)]
-[#import(@./components)]
+#import(@libs/html/basic)
+#import(@styles/docs_styles)
+#import(@./components)
+[basic.page:
 
 [docs_styles.Navbar]
-
-[docs_styles.Header, basic.Center: [basic.Title: LANGUAGE BASICS]]
+[docs_styles.Header, basic.Center:
+    [basic.Title: LANGUAGE BASICS]
+]
 
 Every project needing to be split into multiple Wasm modules must have a config.bst file.
 

@@ -6,10 +6,8 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod interned_path_tests;
     pub(crate) mod jit_runtime_tests;
     pub(crate) mod memory_utils_tests;
-    pub(crate) mod string_interning_tests;
     pub(crate) mod test_runner;
 }
 
@@ -76,6 +74,8 @@ mod compiler {
         pub(crate) mod dom_hooks;
         pub(crate) mod generate_html;
         pub(crate) mod html_styles;
+        pub(crate) mod js_parser;
+        pub(crate) mod web_parser;
     }
 
     #[allow(dead_code)]
@@ -161,32 +161,6 @@ impl<'a> Compiler<'a> {
             host_function_registry,
             string_table,
         }
-    }
-
-    /// Intern a string using the compiler's string table, returning a unique identifier.
-    /// This is a convenience method that delegates to the internal string table.
-    pub fn intern_string(&mut self, s: &str) -> InternedString {
-        self.string_table.intern(s)
-    }
-
-    /// Resolve an interned string ID back to its string content.
-    /// This is a convenience method that delegates to the internal string table.
-    /// # Panics
-    /// Panics if the StringId is invalid (not created by this compiler's string table)
-    pub fn resolve_string(&self, id: InternedString) -> &str {
-        self.string_table.resolve(id)
-    }
-
-    /// Get a reference to the compiler's string table for advanced operations.
-    /// This allows access to statistics, memory usage, and other string table features.
-    pub fn string_table(&self) -> &StringTable {
-        &self.string_table
-    }
-
-    /// Get a mutable reference to the compiler's string table for advanced operations.
-    /// This allows access to interning operations and string table management.
-    pub fn string_table_mut(&mut self) -> &mut StringTable {
-        &mut self.string_table
     }
 
     /// -----------------------------
