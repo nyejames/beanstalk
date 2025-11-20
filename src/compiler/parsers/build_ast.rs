@@ -305,22 +305,29 @@ pub fn function_body_to_ast(
             }
 
             // String template as an expression without being assigned.
-            // This is the primary way to produce output in Beanstalk.
-            // Top-level templates automatically output to a host-defined output mechanism.
+            // OLD: This is the primary way to produce output in Beanstalk.
+            // OLD: Top-level templates automatically output to a host-defined output mechanism.
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
-                let template_output_name = string_table.intern("template_output");
-                let beanstalk_io_module = string_table.intern("beanstalk_io");
+
+                // OLD WASM ONLY BEHAVIOUR: Was for print output
+                //let template_output_name = string_table.intern("template_output");
+                //let beanstalk_io_module = string_table.intern("beanstalk_io");
+                //ast.push(AstNode {
+                //    kind: NodeKind::HostFunctionCall(
+                //        template_output_name,
+                //        Vec::from([expr]),
+                //        Vec::new(),
+                //        beanstalk_io_module,
+                //        template_output_name,
+                //        token_stream.current_location(),
+                //    ),
+                //    location: token_stream.current_location(),
+                //    scope: context.scope.clone(),
+                //})
                 ast.push(AstNode {
-                    kind: NodeKind::HostFunctionCall(
-                        template_output_name,
-                        Vec::from([expr]),
-                        Vec::new(),
-                        beanstalk_io_module,
-                        template_output_name,
-                        token_stream.current_location(),
-                    ),
+                    kind: NodeKind::ParentTemplate(expr),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 })

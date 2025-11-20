@@ -9,6 +9,8 @@ use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
     return_type_error, settings::BS_VAR_PREFIX,
 };
+use crate::compiler::string_interning::StringTable;
+use crate::settings::Config;
 
 pub const JS_INDENT: &str = "    ";
 
@@ -22,20 +24,12 @@ pub struct ParserOutput {
     pub css: String,
 }
 
-#[derive(PartialEq)]
-#[allow(dead_code)]
-pub enum Target {
-    Web,
-    Wasm,
-    JS,
-    Raw,
-}
-
 // Parse ast into valid WAT, JS, HTML and CSS
 pub fn parse_to_html5(
     ast: &[AstNode],
     indentation: &str,
-    target: &Target,
+    config: &Config,
+    string_table: StringTable,
 ) -> Result<ParserOutput, CompileError> {
     let mut code_module = String::new();
     let mut content_output = String::new();
@@ -46,115 +40,32 @@ pub fn parse_to_html5(
     // This is to prevent duplicate JS code from updating the same element
     let mut module_references: Vec<Arg> = Vec::new();
 
-    // Parse HTML
+    // Parse the Markthrough file into HTML and JS.
+    // Eventually we can separate this out to Wasm
+    // CSS is a bit separate as it will be written directly into template styles as a string, or imported directly
     for node in ast {
         match &node.kind {
-            NodeKind::Reference(expr) => {
-                //     code_module.push_str(&format!("\n{indentation}"));
-                //     let top_level_scene_format = match target {
-                //         Target::Web => StyleFormat::Markdown,
-                //         Target::JS => StyleFormat::JSString,
-                //         Target::Raw => StyleFormat::Raw,
-                //         Target::Wasm => StyleFormat::WasmString,
-                //     };
-                //
-                //     let parsed_scene = parse_scene(
-                //         SceneIngredients {
-                //             scene_body,
-                //             scene_style,
-                //             inherited_style: &None,
-                //             scene_id: scene_id.to_owned(),
-                //             format_context: top_level_scene_format,
-                //         },
-                //         &mut code_module,
-                //         &expr.location,
-                //     )?;
-                //
-                //     match target {
-                //         Target::Web => {
-                //             content_output.push_str(&parsed_scene);
-                //         }
-                //         Target::JS => {
-                //             code_module.push_str(&format!(
-                //                 "const {BS_VAR_PREFIX}{} = `{}`;",
-                //                 scene_id, parsed_scene
-                //             ));
-                //         }
-                //         Target::Raw => {
-                //             code_module.push_str(&format!(
-                //                 "const {BS_VAR_PREFIX}{} = `{}`;",
-                //                 scene_id, parsed_scene
-                //             ));
-                //         }
-                //         Target::Wasm => {}
-                //     }
-            }
-
             // JAVASCRIPT / WASM
-            NodeKind::Declaration(name, expr, ..) => {
+            NodeKind::VariableDeclaration(arg) => {
                 code_module.push_str(&format!("\n{indentation}"));
 
-                match expr.data_type {
-                    DataType::Float(mutable)
-                    | DataType::Int(mutable)
-                    | DataType::String(mutable) => {
-                        let var_dec = if mutable {
-                            &format!(
-                                "let {BS_VAR_PREFIX}{name} = {};",
-                                expression_to_js(expr, "")?
-                            )
-                        } else {
-                            &format!(
-                                "const {BS_VAR_PREFIX}{name} = {};",
-                                expression_to_js(expr, "")?
-                            )
-                        };
+                let declaration_keyword = if arg.value.ownership.is_mutable() {
+                    "let"
+                } else {
+                    "const"
+                };
+                let mut declaration = format!(
+                    "{} {declaration_keyword} = {};",
+                      string_table.resolve(arg.id),
+                      expression_to_js(&arg.value, &string_table)?
+                );
 
-                        code_module.push_str(var_dec);
+                    // Instance of a struct
+                    DataType::Struct(args, ownership) => {
+
                     }
 
-                    DataType::Template(..) => {
-                        match &expr.kind {
-                            ExpressionKind::Template(scene_body, scene_styles, id) => {
-                                let scene_to_js_string = parse_template(
-                                    TemplateIngredients {
-                                        template_body: scene_body,
-                                        template_style: scene_styles,
-                                        inherited_style: &None,
-                                        template_id: id.to_owned(),
-                                        format_context: StyleFormat::JSString,
-                                    },
-                                    &mut code_module,
-                                    &expr.location,
-                                )?;
-
-                                let var_dec = format!(
-                                    "const {BS_VAR_PREFIX}{name} = `{}`;",
-                                    scene_to_js_string
-                                );
-
-                                code_module.push_str(&var_dec);
-                            }
-
-                            _ => {
-                                return_type_error!(
-                                    node.location.to_owned(),
-                                    "Scene declaration must be a scene",
-                                )
-                            }
-                        };
-                    }
-
-                    DataType::Args(_) => {
-                        let var_dec = format!(
-                            "const {BS_VAR_PREFIX}{name} = {};",
-                            expression_to_js(expr, "")?
-                        );
-
-                        code_module.push_str(&var_dec);
-                    }
-
-                    DataType::Function(..) => {
+                    DataType::Function(signature) => {
                         match &expr.kind {
                             ExpressionKind::Function(args, body, ..) => {
                                 let mut func = format!("function {BS_VAR_PREFIX}{}(", name);
@@ -197,6 +108,8 @@ pub fn parse_to_html5(
                         ));
                     }
                 };
+
+                declaration.push(';');
 
                 module_references.push(Arg {
                     name: name.to_owned(),

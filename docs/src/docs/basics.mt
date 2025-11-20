@@ -17,7 +17,7 @@ From the config file you can define a Beanstalk file as the entry point of a pro
 
 Web projects have their own structure and config file also.
 
-# Quick Synax Summary
+# Quick Syntax Summary
 For developers coming from most other languages, 
 here are some key idiosyncrasies from other C-like languages to note:
 
@@ -30,7 +30,7 @@ Square brackets are only used for string templates.
 This comes before the type if there is an explicit type declaration.
 - Double dashes for single line comments (--)
 - Immutable Reference semantics are the default for all stack and heap allocated types. 
-- All copies have to be explict unless they are used in part of a new expression. 
+- All copies have to be explicit unless they are used in part of a new expression. 
 Even for primitive types such as integers.
 
 4 spaces are recommended for indentation. 

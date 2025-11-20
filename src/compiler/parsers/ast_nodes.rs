@@ -101,7 +101,7 @@ pub enum NodeKind {
     JS(InternedString),  // Code,
     Css(InternedString), // Code,
 
-    TemplateFormatter,
+    ParentTemplate(Expression),
     Slot,
     Empty, //
 

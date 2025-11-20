@@ -1,3 +1,7 @@
+#import(@libs/html/basic)
+#import(@styles/docs_styles)
+#import(@./components)
+[basic.page:
 [Navbar]
 
 [Header center: [title(1): ERROR HANDLING AND OPTIONALS]]

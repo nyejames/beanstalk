@@ -1,23 +1,111 @@
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::compiler_errors::ErrorType;
-use crate::compiler::datatypes::DataType;
 use crate::compiler::html5_codegen::web_parser::JS_INDENT;
-use crate::compiler::html5_codegen::web_parser::{Target, parse_to_html5};
+use crate::compiler::html5_codegen::web_parser::{parse_to_html5};
 use crate::compiler::parsers::ast_nodes::NodeKind;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
-use crate::compiler::parsers::template::{StyleFormat, TemplateIngredients, parse_template};
-use crate::compiler::parsers::tokens::TextLocation;
+use crate::compiler::string_interning::StringTable;
 use crate::return_compiler_error;
 use crate::settings::BS_VAR_PREFIX;
+
+
+// This will only contain R-value nodes
+// Things like declarations, functions and structs should not show up here
+pub fn expression_node_to_js(node: &NodeKind, string_table: &StringTable) -> Result<String, CompileError> {
+    let mut js = String::new();
+    match node {
+        NodeKind::Expression(expr) => match &expr.kind {
+            ExpressionKind::Float(value) => {
+                js.push_str(&value.to_string());
+            }
+            ExpressionKind::Int(value) => {
+                js.push_str(&value.to_string());
+            }
+            ExpressionKind::StringSlice(value) => {
+                let string = string_table.resolve(*value);
+                js.push_str(&format!("\"{string}\""));
+            }
+            ExpressionKind::Bool(value) => {
+                js.push_str(&value.to_string());
+            }
+            ExpressionKind::Reference(id, ..) => {
+                // All just JS for now
+                js.push_str(&format!(" {BS_VAR_PREFIX}{id}"));
+            }
+            ExpressionKind::FunctionCall(name, args) => {
+                js.push_str(&format!("{BS_VAR_PREFIX}{name}({})", combine_vec_to_js(args)?));
+            }
+            ExpressionKind::Template(template) => {
+
+            }
+            ExpressionKind::None => {}
+
+            // Function as an r-value
+            ExpressionKind::Function(args, body) => {}
+
+            ExpressionKind::Collection(items) => {
+                // Normal JS array for now
+                js.push_str(&format!("[{}]", &combine_vec_to_js(items)?));
+            }
+            ExpressionKind::Runtime(nodes) => {
+                for node in nodes {
+                    js.push_str(&expression_node_to_js(&node.kind, string_table)?)
+                }
+            }
+        },
+
+        NodeKind::Operator(op, ..) => match op {
+            Operator::Add => js.push_str(" +"),
+            Operator::Subtract => js.push_str(" -"),
+            Operator::Multiply => js.push_str(" *"),
+            Operator::Divide => js.push_str(" /"),
+            Operator::Exponent => js.push_str(" **"),
+            Operator::Modulus => js.push_str(" %"),
+            // Operator::Remainder => js.push_str(" %"),
+            Operator::Root => js.push_str(" ** (1/2)"),
+
+            // Logical
+            Operator::Equality => js.push_str(" ==="),
+            Operator::Not => js.push_str(" !=="),
+            Operator::GreaterThan => js.push_str(" >"),
+            Operator::GreaterThanOrEqual => js.push_str(" >="),
+            Operator::LessThan => js.push_str(" <"),
+            Operator::LessThanOrEqual => js.push_str(" <="),
+            Operator::And => js.push_str(" &&"),
+            Operator::Or => js.push_str(" ||"),
+
+            // TODO: Handle ranges for loop expressions
+            Operator::Range => {}
+        },
+
+        NodeKind::FunctionCall(name, args, ..) => {
+            js.push_str(&format!(
+                " {BS_VAR_PREFIX}{}({})",
+                name,
+                combine_vec_to_js(args)?,
+            ));
+        }
+
+        _ => {
+            return_compiler_error!(
+                "Compiler Bug (Not Implemented yet): Invalid AST node found in expression when parsing an expression into JS: {:?}",
+                node
+            )
+        }
+    }
+
+    js.push(' '); // For making sure there is a space after each node
+
+    Ok(js)
+}
 
 // If there are multiple values, it gets wrapped in an array
 pub fn expressions_to_js(
     expressions: &[Expression],
-    indentation: &str,
+    string_table: &StringTable,
 ) -> Result<String, CompileError> {
     let mut js = String::new();
     for expr in expressions {
-        js.push_str(&expression_to_js(expr, indentation)?);
+        js.push_str(&expression_to_js(expr, string_table)?);
     }
 
     if expressions.len() > 0 {
@@ -27,97 +115,16 @@ pub fn expressions_to_js(
     Ok(js)
 }
 
-// Create everything necessary in JS
-pub fn expression_to_js(expr: &Expression, indentation: &str) -> Result<String, CompileError> {
+// Create everything necessary for the R-value in JS
+pub fn expression_to_js(expr: &Expression, string_table: &StringTable) -> Result<String, CompileError> {
     let mut js = String::new(); // Open the template string
 
     match &expr.kind {
         ExpressionKind::Runtime(nodes) => {
             for node in nodes {
-                match &node.kind {
-                    NodeKind::Reference(value) => match &value.kind {
-                        ExpressionKind::Float(value) => {
-                            js.push_str(&value.to_string());
-                        }
-
-                        ExpressionKind::Int(value) => {
-                            js.push_str(&value.to_string());
-                        }
-
-                        ExpressionKind::String(value) => {
-                            js.push_str(&format!("\"{}\"", value));
-                        }
-
-                        ExpressionKind::Bool(value) => {
-                            js.push_str(&value.to_string());
-                        }
-
-                        ExpressionKind::Reference(id, ..) => {
-                            // All just JS for now
-                            js.push_str(&format!("{BS_VAR_PREFIX}{id}"));
-                        }
-
-                        _ => {
-                            return_compiler_error!(
-                                "Compiler Bug (Not Implemented yet): Invalid argument type for function call (js_parser): {:?}",
-                                value
-                            )
-                        }
-                    },
-
-                    NodeKind::Operator(op, ..) => match op {
-                        Operator::Add => js.push_str(" + "),
-                        Operator::Subtract => js.push_str(" - "),
-                        Operator::Multiply => js.push_str(" * "),
-                        Operator::Divide => js.push_str(" / "),
-                        Operator::Exponent => js.push_str(" ** "),
-                        Operator::Modulus => js.push_str(" % "),
-                        // Operator::Remainder => js.push_str(" % "),
-                        Operator::Root => js.push_str(" ** (1/2)"),
-
-                        // Logical
-                        Operator::Equality => js.push_str(" === "),
-                        Operator::NotEqual => js.push_str(" !== "),
-                        Operator::GreaterThan => js.push_str(" > "),
-                        Operator::GreaterThanOrEqual => js.push_str(" >= "),
-                        Operator::LessThan => js.push_str(" < "),
-                        Operator::LessThanOrEqual => js.push_str(" <= "),
-                        Operator::And => js.push_str(" && "),
-                        Operator::Or => js.push_str(" || "),
-                    },
-
-                    NodeKind::FunctionCall(name, args, ..) => {
-                        js.push_str(&format!(
-                            "{BS_VAR_PREFIX}{}({})",
-                            name,
-                            combine_vec_to_js(args)?,
-                        ));
-                    }
-
-                    _ => {
-                        return_compiler_error!(
-                            "Compiler Bug (Not Implemented yet): Invalid AST node found in expression when parsing an expression into JS: {:?}",
-                            node
-                        )
-                    }
-                }
-
-                js.push(' '); // Formatting
-            }
-
-            match expr.data_type {
-                DataType::String(_) | DataType::Float(_) | DataType::Int(_) | DataType::Bool(_) => {
-                }
-                DataType::CoerceToString(_) => {
-                    js.insert_str(0, " String(");
-                    js.push(')');
-                }
-                _ => {
-                    return_compiler_error!(
-                        "Compiler Bug: Haven't implemented this type yet in expression_to_js: {:?}",
-                        expr.data_type
-                    )
-                }
+                js.push_str(&expression_node_to_js(
+                    &node.kind, string_table
+                )?)
             }
         }
 
@@ -215,19 +222,19 @@ pub fn expression_to_js(expr: &Expression, indentation: &str) -> Result<String, 
     Ok(js)
 }
 
-pub fn create_reactive_reference(name: &str, data_type: &DataType) -> String {
-    match data_type {
-        // DataType::Float | DataType::Int => {
-        //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
-        // }
-        DataType::Args(_) | DataType::Collection(_) => {
-            format!("\nuInnerHTML(\"{name}\",{name});\n")
-        }
-        _ => {
-            format!("\nuInnerHTML(\"{name}\",{name});\n")
-        }
-    }
-}
+//pub fn create_reactive_reference(name: &str, data_type: &DataType) -> String {
+//    match data_type {
+//        // DataType::Float | DataType::Int => {
+//        //     format!("uInnerHTML(\"{name}\", wsx.get_{BS_VAR_PREFIX}{name}());")
+//        // }
+//        DataType::Args(_) | DataType::Collection(_) => {
+//            format!("\nuInnerHTML(\"{name}\",{name});\n")
+//        }
+//        _ => {
+//            format!("\nuInnerHTML(\"{name}\",{name});\n")
+//        }
+//    }
+//}
 
 pub fn combine_vec_to_js(collection: &[Expression]) -> Result<String, CompileError> {
     let mut js = String::new();

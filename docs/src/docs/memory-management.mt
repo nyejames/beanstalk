@@ -1,3 +1,7 @@
+#import(@libs/html/basic)
+#import(@styles/docs_styles)
+#import(@./components)
+[basic.page:
 [Navbar]
 
 [header center: [title(1): MEMORY MANAGEMENT]]

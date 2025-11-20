@@ -267,7 +267,7 @@ impl StringTable {
         self.string_to_id.get(s).copied()
     }
 
-    /// Update memory usage statistics based on current state
+    /// Update memory usage statistics based on the current state
     fn update_memory_stats(&mut self) {
         // Calculate estimated memory saved
         // For each cache hit beyond the first, we saved approximately:
