@@ -14,7 +14,7 @@ use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
 // use rayon::prelude::*;
-use crate::compiler::host_functions::registry::create_builtin_registry;
+use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 use std::time::Instant;
@@ -96,11 +96,15 @@ pub fn compile_modules(
     // Create a new string table for interning strings
     let mut string_table = StringTable::new();
 
+    let runtime_backend = RuntimeBackend::default();
+
     // Create a builtin host function registry with print and other host functions
     let host_registry =
-        create_builtin_registry(&mut string_table).map_err(|e| CompilerMessages {
-            errors: vec![e],
-            warnings: Vec::new(),
+        create_builtin_registry(runtime_backend, &mut string_table).map_err(|e| {
+            CompilerMessages {
+                errors: vec![e],
+                warnings: Vec::new(),
+            }
         })?;
 
     // Create the compiler instance

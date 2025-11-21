@@ -17,6 +17,7 @@ use crate::compiler::wir::utilities::{create_borrow_rvalue, lookup_variable_or_e
 use crate::compiler::wir::wir_nodes::{Constant, Operand, Statement};
 
 // Core compiler imports
+use crate::compiler::host_functions::registry::{HostFunctionDef, create_builtin_registry};
 use crate::compiler::parsers::expressions::expression::ExpressionKind;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::{
@@ -70,7 +71,14 @@ pub fn transform_ast_node_to_wir(
         }
         NodeKind::Mutation(name, value, is_mutable) => {
             let var_name = string_table.resolve(*name).to_string();
-            ast_mutation_to_wir(&var_name, value, *is_mutable, &node.location, context, string_table)
+            ast_mutation_to_wir(
+                &var_name,
+                value,
+                *is_mutable,
+                &node.location,
+                context,
+                string_table,
+            )
         }
         NodeKind::FunctionCall(name, args, _, _) => {
             let func_name = string_table.resolve(*name).to_string();
@@ -80,26 +88,47 @@ pub fn transform_ast_node_to_wir(
             let func_name = string_table.resolve(*name).to_string();
             let module_name = string_table.resolve(*module).to_string();
             let function_name = string_table.resolve(*function).to_string();
-            ast_host_function_call_to_wir(&func_name, args, &module_name, &function_name, &node.location, context, string_table)
+            ast_host_function_call_to_wir(
+                &func_name,
+                args,
+                &module_name,
+                &function_name,
+                &node.location,
+                context,
+                string_table,
+            )
         }
         NodeKind::Print(expr) => {
             // Transform Print node to a host function call to the print function
             // Print is a built-in host function provided by the runtime
             ast_print_to_wir(expr, &node.location, context, string_table)
         }
-        NodeKind::If(condition, then_block, else_block) => {
-            ast_if_statement_to_wir(condition, then_block, else_block, &node.location, context, string_table)
-        }
+        NodeKind::If(condition, then_block, else_block) => ast_if_statement_to_wir(
+            condition,
+            then_block,
+            else_block,
+            &node.location,
+            context,
+            string_table,
+        ),
         NodeKind::Expression(expr) => {
             // Handle standalone expressions (like function definitions)
             match &expr.kind {
-                ExpressionKind::Function(args, body) => {
-                    ast_function_definition_to_wir(&args.parameters, body, &node.location, context, string_table)
-                }
+                ExpressionKind::Function(args, body) => ast_function_definition_to_wir(
+                    &args.parameters,
+                    body,
+                    &node.location,
+                    context,
+                    string_table,
+                ),
                 _ => {
                     // For other expressions, convert to assignment to temporary
-                    let (statements, _rvalue) =
-                        expression_to_rvalue_with_context(expr, &node.location, context, string_table)?;
+                    let (statements, _rvalue) = expression_to_rvalue_with_context(
+                        expr,
+                        &node.location,
+                        context,
+                        string_table,
+                    )?;
                     Ok(statements)
                 }
             }
@@ -108,7 +137,8 @@ pub fn transform_ast_node_to_wir(
             ast_return_to_wir(return_values, &node.location, context, string_table)
         }
         _ => {
-            let node_type_str: &'static str = Box::leak(format!("{:?}", node.kind).into_boxed_str());
+            let node_type_str: &'static str =
+                Box::leak(format!("{:?}", node.kind).into_boxed_str());
             let error_location = node.location.clone().to_error_location(string_table);
             return_wir_transformation_error!(
                 format!("AST node type {:?} not yet implemented in WIR transformation", node.kind),
@@ -121,7 +151,6 @@ pub fn transform_ast_node_to_wir(
         }
     }
 }
-
 
 /// Transform AST declaration to WIR statements
 ///
@@ -141,7 +170,8 @@ fn ast_declaration_to_wir(
     let mut statements = Vec::with_capacity(4);
 
     // Convert the value expression to an rvalue
-    let (expr_statements, rvalue) = expression_to_rvalue_with_context(value, location, context, string_table)?;
+    let (expr_statements, rvalue) =
+        expression_to_rvalue_with_context(value, location, context, string_table)?;
     statements.extend(expr_statements);
 
     // Create a place for the variable
@@ -205,7 +235,8 @@ fn ast_function_call_to_wir(
     // Convert arguments to operands
     let mut arg_operands = Vec::with_capacity(args.len());
     for arg in args {
-        let (arg_statements, rvalue) = expression_to_rvalue_with_context(arg, location, context, string_table)?;
+        let (arg_statements, rvalue) =
+            expression_to_rvalue_with_context(arg, location, context, string_table)?;
         statements.extend(arg_statements);
 
         // Create temporary for the argument result
@@ -220,9 +251,7 @@ fn ast_function_call_to_wir(
     // Create function call statement
     // TODO: Properly resolve function name to operand
     let interned_name = string_table.intern(name);
-    let func_operand = Operand::Constant(Constant::String(
-        interned_name,
-    ));
+    let func_operand = Operand::Constant(Constant::String(interned_name));
     statements.push(Statement::Call {
         func: func_operand,
         args: arg_operands,
@@ -242,7 +271,7 @@ fn ast_print_to_wir(
     // Print is a host function call to the print function
     // Convert the expression to a single-element argument list
     let args = vec![expr.clone()];
-    
+
     // Call the host function transformation with print-specific parameters
     ast_host_function_call_to_wir(
         "print",
@@ -328,7 +357,7 @@ fn ast_host_function_call_to_wir(
     for arg in args {
         // Handle string literals as constants for WASIX fd_write calls
         match &arg.kind {
-            crate::compiler::parsers::expressions::expression::ExpressionKind::StringSlice(s) => {
+            ExpressionKind::StringSlice(s) => {
                 // Create a constant operand directly for string literals
                 // s is already an InternedString from the AST
                 arg_operands.push(Operand::Constant(Constant::String(*s)));
@@ -352,38 +381,39 @@ fn ast_host_function_call_to_wir(
 
     // Look up the host function definition from the builtin registry
     let interned_name = string_table.intern(name);
-    let host_function = match crate::compiler::host_functions::registry::create_builtin_registry(string_table) {
-        Ok(registry) => {
-            match registry.get_function(&interned_name) {
-                Some(func_def) => func_def.clone(),
-                None => {
-                    // If not found in builtin registry, create a basic definition
-                    // This maintains backward compatibility for functions not yet in the registry
-                    crate::compiler::host_functions::registry::HostFunctionDef::new(
-                        name,
-                        vec![], // Empty parameters for now
-                        vec![], // Empty return types for now
-                        module,
-                        function,
-                        &format!("Host function call to {}.{}", module, function),
-                        string_table,
-                    )
+    let host_function =
+        match create_builtin_registry(context.runtime_backend.to_owned(), string_table) {
+            Ok(registry) => {
+                match registry.get_function(&interned_name) {
+                    Some(func_def) => func_def.clone(),
+                    None => {
+                        // If not found in builtin registry, create a basic definition
+                        // This maintains backward compatibility for functions not yet in the registry
+                        HostFunctionDef::new(
+                            name,
+                            vec![], // Empty parameters for now
+                            vec![], // Empty return types for now
+                            module,
+                            function,
+                            &format!("Host function call to {}.{}", module, function),
+                            string_table,
+                        )
+                    }
                 }
             }
-        }
-        Err(_) => {
-            // If registry creation fails, create a basic definition
-            crate::compiler::host_functions::registry::HostFunctionDef::new(
-                name,
-                vec![], // Empty parameters for now
-                vec![], // Empty return types for now
-                module,
-                function,
-                &format!("Host function call to {}.{}", module, function),
-                string_table,
-            )
-        }
-    };
+            Err(_) => {
+                // If registry creation fails, create a basic definition
+                HostFunctionDef::new(
+                    name,
+                    vec![], // Empty parameters for now
+                    vec![], // Empty return types for now
+                    module,
+                    function,
+                    &format!("Host function call to {}.{}", module, function),
+                    string_table,
+                )
+            }
+        };
 
     // Add to context imports
     context.add_host_import(host_function.clone());
@@ -461,14 +491,14 @@ fn ast_if_statement_to_wir(
 
     // Enter new scope for then block
     context.enter_scope();
-    
+
     // Transform then block
     let mut then_statements = Vec::new();
     for node in then_block {
         let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
         then_statements.extend(node_statements);
     }
-    
+
     // Exit then block scope
     context.exit_scope();
 
@@ -477,12 +507,12 @@ fn ast_if_statement_to_wir(
     if let Some(else_nodes) = else_block {
         // Enter new scope for else block
         context.enter_scope();
-        
+
         for node in else_nodes {
             let node_statements = transform_ast_node_to_wir(node, context, string_table)?;
             else_statements.extend(node_statements);
         }
-        
+
         // Exit else block scope
         context.exit_scope();
     }

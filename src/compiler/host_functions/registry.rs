@@ -449,18 +449,18 @@ impl Default for HostFunctionRegistry {
 }
 
 /// Create a registry populated with built-in host functions for a specific backend
-pub fn create_builtin_registry_with_backend(
+pub fn create_builtin_registry(
     backend: RuntimeBackend,
     string_table: &mut StringTable,
 ) -> Result<HostFunctionRegistry, CompileError> {
     let mut registry = HostFunctionRegistry::new_with_backend(backend);
 
     // Register the template_output function with all runtime mappings
-    let template_output_function = HostFunctionDef::new(
-        "template_output",
+    let io_print = HostFunctionDef::new(
+        "io",
         vec![BasicParameter {
             name: string_table.intern("content"),
-            data_type: DataType::Template, // Accept Template (mutable string)
+            data_type: DataType::CoerceToString, // Accept anything
             ownership: Ownership::MutableOwned,
         }],
         vec![], // No return value (void function)
@@ -489,7 +489,7 @@ pub fn create_builtin_registry_with_backend(
 
     // Register function with all mappings at once
     registry.register_function_with_mappings(
-        template_output_function,
+        io_print,
         Some(template_output_wasix_mapping),
         Some(template_output_js_mapping),
         string_table,
@@ -499,13 +499,6 @@ pub fn create_builtin_registry_with_backend(
     validate_registry(&registry, string_table)?;
 
     Ok(registry)
-}
-
-/// Create a registry populated with built-in host functions (uses default WASIX backend)
-pub fn create_builtin_registry(
-    string_table: &mut StringTable,
-) -> Result<HostFunctionRegistry, CompileError> {
-    create_builtin_registry_with_backend(RuntimeBackend::default(), string_table)
 }
 
 /// Validate that all host function definitions in the registry are correct

@@ -368,8 +368,6 @@ pub enum TokenKind {
     Use,
 
     /// For exporting functions or variables outside the final module.
-    /// Top level declarations are public to the project automatically,
-    /// So this has nothing to do with internal visibility.
     Export,
 
     // Special compiler directives

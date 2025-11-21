@@ -13,9 +13,9 @@ use crate::compiler::wir::{
     wir_nodes::{Operand, WirFunction},
 };
 
-use std::collections::HashMap;
-use crate::compiler::host_functions::registry::HostFunctionDef;
+use crate::compiler::host_functions::registry::{HostFunctionDef, RuntimeBackend};
 use crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry;
+use std::collections::HashMap;
 
 /// Function information for tracking function metadata and signatures during WIR transformation
 ///
@@ -127,6 +127,7 @@ pub struct StructInitializationTracker {
 /// - Host imports integrate with WASM import sections
 #[derive(Debug)]
 pub struct WirTransformContext {
+    pub(crate) runtime_backend: RuntimeBackend,
     /// Place manager for memory layout
     place_manager: PlaceManager,
     /// Variable name to place mapping (scoped)
@@ -142,8 +143,6 @@ pub struct WirTransformContext {
 
     /// Host function imports used in this module
     host_imports: std::collections::HashSet<HostFunctionDef>,
-    /// WASIX function registry for WASIX import mapping
-    wasix_registry: WasixFunctionRegistry,
 
     /// Pending return operands for the current block
     pending_return: Option<Vec<Operand>>,
@@ -179,31 +178,34 @@ impl WirTransformContext {
     ///
     /// - Variable name must not be empty
     /// - Variable name should not start with underscore (reserved for temporaries)
-    pub fn create_place_for_variable(&mut self, name: String) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
+    pub fn create_place_for_variable(
+        &mut self,
+        name: String,
+    ) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
         use crate::compiler::datatypes::DataType;
-        
+
         // Validate variable name
         if name.is_empty() {
             return Err(CompileError::compiler_error(
-                "Attempted to create place for variable with empty name. This indicates a bug in AST processing."
+                "Attempted to create place for variable with empty name. This indicates a bug in AST processing.",
             ));
         }
-        
+
         // Warn if variable name starts with underscore (reserved for temporaries)
         if name.starts_with('_') && !name.starts_with("_temp_") {
             // This is just a warning - we'll still create the place
             // In a full implementation, we might want to emit a compiler warning
         }
-        
+
         // Create a new place for the variable (default to String type for now)
         let place = self.place_manager.allocate_local(&DataType::String);
-        
+
         // Register the variable in the current scope
         self.register_variable(name, place.clone());
-        
+
         Ok(place)
     }
-    
+
     /// Get the place for an existing variable
     ///
     /// # Parameters
@@ -219,34 +221,43 @@ impl WirTransformContext {
     ///
     /// - Variable name must not be empty
     /// - Variable must exist in the current scope chain
-    pub fn get_place_for_variable(&self, name: &str) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
+    pub fn get_place_for_variable(
+        &self,
+        name: &str,
+    ) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
         // Validate variable name
         if name.is_empty() {
             return Err(CompileError::compiler_error(
-                "Attempted to get place for variable with empty name. This indicates a bug in AST processing."
+                "Attempted to get place for variable with empty name. This indicates a bug in AST processing.",
             ));
         }
-        
+
         match self.lookup_variable(name) {
             Some(place) => Ok(place.clone()),
             None => {
                 // Provide helpful error message with suggestions
-                let mut error_msg = format!("Undefined variable '{}'. Variable must be declared before use.", name);
-                
+                let mut error_msg = format!(
+                    "Undefined variable '{}'. Variable must be declared before use.",
+                    name
+                );
+
                 // Try to find similar variable names for suggestions
                 let similar_vars = self.find_similar_variable_names(name, 3);
                 if !similar_vars.is_empty() {
-                    error_msg.push_str(&format!(" Did you mean one of: {}?", similar_vars.join(", ")));
+                    error_msg.push_str(&format!(
+                        " Did you mean one of: {}?",
+                        similar_vars.join(", ")
+                    ));
                 }
-                
+
                 Err(CompileError::new_rule_error(
                     error_msg,
-                    ErrorLocation::default()
+                    ErrorLocation::default(),
                 ))
             }
         }
     }
-    
+
     /// Find similar variable names for error suggestions
     ///
     /// Uses simple string distance to find variables with similar names.
@@ -263,30 +274,30 @@ impl WirTransformContext {
     fn find_similar_variable_names(&self, name: &str, max_suggestions: usize) -> Vec<String> {
         // Performance optimization: pre-allocate with estimated capacity
         let mut candidates: Vec<String> = Vec::with_capacity(max_suggestions * 2);
-        
+
         // Collect all variable names from all scopes
         for scope in &self.variable_scopes {
             for var_name in scope.keys() {
                 // Simple similarity check: same length or starts with same prefix
-                if var_name.len() == name.len() || 
-                   var_name.starts_with(&name[..name.len().min(3)]) ||
-                   name.starts_with(&var_name[..var_name.len().min(3)]) {
+                if var_name.len() == name.len()
+                    || var_name.starts_with(&name[..name.len().min(3)])
+                    || name.starts_with(&var_name[..var_name.len().min(3)])
+                {
                     candidates.push(var_name.clone());
                 }
             }
         }
-        
+
         // Sort by similarity (simple: prefer exact length matches)
         candidates.sort_by_key(|v| {
             let len_diff = (v.len() as i32 - name.len() as i32).abs();
             len_diff
         });
-        
+
         // Return top suggestions
         candidates.truncate(max_suggestions);
         candidates
     }
-    
 
     /// Create a new transformation context with default settings
     ///
@@ -302,11 +313,8 @@ impl WirTransformContext {
     /// - WASIX registry configured for host function imports
     /// - All tracking structures reset to initial state
     pub fn new() -> Self {
-        use crate::compiler::host_functions::wasix_registry::create_wasix_registry;
-
-        let wasix_registry = create_wasix_registry().unwrap_or_default();
-
         Self {
+            runtime_backend: RuntimeBackend::default(),
             place_manager: PlaceManager::new(),
             variable_scopes: vec![HashMap::new()],
             variable_mutability: HashMap::new(),
@@ -314,7 +322,6 @@ impl WirTransformContext {
             next_function_id: 0,
             next_block_id: 0,
             host_imports: std::collections::HashSet::new(),
-            wasix_registry,
             pending_return: None,
             temporary_counter: 0,
             expression_stack: Vec::new(),
@@ -359,7 +366,10 @@ impl WirTransformContext {
             current_scope.insert(name, place);
         } else {
             // This should never happen as we always have at least the global scope
-            panic!("COMPILER BUG: Attempted to register variable '{}' but no scope exists. This indicates a critical error in scope management.", name);
+            panic!(
+                "COMPILER BUG: Attempted to register variable '{}' but no scope exists. This indicates a critical error in scope management.",
+                name
+            );
         }
     }
 
@@ -420,7 +430,7 @@ impl WirTransformContext {
                 u32::MAX
             );
         }
-        
+
         self.temporary_counter += 1;
         // Performance optimization: avoid string allocation for temporary names
         // since they're not actually used in the current implementation
@@ -502,7 +512,10 @@ impl WirTransformContext {
     /// # Returns
     ///
     /// Reference to the set of host function definitions
-    pub fn get_host_imports(&self) -> &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef> {
+    pub fn get_host_imports(
+        &self,
+    ) -> &std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>
+    {
         &self.host_imports
     }
 
@@ -535,20 +548,18 @@ impl WirTransformContext {
         // Validate parameter name
         if name.is_empty() {
             return Err(CompileError::compiler_error(
-                "Attempted to create place for parameter with empty name. This indicates a bug in function signature processing."
+                "Attempted to create place for parameter with empty name. This indicates a bug in function signature processing.",
             ));
         }
-        
+
         // Check for reserved names
         if name.starts_with("_temp_") {
-            return Err(CompileError::compiler_error(
-                &format!(
-                    "Parameter name '{}' conflicts with reserved temporary variable naming pattern. This indicates a bug in AST processing.",
-                    name
-                )
-            ));
+            return Err(CompileError::compiler_error(&format!(
+                "Parameter name '{}' conflicts with reserved temporary variable naming pattern. This indicates a bug in AST processing.",
+                name
+            )));
         }
-        
+
         let place = self.place_manager.allocate_local(data_type);
         self.register_variable(name, place.clone());
         Ok(place)
@@ -579,7 +590,8 @@ impl WirTransformContext {
     /// - `string_table`: String table for resolving interned strings
     pub fn add_function(&mut self, function: WirFunction, string_table: &StringTable) {
         let function_name = string_table.resolve(function.name);
-        self.function_names.insert(function_name.to_string(), function.id);
+        self.function_names
+            .insert(function_name.to_string(), function.id);
         // Note: In a full implementation, we would store the function somewhere
         // For now, we just track the name-to-ID mapping
     }

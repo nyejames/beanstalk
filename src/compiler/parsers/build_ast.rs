@@ -243,7 +243,10 @@ pub fn function_body_to_ast(
                 if !matches!(context.kind, ContextKind::Function) {
                     return_rule_error!(
                         "Return statements can only be used inside functions",
-                        token_stream.current_location().to_error_location(&string_table), {}
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table),
+                        {}
                     )
                 }
 
@@ -297,7 +300,9 @@ pub fn function_body_to_ast(
                 // Push it as a warning
                 warnings.push(CompilerWarning::new(
                     "You can only export functions and variables from the top level of a file",
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream
+                        .current_location()
+                        .to_error_location(&string_table),
                     WarningKind::PointlessExport,
                     context.scope.to_path_buf(&string_table),
                 ));
@@ -311,21 +316,6 @@ pub fn function_body_to_ast(
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
-                // OLD WASM ONLY BEHAVIOUR: Was for print output
-                //let template_output_name = string_table.intern("template_output");
-                //let beanstalk_io_module = string_table.intern("beanstalk_io");
-                //ast.push(AstNode {
-                //    kind: NodeKind::HostFunctionCall(
-                //        template_output_name,
-                //        Vec::from([expr]),
-                //        Vec::new(),
-                //        beanstalk_io_module,
-                //        template_output_name,
-                //        token_stream.current_location(),
-                //    ),
-                //    location: token_stream.current_location(),
-                //    scope: context.scope.clone(),
-                //})
                 ast.push(AstNode {
                     kind: NodeKind::ParentTemplate(expr),
                     location: token_stream.current_location(),
@@ -339,9 +329,10 @@ pub fn function_body_to_ast(
 
             // Or stuff that hasn't been implemented yet
             _ => {
-                return_compiler_error!(
-                    format!("Unexpected token found in the body of a function. Could be unimplemented. Token: {:?}", token_stream.current_token_kind())
-                )
+                return_compiler_error!(format!(
+                    "Unexpected token found in the body of a function. Could be unimplemented. Token: {:?}",
+                    token_stream.current_token_kind()
+                ))
             }
         }
     }
@@ -376,7 +367,8 @@ fn check_for_dot_access(
 
             // Nothing to access error
             if members.is_empty() {
-                let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
+                let var_name_static: &'static str =
+                    Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                 return_rule_error!(
                     format!("'{}' has no methods or properties to access 😞", string_table.resolve(id)),
                     token_stream.current_location().to_error_location(&string_table), {
@@ -391,8 +383,10 @@ fn check_for_dot_access(
             let access = match members.iter().find(|member| member.id == id) {
                 Some(access) => access,
                 None => {
-                    let property_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
-                    let var_name_static: &'static str = Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
+                    let property_name_static: &'static str =
+                        Box::leak(string_table.resolve(id).to_string().into_boxed_str());
+                    let var_name_static: &'static str =
+                        Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
                     return_rule_error!(
                         format!("Can't find property or method '{}' inside '{}'", string_table.resolve(id), string_table.resolve(arg.id)),
                         token_stream.current_location().to_error_location(&string_table), {
@@ -401,7 +395,7 @@ fn check_for_dot_access(
                             PrimarySuggestion => "Check the available methods and properties for this type",
                         }
                     )
-                },
+                }
             };
 
             // Add the name to the scope
