@@ -6,6 +6,7 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
+    pub(crate) mod host_function_tests;
     pub(crate) mod jit_runtime_tests;
     pub(crate) mod memory_utils_tests;
     pub(crate) mod test_runner;
@@ -96,7 +97,6 @@ mod compiler {
 
     pub(crate) mod host_functions {
         pub(crate) mod registry;
-        pub(crate) mod wasix_registry;
     }
 }
 

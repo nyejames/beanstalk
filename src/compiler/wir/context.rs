@@ -14,7 +14,6 @@ use crate::compiler::wir::{
 };
 
 use crate::compiler::host_functions::registry::{HostFunctionDef, RuntimeBackend};
-use crate::compiler::host_functions::wasix_registry::WasixFunctionRegistry;
 use std::collections::HashMap;
 
 /// Function information for tracking function metadata and signatures during WIR transformation

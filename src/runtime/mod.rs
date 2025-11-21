@@ -157,17 +157,8 @@ impl BeanstalkRuntime {
     pub fn execute(&self, wasm_bytes: &[u8]) -> Result<(), CompileError> {
         match &self.config.compilation_mode {
             CompilationMode::DirectJit => {
-                // Check if we should use WASIX-specific runtime
-                match &self.config.io_backend {
-                    IoBackend::Wasix => {
-                        // Use WASIX-specific runtime with native function support
-                        jit::execute_wasm_with_wasix_runtime(wasm_bytes, &self.config)
-                    }
-                    _ => {
-                        // Use standard JIT execution
-                        jit::execute_direct_jit(wasm_bytes, &self.config)
-                    }
-                }
+                // Use standard JIT execution (WASIX support removed)
+                jit::execute_direct_jit(wasm_bytes, &self.config)
             }
             CompilationMode::Cranelift(opt_level) => {
                 execute_with_cranelift(wasm_bytes, &self.config, &opt_level)

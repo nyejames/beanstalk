@@ -4,9 +4,6 @@
 // for rapid development iteration without additional compilation steps.
 
 use crate::compiler::compiler_errors::CompileError;
-use crate::compiler::host_functions::wasix_registry::{
-    WasixFunctionRegistry, create_wasix_registry,
-};
 use crate::runtime::{IoBackend, RuntimeConfig};
 use std::cell::RefCell;
 use wasmer::{Function, Instance, Memory, Module, Store, imports};
@@ -229,7 +226,6 @@ pub fn create_import_object_with_wasix_native(
     module: &Module,
     wasm_bytes: &[u8],
     io_backend: &IoBackend,
-    _wasix_registry: &mut WasixFunctionRegistry,
 ) -> Result<(wasmer::Imports, Option<wasmer_wasix::WasiFunctionEnv>), CompileError> {
     match io_backend {
         IoBackend::Wasix => {
@@ -1175,174 +1171,22 @@ fn setup_native_imports_with_capture(
     Ok(())
 }
 
-/// JIT Runtime with WASIX integration
+/// JIT Runtime for executing WASM
 pub struct JitRuntime {
-    /// WASIX function registry for import-based calls
-    pub wasix_registry: WasixFunctionRegistry,
     /// Wasmer store for JIT execution
     pub store: Store,
 }
 
-impl Drop for JitRuntime {
-    fn drop(&mut self) {
-        // Cleanup WASIX context when runtime is dropped
-        self.cleanup_wasix_context();
-    }
-}
-
 impl JitRuntime {
-    /// Create a new JIT runtime with WASIX support
+    /// Create a new JIT runtime
     pub fn new() -> Result<Self, CompileError> {
         let store = Store::default();
-        let wasix_registry = create_wasix_registry().map_err(|e| {
-            CompileError::compiler_error(&format!("Failed to create WASIX registry: {:?}", e))
-        })?;
 
         Ok(Self {
-            wasix_registry,
             store,
         })
     }
 
-    /// Setup WASIX environment and native functions
-    pub fn setup_wasix_environment(&mut self) -> Result<(), CompileError> {
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASIX environment initialized with import-based function support");
-
-        Ok(())
-    }
-
-    /// Initialize WASIX context with memory integration (simplified)
-    pub fn initialize_wasix_context_with_memory(
-        &mut self,
-        _memory: wasmer::Memory,
-    ) -> Result<(), CompileError> {
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASIX memory integration - using import-based calls");
-
-        Ok(())
-    }
-
-    /// Cleanup WASIX context and resources
-    pub fn cleanup_wasix_context(&mut self) {
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!("WASIX cleanup completed (simplified registry)");
-    }
-
-    /// Check if WASIX is initialized (always true for simplified registry)
-    pub fn is_wasix_initialized(&self) -> bool {
-        true
-    }
-
-    /// Register native WASIX function implementations
-    /// TODO: This will be properly implemented in task 4 when we integrate WASIX with JIT runtime
-    pub fn register_native_wasix_functions(&mut self) -> Result<(), CompileError> {
-        // Placeholder implementation - actual native function registration requires memory access integration
-        // The fd_write method now requires memory and store parameters which will be available in JIT context
-
-        #[cfg(feature = "verbose_codegen_logging")]
-        println!(
-            "Native WASIX function registration - placeholder (requires task 4 implementation)"
-        );
-
-        Ok(())
-    }
-
-    /// Check if a WASIX function is available (import-based only)
-    pub fn has_wasix_function(&self, function_name: &str) -> bool {
-        self.wasix_registry.has_function(function_name)
-    }
-
-    /// Get the WASIX function registry (for codegen integration)
-    pub fn get_wasix_registry(&self) -> &WasixFunctionRegistry {
-        &self.wasix_registry
-    }
-
-    /// Get mutable WASIX function registry (for registration)
-    pub fn get_wasix_registry_mut(&mut self) -> &mut WasixFunctionRegistry {
-        &mut self.wasix_registry
-    }
-
-    /// Execute WASM bytecode with WASIX support
-    pub fn execute_wasm_with_wasix(
-        &mut self,
-        wasm_bytes: &[u8],
-        config: &RuntimeConfig,
-    ) -> Result<(), CompileError> {
-        // Setup WASIX environment (simplified)
-        self.setup_wasix_environment()?;
-
-        // Register native WASIX functions
-        self.register_native_wasix_functions()?;
-
-        // Compile WASM module
-        let module = Module::new(&self.store, wasm_bytes).map_err(|e| {
-            CompileError::compiler_error(&format!("Failed to compile WASM module: {}", e))
-        })?;
-
-        // Set up imports based on IO backend
-        let (import_object, _wasi_env_guard) = create_import_object_with_wasix_native(
-            &mut self.store,
-            &module,
-            wasm_bytes,
-            &config.io_backend,
-            &mut self.wasix_registry,
-        )?;
-
-        // Instantiate the module
-        let instance = Instance::new(&mut self.store, &module, &import_object).map_err(|e| {
-            CompileError::compiler_error(&format!("Failed to instantiate WASM module: {}", e))
-        })?;
-
-        // Integrate WASM memory with WASIX context
-        if let Ok(memory) = instance.exports.get_memory("memory") {
-            self.initialize_wasix_context_with_memory(memory.clone())?;
-
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!("WASM memory integrated with WASIX context");
-        } else {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!(
-                "No WASM memory export found - WASIX context will use default memory management"
-            );
-        }
-
-        // Execute the module (similar to existing execute_direct_jit logic)
-        if let Ok(main_func) = instance.exports.get_function("main") {
-            match main_func.call(&mut self.store, &[]) {
-                Ok(values) => {
-                    if !values.is_empty() {
-                        println!("Program returned: {:?}", values);
-                    }
-                    Ok(())
-                }
-                Err(e) => Err(CompileError::compiler_error(&format!(
-                    "Runtime error: {}",
-                    e
-                ))),
-            }
-        } else if let Ok(start_func) = instance.exports.get_function("_start") {
-            let result = start_func.call(&mut self.store, &[]);
-            match result {
-                Ok(_) => Ok(()),
-                Err(e) => Err(CompileError::compiler_error(&format!(
-                    "Runtime error: {}",
-                    e
-                ))),
-            }
-        } else {
-            // If neither 'main' nor '_start' is present, but instantiation succeeded, the start section has already run.
-            Ok(())
-        }
-    }
 }
 
-/// Convenience function to execute WASM with WASIX using a new runtime instance
-pub fn execute_wasm_with_wasix_runtime(
-    wasm_bytes: &[u8],
-    config: &RuntimeConfig,
-) -> Result<(), CompileError> {
-    // For now, use the standard WASIX imports from wasmer-wasix
-    // This should provide the fd_write implementation we need
-    execute_direct_jit_with_capture(wasm_bytes, config, false)
-}
+
