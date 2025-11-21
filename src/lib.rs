@@ -65,7 +65,7 @@ mod compiler {
     pub(crate) mod wir;
 
     pub(crate) mod borrow_checker {
-        pub(crate) mod borrow_checker;
+        pub(crate) mod checker;
         pub(crate) mod extract;
     }
 
@@ -74,8 +74,8 @@ mod compiler {
         pub(crate) mod dom_hooks;
         pub(crate) mod generate_html;
         pub(crate) mod html_styles;
-        pub(crate) mod js_parser;
-        pub(crate) mod web_parser;
+        // pub(crate) mod js_parser;
+        // pub(crate) mod web_parser;
     }
 
     #[allow(dead_code)]

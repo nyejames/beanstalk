@@ -4,13 +4,12 @@ use super::js_parser::{expression_to_js, expressions_to_js};
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::html5_codegen::js_parser::combine_vec_to_js;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::parsers::expressions::expression::ExpressionKind;
+use crate::compiler::string_interning::StringTable;
+use crate::settings::Config;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, return_compiler_error,
     return_type_error, settings::BS_VAR_PREFIX,
 };
-use crate::compiler::string_interning::StringTable;
-use crate::settings::Config;
 
 pub const JS_INDENT: &str = "    ";
 
@@ -36,10 +35,6 @@ pub fn parse_to_html5(
     let mut css = String::new();
     // let mut page_title = String::new();
 
-    // Keeps track of whether a reference has already been used
-    // This is to prevent duplicate JS code from updating the same element
-    let mut module_references: Vec<Arg> = Vec::new();
-
     // Parse the Markthrough file into HTML and JS.
     // Eventually we can separate this out to Wasm
     // CSS is a bit separate as it will be written directly into template styles as a string, or imported directly
@@ -54,67 +49,14 @@ pub fn parse_to_html5(
                 } else {
                     "const"
                 };
+
                 let mut declaration = format!(
                     "{} {declaration_keyword} = {};",
-                      string_table.resolve(arg.id),
-                      expression_to_js(&arg.value, &string_table)?
+                    string_table.resolve(arg.id),
+                    expression_to_js(&arg.value, &string_table)?
                 );
 
-                    // Instance of a struct
-                    DataType::Struct(args, ownership) => {
-
-                    }
-
-                    DataType::Function(signature) => {
-                        match &expr.kind {
-                            ExpressionKind::Function(args, body, ..) => {
-                                let mut func = format!("function {BS_VAR_PREFIX}{}(", name);
-
-                                for arg in args {
-                                    func.push_str(&format!(
-                                        "{BS_VAR_PREFIX}{} = {},",
-                                        arg.name,
-                                        expression_to_js(&arg.value, "")?
-                                    ));
-                                }
-
-                                func.push_str(") {");
-
-                                // let utf16_units: Vec<u16> = rust_string.encode_utf16().collect();
-                                let func_body = parse_to_html5(
-                                    body,
-                                    &format!("{indentation}{JS_INDENT}"),
-                                    target,
-                                )?;
-
-                                func.push_str(&format!("{}\n{indentation}}}\n", func_body.js));
-
-                                code_module.push_str(&func);
-                            }
-
-                            _ => {
-                                return_type_error!(
-                                    node.location.to_owned(),
-                                    "Function declaration must be a function",
-                                )
-                            }
-                        }
-                    }
-
-                    _ => {
-                        code_module.push_str(&format!(
-                            "const {BS_VAR_PREFIX}{name} = {};",
-                            expression_to_js(expr, "")?
-                        ));
-                    }
-                };
-
                 declaration.push(';');
-
-                module_references.push(Arg {
-                    name: name.to_owned(),
-                    value: expr.to_owned(),
-                });
             }
 
             NodeKind::FunctionCall(name, arguments, ..) => {

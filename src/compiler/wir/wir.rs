@@ -1,4 +1,4 @@
-use crate::compiler::borrow_checker::borrow_checker::UnifiedBorrowChecker;
+use crate::compiler::borrow_checker::checker::BorrowChecker;
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::{
@@ -19,7 +19,10 @@ use crate::{borrow_log, wir_log};
 /// 1. AST-to-WIR lowering with event generation
 /// 2. State-aware borrow checking with hybrid loan-state mapping
 /// 3. Error reporting and conversion to compile errors
-pub fn borrow_check_pipeline(ast: Vec<AstNode>, string_table: &mut crate::compiler::string_interning::StringTable) -> Result<WIR, Vec<CompileError>> {
+pub fn borrow_check_pipeline(
+    ast: Vec<AstNode>,
+    string_table: &mut crate::compiler::string_interning::StringTable,
+) -> Result<WIR, Vec<CompileError>> {
     // Step 1: Lower AST to simplified WIR
     let wir = match ast_to_wir(ast, string_table) {
         Ok(wir) => wir,
@@ -69,8 +72,7 @@ fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<Comp
 
     // Step 2: Run state-aware unified borrow checking
     let loan_count = fact_extractor.get_loan_count();
-    let mut checker =
-        UnifiedBorrowChecker::new_with_function_id(loan_count, function.id);
+    let mut checker = BorrowChecker::new_with_function_id(loan_count, function.id);
 
     let borrow_results = checker
         .check_function_with_states(function, &fact_extractor, &state_mapping)
@@ -95,5 +97,3 @@ fn run_state_aware_borrow_checker(function: &WirFunction) -> Result<(), Vec<Comp
 
     Ok(())
 }
-
-

@@ -12,10 +12,10 @@ use crate::compiler::wir::context::WirTransformContext;
 use crate::compiler::wir::statements::transform_ast_node_to_wir as transform_statement_to_wir;
 
 // Core compiler imports - consolidated for clarity
-use crate::compiler::borrow_checker::borrow_checker::run_unified_borrow_checking;
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
 use crate::compiler::compiler_errors::CompileError;
 // Error handling macros - grouped for maintainability
+use crate::compiler::borrow_checker::checker::run_unified_borrow_checking;
 use crate::compiler::compiler_errors::{ErrorLocation, ErrorType};
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};

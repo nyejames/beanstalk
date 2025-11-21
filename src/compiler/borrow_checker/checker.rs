@@ -1,4 +1,4 @@
-//! # Unified Borrow Checker
+//! # Borrow Checker
 //!
 //! This module implements Polonius-style borrow checking for the Beanstalk compiler.
 //! It ensures memory safety by detecting borrow conflicts, use-after-move errors,
@@ -11,67 +11,6 @@
 //! - **Loan Tracking**: Tracks active borrows (loans) through the program
 //! - **Move Tracking**: Tracks which values have been moved
 //! - **Conflict Detection**: Detects borrow conflicts immediately during analysis
-//!
-//! ## Error Handling
-//!
-//! The borrow checker creates [`CompileError`] instances directly using error macros
-//! from `compiler_errors.rs`. All errors include:
-//! - Precise error locations (when available)
-//! - Structured metadata for LLM/LSP integration
-//! - Helpful suggestions for resolving conflicts
-//! - Lifetime hints explaining the borrow rules
-//!
-//! ### Error Creation Pattern
-//!
-//! ```rust
-//! // Multiple mutable borrows
-//! let error = create_multiple_mutable_borrows_error!(
-//!     place,
-//!     existing_location,
-//!     new_location
-//! );
-//! self.errors.push(error);
-//!
-//! // Shared/mutable conflict
-//! let error = create_shared_mutable_conflict_error!(
-//!     place,
-//!     existing_kind,
-//!     new_kind,
-//!     existing_location,
-//!     new_location
-//! );
-//! self.errors.push(error);
-//!
-//! // Use after move
-//! let error = create_use_after_move_error!(
-//!     place,
-//!     move_location,
-//!     use_location
-//! );
-//! self.errors.push(error);
-//!
-//! // Move while borrowed
-//! let error = create_move_while_borrowed_error!(
-//!     place,
-//!     borrow_kind,
-//!     borrow_location,
-//!     move_location
-//! );
-//! self.errors.push(error);
-//! ```
-//!
-//! ## Location Tracking
-//!
-//! Currently, WIR doesn't track source locations for performance reasons. To add
-//! proper location tracking:
-//!
-//! 1. Add `location: TextLocation` field to `Loan` struct in `wir_nodes.rs`
-//! 2. Populate it during WIR generation in `build_wir.rs`
-//! 3. Convert to `ErrorLocation` using `text_location.to_error_location(string_table)`
-//!
-//! For now, errors use default locations but still provide helpful error messages
-//! with variable names and conflict descriptions.
-//!
 //! ## Borrow Checking Rules
 //!
 //! The checker enforces Beanstalk's memory safety rules:
@@ -79,29 +18,20 @@
 //! - **Shared + Mutable**: ❌ Conflict
 //! - **Multiple Mutable**: ❌ Conflict
 //! - **Move While Borrowed**: ❌ Error
-//! - **Use After Move**: ❌ Error
-//!
-//! ## Performance
-//!
-//! The unified checker processes each program point once in forward order,
-//! combining all analyses for efficiency. Statistics are tracked for monitoring:
-//! - Program points processed
-//! - Conflicts detected
-//! - Time spent in each phase
+//! - **Use After Move**: ❌ Should be prevented by inferring when moves can happen
 
 // Optimized imports - consolidated for better maintainability and reduced compilation overhead
+use crate::compiler::borrow_checker::extract::{
+    BitSet, BorrowFactExtractor, StateMapping, may_alias,
+};
 use crate::compiler::{
     compiler_errors::{CompileError, ErrorLocation},
     wir::{
         place::Place,
-        wir_nodes::{
-            WirFunction, ProgramPoint, 
-            Loan, LoanId, BorrowKind, PlaceState
-        },
+        wir_nodes::{BorrowKind, Loan, LoanId, PlaceState, ProgramPoint, WirFunction},
     },
 };
 use std::collections::{HashMap, HashSet};
-use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtractor, StateMapping};
 
 /// Unified borrow checker that combines liveness, loan tracking, and conflict detection.
 ///
@@ -119,7 +49,7 @@ use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtr
 /// - Combined validation eliminates redundant checks
 ///
 /// ## Algorithm Overview
-/// 
+///
 /// The unified checker processes each program point once in forward order:
 /// ```
 /// for each program point p:
@@ -130,7 +60,7 @@ use crate::compiler::borrow_checker::extract::{may_alias, BitSet, BorrowFactExtr
 ///   5. Refine Copy→Move based on liveness
 /// ```
 #[derive(Debug)]
-pub struct UnifiedBorrowChecker {
+pub struct BorrowChecker {
     /// Live variables entering each program point (computed once, reused)
     live_vars_in: HashMap<ProgramPoint, HashSet<Place>>,
     /// Live variables exiting each program point (computed once, reused)
@@ -160,12 +90,12 @@ pub struct UnifiedBorrowChecker {
     /// Detected warnings
     warnings: Vec<CompileError>,
     /// Statistics for performance monitoring
-    statistics: UnifiedStatistics,
+    statistics: CheckerStatistics,
 }
 
 /// Statistics for the unified borrow checker
 #[derive(Debug, Clone, Default)]
-pub struct UnifiedStatistics {
+pub struct CheckerStatistics {
     /// Total program points processed
     pub program_points_processed: usize,
     /// Total conflicts detected
@@ -179,32 +109,32 @@ pub struct UnifiedStatistics {
     pub refinement_time_ns: u64,
 }
 
-/// Results from unified borrow checking
+/// Results from borrow checking
 #[derive(Debug)]
-pub struct UnifiedBorrowCheckResults {
+pub struct BorrowCheckResults {
     /// All detected errors (critical)
     pub errors: Vec<CompileError>,
     /// All detected warnings
     pub warnings: Vec<CompileError>,
     /// Performance statistics
-    pub statistics: UnifiedStatistics,
+    pub statistics: CheckerStatistics,
 }
 
-impl UnifiedBorrowChecker {
-    /// Create a new unified borrow checker
+impl BorrowChecker {
+    /// Create a new borrow checker
     pub fn new(loan_count: usize) -> Self {
         Self::new_with_function_id(loan_count, 0)
     }
 
-    /// Create a new unified borrow checker with the function ID for diagnostics
-    /// 
+    /// Create a new borrow checker with the function ID for diagnostics
+    ///
     /// # Performance Optimization
-    /// 
+    ///
     /// Pre-allocates hash maps with estimated capacity based on function size
     pub fn new_with_function_id(loan_count: usize, _function_id: u32) -> Self {
         // Estimate capacity based on loan count (typically 2-4x program points vs loans)
         let estimated_capacity = (loan_count * 3).max(16);
-        
+
         Self {
             live_vars_in: HashMap::with_capacity(estimated_capacity),
             live_vars_out: HashMap::with_capacity(estimated_capacity),
@@ -220,17 +150,17 @@ impl UnifiedBorrowChecker {
             loan_count,
             errors: Vec::new(),
             warnings: Vec::new(),
-            statistics: UnifiedStatistics::default(),
+            statistics: CheckerStatistics::default(),
         }
     }
 
-    /// Run state-aware unified borrow checking analysis on a function
+    /// Run state-aware borrow checking analysis on a function
     pub fn check_function_with_states(
         &mut self,
         function: &WirFunction,
         facts: &BorrowFactExtractor,
         state_mapping: &StateMapping,
-    ) -> Result<UnifiedBorrowCheckResults, String> {
+    ) -> Result<BorrowCheckResults, String> {
         let _start_time = std::time::Instant::now();
 
         // Phase 1: Initialize data structures
@@ -245,7 +175,7 @@ impl UnifiedBorrowChecker {
         let unified_start = std::time::Instant::now();
         self.run_unified_forward_analysis(function)?;
         let unified_time = unified_start.elapsed().as_nanos() as u64;
-        
+
         // Split unified time proportionally
         self.statistics.loan_tracking_time_ns = unified_time / 4;
         self.statistics.conflict_detection_time_ns = unified_time / 4;
@@ -262,7 +192,7 @@ impl UnifiedBorrowChecker {
         self.statistics.conflict_detection_time_ns += conflict_start.elapsed().as_nanos() as u64;
 
         // Phase 6: Generate results
-        let results = UnifiedBorrowCheckResults {
+        let results = BorrowCheckResults {
             errors: self.errors.clone(),
             warnings: self.warnings.clone(),
             statistics: self.statistics.clone(),
@@ -276,7 +206,7 @@ impl UnifiedBorrowChecker {
         &mut self,
         function: &WirFunction,
         extractor: &BorrowFactExtractor,
-    ) -> Result<UnifiedBorrowCheckResults, String> {
+    ) -> Result<BorrowCheckResults, String> {
         let _start_time = std::time::Instant::now();
 
         // Phase 1: Initialize data structures
@@ -291,7 +221,7 @@ impl UnifiedBorrowChecker {
         let unified_start = std::time::Instant::now();
         self.run_unified_forward_analysis(function)?;
         let unified_time = unified_start.elapsed().as_nanos() as u64;
-        
+
         // Split unified time proportionally (rough estimates)
         self.statistics.loan_tracking_time_ns = unified_time / 3;
         self.statistics.conflict_detection_time_ns = unified_time / 3;
@@ -303,7 +233,7 @@ impl UnifiedBorrowChecker {
         self.statistics.refinement_time_ns += region_start.elapsed().as_nanos() as u64;
 
         // Phase 5: Generate results
-        let results = UnifiedBorrowCheckResults {
+        let results = BorrowCheckResults {
             errors: self.errors.clone(),
             warnings: self.warnings.clone(),
             statistics: self.statistics.clone(),
@@ -321,7 +251,7 @@ impl UnifiedBorrowChecker {
         // Build simplified CFG from function blocks
         self.successors.clear();
         self.predecessors.clear();
-        
+
         // Build basic CFG from block structure
         self.build_simplified_cfg(function)?;
 
@@ -333,7 +263,7 @@ impl UnifiedBorrowChecker {
             } else {
                 self.gen_sets.insert(program_point, empty_bitset.clone());
             }
-            
+
             if let Some(kill_set) = extractor.get_kill_set(&program_point) {
                 self.kill_sets.insert(program_point, kill_set.clone());
             } else {
@@ -349,8 +279,10 @@ impl UnifiedBorrowChecker {
         for program_point in function.get_program_points_in_order() {
             self.live_vars_in.insert(program_point, HashSet::new());
             self.live_vars_out.insert(program_point, HashSet::new());
-            self.live_loans_in.insert(program_point, BitSet::new(self.loan_count));
-            self.live_loans_out.insert(program_point, BitSet::new(self.loan_count));
+            self.live_loans_in
+                .insert(program_point, BitSet::new(self.loan_count));
+            self.live_loans_out
+                .insert(program_point, BitSet::new(self.loan_count));
             self.moved_places_in.insert(program_point, HashSet::new());
             self.moved_places_out.insert(program_point, HashSet::new());
         }
@@ -363,42 +295,45 @@ impl UnifiedBorrowChecker {
         // For now, build a simple linear CFG
         // In the simplified WIR, we don't have complex CFG structures yet
         let program_points = function.get_program_points_in_order();
-        
+
         for (i, &current_point) in program_points.iter().enumerate() {
             // Simple linear successors/predecessors for now
             let mut successors = Vec::new();
             let mut predecessors = Vec::new();
-            
+
             if i > 0 {
                 predecessors.push(program_points[i - 1]);
             }
-            
+
             if i < program_points.len() - 1 {
                 successors.push(program_points[i + 1]);
             }
-            
+
             self.successors.insert(current_point, successors);
             self.predecessors.insert(current_point, predecessors);
         }
-        
+
         Ok(())
     }
 
     /// Compute backward liveness analysis (done once, results cached for unified analysis)
     fn compute_liveness_analysis(&mut self, function: &WirFunction) -> Result<(), String> {
         let program_points = function.get_program_points_in_order();
-        
+
         // Worklist algorithm for backward liveness
         let mut worklist: Vec<ProgramPoint> = program_points.clone();
         let mut iteration_count = 0;
         const MAX_ITERATIONS: usize = 1000;
-        
+
         while let Some(current_point) = worklist.pop() {
             iteration_count += 1;
             if iteration_count > MAX_ITERATIONS {
-                return Err(format!("Liveness analysis failed to converge after {} iterations", MAX_ITERATIONS));
+                return Err(format!(
+                    "Liveness analysis failed to converge after {} iterations",
+                    MAX_ITERATIONS
+                ));
             }
-            
+
             // Compute LiveOut[s] = ⋃ LiveIn[succ(s)]
             let mut new_live_out = HashSet::new();
             if let Some(successors) = self.successors.get(&current_point) {
@@ -408,29 +343,38 @@ impl UnifiedBorrowChecker {
                     }
                 }
             }
-            
+
             // Check if LiveOut changed
-            let old_live_out = self.live_vars_out.get(&current_point).cloned().unwrap_or_default();
+            let old_live_out = self
+                .live_vars_out
+                .get(&current_point)
+                .cloned()
+                .unwrap_or_default();
             let live_out_changed = new_live_out != old_live_out;
-            
+
             if live_out_changed {
-                self.live_vars_out.insert(current_point, new_live_out.clone());
-                
+                self.live_vars_out
+                    .insert(current_point, new_live_out.clone());
+
                 // Compute LiveIn[s] = Uses[s] ∪ (LiveOut[s] - Defs[s])
                 let (uses, defs) = self.extract_uses_defs_from_events(function, &current_point);
-                
+
                 let mut new_live_in = uses;
                 for place in &new_live_out {
                     if !defs.contains(place) {
                         new_live_in.insert(place.clone());
                     }
                 }
-                
+
                 // Check if LiveIn changed
-                let old_live_in = self.live_vars_in.get(&current_point).cloned().unwrap_or_default();
+                let old_live_in = self
+                    .live_vars_in
+                    .get(&current_point)
+                    .cloned()
+                    .unwrap_or_default();
                 if new_live_in != old_live_in {
                     self.live_vars_in.insert(current_point, new_live_in);
-                    
+
                     // Add predecessors to worklist
                     if let Some(predecessors) = self.predecessors.get(&current_point) {
                         for &pred in predecessors {
@@ -442,7 +386,7 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -454,36 +398,36 @@ impl UnifiedBorrowChecker {
     ) -> (HashSet<Place>, HashSet<Place>) {
         let mut uses = HashSet::new();
         let mut defs = HashSet::new();
-        
+
         if let Some(events) = function.generate_events(program_point) {
             uses.extend(events.uses.iter().cloned());
             defs.extend(events.reassigns.iter().cloned());
         }
-        
+
         (uses, defs)
     }
 
     /// Run unified forward analysis combining loan tracking, moved-out tracking, and conflict detection
     fn run_unified_forward_analysis(&mut self, function: &WirFunction) -> Result<(), String> {
         let program_points = function.get_program_points_in_order();
-        
+
         // Single forward traversal combining all analyses
         for &current_point in &program_points {
             self.statistics.program_points_processed += 1;
-            
+
             // Step 1: Compute live loans at this point
             self.compute_live_loans_at_point(&current_point)?;
-            
+
             // Step 2: Compute moved-out places at this point
             self.compute_moved_places_at_point(function, &current_point)?;
-            
+
             // Step 3: Detect conflicts immediately using current state
             self.detect_conflicts_at_point(function, &current_point)?;
-            
+
             // Step 4: Refine Copy→Move operations based on liveness
             self.refine_operations_at_point(function, &current_point)?;
         }
-        
+
         Ok(())
     }
 
@@ -498,23 +442,28 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         // Update live-in loans
-        self.live_loans_in.insert(*current_point, new_live_in.clone());
-        
+        self.live_loans_in
+            .insert(*current_point, new_live_in.clone());
+
         // Compute LiveOutLoans[s] = (LiveInLoans[s] - Kill[s]) ∪ Gen[s]
-        let gen_set = self.gen_sets.get(current_point)
+        let gen_set = self
+            .gen_sets
+            .get(current_point)
             .ok_or_else(|| format!("Missing gen set for program point {}", current_point))?;
-        let kill_set = self.kill_sets.get(current_point)
+        let kill_set = self
+            .kill_sets
+            .get(current_point)
             .ok_or_else(|| format!("Missing kill set for program point {}", current_point))?;
-        
+
         let mut new_live_out = new_live_in;
         new_live_out.subtract(kill_set);
         new_live_out.union_with(gen_set);
-        
+
         // Update live-out loans
         self.live_loans_out.insert(*current_point, new_live_out);
-        
+
         Ok(())
     }
 
@@ -533,26 +482,27 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         // Update moved-in places
-        self.moved_places_in.insert(*current_point, new_moved_in.clone());
-        
+        self.moved_places_in
+            .insert(*current_point, new_moved_in.clone());
+
         // Compute MovedOut[s] = (MovedIn[s] - Reassigns[s]) ∪ Moves[s]
         let mut new_moved_out = new_moved_in;
-        
+
         if let Some(events) = function.generate_events(current_point) {
             // Remove reassigned places (they're no longer moved-out)
             for reassigned_place in &events.reassigns {
                 new_moved_out.retain(|place| !may_alias(place, reassigned_place));
             }
-            
+
             // Add newly moved places
             new_moved_out.extend(events.moves.iter().cloned());
         }
-        
+
         // Update moved-out places
         self.moved_places_out.insert(*current_point, new_moved_out);
-        
+
         Ok(())
     }
 
@@ -563,24 +513,28 @@ impl UnifiedBorrowChecker {
         current_point: &ProgramPoint,
     ) -> Result<(), String> {
         // Get current live loans (clone to avoid borrowing issues)
-        let live_loans = self.live_loans_in.get(current_point)
+        let live_loans = self
+            .live_loans_in
+            .get(current_point)
             .ok_or_else(|| format!("No live loans found for program point {}", current_point))?
             .clone();
-        
+
         // Get current moved places (clone to avoid borrowing issues)
-        let moved_places = self.moved_places_in.get(current_point)
+        let moved_places = self
+            .moved_places_in
+            .get(current_point)
             .ok_or_else(|| format!("No moved places found for program point {}", current_point))?
             .clone();
-        
+
         // Check for conflicting borrows
         self.check_conflicting_borrows_at_point(*current_point, &live_loans)?;
-        
+
         // Check for move-while-borrowed
         self.check_move_while_borrowed_at_point(function, *current_point, &live_loans)?;
-        
+
         // Check for use-after-move
         self.check_use_after_move_at_point(function, *current_point, &moved_places)?;
-        
+
         Ok(())
     }
 
@@ -593,16 +547,16 @@ impl UnifiedBorrowChecker {
         // Check all pairs of live loans for conflicts
         let mut live_loan_indices = Vec::new();
         live_loans.for_each_set_bit(|idx| live_loan_indices.push(idx));
-        
+
         for i in 0..live_loan_indices.len() {
             for j in (i + 1)..live_loan_indices.len() {
                 let loan_idx_a = live_loan_indices[i];
                 let loan_idx_b = live_loan_indices[j];
-                
+
                 if loan_idx_a < self.loans.len() && loan_idx_b < self.loans.len() {
                     let loan_a = &self.loans[loan_idx_a];
                     let loan_b = &self.loans[loan_idx_b];
-                    
+
                     if self.loans_conflict(loan_a, loan_b) {
                         // Use fast-path error generation for conflicting borrows
                         let error = self.create_conflicting_borrows_error_streamlined(
@@ -616,7 +570,7 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -632,7 +586,7 @@ impl UnifiedBorrowChecker {
                 live_loans.for_each_set_bit(|loan_idx| {
                     if loan_idx < self.loans.len() {
                         let loan = &self.loans[loan_idx];
-                        
+
                         if may_alias(moved_place, &loan.owner) {
                             let error = self.create_move_while_borrowed_error_streamlined(
                                 program_point,
@@ -646,7 +600,7 @@ impl UnifiedBorrowChecker {
                 });
             }
         }
-        
+
         Ok(())
     }
 
@@ -669,7 +623,7 @@ impl UnifiedBorrowChecker {
                         // For now, using default locations which still provide helpful error messages.
                         let move_location = ErrorLocation::default();
                         let use_location = ErrorLocation::default();
-                        
+
                         let error = crate::create_use_after_move_error!(
                             used_place.clone(),
                             move_location,
@@ -681,7 +635,7 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -692,19 +646,21 @@ impl UnifiedBorrowChecker {
         current_point: &ProgramPoint,
     ) -> Result<(), String> {
         // Get live variables after this point
-        let live_out = self.live_vars_out.get(current_point)
+        let live_out = self
+            .live_vars_out
+            .get(current_point)
             .cloned()
             .unwrap_or_default();
-        
+
         // Note: In a full implementation, this would modify the WIR statements
         // to convert Copy(place) to Move(place) when place ∉ live_out
         // For now, we just count potential refinements
-        
+
         // This is a simplified version - in practice, we'd need to access
         // and modify the actual WIR statements
         let _potential_refinements = live_out.len(); // Placeholder
         self.statistics.refinements_made += 1; // Simplified counting
-        
+
         Ok(())
     }
 
@@ -716,12 +672,12 @@ impl UnifiedBorrowChecker {
         if !may_alias(&loan_a.owner, &loan_b.owner) {
             return false;
         }
-        
+
         // Loans don't conflict with themselves
         if loan_a.id == loan_b.id {
             return false;
         }
-        
+
         // Apply Beanstalk borrow conflict rules
         match (&loan_a.kind, &loan_b.kind) {
             // Multiple shared borrows are allowed
@@ -732,13 +688,16 @@ impl UnifiedBorrowChecker {
     }
 
     /// Improved region inference for lifetime analysis
-    fn infer_loan_regions(&self, function: &WirFunction) -> Result<HashMap<LoanId, Vec<ProgramPoint>>, String> {
+    fn infer_loan_regions(
+        &self,
+        function: &WirFunction,
+    ) -> Result<HashMap<LoanId, Vec<ProgramPoint>>, String> {
         let mut loan_regions = HashMap::new();
-        
+
         // For each loan, compute the region where it's live
         for loan in &self.loans {
             let mut region = Vec::new();
-            
+
             // Find all program points where this loan is live
             for program_point in function.get_program_points_in_order() {
                 if let Some(live_loans) = self.live_loans_in.get(&program_point) {
@@ -750,10 +709,10 @@ impl UnifiedBorrowChecker {
                     }
                 }
             }
-            
+
             loan_regions.insert(loan.id, region);
         }
-        
+
         Ok(loan_regions)
     }
 
@@ -772,7 +731,7 @@ impl UnifiedBorrowChecker {
         // For now, using default locations which still provide helpful error messages.
         let existing_location = ErrorLocation::default();
         let new_location = ErrorLocation::default();
-        
+
         // Use the error macros for cleaner error creation
         match (&loan_a.kind, &loan_b.kind) {
             (BorrowKind::Mut, BorrowKind::Mut) => {
@@ -809,7 +768,7 @@ impl UnifiedBorrowChecker {
         // For now, using default locations which still provide helpful error messages.
         let borrow_location = ErrorLocation::default();
         let move_location = ErrorLocation::default();
-        
+
         // Use the error macro for cleaner error creation
         crate::create_move_while_borrowed_error!(
             moved_place,
@@ -827,23 +786,23 @@ impl UnifiedBorrowChecker {
     ) -> Result<(), String> {
         // Traverse program points in reverse order
         let program_points = function.get_program_points_in_order();
-        
+
         for point in program_points.iter().rev() {
             let events = function.generate_events(point).unwrap_or_default();
-            
+
             // Check for last uses and refine states
             for used_place in &events.uses {
                 if self.is_last_use_at_point(used_place, *point, function) {
                     self.handle_last_use(used_place, *point, state_mapping)?;
                 }
             }
-            
+
             // Check for moves
             for moved_place in &events.moves {
                 self.handle_move(moved_place, *point, state_mapping)?;
             }
         }
-        
+
         Ok(())
     }
 
@@ -857,7 +816,7 @@ impl UnifiedBorrowChecker {
         // Get all program points after this one
         let program_points = function.get_program_points_in_order();
         let current_index = program_points.iter().position(|&p| p == point);
-        
+
         if let Some(index) = current_index {
             // Check if place is used in any subsequent program point
             for &later_point in &program_points[index + 1..] {
@@ -890,15 +849,15 @@ impl UnifiedBorrowChecker {
     ) -> Result<(), String> {
         // Record that this place can transition to Killed state after last use
         // This enables more precise state tracking and can help with optimization
-        
+
         // For now, we just record the refinement for statistics
         self.statistics.refinements_made += 1;
-        
+
         // In a full implementation, this would:
         // 1. Update the state mapping to mark the place as Killed
         // 2. Release any loans associated with this place
         // 3. Enable more aggressive optimization opportunities
-        
+
         Ok(())
     }
 
@@ -911,15 +870,15 @@ impl UnifiedBorrowChecker {
     ) -> Result<(), String> {
         // Record that this place transitions to Moved state
         // This is important for use-after-move detection
-        
+
         // For now, we just record the move for statistics
         self.statistics.refinements_made += 1;
-        
+
         // In a full implementation, this would:
         // 1. Update the state mapping to mark the place as Moved
         // 2. Invalidate any loans associated with this place
         // 3. Enable use-after-move error detection
-        
+
         Ok(())
     }
 
@@ -932,17 +891,17 @@ impl UnifiedBorrowChecker {
         for (point, events) in function.get_all_events() {
             // Check for multiple mutable borrows
             self.check_multiple_mutable_borrows_at_point(*point, events, state_mapping)?;
-            
+
             // Check for shared/mutable conflicts
             self.check_shared_mutable_conflicts_at_point(*point, events, state_mapping)?;
-            
+
             // Check for use after move
             self.check_use_after_move_state_aware(*point, events, state_mapping)?;
-            
+
             // Check for move while borrowed
             self.check_move_while_borrowed_at_point_state_aware(*point, events, state_mapping)?;
         }
-        
+
         Ok(())
     }
 
@@ -960,19 +919,24 @@ impl UnifiedBorrowChecker {
                     // Check if there are already other mutable loans on the same place
                     // We need to check for existing loans that alias with this place
                     let mut has_conflicting_mutable_borrow = false;
-                    
+
                     for other_loan in &self.loans {
                         // Skip the current loan
                         if other_loan.id == loan.id {
                             continue;
                         }
-                        
+
                         // Check if the other loan is mutable and aliases with this place
-                        if other_loan.kind == BorrowKind::Mut && may_alias(&loan.owner, &other_loan.owner) {
+                        if other_loan.kind == BorrowKind::Mut
+                            && may_alias(&loan.owner, &other_loan.owner)
+                        {
                             // Check if the other loan is still active
-                            if let Some(other_loan_ids) = state_mapping.place_to_loans.get(&other_loan.owner) {
+                            if let Some(other_loan_ids) =
+                                state_mapping.place_to_loans.get(&other_loan.owner)
+                            {
                                 if other_loan_ids.contains(&other_loan.id) {
-                                    let other_state = state_mapping.loan_to_state.get(&other_loan.id);
+                                    let other_state =
+                                        state_mapping.loan_to_state.get(&other_loan.id);
                                     if other_state == Some(&PlaceState::Borrowed) {
                                         has_conflicting_mutable_borrow = true;
                                         break;
@@ -981,7 +945,7 @@ impl UnifiedBorrowChecker {
                             }
                         }
                     }
-                    
+
                     if has_conflicting_mutable_borrow {
                         // NOTE: WIR currently doesn't track source locations for performance.
                         // To add proper location tracking:
@@ -991,7 +955,7 @@ impl UnifiedBorrowChecker {
                         // For now, using default locations which still provide helpful error messages.
                         let existing_location = ErrorLocation::default();
                         let new_location = ErrorLocation::default();
-                        
+
                         // Use the error macro for cleaner error creation
                         let error = crate::create_multiple_mutable_borrows_error!(
                             loan.owner.clone(),
@@ -1004,7 +968,7 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -1018,7 +982,7 @@ impl UnifiedBorrowChecker {
         for loan_id in &events.start_loans {
             if let Some(loan) = self.loans.iter().find(|l| l.id == *loan_id) {
                 let current_state = state_mapping.get_place_state(&loan.owner);
-                
+
                 match (&loan.kind, current_state) {
                     // Trying to create mutable borrow when place is already shared
                     (BorrowKind::Mut, PlaceState::Referenced) => {
@@ -1030,7 +994,7 @@ impl UnifiedBorrowChecker {
                         // For now, using default locations which still provide helpful error messages.
                         let existing_location = ErrorLocation::default();
                         let new_location = ErrorLocation::default();
-                        
+
                         let error = crate::create_shared_mutable_conflict_error!(
                             loan.owner.clone(),
                             BorrowKind::Shared,
@@ -1051,7 +1015,7 @@ impl UnifiedBorrowChecker {
                         // For now, using default locations which still provide helpful error messages.
                         let existing_location = ErrorLocation::default();
                         let new_location = ErrorLocation::default();
-                        
+
                         let error = crate::create_shared_mutable_conflict_error!(
                             loan.owner.clone(),
                             BorrowKind::Mut,
@@ -1066,11 +1030,9 @@ impl UnifiedBorrowChecker {
                 }
             }
         }
-        
+
         Ok(())
     }
-
-
 
     /// Check for use after move using state mapping
     fn check_use_after_move_state_aware(
@@ -1090,7 +1052,7 @@ impl UnifiedBorrowChecker {
                 // For now, using default locations which still provide helpful error messages.
                 let move_location = ErrorLocation::default();
                 let use_location = ErrorLocation::default();
-                
+
                 // Use the error macro for cleaner error creation
                 let error = crate::create_use_after_move_error!(
                     used_place.clone(),
@@ -1101,7 +1063,7 @@ impl UnifiedBorrowChecker {
                 self.statistics.conflicts_detected += 1;
             }
         }
-        
+
         Ok(())
     }
 
@@ -1114,7 +1076,7 @@ impl UnifiedBorrowChecker {
     ) -> Result<(), String> {
         for moved_place in &events.moves {
             let current_state = state_mapping.get_place_state(moved_place);
-            
+
             // Check if place has active loans (not in Owned state)
             if current_state != PlaceState::Owned {
                 let borrow_kind = match current_state {
@@ -1122,7 +1084,7 @@ impl UnifiedBorrowChecker {
                     PlaceState::Borrowed => BorrowKind::Mut,
                     _ => BorrowKind::Shared, // Default fallback
                 };
-                
+
                 // NOTE: WIR currently doesn't track source locations for performance.
                 // To add proper location tracking:
                 // 1. Add `location: TextLocation` field to Loan struct in wir_nodes.rs
@@ -1131,7 +1093,7 @@ impl UnifiedBorrowChecker {
                 // For now, using default locations which still provide helpful error messages.
                 let borrow_location = ErrorLocation::default();
                 let move_location = ErrorLocation::default();
-                
+
                 // Use the error macro for cleaner error creation
                 let error = crate::create_move_while_borrowed_error!(
                     moved_place.clone(),
@@ -1143,7 +1105,7 @@ impl UnifiedBorrowChecker {
                 self.statistics.conflicts_detected += 1;
             }
         }
-        
+
         Ok(())
     }
 
@@ -1153,9 +1115,6 @@ impl UnifiedBorrowChecker {
         // In a full implementation, this would use proper place formatting
         format!("{:?}", place)
     }
-
-
-
 }
 
 // Helper functions removed - now using streamlined diagnostics for performance
@@ -1164,8 +1123,8 @@ impl UnifiedBorrowChecker {
 pub fn run_unified_borrow_checking(
     function: &WirFunction,
     extractor: &BorrowFactExtractor,
-) -> Result<UnifiedBorrowCheckResults, String> {
+) -> Result<BorrowCheckResults, String> {
     let loan_count = extractor.get_loan_count();
-    let mut checker = UnifiedBorrowChecker::new(loan_count);
+    let mut checker = BorrowChecker::new(loan_count);
     checker.analyze_function(function, extractor)
 }
