@@ -1,2 +1,2 @@
-message = "Hello from WASIX"
-[message]
+message = "Hello from Beanstalk IO"
+io(message)

@@ -1,4 +1,4 @@
--- Test template output system
--- This should generate a call to template_output host function
+-- Test io() output system
+-- This should generate a call to the io host function
 
-["Hello from template output!"]
+io("Hello from io output!")

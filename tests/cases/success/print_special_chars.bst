@@ -1,5 +1,5 @@
--- Test WASIX print with special characters
-["Hello\nWorld!"]
-["Tab\tSeparated"]
-["Quote: \"Hello\""]
-["Backslash: \\"]
+-- Test io() with special characters
+io("Hello\nWorld!")
+io("Tab\tSeparated")
+io("Quote: \"Hello\"")
+io("Backslash: \\")

@@ -1,4 +1,4 @@
 -- Test multiple print statements
-["First line"]
-["Second line"]
-["Third line"]
+io("First line")
+io("Second line")
+io("Third line")

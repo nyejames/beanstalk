@@ -4,4 +4,4 @@ export format_number |num Int| -> String:
 ;
 
 -- String module initialization  
-["String module initialized"]
+io("String module initialized")

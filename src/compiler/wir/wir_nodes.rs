@@ -380,13 +380,6 @@ pub enum Statement {
         destination: Option<Place>,
     },
 
-    /// WASIX function call (low-level WASM system calls)
-    WasixCall {
-        function_name: InternedString,
-        args: Vec<Operand>,
-        destination: Option<Place>,
-    },
-
     /// Conditional execution (simplified control flow)
     Conditional {
         condition: Operand,
@@ -568,26 +561,7 @@ impl Statement {
                     });
                 }
             }
-            Statement::WasixCall {
-                args, destination, ..
-            } => {
-                // Generate use events for all arguments (same as HostCall)
-                for arg in args {
-                    self.generate_operand_events(arg, &mut events);
-                }
 
-                // If there's a destination, it gets reassigned with state transition to Owned
-                if let Some(dest_place) = destination {
-                    events.reassigns.push(dest_place.clone());
-                    events.state_transitions.push(StateTransition {
-                        place: dest_place.clone(),
-                        from_state: PlaceState::Owned, // Assume previous state
-                        to_state: PlaceState::Owned,   // WASIX function result is owned
-                        program_point,
-                        reason: TransitionReason::Assignment,
-                    });
-                }
-            }
             Statement::MarkFieldInitialized { struct_place, .. } => {
                 // Mark field initialization - this is a reassign event for the struct
                 events.reassigns.push(struct_place.clone());

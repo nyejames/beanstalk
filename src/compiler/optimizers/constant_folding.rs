@@ -51,7 +51,10 @@ use crate::{return_rule_error, return_syntax_error};
 /// - Type mismatches in operations
 /// - Division by zero in constant expressions
 /// - Unsupported operations on constant types
-pub fn constant_fold(output_stack: &[AstNode], string_table: &mut StringTable) -> Result<Vec<AstNode>, CompileError> {
+pub fn constant_fold(
+    output_stack: &[AstNode],
+    string_table: &mut StringTable,
+) -> Result<Vec<AstNode>, CompileError> {
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 
     for node in output_stack {
@@ -66,8 +69,9 @@ pub fn constant_fold(output_stack: &[AstNode], string_table: &mut StringTable) -
                             op.to_str(),
                             output_stack,
                             stack
-                        ), 
-                        node.location.to_owned().to_error_location(&string_table), {}
+                        ),
+                        node.location.to_owned().to_error_location(&string_table),
+                        {}
                     )
                 }
 
@@ -156,7 +160,8 @@ impl Expression {
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on floats", op.to_str()),
-                        self.location.to_owned().to_error_location(&string_table), {}
+                        self.location.to_owned().to_error_location(&string_table),
+                        {}
                     ),
                 }
             }
@@ -172,7 +177,8 @@ impl Expression {
                         if *rhs_val == 0 {
                             return_rule_error!(
                                 "Can't divide by zero",
-                                self.location.to_owned().to_error_location(&string_table), {}
+                                self.location.to_owned().to_error_location(&string_table),
+                                {}
                             )
                         }
 
@@ -182,7 +188,8 @@ impl Expression {
                         if *rhs_val == 0 {
                             return_rule_error!(
                                 "Can't modulus by zero",
-                                self.location.to_owned().to_error_location(&string_table), {}
+                                self.location.to_owned().to_error_location(&string_table),
+                                {}
                             )
                         }
 
@@ -223,7 +230,8 @@ impl Expression {
 
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on integers", op.to_str()),
-                        self.location.to_owned().to_error_location(&string_table), {}
+                        self.location.to_owned().to_error_location(&string_table),
+                        {}
                     ),
                 }
             }
@@ -236,7 +244,8 @@ impl Expression {
 
                 _ => return_rule_error!(
                     format!("Can't perform operation {} on booleans", op.to_str()),
-                    self.location.to_owned().to_error_location(&string_table), {}
+                    self.location.to_owned().to_error_location(&string_table),
+                    {}
                 ),
             },
 
@@ -250,16 +259,15 @@ impl Expression {
                         let concatenated = format!("{}{}", lhs_str, rhs_str);
                         let interned_result = string_table.get_or_intern(concatenated);
                         ExpressionKind::StringSlice(interned_result)
-                    },
+                    }
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
                     _ => return_rule_error!(
-                        format!("Can't perform operation {} on strings",
-                        op.to_str()),
-                        self.location.to_owned().to_error_location(&string_table), {}
+                        format!("Can't perform operation {} on strings", op.to_str()),
+                        self.location.to_owned().to_error_location(&string_table),
+                        {}
                     ),
                 }
             }
-
             // Any other combination of types
             _ => return Ok(None),
         };

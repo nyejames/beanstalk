@@ -4,7 +4,7 @@ use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::structs::{create_struct_definition, parse_parameters};
 use crate::compiler::string_interning::{StringId, StringTable};
 
@@ -493,6 +493,9 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
     // This is a simplified version - in a full implementation, this would handle
     // more complex type relationships, ownership, mutability, etc.
     match (arg_type, param_type) {
+        // CoerceToString accepts any type - this is the key for io() function
+        (_, DataType::CoerceToString) => true,
+
         // Exact type matches
         (DataType::String, DataType::String) => true,
         (DataType::Int, DataType::Int) => true,
@@ -618,6 +621,71 @@ pub fn create_function_call_arguments(
     }
 }
 
+/// Coerce an expression to a string at compile time if possible
+/// This handles compile-time constant folding for CoerceToString parameters
+fn coerce_to_string_at_compile_time(
+    expr: &Expression,
+    string_table: &mut StringTable,
+) -> Result<Expression, CompileError> {
+    match &expr.kind {
+        // String literals pass through unchanged (optimization: no conversion needed)
+        ExpressionKind::StringSlice(_) => Ok(expr.clone()),
+
+        // Integer literals: fold to string at compile time (42 → "42")
+        ExpressionKind::Int(value) => {
+            let string_value = value.to_string();
+            let interned = string_table.get_or_intern(string_value);
+            Ok(Expression::string_slice(
+                interned,
+                expr.location.clone(),
+                Ownership::ImmutableOwned,
+            ))
+        }
+
+        // Float literals: fold to string at compile time (3.14 → "3.14")
+        ExpressionKind::Float(value) => {
+            let string_value = value.to_string();
+            let interned = string_table.get_or_intern(string_value);
+            Ok(Expression::string_slice(
+                interned,
+                expr.location.clone(),
+                Ownership::ImmutableOwned,
+            ))
+        }
+
+        // Boolean literals: fold to string at compile time (true → "true", false → "false")
+        ExpressionKind::Bool(value) => {
+            let string_value = value.to_string();
+            let interned = string_table.get_or_intern(string_value);
+            Ok(Expression::string_slice(
+                interned,
+                expr.location.clone(),
+                Ownership::ImmutableOwned,
+            ))
+        }
+
+        // Template literals: evaluate to string at compile time if possible
+        ExpressionKind::Template(template) => {
+            // Try to fold the template to a string
+            if let Ok(folded_string) = template.fold(&None, string_table) {
+                Ok(Expression::string_slice(
+                    folded_string,
+                    expr.location.clone(),
+                    Ownership::ImmutableOwned,
+                ))
+            } else {
+                // Template contains runtime expressions, can't fold at compile time
+                // Return as-is for runtime conversion
+                Ok(expr.clone())
+            }
+        }
+
+        // Runtime expressions, variable references, function calls, etc.
+        // These cannot be folded at compile time and will need runtime conversion
+        _ => Ok(expr.clone()),
+    }
+}
+
 /// Parse a host function call
 pub fn parse_host_function_call(
     token_stream: &mut FileTokens,
@@ -630,12 +698,19 @@ pub fn parse_host_function_call(
     let params_as_args = host_func.params_to_signature(string_table);
 
     // Parse arguments using the same logic as regular function calls
-    let args = create_function_call_arguments(
+    let mut args = create_function_call_arguments(
         token_stream,
         &params_as_args.parameters,
         context,
         string_table,
     )?;
+
+    // Apply CoerceToString compile-time folding for constant arguments
+    for (i, param) in host_func.parameters.iter().enumerate() {
+        if matches!(param.data_type, DataType::CoerceToString) && i < args.len() {
+            args[i] = coerce_to_string_at_compile_time(&args[i], string_table)?;
+        }
+    }
 
     // Validate the host function call
     validate_host_function_call(host_func, &args, location.clone(), &string_table)?;

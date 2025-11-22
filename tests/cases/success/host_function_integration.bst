@@ -1,11 +1,11 @@
 -- Test various host function combinations
 message = "Testing host functions"
-[message]
+io(message)
 
 -- Test with different data types
 number = 42
-["Number: ", number]
+io([: Number: number])
 
 -- Test with expressions
 result = 10 + 5
-["Result: ", result]
+io([: Result: result])

@@ -310,8 +310,8 @@ pub fn function_body_to_ast(
             }
 
             // String template as an expression without being assigned.
-            // OLD: This is the primary way to produce output in Beanstalk.
-            // OLD: Top-level templates automatically output to a host-defined output mechanism.
+            // NOTE: For output, use the io() function instead of top-level templates.
+            // The io() function is the standard way to print to stdout with automatic newlines.
             TokenKind::TemplateHead | TokenKind::ParentTemplate => {
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);

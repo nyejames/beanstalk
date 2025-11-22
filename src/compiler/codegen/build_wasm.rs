@@ -23,28 +23,20 @@ fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompileError> {
     }
 }
 
-/// WIR-to-WASM compilation entry point
-///
-/// This function provides direct WIR → WASM lowering with minimal overhead,
-/// focusing on core functionality and correctness.
-pub fn new_wasm_module(wir: WIR, string_table: StringTable) -> Result<Vec<u8>, CompileError> {
-    new_wasm_module_with_registry(wir, None, string_table)
-}
-
 /// WIR-to-WASM compilation with host function registry support
 ///
 /// This function provides direct WIR → WASM lowering with access to the host function registry
 /// for proper runtime-specific function mapping during codegen.
-pub fn new_wasm_module_with_registry(
+pub fn new_wasm_module(
     wir: WIR,
-    registry: Option<&HostFunctionRegistry>,
+    registry: &HostFunctionRegistry,
     string_table: StringTable,
 ) -> Result<Vec<u8>, CompileError> {
     // Basic WIR validation
     validate_wir_for_wasm_compilation(&wir, &string_table)?;
 
     // Create WASM module from WIR with registry access (transfers ownership of string_table)
-    let mut module = WasmModule::from_wir_with_registry(&wir, registry, string_table)?;
+    let mut module = WasmModule::from_wir(&wir, registry, string_table)?;
 
     // Handle exports (functions are already compiled in from_wir)
     for wir_function in &wir.functions {

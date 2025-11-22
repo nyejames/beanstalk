@@ -6,6 +6,6 @@ export get_database_url || -> String:
 ;
 
 -- This is config's implicit main - runs when config() is called
-["Loading configuration..."]
+io("Loading configuration...")
 database_url = "postgresql://localhost:5432/mydb"
-["Configuration loaded"]
+io("Configuration loaded")

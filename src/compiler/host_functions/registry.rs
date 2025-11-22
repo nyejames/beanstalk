@@ -46,8 +46,6 @@ pub struct BasicParameter {
     pub(crate) ownership: Ownership,
 }
 
-
-
 /// Defines a JavaScript function mapping for web execution
 #[derive(Debug, Clone)]
 pub struct JsFunctionDef {
@@ -314,10 +312,10 @@ impl HostFunctionRegistry {
     }
 
     /// Get runtime-specific function mapping based on current backend
-    pub fn get_runtime_mapping<'a>(
-        &'a self,
+    pub fn get_runtime_mapping(
+        &self,
         beanstalk_name: &InternedString,
-    ) -> Option<RuntimeFunctionMapping<'a>> {
+    ) -> Option<RuntimeFunctionMapping> {
         match self.current_backend {
             RuntimeBackend::JavaScript => self
                 .get_js_mapping(beanstalk_name)
@@ -402,11 +400,7 @@ pub fn create_builtin_registry(
     );
 
     // Register function with JavaScript mapping
-    registry.register_function_with_mappings(
-        io_function,
-        Some(io_js_mapping),
-        string_table,
-    )?;
+    registry.register_function_with_mappings(io_function, Some(io_js_mapping), string_table)?;
 
     // Validate all registered functions
     validate_registry(&registry, string_table)?;

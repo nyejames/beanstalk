@@ -135,7 +135,7 @@ pub fn evaluate_expression(
                             {
                                 FoundType => found_type_static,
                                 CompilationStage => "Expression Evaluation",
-                                PrimarySuggestion => "Use string concatenation or template syntax instead of arithmetic operators",
+                                PrimarySuggestion => "Use string concatenation, template syntax, or io() for output instead of arithmetic operators",
                                 AlternativeSuggestion => "Convert to a numeric type if arithmetic is needed",
                             }
                         )

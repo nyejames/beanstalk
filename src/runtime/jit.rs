@@ -773,8 +773,66 @@ fn setup_native_wasix_fd_write(
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
+    // Create io function that prints with automatic newline
+    let io_func = Function::new_typed(
+        store,
+        move |text_ptr: i32, text_len: i32| {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "WASIX io called with text_ptr=0x{:x}, text_len={}",
+                text_ptr, text_len
+            );
+
+            // Get memory from shared state
+            let memory = match get_wasix_memory() {
+                Some(mem) => mem,
+                None => {
+                    eprintln!("WASIX io error: Memory not available");
+                    return;
+                }
+            };
+
+            let store_ptr = match get_wasix_store() {
+                Some(ptr) => ptr,
+                None => {
+                    eprintln!("WASIX io error: Store not available");
+                    return;
+                }
+            };
+
+            // Read string from WASM memory
+            let store_ref = unsafe { &*store_ptr };
+            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+                Ok(text) => {
+                    // Check if we should capture output or print normally
+                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+                    
+                    if should_capture {
+                        // Capture output for testing (with newline)
+                        CAPTURED_OUTPUT.with(|output| {
+                            if let Some(ref captured) = *output.borrow() {
+                                let mut stdout = captured.stdout.lock().unwrap();
+                                stdout.extend_from_slice(text.as_bytes());
+                                stdout.push(b'\n'); // Add newline
+                            }
+                        });
+                    } else {
+                        // Normal output to stdout with newline
+                        println!("{}", text);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("WASIX io error: {}", e);
+                }
+            }
+        },
+    );
+
+    // Add io function to beanstalk_io module
+    imports.define("beanstalk_io", "io", io_func);
+
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("Native WASIX fd_write and template_output implementation configured");
+    println!("Native WASIX fd_write, template_output, and io implementation configured");
 
     Ok(())
 }
@@ -1160,6 +1218,64 @@ fn setup_native_imports_with_capture(
 
     // Add print function to beanstalk_io module
     imports.define("beanstalk_io", "print", print_func);
+
+    // Create io function that prints with automatic newline
+    let io_func = Function::new_typed(
+        store,
+        move |text_ptr: i32, text_len: i32| {
+            #[cfg(feature = "verbose_codegen_logging")]
+            println!(
+                "Native io called with text_ptr=0x{:x}, text_len={}",
+                text_ptr, text_len
+            );
+
+            // Get memory from shared state
+            let memory = match get_wasix_memory() {
+                Some(mem) => mem,
+                None => {
+                    eprintln!("Native io error: Memory not available");
+                    return;
+                }
+            };
+
+            let store_ptr = match get_wasix_store() {
+                Some(ptr) => ptr,
+                None => {
+                    eprintln!("Native io error: Store not available");
+                    return;
+                }
+            };
+
+            // Read string from WASM memory
+            let store_ref = unsafe { &*store_ptr };
+            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+                Ok(text) => {
+                    // Check if we should capture output or print normally
+                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+                    
+                    if should_capture {
+                        // Capture output for testing (with newline)
+                        CAPTURED_OUTPUT.with(|output| {
+                            if let Some(ref captured) = *output.borrow() {
+                                let mut stdout = captured.stdout.lock().unwrap();
+                                stdout.extend_from_slice(text.as_bytes());
+                                stdout.push(b'\n'); // Add newline
+                            }
+                        });
+                    } else {
+                        // Normal output to stdout with newline
+                        println!("{}", text);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Native io error: {}", e);
+                }
+            }
+        },
+    );
+
+    // Add io function to beanstalk_io module
+    imports.define("beanstalk_io", "io", io_func);
 
     #[cfg(feature = "verbose_codegen_logging")]
     if capture_output {

@@ -100,12 +100,11 @@ mod compiler {
     }
 }
 
-use crate::compiler::codegen::build_wasm::new_wasm_module;
+use crate::compiler::codegen::build_wasm::{new_wasm_module};
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast_nodes::AstNode;
-use crate::compiler::parsers::tokenizer;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::StringTable;
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
@@ -256,6 +255,6 @@ impl<'a> Compiler<'a> {
     ///    (Wasm Generation)
     /// -----------------------
     pub fn ir_to_wasm(&mut self, wir: WIR) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(wir, self.string_table.clone())
+        new_wasm_module(wir, &self.host_function_registry, self.string_table.clone())
     }
 }

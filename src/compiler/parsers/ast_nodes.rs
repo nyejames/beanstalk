@@ -92,9 +92,9 @@ pub enum NodeKind {
     Expression(Expression),
 
     // Built-in, always expected host Functions.
-    // Print can accept multiple arguments and will coerce them to strings.
-    // This will eventually change to a Beanstalk import called "io"
-    // that will have a default init function that prints to the standard output
+    // Print node - deprecated in favor of io() host function
+    // The io() function is now the standard way to output to stdout
+    // It accepts any type through CoerceToString and automatically adds newlines
     Print(Expression),
 
     // Other language code blocks

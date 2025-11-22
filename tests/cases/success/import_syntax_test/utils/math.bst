@@ -8,4 +8,4 @@ export multiply |a Int, b Int| -> Int:
 ;
 
 -- Math module initialization
-["Math module initialized"]
+io("Math module initialized")

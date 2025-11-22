@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod host_function_registry_tests {
-    use crate::compiler::host_functions::{
+    use crate::compiler::host_functions::registry::{
         create_builtin_registry, RuntimeBackend,
     };
     use crate::compiler::string_interning::StringTable;

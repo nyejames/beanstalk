@@ -2,14 +2,14 @@
 condition = true
 counter ~= 0
 
-["Starting control flow test"]
+io("Starting control flow test")
 
 if condition:
-    ["Condition is true"]
+    io("Condition is true")
     counter = counter + 1
-    ["Counter incremented: ", counter]
+    io([: Counter incremented: counter])
 else
-    ["Condition is false"]
+    io("Condition is false")
 ;
 
 -- Test with variables and expressions
@@ -18,10 +18,10 @@ y = 5
 
 if x > y:
     result = x + y
-    ["x is greater: ", x, " + ", y, " = ", result]
+    io([: x is greater: x + y = result])
 else
     result = x - y
-    ["x is not greater: ", x, " - ", y, " = ", result]
+    io([: x is not greater: x - y = result])
 ;
 
-["Control flow test complete"]
+io("Control flow test complete")
