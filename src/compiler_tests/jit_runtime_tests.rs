@@ -1,65 +1,36 @@
 use crate::runtime::{CompilationMode, IoBackend, RuntimeConfig, jit::{CapturedOutput, MemoryCleanup, clear_captured_output, execute_direct_jit_with_capture, get_captured_output}};
 
 
-/// Test basic JIT execution with WASIX backend
+/// Test basic JIT execution with Native backend
 #[test]
-fn test_wasix_backend_basic_execution() {
+fn test_native_backend_basic_execution() {
     // Create a simple WASM module that should execute successfully
     let wasm_bytes = create_simple_wasm_module();
     
     let config = RuntimeConfig {
         compilation_mode: CompilationMode::DirectJit,
-        io_backend: IoBackend::Wasix,
+        io_backend: IoBackend::Native,
         hot_reload: false,
         flags: vec![],
     };
 
-    // Test should not panic and should return Ok
-    // Note: WASIX may require a Tokio runtime, so we catch that specific error
-    let result = std::panic::catch_unwind(|| {
-        execute_direct_jit_with_capture(&wasm_bytes, &config, false)
-    });
+    // Test should execute successfully
+    let result = execute_direct_jit_with_capture(&wasm_bytes, &config, false);
     
     match result {
-        Ok(exec_result) => {
-            // Execution completed without panic
-            match exec_result {
-                Ok(_) => {
-                    // Success case - WASM executed successfully
-                    println!("WASIX backend execution succeeded");
-                }
-                Err(e) => {
-                    // Expected failure case - ensure it's a reasonable error
-                    let error_msg = format!("{:?}", e);
-                    assert!(
-                        error_msg.contains("Failed to compile WASM module") || 
-                        error_msg.contains("magic header") ||
-                        error_msg.contains("backend requires WASM memory export"),
-                        "Unexpected error type: {}",
-                        error_msg
-                    );
-                }
-            }
+        Ok(_) => {
+            println!("Native backend execution succeeded");
         }
-        Err(panic_payload) => {
-            // Execution panicked - check if it's the expected Tokio runtime error
-            let panic_msg = if let Some(s) = panic_payload.downcast_ref::<String>() {
-                s.clone()
-            } else if let Some(s) = panic_payload.downcast_ref::<&str>() {
-                s.to_string()
-            } else {
-                "Unknown panic".to_string()
-            };
-            
-            // This is expected when WASIX requires a Tokio runtime
+        Err(e) => {
+            // Expected failure cases - ensure it's a reasonable error
+            let error_msg = format!("{:?}", e);
             assert!(
-                panic_msg.contains("there is no reactor running") ||
-                panic_msg.contains("Tokio"),
-                "Unexpected panic: {}",
-                panic_msg
+                error_msg.contains("Failed to compile WASM module") || 
+                error_msg.contains("magic header") ||
+                error_msg.contains("backend requires WASM memory export"),
+                "Unexpected error type: {}",
+                error_msg
             );
-            
-            println!("WASIX backend test completed - requires Tokio runtime as expected");
         }
     }
 }
@@ -171,16 +142,6 @@ fn test_captured_output_functionality() {
 /// Test runtime configuration for different backends
 #[test]
 fn test_runtime_config_backends() {
-    // Test WASIX backend configuration
-    let wasix_config = RuntimeConfig {
-        compilation_mode: CompilationMode::DirectJit,
-        io_backend: IoBackend::Wasix,
-        hot_reload: false,
-        flags: vec![],
-    };
-    
-    assert!(matches!(wasix_config.io_backend, IoBackend::Wasix));
-    
     // Test Native backend configuration
     let native_config = RuntimeConfig {
         compilation_mode: CompilationMode::DirectJit,
@@ -193,12 +154,12 @@ fn test_runtime_config_backends() {
     
     // Test development configuration
     let dev_config = RuntimeConfig::for_development();
-    assert!(matches!(dev_config.io_backend, IoBackend::Wasix));
+    assert!(matches!(dev_config.io_backend, IoBackend::Native));
     assert!(dev_config.hot_reload);
     
     // Test native release configuration
     let release_config = RuntimeConfig::for_native_release();
-    assert!(matches!(release_config.io_backend, IoBackend::Wasix));
+    assert!(matches!(release_config.io_backend, IoBackend::Native));
     assert!(!release_config.hot_reload);
 }
 
@@ -210,7 +171,7 @@ fn test_error_handling_scenarios() {
     
     let config = RuntimeConfig {
         compilation_mode: CompilationMode::DirectJit,
-        io_backend: IoBackend::Wasix,
+        io_backend: IoBackend::Native,
         hot_reload: false,
         flags: vec![],
     };
@@ -287,20 +248,20 @@ fn test_template_output_integration() {
     println!("Template output integration test - requires valid WASM modules");
 }
 
-/// Test WASIX fd_write functionality
+/// Test native IO functionality
 #[test]
 #[ignore] // Ignored until we have valid WASM modules to test with
-fn test_wasix_fd_write_functionality() {
-    // This test would verify that WASIX fd_write calls work correctly
-    // It requires a WASM module that makes fd_write calls
+fn test_native_io_functionality() {
+    // This test would verify that native IO calls work correctly
+    // It requires a WASM module that makes IO calls
     
     let _config = RuntimeConfig {
         compilation_mode: CompilationMode::DirectJit,
-        io_backend: IoBackend::Wasix,
+        io_backend: IoBackend::Native,
         hot_reload: false,
         flags: vec![],
     };
     
-    // TODO: Implement when we have WASM modules that use fd_write
-    println!("WASIX fd_write test - requires WASM modules with fd_write calls");
+    // TODO: Implement when we have WASM modules that use io()
+    println!("Native IO test - requires WASM modules with io() calls");
 }

@@ -355,7 +355,7 @@ fn ast_host_function_call_to_wir(
     // Convert arguments to operands
     let mut arg_operands = Vec::with_capacity(args.len());
     for arg in args {
-        // Handle string literals as constants for WASIX fd_write calls
+        // Handle string literals as constants for host function calls
         match &arg.kind {
             ExpressionKind::StringSlice(s) => {
                 // Create a constant operand directly for string literals

@@ -62,8 +62,6 @@ pub enum CraneliftOptLevel {
 
 #[derive(Debug, Clone)]
 pub enum IoBackend {
-    /// Standard WASIX interface
-    Wasix,
     /// Custom IO hooks for embedded scenarios
     Custom(String), // Configuration path or identifier
     /// JavaScript/DOM bindings for web targets
@@ -86,7 +84,7 @@ impl Default for RuntimeConfig {
     fn default() -> Self {
         Self {
             compilation_mode: CompilationMode::Cranelift(CraneliftOptLevel::Speed),
-            io_backend: IoBackend::Wasix,
+            io_backend: IoBackend::Native,
             hot_reload: false,
             flags: vec![],
         }
@@ -98,7 +96,7 @@ impl RuntimeConfig {
     pub fn for_development() -> Self {
         Self {
             compilation_mode: CompilationMode::Cranelift(CraneliftOptLevel::None),
-            io_backend: IoBackend::Wasix, // Use WASIX for enhanced system call support
+            io_backend: IoBackend::Native,
             hot_reload: true,
             flags: vec![RuntimeFlag::Debug],
         }
@@ -108,7 +106,7 @@ impl RuntimeConfig {
     pub fn for_native_release() -> Self {
         Self {
             compilation_mode: CompilationMode::Cranelift(CraneliftOptLevel::Speed),
-            io_backend: IoBackend::Wasix, // Use WASIX for enhanced system call support
+            io_backend: IoBackend::Native,
             hot_reload: false,
             flags: vec![],
         }
@@ -157,7 +155,6 @@ impl BeanstalkRuntime {
     pub fn execute(&self, wasm_bytes: &[u8]) -> Result<(), CompileError> {
         match &self.config.compilation_mode {
             CompilationMode::DirectJit => {
-                // Use standard JIT execution (WASIX support removed)
                 jit::execute_direct_jit(wasm_bytes, &self.config)
             }
             CompilationMode::Cranelift(opt_level) => {

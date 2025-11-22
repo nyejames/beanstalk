@@ -108,7 +108,7 @@ pub struct StructInitializationTracker {
 ///
 /// This is the central context structure that maintains all state during AST-to-WIR
 /// transformation. It manages variable scoping, place allocation, temporary variables,
-/// and integrates with the WASIX host function system.
+/// and integrates with the host function system.
 ///
 /// ## Key Responsibilities
 ///
@@ -300,7 +300,7 @@ impl WirTransformContext {
 
     /// Create a new transformation context with default settings
     ///
-    /// Initializes all tracking structures and sets up the WASIX host function registry.
+    /// Initializes all tracking structures and sets up the host function registry.
     /// The context starts with a single global scope and is ready to begin AST-to-WIR
     /// transformation.
     ///
@@ -309,7 +309,7 @@ impl WirTransformContext {
     /// A new `WirTransformContext` ready for transformation with:
     /// - Empty variable scopes (with one global scope)
     /// - Initialized place manager for memory allocation
-    /// - WASIX registry configured for host function imports
+    /// - Host function registry configured for imports
     /// - All tracking structures reset to initial state
     pub fn new() -> Self {
         Self {
@@ -482,8 +482,8 @@ impl WirTransformContext {
     /// Add a host function import for WASM module generation
     ///
     /// Registers a host function that will be imported in the generated WASM module.
-    /// This includes system functions, WASI/WASIX functions, and other external
-    /// functions that the Beanstalk program needs to call.
+    /// This includes system functions and other external functions that the 
+    /// Beanstalk program needs to call.
     ///
     /// # Parameters
     ///

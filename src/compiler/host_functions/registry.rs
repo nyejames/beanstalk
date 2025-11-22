@@ -343,6 +343,15 @@ impl HostFunctionRegistry {
     pub fn js_mapping_count(&self) -> usize {
         self.js_mappings.len()
     }
+
+    /// Validate that the mandatory io() function is available
+    /// This should be called during compilation to ensure build system contract compliance
+    pub fn validate_io_availability(
+        &self,
+        string_table: &StringTable,
+    ) -> Result<(), CompileError> {
+        validate_io_function_availability(self, string_table)
+    }
 }
 
 /// Runtime-specific function mapping wrapper
@@ -421,6 +430,32 @@ fn validate_registry(
     // Validate JavaScript mappings
     for (_, js_function) in registry.list_js_mappings() {
         validate_js_function_def(js_function)?;
+    }
+
+    // Validate that the mandatory io() function is present
+    validate_io_function_availability(registry, string_table)?;
+
+    Ok(())
+}
+
+/// Validate that the mandatory io() function is available in the registry
+/// This is a build system contract requirement - every build system must provide io()
+fn validate_io_function_availability(
+    registry: &HostFunctionRegistry,
+    string_table: &StringTable,
+) -> Result<(), CompileError> {
+    // Check if io() function exists by looking through all registered functions
+    let has_io = registry.list_functions().iter().any(|func| {
+        let func_name = string_table.resolve(func.name);
+        func_name == "io"
+    });
+    
+    if !has_io {
+        return_compiler_error!(
+            "Build system does not provide required 'io()' function. \
+            Every Beanstalk build system must provide at minimum the io() function for basic printing. \
+            Check your build system configuration and ensure the Io struct includes the io() function."
+        );
     }
 
     Ok(())

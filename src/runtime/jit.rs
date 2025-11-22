@@ -7,7 +7,6 @@ use crate::compiler::compiler_errors::CompileError;
 use crate::runtime::{IoBackend, RuntimeConfig};
 use std::cell::RefCell;
 use wasmer::{Function, Instance, Memory, Module, Store, imports};
-use wasmer_wasix::WasiEnvBuilder;
 
 /// Execute WASM bytecode directly using JIT compilation
 pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(), CompileError> {
@@ -20,14 +19,7 @@ pub fn execute_direct_jit_with_capture(
     config: &RuntimeConfig,
     capture_output: bool,
 ) -> Result<(), CompileError> {
-    // WASIX requires a Tokio runtime context for async I/O operations
-    // Create a runtime only for JIT execution to avoid overhead in other CLI operations
-    let runtime = tokio::runtime::Runtime::new()
-        .map_err(|e| CompileError::compiler_error(&format!("Failed to create Tokio runtime for WASIX: {}", e)))?;
-    
-    // Enter the runtime context and execute synchronously
-    // The _guard ensures we stay in the runtime context for the duration of this function
-    let _guard = runtime.enter();
+    // Note: Tokio runtime is no longer required since we removed WASIX dependencies
     
     // Create a Wasmer store for JIT execution
     let mut store = Store::default();
@@ -53,7 +45,7 @@ pub fn execute_direct_jit_with_capture(
     })?;
 
     // Set up imports based on IO backend
-    let (import_object, wasi_env_opt) = create_import_object_with_capture(
+    let import_object = create_import_object_with_capture(
         &mut store,
         &module,
         wasm_bytes,
@@ -66,13 +58,8 @@ pub fn execute_direct_jit_with_capture(
         CompileError::compiler_error(&format!("Failed to instantiate WASM module: {}", e))
     })?;
 
-    // Keep WasiFunctionEnv alive for the duration of execution
-    // The WasiFunctionEnv must not be dropped while the instance is being used
-    // Simply keeping it in scope ensures it stays alive
-    let _wasi_env_guard = wasi_env_opt;
-
-    // Set up memory access for backends that need it (WASIX and Native)
-    if matches!(config.io_backend, IoBackend::Wasix | IoBackend::Native) {
+    // Set up memory access for Native backend
+    if matches!(config.io_backend, IoBackend::Native) {
         // Try different memory export names in order of preference
         let memory_result = instance
             .exports
@@ -87,47 +74,40 @@ pub fn execute_direct_jit_with_capture(
                 let memory_size = memory_view.data_size();
                 
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASIX memory found: {} bytes", memory_size);
+                println!("Native backend memory found: {} bytes", memory_size);
                 
-                // Ensure minimum memory size for WASIX operations
+                // Ensure minimum memory size for native operations
                 if memory_size < 65536 {
                     return Err(CompileError::compiler_error(
-                        "WASM memory too small for WASIX operations. Minimum 64KB required."
+                        "WASM memory too small for native operations. Minimum 64KB required."
                     ));
                 }
 
-                set_wasix_memory_and_store(memory.clone(), &mut store as *mut Store);
+                set_native_memory_and_store(memory.clone(), &mut store as *mut Store);
                 
                 #[cfg(feature = "verbose_codegen_logging")]
-                println!("WASIX memory access configured successfully");
+                println!("Native backend memory access configured successfully");
             }
             Err(_) => {
                 #[cfg(feature = "verbose_codegen_logging")]
                 {
-                    println!("Warning: No memory export found for WASIX");
+                    println!("Warning: No memory export found for Native backend");
                     println!("Available exports:");
                     for (name, _) in instance.exports.iter() {
                         println!("  - {}", name);
                     }
                 }
                 
-                // For WASIX and Native backends, memory is required
-                let backend_name = match config.io_backend {
-                    IoBackend::Wasix => "WASIX",
-                    IoBackend::Native => "Native",
-                    _ => "Unknown",
-                };
-                return Err(CompileError::compiler_error(&format!(
-                    "{} backend requires WASM memory export. Ensure the WASM module exports memory.",
-                    backend_name
-                )));
+                return Err(CompileError::compiler_error(
+                    "Native backend requires WASM memory export. Ensure the WASM module exports memory."
+                ));
             }
         }
     }
 
     // Wasmer automatically runs the start section (if present) when instantiating the module above.
     // So if instantiation succeeded, the start section has already run.
-    // Now, optionally call 'main' or '_start' if present (for non-WASIX modules).
+    // Now, optionally call 'main' or '_start' if present.
     #[cfg(feature = "verbose_codegen_logging")]
     println!("JIT: Looking for main function...");
     if let Ok(main_func) = instance.exports.get_function("main") {
@@ -177,68 +157,40 @@ pub fn create_import_object(
     module: &Module,
     wasm_bytes: &[u8],
     io_backend: &IoBackend,
-) -> Result<(wasmer::Imports, Option<wasmer_wasix::WasiFunctionEnv>), CompileError> {
+) -> Result<wasmer::Imports, CompileError> {
     create_import_object_with_capture(store, module, wasm_bytes, io_backend, false)
 }
 
 /// Create an import object with optional output capture
-/// Returns both the imports and an optional WasiFunctionEnv that needs to be kept alive
 pub fn create_import_object_with_capture(
     store: &mut Store,
     module: &Module,
     wasm_bytes: &[u8],
     io_backend: &IoBackend,
     capture_output: bool,
-) -> Result<(wasmer::Imports, Option<wasmer_wasix::WasiFunctionEnv>), CompileError> {
+) -> Result<wasmer::Imports, CompileError> {
     match io_backend {
-        IoBackend::Wasix => {
-            // TEMPORARY: Use native implementation instead of wasmer-wasix due to API compatibility issues
-            // The wasmer-wasix 0.601.0 API has initialization requirements that are complex to satisfy
-            // For now, we implement fd_write directly which is sufficient for print() functionality
+        IoBackend::Native => {
             let mut imports = imports! {};
-            setup_native_wasix_fd_write(store, &mut imports, capture_output)?;
-            Ok((imports, None))
+            setup_native_io_functions(store, &mut imports, capture_output)?;
+            Ok(imports)
         }
         IoBackend::Custom(_config_path) => {
             // Set up custom IO hooks
             let mut imports = imports! {};
             setup_custom_io_imports(store, &mut imports)?;
-            Ok((imports, None))
+            Ok(imports)
         }
         IoBackend::JsBindings => {
             // Set up JS/DOM bindings (for web targets)
             let mut imports = imports! {};
             setup_js_imports(store, &mut imports)?;
-            Ok((imports, None))
-        }
-        IoBackend::Native => {
-            // Set up native system call imports with capture support
-            let mut imports = imports! {};
-            setup_native_imports_with_capture(store, &mut imports, capture_output)?;
-            Ok((imports, None))
+            Ok(imports)
         }
     }
 }
 
-/// Create an import object with native WASIX function support
-pub fn create_import_object_with_wasix_native(
-    store: &mut Store,
-    module: &Module,
-    wasm_bytes: &[u8],
-    io_backend: &IoBackend,
-) -> Result<(wasmer::Imports, Option<wasmer_wasix::WasiFunctionEnv>), CompileError> {
-    match io_backend {
-        IoBackend::Wasix => {
-            // Set up WASIX imports with native function support
-            let imports = setup_wasix_imports_with_native_support(store, module, wasm_bytes)?;
-            Ok((imports, None))
-        }
-        _ => {
-            // For non-WASIX backends, use standard import creation
-            create_import_object_with_capture(store, module, wasm_bytes, io_backend, false)
-        }
-    }
-}
+
 
 /// Implement fd_write functionality with WASM memory access
 /// This is the core implementation that reads IOVec structures from memory and outputs data
@@ -669,8 +621,8 @@ impl CapturedOutput {
 
 
 
-/// Set memory and store for WASIX functions to use
-fn set_wasix_memory_and_store(memory: Memory, store: *mut Store) {
+/// Set memory and store for native IO functions to use
+fn set_native_memory_and_store(memory: Memory, store: *mut Store) {
     WASIX_MEMORY.with(|m| {
         *m.borrow_mut() = Some(memory);
     });
@@ -679,13 +631,13 @@ fn set_wasix_memory_and_store(memory: Memory, store: *mut Store) {
     });
 }
 
-/// Get memory for WASIX functions
-fn get_wasix_memory() -> Option<Memory> {
+/// Get memory for native IO functions
+fn get_native_memory() -> Option<Memory> {
     WASIX_MEMORY.with(|m| m.borrow().clone())
 }
 
-/// Get store for WASIX functions
-fn get_wasix_store() -> Option<*mut Store> {
+/// Get store for native IO functions
+fn get_native_store() -> Option<*mut Store> {
     WASIX_STORE.with(|s| *s.borrow())
 }
 
@@ -703,9 +655,9 @@ pub fn clear_captured_output() {
     });
 }
 
-/// Set up native WASIX fd_write implementation
-/// This is a simplified implementation that provides fd_write functionality without wasmer-wasix
-fn setup_native_wasix_fd_write(
+/// Set up native IO functions implementation
+/// This provides IO functionality for the native backend
+fn setup_native_io_functions(
     store: &mut Store,
     imports: &mut wasmer::Imports,
     capture_output: bool,
@@ -723,12 +675,12 @@ fn setup_native_wasix_fd_write(
         });
     }
 
-    // Create fd_write function
+    // Create fd_write function for backward compatibility
     let fd_write_func = Function::new_typed(
         store,
         move |fd: i32, iovs_ptr: i32, iovs_len: i32, nwritten_ptr: i32| -> i32 {
             // Get memory from shared state
-            let memory = match get_wasix_memory() {
+            let memory = match get_native_memory() {
                 Some(mem) => mem,
                 None => {
                     eprintln!("fd_write error: Memory not available");
@@ -736,7 +688,7 @@ fn setup_native_wasix_fd_write(
                 }
             };
 
-            let store_ptr = match get_wasix_store() {
+            let store_ptr = match get_native_store() {
                 Some(ptr) => ptr,
                 None => {
                     eprintln!("fd_write error: Store not available");
@@ -784,7 +736,7 @@ fn setup_native_wasix_fd_write(
             );
 
             // Get memory from shared state
-            let memory = match get_wasix_memory() {
+            let memory = match get_native_memory() {
                 Some(mem) => mem,
                 None => {
                     eprintln!("WASIX io error: Memory not available");
@@ -792,7 +744,7 @@ fn setup_native_wasix_fd_write(
                 }
             };
 
-            let store_ptr = match get_wasix_store() {
+            let store_ptr = match get_native_store() {
                 Some(ptr) => ptr,
                 None => {
                     eprintln!("WASIX io error: Store not available");
@@ -832,202 +784,12 @@ fn setup_native_wasix_fd_write(
     imports.define("beanstalk_io", "io", io_func);
 
     #[cfg(feature = "verbose_codegen_logging")]
-    println!("Native WASIX fd_write, template_output, and io implementation configured");
+    println!("Native IO functions configured (fd_write, template_output, and io)");
 
     Ok(())
 }
 
-/// Set up WASIX imports with configurable I/O redirection and error handling
-fn setup_wasix_imports_with_io(
-    store: &mut Store,
-    module: &Module,
-    wasm_bytes: &[u8],
-    capture_output: bool,
-) -> Result<(wasmer::Imports, wasmer_wasix::WasiFunctionEnv), CompileError> {
-    #[cfg(feature = "verbose_codegen_logging")]
-    if capture_output {
-        println!("WASIX environment configured for output capture (testing mode)");
-    } else {
-        println!("WASIX environment configured for normal output");
-    }
 
-    // Create proper WASIX environment using wasmer-wasix
-    let mut wasi_env_builder = WasiEnvBuilder::new("beanstalk-program");
-    
-    // Set the runtime for WASIX - required for async I/O operations
-    // Get the current Tokio runtime handle and create a pluggable runtime
-    let runtime_handle = tokio::runtime::Handle::current();
-    let task_manager = wasmer_wasix::runtime::task_manager::tokio::TokioTaskManager::new(runtime_handle);
-    let runtime = wasmer_wasix::PluggableRuntime::new(std::sync::Arc::new(task_manager));
-    wasi_env_builder.set_runtime(std::sync::Arc::new(runtime));
-
-    // For capture_output, we'll use a different approach - intercept at the fd_write level
-    if capture_output {
-        // Initialize captured output storage
-        let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        
-        CAPTURED_OUTPUT.with(|output| {
-            *output.borrow_mut() = Some(CapturedOutput {
-                stdout: captured_stdout,
-                stderr: captured_stderr,
-            });
-        });
-    }
-
-    // Build the WASIX environment with enhanced error handling
-    let wasi_env = wasi_env_builder
-        .finalize(store)
-        .map_err(|e| {
-            let error_msg = format!("Failed to create WASIX environment: {}", e);
-            let suggestion = "Ensure wasmer-wasix is properly installed and configured. Try updating Wasmer to the latest version.";
-            CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
-        })?;
-
-    // Generate WASIX import object with comprehensive error handling
-    let wasix_imports = wasi_env.import_object(store, module).map_err(|e| {
-        let error_msg = format!("Failed to create WASIX imports: {}", e);
-        let suggestion = match e.to_string().as_str() {
-            s if s.contains("memory") => {
-                "Increase WASM memory limits or check memory configuration"
-            }
-            s if s.contains("function") => {
-                "Verify that all required WASIX functions are available in the runtime"
-            }
-            s if s.contains("module") => {
-                "Check that the WASM module has correct WASIX import declarations"
-            }
-            _ => "Verify WASIX runtime configuration and ensure all dependencies are available",
-        };
-        CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
-    })?;
-
-    // Validate imports against module requirements
-    validate_wasix_imports(wasm_bytes, &wasix_imports)?;
-
-    #[cfg(feature = "verbose_codegen_logging")]
-    println!("WASIX environment configured with proper fd_write implementation");
-
-    // Return both the imports and the WasiEnv so it can be initialized after instantiation
-    Ok((wasix_imports, wasi_env))
-}
-
-
-
-/// Set up WASIX imports with native function support and comprehensive error handling
-fn setup_wasix_imports_with_native_support(
-    store: &mut Store,
-    module: &Module,
-    wasm_bytes: &[u8],
-) -> Result<wasmer::Imports, CompileError> {
-    // Create WASIX environment using wasmer-wasix
-    let wasi_env_builder = WasiEnvBuilder::new("beanstalk-program");
-
-    // Build the WASIX environment with enhanced error handling
-    let wasi_env = wasi_env_builder
-        .finalize(store)
-        .map_err(|e| {
-            let error_msg = format!("Failed to create WASIX environment: {}", e);
-            let suggestion = "Ensure wasmer-wasix is properly installed and configured. Try updating Wasmer to the latest version.";
-            CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
-        })?;
-
-    // Generate WASIX import object with comprehensive error handling
-    let wasix_imports = wasi_env.import_object(store, module).map_err(|e| {
-        let error_msg = format!("Failed to create WASIX imports: {}", e);
-        let suggestion = match e.to_string().as_str() {
-            s if s.contains("memory") => {
-                "Increase WASM memory limits or check memory configuration"
-            }
-            s if s.contains("function") => {
-                "Verify that all required WASIX functions are available in the runtime"
-            }
-            s if s.contains("module") => {
-                "Check that the WASM module has correct WASIX import declarations"
-            }
-            _ => "Verify WASIX runtime configuration and ensure all dependencies are available",
-        };
-        CompileError::compiler_error(&format!("{} Suggestion: {}", error_msg, suggestion))
-    })?;
-
-    // Validate that required WASIX imports are available
-    validate_wasix_imports(wasm_bytes, &wasix_imports)?;
-
-    // Native function overrides are not yet implemented
-    // Currently using standard WASIX imports from wasmer-wasix
-    // Native function dispatch through registry system requires WASM memory integration
-
-    #[cfg(feature = "verbose_codegen_logging")]
-    println!("WASIX environment configured with native function support");
-
-    Ok(wasix_imports)
-}
-
-/// Validate that required WASIX imports are properly resolved
-fn validate_wasix_imports(
-    wasm_bytes: &[u8],
-    imports: &wasmer::Imports,
-) -> Result<(), CompileError> {
-    use wasmparser::{Parser, Payload};
-
-    let mut required_wasix_imports = Vec::new();
-    let parser = Parser::new(0);
-
-    // Parse the WASM module to find required imports
-    for payload in parser.parse_all(&wasm_bytes) {
-        if let Payload::ImportSection(import_reader) = payload.map_err(|e| {
-            CompileError::compiler_error(&format!("Failed to parse WASM module: {}", e))
-        })? {
-            for import in import_reader {
-                let import = import.map_err(|e| {
-                    CompileError::compiler_error(&format!("Failed to read import: {}", e))
-                })?;
-
-                // Check for WASIX imports
-                if import.module.starts_with("wasix_") || import.module == "wasi_snapshot_preview1"
-                {
-                    required_wasix_imports
-                        .push((import.module.to_string(), import.name.to_string()));
-                }
-            }
-        }
-    }
-
-    // Validate that all required WASIX imports are available
-    for (module_name, function_name) in &required_wasix_imports {
-        if !imports.contains_namespace(module_name) {
-            return Err(CompileError::compiler_error(&format!(
-                "WASIX import resolution failed: module '{}' not found. Suggestion: Ensure WASIX runtime is properly configured and supports the required module version",
-                module_name
-            )));
-        }
-
-        let namespace = imports.get_namespace_exports(module_name)
-            .ok_or_else(|| CompileError::compiler_error(&format!(
-                "WASIX import resolution failed: cannot access exports for module '{}'. Suggestion: Check WASIX runtime configuration",
-                module_name
-            )))?;
-
-        if !namespace.iter().any(|(name, _)| name == function_name) {
-            let available_functions: Vec<String> =
-                namespace.iter().map(|(name, _)| name.clone()).collect();
-            return Err(CompileError::compiler_error(&format!(
-                "WASIX import resolution failed: function '{}' not found in module '{}'. Available functions: {}. Suggestion: Update WASIX runtime or check function name spelling",
-                function_name,
-                module_name,
-                available_functions.join(", ")
-            )));
-        }
-    }
-
-    #[cfg(feature = "verbose_codegen_logging")]
-    println!(
-        "✓ All {} WASIX imports validated successfully",
-        required_wasix_imports.len()
-    );
-
-    Ok(())
-}
 
 /// Set up custom IO imports for embedded scenarios
 #[allow(unused_variables)]
@@ -1075,7 +837,7 @@ fn create_template_output_import(store: &mut Store) -> Function {
             );
 
             // Get memory from shared state
-            let memory = match get_wasix_memory() {
+            let memory = match get_native_memory() {
                 Some(mem) => mem,
                 None => {
                     eprintln!("template_output error: Memory not available");
@@ -1083,7 +845,7 @@ fn create_template_output_import(store: &mut Store) -> Function {
                 }
             };
 
-            let store_ptr = match get_wasix_store() {
+            let store_ptr = match get_native_store() {
                 Some(ptr) => ptr,
                 None => {
                     eprintln!("template_output error: Store not available");
@@ -1166,7 +928,7 @@ fn setup_native_imports_with_capture(
             );
 
             // Get memory from shared state
-            let memory = match get_wasix_memory() {
+            let memory = match get_native_memory() {
                 Some(mem) => mem,
                 None => {
                     eprintln!("Native print error: Memory not available");
@@ -1174,7 +936,7 @@ fn setup_native_imports_with_capture(
                 }
             };
 
-            let store_ptr = match get_wasix_store() {
+            let store_ptr = match get_native_store() {
                 Some(ptr) => ptr,
                 None => {
                     eprintln!("Native print error: Store not available");
@@ -1230,7 +992,7 @@ fn setup_native_imports_with_capture(
             );
 
             // Get memory from shared state
-            let memory = match get_wasix_memory() {
+            let memory = match get_native_memory() {
                 Some(mem) => mem,
                 None => {
                     eprintln!("Native io error: Memory not available");
@@ -1238,7 +1000,7 @@ fn setup_native_imports_with_capture(
                 }
             };
 
-            let store_ptr = match get_wasix_store() {
+            let store_ptr = match get_native_store() {
                 Some(ptr) => ptr,
                 None => {
                     eprintln!("Native io error: Store not available");
