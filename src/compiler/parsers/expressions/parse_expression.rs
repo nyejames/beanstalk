@@ -392,12 +392,21 @@ pub fn create_expression(
 
                 match template.kind {
                     TemplateType::StringFunction => {
+                        // Check if we need to consume a closing parenthesis after the template
+                        if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                            token_stream.advance();
+                        }
                         return Ok(Expression::template(template, ownership.to_owned()));
                     }
 
                     TemplateType::String => {
                         let folded_string = template.fold(&None, string_table)?;
                         let interned = folded_string;
+
+                        // Check if we need to consume a closing parenthesis after the template
+                        if consume_closing_parenthesis && token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                            token_stream.advance();
+                        }
 
                         return Ok(Expression::string_slice(
                             interned,

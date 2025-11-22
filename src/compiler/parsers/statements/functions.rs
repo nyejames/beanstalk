@@ -612,6 +612,9 @@ pub fn create_function_call_arguments(
             )
         }
 
+        // Advance past the closing parenthesis
+        token_stream.advance();
+
         Ok(Vec::new())
     } else {
         let required_argument_types = required_arguments.to_owned();

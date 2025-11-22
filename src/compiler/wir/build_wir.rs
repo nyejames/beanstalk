@@ -77,6 +77,39 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut StringTable) -> Result<W
     let mut functions = Vec::new();
     let mut other_statements = Vec::new();
 
+    // First pass: Register all function signatures in the context
+    // This allows function bodies to reference other functions
+    for node in &ast {
+        if let NodeKind::Function(name, signature, _body) = &node.kind {
+            let func_name = string_table.resolve(*name).to_string();
+            let func_id = context.get_next_function_id();
+            
+            // Extract return types from signature
+            let mut return_types = Vec::new();
+            for return_arg in &signature.returns {
+                let wasm_type = convert_datatype_to_wasm_type(&return_arg.value.data_type)?;
+                return_types.push(wasm_type);
+            }
+            
+            // Create a minimal WirFunction just for registration with return types
+            let interned_name = *name;
+            let minimal_function = WirFunction::new(
+                func_id,
+                interned_name,
+                vec![],
+                return_types,
+                signature.returns.clone(),
+            );
+            
+            // Register the function in the context before transforming bodies
+            context.add_function(minimal_function, string_table);
+            
+            #[cfg(debug_assertions)]
+            wir_log!("Registered function '{}' with ID {} and {} return types", func_name, func_id, signature.returns.len());
+        }
+    }
+
+    // Second pass: Transform function bodies (can now reference other functions)
     for node in ast {
         match &node.kind {
             NodeKind::Function(name, signature, body) => {
@@ -480,12 +513,37 @@ fn create_wir_function_from_ast(
     let mut main_block = WirBlock::new(0);
     main_block.statements = body_statements;
 
-    // Add return terminator
-    main_block.terminator = if signature.returns.is_empty() {
+    // Add return terminator using pending return operands if available
+    main_block.terminator = if let Some(return_operands) = context.take_pending_return() {
+        // Use the return operands from the return statement
+        wir_log!(
+            "Function '{}' has explicit return with {} values",
+            name,
+            return_operands.len()
+        );
+        Terminator::Return {
+            values: return_operands,
+        }
+    } else if signature.returns.is_empty() {
+        // No return statement and no return values expected
+        wir_log!("Function '{}' has no return values", name);
         Terminator::Return { values: vec![] }
     } else {
-        // For now, return default values - proper return handling will be added later
-        Terminator::Return { values: vec![] }
+        // Function expects return values but no return statement found
+        let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
+        return_wir_transformation_error!(
+            format!(
+                "Function '{}' expects {} return value(s) but no return statement found",
+                name,
+                signature.returns.len()
+            ),
+            ErrorLocation::default(),
+            {
+                VariableName => func_name_static,
+                CompilationStage => "WIR Generation",
+                PrimarySuggestion => "Add a return statement with the expected return values",
+            }
+        );
     };
 
     // Add the block to the function

@@ -574,8 +574,16 @@ impl LocalMap {
 
     /// Create a local map with parameter count (parameters occupy first local indices)
     pub fn with_parameters(param_count: u32) -> Self {
+        let mut local_mapping = HashMap::new();
+        
+        // Pre-populate parameter mappings (identity mapping: WIR index → WASM index)
+        // Parameters occupy the first local indices in both WIR and WASM
+        for i in 0..param_count {
+            local_mapping.insert(i, i);
+        }
+        
         Self {
-            local_mapping: HashMap::new(),
+            local_mapping,
             global_mapping: HashMap::new(),
             next_local_index: param_count, // Parameters occupy indices 0..param_count
             next_global_index: 0,
@@ -1302,11 +1310,6 @@ impl WasmModule {
     ) -> Result<(), CompileError> {
         self.host_registry = Some(registry.clone());
         Ok(())
-    }
-
-    /// Get the host function registry if available
-    pub fn get_host_function_registry(&self) -> Option<&HostFunctionRegistry> {
-        self.host_registry.as_ref()
     }
 
     /// Resolve an interned string ID to its string value

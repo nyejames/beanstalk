@@ -1137,10 +1137,10 @@ pub fn print_formatted_error(e: CompileError) {
             .unwrap_or_default()
             .to_string(),
         Err(_) => {
-            red_ln!(
-                "Compiler Skill Issue: Error with printing error. File path is invalid: {}",
-                actual_file.display()
-            );
+            // red_ln!(
+            //     "Compiler Skill Issue: Error with printing error. File path is invalid: {}",
+            //     actual_file.display()
+            // );
             "".to_string()
         }
     };

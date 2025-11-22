@@ -315,7 +315,7 @@ impl HostFunctionRegistry {
     pub fn get_runtime_mapping(
         &self,
         beanstalk_name: &InternedString,
-    ) -> Option<RuntimeFunctionMapping> {
+    ) -> Option<RuntimeFunctionMapping<'_>> {
         match self.current_backend {
             RuntimeBackend::JavaScript => self
                 .get_js_mapping(beanstalk_name)
@@ -367,14 +367,6 @@ impl Default for HostFunctionRegistry {
     fn default() -> Self {
         Self::new()
     }
-}
-
-/// Create a registry populated with built-in host functions with default backend
-pub fn create_builtin_registry_with_backend(
-    backend: RuntimeBackend,
-    string_table: &mut StringTable,
-) -> Result<HostFunctionRegistry, CompileError> {
-    create_builtin_registry(backend, string_table)
 }
 
 /// Create a registry populated with built-in host functions for a specific backend

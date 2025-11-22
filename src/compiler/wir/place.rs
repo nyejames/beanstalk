@@ -714,6 +714,22 @@ impl PlaceManager {
         Place::Local { index, wasm_type }
     }
 
+    /// Allocate a new local place from a WASM type
+    /// 
+    /// This is used when we already have a WasmType (e.g., from function return types)
+    /// and don't need to convert from a DataType.
+    pub fn allocate_local_from_wasm_type(&mut self, wasm_type: &WasmType) -> Place {
+        let index = self.next_local_index;
+        self.next_local_index += 1;
+
+        self.local_types.insert(index, wasm_type.clone());
+
+        Place::Local {
+            index,
+            wasm_type: wasm_type.clone(),
+        }
+    }
+
     /// Allocate a new global place
     /// 
     /// # Performance Optimization

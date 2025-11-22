@@ -28,6 +28,7 @@ use crate::compiler::{
     },
 };
 // Error handling macros
+use crate::return_rule_error;
 use crate::return_wir_transformation_error;
 
 /// Transform a single AST node to WIR statements
@@ -249,13 +250,57 @@ fn ast_function_call_to_wir(
     }
 
     // Create function call statement
-    // TODO: Properly resolve function name to operand
-    let interned_name = string_table.intern(name);
-    let func_operand = Operand::Constant(Constant::String(interned_name));
+    // Look up the function ID by name
+    let func_id = match context.get_function_id(name) {
+        Some(id) => id,
+        None => {
+            let name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
+            let error_location = location.clone().to_error_location(string_table);
+            return_rule_error!(
+                format!("Function '{}' not found. Make sure the function is defined before calling it.", name),
+                error_location,
+                {
+                    VariableName => name_static,
+                    CompilationStage => "WIR Generation",
+                    PrimarySuggestion => "Define the function before calling it, or check for typos in the function name",
+                }
+            );
+        }
+    };
+
+    let func_operand = Operand::FunctionRef(func_id);
+    
+    // Check if the function has return values
+    let has_return_value = context
+        .get_function_return_types(func_id)
+        .map(|types| !types.is_empty())
+        .unwrap_or(false);
+    
+    let destination = if has_return_value {
+        // Function returns a value but it's not being assigned
+        // Create a temporary to capture it so it doesn't stay on the stack
+        let return_type = context.get_function_return_types(func_id).unwrap()[0].clone();
+        let temp_place = context.allocate_local_from_wasm_type(&return_type);
+        
+        // Add a drop statement to immediately discard the unused return value
+        statements.push(Statement::Call {
+            func: func_operand.clone(),
+            args: arg_operands.clone(),
+            destination: Some(temp_place.clone()),
+        });
+        statements.push(Statement::Drop {
+            place: temp_place,
+        });
+        
+        return Ok(statements);
+    } else {
+        None
+    };
+    
     statements.push(Statement::Call {
         func: func_operand,
         args: arg_operands,
-        destination: None, // TODO: Handle return values
+        destination,
     });
 
     Ok(statements)
@@ -313,9 +358,9 @@ fn ast_return_to_wir(
     string_table: &mut crate::compiler::string_interning::StringTable,
 ) -> Result<Vec<Statement>, CompileError> {
     let mut statements = Vec::with_capacity(return_values.len() * 2);
+    let mut return_operands = Vec::with_capacity(return_values.len());
 
-    // For now, just evaluate the return expressions
-    // Proper return handling with terminators will be added in a future task
+    // Evaluate the return expressions and collect operands
     for return_expr in return_values {
         let (expr_statements, rvalue) =
             expression_to_rvalue_with_context(return_expr, location, context, string_table)?;
@@ -324,14 +369,17 @@ fn ast_return_to_wir(
         // Create a temporary place for the return value
         let return_place = context.create_temporary_place(&return_expr.data_type);
         statements.push(Statement::Assign {
-            place: return_place,
+            place: return_place.clone(),
             rvalue,
         });
+
+        // Add the place as an operand to return
+        return_operands.push(Operand::Copy(return_place));
     }
 
-    // TODO: Add proper Return terminator handling
-    // For now, we just evaluate the expressions and let the function builder
-    // add a default return terminator at the end of the function
+    // Store the return operands in the context so the function builder can use them
+    context.set_pending_return(return_operands);
+
     Ok(statements)
 }
 

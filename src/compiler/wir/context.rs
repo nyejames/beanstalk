@@ -9,7 +9,7 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::string_interning::StringTable;
 
 use crate::compiler::wir::{
-    place::{Place, PlaceManager},
+    place::{Place, PlaceManager, WasmType},
     wir_nodes::{Operand, WirFunction},
 };
 
@@ -135,6 +135,8 @@ pub struct WirTransformContext {
     variable_mutability: HashMap<String, bool>,
     /// Function name to ID mapping
     function_names: HashMap<String, u32>,
+    /// Function ID to return types mapping
+    function_return_types: HashMap<u32, Vec<WasmType>>,
     /// Next function ID to allocate
     next_function_id: u32,
     /// Next block ID to allocate
@@ -318,6 +320,7 @@ impl WirTransformContext {
             variable_scopes: vec![HashMap::new()],
             variable_mutability: HashMap::new(),
             function_names: HashMap::new(),
+            function_return_types: HashMap::new(),
             next_function_id: 0,
             next_block_id: 0,
             host_imports: std::collections::HashSet::new(),
@@ -479,6 +482,31 @@ impl WirTransformContext {
         }
     }
 
+    /// Set pending return operands for the current function
+    ///
+    /// Stores the operands that should be returned from the current function.
+    /// This is used when processing return statements to track what values
+    /// need to be returned when the function terminates.
+    ///
+    /// # Parameters
+    ///
+    /// - `operands`: Vector of operands to return from the function
+    pub fn set_pending_return(&mut self, operands: Vec<Operand>) {
+        self.pending_return = Some(operands);
+    }
+
+    /// Take the pending return operands, clearing them from the context
+    ///
+    /// Retrieves and removes the pending return operands. This is typically
+    /// called when creating the return terminator for a function.
+    ///
+    /// # Returns
+    ///
+    /// The pending return operands, or None if no return was set
+    pub fn take_pending_return(&mut self) -> Option<Vec<Operand>> {
+        self.pending_return.take()
+    }
+
     /// Add a host function import for WASM module generation
     ///
     /// Registers a host function that will be imported in the generated WASM module.
@@ -591,8 +619,59 @@ impl WirTransformContext {
         let function_name = string_table.resolve(function.name);
         self.function_names
             .insert(function_name.to_string(), function.id);
+        self.function_return_types
+            .insert(function.id, function.return_types.clone());
         // Note: In a full implementation, we would store the function somewhere
-        // For now, we just track the name-to-ID mapping
+        // For now, we just track the name-to-ID mapping and return types
+    }
+
+    /// Get function ID by name
+    ///
+    /// Looks up a function by its name and returns its ID if found.
+    /// This is used when transforming function calls to get the function index.
+    ///
+    /// # Parameters
+    ///
+    /// - `name`: Function name to look up
+    ///
+    /// # Returns
+    ///
+    /// The function ID if found, None otherwise
+    pub fn get_function_id(&self, name: &str) -> Option<u32> {
+        self.function_names.get(name).copied()
+    }
+
+    /// Get function return types by ID
+    ///
+    /// Looks up a function's return types by its ID.
+    /// This is used when transforming function calls to determine if a return value
+    /// needs to be captured and dropped.
+    ///
+    /// # Parameters
+    ///
+    /// - `func_id`: Function ID to look up
+    ///
+    /// # Returns
+    ///
+    /// The function's return types if found, None otherwise
+    pub fn get_function_return_types(&self, func_id: u32) -> Option<&Vec<WasmType>> {
+        self.function_return_types.get(&func_id)
+    }
+
+    /// Allocate a local place from a WASM type
+    ///
+    /// This is a convenience method that delegates to the place manager.
+    /// Used when we already have a WasmType and need to allocate a local.
+    ///
+    /// # Parameters
+    ///
+    /// - `wasm_type`: The WASM type for the local
+    ///
+    /// # Returns
+    ///
+    /// A new Place allocated for the local
+    pub fn allocate_local_from_wasm_type(&mut self, wasm_type: &WasmType) -> Place {
+        self.place_manager.allocate_local_from_wasm_type(wasm_type)
     }
 }
 
