@@ -15,7 +15,7 @@ Choices use a double colon for their declaration.
 You access one of the choices using double colon also.
 
 [#Code:
-    Some_Options Choice:
+    Some_Options =>
         Option1 String,
         Option2 String,
     ;
