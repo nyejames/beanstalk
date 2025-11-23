@@ -15,8 +15,7 @@
 
   <h2>Current Progress</h2>
   <ul>
-    <li><strong>Frontend</strong> - Core syntax implemented. Currently refactoring header parsing before AST for full dependency resolution</li>
-    <li><strong>Type Checking</strong> - Basics complete, full struct type checking todo</li>
+    <li><strong>Frontend</strong> - Mostly implemented. With basic type checking </li>
     <li><strong>Mid Level Optimisation</strong> - Fast Constant folding in place, more powerful optimisation passes to be added in the IR</li>
     <li><strong>IR / Codegen</strong>Basics functioning - Will become the focus when the frontend is stabilised. </li>
     <li><strong>Borrow Checker</strong> - Not working yet, In progress. </li>
