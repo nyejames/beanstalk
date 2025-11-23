@@ -38,8 +38,9 @@ impl Ast {
 
         // First pass: collect all function signatures and struct definitions to register them in scope
         let mut declarations: Vec<Arg> = Vec::new();
-        let mut seen_names: std::collections::HashMap<StringId, (usize, &str)> = std::collections::HashMap::new();
-        
+        let mut seen_names: std::collections::HashMap<StringId, (usize, &str)> =
+            std::collections::HashMap::new();
+
         for (idx, header) in sorted_headers.iter().enumerate() {
             match &header.kind {
                 HeaderKind::Function(signature, _) => {
@@ -48,21 +49,19 @@ impl Ast {
                         Some(name) => name,
                         None => {
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(
-                                    format!(
-                                        "Failed to extract function name from header path: {}",
-                                        header.path.to_string(string_table)
-                                    )
-                                )],
+                                errors: vec![CompileError::compiler_error(format!(
+                                    "Failed to extract function name from header path: {}",
+                                    header.path.to_string(string_table)
+                                ))],
                                 warnings,
                             });
                         }
                     };
-                    
+
                     // Check for duplicate names
                     if let Some((_first_idx, first_kind)) = seen_names.get(&simple_name) {
                         let name_str = string_table.resolve(simple_name);
-                        
+
                         let mut error = CompileError::new_rule_error(
                             format!(
                                 "Duplicate {} name '{}' in module. A {} with this name already exists.",
@@ -70,22 +69,22 @@ impl Ast {
                             ),
                             header.name_location.clone().to_error_location(string_table),
                         );
-                        
+
                         error.new_metadata_entry(
                             crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                            "Rename one of the function definitions to avoid the conflict"
+                            "Rename one of the function definitions to avoid the conflict",
                         );
-                        
+
                         return Err(CompilerMessages {
                             errors: vec![error],
                             warnings,
                         });
                     }
-                    
+
                     seen_names.insert(simple_name, (idx, "function"));
-                    
+
                     let func_arg = Arg {
-                        id: simple_name,  // Use simple name for scope lookup
+                        id: simple_name, // Use simple name for scope lookup
                         value: Expression {
                             kind: ExpressionKind::None,
                             data_type: DataType::Function(signature.clone()),
@@ -102,21 +101,19 @@ impl Ast {
                         Some(name) => name,
                         None => {
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(
-                                    format!(
-                                        "Failed to extract struct name from header path: {}",
-                                        header.path.to_string(string_table)
-                                    )
-                                )],
+                                errors: vec![CompileError::compiler_error(format!(
+                                    "Failed to extract struct name from header path: {}",
+                                    header.path.to_string(string_table)
+                                ))],
                                 warnings,
                             });
                         }
                     };
-                    
+
                     // Check for duplicate names
                     if let Some((_first_idx, first_kind)) = seen_names.get(&simple_name) {
                         let name_str = string_table.resolve(simple_name);
-                        
+
                         let mut error = CompileError::new_rule_error(
                             format!(
                                 "Duplicate {} name '{}' in module. A {} with this name already exists.",
@@ -124,22 +121,22 @@ impl Ast {
                             ),
                             header.name_location.clone().to_error_location(string_table),
                         );
-                        
+
                         error.new_metadata_entry(
                             crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                            "Rename one of the struct definitions to avoid the conflict"
+                            "Rename one of the struct definitions to avoid the conflict",
                         );
-                        
+
                         return Err(CompilerMessages {
                             errors: vec![error],
                             warnings,
                         });
                     }
-                    
+
                     seen_names.insert(simple_name, (idx, "struct"));
-                    
+
                     let struct_arg = Arg {
-                        id: simple_name,  // Use simple name for scope lookup
+                        id: simple_name, // Use simple name for scope lookup
                         value: Expression {
                             kind: ExpressionKind::None,
                             data_type: DataType::Parameters(definition.clone()),
@@ -185,12 +182,10 @@ impl Ast {
                         Some(name) => name,
                         None => {
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(
-                                    format!(
-                                        "Failed to extract function name from header path: {}",
-                                        header.path.to_string(string_table)
-                                    )
-                                )],
+                                errors: vec![CompileError::compiler_error(format!(
+                                    "Failed to extract function name from header path: {}",
+                                    header.path.to_string(string_table)
+                                ))],
                                 warnings,
                             });
                         }
@@ -198,12 +193,12 @@ impl Ast {
 
                     ast.push(AstNode {
                         kind: NodeKind::Function(
-                            simple_name,  // Use simple name for identifier
+                            simple_name, // Use simple name for identifier
                             signature.to_owned(),
                             body.to_owned(),
                         ),
                         location: header.name_location,
-                        scope: context.scope.clone(),  // Preserve full path in scope field
+                        scope: context.scope.clone(), // Preserve full path in scope field
                     });
                 }
 
@@ -291,21 +286,19 @@ impl Ast {
                         Some(name) => name,
                         None => {
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(
-                                    format!(
-                                        "Failed to extract struct name from header path: {}",
-                                        header.path.to_string(string_table)
-                                    )
-                                )],
+                                errors: vec![CompileError::compiler_error(format!(
+                                    "Failed to extract struct name from header path: {}",
+                                    header.path.to_string(string_table)
+                                ))],
                                 warnings,
                             });
                         }
                     };
 
                     ast.push(AstNode {
-                        kind: NodeKind::StructDefinition(simple_name, fields),  // Use simple name for identifier
+                        kind: NodeKind::StructDefinition(simple_name, fields), // Use simple name for identifier
                         location: header.name_location,
-                        scope: header.path.to_owned(),  // Preserve full path in scope field
+                        scope: header.path.to_owned(), // Preserve full path in scope field
                     });
                 }
 
@@ -315,6 +308,16 @@ impl Ast {
 
                 HeaderKind::Choice => {
                     // TODO: Implement choice handling
+                }
+
+                HeaderKind::Template(tokens) => {
+                    let context = ScopeContext::new(
+                        ContextKind::Template,
+                        header.path.to_owned(),
+                        &declarations,
+                        host_registry.clone(),
+                        Vec::new(),
+                    );
                 }
             }
 

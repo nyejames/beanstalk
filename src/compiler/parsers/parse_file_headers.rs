@@ -15,6 +15,7 @@ use std::path::Path;
 // Each header is one of these categories:
 // - Functions
 // - Structs
+// - Templates (for creating HTML pages)
 // - Choices (not yet implemented)
 // - Constants
 // - Implicit Main Function:
@@ -24,6 +25,7 @@ use std::path::Path;
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function(FunctionSignature, Vec<Token>),
+    Template(Vec<Token>),
     Struct(Vec<Arg>),
     Choice,
     Constant(Arg),
@@ -162,6 +164,53 @@ pub fn parse_headers_in_file(
         token_stream.advance();
 
         match current_token.kind.to_owned() {
+            // Template declaration at Top level
+            // This becomes an HTML page if this file is a Page in an HTML project
+            TokenKind::ParentTemplate => {
+                let mut dependencies: HashSet<InternedPath> = HashSet::new();
+                let mut templates_opened = 1;
+                let mut templates_closed = 0;
+                let mut template_content = Vec::new();
+
+                // Skip to the end of the template
+                while templates_opened > templates_closed {
+                    match token_stream.current_token_kind() {
+                        TokenKind::TemplateClose => {
+                            templates_closed += 1;
+                            if templates_opened > templates_closed {
+                                template_content
+                                    .push(token_stream.tokens[token_stream.index].to_owned());
+                            }
+                        }
+                        TokenKind::TemplateHead => {
+                            templates_opened += 1;
+                            template_content
+                                .push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                        TokenKind::Symbol(name_id) => {
+                            if let Some(path) = file_imports.get(name_id) {
+                                dependencies.insert(path.to_owned());
+                            }
+                            template_content
+                                .push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                        _ => {
+                            template_content
+                                .push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                    }
+                    token_stream.advance();
+                }
+
+                headers.push(Header {
+                    path: token_stream.src_path.to_owned(),
+                    kind: HeaderKind::Template(template_content),
+                    exported: true,
+                    dependencies,
+                    name_location: current_location,
+                });
+            }
+
             // New Function, Struct, Choice, or Variable declaration
             TokenKind::Symbol(name_id) => {
                 // No need to resolve the name since we use StringId directly
@@ -185,9 +234,11 @@ pub fn parse_headers_in_file(
                         );
                         error.new_metadata_entry(
                             ErrorMetaDataKey::PrimarySuggestion,
-                            "Rename one of the definitions to avoid the conflict"
+                            "Rename one of the definitions to avoid the conflict",
                         );
-                        return Err(error.with_file_path(token_stream.src_path.to_path_buf(string_table)));
+                        return Err(
+                            error.with_file_path(token_stream.src_path.to_path_buf(string_table))
+                        );
                     }
                 }
 
