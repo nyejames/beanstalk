@@ -149,6 +149,7 @@ pub fn parse_headers_in_file(
     let mut encountered_symbols: HashSet<StringId> = HashSet::new();
     let mut next_statement_exported = false;
     let mut main_function_body = Vec::new();
+
     let mut main_function_dependencies: HashSet<InternedPath> = HashSet::new();
 
     // We parse and track imports as we go,
@@ -193,6 +194,13 @@ pub fn parse_headers_in_file(
                             }
                             template_content
                                 .push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                        // Prevents the infinite loop if there is a missing closing tag
+                        TokenKind::Eof => {
+                            template_content
+                                .push(token_stream.tokens[token_stream.index].to_owned());
+
+                            break;
                         }
                         _ => {
                             template_content
@@ -280,6 +288,11 @@ pub fn parse_headers_in_file(
                     // This is a reference, so it goes into the implicit main function
                     main_function_body.push(current_token);
 
+                    // We also store the path in dependencies and check if it's a header in scope already.
+                    // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
+                    // Create a path from the current file plus the symbol name
+                    main_function_dependencies.insert(token_stream.src_path.join_header(name_id, string_table));
+
                     if next_statement_exported {
                         next_statement_exported = false;
                         warnings.push(CompilerWarning::new(
@@ -339,8 +352,8 @@ pub fn parse_headers_in_file(
 
     // The implicit main function also depends on other headers in this file.
     // So it can use and call any functions or structs defined in this file.
-    // TODO: create a list of actual dependencies (what is actually used) based on what is referenced in the main function body.
     for header in headers.iter() {
+        println!("{:?}", header.path);
         main_function_dependencies.insert(header.path.to_owned());
     }
 
