@@ -141,6 +141,7 @@ The error system is built around three core types:
 - **`ErrorLocation`**: Owned location information without string interning dependencies
 - **`ErrorMetaDataKey`**: Structured metadata keys for intelligent error analysis
 
+CompileError Best practices:
 - **Be Specific**: Include exact tokens, types, or names in errors.
 - **Be Helpful**: Suggest corrections when possible, especially for borrow checker errors. Provide actionable messages with context
 - **User errors**: Use `return_syntax_error!`, `return_rule_error!`, or `return_type_error!`
@@ -198,7 +199,7 @@ return_rule_error!(location, "Match expressions not supported"); // Should be wi
 ```
 
 ## Compilation Pipeline Stages
-### Stage Overview
+### Overview
 The build system will determine which files are associated into a single Wasm module.
 Those files are then all tokenized, parsed into headers and have their dependencies sorted. 
 After this, everything is combined into a single AST that should be able to check all types and see all declarations in the module.

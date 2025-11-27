@@ -17,13 +17,14 @@ Square brackets are only used for string templates.
 - ~ tilde symbol to indicate mutability (mutability must be explicit). 
 This comes before the type if there is an explicit type declaration.
 - Double dashes for single line comments (--)
-- Immutable Reference semantics are the default for all stack and heap allocated types. 
-- All copies have to be explicit unless they are used in part of a new expression. Even for primitive types such as integers.
-- Errors use the '?' symbol. Options use '?'.
+- Immutable reference semantics are the default for all stack and heap allocated types. 
+- All copies have to be explicit unless they are used in part of a new expression. Inlcuding integers, floats and bools.
+- Errors use the '!' symbol. Options use '?'.
 
 **Naming conventions (strictly enforce):**
-- Types/Objects: `PascalCase`
+- Types/Objects/Choices: `PascalCase`
 - Variables/functions: `regular_snake_case`
+- Constants: `UPPER_SNAKE_CASE`
 
 ## Core Syntax Patterns
 ```beanstalk
@@ -59,8 +60,9 @@ This comes before the type if there is an explicit type declaration.
 **Function definitions:**
 ```beanstalk
 -- Basic function pattern
-function_name |param Type| -> ReturnType:
+function_name |param Int| -> Int:
     -- 4-space indentation
+    value = param + 1
     return value
 ;
 
@@ -68,7 +70,7 @@ function_name |param Type| -> ReturnType:
 -- Error can be any type, the bang indicates this is a possible error value
 risky_function || -> String, Error!:
     return other_function() !err:
-        return "", err
+        return err
     ;
 ;
 ```
@@ -76,11 +78,7 @@ risky_function || -> String, Error!:
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
 Instead of accessing elements directly, 
-all collections have built-in methods for accessing, mutating, pushing or removing elements.
-
-Collections are ordered groups of values that are zero-indexed (start from 0). 
-
-For unordered groups of values with optional keys, use a Hash Map (see below).
+all collections have built-in methods for accessing, mutating, pushing or removing elements. Collections are ordered groups of values that are zero-indexed. 
 
 Elements inside collections are accessed using the .get() method.
 
@@ -102,11 +100,11 @@ io(message)
 
 -- Print with interpolation using templates
 name = "Alice"
-io([: Hello, name!])
+io([: Hello, [name]!])
 
 -- Print in functions
 greet |name String| -> Void:
-    io([: Hello, name!])
+    io([: Hello, [name]!])
 ;
 ```
 
@@ -136,25 +134,25 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 
 ```beanstalk
     loop thing in things:
-        print(thing)
+        io(thing)
     ;
 
     loop -20 to big_number:
-        print("hello")
+        io("hello")
     ;
 
     -- reverse loop
     loop n in big_number to smaller_number:
-        print(n)
+        io(n)
     ;
 
     loop item in collection:
-        print(item.to_string())
+        io(item.to_string())
     ;
 
     -- Getting the index
     loop item, index in collection:
-        print(index.to_string())
+        io(index.to_string())
     ;
 ```
 
@@ -172,8 +170,8 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     person ~= Person("Alice", 30)
 
     -- Access fields using dot notation
-    print(person.name) -- "Alice"
-    print(person.age)  -- 30
+    io(person.name) -- "Alice"
+    io(person.age)  -- 30
 
     -- Defining a struct, then defining a method for it
     Vector2:

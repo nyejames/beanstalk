@@ -55,10 +55,13 @@ post = PostGenerator.create_post(date, [:
 ## Goals 
 - The minimalism and fast compile speed of Go.
 - The memory safety of Rust, with no 'unsafe' mode.
-- A template system can double up as a tiny HTML/markup engine.
+- Predictable performance
+- **The King of Strings**: A string template system can double up as a tiny HTML/markup engine or anything else you want.
 - A full static-site–capable build system.
 - Simple and strong type system
 - Wasm focused backend designed around producing high-quality Wasm efficiently and integrating with that ecosystem
+
+
 
 
 [//]: # (  <h1>)
@@ -72,8 +75,6 @@ post = PostGenerator.create_post(date, [:
 [//]: # (  </h1>)
 
 [//]: # (  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>)
-
-Beanstalk is designed for fast iteration, simple syntax, and predictable performance. It compiles to Wasm and aims to provide a complete build system for web projects.
 
 See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Development Guide.md` for more in depth details.
 
