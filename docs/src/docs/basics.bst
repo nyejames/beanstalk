@@ -179,7 +179,7 @@ These are all different ways to create strings.
 ```beanstalk
     [: Type] [: Description]
 
-    [: string slice ] [: UTF-16 (For JS compatibility)]
+    [: string slice ] [: UTF-8]
 
     [: template ] [: The string templating syntax of Beanstalk for creating strings. See [@./templates: Templates] for more info!]
 ```
@@ -188,7 +188,7 @@ These are all different ways to create strings.
 String is the keyword for string types in Beanstalk. 
 Double quotes are automatically string slices. 
 
-`"Double quotes for a UTF-16 string slice"`
+`"Double quotes for a UTF-8 string slice"`
 
 Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash \.
 

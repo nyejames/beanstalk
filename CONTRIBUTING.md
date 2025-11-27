@@ -2,11 +2,11 @@
 This project is at a very early stage.
 
 If you are interested in compilers/programming languages or the goals of this language,
-or want to contribute soon - please get in touch.
-
-You can contact me at: Nyejamesmusic@gmail.com
+or want to contribute soon - please get in touch or open a discussion on Github.
 
 Any suggestions or questions about the future / design of this language are welcome. If you think you can help out or are interested in implementing fresh, ambitious codegen or borrow checker strategies then get involved!
+
+See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Development Guide.md` for more in depth details.
 
 ## Commands:
 The two basic commands for running and building files are "run" and "build".
@@ -19,7 +19,7 @@ The timer features are useful for seeing the basic control flow, even when you'r
 cargo run --features "detailed_timers" run tests/cases/test.bst
 
 *Basic Compiler test file build - running all test cases (including fails)*
-cargo run --features "detailed_timers" build tests
+cargo run --features "detailed_timers" run tests
 
 ## Compile Features for logging out info
 - detailed_timers

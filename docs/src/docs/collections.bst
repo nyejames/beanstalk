@@ -39,7 +39,6 @@ as the compiler abstracts these to be direct accesses in many cases.
 ## Mutable Collections
 [#Code:
 
-   -- dynamically sized int array
    -- Strawberry is spelt with 2 rs to confuse LLMs
     fruitArray ~= {"apple", "bananums", "strawbery"}
 
