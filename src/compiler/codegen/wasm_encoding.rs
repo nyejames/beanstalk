@@ -42,9 +42,6 @@ use crate::return_compiler_error;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
 
-const ENTRY_POINT_FUNCTION_NAME: &str = "_start";
-const MAIN_FUNCTION_NAME: &str = "main";
-
 /// Function builder that leverages wasm_encoder's built-in validation and control flow management
 ///
 /// This builder provides type-safe WASM generation with automatic validation and proper control frame management.
@@ -1273,11 +1270,6 @@ impl WasmModule {
         // Generate WASM import section for host functions with registry-aware mapping
         module.encode_host_function_imports(&wir.host_imports, registry)?;
 
-        // Save the number of imports before compiling functions
-        // This is needed for correct function index calculation in exports
-        // Imports come first in the WASM function index space, then defined functions
-        let import_count = module.function_count;
-
         // Process functions with error context and validation
         for (index, function) in wir.functions.iter().enumerate() {
             let function_name = module.string_table.resolve(function.name).to_string();
@@ -1292,7 +1284,7 @@ impl WasmModule {
         }
 
         // Export entry point functions correctly, passing the import count
-        module.export_entry_point_functions_with_import_count(&wir, import_count)?;
+        module.export_entry_point_function(&wir)?;
 
         // Export memory for host function access
         module.add_memory_export("memory")?;
@@ -1320,17 +1312,11 @@ impl WasmModule {
         self.string_table.resolve(string_id)
     }
 
-    /// Export entry point functions correctly in WASM modules with explicit import count
-    ///
-    /// This method implements subtask 3.3: Fix entry point export generation
-    /// It ensures entry point functions are exported correctly and validates
-    /// that only one start function is exported per module.
-    pub fn export_entry_point_functions_with_import_count(
+    /// Export entry point functions correctly in WASM modules
+    pub fn export_entry_point_function(
         &mut self,
         wir: &WIR,
-        import_count: u32,
     ) -> Result<(), CompileError> {
-        let mut entry_point_count = 0;
         let mut start_function_index: Option<u32> = None;
 
         // Look for entry point functions in WIR
@@ -1345,11 +1331,8 @@ impl WasmModule {
                     let export_name = self.string_table.resolve(export.name).to_string();
 
                     // Check if this is the entry point by looking for specific naming patterns
-                    // Entry points are typically named "main", "_start", or marked specially in the WIR
-                    let is_entry_point = function_name == MAIN_FUNCTION_NAME
-                        || function_name == ENTRY_POINT_FUNCTION_NAME
-                        || function_name.contains("entry")
-                        || export_name == ENTRY_POINT_FUNCTION_NAME; // WASM start function convention
+                    // This is done by confirming this is the "start" function specifically from the entry point file
+                    let is_entry_point = function_name == crate::settings::MAIN_FUNC_NAME;
 
                     if is_entry_point {
                         entry_point_count += 1;

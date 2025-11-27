@@ -100,10 +100,9 @@ mod compiler {
     }
 }
 
-use crate::compiler::codegen::build_wasm::{new_wasm_module};
+use crate::compiler::codegen::build_wasm::new_wasm_module;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
-use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::string_interning::StringTable;
 use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
@@ -245,9 +244,9 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
-    pub fn ast_to_ir(&mut self, ast: Vec<AstNode>) -> Result<WIR, Vec<CompileError>> {
+    pub fn ast_to_ir(&mut self, ast: Ast) -> Result<WIR, CompilerMessages> {
         // Pass string table to WIR generation for string interning during WIR building
-        compiler::wir::wir::borrow_check_pipeline(ast, &mut self.string_table)
+        compiler::wir::build_wir::ast_to_wir(ast, &mut self.string_table)
     }
 
     /// -----------------------

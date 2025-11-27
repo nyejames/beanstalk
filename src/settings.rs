@@ -9,6 +9,8 @@ pub const INDEX_PAGE_NAME: &str = "index.html";
 pub const CONFIG_FILE_NAME: &str = "#config.bst";
 pub const BS_VAR_PREFIX: &str = "bst_";
 
+pub const IMPLICIT_START_FUNC_NAME: &str = "start";
+
 // This is a guess about how much should be initially allocated for the token and node vecs.
 // This should be a rough guess to help avoid too many allocations
 // and is just a heuristic based on tests with rudimentary small snippets of code.

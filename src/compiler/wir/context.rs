@@ -179,10 +179,7 @@ impl WirTransformContext {
     ///
     /// - Variable name must not be empty
     /// - Variable name should not start with underscore (reserved for temporaries)
-    pub fn create_place_for_variable(
-        &mut self,
-        name: String,
-    ) -> Result<Place, crate::compiler::compiler_errors::CompileError> {
+    pub fn create_place_for_variable(&mut self, name: String) -> Result<Place, CompileError> {
         use crate::compiler::datatypes::DataType;
 
         // Validate variable name
@@ -510,7 +507,7 @@ impl WirTransformContext {
     /// Add a host function import for WASM module generation
     ///
     /// Registers a host function that will be imported in the generated WASM module.
-    /// This includes system functions and other external functions that the 
+    /// This includes system functions and other external functions that the
     /// Beanstalk program needs to call.
     ///
     /// # Parameters

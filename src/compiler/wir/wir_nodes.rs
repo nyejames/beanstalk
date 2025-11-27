@@ -1,7 +1,9 @@
 // Optimized import structure - grouped by module for clarity
-use crate::compiler::wir::place::{Place, WasmType};
+use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::string_interning::InternedString;
-use std::collections::HashMap;
+use crate::compiler::wir::place::{Place, WasmType};
+use std::collections::{HashMap, HashSet};
+use crate::compiler::parsers::ast_nodes::Arg;
 
 /// WASM Intermediate Representation structure with simplified borrow checking
 ///
@@ -48,8 +50,138 @@ pub struct WIR {
     /// Type information for WASM module generation
     pub type_info: TypeInfo,
     /// Host function imports for WASM generation
-    pub host_imports:
-        std::collections::HashSet<crate::compiler::host_functions::registry::HostFunctionDef>,
+    pub host_imports: HashSet<HostFunctionDef>,
+}
+
+/// Simple loan structure for tracking borrows
+///
+/// Loans represent active borrows in the simplified borrow checking system.
+/// Each loan tracks what is borrowed, how it's borrowed, and where the borrow originated.
+///
+/// ## Loan Lifecycle
+///
+/// 1. **Creation**: Loan created when `Rvalue::Ref` generates `start_loans` event
+/// 2. **Tracking**: Loan tracked through dataflow analysis using efficient bitsets
+/// 3. **Termination**: Loan ends when owner is moved/reassigned or goes out of scope
+///
+/// ## Conflict Detection
+///
+/// Loans are checked for conflicts using aliasing analysis:
+/// - **Shared + Shared**: No conflict (multiple readers allowed)
+/// - **Shared + Mutable**: Conflict (reader/writer conflict)
+/// - **Mutable + Any**: Conflict (exclusive access required)
+///
+/// ## Example
+///
+/// ```rust
+/// // For code: let a = &x;
+/// Loan {
+///     id: LoanId(0),
+///     owner: Place::Local { index: 0, wasm_type: I32 }, // x
+///     kind: BorrowKind::Shared,
+///     origin_stmt: ProgramPoint(1), // Where borrow occurs
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct Loan {
+    /// Unique loan identifier
+    pub id: LoanId,
+    /// Place being borrowed (direct Place reference for simplicity)
+    pub owner: Place,
+    /// Kind of borrow (shared, mutable, unique)
+    pub kind: BorrowKind,
+    /// Program point where this loan originates
+    pub origin_stmt: ProgramPoint,
+}
+
+/// Export information for WASM module
+#[derive(Debug, Clone)]
+pub struct Export {
+    /// Export name
+    pub name: InternedString,
+    /// Export kind
+    pub kind: ExportKind,
+    /// Index in the respective section
+    pub index: u32,
+}
+
+/// WASM export kinds
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExportKind {
+    Function,
+    Global,
+    Memory,
+    Table,
+}
+
+/// Type information for WASM module generation
+#[derive(Debug, Clone)]
+pub struct TypeInfo {
+    /// Function type signatures
+    pub function_types: Vec<FunctionSignature>,
+    /// Global variable types
+    pub global_types: Vec<WasmType>,
+    /// Memory requirements
+    pub memory_info: MemoryInfo,
+    /// Interface vtable information
+    pub interface_info: InterfaceInfo,
+}
+
+/// Memory information for WASM module
+#[derive(Debug, Clone)]
+pub struct MemoryInfo {
+    /// Initial memory size (in WASM pages)
+    pub initial_pages: u32,
+    /// Maximum memory size (in WASM pages)
+    pub max_pages: Option<u32>,
+    /// Static data size
+    pub static_data_size: u32,
+}
+
+/// Interface information for dynamic dispatch
+#[derive(Debug, Clone)]
+pub struct InterfaceInfo {
+    /// Interface definitions
+    pub interfaces: HashMap<u32, InterfaceDefinition>,
+    /// Vtable layouts
+    pub vtables: HashMap<u32, VTable>,
+    /// Function table for call_indirect
+    pub function_table: Vec<u32>,
+}
+
+/// Interface definition
+#[derive(Debug, Clone)]
+pub struct InterfaceDefinition {
+    /// Interface ID
+    pub id: u32,
+    /// Interface name
+    pub name: InternedString,
+    /// Method signatures
+    pub methods: Vec<MethodSignature>,
+}
+
+/// Method signature for interface
+#[derive(Debug, Clone)]
+pub struct MethodSignature {
+    /// Method ID within interface
+    pub id: u32,
+    /// Method name
+    pub name: InternedString,
+    /// Parameter types (including receiver)
+    pub param_types: Vec<WasmType>,
+    /// Return types
+    pub return_types: Vec<WasmType>,
+}
+
+/// Virtual table for interface dispatch
+#[derive(Debug, Clone)]
+pub struct VTable {
+    /// Interface ID
+    pub interface_id: u32,
+    /// Implementing type ID
+    pub type_id: u32,
+    /// Function indices for each method
+    pub method_functions: Vec<u32>,
 }
 
 impl Default for WIR {
@@ -79,7 +211,7 @@ impl WIR {
                     function_table: Vec::new(),
                 },
             },
-            host_imports: std::collections::HashSet::new(),
+            host_imports: HashSet::new(),
         }
     }
 
@@ -89,12 +221,7 @@ impl WIR {
     }
 
     /// Add host function imports to the WIR
-    pub fn add_host_imports(
-        &mut self,
-        imports: &std::collections::HashSet<
-            crate::compiler::host_functions::registry::HostFunctionDef,
-        >,
-    ) {
+    pub fn add_host_imports(&mut self, imports: &HashSet<HostFunctionDef>) {
         self.host_imports.extend(imports.iter().cloned());
     }
 
@@ -171,7 +298,7 @@ pub struct WirFunction {
     /// Return type information (WASM types for code generation)
     pub return_types: Vec<WasmType>,
     /// Return argument information (full Arg info for named returns and references)
-    pub return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>,
+    pub return_args: Vec<Arg>,
     /// Basic blocks
     pub blocks: Vec<WirBlock>,
     /// Local variable places
@@ -191,7 +318,7 @@ impl WirFunction {
         name: InternedString,
         parameters: Vec<Place>,
         return_types: Vec<WasmType>,
-        return_args: Vec<crate::compiler::parsers::ast_nodes::Arg>,
+        return_args: Vec<Arg>,
     ) -> Self {
         Self {
             id,
@@ -375,7 +502,7 @@ pub enum Statement {
 
     /// Host function call (functions provided by the runtime)
     HostCall {
-        function: crate::compiler::host_functions::registry::HostFunctionDef,
+        function: HostFunctionDef,
         args: Vec<Operand>,
         destination: Option<Place>,
     },
@@ -1127,137 +1254,4 @@ impl std::fmt::Display for LoanId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "loan{}", self.0)
     }
-}
-
-/// Simple loan structure for tracking borrows
-///
-/// Loans represent active borrows in the simplified borrow checking system.
-/// Each loan tracks what is borrowed, how it's borrowed, and where the borrow originated.
-///
-/// ## Loan Lifecycle
-///
-/// 1. **Creation**: Loan created when `Rvalue::Ref` generates `start_loans` event
-/// 2. **Tracking**: Loan tracked through dataflow analysis using efficient bitsets
-/// 3. **Termination**: Loan ends when owner is moved/reassigned or goes out of scope
-///
-/// ## Conflict Detection
-///
-/// Loans are checked for conflicts using aliasing analysis:
-/// - **Shared + Shared**: No conflict (multiple readers allowed)
-/// - **Shared + Mutable**: Conflict (reader/writer conflict)
-/// - **Mutable + Any**: Conflict (exclusive access required)
-///
-/// ## Example
-///
-/// ```rust
-/// // For code: let a = &x;
-/// Loan {
-///     id: LoanId(0),
-///     owner: Place::Local { index: 0, wasm_type: I32 }, // x
-///     kind: BorrowKind::Shared,
-///     origin_stmt: ProgramPoint(1), // Where borrow occurs
-/// }
-/// ```
-#[derive(Debug, Clone)]
-pub struct Loan {
-    /// Unique loan identifier
-    pub id: LoanId,
-    /// Place being borrowed (direct Place reference for simplicity)
-    pub owner: Place,
-    /// Kind of borrow (shared, mutable, unique)
-    pub kind: BorrowKind,
-    /// Program point where this loan originates
-    pub origin_stmt: ProgramPoint,
-}
-
-
-
-/// Export information for WASM module
-#[derive(Debug, Clone)]
-pub struct Export {
-    /// Export name
-    pub name: InternedString,
-    /// Export kind
-    pub kind: ExportKind,
-    /// Index in respective section
-    pub index: u32,
-}
-
-/// WASM export kinds
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExportKind {
-    Function,
-    Global,
-    Memory,
-    Table,
-}
-
-/// Type information for WASM module generation
-#[derive(Debug, Clone)]
-pub struct TypeInfo {
-    /// Function type signatures
-    pub function_types: Vec<FunctionSignature>,
-    /// Global variable types
-    pub global_types: Vec<WasmType>,
-    /// Memory requirements
-    pub memory_info: MemoryInfo,
-    /// Interface vtable information
-    pub interface_info: InterfaceInfo,
-}
-
-/// Memory information for WASM module
-#[derive(Debug, Clone)]
-pub struct MemoryInfo {
-    /// Initial memory size (in WASM pages)
-    pub initial_pages: u32,
-    /// Maximum memory size (in WASM pages)
-    pub max_pages: Option<u32>,
-    /// Static data size
-    pub static_data_size: u32,
-}
-
-/// Interface information for dynamic dispatch
-#[derive(Debug, Clone)]
-pub struct InterfaceInfo {
-    /// Interface definitions
-    pub interfaces: HashMap<u32, InterfaceDefinition>,
-    /// Vtable layouts
-    pub vtables: HashMap<u32, VTable>,
-    /// Function table for call_indirect
-    pub function_table: Vec<u32>,
-}
-
-/// Interface definition
-#[derive(Debug, Clone)]
-pub struct InterfaceDefinition {
-    /// Interface ID
-    pub id: u32,
-    /// Interface name
-    pub name: InternedString,
-    /// Method signatures
-    pub methods: Vec<MethodSignature>,
-}
-
-/// Method signature for interface
-#[derive(Debug, Clone)]
-pub struct MethodSignature {
-    /// Method ID within interface
-    pub id: u32,
-    /// Method name
-    pub name: InternedString,
-    /// Parameter types (including receiver)
-    pub param_types: Vec<WasmType>,
-    /// Return types
-    pub return_types: Vec<WasmType>,
-}
-
-/// Virtual table for interface dispatch
-#[derive(Debug, Clone)]
-pub struct VTable {
-    /// Interface ID
-    pub interface_id: u32,
-    /// Implementing type ID
-    pub type_id: u32,
-    /// Function indices for each method
-    pub method_functions: Vec<u32>,
 }

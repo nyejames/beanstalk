@@ -3,7 +3,6 @@
 use crate::compiler::compiler_errors::CompileError;
 use crate::compiler::parsers::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::{return_syntax_error, return_token};
-use crate::compiler::parsers::tokenizer::tokenizer::string_block;
 use crate::compiler::string_interning::StringTable;
 
 // This used by the tokenizer stage
@@ -25,7 +24,9 @@ pub fn compiler_directive(
         match token_value.as_str() {
             // Special
             // Import Statement
-            "import" => return_token!(TokenKind::Import, stream),
+            "import" => {
+                return_token!(TokenKind::Import, stream)
+            }
 
             // For exporting functions or constants out of the final Wasm module
             "export" => return_token!(TokenKind::Export, stream),
@@ -35,7 +36,10 @@ pub fn compiler_directive(
             "async" => return_token!(TokenKind::Async, stream),
 
             // External language blocks
-            "WAT" => return_token!(TokenKind::Wat(string_block(stream, string_table)?), stream),
+            // PROBABLY WONT DO THIS
+            // Will possibly allow wat files that can be imported into Beanstalk modules in the future,
+            // But likely not.
+            // "WAT" => return_token!(TokenKind::Wat(string_block(stream, string_table)?), stream),
 
             // Special template tokens
             "slot" => return_token!(TokenKind::Slot, stream),
