@@ -5,6 +5,7 @@
 //! place-based representation that enables efficient borrow checking and direct
 //! WASM lowering.
 
+use crate::compiler::parsers::ast::Ast;
 // Import context types from context module
 use crate::compiler::wir::context::WirTransformContext;
 
@@ -13,7 +14,7 @@ use crate::compiler::wir::statements::transform_ast_node_to_wir as transform_sta
 
 // Core compiler imports - consolidated for clarity
 use crate::compiler::borrow_checker::extract::BorrowFactExtractor;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 // Error handling macros - grouped for maintainability
 use crate::compiler::borrow_checker::checker::run_unified_borrow_checking;
 use crate::compiler::compiler_errors::{ErrorLocation, ErrorType};
@@ -27,29 +28,18 @@ pub(crate) use crate::compiler::wir::wir_nodes::{
     BorrowKind, Constant, Export, ExportKind, Operand, Rvalue, Statement, Terminator, WIR,
     WirBlock, WirFunction,
 };
+use crate::settings::IMPLICIT_START_FUNC_NAME;
 use crate::{ir_log, return_wir_transformation_error, wir_log};
 
 /// Main entry point: Transform AST to WIR with borrow checking
 ///
 /// This is the primary function for converting a complete AST into WIR representation.
-/// It orchestrates the entire transformation process including AST-to-WIR conversion
+/// It orchestrates the entire transformation process, including AST-to-WIR conversion
 /// and integrated borrow checking to ensure memory safety.
 ///
-/// # Parameters
-///
-/// - `ast`: Complete AST block representing a Beanstalk program or module
-///
-/// # Returns
-///
-/// - `Ok(WIR)`: Complete WIR with all functions borrow-checked and ready for WASM lowering
-/// - `Err(CompileError)`: Transformation or borrow checking error with source location
-///
-/// # Transformation Process
-///
-/// 1. **Context Initialization**: Create transformation context with empty state
-/// 2. **AST Processing**: Transform each AST node to WIR statements and functions
-/// 3. **Borrow Checking**: Run Polonius-style borrow checking on all WIR functions
-/// 4. **Validation**: Ensure all memory access patterns are safe
+/// 1. **AST Processing**: Transform each AST node to WIR statements and functions
+/// 2. **Borrow Checking**: Run Polonius-style borrow checking on all WIR functions
+/// 3. **Validation**: Ensure all memory access patterns are safe
 ///
 /// # Memory Safety
 ///
@@ -64,54 +54,14 @@ use crate::{ir_log, return_wir_transformation_error, wir_log};
 /// - All places map to WASM locals or linear memory locations
 /// - All operations correspond to WASM instruction sequences
 /// - Function calls are prepared for WASM function tables
-///
-///
-const MAIN_ENTRY_POINT_FUNC_NAME: &str = "_start";
-const MAIN_FUNCTION_NAME: &str = "_main";
-
-pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut StringTable) -> Result<WIR, CompileError> {
+pub fn ast_to_wir(ast: Ast, string_table: &mut StringTable) -> Result<WIR, CompilerMessages> {
     let mut context = WirTransformContext::new();
     let mut wir = WIR::new();
+    let nodes = ast.nodes;
 
-    // Separate function definitions from other top-level statements
-    let mut functions = Vec::new();
-    let mut other_statements = Vec::new();
-
-    // First pass: Register all function signatures in the context
-    // This allows function bodies to reference other functions
-    for node in &ast {
-        if let NodeKind::Function(name, signature, _body) = &node.kind {
-            let func_name = string_table.resolve(*name).to_string();
-            let func_id = context.get_next_function_id();
-            
-            // Extract return types from signature
-            let mut return_types = Vec::new();
-            for return_arg in &signature.returns {
-                let wasm_type = convert_datatype_to_wasm_type(&return_arg.value.data_type)?;
-                return_types.push(wasm_type);
-            }
-            
-            // Create a minimal WirFunction just for registration with return types
-            let interned_name = *name;
-            let minimal_function = WirFunction::new(
-                func_id,
-                interned_name,
-                vec![],
-                return_types,
-                signature.returns.clone(),
-            );
-            
-            // Register the function in the context before transforming bodies
-            context.add_function(minimal_function, string_table);
-            
-            #[cfg(debug_assertions)]
-            wir_log!("Registered function '{}' with ID {} and {} return types", func_name, func_id, signature.returns.len());
-        }
-    }
-
-    // Second pass: Transform function bodies (can now reference other functions)
-    for node in ast {
+    for node in nodes {
         match &node.kind {
+            // Transform function bodies
             NodeKind::Function(name, signature, body) => {
                 // Resolve the function name first
                 let func_name = string_table.resolve(*name).to_string();
@@ -126,70 +76,36 @@ pub fn ast_to_wir(ast: Vec<AstNode>, string_table: &mut StringTable) -> Result<W
                 )?;
 
                 // Check if this is an entry point function and add export
-                let entry_point_string = string_table.intern(MAIN_ENTRY_POINT_FUNC_NAME);
-                if func_name == MAIN_ENTRY_POINT_FUNC_NAME {
+                // To do this, the name of the function will be the implicit start function name
+                // But specifically from the main entry point file
+                if func_name == IMPLICIT_START_FUNC_NAME {
+                    let entry_point_name = string_table.intern(IMPLICIT_START_FUNC_NAME);
+
                     wir.exports.insert(
-                        entry_point_string,
+                        entry_point_name,
                         Export {
-                            name: entry_point_string,
+                            name: entry_point_name,
                             kind: ExportKind::Function,
                             index: wir.functions.len() as u32, // Function index in the WIR
                         },
                     );
+
                     #[cfg(debug_assertions)]
                     wir_log!("Added export for entry point function '{}'", name);
                 }
 
-                functions.push(wir_function);
+                wir.add_function(wir_function);
             }
+
             _ => {
-                other_statements.push(node);
+                // TODO: Handle other top-level AST nodes such as structs for type info
             }
-        }
-    }
-
-    // Add all functions to the WIR
-    for function in functions {
-        wir.add_function(function);
-    }
-
-    // Create a main function for any remaining top-level statements
-    // Only create if we don't already have an entry point function
-    if !other_statements.is_empty() {
-        let start_name = string_table.intern(MAIN_ENTRY_POINT_FUNC_NAME);
-        let has_entry_point = wir.exports.contains_key(&start_name);
-
-        if has_entry_point {
-            // If we already have an entry point, don't create another main function
-            // This prevents duplicate exports
-            #[cfg(debug_assertions)]
-            wir_log!("Skipping main function creation - entry point already exists");
-        } else {
-            // Create main function and export it as _start
-            let mut main_function =
-                create_main_function_from_ast(&other_statements, &mut context, string_table)?;
-
-            // Rename to _start to match WASM convention
-            main_function.name = start_name;
-
-            // Add export for the entry point
-            wir.exports.insert(
-                start_name,
-                Export {
-                    name: start_name,
-                    kind: ExportKind::Function,
-                    index: wir.functions.len() as u32,
-                },
-            );
-
-            wir.add_function(main_function);
-            #[cfg(debug_assertions)]
-            wir_log!("Created _start function from top-level statements");
         }
     }
 
     // Transfer host imports from context to WIR
     wir.add_host_imports(&context.get_host_imports());
+
     #[cfg(debug_assertions)]
     wir_log!(
         "Transferred {} host imports to WIR",
@@ -441,37 +357,6 @@ fn create_wir_function_from_ast(
         name,
         body.len()
     );
-
-    // Check if this is an entry point function and validate signature
-    let is_entry_point = name == MAIN_ENTRY_POINT_FUNC_NAME;
-    if is_entry_point {
-        wir_log!("Function '{}' detected as entry point", name);
-
-        // Validate entry point signature - should have no parameters and no returns
-        if !signature.parameters.is_empty() {
-            let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
-            return_wir_transformation_error!(
-                format!("Entry point function '{}' should not have parameters, found {} parameters", name, signature.parameters.len()),
-                ErrorLocation::default(), {
-                    VariableName => func_name_static,
-                    CompilationStage => "WIR Generation",
-                    PrimarySuggestion => "Remove parameters from the entry point function - it's the module's starting function and cannot accept arguments",
-                }
-            );
-        }
-
-        if !signature.returns.is_empty() {
-            let func_name_static: &'static str = Box::leak(name.to_string().into_boxed_str());
-            return_wir_transformation_error!(
-                format!("Entry point function '{}' should not have return values, found {} return values", name, signature.returns.len()),
-                ErrorLocation::default(), {
-                    VariableName => func_name_static,
-                    CompilationStage => "WIR Generation",
-                    PrimarySuggestion => "Remove return values from the entry point function - it's the module's starting function and cannot return values",
-                }
-            );
-        }
-    }
 
     // Convert AST signature to WIR signature
     let mut param_places = Vec::new();

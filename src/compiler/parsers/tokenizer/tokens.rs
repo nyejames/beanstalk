@@ -1,6 +1,6 @@
 use crate::compiler::datatypes::DataType;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 
 use crate::compiler::compiler_errors::ErrorLocation;
 use colour::red_ln;
@@ -373,7 +373,7 @@ pub enum TokenKind {
     // Special compiler directives
     /// The only way to manually force a panic in the compiler in release mode
     Panic,
-    Wat(String),
+    // Wat(String),
     Ignore,
 
     /// Function Signatures
@@ -499,7 +499,7 @@ pub enum TokenKind {
     TemplateClose,
     TemplateHead,
 
-    Id(String), // ID for scenes
+    Id(InternedString), // ID for scenes
 
     Empty,
 }

@@ -1,16 +1,19 @@
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
-use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 use crate::compiler::string_interning::{StringId, StringTable};
-use crate::settings;
+use crate::settings::{self, IMPLICIT_START_FUNC_NAME};
+
+pub struct ModuleExport {
+    pub id: StringId,
+    pub signature: FunctionSignature,
+}
 pub struct Ast {
     pub nodes: Vec<AstNode>,
 
@@ -19,7 +22,8 @@ pub struct Ast {
 
     // Exported out of the final compiled wasm module
     // Functions must use explicit 'export' syntax Token::Export to be exported
-    pub external_exports: Vec<Arg>,
+    // The only exception is the Main function, which is the start function of the entry point file
+    pub external_exports: Vec<ModuleExport>,
     pub warnings: Vec<CompilerWarning>,
 }
 
@@ -32,124 +36,12 @@ impl Ast {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
             Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
-        let external_exports: Vec<Arg> = Vec::new();
+        let mut external_exports: Vec<ModuleExport> = Vec::new();
         let mut warnings: Vec<CompilerWarning> = Vec::new();
         let mut entry_path = None;
 
-        // First pass: collect all function signatures and struct definitions to register them in scope
+        // Collect all function signatures and struct definitions to register them in scope
         let mut declarations: Vec<Arg> = Vec::new();
-        let mut seen_names: std::collections::HashMap<StringId, (usize, &str)> =
-            std::collections::HashMap::new();
-
-        for (idx, header) in sorted_headers.iter().enumerate() {
-            match &header.kind {
-                HeaderKind::Function(signature, _) => {
-                    // Extract simple name from header path for scope registration
-                    let simple_name = match header.path.extract_header_name(string_table) {
-                        Some(name) => name,
-                        None => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(format!(
-                                    "Failed to extract function name from header path: {}",
-                                    header.path.to_string(string_table)
-                                ))],
-                                warnings,
-                            });
-                        }
-                    };
-
-                    // Check for duplicate names
-                    if let Some((_first_idx, first_kind)) = seen_names.get(&simple_name) {
-                        let name_str = string_table.resolve(simple_name);
-
-                        let mut error = CompileError::new_rule_error(
-                            format!(
-                                "Duplicate {} name '{}' in module. A {} with this name already exists.",
-                                "function", name_str, first_kind
-                            ),
-                            header.name_location.clone().to_error_location(string_table),
-                        );
-
-                        error.new_metadata_entry(
-                            crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                            "Rename one of the function definitions to avoid the conflict",
-                        );
-
-                        return Err(CompilerMessages {
-                            errors: vec![error],
-                            warnings,
-                        });
-                    }
-
-                    seen_names.insert(simple_name, (idx, "function"));
-
-                    let func_arg = Arg {
-                        id: simple_name, // Use simple name for scope lookup
-                        value: Expression {
-                            kind: ExpressionKind::None,
-                            data_type: DataType::Function(signature.clone()),
-                            ownership: Ownership::ImmutableOwned,
-                            location: header.name_location.clone(),
-                        },
-                    };
-                    declarations.push(func_arg);
-                }
-
-                HeaderKind::Struct(definition) => {
-                    // Extract simple name from header path for scope registration
-                    let simple_name = match header.path.extract_header_name(string_table) {
-                        Some(name) => name,
-                        None => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(format!(
-                                    "Failed to extract struct name from header path: {}",
-                                    header.path.to_string(string_table)
-                                ))],
-                                warnings,
-                            });
-                        }
-                    };
-
-                    // Check for duplicate names
-                    if let Some((_first_idx, first_kind)) = seen_names.get(&simple_name) {
-                        let name_str = string_table.resolve(simple_name);
-
-                        let mut error = CompileError::new_rule_error(
-                            format!(
-                                "Duplicate {} name '{}' in module. A {} with this name already exists.",
-                                "struct", name_str, first_kind
-                            ),
-                            header.name_location.clone().to_error_location(string_table),
-                        );
-
-                        error.new_metadata_entry(
-                            crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                            "Rename one of the struct definitions to avoid the conflict",
-                        );
-
-                        return Err(CompilerMessages {
-                            errors: vec![error],
-                            warnings,
-                        });
-                    }
-
-                    seen_names.insert(simple_name, (idx, "struct"));
-
-                    let struct_arg = Arg {
-                        id: simple_name, // Use simple name for scope lookup
-                        value: Expression {
-                            kind: ExpressionKind::None,
-                            data_type: DataType::Parameters(definition.clone()),
-                            ownership: Ownership::ImmutableOwned,
-                            location: header.name_location.clone(),
-                        },
-                    };
-                    declarations.push(struct_arg);
-                }
-                _ => {}
-            }
-        }
-
         for header in sorted_headers {
             match header.kind {
                 HeaderKind::Function(signature, tokens) => {
@@ -177,23 +69,13 @@ impl Ast {
                         }
                     };
 
-                    // Extract simple name for AST node identifier
-                    let simple_name = match header.path.extract_header_name(string_table) {
-                        Some(name) => name,
-                        None => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(format!(
-                                    "Failed to extract function name from header path: {}",
-                                    header.path.to_string(string_table)
-                                ))],
-                                warnings,
-                            });
-                        }
-                    };
-
+                    // Make name from header path
+                    // This ensures unique namespaced function names
+                    // ALL symbols become full paths in the AST converted to interned strings
+                    let unique_name = header.path.to_interned_string(string_table);
                     ast.push(AstNode {
                         kind: NodeKind::Function(
-                            simple_name, // Use simple name for identifier
+                            unique_name, 
                             signature.to_owned(),
                             body.to_owned(),
                         ),
@@ -202,7 +84,16 @@ impl Ast {
                     });
                 }
 
-                HeaderKind::EntryPoint(tokens) => {
+
+                // The main entry point
+                // The big difference between this function and the StartFunction,
+                // is that this one is exposed to the host environment.
+
+                // Both the main function and start functions are given a set name,
+                // But should never conflict as each file can only have one,
+                // and when imported into another file, they are automatically namespaced into a struct.
+                // Beanstalk currently doesn't and may never support universal imports.
+                HeaderKind::Main(tokens) => {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
@@ -234,15 +125,22 @@ impl Ast {
 
                     entry_path = Some(header.path.to_owned());
 
-                    let start_name = string_table.intern("_start");
+                    // The main function is the only function in the module with the implicit start name,
+                    // And no path prefix. Other start functions are namespaced by their file path.
+                    let start_name = string_table.intern(settings::IMPLICIT_START_FUNC_NAME);
                     ast.push(AstNode {
                         kind: NodeKind::Function(start_name, entry_signature, body),
-                        location: header.name_location,
+                        location: header.name_location.clone(),
                         scope: context.scope.clone(),
+                    });
+
+                    external_exports.push(ModuleExport { 
+                        id: start_name, 
+                        signature: FunctionSignature::default() 
                     });
                 }
 
-                HeaderKind::ImplicitMain(tokens) => {
+                HeaderKind::StartFunction(tokens) => {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
@@ -266,8 +164,11 @@ impl Ast {
                         }
                     };
 
-                    // Create an implicit main function that can be called by other modules
-                    let interned_name = header.path.to_interned_string(string_table);
+                    // Create an implicit "start" function that can be called by other modules
+                    let interned_name = header.path
+                        .join_str(IMPLICIT_START_FUNC_NAME, string_table)
+                        .to_interned_string(string_table);
+
                     let main_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![],
@@ -306,11 +207,12 @@ impl Ast {
                     // TODO: Implement constant handling
                 }
 
-                HeaderKind::Choice => {
+                HeaderKind::Choice(_args) => {
                     // TODO: Implement choice handling
                 }
 
                 HeaderKind::Template(tokens) => {
+                    // TODO: Implement exposing top level templates for HTML projects
                     let context = ScopeContext::new(
                         ContextKind::Template,
                         header.path.to_owned(),

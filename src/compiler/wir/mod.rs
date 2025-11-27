@@ -58,7 +58,7 @@
 //!
 //! // Transform AST to WIR with borrow checking
 //! let wir = ast_to_wir(ast_block)?;
-//! 
+//!
 //! // WIR is now ready for direct WASM lowering
 //! ```
 //!
@@ -140,7 +140,6 @@
 // Core WIR modules
 pub mod build_wir;
 pub mod place;
-pub mod wir;
 pub mod wir_nodes;
 
 // New modular organization

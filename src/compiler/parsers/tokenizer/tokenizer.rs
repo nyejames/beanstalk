@@ -449,6 +449,8 @@ pub fn get_token_kind(
     }
 
     // Compiler Directives
+    // These are special compiler commands that start with a hash
+    // They are always followed by a stringslice literal
     if current_char == '#' {
         return compiler_directive(&mut token_value, stream, &string_table);
     }
@@ -463,7 +465,8 @@ pub fn get_token_kind(
                 }
                 break;
             }
-            return_token!(TokenKind::Id(token_value), stream);
+            let interned = string_table.intern(&token_value);
+            return_token!(TokenKind::Id(interned), stream);
         }
 
         // The @ should always be followed by a path

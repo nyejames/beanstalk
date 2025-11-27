@@ -12,30 +12,27 @@ use crate::compiler::string_interning::{StringId, StringTable};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-// Each header is one of these categories:
-// - Functions
-// - Structs
-// - Templates (for creating HTML pages)
-// - Choices (not yet implemented)
-// - Constants
-// - Implicit Main Function:
-//      any other logic in the top level scope implicitly becomes a main function.
-//      This only runs when explicitly called from the file importing this file,
-//      or it will be called at the start of the program if this file is the entry point.
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function(FunctionSignature, Vec<Token>),
-    Template(Vec<Token>),
+    Template(Vec<Token>), // Top level templates are used for HTML page generation
     Struct(Vec<Arg>),
-    Choice,
+    Choice(Vec<Arg>), // Tagged unions. Not yet implemented in the language
     Constant(Arg),
 
     // The top-level scope of regular files.
-    ImplicitMain(Vec<Token>),
+    // Any other logic in the top level scope implicitly becomes a "start" function.
+    // This only runs when explicitly called from an import.
+    // Each .bst file can see and use these like normal functions. 
+    // Start functions have no arguments or return values
+    // and are not visible to the host from the final wasm module.
+    StartFunction(Vec<Token>),
 
-    // The top-level scope of the entry file.
-    // This will automatically run when the program starts.
-    EntryPoint(Vec<Token>),
+    // This is the main function that the host environment can use to run the final Wasm module.
+    // The start function of the entry file.
+    // It has the same rules as other start functions,
+    // but it is exposed to the host from the final Wasm module.
+    Main(Vec<Token>),
 }
 
 #[derive(Clone, Debug)]
@@ -91,13 +88,13 @@ pub fn parse_headers(
     // Validate that only one EntryPoint exists in the module
     let entry_point_count = headers
         .iter()
-        .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
+        .filter(|h| matches!(h.kind, HeaderKind::Main(_)))
         .count();
 
     if entry_point_count > 1 {
         let entry_points: Vec<_> = headers
             .iter()
-            .filter(|h| matches!(h.kind, HeaderKind::EntryPoint(_)))
+            .filter(|h| matches!(h.kind, HeaderKind::Main(_)))
             .collect();
 
         let first_path_str: &'static str = Box::leak(
@@ -147,6 +144,9 @@ pub fn parse_headers_in_file(
 ) -> Result<Vec<Header>, CompileError> {
     let mut headers = Vec::new();
     let mut encountered_symbols: HashSet<StringId> = HashSet::new();
+
+    // We only need to know IF a header is exported,
+    // So later on it can be added to the modules export section
     let mut next_statement_exported = false;
     let mut main_function_body = Vec::new();
 
@@ -154,7 +154,7 @@ pub fn parse_headers_in_file(
 
     // We parse and track imports as we go,
     // so we can check if the headers depend on those imports.
-    // The StringId is the symbol for the header (This is namespaced to its original file)
+    // The StringId is the symbol for the header,
     // The path is the file it's from.
     let mut file_imports: HashMap<StringId, InternedPath> = HashMap::new();
 
@@ -221,82 +221,73 @@ pub fn parse_headers_in_file(
 
             // New Function, Struct, Choice, or Variable declaration
             TokenKind::Symbol(name_id) => {
-                // No need to resolve the name since we use StringId directly
+                if host_function_registry.get_function(&name_id).is_none() {
 
-                // Check if this is a duplicate definition by looking ahead
-                if host_function_registry.get_function(&name_id).is_none()
-                    && encountered_symbols.contains(&name_id)
-                {
-                    // Check if this looks like a duplicate function/struct definition
-                    // by looking ahead to see if there's a type parameter bracket
-                    let next_token = token_stream.current_token();
-                    if matches!(next_token.kind, TokenKind::TypeParameterBracket) {
-                        // This looks like a duplicate function or struct definition
-                        let name_str = string_table.resolve(name_id);
-                        let mut error = CompileError::new_rule_error(
-                            format!(
-                                "Duplicate definition of '{}'. A function or struct with this name already exists in this file.",
-                                name_str
-                            ),
-                            current_location.to_error_location(string_table),
-                        );
-                        error.new_metadata_entry(
-                            ErrorMetaDataKey::PrimarySuggestion,
-                            "Rename one of the definitions to avoid the conflict",
-                        );
-                        return Err(
-                            error.with_file_path(token_stream.src_path.to_path_buf(string_table))
-                        );
-                    }
-                }
+                    // Reference to an existing symbol
+                    if encountered_symbols.contains(&name_id) {
+                        // This is a reference, so it goes into the implicit main function
+                        main_function_body.push(current_token);
 
-                // If this is also not a host registry function,
-                // Then it's a new symbol and should be parsed as a header
-                if host_function_registry.get_function(&name_id).is_none()
-                    && !encountered_symbols.contains(&name_id)
-                {
-                    // Every time we encounter a new symbol,
-                    // we check if it fits into one of the Header categories.
-                    // If not, it goes into the implicit main function.
-                    let header = create_header(
-                        token_stream.src_path.join_header(name_id, string_table),
-                        next_statement_exported,
-                        token_stream,
-                        current_location,
-                        // Since this is a new scope,
-                        // We don't want to add any imports from the header's scope to the global imports.
-                        &file_imports,
-                        host_function_registry,
-                        string_table,
-                    )?;
+                        // We also store the path in dependencies and check if it's a header in scope already.
+                        // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
+                        // Create a path from the current file plus the symbol name
+                        main_function_dependencies.insert(token_stream.src_path.join_header(name_id, string_table));
 
-                    match header.kind {
-                        HeaderKind::ImplicitMain(_) => {
-                            main_function_body.push(current_token);
-                            if let Some(path) = file_imports.get(&name_id) {
-                                main_function_dependencies.insert(path.to_owned());
+                        if next_statement_exported {
+                            next_statement_exported = false;
+                            warnings.push(CompilerWarning::new(
+                                "You can't export a reference to a variable, only new declarations.",
+                                token_stream
+                                    .current_location()
+                                    .to_error_location(string_table),
+                                WarningKind::PointlessExport,
+                                token_stream.src_path.to_path_buf(string_table),
+                            ))
+                        }
+
+                    // New symbol declaration
+                    } else {
+                        // Every time we encounter a new symbol,
+                        // we check if it fits into one of the Header categories.
+                        // If not, it goes into the implicit main function.
+                        let header = create_header(
+                            token_stream.src_path.join_header(name_id, string_table),
+                            next_statement_exported,
+                            token_stream,
+                            current_location,
+                            // Since this is a new scope,
+                            // We don't want to add any imports from the header's scope to the global imports.
+                            // We also don't use encountered_symbols since headers don't capture variables from the surrounding scope
+                            &file_imports,
+                            host_function_registry,
+                            string_table,
+                        )?;
+
+                        match header.kind {
+                            HeaderKind::StartFunction(_) => {
+                                main_function_body.push(current_token);
+                                if let Some(path) = file_imports.get(&name_id) {
+                                    main_function_dependencies.insert(path.to_owned());
+                                }
+                            }
+                            _ => {
+                                headers.push(header);
                             }
                         }
-                        _ => {
-                            headers.push(header);
-                        }
-                    }
 
-                    next_statement_exported = false;
-                    encountered_symbols.insert(name_id);
+                        next_statement_exported = false;
+                        encountered_symbols.insert(name_id);
+                    };
+
+                // Host function reference
                 } else {
-                    // This is a reference, so it goes into the implicit main function
+                    // This is a reference to a host function, so it goes into the implicit main function
+                    // Does not need to be added as a dependency since host functions are globally available
                     main_function_body.push(current_token);
-
-                    // We also store the path in dependencies and check if it's a header in scope already.
-                    // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
-                    // Create a path from the current file plus the symbol name
-                    main_function_dependencies.insert(token_stream.src_path.join_header(name_id, string_table));
-
                     if next_statement_exported {
                         next_statement_exported = false;
                         warnings.push(CompilerWarning::new(
-                            "You can't export a reference to a variable, only new declarations.",
+                            "You can't export a reference to a host function, only new declarations.",
                             token_stream
                                 .current_location()
                                 .to_error_location(string_table),
@@ -312,8 +303,15 @@ pub fn parse_headers_in_file(
             // Just uses the end of the path as the name of the header being imported.
             // Named imports not yet supported, will need to be added through create_header.
             TokenKind::Import => {
-                let (import_name, import_path) = parse_import(token_stream, string_table)?;
-                file_imports.insert(import_name, import_path);
+                let import= parse_import(token_stream, string_table)?;
+                let import_symbol = if let Some(renamed_path) = import.alias {
+                    renamed_path
+                } else {
+                    import.header_path.to_interned_string(string_table)
+                };
+
+                file_imports.insert(import_symbol, import.header_path);
+                encountered_symbols.insert(import_symbol);
             }
 
             TokenKind::Export => {
@@ -345,15 +343,16 @@ pub fn parse_headers_in_file(
 
     // Create the appropriate header kind based on whether this is the entry file
     let main_header_kind = if is_entry_file {
-        HeaderKind::EntryPoint(main_function_body)
+        HeaderKind::Main(main_function_body)
     } else {
-        HeaderKind::ImplicitMain(main_function_body)
+        HeaderKind::StartFunction(main_function_body)
     };
 
     // The implicit main function also depends on other headers in this file.
     // So it can use and call any functions or structs defined in this file.
     for header in headers.iter() {
         println!("{:?}", header.path);
+
         main_function_dependencies.insert(header.path.to_owned());
     }
 
@@ -380,7 +379,7 @@ fn create_header(
     // We only need to know what imports this header is actually using.
     // So only track symbols matching this file's imports to add to the dependencies.
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
-    let mut kind: HeaderKind = HeaderKind::ImplicitMain(Vec::new());
+    let mut kind: HeaderKind = HeaderKind::StartFunction(Vec::new());
 
     // Starts at the first token after the declaration symbol
     let current_token = token_stream.current_token_kind().to_owned();
