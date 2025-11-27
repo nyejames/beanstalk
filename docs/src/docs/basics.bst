@@ -15,7 +15,7 @@ it will create a single Wasm module from that entry point and pull in all its de
 
 From the config file you can define a Beanstalk file as the entry point of a program.
 
-Web projects have their own structure and config file also.
+Web projects have their own directory based structure and config file also.
 
 # Quick Syntax Summary
 For developers coming from most other languages, 
@@ -46,7 +46,7 @@ Documentation comments will eventually be created via special templates.
 ```beanstalk
     -- normal comment
 
-    [#docs():
+    --[:
         Multiline comment
 
         Woo
