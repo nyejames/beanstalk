@@ -1,11 +1,9 @@
 # Beanstalk Language Design Guide
+Beanstalk is a programming language and build system with minimal syntax and a simple type system. It uses Wasm as its target bytecode.
 
-Beanstalk is a programming language and build system with minimal syntax and a simple type system.
+You can think of the language at a high level as being like a blend of Go and Rust. Fast compile times, very minimal and simple like Go, but with a Rust style memory management (instead of a GC) and a unique modern syntax with very powerful string templates.
 
-You can think of the language at a high level as being similar to Go (fast compile times, very minimal and simple), but with a Rust style memory management (instead of a GC) and a unique modern syntax with very powerful string templates.
-
-## Language Syntax Rules
-# Quick Syntax Summary
+## Syntax Summary
 For developers coming from most other languages, 
 here are some key idiosyncrasies from other C-like languages to note:
 
@@ -19,7 +17,7 @@ This comes before the type if there is an explicit type declaration.
 - Double dashes for single line comments (--)
 - Immutable reference semantics are the default for all stack and heap allocated types. 
 - All copies have to be explicit unless they are used in part of a new expression. Inlcuding integers, floats and bools.
-- Errors use the '!' symbol. Options use '?'.
+- Result types are created with the '!' symbol. Options use '?'.
 
 **Naming conventions (strictly enforce):**
 - Types/Objects/Choices: `PascalCase`
@@ -58,6 +56,7 @@ This comes before the type if there is an explicit type declaration.
 ```
 
 **Function definitions:**
+
 ```beanstalk
 -- Basic function pattern
 function_name |param Int| -> Int:
@@ -65,16 +64,122 @@ function_name |param Int| -> Int:
     value = param + 1
     return value
 ;
-
--- Error handling pattern
--- Error can be any type, the bang indicates this is a possible error value
-risky_function || -> String, Error!:
-    return other_function() !err:
-        return err
-    ;
-;
 ```
+### Handling Errors in Beanstalk
+Errors are treated as values in Beanstalk, and
+they represent Result types similar to Rust.
+
+Any function that can return an error must have its error handled.
+
+The bang symbol ! is used for creating Result types and handling errors.
+
+```beanstalk
+    func_call_that_can_return_an_error() !:
+        -- Error handling code
+    ;
+
+    -- Here, we define a type called 'BadStuff' that we will use as our error value.
+    BadStuff:
+        msg String
+    ;
+
+    -- This function can return a String and an Int or a BadStuff error
+    -- The ! indicates that instead of the normal return values, the error value could be returned instead of the other two
+    -- Using return! returns only the error value
+    -- The regular return doesn't return the error value
+    -- Only one value can use the ! symbol to represent the error value
+    parent_func || -> String, Int, BadStuff!:
+        text = func_call_that_can_return_an_error() !err:
+            print("Error: ", err)
+            return! BadStuff(err.msg)
+        ;
+
+        return text, 42
+    ;
+    
+    text, number = parent_func() !err:
+        print("Error from parent_func: ", err.msg)
+        return
+    ;
+
+    -- Handling an error with default values in case of an error
+    string_returned, number_returned = parent_func() !("", 0)
+
+    -- Bubbling up errors without handling them
+    another_parent_func || -> String, Int, BadStuff!:
+        -- Since this function has the same return signature, 
+        -- it can be directly returned without handling the error here
+        -- The ! represents that the value is a Result type
+        return parent_func()!
+    ;
+
+    -- By default, accessing items in a collection by their index using .get() returns an error if the index is out of bounds
+    -- Unlike other languages where this can cause a panic or exception by default
+
+    my_list ~= [1, 2, 3]
+
+    -- If you wanted to both open a scope for handling the error and provide a default value, you could do it like this:
+    -- Default to the last index, and also print an error message
+    value ~= my_list.get(5) !(
+        my_list.length() - 1
+    ) !msg:
+        print("Index out of bounds error: ", msg)
+    ;
+```
+
+### Using the ? operator
+```beanstalk
+
+    -- Using the Option type (?) we can represent that a value might not exist
+    -- This function returns a string or None
+    getURL || -> String?:
+        response = getNetworkRequest()
+
+        if response is None:
+            return None
+
+        return response.body
+    ;
+
+    -- We can use some ? syntax sugar to set a default value if the value is None
+    url = getURL() ?("https://nyejames.com")
+
+    -- This function always returns a Response, as we've handled the None case inside the function
+    getURL || -> Response:
+        return getNetworkRequest() ?(
+            Response("Default Body")
+        )
+    ;
+
+    -- Ignoring the error syntax sugar and returning errors with the values
+    -- Notice, not using the ! 
+    -- Instead, we will use an option '?' to represent that the error could be None
+    -- This is equivalent to the pattern used for error handling in Go
+    parent_func_no_sugar || -> String, Int, BadStuff?:
+        text, number = func_call_that_can_return_an_error() !:
+            return "", 0, BadStuff("An error occurred")
+        ;
+
+        return text, number, None
+    ;
+
+    -- We are just treating the error as an optional here instead
+    -- So we can seperately check if there was an error
+    text, number, error? = parent_func_no_sugar()
+
+    if error is not None:
+        print("Error from parent_func_no_sugar: ", error.msg)
+        return
+```
+
+### Panics
+Panics use a compiler directive.
+```beanstalk
+    #panic "Message about the panic"
+```
+
 **Collections**
+
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
 Instead of accessing elements directly, 
@@ -111,6 +216,7 @@ greet |name String| -> Void:
 Every host environment must provide an io function to compile Beanstalk.
 
 **Control flow patterns:**
+
 There is no 'else if', you use pattern matching instead for more than 2 branches.
 ```beanstalk
 -- Conditional (use 'is', never ==)
@@ -122,9 +228,9 @@ else
 
 -- Pattern matching (always exhaustive)
 if value is:
-    0: ["zero"]
-    < 0: ["negative"]
-    else: ["other"]
+    0: return "zero"
+    < 0: return "negative"
+    else: return "other"
 ;
 ```
 
@@ -203,16 +309,20 @@ For a more detailed breakdown, see the Beanstalk Compiler Development Guide.
 
 ## Module System and Imports
 
-**Multi-file modules**: Beanstalk supports organizing code across multiple files that compile into a single WASM module.
+**Multi-file modules**
+
+Beanstalk supports organizing code across multiple files that compile into a single WASM module.
 
 Everything at the top level of a file is visible to the rest of the module by default, but must be explicitly exported to be exported from the final wasm module.
 
 Currently imports can't yet be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
 
 **Import syntax:**
+
+Imports use a compiler directve (a hash keyword with a string afterwards)
 ```beanstalk
 -- Import another file in the same module
-#import("path/to/file")
+#import "path/to/file"
 ```
 
 **Entry files and implicit main functions:**
@@ -269,7 +379,3 @@ Templates are either folded to strings at compile time, or become functions that
 
 [for item in collection: [item]]
 ```
-
-
-
-

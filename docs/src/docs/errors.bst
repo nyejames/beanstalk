@@ -7,7 +7,7 @@
 [Docs_styles.Header Basic.center: [Basic.title(1): ERROR HANDLING AND OPTIONALS]]
 [Basic.Page:
 
-Errors are treated as values in Beanstalk, 
+Errors are treated as values in Beanstalk, and
 they represent Result types similar to Rust.
 
 Any function that can return an error must have its error handled.

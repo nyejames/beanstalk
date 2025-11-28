@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A minimal, statically typed programming language for creating fast and safe web apps
+  A programming language for the future
 </em></p>
 
 # 🌱
@@ -53,15 +53,14 @@ post = PostGenerator.create_post(date, [:
 <br>
 
 ## Goals 
-- The minimalism and fast compile speed of Go.
-- The memory safety of Rust, with no 'unsafe' mode.
+- The syntax minimalism and fast compile speed of Go
+- The memory safety of Rust, with no 'unsafe' mode
 - Predictable performance
-- **The King of Strings**: A string template system can double up as a tiny HTML/markup engine or anything else you want.
-- A full static-site–capable build system.
-- Simple and strong type system
+- **The King of Strings**: String templates that can double up as a tiny HTML/markup engine or anything else you want
+- A complete build system for web projects and beyond
+- Simple, static and strong type system
+- Clean and deterministic error handling
 - Wasm focused backend designed around producing high-quality Wasm efficiently and integrating with that ecosystem
-
-
 
 
 [//]: # (  <h1>)
