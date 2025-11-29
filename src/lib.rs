@@ -242,7 +242,6 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     ///         WIR CREATION
     /// -----------------------------
-    /// Lower to an IR for lifetime analysis and block level optimisations
     /// This IR maps well to WASM with integrated borrow checking
     pub fn ast_to_ir(&mut self, ast: Ast) -> Result<WIR, CompilerMessages> {
         // Pass string table to WIR generation for string interning during WIR building

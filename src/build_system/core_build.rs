@@ -8,14 +8,17 @@
 
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::interned_path::InternedPath;
+use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::string_interning::{StringId, StringTable};
+use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
+use rayon::string;
+use wasmer::sys::module;
 // use rayon::prelude::*;
 use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
-use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 use std::time::Instant;
 
@@ -179,20 +182,24 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
     //let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
-    let mut messages: CompilerMessages = CompilerMessages::new();
-    let mut module_ast: Vec<AstNode> = Vec::with_capacity(sorted_modules.len());
+    let mut module_ast = Ast {
+        nodes: Vec::with_capacity(sorted_modules.len()),
+        entry_path: InternedPath::from_path_buf(&config.entry_point, &mut compiler.string_table),
+        external_exports: Vec::new(),
+        warnings: Vec::new(),
+    };
 
     // Combine all the headers into one AST
     match compiler.headers_to_ast(sorted_modules) {
         Ok(parser_output) => {
-            module_ast.extend(parser_output.nodes);
-
+            module_ast.nodes.extend(parser_output.nodes);
+            module_ast.external_exports.extend(parser_output.external_exports);
             // Extends the compiler messages with warnings and errors from the parser
-            messages.warnings.extend(parser_output.warnings);
+            compiler_messages.warnings.extend(parser_output.warnings);
         }
         Err(e) => {
-            messages.errors.extend(e.errors);
-            return Err(messages);
+            compiler_messages.errors.extend(e.errors);
+            return Err(compiler_messages);
         }
     }
 
@@ -210,8 +217,9 @@ pub fn compile_modules(
             wir
         }
         Err(e) => {
-            messages.errors.extend(e);
-            return Err(messages);
+            compiler_messages.errors.extend(e.errors);
+            compiler_messages.warnings.extend(e.warnings);
+            return Err(compiler_messages);
         }
     };
 
@@ -221,8 +229,8 @@ pub fn compile_modules(
     let wasm_bytes = match compiler.ir_to_wasm(wir) {
         Ok(w) => w,
         Err(e) => {
-            messages.errors.push(e);
-            return Err(messages);
+            compiler_messages.errors.push(e);
+            return Err(compiler_messages);
         }
     };
 
@@ -240,7 +248,7 @@ pub fn compile_modules(
         wasm_bytes,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
         exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
-        warnings: messages.warnings,
+        warnings: compiler_messages.warnings,
     })
 }
 

@@ -58,6 +58,7 @@ pub fn ast_to_wir(ast: Ast, string_table: &mut StringTable) -> Result<WIR, Compi
     let mut context = WirTransformContext::new();
     let mut wir = WIR::new();
     let nodes = ast.nodes;
+    let mut messages = CompilerMessages::new();
 
     for node in nodes {
         match &node.kind {
@@ -67,13 +68,19 @@ pub fn ast_to_wir(ast: Ast, string_table: &mut StringTable) -> Result<WIR, Compi
                 let func_name = string_table.resolve(*name).to_string();
 
                 // Transform function definition and add to WIR
-                let wir_function = create_wir_function_from_ast(
+                let wir_function = match create_wir_function_from_ast(
                     &func_name,
                     signature,
                     body,
                     &mut context,
                     string_table,
-                )?;
+                ) {
+                    Ok(func) => func,
+                    Err(err) => {
+                        messages.errors.push(err);
+                        return Err(messages);
+                    }
+                };
 
                 // Check if this is an entry point function and add export
                 // To do this, the name of the function will be the implicit start function name
@@ -113,7 +120,16 @@ pub fn ast_to_wir(ast: Ast, string_table: &mut StringTable) -> Result<WIR, Compi
     );
 
     // Run borrow checking on the WIR
-    run_borrow_checking_on_wir(&mut wir, string_table)?;
+    match run_borrow_checking_on_wir(&mut wir, string_table) {
+        Ok(_) => {
+            #[cfg(debug_assertions)]
+            wir_log!("Borrow checking completed successfully on WIR");
+        }
+        Err(err) => {
+            messages.errors.push(err);
+            return Err(messages);
+        }
+    };
 
     Ok(wir)
 }
@@ -139,7 +155,7 @@ fn create_main_function_from_ast(
     // Create the main function
     let mut main_function = WirFunction::new(
         0, // function ID
-        string_table.intern(MAIN_FUNCTION_NAME),
+        string_table.intern(IMPLICIT_START_FUNC_NAME),
         vec![], // no parameters
         vec![], // no return types for now
         vec![], // no return args for now

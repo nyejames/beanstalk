@@ -39,6 +39,7 @@ use crate::compiler::wir::wir_nodes::{
     WirFunction,
 };
 use crate::return_compiler_error;
+use crate::settings::IMPLICIT_START_FUNC_NAME;
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::*;
 
@@ -1332,13 +1333,10 @@ impl WasmModule {
 
                     // Check if this is the entry point by looking for specific naming patterns
                     // This is done by confirming this is the "start" function specifically from the entry point file
-                    let is_entry_point = function_name == crate::settings::MAIN_FUNC_NAME;
+                    let is_entry_point = function_name == crate::settings::IMPLICIT_START_FUNC_NAME;
 
                     if is_entry_point {
-                        entry_point_count += 1;
-                        // FIXED: Add import_count to get the correct WASM function index
-                        // Imports come first in the function index space, then defined functions
-                        let function_index = import_count + (index as u32);
+                        let function_index = index as u32;
 
                         // Export the entry point function
                         self.add_function_export(&export_name, function_index)?;
@@ -1355,35 +1353,6 @@ impl WasmModule {
                     }
                 }
             }
-
-            // Handle implicit main/_start function export only if not already exported
-            let function_name = self.string_table.resolve(wir_function.name).to_string();
-            if !exported
-                && (function_name == MAIN_FUNCTION_NAME
-                    || function_name == ENTRY_POINT_FUNCTION_NAME)
-            {
-                entry_point_count += 1;
-                // FIXED: Add import_count to get the correct WASM function index
-                let function_index = import_count + (index as u32);
-
-                // Use the function's actual name for the export
-                self.add_function_export(&function_name, function_index)?;
-                start_function_index = Some(function_index);
-
-                #[cfg(feature = "verbose_codegen_logging")]
-                println!(
-                    "WASM: Exported implicit entry point function '{}' at index {}",
-                    function_name, function_index
-                );
-            }
-        }
-
-        // Validate that only one start function is exported per module
-        if entry_point_count > 1 {
-            return_compiler_error!(
-                "Multiple entry points found in module ({}). WASM modules can only have one start function.",
-                entry_point_count
-            );
         }
 
         // Add proper function indexing for exported entry points
