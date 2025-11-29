@@ -4,7 +4,7 @@
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 
 use crate::build::{BuildTarget, ProjectBuilder};
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project, return_config_error};
 
@@ -55,7 +55,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
         &self.target
     }
 
-    fn validate_config(&self, config: &Config) -> Result<(), CompileError> {
+    fn validate_config(&self, config: &Config) -> Result<(), CompilerError> {
         // Validate HTML-specific configuration
         if config.dev_folder.as_os_str().is_empty() {
             return_config_error!(

@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
@@ -227,7 +227,7 @@ impl HostFunctionRegistry {
         &mut self,
         function: HostFunctionDef,
         string_table: &StringTable,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         // Validate the function definition first
         validate_host_function_def(&function, string_table)?;
 
@@ -248,7 +248,7 @@ impl HostFunctionRegistry {
         function: HostFunctionDef,
         js_mapping: Option<JsFunctionDef>,
         string_table: &StringTable,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         // Register the core function first
         self.register_function(function.clone(), string_table)?;
 
@@ -296,7 +296,7 @@ impl HostFunctionRegistry {
         beanstalk_name: InternedString,
         js_function: JsFunctionDef,
         string_table: &StringTable,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         // Validate the JavaScript function definition
         validate_js_function_def(&js_function)?;
 
@@ -349,7 +349,7 @@ impl HostFunctionRegistry {
     pub fn validate_io_availability(
         &self,
         string_table: &StringTable,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         validate_io_function_availability(self, string_table)
     }
 }
@@ -373,7 +373,7 @@ impl Default for HostFunctionRegistry {
 pub fn create_builtin_registry(
     backend: RuntimeBackend,
     string_table: &mut StringTable,
-) -> Result<HostFunctionRegistry, CompileError> {
+) -> Result<HostFunctionRegistry, CompilerError> {
     let mut registry = HostFunctionRegistry::new_with_backend(backend);
 
     // Register the io() function with CoerceToString parameter
@@ -413,7 +413,7 @@ pub fn create_builtin_registry(
 fn validate_registry(
     registry: &HostFunctionRegistry,
     string_table: &StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Validate core host functions
     for function in registry.list_functions() {
         validate_host_function_def(function, string_table)?;
@@ -435,13 +435,13 @@ fn validate_registry(
 fn validate_io_function_availability(
     registry: &HostFunctionRegistry,
     string_table: &StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Check if io() function exists by looking through all registered functions
     let has_io = registry.list_functions().iter().any(|func| {
         let func_name = string_table.resolve(func.name);
         func_name == "io"
     });
-    
+
     if !has_io {
         return_compiler_error!(
             "Build system does not provide required 'io()' function. \
@@ -454,7 +454,7 @@ fn validate_io_function_availability(
 }
 
 /// Validate a single JavaScript function definition
-fn validate_js_function_def(function: &JsFunctionDef) -> Result<(), CompileError> {
+fn validate_js_function_def(function: &JsFunctionDef) -> Result<(), CompilerError> {
     // Validate function name is not empty
     if function.name.is_empty() {
         return_compiler_error!(
@@ -509,7 +509,7 @@ fn validate_js_function_def(function: &JsFunctionDef) -> Result<(), CompileError
 fn validate_host_function_def(
     function: &HostFunctionDef,
     string_table: &StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     let function_name = string_table.resolve(function.name);
     let module_name = string_table.resolve(function.module);
     let import_name = string_table.resolve(function.import_name);
@@ -575,7 +575,7 @@ fn validate_host_function_def(
 fn validate_io_function(
     function: &HostFunctionDef,
     string_table: &StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     let function_name = string_table.resolve(function.name);
     let module_name = string_table.resolve(function.module);
 

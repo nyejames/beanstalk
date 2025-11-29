@@ -1,5 +1,5 @@
 use super::eval_expression::evaluate_expression;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ContextKind;
 use crate::compiler::parsers::ast::ScopeContext;
@@ -25,7 +25,7 @@ pub fn create_multiple_expressions(
     context: &ScopeContext,
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
-) -> Result<Vec<Expression>, CompileError> {
+) -> Result<Vec<Expression>, CompilerError> {
     let mut expressions: Vec<Expression> = Vec::new();
     let mut type_index = 0;
 
@@ -90,7 +90,7 @@ pub fn create_expression(
     ownership: &Ownership,
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
-) -> Result<Expression, CompileError> {
+) -> Result<Expression, CompilerError> {
     let mut expression: Vec<AstNode> = Vec::new();
     // let mut number_union = get_any_number_datatype(false);
 

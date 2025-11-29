@@ -24,7 +24,7 @@
 //! - **Code Size**: Reduces generated WASM by pre-computing known values
 //! - **Optimization**: Enables dead code elimination and further optimizations
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
@@ -46,7 +46,7 @@ use crate::{return_rule_error, return_syntax_error};
 ///
 /// ## Error Handling
 ///
-/// Returns [`CompileError`] for:
+/// Returns [`CompilerError`] for:
 /// - Malformed expressions (insufficient operands for operators)
 /// - Type mismatches in operations
 /// - Division by zero in constant expressions
@@ -54,7 +54,7 @@ use crate::{return_rule_error, return_syntax_error};
 pub fn constant_fold(
     output_stack: &[AstNode],
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompileError> {
+) -> Result<Vec<AstNode>, CompilerError> {
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
 
     for node in output_stack {
@@ -138,7 +138,7 @@ impl Expression {
         rhs: &Expression,
         op: &Operator,
         string_table: &mut StringTable,
-    ) -> Result<Option<Expression>, CompileError> {
+    ) -> Result<Option<Expression>, CompilerError> {
         let kind: ExpressionKind = match (&self.kind, &rhs.kind) {
             // Float operations
             (ExpressionKind::Float(lhs_val), ExpressionKind::Float(rhs_val)) => {

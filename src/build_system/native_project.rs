@@ -5,7 +5,7 @@
 
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages, ErrorLocation};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, ErrorLocation};
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
 
@@ -54,7 +54,7 @@ impl ProjectBuilder for NativeProjectBuilder {
         &self.target
     }
 
-    fn validate_config(&self, _config: &Config) -> Result<(), CompileError> {
+    fn validate_config(&self, _config: &Config) -> Result<(), CompilerError> {
         // Validate native-specific configuration
         if let BuildTarget::Native { target_arch: _, .. } = &self.target {
             // Don't bother checking for valid targets for now

@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::Ownership::MutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
@@ -16,8 +16,8 @@ pub fn new_collection(
     collection_type: &DataType,
     context: &ScopeContext,
     ownership: &Ownership,
-    string_table: &mut StringTable
-) -> Result<Expression, CompileError> {
+    string_table: &mut StringTable,
+) -> Result<Expression, CompilerError> {
     let mut items: Vec<Expression> = Vec::new();
 
     // Should always start with the current token being an open curly brace,
@@ -40,7 +40,9 @@ pub fn new_collection(
                 if next_item {
                     return_syntax_error!(
                         "Expected a collection item after the comma",
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table),
                         {}
                     )
                 }
@@ -53,7 +55,10 @@ pub fn new_collection(
                 if !next_item {
                     return_syntax_error!(
                         "Expected a collection item after the comma",
-                        token_stream.current_location().to_error_location(&string_table), {}
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table),
+                        {}
                     )
                 }
 

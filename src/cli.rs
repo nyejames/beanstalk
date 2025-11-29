@@ -1,5 +1,5 @@
+use crate::build::BuildTarget;
 use crate::build_system::repl;
-use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
 use crate::compiler::compiler_errors::print_compiler_messages;
 use crate::compiler_tests::test_runner::run_all_test_cases;
 use crate::settings::Config;
@@ -11,7 +11,6 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use crate::build::BuildTarget;
 
 enum Command {
     NewHTMLProject(PathBuf),
@@ -21,7 +20,6 @@ enum Command {
 
     Dev(PathBuf), // Runs local dev server
     Release(PathBuf),
-    Wat(PathBuf), // Compiles a WAT file to WebAssembly
 
     Help,
     CompilerTests,
@@ -106,16 +104,6 @@ pub fn start_cli() {
             dev_server::start_dev_server(path, &flags);
         }
 
-        Command::Wat(path) => {
-            println!("Compiling WAT to WebAssembly...");
-            match compile_wat_file(&path) {
-                Ok(_) => {}
-                Err(e) => {
-                    red_ln!("Error compiling WAT file: {}", e);
-                }
-            }
-        }
-
         Command::CompilerTests => {
             // Warnings are hidden by default for compiler tests,
             // unless the show-warnings flag is set
@@ -194,17 +182,6 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 }
             }
             None => Ok(Command::Dev(PathBuf::from("../../test_output"))),
-        },
-
-        Some("wat") => match args.get(1).map(String::as_str) {
-            Some(path) => {
-                if path.is_empty() {
-                    Ok(Command::Wat(PathBuf::from("../../test_output/test.wat")))
-                } else {
-                    Ok(Command::Wat(PathBuf::from(path)))
-                }
-            }
-            None => Ok(Command::Wat(PathBuf::from("../../test_output/test.wat"))),
         },
 
         Some("tests") => Ok(Command::CompilerTests),

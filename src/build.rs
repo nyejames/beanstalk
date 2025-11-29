@@ -1,5 +1,5 @@
 use crate::build_system::{embedded_project, html_project, jit, native_project};
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, ProjectType};
 use crate::{Flag, return_file_error, settings};
@@ -65,7 +65,7 @@ pub trait ProjectBuilder {
     fn target_type(&self) -> &BuildTarget;
 
     /// Validate the project configuration
-    fn validate_config(&self, config: &Config) -> Result<(), CompileError>;
+    fn validate_config(&self, config: &Config) -> Result<(), CompilerError>;
 }
 
 /// Create the appropriate project builder based on configuration
@@ -141,7 +141,7 @@ pub fn build_project_files(
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            messages.errors.push(CompileError::file_error(
+            messages.errors.push(CompilerError::file_error(
                 &PathBuf::new(),
                 format!("Error finding current directory: {:?}", e),
             ));
@@ -170,7 +170,7 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::SingleBeanstalkFile(content),
             Err(e) => {
-                messages.errors.push(CompileError::file_error(
+                messages.errors.push(CompilerError::file_error(
                     &PathBuf::new(),
                     format!("Error reading file: {:?}", e),
                 ));
@@ -186,7 +186,7 @@ pub fn build_project_files(
         match source_code {
             Ok(content) => CompileType::MultiFile(content),
             Err(e) => {
-                messages.errors.push(CompileError::file_error(
+                messages.errors.push(CompilerError::file_error(
                     &PathBuf::new(),
                     format!("Error reading config file: {:?}", e),
                 ));
@@ -206,7 +206,7 @@ pub fn build_project_files(
 
         CompileType::SingleMarkthroughFile(_code) => {
             // TODO: Handle Markthrough files in the future
-            messages.errors.push(CompileError::file_error(
+            messages.errors.push(CompilerError::file_error(
                 &PathBuf::new(),
                 "Markthrough files are not yet supported",
             ));
@@ -323,7 +323,7 @@ pub fn build_project_files(
 fn add_bst_files_to_parse(
     source_code_to_parse: &mut Vec<InputModule>,
     project_root_dir: &Path,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Can't just use the src_dir from config, because this might be recursively called for new subdirectories
 
     // Read all files in the src directory

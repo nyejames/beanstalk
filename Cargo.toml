@@ -4,9 +4,8 @@ show_char_stream = []
 show_tokens = []
 show_ast = []
 show_eval = []
-show_ir = []
 show_codegen = []
-show_wir = []
+show_hir = []
 show_borrow_checker = []
 wasix_native_functions = []
 wasix_enhanced_io = []
@@ -24,12 +23,8 @@ path = "src/main.rs"
 [dependencies]
 fs_extra = "1.3.0"
 colour = "2.1.0"
-wat = "1.235.0"
-wasmparser = "0.238.1"
+wasmparser = "0.242.0"
 rayon = "1.10.0"
 wasmer = "6.1.0-rc.5"
-wasm-encoder = "0.238.1"
+wasm-encoder = "0.242.0"
 wasmer-types = "6.1.0-rc.5"
-wasmer-wasix = "0.601.0-rc.5"
-tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
-serde_json = "1.0.145"

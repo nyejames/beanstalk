@@ -67,23 +67,6 @@ macro_rules! eval_log {
     };
 }
 
-// IR LOGGING MACROS
-#[macro_export]
-#[cfg(feature = "show_ir")]
-macro_rules! ir_log {
-    ($($arg:tt)*) => {
-        eprintln!($($arg)*);
-    };
-}
-
-#[macro_export]
-#[cfg(not(feature = "show_ir"))]
-macro_rules! ir_log {
-    ($($arg:tt)*) => {
-        // Nothing
-    };
-}
-
 // CODEGEN LOGGING MACROS
 #[macro_export]
 #[cfg(feature = "show_codegen")]
@@ -101,18 +84,18 @@ macro_rules! codegen_log {
     };
 }
 
-// WIR LOGGING MACROS
+// HIR LOGGING MACROS
 #[macro_export]
-#[cfg(feature = "show_wir")]
-macro_rules! wir_log {
+#[cfg(feature = "show_hir")]
+macro_rules! hir_log {
     ($($arg:tt)*) => {
         eprintln!($($arg)*);
     };
 }
 
 #[macro_export]
-#[cfg(not(feature = "show_wir"))]
-macro_rules! wir_log {
+#[cfg(not(feature = "show_hir"))]
+macro_rules! hir_log {
     ($($arg:tt)*) => {
         // Nothing
     };

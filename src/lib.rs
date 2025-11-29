@@ -6,9 +6,6 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod host_function_tests;
-    pub(crate) mod jit_runtime_tests;
-    pub(crate) mod memory_utils_tests;
     pub(crate) mod test_runner;
 }
 
@@ -62,12 +59,6 @@ mod compiler {
     }
 
     pub(crate) mod module_dependencies;
-    pub(crate) mod wir;
-
-    pub(crate) mod borrow_checker {
-        pub(crate) mod checker;
-        pub(crate) mod extract;
-    }
 
     mod html5_codegen {
         pub(crate) mod code_block_highlighting;
@@ -80,36 +71,36 @@ mod compiler {
 
     #[allow(dead_code)]
     pub(crate) mod basic_utility_functions;
-    pub(crate) mod compiler_dev_logging;
-    pub(crate) mod compiler_errors;
-    pub(crate) mod compiler_warnings;
+
+    pub(crate) mod compiler_messages {
+        pub(crate) mod compiler_dev_logging;
+        pub(crate) mod compiler_errors;
+        pub(crate) mod compiler_warnings;
+    }
+    // Temporary re-exports to preserve old import paths after moving modules
+    // into `compiler_messages`. This minimizes churn across the codebase.
+    pub(crate) use compiler_messages::compiler_dev_logging;
+    pub(crate) use compiler_messages::compiler_errors;
+    pub(crate) use compiler_messages::compiler_warnings;
     pub(crate) mod datatypes;
     pub(crate) mod interned_path;
     pub(crate) mod string_interning;
     pub(crate) mod traits;
-
-    pub(crate) mod codegen {
-        pub(crate) mod build_wasm;
-        pub(crate) mod wasm_encoding;
-        pub(crate) mod wat_to_wasm;
-    }
 
     pub(crate) mod host_functions {
         pub(crate) mod registry;
     }
 }
 
-use crate::compiler::codegen::build_wasm::new_wasm_module;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::string_interning::StringTable;
-use crate::compiler::wir::build_wir::WIR;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 // Re-export types for the build system
-use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
@@ -167,7 +158,7 @@ impl<'a> Compiler<'a> {
         &mut self,
         source_code: &str,
         module_path: &PathBuf,
-    ) -> Result<FileTokens, CompileError> {
+    ) -> Result<FileTokens, CompilerError> {
         let tokenizer_mode = match self.project_config.project_type {
             ProjectType::Repl => TokenizeMode::TemplateHead,
             _ => TokenizeMode::Normal,
@@ -200,7 +191,7 @@ impl<'a> Compiler<'a> {
         &mut self,
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
-    ) -> Result<Vec<Header>, Vec<CompileError>> {
+    ) -> Result<Vec<Header>, Vec<CompilerError>> {
         parse_headers(
             files,
             &self.host_function_registry,
@@ -219,7 +210,10 @@ impl<'a> Compiler<'a> {
     /// This is so structs that contain imported structs can know the shape of the imports first.
     /// This section answers the following question:
     /// - In what order must the headers be defined so that symbol resolution and type-checking of bodies can proceed deterministically?
-    pub fn sort_headers(&mut self, headers: Vec<Header>) -> Result<Vec<Header>, Vec<CompileError>> {
+    pub fn sort_headers(
+        &mut self,
+        headers: Vec<Header>,
+    ) -> Result<Vec<Header>, Vec<CompilerError>> {
         resolve_module_dependencies(headers, &mut self.string_table)
     }
 
@@ -236,22 +230,5 @@ impl<'a> Compiler<'a> {
             &self.host_function_registry,
             &mut self.string_table,
         )
-    }
-
-    /// -----------------------------
-    ///         WIR CREATION
-    /// -----------------------------
-    /// This IR maps well to WASM with integrated borrow checking
-    pub fn ast_to_ir(&mut self, ast: Ast) -> Result<WIR, CompilerMessages> {
-        // Pass string table to WIR generation for string interning during WIR building
-        compiler::wir::build_wir::ast_to_wir(ast, &mut self.string_table)
-    }
-
-    /// -----------------------
-    ///        BACKEND
-    ///    (Wasm Generation)
-    /// -----------------------
-    pub fn ir_to_wasm(&mut self, wir: WIR) -> Result<Vec<u8>, CompileError> {
-        new_wasm_module(wir, &self.host_function_registry, self.string_table.clone())
     }
 }

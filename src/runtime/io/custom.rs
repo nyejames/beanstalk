@@ -3,7 +3,7 @@
 // Allows custom IO implementations to be plugged in for specific use cases.
 // This might use Wasi for native and custom bindings for web during the build process
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::runtime::io::io::{IoConfig, IoInterface};
 
 pub struct CustomIoBackend {
@@ -17,27 +17,29 @@ impl CustomIoBackend {
 }
 
 impl IoInterface for CustomIoBackend {
-    fn print(&self, message: &str) -> Result<(), CompileError> {
+    fn print(&self, message: &str) -> Result<(), CompilerError> {
         // Custom print implementation - could be redirected to logs, GUI, etc.
         eprintln!("Custom IO: {}", message);
         Ok(())
     }
 
-    fn read_input(&self) -> Result<String, CompileError> {
+    fn read_input(&self) -> Result<String, CompilerError> {
         // Custom input implementation
-        Err(CompileError::compiler_error("Custom input not implemented"))
+        Err(CompilerError::compiler_error(
+            "Custom input not implemented",
+        ))
     }
 
-    fn write_file(&self, _path: &str, _content: &str) -> Result<(), CompileError> {
+    fn write_file(&self, _path: &str, _content: &str) -> Result<(), CompilerError> {
         // Custom file writing - might not be supported in embedded scenarios
-        Err(CompileError::compiler_error(
+        Err(CompilerError::compiler_error(
             "File writing not supported in custom IO backend",
         ))
     }
 
-    fn read_file(&self, _path: &str) -> Result<String, CompileError> {
+    fn read_file(&self, _path: &str) -> Result<String, CompilerError> {
         // Custom file reading - might not be supported in embedded scenarios
-        Err(CompileError::compiler_error(
+        Err(CompilerError::compiler_error(
             "File reading not supported in custom IO backend",
         ))
     }

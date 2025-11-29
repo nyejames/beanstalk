@@ -1,5 +1,5 @@
 use super::ast_nodes::NodeKind;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
@@ -24,7 +24,7 @@ pub fn function_body_to_ast(
     mut context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompileError> {
+) -> Result<Vec<AstNode>, CompilerError> {
     let mut ast: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
@@ -346,7 +346,7 @@ fn check_for_dot_access(
     context: &ScopeContext,
     ast: &mut Vec<AstNode>,
     string_table: &mut StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Name of variable, with any accesses added to the path
     let mut scope = context.scope.clone();
 

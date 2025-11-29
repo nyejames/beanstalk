@@ -1,5 +1,6 @@
 use crate::build::BuildTarget;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages, print_compiler_messages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, print_compiler_messages};
+// print_compiler_messages is available via compiler_errors re-export in lib.rs
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
@@ -107,7 +108,7 @@ fn handle_connection(
                 contents = match fs::read(&p) {
                     Ok(content) => content,
                     Err(e) => {
-                        messages.errors.push(CompileError::new_file_error(
+                        messages.errors.push(CompilerError::new_file_error(
                             &p,
                             format!("Error reading home page: {:?}", e),
                             HashMap::new(),
@@ -269,7 +270,7 @@ fn handle_connection(
     match stream.write_all(response) {
         Ok(_) => Ok(messages.warnings),
         Err(e) => {
-            messages.errors.push(CompileError::new_file_error(
+            messages.errors.push(CompilerError::new_file_error(
                 path,
                 format!("Error writing response: {:?}", e),
                 // TODO: add some metadata to this error
@@ -280,12 +281,12 @@ fn handle_connection(
     }
 }
 
-fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, CompileError> {
+fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, CompilerError> {
     // Check if it's a file or directory
     let path_metadata = match metadata(path) {
         Ok(m) => m,
         Err(e) => {
-            return Err(CompileError::new_file_error(
+            return Err(CompilerError::new_file_error(
                 path,
                 format!("Error reading file metadata: {:?}", e),
                 // TODO: add some metadata to this error
@@ -298,7 +299,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
         let entries = match fs::read_dir(path) {
             Ok(all) => all,
             Err(e) => {
-                return Err(CompileError::new_file_error(
+                return Err(CompilerError::new_file_error(
                     path,
                     format!("Error reading directory: {:?}", e),
                     // TODO: add some metadata to this error
@@ -311,7 +312,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => {
-                    return Err(CompileError::new_file_error(
+                    return Err(CompilerError::new_file_error(
                         path,
                         format!("Error reading directory entry: {:?}", e),
                         // TODO: add some metadata to this error
@@ -323,7 +324,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
             let meta = match metadata(entry.path()) {
                 Ok(m) => m,
                 Err(e) => {
-                    return Err(CompileError::new_file_error(
+                    return Err(CompilerError::new_file_error(
                         path,
                         format!("Error reading directory: {:?}", e),
                         // TODO: add some metadata to this error
@@ -335,7 +336,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
             let modified_time = match meta.modified() {
                 Ok(t) => t,
                 Err(e) => {
-                    return Err(CompileError::new_file_error(
+                    return Err(CompilerError::new_file_error(
                         path,
                         format!("Error getting the system time for hot reloading: {:?}", e),
                         // TODO: add some metadata to this error
@@ -360,7 +361,7 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
                 }
             }
             Err(e) => {
-                return Err(CompileError::new_file_error(
+                return Err(CompilerError::new_file_error(
                     path,
                     format!("Error reading the file modification time metadata: {:?}", e),
                     // TODO: add some metadata to this error
@@ -377,7 +378,7 @@ fn get_home_page_path(
     path: &Path,
     source_folder: bool,
     project_config: &Config,
-) -> Result<PathBuf, CompileError> {
+) -> Result<PathBuf, CompilerError> {
     let root_src_path = if source_folder {
         PathBuf::from(&path).join(&project_config.src)
     } else {
@@ -387,7 +388,7 @@ fn get_home_page_path(
     let src_files = match fs::read_dir(&root_src_path) {
         Ok(m) => m,
         Err(e) => {
-            return Err(CompileError::new_file_error(
+            return Err(CompilerError::new_file_error(
                 path,
                 format!("Error trying to read the source directory path: {:?}", e),
                 // TODO: add some metadata to this error
@@ -428,7 +429,7 @@ fn get_home_page_path(
             }
 
             Err(e) => {
-                return Err(CompileError::new_file_error(
+                return Err(CompilerError::new_file_error(
                     path,
                     format!("Error reading the source directory file: {:?}", e),
                     // TODO: add some metadata to this error
@@ -441,7 +442,7 @@ fn get_home_page_path(
     match first_page {
         Some(index_page_path) => Ok(index_page_path),
         None => {
-            Err(CompileError::new_file_error(
+            Err(CompilerError::new_file_error(
                 &root_src_path,
                 format!(
                     "No page found in {:?} directory",

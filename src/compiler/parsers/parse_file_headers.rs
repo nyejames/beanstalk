@@ -1,5 +1,5 @@
 use crate::ast_log;
-use crate::compiler::compiler_errors::{CompileError, ErrorMetaDataKey};
+use crate::compiler::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::interned_path::InternedPath;
@@ -23,7 +23,7 @@ pub enum HeaderKind {
     // The top-level scope of regular files.
     // Any other logic in the top level scope implicitly becomes a "start" function.
     // This only runs when explicitly called from an import.
-    // Each .bst file can see and use these like normal functions. 
+    // Each .bst file can see and use these like normal functions.
     // Start functions have no arguments or return values
     // and are not visible to the host from the final wasm module.
     StartFunction(Vec<Token>),
@@ -56,9 +56,9 @@ pub fn parse_headers(
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
     string_table: &mut StringTable,
-) -> Result<Vec<Header>, Vec<CompileError>> {
+) -> Result<Vec<Header>, Vec<CompilerError>> {
     let mut headers: Vec<Header> = Vec::new();
-    let mut errors: Vec<CompileError> = Vec::new();
+    let mut errors: Vec<CompilerError> = Vec::new();
 
     for mut file in tokenized_files {
         let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
@@ -104,7 +104,7 @@ pub fn parse_headers(
             format!("{:?}", entry_points[1].path.to_string(string_table)).into_boxed_str(),
         );
 
-        return Err(vec![CompileError::new_rule_error_with_metadata(
+        return Err(vec![CompilerError::new_rule_error_with_metadata(
             format!(
                 "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {}, Second entry point: {}",
                 first_path_str, second_path_str
@@ -141,7 +141,7 @@ pub fn parse_headers_in_file(
     warnings: &mut Vec<CompilerWarning>,
     is_entry_file: bool,
     string_table: &mut StringTable,
-) -> Result<Vec<Header>, CompileError> {
+) -> Result<Vec<Header>, CompilerError> {
     let mut headers = Vec::new();
     let mut encountered_symbols: HashSet<StringId> = HashSet::new();
 
@@ -222,7 +222,6 @@ pub fn parse_headers_in_file(
             // New Function, Struct, Choice, or Variable declaration
             TokenKind::Symbol(name_id) => {
                 if host_function_registry.get_function(&name_id).is_none() {
-
                     // Reference to an existing symbol
                     if encountered_symbols.contains(&name_id) {
                         // This is a reference, so it goes into the implicit main function
@@ -231,7 +230,8 @@ pub fn parse_headers_in_file(
                         // We also store the path in dependencies and check if it's a header in scope already.
                         // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
                         // Create a path from the current file plus the symbol name
-                        main_function_dependencies.insert(token_stream.src_path.join_header(name_id, string_table));
+                        main_function_dependencies
+                            .insert(token_stream.src_path.join_header(name_id, string_table));
 
                         if next_statement_exported {
                             next_statement_exported = false;
@@ -303,7 +303,7 @@ pub fn parse_headers_in_file(
             // Just uses the end of the path as the name of the header being imported.
             // Named imports not yet supported, will need to be added through create_header.
             TokenKind::Import => {
-                let import= parse_import(token_stream, string_table)?;
+                let import = parse_import(token_stream, string_table)?;
                 let import_symbol = if let Some(renamed_path) = import.alias {
                     renamed_path
                 } else {
@@ -375,7 +375,7 @@ fn create_header(
     file_imports: &HashMap<StringId, InternedPath>,
     host_registry: &HostFunctionRegistry,
     string_table: &mut StringTable,
-) -> Result<Header, CompileError> {
+) -> Result<Header, CompilerError> {
     // We only need to know what imports this header is actually using.
     // So only track symbols matching this file's imports to add to the dependencies.
     let mut dependencies: HashSet<InternedPath> = HashSet::new();

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::{self, InternedPath};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::{StringId, StringTable};
@@ -19,29 +19,29 @@ pub struct FileImport {
 pub fn parse_import(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
-) -> Result<FileImport, CompileError> {
-
+) -> Result<FileImport, CompilerError> {
     // TODO: Support renaming imports
     // This might look exactly like declaration syntax:
     // newName = #import "path/to/file"
     // Or something else entirely. Has not been decided yet.
 
     // Starts after the import token
-    let string_id = if let TokenKind::StringSliceLiteral(p) = token_stream.current_token_kind().to_owned() {
-        p
-    } else {
-        return_rule_error!(
-            format!(
-                "Expected a path after the import keyword. Found: {:?}",
-                token_stream.current_token_kind()
-            ),
-            token_stream.current_location().to_error_location(&string_table),
-            {
-                CompilationStage => "Import Parsing",
-                PrimarySuggestion => "Use #import \"path/to/file\" syntax to import a file",
-            }
-        )
-    };
+    let string_id =
+        if let TokenKind::StringSliceLiteral(p) = token_stream.current_token_kind().to_owned() {
+            p
+        } else {
+            return_rule_error!(
+                format!(
+                    "Expected a path after the import keyword. Found: {:?}",
+                    token_stream.current_token_kind()
+                ),
+                token_stream.current_location().to_error_location(&string_table),
+                {
+                    CompilationStage => "Import Parsing",
+                    PrimarySuggestion => "Use #import \"path/to/file\" syntax to import a file",
+                }
+            )
+        };
 
     token_stream.advance();
 

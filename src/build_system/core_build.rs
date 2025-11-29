@@ -1,12 +1,8 @@
 // Core build functionality shared across all project types
 //
-// Contains the common compilation pipeline steps that are used by all project builders:
-// - Tokenization
-// - AST generation
-// - WIR generation
-// - WASM generation
+// Contains the common compilation pipeline steps that are used by all project builders
 
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
@@ -114,14 +110,14 @@ pub fn compile_modules(
     // ----------------------------------
     //         Token generation
     // ----------------------------------
-    let tokenizer_result: Vec<Result<FileTokens, CompileError>> = modules
+    let tokenizer_result: Vec<Result<FileTokens, CompilerError>> = modules
         .iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
 
     // Check for any errors first
     let mut project_tokens = Vec::new();
-    let mut errors: Vec<CompileError> = Vec::new();
+    let mut errors: Vec<CompilerError> = Vec::new();
     for file in tokenizer_result {
         match file {
             Ok(tokens) => {
@@ -206,33 +202,19 @@ pub fn compile_modules(
     timer_log!(time, "AST created in: ");
 
     // ----------------------------------
-    //          WIR generation
+    //          HIR generation
     // ----------------------------------
-    let wir = match compiler.ast_to_ir(module_ast) {
-        Ok(wir) => {
-            if !flags.contains(&Flag::DisableTimers) {
-                print!("Wasm Intermediate Representation generated in: ");
-                green_ln!("{:?}", time.elapsed());
-            }
-            wir
-        }
-        Err(e) => {
-            compiler_messages.errors.extend(e.errors);
-            compiler_messages.warnings.extend(e.warnings);
-            return Err(compiler_messages);
-        }
-    };
+
+    // ----------------------------------
+    //          LIR generation
+    // ----------------------------------
 
     // ----------------------------------
     //          WASM generation
     // ----------------------------------
-    let wasm_bytes = match compiler.ir_to_wasm(wir) {
-        Ok(w) => w,
-        Err(e) => {
-            compiler_messages.errors.push(e);
-            return Err(compiler_messages);
-        }
-    };
+
+    // TEMPORARY UNTIL NEW BACKEND IS IMPLEMENTED
+    let wasm_bytes = Vec::new();
 
     if !flags.contains(&Flag::DisableTimers) {
         print!("WASM generated in: ");

@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive;
 use crate::compiler::parsers::tokenizer::tokens::{
@@ -24,7 +24,7 @@ pub fn tokenize(
     src_path: &InternedPath,
     mode: TokenizeMode,
     string_table: &mut StringTable,
-) -> Result<FileTokens, CompileError> {
+) -> Result<FileTokens, CompilerError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
     let type_declarations_initial_capacity = settings::IMPORTS_CAPACITY;
@@ -72,7 +72,7 @@ pub fn get_token_kind(
     template_nesting_level: &mut i64,
     type_declarations: &mut HashSet<String>,
     string_table: &mut StringTable,
-) -> Result<Token, CompileError> {
+) -> Result<Token, CompilerError> {
     let mut current_char = match stream.next() {
         Some(ch) => ch,
         None => return_token!(TokenKind::Eof, stream),
@@ -555,7 +555,7 @@ fn keyword_or_variable(
     stream: &mut TokenStream,
     type_declarations: &mut HashSet<String>,
     string_table: &mut StringTable,
-) -> Result<Token, CompileError> {
+) -> Result<Token, CompilerError> {
     // Match variables or keywords
     loop {
         if let Some(char) = stream.peek()
@@ -650,7 +650,7 @@ fn is_valid_identifier(s: &str) -> bool {
 pub fn string_block(
     stream: &mut TokenStream,
     string_table: &StringTable,
-) -> Result<String, CompileError> {
+) -> Result<String, CompilerError> {
     let mut string_value = String::new();
 
     while let Some(ch) = stream.peek() {
@@ -721,7 +721,7 @@ pub fn string_block(
 fn tokenize_string(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<Token, CompileError> {
+) -> Result<Token, CompilerError> {
     let mut token_value = String::new();
 
     // Currently should be at the character that started the String
@@ -756,7 +756,7 @@ fn tokenize_template_body(
     current_char: char,
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<Token, CompileError> {
+) -> Result<Token, CompilerError> {
     let mut token_value = String::from(current_char);
 
     // Currently should be at the character that started the String
@@ -784,7 +784,7 @@ fn tokenize_template_body(
 fn tokenize_path(
     stream: &mut TokenStream,
     string_table: &StringTable,
-) -> Result<PathBuf, CompileError> {
+) -> Result<PathBuf, CompilerError> {
     let mut import_path = String::new();
     let mut break_on_whitespace = true;
 

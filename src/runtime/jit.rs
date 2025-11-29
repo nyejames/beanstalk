@@ -3,13 +3,13 @@
 // This module provides immediate WASM execution using Wasmer's JIT capabilities
 // for rapid development iteration without additional compilation steps.
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::runtime::{IoBackend, RuntimeConfig};
 use std::cell::RefCell;
 use wasmer::{Function, Instance, Memory, Module, Store, imports};
 
 /// Execute WASM bytecode directly using JIT compilation
-pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(), CompileError> {
+pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(), CompilerError> {
     execute_direct_jit_with_capture(wasm_bytes, config, false)
 }
 
@@ -18,9 +18,9 @@ pub fn execute_direct_jit_with_capture(
     wasm_bytes: &[u8],
     config: &RuntimeConfig,
     capture_output: bool,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Note: Tokio runtime is no longer required since we removed WASIX dependencies
-    
+
     // Create a Wasmer store for JIT execution
     let mut store = Store::default();
 
@@ -33,7 +33,7 @@ pub fn execute_direct_jit_with_capture(
             // This is a known bug in Wasmer 6.1.0-rc.5 where it misreports the magic header
             // The WASM bytes are actually correct (as verified by our debug output)
             // but Wasmer incorrectly reports finding "wasm" instead of "\0asm"
-            return CompileError::compiler_error(
+            return CompilerError::compiler_error(
                 "WASM magic header bug detected in Wasmer 6.1.0-rc.5. \
                 The WASM module is correctly generated but Wasmer RC has a bug in magic header validation. \
                 This is a known issue with the release candidate version. \
@@ -41,7 +41,7 @@ pub fn execute_direct_jit_with_capture(
             );
         }
 
-        CompileError::compiler_error(&format!("Failed to compile WASM module: {}", e))
+        CompilerError::compiler_error(&format!("Failed to compile WASM module: {}", e))
     })?;
 
     // Set up imports based on IO backend
@@ -55,7 +55,7 @@ pub fn execute_direct_jit_with_capture(
 
     // Instantiate the module
     let instance = Instance::new(&mut store, &module, &import_object).map_err(|e| {
-        CompileError::compiler_error(&format!("Failed to instantiate WASM module: {}", e))
+        CompilerError::compiler_error(&format!("Failed to instantiate WASM module: {}", e))
     })?;
 
     // Set up memory access for Native backend
@@ -72,19 +72,19 @@ pub fn execute_direct_jit_with_capture(
                 // Validate memory configuration
                 let memory_view = memory.view(&store);
                 let memory_size = memory_view.data_size();
-                
+
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!("Native backend memory found: {} bytes", memory_size);
-                
+
                 // Ensure minimum memory size for native operations
                 if memory_size < 65536 {
-                    return Err(CompileError::compiler_error(
-                        "WASM memory too small for native operations. Minimum 64KB required."
+                    return Err(CompilerError::compiler_error(
+                        "WASM memory too small for native operations. Minimum 64KB required.",
                     ));
                 }
 
                 set_native_memory_and_store(memory.clone(), &mut store as *mut Store);
-                
+
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!("Native backend memory access configured successfully");
             }
@@ -97,9 +97,9 @@ pub fn execute_direct_jit_with_capture(
                         println!("  - {}", name);
                     }
                 }
-                
-                return Err(CompileError::compiler_error(
-                    "Native backend requires WASM memory export. Ensure the WASM module exports memory."
+
+                return Err(CompilerError::compiler_error(
+                    "Native backend requires WASM memory export. Ensure the WASM module exports memory.",
                 ));
             }
         }
@@ -130,7 +130,7 @@ pub fn execute_direct_jit_with_capture(
             Err(e) => {
                 #[cfg(feature = "verbose_codegen_logging")]
                 println!("JIT: Main function failed with error: {}", e);
-                Err(CompileError::compiler_error(&format!(
+                Err(CompilerError::compiler_error(&format!(
                     "Runtime error: {}",
                     e
                 )))
@@ -140,7 +140,7 @@ pub fn execute_direct_jit_with_capture(
         let result = start_func.call(&mut store, &[]);
         match result {
             Ok(_) => Ok(()),
-            Err(e) => Err(CompileError::compiler_error(&format!(
+            Err(e) => Err(CompilerError::compiler_error(&format!(
                 "Runtime error: {}",
                 e
             ))),
@@ -157,7 +157,7 @@ pub fn create_import_object(
     module: &Module,
     wasm_bytes: &[u8],
     io_backend: &IoBackend,
-) -> Result<wasmer::Imports, CompileError> {
+) -> Result<wasmer::Imports, CompilerError> {
     create_import_object_with_capture(store, module, wasm_bytes, io_backend, false)
 }
 
@@ -168,7 +168,7 @@ pub fn create_import_object_with_capture(
     wasm_bytes: &[u8],
     io_backend: &IoBackend,
     capture_output: bool,
-) -> Result<wasmer::Imports, CompileError> {
+) -> Result<wasmer::Imports, CompilerError> {
     match io_backend {
         IoBackend::Native => {
             let mut imports = imports! {};
@@ -189,8 +189,6 @@ pub fn create_import_object_with_capture(
         }
     }
 }
-
-
 
 /// Implement fd_write functionality with WASM memory access
 /// This is the core implementation that reads IOVec structures from memory and outputs data
@@ -490,7 +488,7 @@ fn write_bytes_to_memory(
     }
 
     let len = data.len() as u32;
-    
+
     // Get memory view and validate bounds
     let memory_view = memory.view(store);
     let memory_size = memory_view.data_size() as u32;
@@ -519,15 +517,15 @@ fn write_bytes_to_memory(
     }
 
     // Write data to memory
-    memory_view
-        .write(ptr as u64, data)
-        .map_err(|e| format!("Failed to write {} bytes to memory at 0x{:x}: {}", len, ptr, e))?;
+    memory_view.write(ptr as u64, data).map_err(|e| {
+        format!(
+            "Failed to write {} bytes to memory at 0x{:x}: {}",
+            len, ptr, e
+        )
+    })?;
 
     #[cfg(feature = "verbose_codegen_logging")]
-    println!(
-        "Successfully wrote {} bytes to memory at 0x{:x}",
-        len, ptr
-    );
+    println!("Successfully wrote {} bytes to memory at 0x{:x}", len, ptr);
 
     Ok(())
 }
@@ -619,8 +617,6 @@ impl CapturedOutput {
     }
 }
 
-
-
 /// Set memory and store for native IO functions to use
 fn set_native_memory_and_store(memory: Memory, store: *mut Store) {
     WASIX_MEMORY.with(|m| {
@@ -661,12 +657,12 @@ fn setup_native_io_functions(
     store: &mut Store,
     imports: &mut wasmer::Imports,
     capture_output: bool,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Initialize captured output if needed
     if capture_output {
         let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        
+
         CAPTURED_OUTPUT.with(|output| {
             *output.borrow_mut() = Some(CapturedOutput {
                 stdout: captured_stdout,
@@ -697,7 +693,7 @@ fn setup_native_io_functions(
             };
 
             let store_ref = unsafe { &*store_ptr };
-            
+
             // Call the implementation
             match implement_fd_write_with_memory(
                 &memory,
@@ -721,64 +717,61 @@ fn setup_native_io_functions(
 
     // Create template_output function for WASIX backend
     let template_output_func = create_template_output_import(store);
-    
+
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
     // Create io function that prints with automatic newline
-    let io_func = Function::new_typed(
-        store,
-        move |text_ptr: i32, text_len: i32| {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!(
-                "WASIX io called with text_ptr=0x{:x}, text_len={}",
-                text_ptr, text_len
-            );
+    let io_func = Function::new_typed(store, move |text_ptr: i32, text_len: i32| {
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!(
+            "WASIX io called with text_ptr=0x{:x}, text_len={}",
+            text_ptr, text_len
+        );
 
-            // Get memory from shared state
-            let memory = match get_native_memory() {
-                Some(mem) => mem,
-                None => {
-                    eprintln!("WASIX io error: Memory not available");
-                    return;
-                }
-            };
+        // Get memory from shared state
+        let memory = match get_native_memory() {
+            Some(mem) => mem,
+            None => {
+                eprintln!("WASIX io error: Memory not available");
+                return;
+            }
+        };
 
-            let store_ptr = match get_native_store() {
-                Some(ptr) => ptr,
-                None => {
-                    eprintln!("WASIX io error: Store not available");
-                    return;
-                }
-            };
+        let store_ptr = match get_native_store() {
+            Some(ptr) => ptr,
+            None => {
+                eprintln!("WASIX io error: Store not available");
+                return;
+            }
+        };
 
-            // Read string from WASM memory
-            let store_ref = unsafe { &*store_ptr };
-            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
-                Ok(text) => {
-                    // Check if we should capture output or print normally
-                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
-                    
-                    if should_capture {
-                        // Capture output for testing (with newline)
-                        CAPTURED_OUTPUT.with(|output| {
-                            if let Some(ref captured) = *output.borrow() {
-                                let mut stdout = captured.stdout.lock().unwrap();
-                                stdout.extend_from_slice(text.as_bytes());
-                                stdout.push(b'\n'); // Add newline
-                            }
-                        });
-                    } else {
-                        // Normal output to stdout with newline
-                        println!("{}", text);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("WASIX io error: {}", e);
+        // Read string from WASM memory
+        let store_ref = unsafe { &*store_ptr };
+        match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+            Ok(text) => {
+                // Check if we should capture output or print normally
+                let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+
+                if should_capture {
+                    // Capture output for testing (with newline)
+                    CAPTURED_OUTPUT.with(|output| {
+                        if let Some(ref captured) = *output.borrow() {
+                            let mut stdout = captured.stdout.lock().unwrap();
+                            stdout.extend_from_slice(text.as_bytes());
+                            stdout.push(b'\n'); // Add newline
+                        }
+                    });
+                } else {
+                    // Normal output to stdout with newline
+                    println!("{}", text);
                 }
             }
-        },
-    );
+            Err(e) => {
+                eprintln!("WASIX io error: {}", e);
+            }
+        }
+    });
 
     // Add io function to beanstalk_io module
     imports.define("beanstalk_io", "io", io_func);
@@ -789,106 +782,101 @@ fn setup_native_io_functions(
     Ok(())
 }
 
-
-
 /// Set up custom IO imports for embedded scenarios
 #[allow(unused_variables)]
 fn setup_custom_io_imports(
     store: &mut Store,
     imports: &mut wasmer::Imports,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Create template_output function for custom IO backend
     let template_output_func = create_template_output_import(store);
-    
+
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
-    
+
     #[cfg(feature = "verbose_codegen_logging")]
     println!("Custom IO backend configured with template_output");
-    
+
     Ok(())
 }
 
 /// Set up JavaScript/DOM bindings for web targets
 #[allow(unused_variables)]
-fn setup_js_imports(store: &mut Store, imports: &mut wasmer::Imports) -> Result<(), CompileError> {
+fn setup_js_imports(store: &mut Store, imports: &mut wasmer::Imports) -> Result<(), CompilerError> {
     // Create template_output function for JavaScript backend
     let template_output_func = create_template_output_import(store);
-    
+
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
-    
+
     #[cfg(feature = "verbose_codegen_logging")]
     println!("JavaScript backend configured with template_output");
-    
+
     Ok(())
 }
 
 /// Create a template_output import function for the JIT runtime
 /// This function reads a string from WASM memory and outputs it to stdout
 fn create_template_output_import(store: &mut Store) -> Function {
-    Function::new_typed(
-        store,
-        move |text_ptr: i32, text_len: i32| {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!(
-                "template_output called with text_ptr=0x{:x}, text_len={}",
-                text_ptr, text_len
-            );
+    Function::new_typed(store, move |text_ptr: i32, text_len: i32| {
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!(
+            "template_output called with text_ptr=0x{:x}, text_len={}",
+            text_ptr, text_len
+        );
 
-            // Get memory from shared state
-            let memory = match get_native_memory() {
-                Some(mem) => mem,
-                None => {
-                    eprintln!("template_output error: Memory not available");
-                    return; // Void function, just return
-                }
-            };
+        // Get memory from shared state
+        let memory = match get_native_memory() {
+            Some(mem) => mem,
+            None => {
+                eprintln!("template_output error: Memory not available");
+                return; // Void function, just return
+            }
+        };
 
-            let store_ptr = match get_native_store() {
-                Some(ptr) => ptr,
-                None => {
-                    eprintln!("template_output error: Store not available");
-                    return; // Void function, just return
-                }
-            };
+        let store_ptr = match get_native_store() {
+            Some(ptr) => ptr,
+            None => {
+                eprintln!("template_output error: Store not available");
+                return; // Void function, just return
+            }
+        };
 
-            // Read string from WASM memory
-            let store_ref = unsafe { &*store_ptr };
-            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
-                Ok(text) => {
-                    // Check if we should capture output or print normally
-                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
-                    
-                    if should_capture {
-                        // Capture output for testing
-                        CAPTURED_OUTPUT.with(|output| {
-                            if let Some(ref captured) = *output.borrow() {
-                                let mut stdout = captured.stdout.lock().unwrap();
-                                stdout.extend_from_slice(text.as_bytes());
-                            }
-                        });
-                    } else {
-                        // Normal output to stdout
-                        print!("{}", text);
-                        if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
-                            eprintln!("template_output error: Failed to flush stdout: {}", e);
+        // Read string from WASM memory
+        let store_ref = unsafe { &*store_ptr };
+        match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+            Ok(text) => {
+                // Check if we should capture output or print normally
+                let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+
+                if should_capture {
+                    // Capture output for testing
+                    CAPTURED_OUTPUT.with(|output| {
+                        if let Some(ref captured) = *output.borrow() {
+                            let mut stdout = captured.stdout.lock().unwrap();
+                            stdout.extend_from_slice(text.as_bytes());
                         }
+                    });
+                } else {
+                    // Normal output to stdout
+                    print!("{}", text);
+                    if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
+                        eprintln!("template_output error: Failed to flush stdout: {}", e);
                     }
                 }
-                Err(e) => {
-                    eprintln!("template_output error: {}", e);
-                }
             }
-        },
-    )
+            Err(e) => {
+                eprintln!("template_output error: {}", e);
+            }
+        }
+    })
 }
 
 /// Set up native system call imports
 fn setup_native_imports(
     store: &mut Store,
     imports: &mut wasmer::Imports,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     setup_native_imports_with_capture(store, imports, false)
 }
 
@@ -897,12 +885,12 @@ fn setup_native_imports_with_capture(
     store: &mut Store,
     imports: &mut wasmer::Imports,
     capture_output: bool,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Initialize captured output if needed
     if capture_output {
         let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        
+
         CAPTURED_OUTPUT.with(|output| {
             *output.borrow_mut() = Some(CapturedOutput {
                 stdout: captured_stdout,
@@ -913,128 +901,122 @@ fn setup_native_imports_with_capture(
 
     // Create template_output function for native backend
     let template_output_func = create_template_output_import(store);
-    
+
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
     // Create native print function that directly outputs to stdout or captures
-    let print_func = Function::new_typed(
-        store,
-        move |text_ptr: i32, text_len: i32| -> i32 {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!(
-                "Native print called with text_ptr=0x{:x}, text_len={}",
-                text_ptr, text_len
-            );
+    let print_func = Function::new_typed(store, move |text_ptr: i32, text_len: i32| -> i32 {
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!(
+            "Native print called with text_ptr=0x{:x}, text_len={}",
+            text_ptr, text_len
+        );
 
-            // Get memory from shared state
-            let memory = match get_native_memory() {
-                Some(mem) => mem,
-                None => {
-                    eprintln!("Native print error: Memory not available");
-                    return -1; // Error
-                }
-            };
-
-            let store_ptr = match get_native_store() {
-                Some(ptr) => ptr,
-                None => {
-                    eprintln!("Native print error: Store not available");
-                    return -1; // Error
-                }
-            };
-
-            // Read string from WASM memory
-            let store_ref = unsafe { &*store_ptr };
-            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
-                Ok(text) => {
-                    // Check if we should capture output or print normally
-                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
-                    
-                    if should_capture {
-                        // Capture output for testing
-                        CAPTURED_OUTPUT.with(|output| {
-                            if let Some(ref captured) = *output.borrow() {
-                                let mut stdout = captured.stdout.lock().unwrap();
-                                stdout.extend_from_slice(text.as_bytes());
-                            }
-                        });
-                    } else {
-                        // Normal output to stdout
-                        print!("{}", text);
-                        if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
-                            eprintln!("Native print error: Failed to flush stdout: {}", e);
-                            return -1; // Error
-                        }
-                    }
-                    
-                    0 // Success
-                }
-                Err(e) => {
-                    eprintln!("Native print error: {}", e);
-                    -1 // Error
-                }
+        // Get memory from shared state
+        let memory = match get_native_memory() {
+            Some(mem) => mem,
+            None => {
+                eprintln!("Native print error: Memory not available");
+                return -1; // Error
             }
-        },
-    );
+        };
+
+        let store_ptr = match get_native_store() {
+            Some(ptr) => ptr,
+            None => {
+                eprintln!("Native print error: Store not available");
+                return -1; // Error
+            }
+        };
+
+        // Read string from WASM memory
+        let store_ref = unsafe { &*store_ptr };
+        match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+            Ok(text) => {
+                // Check if we should capture output or print normally
+                let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+
+                if should_capture {
+                    // Capture output for testing
+                    CAPTURED_OUTPUT.with(|output| {
+                        if let Some(ref captured) = *output.borrow() {
+                            let mut stdout = captured.stdout.lock().unwrap();
+                            stdout.extend_from_slice(text.as_bytes());
+                        }
+                    });
+                } else {
+                    // Normal output to stdout
+                    print!("{}", text);
+                    if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
+                        eprintln!("Native print error: Failed to flush stdout: {}", e);
+                        return -1; // Error
+                    }
+                }
+
+                0 // Success
+            }
+            Err(e) => {
+                eprintln!("Native print error: {}", e);
+                -1 // Error
+            }
+        }
+    });
 
     // Add print function to beanstalk_io module
     imports.define("beanstalk_io", "print", print_func);
 
     // Create io function that prints with automatic newline
-    let io_func = Function::new_typed(
-        store,
-        move |text_ptr: i32, text_len: i32| {
-            #[cfg(feature = "verbose_codegen_logging")]
-            println!(
-                "Native io called with text_ptr=0x{:x}, text_len={}",
-                text_ptr, text_len
-            );
+    let io_func = Function::new_typed(store, move |text_ptr: i32, text_len: i32| {
+        #[cfg(feature = "verbose_codegen_logging")]
+        println!(
+            "Native io called with text_ptr=0x{:x}, text_len={}",
+            text_ptr, text_len
+        );
 
-            // Get memory from shared state
-            let memory = match get_native_memory() {
-                Some(mem) => mem,
-                None => {
-                    eprintln!("Native io error: Memory not available");
-                    return;
-                }
-            };
+        // Get memory from shared state
+        let memory = match get_native_memory() {
+            Some(mem) => mem,
+            None => {
+                eprintln!("Native io error: Memory not available");
+                return;
+            }
+        };
 
-            let store_ptr = match get_native_store() {
-                Some(ptr) => ptr,
-                None => {
-                    eprintln!("Native io error: Store not available");
-                    return;
-                }
-            };
+        let store_ptr = match get_native_store() {
+            Some(ptr) => ptr,
+            None => {
+                eprintln!("Native io error: Store not available");
+                return;
+            }
+        };
 
-            // Read string from WASM memory
-            let store_ref = unsafe { &*store_ptr };
-            match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
-                Ok(text) => {
-                    // Check if we should capture output or print normally
-                    let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
-                    
-                    if should_capture {
-                        // Capture output for testing (with newline)
-                        CAPTURED_OUTPUT.with(|output| {
-                            if let Some(ref captured) = *output.borrow() {
-                                let mut stdout = captured.stdout.lock().unwrap();
-                                stdout.extend_from_slice(text.as_bytes());
-                                stdout.push(b'\n'); // Add newline
-                            }
-                        });
-                    } else {
-                        // Normal output to stdout with newline
-                        println!("{}", text);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Native io error: {}", e);
+        // Read string from WASM memory
+        let store_ref = unsafe { &*store_ptr };
+        match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
+            Ok(text) => {
+                // Check if we should capture output or print normally
+                let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
+
+                if should_capture {
+                    // Capture output for testing (with newline)
+                    CAPTURED_OUTPUT.with(|output| {
+                        if let Some(ref captured) = *output.borrow() {
+                            let mut stdout = captured.stdout.lock().unwrap();
+                            stdout.extend_from_slice(text.as_bytes());
+                            stdout.push(b'\n'); // Add newline
+                        }
+                    });
+                } else {
+                    // Normal output to stdout with newline
+                    println!("{}", text);
                 }
             }
-        },
-    );
+            Err(e) => {
+                eprintln!("Native io error: {}", e);
+            }
+        }
+    });
 
     // Add io function to beanstalk_io module
     imports.define("beanstalk_io", "io", io_func);
@@ -1057,14 +1039,9 @@ pub struct JitRuntime {
 
 impl JitRuntime {
     /// Create a new JIT runtime
-    pub fn new() -> Result<Self, CompileError> {
+    pub fn new() -> Result<Self, CompilerError> {
         let store = Store::default();
 
-        Ok(Self {
-            store,
-        })
+        Ok(Self { store })
     }
-
 }
-
-

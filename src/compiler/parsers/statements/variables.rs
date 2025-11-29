@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
@@ -20,7 +20,7 @@ pub fn create_reference(
     reference_arg: &Arg,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompileError> {
+) -> Result<AstNode, CompilerError> {
     // Move past the name
     token_stream.advance();
 
@@ -64,7 +64,7 @@ pub fn new_arg(
     context: &ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<Arg, CompileError> {
+) -> Result<Arg, CompilerError> {
     // Move past the name
     token_stream.advance();
 
@@ -184,7 +184,7 @@ pub fn new_arg(
                 }
             )
         }
-        
+
         // Other kinds of syntax errors
         _ => {
             return_syntax_error!(

@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::runtime::io::js_bindings::JsBindingsGenerator;
 use crate::settings::HTMLMeta;
 use std::fs;
@@ -6,7 +6,7 @@ use std::fs;
 pub fn create_html_boilerplate(
     meta_tags: &HTMLMeta,
     release_build: bool,
-) -> Result<String, CompileError> {
+) -> Result<String, CompilerError> {
     // Add basic HTML boilerplate to output
     let file = match release_build {
         true => fs::read_to_string("/boilerplate-release.html"),
@@ -34,7 +34,7 @@ pub fn create_html_boilerplate(
             .replace("theme-color-light", &meta_tags.theme_color_light)
             .replace("theme-color-dark", &meta_tags.theme_color_dark)),
 
-        Err(ref err) => Err(CompileError::compiler_error(&format!(
+        Err(ref err) => Err(CompilerError::compiler_error(&format!(
             "Error reading boilerplate HTML file: {:?}",
             err
         ))),
@@ -46,7 +46,7 @@ pub fn create_html_with_js_bindings(
     meta_tags: &HTMLMeta,
     wasm_module_name: &str,
     release_build: bool,
-) -> Result<String, CompileError> {
+) -> Result<String, CompilerError> {
     // Generate the JS bindings
     let generator = JsBindingsGenerator::new(wasm_module_name.to_string())
         .with_dom_functions(true)
