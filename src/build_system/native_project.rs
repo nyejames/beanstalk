@@ -3,10 +3,9 @@
 // Builds Beanstalk projects for native execution, producing a single optimized WASM file
 // that can be executed with the Beanstalk runtime or embedded in other applications.
 
-use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
+use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages, ErrorLocation};
-use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
 

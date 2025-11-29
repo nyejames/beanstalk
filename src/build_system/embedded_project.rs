@@ -3,7 +3,7 @@
 // Builds Beanstalk projects for embedding in other applications,
 // with support for hot reloading and custom IO interfaces.
 
-use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
+use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::settings::Config;

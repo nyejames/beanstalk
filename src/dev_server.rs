@@ -1,4 +1,4 @@
-use crate::build_system::build_system::BuildTarget;
+use crate::build::BuildTarget;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages, print_compiler_messages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::BEANSTALK_FILE_EXTENSION;

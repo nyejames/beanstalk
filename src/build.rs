@@ -1,14 +1,13 @@
-use crate::build_system::build_system::{
-    BuildTarget, create_project_builder, determine_build_target,
-};
+use crate::build_system::{embedded_project, html_project, jit, native_project};
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
+use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, ProjectType};
 use crate::{Flag, return_file_error, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, grey_ln, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use wasmer_types::target::Target;
 
 pub struct InputModule {
     pub source_code: String,
@@ -24,6 +23,87 @@ pub struct Project {
     pub config: Config,
     pub output_files: Vec<OutputFile>,
     pub warnings: Vec<CompilerWarning>,
+}
+
+/// Build configuration that determines how WASM files are generated and organized
+#[derive(Debug, Clone)]
+pub enum BuildTarget {
+    /// HTML/JS project - generates separate WASM files for different HTML imports
+    HtmlProject,
+
+    /// Just runs the wasm and doesn't generate any output files
+    Jit,
+
+    /// Native project - single optimised WASM file
+    Native {
+        /// Target architecture (if applicable)
+        target_arch: Option<Target>,
+        /// Whether to enable native system calls
+        enable_syscalls: bool,
+    },
+    /// Embedded project - WASM for embedding in other applications
+    Embedded {
+        /// Whether to enable hot reloading support
+        hot_reload: bool,
+        /// Custom IO interface configuration
+        io_config: Option<String>,
+    },
+}
+
+/// Unified build interface for all project types
+pub trait ProjectBuilder {
+    /// Build the project with the given configuration
+    fn build_project(
+        &self,
+        modules: Vec<InputModule>,
+        config: &Config,
+        release_build: bool,
+        flags: &[Flag],
+    ) -> Result<Project, CompilerMessages>;
+
+    /// Get the build target type
+    fn target_type(&self) -> &BuildTarget;
+
+    /// Validate the project configuration
+    fn validate_config(&self, config: &Config) -> Result<(), CompileError>;
+}
+
+/// Create the appropriate project builder based on configuration
+pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
+    match target {
+        BuildTarget::HtmlProject => Box::new(html_project::HtmlProjectBuilder::new(target)),
+        BuildTarget::Native { .. } => Box::new(native_project::NativeProjectBuilder::new(target)),
+        BuildTarget::Embedded { .. } => {
+            Box::new(embedded_project::EmbeddedProjectBuilder::new(target))
+        }
+        BuildTarget::Jit => Box::new(jit::JitProjectBuilder::new(target)),
+    }
+}
+
+/// Determine a build target from project configuration
+pub fn determine_build_target(config: &Config) -> BuildTarget {
+    // Check if this is a single file or project
+    if config.entry_point.extension().is_some() {
+        // Single file - default to JIT
+        BuildTarget::Jit
+    } else {
+        // Project directory - check config for the target type
+        match &config.project_type {
+            ProjectType::HTML => BuildTarget::HtmlProject,
+            ProjectType::Native(target_arch) => BuildTarget::Native {
+                target_arch: Some(target_arch.clone()),
+                enable_syscalls: true,
+            },
+            ProjectType::Embedded => BuildTarget::Embedded {
+                hot_reload: false, // Default to false for embedded
+                io_config: None,
+            },
+            ProjectType::Jit => BuildTarget::Jit,
+
+            // Currently not using JIT, just parsing a string template
+            ProjectType::Repl => BuildTarget::Jit,
+        }
+    }
 }
 
 /// Build a Beanstalk project with an explicit target specification

@@ -3,7 +3,7 @@
 // Builds and immediately executes Beanstalk code without creating any output files.
 // This is useful for quick testing, debugging, and development iteration.
 
-use crate::build_system::build_system::{BuildTarget, ProjectBuilder};
+use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::runtime::jit::execute_direct_jit;
@@ -49,7 +49,7 @@ impl ProjectBuilder for JitProjectBuilder {
                     output_files: vec![],
                     warnings: compilation_result.warnings,
                 })
-            },
+            }
             Err(e) => Err(CompilerMessages {
                 errors: vec![e],
                 warnings: vec![],

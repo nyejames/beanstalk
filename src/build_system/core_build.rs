@@ -10,13 +10,11 @@ use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
 use colour::green_ln;
-use rayon::string;
-use wasmer::sys::module;
 // use rayon::prelude::*;
 use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
@@ -193,7 +191,9 @@ pub fn compile_modules(
     match compiler.headers_to_ast(sorted_modules) {
         Ok(parser_output) => {
             module_ast.nodes.extend(parser_output.nodes);
-            module_ast.external_exports.extend(parser_output.external_exports);
+            module_ast
+                .external_exports
+                .extend(parser_output.external_exports);
             // Extends the compiler messages with warnings and errors from the parser
             compiler_messages.warnings.extend(parser_output.warnings);
         }

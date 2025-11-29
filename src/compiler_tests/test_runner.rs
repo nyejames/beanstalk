@@ -1,6 +1,6 @@
 //! Test runner for validating core Beanstalk compiler functionality
 
-use crate::build_system::build_system::BuildTarget;
+use crate::build::BuildTarget;
 use crate::compiler::compiler_errors::{error_type_to_str, print_formatted_error};
 use crate::compiler::compiler_warnings::print_formatted_warning;
 use crate::settings::Config;
@@ -95,8 +95,13 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     println!("  {}", file_name);
                     let mut default_config = Config::new(path);
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    let messages = build_project_files(&mut default_config, false, &flags, Some(BuildTarget::Jit));
-                    
+                    let messages = build_project_files(
+                        &mut default_config,
+                        false,
+                        &flags,
+                        Some(BuildTarget::Jit),
+                    );
+
                     if messages.errors.is_empty() {
                         yellow_ln!("✗ UNEXPECTED SUCCESS");
                         unexpected_successes += 1;

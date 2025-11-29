@@ -1,4 +1,3 @@
-use crate::build_system::build_system::BuildTarget;
 use crate::build_system::repl;
 use crate::compiler::codegen::wat_to_wasm::compile_wat_file;
 use crate::compiler::compiler_errors::print_compiler_messages;
@@ -12,6 +11,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use crate::build::BuildTarget;
 
 enum Command {
     NewHTMLProject(PathBuf),
