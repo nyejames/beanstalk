@@ -18,27 +18,11 @@ Beanstalk makes deliberate tradeoffs for compilation speed:
 - Functions should be self-documenting through clear naming
 - Compiler-specific prefixes: `ast_`, `hir_`, `lir_`, `wasm_` for clarity
 - Compiler passes: descriptive names (`build_ast`, `generate_hir`, `emit_wasm`)
-
-```rust
-  // Good patterns for this codebase
-  let ast_node = parse_expression(&tokens);
-  let ir_instruction = build_ir_from_ast(&ast_node);
-  let wasm_bytes = generate_wasm_from_ir(&ir_instruction);
-```
+- Comments should use correct grammar without dropping connectives (`// Build AST` vs `// Builds the AST`)
 
 ### Import Guidelines
 - **Avoid inline imports**: If a function/type is used more than once in a file, import it at the top
 - **Use clear, consistent names**: Avoid aliasing types or imports as much as possible
-
-```rust
-// Bad: Inline imports for repeated usage
-fn process_variable(name: &str) {
-    let place = crate::compiler::hir::utilities::lookup_variable_or_error(
-        context, name, location, string_table, "processing"
-    )?;
-    // ... more inline crate::compiler::hir::utilities:: calls
-}
-```
 
 ### Code Style and Organisation
 **Compiler Development**:
@@ -109,20 +93,20 @@ Good places to add comments:
 
 ### Returning Errors
 The error system is built around three core types:
-- **`CompileError`**: The unified error type with owned data and structured metadata
+- **`CompilerError`**: The unified error type with owned data and structured metadata
 - **`ErrorLocation`**: Owned location information without string interning dependencies
 - **`ErrorMetaDataKey`**: Structured metadata keys for intelligent error analysis
 
-CompileError Best practices:
+CompilerError Best practices:
 - **Be Specific**: Include exact tokens, types, or names in errors.
 - **Be Helpful**: Suggest corrections when possible, especially for borrow checker errors. Provide actionable messages with context
 - **User errors**: Use `return_syntax_error!`, `return_rule_error!`, or `return_type_error!`
 - **Compiler bugs**: Use `return_compiler_error!` (prefix added automatically)
 - Always include source location (ErrorLocation) for user errors
-- Use consistent error handling patterns across stages, use provided macros and methods inside `src/compiler/compiler_errors.rs` to do this cleanly and consistently. 
-- Each macro can support multiple variations, but sometimes using CompileError methods directly will be more concise and clear for advanced error handling
-- Return a CompilerMessages Err result when a mix of warnings and/or multiple errors can be created at once. Use a single CompileError when only one error without warnings could be returned.
-- Add warnings to the output when it is appropriate to warn rather than error. See `src/compiler/compiler_warnings.rs`.
+- Use consistent error handling patterns across stages, use provided macros and methods inside `src/compiler/compiler_messages/compiler_errors.rs` to do this cleanly and consistently. 
+- Each macro can support multiple variations, but sometimes using CompilerError methods directly will be more concise and clear for advanced error handling
+- Return a CompilerMessages Err result when a mix of warnings and/or multiple errors can be created at once. Use a single CompilerError when only one error without warnings could be returned.
+- Add warnings to the output when it is appropriate to warn rather than error. See `src/compiler/compiler_messages/compiler_warnings.rs`.
 
 Every error as an associated type which informs the error output formatter how to display it and what data to expect and display.
 ``` rust

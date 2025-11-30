@@ -90,6 +90,15 @@ mod compiler {
     pub(crate) mod host_functions {
         pub(crate) mod registry;
     }
+
+    pub(crate) mod hir {
+        pub(crate) mod builder;
+        pub(crate) mod nodes;
+        pub(crate) mod place;
+    }
+    pub(crate) mod borrow_checker {
+        pub(crate) mod checker;
+    }
 }
 
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
