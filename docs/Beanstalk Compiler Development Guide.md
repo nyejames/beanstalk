@@ -8,59 +8,48 @@ This guide covers the structure, goals and best practices for Beanstalk's compil
 - Compiler repo is bundled with a CLI and a complete build system with extensive tooling
 
 Beanstalk makes deliberate tradeoffs for compilation speed:
-- **Early constant folding** at AST stage eliminates optimization passes
-- **Dual-purpose WIR** serves both borrow checking and WASM lowering without separate IRs
-- **External optimization** delegates complex transforms to WASM tooling, which will be used for release builds only
+- **Early constant folding** at AST stage eliminates optimisation passes
+- **External optimisation** delegates complex transforms to WASM tooling, which will be used for release builds only
 
 ## Best Practices
 
 ### Variables and Functions
-- Use descriptive, full names - avoid abbreviations except for simple iterators (`i`, `j`)
+- Use descriptive, full names—avoid abbreviations except for simple iterators (`i`, `j`)
 - Functions should be self-documenting through clear naming
-- Compiler-specific prefixes: `ast_`, `ir_`, `wasm_` for clarity
-- Compiler passes: descriptive names (`build_ast`, `generate_ir`, `emit_wasm`)
+- Compiler-specific prefixes: `ast_`, `hir_`, `lir_`, `wasm_` for clarity
+- Compiler passes: descriptive names (`build_ast`, `generate_hir`, `emit_wasm`)
 
 ```rust
-// Good patterns for this codebase
-let ast_node = parse_expression(&tokens);
-let ir_instruction = build_ir_from_ast(&ast_node);
-let wasm_bytes = generate_wasm_from_ir(&ir_instruction);
+  // Good patterns for this codebase
+  let ast_node = parse_expression(&tokens);
+  let ir_instruction = build_ir_from_ast(&ast_node);
+  let wasm_bytes = generate_wasm_from_ir(&ir_instruction);
 ```
 
 ### Import Guidelines
 - **Avoid inline imports**: If a function/type is used more than once in a file, import it at the top
-- **Group imports logically**: Organize by module (context, utilities, WIR types, core compiler)
 - **Use clear, consistent names**: Avoid aliasing types or imports as much as possible
 
 ```rust
-// Good: Imports at the top
-use crate::compiler::wir::utilities::lookup_variable_or_error;
-use crate::compiler::wir::expressions::expression_to_rvalue_with_context;
-
-fn process_variable(name: &str) {
-    let place = lookup_variable_or_error(context, name, location, string_table, "processing")?;
-    // ... more uses of lookup_variable_or_error
-}
-
 // Bad: Inline imports for repeated usage
 fn process_variable(name: &str) {
-    let place = crate::compiler::wir::utilities::lookup_variable_or_error(
+    let place = crate::compiler::hir::utilities::lookup_variable_or_error(
         context, name, location, string_table, "processing"
     )?;
-    // ... more inline crate::compiler::wir::utilities:: calls
+    // ... more inline crate::compiler::hir::utilities:: calls
 }
 ```
 
 ### Code Style and Organisation
 **Compiler Development**:
-- Maintain clear separation between compilation stages. Each compilation stage is independantly exposed as a library in `src/lib.rs`.
+- Maintain clear separation between compilation stages. Each compilation stage is independently exposed as a library in `src/lib.rs`.
 - Follow the same style and patterns as the frontend of the codebase (`src/compiler/parsers`).
-- Never use .unwrap() unless blantantly safe, prefer match to handle results.
+- Never use .unwrap() unless blatantly safe, prefer match to handle results.
 - Prefer `.to_owned()` over `.clone()` for string/data copying (signals potential future refactoring)
 - Use `.clone()` only when you are sure a copy is unavoidable with this pattern
-- Split up and organise code into files that each deal with a catagory of tasks. Files should aim to be ~< 2000 lines each when possible.
-- Each module has ONE clear responsibility - don't mix concerns
-- Prefere using a context struct for state - don't pass individual state pieces between functions
+- Split up and organise code into files that each deal with a category of tasks. Files should aim to be ~< 2000 lines each when possible.
+- Each module has ONE clear responsibility—don't mix concerns
+- Prefer using a context struct for state—don't pass individual state pieces between functions
 
 #### Iterator vs Loop Preference
 - Simple operations: Use iterators
@@ -82,16 +71,16 @@ for node in ast_nodes {
 - **Simple functions**: ~50 lines max for straightforward operations
 - **Complex functions**: ~100 lines max when handling complex tasks
 - **Acceptable complexity**: Functions can be longer when they:
-  - Handle intricate compiler transformations (AST → WIR, WIR → WASM)
+  - Handle intricate compiler transformations (AST → HIR, LIR → WASM)
   - Manage complex state machines or pattern matching
   - Coordinate multiple related operations that benefit from being together
   - Would be harder to understand if split into smaller pieces
 
 **When to Split Functions**
-- Function has multiple unrelated responsibilities
-- Logic can be reused in other contexts
-- Function is difficult to test as a whole
-- Function name doesn't accurately describe what it does
+- The function has multiple unrelated responsibilities
+- The logic can be reused in other contexts
+- The function is challenging to test as a whole
+- The function name doesn't accurately describe what it does
 
 **When to Keep Functions Together**
 - Operations are tightly coupled and sequential
@@ -99,39 +88,22 @@ for node in ast_nodes {
 - The function represents a single conceptual operation
 - Splitting would make the code harder to follow
 
-```rust
-// Good: Complex transformation function (~80 lines)
-fn transform_complex_expression_to_wir(
-    expr: &Expression,
-    context: &mut WirTransformContext,
-    string_table: &mut StringTable,
-) -> Result<(Vec<Statement>, Rvalue), CompileError> {
-    // Complex pattern matching and transformation logic
-    // Multiple related operations that form a cohesive whole
-    // Better kept together for understanding the complete transformation
-    // ...
-}
-
-// Good: Simple utility function (~20 lines)
-fn resolve_variable_name(id: StringId, string_table: &StringTable) -> &str {
-    string_table.resolve(id)
-}
-```
-
 ### Macros
 - Minimal macro usage: Only small declarative macros for repetition
 - Avoid procedural macros entirely
 
 ### Other Style Considerations
 - Use `#[allow(dead_code)]` sparingly with justification
-- Try to reduce unused variable warnings and run clippy to fix as many simple warnings as possible before committing code
+- Try to reduce unused variable warnings as much as possible 
+- Use clippy to check code
+- Use the default Rust formatter on new code
 
 ### Comments:
 Avoid over commenting code. Stick to concise and brief descriptions. 
 
 Good places to add comments: 
 - Short summaries before important / complex functions 
-- Labeling parts of the control flow (branches) to make it clearer what each branch is doing
+- Labelling parts of the control flow (branches) to make it clearer what each branch is doing
 - TODOs for unimplemented features
 - Comments referencing an unusual or unclear bit of code and why it is written the way it is. Particularly when something has been changed to fix a subtle bug.
 
@@ -163,7 +135,8 @@ pub enum ErrorType {
     Compiler,
     DevServer,
     BorrowChecker,
-    WirTransformation,
+    HirTransformation,
+    LirTransformation,
     WasmGeneration,
 }
 ```
@@ -181,9 +154,9 @@ return_syntax_error!(
 // Bad: Using compiler error for user mistakes
 return_compiler_error!("User provided invalid variable name"); // Should be rule_error!
 
-// Instead Use for: Internal compiler bugs and unimplemented features
+// Instead, Use for: Internal compiler bugs and unimplemented features
 // Examples: Unsupported AST nodes, internal state corruption
-// User-facing: No - indicates compiler developer needs to fix
+// User-facing: No - indicates the compiler developer needs to fix
 // Note: Automatically prefixed with "COMPILER BUG" in output
 // No location required: These are internal errors
 return_compiler_error!(
@@ -195,12 +168,12 @@ return_compiler_error!(
 );
 
 // Bad: Using rule error for unimplemented features  
-return_rule_error!(location, "Match expressions not supported"); // Should be wir_transformation_error!
+return_rule_error!(location, "Match expressions not supported"); // Should be hir_transformation_error!
 ```
 
 ## Compilation Pipeline Stages
 ### Overview
-The build system will determine which files are associated into a single Wasm module.
+The build system will determine which files are associated with a single Wasm module.
 Those files are then all tokenized, parsed into headers and have their dependencies sorted. 
 After this, everything is combined into a single AST that should be able to check all types and see all declarations in the module.
 
@@ -216,18 +189,17 @@ The Beanstalk compiler processes modules through these stages:
 1. **Tokenization** - Convert source text to tokens
 2. **Header Parsing** - Extract headers and identify the entry point. Separates function definitions, structs, constants from top-level code
 3. **Dependency Sorting** - Order headers by dependencies
-4. **AST Construction** - Build abstract syntax tree
-5. **WIR Generation** - Create Wasm Intermediate Representation
+4. **AST Construction** - Build an abstract syntax tree
+5. **HIR Generation** - Create a high-level IR designed for borrow checking and lifetime analysis
 6. **Borrow Checking** - Verify memory safety
-7. **Codegen** - Produce final Wasm bytecode
+7. **LIR Generation** - Create an IR close to Wasm that can be lowered directly
+8. **Codegen** - Produce final Wasm bytecode
 
 **Key Pipeline Principles**:
 - **Import Resolution**: Processes `#import "path"` statements at the header stage so dependencies can be sorted after
 - **Early optimization**: Constant folding and type checking at AST stage
 - **Module-aware compilation**: Header parsing enables multi-file modules with proper entry point designation
-- **Dual-purpose WIR**: Serves both borrow checking and direct WASM lowering
-- **No optimization passes**: Complex optimizations left to external WASM tools for release builds only
-- **Direct lowering**: WIR maps directly to WASM without intermediate transformations
+- **No optimization passes in IR**: Complex optimizations left to external WASM tools for release builds only
 
 ### Stage 1: Tokenization (`src/compiler/parsers/tokenizer.rs`)
 **Purpose**: Convert raw source code into structured tokens with location information.
@@ -239,6 +211,8 @@ The Beanstalk compiler processes modules through these stages:
 
 **Development Notes**:
 This stage of the compiler is stable and currently can represent almost all the tokens Beanstalk will need to represent.
+
+---
 
 ### Stage 2: Header Parsing (`src/compiler/parsers/parse_file_headers.rs`)
 **Purpose**: Extract function definitions, structs, constants, imports and identify entry points before AST construction.
@@ -277,6 +251,8 @@ pub enum HeaderKind {
 }
 ```
 
+---
+
 ### Stage 3: Dependency Sorting (`src/lib.rs::sort_headers`)
 **Purpose**: Order headers topologically to ensure proper compilation sequence so the AST for the whole module can be created in one pass. This enables the AST to perform full type checking.
 
@@ -284,6 +260,8 @@ pub enum HeaderKind {
 - Topological sort of import dependencies
 - Circular dependency detection
 - Entry point validation (single entry per module)
+
+---
 
 ### Stage 4: AST Construction (`src/compiler/parsers/ast.rs`)
 **Purpose**: Transform headers into Abstract Syntax Tree with compile-time optimizations.
@@ -300,7 +278,7 @@ pub enum HeaderKind {
 - Expressions are converted to **Reverse Polish Notation (RPN)** for evaluation
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
-- Variables, function calls, or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
+- Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`
 - The `Vec<AstNode>` contains the expression in **RPN order** ready for stack-based evaluation
 - Example: `x + 2 * y` becomes `[x, 2, y, *, +]` in the Runtime vector
 
@@ -312,68 +290,93 @@ pub enum HeaderKind {
 **Development Notes**:
 - Use `show_ast` feature flag to inspect generated AST
 
+---
 
-### Stage 5: WIR Generation (`src/compiler/wir/build_wir.rs`)
-WIR (WASM Intermediate Representation) is Beanstalk's dual-purpose IR that enables both precise borrow checking and direct WASM lowering.
+## Stage 5: HIR Generation (`src/compiler/hir/`)
+HIR (High-Level IR) is Beanstalk’s semantic IR.  
+It is the first fully typed, canonical representation of a program, designed for **borrow checking, last-use analysis, and structured lowering**.
 
-**Key Features**:
-- **Minimal Passes**: Only borrow checking and direct WASM lowering. Most optimization is done by external Wasm tools or during the AST stage.
-- **No Backend Abstraction**: WIR operations chosen specifically for optimal WASM lowering
-- **Place-based Analysis**: Memory location tracking for borrow checking
-- **Fact Generation**: Lifetime analysis preparation
-- **Create Module Exports**: Mark functions that will be exported from the final module
-- **Direct Instruction Mapping**: WIR operations correspond directly to WASM instruction sequences. Ideally each statement maps to ≤3 WASM instructions
-- **WASM Type Alignment**: All WIR operands use WASM value types (i32, i64, f32, f64)
-- **Structured Control Flow**: WIR blocks map directly to WASM's structured control flow
+HIR is still “Beanstalk-shaped”: it preserves high-level constructs, references, structured control flow and the semantics needed for ownership analysis.
 
-**Debugging WIR Generation**:
-- Use `show_wir` feature flag to inspect generated WIR
-- Verify place analysis and borrow fact generation
-- Check entry point export generation
+### Purpose
+- Represent Beanstalk programs in a form that is straightforward to analyze but not yet bound to Wasm.
+- Provide a stable shape for borrow checking, move analysis and template resolution.
+- Normalise syntax sugar into canonical nodes while preserving structure.
 
-**Place Construction**: Always use place abstraction for memory locations
-```rust
-// Good: Place-based assignment
-let place = Place::Local(local_id);
-let rvalue = Rvalue::Use(Operand::Copy(source_place));
-statements.push(Statement::Assign { place, rvalue });
+### Key Features
+- **Structured Control Flow**: `if`, `loop`, `match`, and template bodies remain structured for analysis.
+- **Place-based Memory Model**: Locals, temporaries, and fields represented as “places” for borrowing analysis.
+- **Ownership & Move Tracking**: HIR nodes explicitly mark moves, borrows, and drops derived from last-use analysis.
+- **Template Handling**: Compile-time templates are folded; runtime templates are converted into HIR function bodies.
+- **Desugared Semantics**: Error/option propagation, assignment sugar, and borrowing rules lowered into a uniform form.
+- **Not Tied to Wasm**: No stack machine semantics, no Wasm types, no address arithmetic.
 
-// Bad: Direct variable manipulation
-statements.push(IRNode::SetInt(var_id, value, is_global));
-```
+### Debugging HIR
+- Use `show_hir` to inspect the desugared program.
+- Verify move and borrow annotations.
+- Inspect template lowering, constant folding, and structured control flow.
 
-**Lifetime Tracking**: Generate facts during WIR construction
-```rust
-// Track borrows with precise points
-let loan_id = self.issue_loan(region, borrow_kind, borrowed_place);
-self.facts.loan_issued_at.push((point, loan_id, region_live_at));
-```
+---
 
-### Stage 6: Borrow Checking (`src/compiler/borrow_checker/`)
-The borrow checker must know statically where moves occur.
-Moves are not an explicit part of the language, but determined by the compiler based on last usage.
-**Purpose**: Verify memory safety using lifetime analysis.
+## Stage 6: Borrow Checking (`src/compiler/borrow_checker/`)
+The borrow checker operates *exclusively on HIR*.  
+Its job is to validate ownership correctness before the program is lowered toward Wasm.
 
-**Key Features**:
-- **Place-based Tracking**: Precise memory location analysis
-- **Loan Management**: Borrow conflict detection
-- **Move Semantics**: Ownership transfer validation
-- **Error Reporting**: Clear diagnostic messages with source locations
+### Purpose
+- Enforce Beanstalk’s reference rules.
+- Ensure all moves and borrows are consistent with lifetimes derived from HIR.
+- Reject programs with illegal aliasing or dangling references.
 
-**Development Notes**:
-- Extend borrow checking for new language features
-- Add lifetime analysis for complex borrowing patterns
-- Ensure error messages reference original source locations
+### Key Features
+- **Region & Lifetime Inference**: Implicit lifetimes derived from structure and usage.
+- **Loan Tracking**: Mutable/immutable borrow conflicts detected via place-based loans.
+- **Move Validation**: Ensure moved-from values are not used afterwards.
+- **Drop Insertion Points**: Determine where cleanup must occur (for later LIR lowering).
+- **Origin Checking for Returns**: Validate reference-returning functions use the declared origin parameter correctly.
 
-### Stage 7: WASM Generation (`src/compiler/codegen/`)
+### Development Notes
+- All borrow errors must reference original source spans, not HIR internals.
+- Complex features (pattern binds, runtime templates) require additional region facts.
+- HIR must remain easy for the borrow checker to walk — keep constructs structured, not flattened.
 
-**Purpose**: Generate final WASM bytecode with memory safety guarantees.
+---
 
-**Key Features**:
-- **Direct WIR Lowering**: One-to-few instruction mapping
-- **Entry Point Export**: Export entry functions as WASM start functions
-- **Host Function Integration**: Proper import section generation
-- **Memory Layout**: Linear memory organization based on WIR analysis
+## Stage 7: LIR Generation (`src/compiler/lir/`)
+LIR (Low-Level IR) is the *Wasm-shaped* representation of the program.  
+It is a close, structural match to Wasm’s execution model, with stack effects and control blocks fully explicit.
+
+LIR contains no remaining high-level constructs from Beanstalk: everything has been lowered into concrete Wasm-compatible operations.
+
+### Purpose
+- Transform HIR into an instruction-level IR that can be directly emitted as Wasm.
+- Make control flow, locals and memory operations explicit.
+- Insert drops, compute field offsets and rewrite multi-value returns.
+
+### Key Features
+- **Wasm-Friendly Control Flow**: Blocks, loops, and branches match Wasm’s structured CFG.
+- **Concrete Memory Access**: All field and array accesses lowered to explicit offsets and load/store instructions.
+- **Explicit Locals**: All temporaries materialized as Wasm locals or stack values.
+- **Drop Semantics**: Ownership outcomes from HIR lowering translated to explicit drop/free operations.
+- **Stack Discipline**: Expressions sequenced according to Wasm’s operand stack rules.
+- **Final Type Model**: All values lowered to Wasm types (`i32`, `i64`, `f32`, `f64`, plus reference types if enabled).
+
+### Debugging LIR
+- Use `show_lir` to inspect Wasm-shaped blocks.
+- Verify stack height balancing.
+- Confirm struct layouts and offsets.
+- Inspect lowered drop instructions and ownership decisions.
+
+---
+
+## Stage 8: Codegen (`src/compiler/codegen/`)
+Transforms LIR directly into Wasm bytecode.
+
+### Purpose
+- Encode LIR instructions into valid WebAssembly.
+- Produce linear memory layout, data segments, function tables and exports.
+
+### Key Features
+- **Direct Encoding**: LIR nodes correspond 1:1 (or close) to Wasm bytecode s
 
 ## Beanstalk Memory Model and Borrow Semantics
 Beanstalk uses a borrow checker to enable performant automatic memory management and memory safety, while also eliminating entire classes of bugs.
@@ -409,15 +412,16 @@ Beanstalk uses a borrow checker to enable performant automatic memory management
 - Most operations use borrowing instead of copying
 
 ### 5. Unified ABI for Moves and Mutable References
-Beanstalk does not generate separate function bodies for “owned” vs “borrowed” arguments. Function signatures make no distinction between a mutable reference or a move (owned value). Instead, all function calls use a single ABI:
+Beanstalk does not generate separate function bodies for “owned” vs “borrowed” arguments. 
+Function signatures make no distinction between a mutable reference or a move (owned value). Instead, all function calls use a single ABI:
 
 - Arguments that live in linear memory are passed as tagged pointers.
 - The lowest alignment-safe bit of the pointer is used as an ownership flag (1 = owned, 0 = borrowed).
 - The callee masks out the tag to recover the real pointer.
 - If the ownership bit is set, the callee is responsible for dropping the value before returning.
-- Borrow checker rules guarantee that owned arguments are no longer used by the caller after the call.
+- Borrow checker rules guarantee that the caller no longer uses owned arguments after the call.
 
-This design keeps dispatch static, avoids monomorphization, and prevents binary-size growth on Wasm while still allowing the compiler to freely choose between moves and mutable references based on last-use analysis.
+This design keeps dispatch static, avoids monomorphization and prevents binary-size growth on Wasm while still allowing the compiler to freely choose between moves and mutable references based on last-use analysis.
 
 ### Assignment Operations
 ```beanstalk
@@ -475,7 +479,7 @@ This memory model provides memory safety while maintaining Beanstalk's goal of m
 cargo run -- run test.bst
 
 # Compile and run with debugging output
-cargo run --features "show_ast,show_wir,detailed_timers" -- run test.bst
+cargo run --features "show_ast,show_hir,detailed_timers" -- run test.bst
 
 # Run integration test suite
 cargo run -- run tests
@@ -491,7 +495,7 @@ See the Cargo.toml for all feature flags.
 - `show_tokens` - Display tokenization output
 - `show_headers` - Display parsed headers and dependencies
 - `show_ast` - Display generated Abstract Syntax Tree
-- `show_wir` - Display WASM Intermediate Representation
+- `show_hir` - Display High level IR
 - `show_wasm` - Display generated WASM bytecode
 
 **Performance Analysis**:
@@ -514,7 +518,7 @@ cargo run --features "show_headers,show_ast" -- run main.bst
 cargo run --features "show_headers,show_ast,verbose_errors" -- run main.bst
 
 # Full pipeline debugging
-cargo run --features "show_headers,show_ast,show_wir,detailed_timers" -- run main.bst
+cargo run --features "show_headers,show_ast,show_hir,detailed_timers" -- run main.bst
 ```
 
 ## Testing Workflow
@@ -617,7 +621,7 @@ io("Loop complete")
 ```
 
 ### Still in the design phase
-Much of the specific implementation of the compiler, particularly the backend, is being rapidly iterated on beyond the core design choices of the language.
+The implementation of the compiler, particularly the backend, is being rapidly iterated on beyond the core design choices of the language.
 
 Here are some notes about the direction of future features:
 - **Interfaces instead of traits** avoid complex trait resolution. Dynamic dispatch as the default for smaller binary sizes and faster compile times.

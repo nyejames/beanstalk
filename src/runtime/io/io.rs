@@ -4,22 +4,22 @@
 // - WASI for standard I/O
 // - Custom hooks for embedded scenarios
 // - JS bindings for web targets
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 
 /// Generic IO interface that all backends must implement
 /// TODO: Add more IO functions, just barebones for now to get it working
 pub trait IoInterface {
     /// Print a string to the output
-    fn print(&self, message: &str) -> Result<(), CompileError>;
+    fn print(&self, message: &str) -> Result<(), CompilerError>;
 
     /// Read input from the user/environment
-    fn read_input(&self) -> Result<String, CompileError>;
+    fn read_input(&self) -> Result<String, CompilerError>;
 
     /// Write to a file (if supported by backend)
-    fn write_file(&self, path: &str, content: &str) -> Result<(), CompileError>;
+    fn write_file(&self, path: &str, content: &str) -> Result<(), CompilerError>;
 
     /// Read from a file (if supported by backend)
-    fn read_file(&self, path: &str) -> Result<String, CompileError>;
+    fn read_file(&self, path: &str) -> Result<String, CompilerError>;
 }
 
 /// IO backend configuration

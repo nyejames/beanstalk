@@ -3,7 +3,7 @@
 // Provides safe and efficient utilities for reading and writing data between
 // WASM linear memory and host functions, with proper error handling.
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use wasmer::MemoryView;
 
 /// Utilities for reading and writing WASM memory from host functions
@@ -24,7 +24,7 @@ impl MemoryUtils {
         memory: &MemoryView,
         ptr: u32,
         len: u32,
-    ) -> Result<String, CompileError> {
+    ) -> Result<String, CompilerError> {
         // Validate parameters
         if len == 0 {
             return Ok(String::new());
@@ -32,7 +32,7 @@ impl MemoryUtils {
 
         // Check for potential overflow
         let end_ptr = ptr.checked_add(len).ok_or_else(|| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Memory access overflow: ptr={}, len={}",
                 ptr, len
             ))
@@ -41,7 +41,7 @@ impl MemoryUtils {
         // Check memory bounds
         let memory_size = memory.size().bytes().0 as u32;
         if end_ptr > memory_size {
-            return Err(CompileError::compiler_error(&format!(
+            return Err(CompilerError::compiler_error(&format!(
                 "Memory access out of bounds: trying to read {}..{}, memory size is {}",
                 ptr, end_ptr, memory_size
             )));
@@ -50,7 +50,7 @@ impl MemoryUtils {
         // Read bytes from memory
         let mut bytes = vec![0u8; len as usize];
         memory.read(ptr as u64, &mut bytes).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Failed to read from WASM memory at {}: {}",
                 ptr, e
             ))
@@ -58,7 +58,7 @@ impl MemoryUtils {
 
         // Convert to UTF-8 string
         String::from_utf8(bytes).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Invalid UTF-8 string in WASM memory at {}: {}",
                 ptr, e
             ))
@@ -79,7 +79,7 @@ impl MemoryUtils {
         memory: &MemoryView,
         ptr: u32,
         data: &str,
-    ) -> Result<u32, CompileError> {
+    ) -> Result<u32, CompilerError> {
         let bytes = data.as_bytes();
         let len = bytes.len() as u32;
 
@@ -89,7 +89,7 @@ impl MemoryUtils {
 
         // Check for potential overflow
         let end_ptr = ptr.checked_add(len).ok_or_else(|| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Memory write overflow: ptr={}, len={}",
                 ptr, len
             ))
@@ -98,7 +98,7 @@ impl MemoryUtils {
         // Check memory bounds
         let memory_size = memory.size().bytes().0 as u32;
         if end_ptr > memory_size {
-            return Err(CompileError::compiler_error(&format!(
+            return Err(CompilerError::compiler_error(&format!(
                 "Memory write out of bounds: trying to write {}..{}, memory size is {}",
                 ptr, end_ptr, memory_size
             )));
@@ -106,7 +106,7 @@ impl MemoryUtils {
 
         // Write bytes to memory
         memory.write(ptr as u64, bytes).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Failed to write to WASM memory at {}: {}",
                 ptr, e
             ))
@@ -129,7 +129,7 @@ impl MemoryUtils {
         memory: &MemoryView,
         ptr: u32,
         max_len: u32,
-    ) -> Result<String, CompileError> {
+    ) -> Result<String, CompilerError> {
         let memory_size = memory.size().bytes().0 as u32;
 
         // Find the null terminator
@@ -137,7 +137,7 @@ impl MemoryUtils {
         while len < max_len && (ptr + len) < memory_size {
             let mut byte = [0u8; 1];
             memory.read((ptr + len) as u64, &mut byte).map_err(|e| {
-                CompileError::compiler_error(&format!(
+                CompilerError::compiler_error(&format!(
                     "Failed to read from WASM memory at {}: {}",
                     ptr + len,
                     e
@@ -151,7 +151,7 @@ impl MemoryUtils {
         }
 
         if len == max_len {
-            return Err(CompileError::compiler_error(&format!(
+            return Err(CompilerError::compiler_error(&format!(
                 "No null terminator found within {} bytes at {}",
                 max_len, ptr
             )));
@@ -175,14 +175,14 @@ impl MemoryUtils {
         memory: &MemoryView,
         ptr: u32,
         data: &str,
-    ) -> Result<u32, CompileError> {
+    ) -> Result<u32, CompilerError> {
         let mut bytes = data.as_bytes().to_vec();
         bytes.push(0); // Add null terminator
         let len = bytes.len() as u32;
 
         // Check for potential overflow
         let end_ptr = ptr.checked_add(len).ok_or_else(|| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Memory write overflow: ptr={}, len={}",
                 ptr, len
             ))
@@ -191,7 +191,7 @@ impl MemoryUtils {
         // Check memory bounds
         let memory_size = memory.size().bytes().0 as u32;
         if end_ptr > memory_size {
-            return Err(CompileError::compiler_error(&format!(
+            return Err(CompilerError::compiler_error(&format!(
                 "Memory write out of bounds: trying to write {}..{}, memory size is {}",
                 ptr, end_ptr, memory_size
             )));
@@ -199,7 +199,7 @@ impl MemoryUtils {
 
         // Write bytes to memory
         memory.write(ptr as u64, &bytes).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Failed to write to WASM memory at {}: {}",
                 ptr, e
             ))
@@ -217,10 +217,10 @@ impl MemoryUtils {
     /// # Returns
     /// * `Ok(i32)` - The integer value
     /// * `Err(CompileError)` - If memory access fails
-    pub fn read_i32_from_memory(memory: &MemoryView, ptr: u32) -> Result<i32, CompileError> {
+    pub fn read_i32_from_memory(memory: &MemoryView, ptr: u32) -> Result<i32, CompilerError> {
         let mut bytes = [0u8; 4];
         memory.read(ptr as u64, &mut bytes).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Failed to read i32 from WASM memory at {}: {}",
                 ptr, e
             ))
@@ -243,10 +243,10 @@ impl MemoryUtils {
         memory: &MemoryView,
         ptr: u32,
         value: i32,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         let bytes = value.to_le_bytes();
         memory.write(ptr as u64, &bytes).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Failed to write i32 to WASM memory at {}: {}",
                 ptr, e
             ))
@@ -269,14 +269,14 @@ impl MemoryUtils {
         memory: &MemoryView,
         ptr: u32,
         len: u32,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         if len == 0 {
             return Ok(());
         }
 
         // Check for overflow
         let end_ptr = ptr.checked_add(len).ok_or_else(|| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Memory range overflow: ptr={}, len={}",
                 ptr, len
             ))
@@ -285,7 +285,7 @@ impl MemoryUtils {
         // Check bounds
         let memory_size = memory.size().bytes().0 as u32;
         if end_ptr > memory_size {
-            return Err(CompileError::compiler_error(&format!(
+            return Err(CompilerError::compiler_error(&format!(
                 "Memory range out of bounds: {}..{}, memory size is {}",
                 ptr, end_ptr, memory_size
             )));

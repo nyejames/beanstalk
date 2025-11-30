@@ -5,7 +5,7 @@
 // ONLY DOES COMPILE TIME TEMPLATE ATM.
 // Function templates are not yet supported
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::create_template_node::Template;
@@ -80,7 +80,7 @@ pub fn start_repl_session() {
 fn compile_beanstalk_to_string(
     source_code: &str,
     source_path: &Path,
-) -> Result<String, CompileError> {
+) -> Result<String, CompilerError> {
     use crate::compiler::interned_path::InternedPath;
     use crate::compiler::string_interning::StringTable;
 
@@ -116,7 +116,7 @@ fn compile_beanstalk_to_string(
     // For now, this will be able to return a string if it can be folded at compile time
     // If not, it will throw an error.
     // Since the repl is purely inside the string template, new variables or functions can't be used anyway.
-    
+
     // This is super gross as we are interning then resolving immediately
     let template_string = template.fold(&None, &mut string_table)?;
 

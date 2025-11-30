@@ -1,9 +1,11 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::compiler::parsers::statements::template::{Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType};
+use crate::compiler::parsers::statements::template::{
+    Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType,
+};
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::compiler::traits::ContainsReferences;
@@ -28,7 +30,7 @@ impl Template {
         context: &ScopeContext,
         inherited_style: Option<Box<Style>>,
         string_table: &mut StringTable,
-    ) -> Result<Template, CompileError> {
+    ) -> Result<Template, CompilerError> {
         // These are variables or special keywords passed into the template head
         let mut template = Self::create_default(inherited_style);
 
@@ -232,7 +234,7 @@ impl Template {
         template_being_inserted: &Template,
         foldable: &mut bool,
         string_table: &StringTable,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         match template_being_inserted.kind {
             TemplateType::StringFunction => {
                 // Keep going, but this template can't be folded at compile time now
@@ -284,10 +286,10 @@ impl Template {
         &self,
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
-    ) -> Result<InternedString, CompileError> {
+    ) -> Result<InternedString, CompilerError> {
         // Now we start combining everything into one string
         let mut final_string = String::with_capacity(3);
-        let mut formatter:  Option<Formatter> = self.style.formatter.to_owned();
+        let mut formatter: Option<Formatter> = self.style.formatter.to_owned();
 
         // Format. How will the content be parsed at compile time?
         if let Some(style) = inherited_style {
@@ -410,7 +412,7 @@ pub fn parse_template_head(
     template: &mut Template,
     foldable: &mut bool,
     string_table: &mut StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // TODO: Add control flow parsing
 
     template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);

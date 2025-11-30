@@ -5,7 +5,7 @@
 
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project};
@@ -61,7 +61,7 @@ impl ProjectBuilder for JitProjectBuilder {
         &self.target
     }
 
-    fn validate_config(&self, _config: &Config) -> Result<(), CompileError> {
+    fn validate_config(&self, _config: &Config) -> Result<(), CompilerError> {
         // JIT mode doesn't require specific configuration validation
         // The runtime configuration is already validated in the Config struct
         Ok(())

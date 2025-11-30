@@ -6,7 +6,7 @@ use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::return_syntax_error;
-use crate::{CompileError, ast_log};
+use crate::{CompilerError, ast_log};
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as
@@ -14,7 +14,7 @@ pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<Vec<Arg>, CompileError> {
+) -> Result<Vec<Arg>, CompilerError> {
     // Should start at the Colon
     // Need to skip it,
     token_stream.advance();
@@ -35,7 +35,7 @@ pub fn parse_parameters(
 
     // False for function definitions, true for struct definitions
     is_struct: bool,
-) -> Result<Vec<Arg>, CompileError> {
+) -> Result<Vec<Arg>, CompilerError> {
     let mut args: Vec<Arg> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
 
@@ -151,7 +151,7 @@ pub fn new_parameter(
     name: InternedString,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<Arg, CompileError> {
+) -> Result<Arg, CompilerError> {
     // Move past the name
     token_stream.advance();
 

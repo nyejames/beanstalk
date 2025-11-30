@@ -1,5 +1,5 @@
 // use crate::parsers::expressions::function_call_inline::inline_function_call;
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
@@ -26,7 +26,7 @@ impl FunctionSignature {
         token_stream: &mut FileTokens,
         context: &ScopeContext,
         string_table: &mut StringTable,
-    ) -> Result<Self, CompileError> {
+    ) -> Result<Self, CompilerError> {
         // Should start at the Colon
         // Need to skip it,
         token_stream.advance();
@@ -525,7 +525,7 @@ pub fn parse_function_call(
     context: &ScopeContext,
     signature: &FunctionSignature,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompileError> {
+) -> Result<AstNode, CompilerError> {
     // Assumes we're starting at the first token after the name of the function call
     // Check if it's a host function first
     if let Some(host_func) = &context.host_registry.get_function(id) {
@@ -574,7 +574,7 @@ pub fn create_function_call_arguments(
     required_arguments: &[Arg],
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<Vec<Expression>, CompileError> {
+) -> Result<Vec<Expression>, CompilerError> {
     // Starts at the first token after the function name
     ast_log!("Creating function call arguments");
 
@@ -629,7 +629,7 @@ pub fn create_function_call_arguments(
 fn coerce_to_string_at_compile_time(
     expr: &Expression,
     string_table: &mut StringTable,
-) -> Result<Expression, CompileError> {
+) -> Result<Expression, CompilerError> {
     match &expr.kind {
         // String literals pass through unchanged (optimization: no conversion needed)
         ExpressionKind::StringSlice(_) => Ok(expr.clone()),
@@ -695,7 +695,7 @@ pub fn parse_host_function_call(
     host_func: &HostFunctionDef,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompileError> {
+) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
 
     let params_as_args = host_func.params_to_signature(string_table);
@@ -738,7 +738,7 @@ pub fn validate_host_function_call(
     args: &[Expression],
     location: TextLocation,
     string_table: &StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // Check argument count
     if args.len() != function.parameters.len() {
         let expected = function.parameters.len();

@@ -1,11 +1,11 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
-use crate::{ast_log, return_rule_error, return_syntax_error};
-use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::StringTable;
+use crate::{ast_log, return_rule_error, return_syntax_error};
 
 /// Handle mutation of existing mutable variables
 /// Called when we encounter a variable reference followed by an assignment operator
@@ -14,7 +14,7 @@ pub fn handle_mutation(
     variable_arg: &Arg,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompileError> {
+) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
 
     // Check if the variable is mutable
@@ -26,7 +26,12 @@ pub fn handle_mutation(
     );
 
     if !ownership.is_mutable() {
-        let var_name_static: &'static str = Box::leak(string_table.resolve(variable_arg.id).to_string().into_boxed_str());
+        let var_name_static: &'static str = Box::leak(
+            string_table
+                .resolve(variable_arg.id)
+                .to_string()
+                .into_boxed_str(),
+        );
         return_rule_error!(
             format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", var_name_static),
             location.to_error_location(&string_table),
@@ -46,8 +51,14 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let new_value =
-                create_expression(token_stream, context, &mut expected_type, ownership, false, string_table)?;
+            let new_value = create_expression(
+                token_stream,
+                context,
+                &mut expected_type,
+                ownership,
+                false,
+                string_table,
+            )?;
 
             Ok(AstNode {
                 kind: NodeKind::Mutation(variable_arg.id.to_owned(), new_value, false),
@@ -61,8 +72,14 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let add_value =
-                create_expression(token_stream, context, &mut expected_type, ownership, false, string_table)?;
+            let add_value = create_expression(
+                token_stream,
+                context,
+                &mut expected_type,
+                ownership,
+                false,
+                string_table,
+            )?;
 
             // Create an addition expression in RPN order: variable, add_value, +
             let variable_ref = AstNode {
@@ -102,8 +119,14 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let subtract_value =
-                create_expression(token_stream, context, &mut expected_type, ownership, false, string_table)?;
+            let subtract_value = create_expression(
+                token_stream,
+                context,
+                &mut expected_type,
+                ownership,
+                false,
+                string_table,
+            )?;
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
             let variable_ref = AstNode {
@@ -143,8 +166,14 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let multiply_value =
-                create_expression(token_stream, context, &mut expected_type, ownership, false, string_table)?;
+            let multiply_value = create_expression(
+                token_stream,
+                context,
+                &mut expected_type,
+                ownership,
+                false,
+                string_table,
+            )?;
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
             let variable_ref = AstNode {
@@ -184,8 +213,14 @@ pub fn handle_mutation(
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let divide_value =
-                create_expression(token_stream, context, &mut expected_type, ownership, false, string_table)?;
+            let divide_value = create_expression(
+                token_stream,
+                context,
+                &mut expected_type,
+                ownership,
+                false,
+                string_table,
+            )?;
 
             // Create a division expression in RPN order: variable, divide_value, /
             let variable_ref = AstNode {
@@ -221,7 +256,12 @@ pub fn handle_mutation(
         }
 
         _ => {
-            let var_name_static: &'static str = Box::leak(string_table.resolve(variable_arg.id).to_string().into_boxed_str());
+            let var_name_static: &'static str = Box::leak(
+                string_table
+                    .resolve(variable_arg.id)
+                    .to_string()
+                    .into_boxed_str(),
+            );
             return_syntax_error!(
                 format!("Expected assignment operator after variable '{}', found '{:?}'", var_name_static, token_stream.current_token_kind()),
                 location.to_error_location(&string_table),

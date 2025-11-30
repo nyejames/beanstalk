@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
+use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::optimizers::constant_folding::constant_fold;
 use crate::compiler::parsers::ast_nodes::AstNode;
@@ -6,12 +6,12 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::statements::create_template_node::Template;
 
 use crate::compiler::datatypes::Ownership;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
     return_compiler_error, return_syntax_error,
 };
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /**
  * Evaluates an abstract syntax tree (AST) expression using the shunting-yard algorithm
@@ -86,7 +86,7 @@ pub fn evaluate_expression(
     current_type: &mut DataType,
     ownership: &Ownership,
     string_table: &mut StringTable,
-) -> Result<Expression, CompileError> {
+) -> Result<Expression, CompilerError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
     eval_log!("Evaluating expression: {:#?}", nodes);
@@ -163,7 +163,10 @@ pub fn evaluate_expression(
             }
 
             _ => {
-                return_compiler_error!(format!("Unsupported AST node found in expression: {:?}", node.kind))
+                return_compiler_error!(format!(
+                    "Unsupported AST node found in expression: {:?}",
+                    node.kind
+                ))
             }
         }
     }
@@ -233,7 +236,8 @@ pub fn evaluate_expression(
             }
 
             if stack.is_empty() {
-                let expected_type_static: &'static str = Box::leak(format!("{}", current_type).into_boxed_str());
+                let expected_type_static: &'static str =
+                    Box::leak(format!("{}", current_type).into_boxed_str());
                 return_syntax_error!(
                     "Invalid expression: no valid operands found during evaluation.",
                     ErrorLocation::default(),
@@ -287,7 +291,7 @@ fn pop_higher_precedence(
 fn concat_template(
     simplified_expression: &mut Vec<AstNode>,
     ownership: Ownership,
-) -> Result<Expression, CompileError> {
+) -> Result<Expression, CompilerError> {
     let mut template: Template = Template::create_default(None);
     let _location = extract_location(simplified_expression)?;
 
@@ -336,7 +340,7 @@ fn concat_template(
     Ok(Expression::template(template, ownership))
 }
 
-fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompileError> {
+fn extract_location(nodes: &[AstNode]) -> Result<TextLocation, CompilerError> {
     // TODO: Just in case the first node is an operator or something
     // This should PROBABLY iterate through until it hits the first expression node
     match nodes.first() {

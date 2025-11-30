@@ -6,7 +6,7 @@
 //! ## Architecture
 //!
 //! The error system is built around three core types:
-//! - [`CompileError`]: The unified error type with owned data and structured metadata
+//! - [`CompilerError`]: The unified error type with owned data and structured metadata
 //! - [`ErrorLocation`]: Owned location information without string interning dependencies
 //! - [`ErrorMetaDataKey`]: Structured metadata keys for intelligent error analysis
 //!
@@ -17,8 +17,9 @@
 //! - **Type**: Type system violations and mismatches
 //! - **Rule**: Semantic errors like undefined variables or scope violations
 //! - **BorrowChecker**: Memory safety violations detected during lifetime analysis
-//! - **WirTransformation**: Failures during AST to WIR conversion (compiler bugs)
-//! - **WasmGeneration**: Failures during WIR to WASM codegen (compiler bugs)
+//! - **HirTransformation**: Failures during AST to HIR conversion (compiler bugs)
+//! - **LirTransformation**: Failures during HIR to LIR conversion (compiler bugs)
+//! - **WasmGeneration**: Failures during LIR to WASM (compiler bugs)
 //! - **Compiler**: Internal compiler bugs (not user's fault)
 //! - **File**: File system errors
 //! - **Config**: Configuration file issues
@@ -36,7 +37,8 @@
 //!
 //! ### Compiler Bug Errors
 //! - [`return_compiler_error!`]: For internal compiler bugs
-//! - [`return_wir_transformation_error!`]: For WIR transformation failures
+//! - [`return_hir_transformation_error!`]: For HIR transformation failures
+//! - [`return_lir_transformation_error!`]: For LIR transformation failures
 //! - [`return_wasm_generation_error!`]: For WASM generation failures
 //!
 //! ### Specialized Borrow Checker Errors
@@ -83,11 +85,11 @@
 //! let error_location = text_location.to_error_location(string_table);
 //!
 //! // Use in error creation
-//! return_wir_transformation_error!(
+//! return_hir_transformation_error!(
 //!     format!("Cannot transform expression type {:?}", expr_type),
 //!     error_location,
 //!     {
-//!         CompilationStage => "WIR Transformation",
+//!         CompilationStage => "HIR Transformation",
 //!         PrimarySuggestion => "This is a compiler bug - please report it"
 //!     }
 //! );
@@ -123,7 +125,9 @@
 //!     ↓
 //! AST Builder → Type/Rule Errors
 //!     ↓
-//! WIR Builder → WirTransformation Errors
+//! HIR Builder → HirTransformation Errors
+//!     ↓
+//! LIR Builder → LirTransformation Errors
 //!     ↓
 //! Borrow Checker → BorrowChecker Errors
 //!     ↓
@@ -144,8 +148,14 @@ use std::{env, fs};
 // The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
 pub struct CompilerMessages {
-    pub errors: Vec<CompileError>,
+    pub errors: Vec<CompilerError>,
     pub warnings: Vec<CompilerWarning>,
+}
+
+impl Default for CompilerMessages {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CompilerMessages {
@@ -208,7 +218,7 @@ impl ErrorLocation {
 }
 
 #[derive(Debug, Clone)]
-pub struct CompileError {
+pub struct CompilerError {
     pub msg: String,
 
     // Includes the scope path, which will have the file name and header data.
@@ -222,13 +232,13 @@ pub struct CompileError {
     pub metadata: HashMap<ErrorMetaDataKey, &'static str>,
 }
 
-impl CompileError {
+impl CompilerError {
     pub fn new(
         msg: impl Into<String>,
         location: ErrorLocation,
         error_type: ErrorType,
-    ) -> CompileError {
-        CompileError {
+    ) -> CompilerError {
+        CompilerError {
             msg: msg.into(),
             location,
             error_type,
@@ -252,7 +262,7 @@ impl CompileError {
 
     /// Create a new syntax error with a clear explanation
     pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location,
             error_type: ErrorType::Syntax,
@@ -262,7 +272,7 @@ impl CompileError {
 
     /// Create a new rule error with a descriptive message (no metadata)
     pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location,
             error_type: ErrorType::Rule,
@@ -276,7 +286,7 @@ impl CompileError {
         location: ErrorLocation,
         metadata: HashMap<ErrorMetaDataKey, &'static str>,
     ) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location,
             error_type: ErrorType::Rule,
@@ -286,7 +296,7 @@ impl CompileError {
 
     /// Create a new type error with type information and suggestions
     pub fn new_type_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location,
             error_type: ErrorType::Type,
@@ -296,7 +306,7 @@ impl CompileError {
 
     /// Create a thread panic error (internal compiler issue)
     pub fn new_thread_panic(msg: impl Into<String>) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location: ErrorLocation::default(),
             error_type: ErrorType::Compiler,
@@ -306,7 +316,7 @@ impl CompileError {
 
     /// Create a compiler error (internal bug, not user's fault)
     pub fn compiler_error(msg: impl Into<String>) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location: ErrorLocation::default(),
             error_type: ErrorType::Compiler,
@@ -316,7 +326,7 @@ impl CompileError {
 
     /// Create a file system error from a Path
     pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location: ErrorLocation::new(
                 path.to_path_buf(),
@@ -334,7 +344,7 @@ impl CompileError {
         msg: impl Into<String>,
         metadata: HashMap<ErrorMetaDataKey, &'static str>,
     ) -> Self {
-        CompileError {
+        CompilerError {
             msg: msg.into(),
             location: ErrorLocation::new(
                 path.to_path_buf(),
@@ -372,7 +382,8 @@ pub enum ErrorType {
     Compiler,
     DevServer,
     BorrowChecker,
-    WirTransformation,
+    HirTransformation,
+    LirTransformation,
     WasmGeneration,
 }
 
@@ -386,7 +397,8 @@ pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
         ErrorType::Type => "Type Error",
         ErrorType::DevServer => "Dev Server Issue",
         ErrorType::BorrowChecker => "Borrow Checker",
-        ErrorType::WirTransformation => "WIR Transformation",
+        ErrorType::HirTransformation => "HIR Transformation",
+        ErrorType::LirTransformation => "LIR Transformation",
         ErrorType::WasmGeneration => "WASM Generation",
     }
 }
@@ -405,7 +417,7 @@ pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
 #[macro_export]
 macro_rules! return_syntax_error {
     ($msg:expr, $loc:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $loc,
             error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
@@ -431,7 +443,7 @@ macro_rules! return_syntax_error {
 macro_rules! return_type_error {
     // New with metadata
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Type,
@@ -444,7 +456,7 @@ macro_rules! return_type_error {
     };
     // New simple
     ($msg:expr, $location:expr) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Type,
@@ -465,7 +477,7 @@ macro_rules! return_type_error {
 macro_rules! return_rule_error {
     // Arm with metadata map
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Rule,
@@ -478,7 +490,7 @@ macro_rules! return_rule_error {
     };
     // Arm without metadata
     ($msg:expr, $location:expr) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Rule,
@@ -493,7 +505,7 @@ macro_rules! return_rule_error {
 macro_rules! return_file_error {
     // New usage with metadata (Path)
     ($path:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
-        return Err($crate::compiler::compiler_errors::CompileError::new_file_error(
+        return Err($crate::compiler::compiler_errors::CompilerError::new_file_error(
             $path,
             $msg,
             {
@@ -505,7 +517,7 @@ macro_rules! return_file_error {
     }};
     // Simplified usage without metadata
     ($path:expr, $msg:expr) => {{
-        return Err($crate::compiler::compiler_errors::CompileError::file_error(
+        return Err($crate::compiler::compiler_errors::CompilerError::file_error(
             $path, $msg,
         ));
     }};
@@ -518,7 +530,7 @@ macro_rules! return_file_error {
 macro_rules! return_config_error {
     // New with metadata
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Config,
@@ -531,7 +543,7 @@ macro_rules! return_config_error {
     };
     // New simple
     ($msg:expr, $location:expr) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::Config,
@@ -548,7 +560,7 @@ macro_rules! return_config_error {
 macro_rules! return_compiler_error {
     // Variant with format string, arguments, and metadata (with semicolon separator)
     ($fmt:expr, $($arg:expr),+ ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: format!($fmt, $($arg),+),
             location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
@@ -561,7 +573,7 @@ macro_rules! return_compiler_error {
     }};
     // Variant with format string and arguments (no metadata)
     ($fmt:expr, $($arg:expr),+ $(,)?) => {{
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: format!($fmt, $($arg),+),
             location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
@@ -570,7 +582,7 @@ macro_rules! return_compiler_error {
     }};
     // Variant with message and metadata (with semicolon separator)
     ($msg:expr ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
@@ -583,7 +595,7 @@ macro_rules! return_compiler_error {
     }};
     // Simple variant with just a message (no metadata)
     ($msg:expr) => {{
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $crate::compiler::compiler_errors::ErrorLocation::default(),
             error_type: $crate::compiler::compiler_errors::ErrorType::Compiler,
@@ -601,7 +613,7 @@ macro_rules! return_dev_server_error {
     // With path, format string, and arguments
     ($path:expr, $fmt:expr, $($arg:expr),+) => {
         return Err($crate::compiler::compiler_errors::CompilerMessages {
-            errors: vec![$crate::compiler::compiler_errors::CompileError::file_error(
+            errors: vec![$crate::compiler::compiler_errors::CompilerError::file_error(
                 &$path,
                 &format!($fmt, $($arg),+),
             ).with_error_type($crate::compiler::compiler_errors::ErrorType::DevServer)],
@@ -611,7 +623,7 @@ macro_rules! return_dev_server_error {
     // With path and message (no format args)
     ($path:expr, $msg:expr) => {
         return Err($crate::compiler::compiler_errors::CompilerMessages {
-            errors: vec![$crate::compiler::compiler_errors::CompileError::file_error(
+            errors: vec![$crate::compiler::compiler_errors::CompilerError::file_error(
                 &$path,
                 $msg,
             ).with_error_type($crate::compiler::compiler_errors::ErrorType::DevServer)],
@@ -621,7 +633,7 @@ macro_rules! return_dev_server_error {
     // Message only (location defaults)
     ($msg:expr) => {
         return Err($crate::compiler::compiler_errors::CompilerMessages {
-            errors: vec![$crate::compiler::compiler_errors::CompileError {
+            errors: vec![$crate::compiler::compiler_errors::CompilerError {
                 msg: $msg.into(),
                 location: $crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
                 error_type: $crate::compiler::compiler_errors::ErrorType::DevServer,
@@ -643,7 +655,7 @@ macro_rules! return_dev_server_error {
 macro_rules! return_borrow_checker_error {
     // New with metadata
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
@@ -656,7 +668,7 @@ macro_rules! return_borrow_checker_error {
     };
     // New simple
     ($msg:expr, $location:expr) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
@@ -676,7 +688,7 @@ macro_rules! create_multiple_mutable_borrows_error {
     ($place:expr, $existing_location:expr, $new_location:expr) => {{
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
 
-        $crate::compiler::compiler_errors::CompileError {
+        $crate::compiler::compiler_errors::CompilerError {
             msg: format!(
                 "cannot mutably borrow `{:?}` because it is already mutably borrowed",
                 $place
@@ -741,8 +753,6 @@ macro_rules! return_multiple_mutable_borrows_error {
 #[macro_export]
 macro_rules! create_shared_mutable_conflict_error {
     ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
-        use $crate::compiler::wir::wir_nodes::BorrowKind;
-
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
         let existing_kind_str: &'static str = match $existing_kind {
             BorrowKind::Shared => "Shared",
@@ -785,7 +795,7 @@ macro_rules! create_shared_mutable_conflict_error {
             .into_boxed_str(),
         );
 
-        $crate::compiler::compiler_errors::CompileError {
+        $crate::compiler::compiler_errors::CompilerError {
             msg: message,
             location: $new_location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
@@ -852,7 +862,7 @@ macro_rules! create_use_after_move_error {
     ($place:expr, $move_location:expr, $use_location:expr) => {{
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
 
-        $crate::compiler::compiler_errors::CompileError {
+        $crate::compiler::compiler_errors::CompilerError {
             msg: format!("borrow of moved value: `{:?}`", $place),
             location: $use_location,
             error_type: $crate::compiler::compiler_errors::ErrorType::BorrowChecker,
@@ -893,8 +903,6 @@ macro_rules! return_use_after_move_error {
 #[macro_export]
 macro_rules! create_move_while_borrowed_error {
     ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
-        use $crate::compiler::wir::wir_nodes::BorrowKind;
-
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
         let borrow_kind_str: &'static str = match $borrow_kind {
             BorrowKind::Shared => "Shared",
@@ -906,7 +914,7 @@ macro_rules! create_move_while_borrowed_error {
             BorrowKind::Mut => "mutably borrowed",
         };
 
-        $crate::compiler::compiler_errors::CompileError {
+        $crate::compiler::compiler_errors::CompilerError {
             msg: format!(
                 "cannot move out of `{:?}` because it is {}",
                 $place, borrow_type
@@ -964,21 +972,21 @@ macro_rules! return_move_while_borrowed_error {
     }};
 }
 
-/// Returns a new CompileError for WIR transformation failures.
+/// Returns a new CompileError for HIR transformation failures.
 ///
-/// WIR transformation errors indicate failures during AST to WIR conversion.
-/// These are typically compiler bugs where the WIR infrastructure is missing
+/// HIR transformation errors indicate failures during AST to HIR conversion.
+/// These are typically compiler bugs where the HIR infrastructure is missing
 /// or incomplete for a particular language feature.
 ///
-/// Usage: `return_wir_transformation_error!("Function '{}' transformation not yet implemented", func_name, location, {})`;
+/// Usage: `return_hir_transformation_error!("Function '{}' transformation not yet implemented", func_name, location, {})`;
 #[macro_export]
-macro_rules! return_wir_transformation_error {
+macro_rules! return_hir_transformation_error {
     // New arms
     ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
-            error_type: $crate::compiler::compiler_errors::ErrorType::WirTransformation,
+            error_type: $crate::compiler::compiler_errors::ErrorType:HirTransformationn,
             metadata: {
                 let mut map = std::collections::HashMap::new();
                 $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
@@ -987,67 +995,10 @@ macro_rules! return_wir_transformation_error {
         })
     };
     ($msg:expr, $location:expr) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
+        return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
-            error_type: $crate::compiler::compiler_errors::ErrorType::WirTransformation,
-            metadata: std::collections::HashMap::new(),
-        })
-    };
-}
-
-/// Returns a new CompileError for WASM generation failures.
-///
-/// WASM generation errors indicate failures during WIR to WASM codegen.
-/// These are typically compiler bugs in the WASM lowering or module generation.
-///
-/// # Usage Examples
-///
-/// With metadata:
-/// ```ignore
-/// return_wasm_generation_error!(
-///     format!("Failed to generate WASM export for function '{}'", func_name),
-///     location,
-///     {
-///         CompilationStage => "WASM Generation",
-///         PrimarySuggestion => "This is a compiler bug - please report it"
-///     }
-/// );
-/// ```
-///
-/// Simple version without metadata:
-/// ```ignore
-/// return_wasm_generation_error!(
-///     "WASM validation failed",
-///     location
-/// );
-/// ```
-#[macro_export]
-macro_rules! return_wasm_generation_error {
-    // With metadata
-    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $(
-                    map.insert(
-                        $crate::compiler::compiler_errors::ErrorMetaDataKey::$key,
-                        $value
-                    );
-                )*
-                map
-            },
-        })
-    };
-    // Simple version without metadata
-    ($msg:expr, $location:expr) => {
-        return Err($crate::compiler::compiler_errors::CompileError {
-            msg: $msg.into(),
-            location: $location,
-            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            error_type: $crate::compiler::compiler_errors::ErrorType:HirTransformationn,
             metadata: std::collections::HashMap::new(),
         })
     };
@@ -1056,34 +1007,12 @@ macro_rules! return_wasm_generation_error {
 #[macro_export]
 macro_rules! return_thread_err {
     ($process:expr) => {
-        return Err(CompileError {
+        return Err(CompilerError {
             msg: &format!("Thread panicked during {}", $process),
             location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
             error_type: crate::compiler::compiler_errors::ErrorType::Compiler,
             file_path: std::path::PathBuf::new(),
             suggestions: Vec::new(),
-        })
-    };
-}
-
-#[macro_export]
-macro_rules! return_wat_err {
-    // New version with string table and metadata
-    ($err:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
-        return Err(CompileError {
-            msg: &format!("Error while parsing WAT: {}", $err),
-            location: crate::compiler::parsers::tokenizer::tokens::TextLocation::default(),
-            error_type: crate::compiler::compiler_errors::ErrorType::Syntax,
-            metadata: {
-                let mut map = std::collections::HashMap::new();
-                $(
-                    map.insert(
-                        crate::compiler::compiler_errors::ErrorMetaDataKey::$key,
-                        $value
-                    );
-                )*
-                map
-            },
         })
     };
 }
@@ -1099,7 +1028,7 @@ pub fn print_compiler_messages(messages: CompilerMessages) {
     }
 }
 
-pub fn print_formatted_error(e: CompileError) {
+pub fn print_formatted_error(e: CompilerError) {
     // Walk back through the file path until it's the current directory
     let relative_dir = match env::current_dir() {
         Ok(dir) => {
@@ -1151,9 +1080,11 @@ pub fn print_formatted_error(e: CompileError) {
 
     match e.error_type {
         ErrorType::Syntax => {
-            eprint!("\n(╯°□°)╯  🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥  Σ(°△°;) ");
+            if !relative_dir.is_empty() {
+                eprint!("\n(╯°□°)╯  🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥  Σ(°△°;) ");
+            }
 
             e_red_ln!("Syntax");
             e_dark_magenta!("Line ");
@@ -1161,9 +1092,11 @@ pub fn print_formatted_error(e: CompileError) {
         }
 
         ErrorType::Type => {
-            eprint!("\n(ಠ_ಠ) ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" ( ._. ) ");
+            if !relative_dir.is_empty() {
+                eprint!("\n(ಠ_ಠ) ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" ( ._. ) ");
+            }
 
             e_red_ln!("Type Error");
             e_dark_magenta!("Line ");
@@ -1171,9 +1104,11 @@ pub fn print_formatted_error(e: CompileError) {
         }
 
         ErrorType::Rule => {
-            eprint!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥🔥  ╰(°□°╰) ");
+            if !relative_dir.is_empty() {
+                eprint!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥🔥  ╰(°□°╰) ");
+            }
 
             e_red_ln!("Rule");
             e_dark_magenta!("Line ");
@@ -1186,17 +1121,21 @@ pub fn print_formatted_error(e: CompileError) {
         }
 
         ErrorType::Compiler => {
-            eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
+            if !relative_dir.is_empty() {
+                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
+            }
             e_yellow!("COMPILER BUG - ");
             e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
         }
 
         ErrorType::Config => {
-            eprint!("\n (-_-)  🔥🔥🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥🔥🔥  <(^~^)/ ");
+            if !relative_dir.is_empty() {
+                eprint!("\n (-_-)  🔥🔥🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥🔥🔥  <(^~^)/ ");
+            }
             e_yellow!("CONFIG FILE ISSUE- ");
             e_dark_yellow_ln!(
                 "Malformed config file, something doesn't make sense inside the project config)"
@@ -1204,38 +1143,59 @@ pub fn print_formatted_error(e: CompileError) {
         }
 
         ErrorType::DevServer => {
-            eprint!("\n(ﾉ☉_⚆)ﾉ  🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥 ╰(° O °)╯ ");
+            if !relative_dir.is_empty() {
+                eprint!("\n(ﾉ☉_⚆)ﾉ  🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥 ╰(° O °)╯ ");
+            }
+
             e_yellow_ln!("Dev Server whoopsie");
             e_red_ln!("  {}", e.msg);
             return;
         }
 
         ErrorType::BorrowChecker => {
-            eprint!("\n(╯°Д°)╯  🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥  (╯°□°)╯ ");
+            if !relative_dir.is_empty() {
+                eprint!("\n(╯°Д°)╯  🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥  ╰(°□°╰) ");
+            }
 
             e_red_ln!("Borrow Checker");
             e_dark_magenta!("Line ");
             e_magenta_ln!("{}\n", line_number + 1);
         }
 
-        ErrorType::WirTransformation => {
-            eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥🔥  ╰(° _ o╰) ");
-            e_yellow!("WIR TRANSFORMATION BUG - ");
+        ErrorType::HirTransformation => {
+            if !relative_dir.is_empty() {
+                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥🔥  ╰(°□°╰) ");
+            }
+
+            e_yellow!("HIR TRANSFORMATION BUG - ");
+            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+        }
+
+        ErrorType::LirTransformation => {
+            if !relative_dir.is_empty() {
+                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥🔥  ╰(° _ o╰) ");
+            }
+
+            e_yellow!("LIR TRANSFORMATION BUG - ");
             e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
         }
 
         ErrorType::WasmGeneration => {
-            eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
-            e_dark_magenta!("{}", relative_dir);
-            eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
-            e_yellow!("WASM GENERATION BUG - ");
-            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+            if !relative_dir.is_empty() {
+                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
+                e_dark_magenta!("{}", relative_dir);
+                eprintln!(" 🔥🔥🔥🔥  ╰(° O °)╯ ");
+                e_yellow!("WASM GENERATION BUG - ");
+                e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+            }
         }
     }
 

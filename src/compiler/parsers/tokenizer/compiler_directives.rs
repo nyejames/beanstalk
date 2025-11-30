@@ -1,9 +1,9 @@
 // Compiler Directives
 // These are special keywords that are started with a hash, e.g., #slot
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::parsers::tokenizer::tokens::{Token, TokenKind, TokenStream};
-use crate::{return_syntax_error, return_token};
 use crate::compiler::string_interning::StringTable;
+use crate::{return_syntax_error, return_token};
 
 // This used by the tokenizer stage
 // Also used by the config file to set compiler settings
@@ -11,7 +11,7 @@ pub fn compiler_directive(
     token_value: &mut String,
     stream: &mut TokenStream,
     string_table: &StringTable,
-) -> Result<Token, CompileError> {
+) -> Result<Token, CompilerError> {
     loop {
         if stream
             .peek()

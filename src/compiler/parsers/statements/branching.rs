@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
@@ -38,7 +38,7 @@ pub fn create_branch(
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompileError> {
+) -> Result<Vec<AstNode>, CompilerError> {
     let then_condition = create_expression(
         token_stream,
         &context.new_child_control_flow(ContextKind::Condition),
@@ -52,7 +52,13 @@ pub fn create_branch(
     if token_stream.current_token_kind() == &TokenKind::Is {
         // create_expression will only NOT consume the 'is' token if it's a match statement
         token_stream.advance(); // Consume 'is'
-        let match_statement = create_match_node(then_condition, token_stream, context, warnings, string_table)?;
+        let match_statement = create_match_node(
+            then_condition,
+            token_stream,
+            context,
+            warnings,
+            string_table,
+        )?;
         return Ok(vec![match_statement]);
     }
 
@@ -120,7 +126,7 @@ fn create_match_node(
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompileError> {
+) -> Result<AstNode, CompilerError> {
     ast_log!("Creating Match Statement");
 
     if token_stream.current_token_kind() != &TokenKind::Colon {

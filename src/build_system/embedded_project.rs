@@ -5,7 +5,7 @@
 
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::settings::Config;
 use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
 
@@ -181,13 +181,13 @@ auto_reload = true
         &self.target
     }
 
-    fn validate_config(&self, config: &Config) -> Result<(), CompileError> {
+    fn validate_config(&self, config: &Config) -> Result<(), CompilerError> {
         // Validate embedded-specific configuration
         if let BuildTarget::Embedded { io_config, .. } = &self.target {
             if let Some(io_config_path) = io_config {
                 // Validate IO configuration file exists
                 if !std::path::Path::new(io_config_path).exists() {
-                    return Err(CompileError::new_file_error(
+                    return Err(CompilerError::new_file_error(
                         std::path::Path::new(io_config_path),
                         "IO configuration file not found",
                         {

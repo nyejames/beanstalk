@@ -16,7 +16,7 @@ pub mod io {
 pub mod jit;
 pub mod memory_utils;
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::runtime::backends::cranelift::execute_with_cranelift;
 use std::path::Path;
 
@@ -152,11 +152,9 @@ impl BeanstalkRuntime {
     }
 
     /// Execute WASM bytecode with the configured runtime
-    pub fn execute(&self, wasm_bytes: &[u8]) -> Result<(), CompileError> {
+    pub fn execute(&self, wasm_bytes: &[u8]) -> Result<(), CompilerError> {
         match &self.config.compilation_mode {
-            CompilationMode::DirectJit => {
-                jit::execute_direct_jit(wasm_bytes, &self.config)
-            }
+            CompilationMode::DirectJit => jit::execute_direct_jit(wasm_bytes, &self.config),
             CompilationMode::Cranelift(opt_level) => {
                 execute_with_cranelift(wasm_bytes, &self.config, &opt_level)
             }
@@ -165,9 +163,10 @@ impl BeanstalkRuntime {
     }
 
     /// Execute WASM from a file path
-    pub fn execute_file(&self, wasm_path: &Path) -> Result<(), CompileError> {
+    pub fn execute_file(&self, wasm_path: &Path) -> Result<(), CompilerError> {
         let wasm_bytes = std::fs::read(wasm_path).map_err(|e| {
-            let error_msg: &'static str = Box::leak(format!("Failed to read WASM file: {}", e).into_boxed_str());
+            let error_msg: &'static str =
+                Box::leak(format!("Failed to read WASM file: {}", e).into_boxed_str());
             let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
                 "Check that the WASM file exists at the specified path"
             } else if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -175,24 +174,26 @@ impl BeanstalkRuntime {
             } else {
                 "Verify the WASM file is accessible and not corrupted"
             };
-            
-            CompileError::new_file_error(
-                wasm_path,
-                error_msg,
-                {
-                    let mut map = std::collections::HashMap::new();
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Runtime");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                    map
-                }
-            )
+
+            CompilerError::new_file_error(wasm_path, error_msg, {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Runtime",
+                );
+                map.insert(
+                    crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    suggestion,
+                );
+                map
+            })
         })?;
 
         self.execute(&wasm_bytes)
     }
 
     /// Create runtime for embedding in Rust applications
-    pub fn create_embedded_runtime(&self) -> Result<embedding::EmbeddedRuntime, CompileError> {
+    pub fn create_embedded_runtime(&self) -> Result<embedding::EmbeddedRuntime, CompilerError> {
         embedding::EmbeddedRuntime::new(&self.config)
     }
 }

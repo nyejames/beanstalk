@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::{CompileError, CompilerMessages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::interned_path::InternedPath;
@@ -75,7 +75,7 @@ impl Ast {
                     let unique_name = header.path.to_interned_string(string_table);
                     ast.push(AstNode {
                         kind: NodeKind::Function(
-                            unique_name, 
+                            unique_name,
                             signature.to_owned(),
                             body.to_owned(),
                         ),
@@ -83,7 +83,6 @@ impl Ast {
                         scope: context.scope.clone(), // Preserve full path in scope field
                     });
                 }
-
 
                 // The main entry point
                 // The big difference between this function and the StartFunction,
@@ -134,9 +133,9 @@ impl Ast {
                         scope: context.scope.clone(),
                     });
 
-                    external_exports.push(ModuleExport { 
-                        id: start_name, 
-                        signature: FunctionSignature::default() 
+                    external_exports.push(ModuleExport {
+                        id: start_name,
+                        signature: FunctionSignature::default(),
                     });
                 }
 
@@ -165,7 +164,8 @@ impl Ast {
                     };
 
                     // Create an implicit "start" function that can be called by other modules
-                    let interned_name = header.path
+                    let interned_name = header
+                        .path
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table)
                         .to_interned_string(string_table);
 
@@ -187,7 +187,7 @@ impl Ast {
                         Some(name) => name,
                         None => {
                             return Err(CompilerMessages {
-                                errors: vec![CompileError::compiler_error(format!(
+                                errors: vec![CompilerError::compiler_error(format!(
                                     "Failed to extract struct name from header path: {}",
                                     header.path.to_string(string_table)
                                 ))],
@@ -230,7 +230,7 @@ impl Ast {
         match entry_path {
             None => Err(CompilerMessages {
                 warnings,
-                errors: vec![CompileError::compiler_error(
+                errors: vec![CompilerError::compiler_error(
                     "No entry point found. The compiler should always create an entry point.",
                 )],
             }),

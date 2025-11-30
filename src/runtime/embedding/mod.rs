@@ -3,7 +3,7 @@
 // Provides APIs for embedding Beanstalk runtime in Rust applications
 // with support for hot reloading and custom IO integration.
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::runtime::{BeanstalkRuntime, RuntimeConfig};
 use std::collections::HashMap;
 use std::path::Path;
@@ -20,7 +20,7 @@ pub struct EmbeddedRuntime {
 
 impl EmbeddedRuntime {
     /// Create a new embedded runtime
-    pub fn new(config: &RuntimeConfig) -> Result<Self, CompileError> {
+    pub fn new(config: &RuntimeConfig) -> Result<Self, CompilerError> {
         let runtime = BeanstalkRuntime::new(config.clone());
         let store = Arc::new(Mutex::new(Store::default()));
         let loaded_modules = Arc::new(Mutex::new(HashMap::new()));
@@ -34,10 +34,13 @@ impl EmbeddedRuntime {
     }
 
     /// Load a Beanstalk module from WASM bytes
-    pub fn load_module(&self, module_name: &str, wasm_bytes: &[u8]) -> Result<(), CompileError> {
+    pub fn load_module(&self, module_name: &str, wasm_bytes: &[u8]) -> Result<(), CompilerError> {
         let store_guard = self.store.lock().unwrap();
         let module = Module::new(&*store_guard, wasm_bytes).map_err(|e| {
-            CompileError::compiler_error(&format!("Failed to load module '{}': {}", module_name, e))
+            CompilerError::compiler_error(&format!(
+                "Failed to load module '{}': {}",
+                module_name, e
+            ))
         })?;
 
         let mut modules = self.loaded_modules.lock().unwrap();
@@ -51,9 +54,10 @@ impl EmbeddedRuntime {
         &self,
         module_name: &str,
         wasm_path: &Path,
-    ) -> Result<(), CompileError> {
+    ) -> Result<(), CompilerError> {
         let wasm_bytes = std::fs::read(wasm_path).map_err(|e| {
-            let error_msg: &'static str = Box::leak(format!("Failed to read WASM file: {}", e).into_boxed_str());
+            let error_msg: &'static str =
+                Box::leak(format!("Failed to read WASM file: {}", e).into_boxed_str());
             let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
                 "Check that the WASM file exists at the specified path"
             } else if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -61,17 +65,19 @@ impl EmbeddedRuntime {
             } else {
                 "Verify the WASM file is accessible and not corrupted"
             };
-            
-            CompileError::new_file_error(
-                wasm_path,
-                error_msg,
-                {
-                    let mut map = std::collections::HashMap::new();
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage, "Runtime Embedding");
-                    map.insert(crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, suggestion);
-                    map
-                }
-            )
+
+            CompilerError::new_file_error(wasm_path, error_msg, {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Runtime Embedding",
+                );
+                map.insert(
+                    crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    suggestion,
+                );
+                map
+            })
         })?;
 
         self.load_module(module_name, &wasm_bytes)
@@ -83,33 +89,33 @@ impl EmbeddedRuntime {
         module_name: &str,
         function_name: &str,
         args: &[Value],
-    ) -> Result<Vec<Value>, CompileError> {
+    ) -> Result<Vec<Value>, CompilerError> {
         let mut store_guard = self.store.lock().unwrap();
         let modules = self.loaded_modules.lock().unwrap();
 
         let module = modules.get(module_name).ok_or_else(|| {
-            CompileError::compiler_error(&format!("Module '{}' not loaded", module_name))
+            CompilerError::compiler_error(&format!("Module '{}' not loaded", module_name))
         })?;
 
         // Create import object (simplified for embedding)
         let import_object = wasmer::imports! {};
 
         let instance = Instance::new(&mut *store_guard, module, &import_object).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Failed to instantiate module '{}': {}",
                 module_name, e
             ))
         })?;
 
         let function = instance.exports.get_function(function_name).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Function '{}' not found in module '{}': {}",
                 function_name, module_name, e
             ))
         })?;
 
         let result = function.call(&mut *store_guard, args).map_err(|e| {
-            CompileError::compiler_error(&format!(
+            CompilerError::compiler_error(&format!(
                 "Error calling function '{}': {}",
                 function_name, e
             ))
@@ -119,9 +125,11 @@ impl EmbeddedRuntime {
     }
 
     /// Reload a module (for hot reloading)
-    pub fn reload_module(&self, module_name: &str, wasm_bytes: &[u8]) -> Result<(), CompileError> {
+    pub fn reload_module(&self, module_name: &str, wasm_bytes: &[u8]) -> Result<(), CompilerError> {
         if !self.hot_reload_enabled {
-            return Err(CompileError::compiler_error("Hot reloading is not enabled"));
+            return Err(CompilerError::compiler_error(
+                "Hot reloading is not enabled",
+            ));
         }
 
         // Remove old module
@@ -169,7 +177,7 @@ impl EmbeddedRuntimeBuilder {
         self
     }
 
-    pub fn build(self) -> Result<EmbeddedRuntime, CompileError> {
+    pub fn build(self) -> Result<EmbeddedRuntime, CompilerError> {
         EmbeddedRuntime::new(&self.config)
     }
 }

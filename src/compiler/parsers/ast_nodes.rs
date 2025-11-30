@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
@@ -114,7 +114,7 @@ pub enum NodeKind {
 }
 
 impl AstNode {
-    pub fn get_expr(&self) -> Result<Expression, CompileError> {
+    pub fn get_expr(&self) -> Result<Expression, CompilerError> {
         match &self.kind {
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
             NodeKind::Expression(value, ..) | NodeKind::Mutation(_, value, _) => {
@@ -151,12 +151,14 @@ impl AstNode {
                 ))
             }
             // Compiler tried to get the expression of a node that cannot contain expressions
-            _ => return_compiler_error!("Compiler tried to get the expression of a node that cannot contain expressions in src/compiler/parsers/ast_nodes.rs"),
+            _ => return_compiler_error!(
+                "Compiler tried to get the expression of a node that cannot contain expressions in src/compiler/parsers/ast_nodes.rs"
+            ),
         }
     }
 
     // If this is a boolean value, flip it to the opposite value
-    pub fn flip(&mut self, string_table: &StringTable) -> Result<bool, CompileError> {
+    pub fn flip(&mut self, string_table: &StringTable) -> Result<bool, CompilerError> {
         if let NodeKind::Expression(value) = &mut self.kind {
             match value.kind {
                 ExpressionKind::Bool(val) => {

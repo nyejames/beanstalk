@@ -1,4 +1,4 @@
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
@@ -23,7 +23,7 @@ pub fn create_loop(
     mut context: ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<AstNode, CompileError> {
+) -> Result<AstNode, CompilerError> {
     ast_log!("Creating a Loop");
 
     // First check if the loop has a declaration or just an expression
@@ -83,7 +83,8 @@ pub fn create_loop(
                     }
 
                     _ => {
-                        let type_str: &'static str = Box::leak(data_type.to_string().into_boxed_str());
+                        let type_str: &'static str =
+                            Box::leak(data_type.to_string().into_boxed_str());
                         return_syntax_error!(
                             format!(
                                 "A loop condition using an existing variable must be a boolean expression (true or false). Found a {} expression",
@@ -138,7 +139,8 @@ pub fn create_loop(
 
             // Make sure this type can be iterated over
             if !iterable_type.is_iterable() {
-                let type_str: &'static str = Box::leak(format!("{:?}", iterable_type).into_boxed_str());
+                let type_str: &'static str =
+                    Box::leak(format!("{:?}", iterable_type).into_boxed_str());
                 return_syntax_error!(
                     format!("The type {:?} is not iterable", iterable_type),
                     token_stream.current_location().to_error_location(&string_table),

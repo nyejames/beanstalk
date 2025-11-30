@@ -1,8 +1,10 @@
 //! Test runner for validating core Beanstalk compiler functionality
 
 use crate::build::BuildTarget;
-use crate::compiler::compiler_errors::{error_type_to_str, print_formatted_error};
-use crate::compiler::compiler_warnings::print_formatted_warning;
+use crate::compiler::compiler_messages::compiler_errors::{
+    error_type_to_str, print_formatted_error,
+};
+use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
 use crate::settings::Config;
 
 ///

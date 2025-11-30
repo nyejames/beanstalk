@@ -3,7 +3,7 @@
 // Provides comprehensive JS code generation for WASM integration,
 // DOM manipulation, and web-specific functionality.
 
-use crate::compiler::compiler_errors::CompileError;
+use crate::compiler::compiler_errors::CompilerError;
 use crate::runtime::io::io::{IoConfig, IoInterface};
 
 pub struct JsBindingsIoBackend {
@@ -17,29 +17,29 @@ impl JsBindingsIoBackend {
 }
 
 impl IoInterface for JsBindingsIoBackend {
-    fn print(&self, message: &str) -> Result<(), CompileError> {
+    fn print(&self, message: &str) -> Result<(), CompilerError> {
         // In a real web environment, this would call console.log via JS bindings
         println!("JS Console: {}", message);
         Ok(())
     }
 
-    fn read_input(&self) -> Result<String, CompileError> {
+    fn read_input(&self) -> Result<String, CompilerError> {
         // In a web environment, this might use prompt() or read from DOM elements
-        Err(CompileError::compiler_error(
+        Err(CompilerError::compiler_error(
             "Input reading not implemented for JS bindings",
         ))
     }
 
-    fn write_file(&self, _path: &str, _content: &str) -> Result<(), CompileError> {
+    fn write_file(&self, _path: &str, _content: &str) -> Result<(), CompilerError> {
         // Web environments typically can't write arbitrary files
-        Err(CompileError::compiler_error(
+        Err(CompilerError::compiler_error(
             "File writing not supported in web environment",
         ))
     }
 
-    fn read_file(&self, _path: &str) -> Result<String, CompileError> {
+    fn read_file(&self, _path: &str) -> Result<String, CompilerError> {
         // Web environments might fetch files via HTTP
-        Err(CompileError::compiler_error(
+        Err(CompilerError::compiler_error(
             "File reading not implemented for JS bindings",
         ))
     }

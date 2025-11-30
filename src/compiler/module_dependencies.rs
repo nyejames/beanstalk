@@ -2,7 +2,7 @@
 // Dependency resolution will have to happen at the module level.
 // Declarations will be parsed first in the tokenizer now.
 
-use crate::compiler::compiler_errors::{CompileError, ErrorLocation};
+use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::parse_file_headers::Header;
 use crate::compiler::string_interning::StringTable;
@@ -30,9 +30,9 @@ impl DependencyTracker {
 pub fn resolve_module_dependencies(
     headers: Vec<Header>,
     string_table: &mut StringTable,
-) -> Result<Vec<Header>, Vec<CompileError>> {
+) -> Result<Vec<Header>, Vec<CompilerError>> {
     let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(headers.len());
-    let mut errors: Vec<CompileError> = Vec::with_capacity(headers.len());
+    let mut errors: Vec<CompilerError> = Vec::with_capacity(headers.len());
 
     // Build graph or collect errors
     for header in headers {
@@ -69,7 +69,7 @@ fn visit_node(
     graph: &HashMap<InternedPath, Header>,
     sorted: &mut Vec<Header>,
     string_table: &mut StringTable,
-) -> Result<(), CompileError> {
+) -> Result<(), CompilerError> {
     // cycle?
     if tracker.temp_mark.contains(node_path) {
         let path_str: &'static str = Box::leak(node_path.to_string(string_table).into_boxed_str());
