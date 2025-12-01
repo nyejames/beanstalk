@@ -93,8 +93,11 @@ mod compiler {
 
     pub(crate) mod hir {
         pub(crate) mod builder;
+        pub(crate) mod lower_expression;
         pub(crate) mod nodes;
         pub(crate) mod place;
+        #[cfg(test)]
+        mod tests;
     }
     pub(crate) mod borrow_checker {
         pub(crate) mod checker;

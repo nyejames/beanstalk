@@ -246,7 +246,8 @@ pub enum BinOp {
     Ge,
     And,
     Or,
-    // Add others as needed
+    Root,
+    Exponent,
 }
 
 #[derive(Debug, Clone, Copy)]
