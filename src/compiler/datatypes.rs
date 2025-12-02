@@ -117,7 +117,7 @@ pub enum DataType {
     // They are basically functions that accept a style and return a string
     Template, // is_mutable
 
-    Function(FunctionSignature), // Arg constructor, Returned args
+    Function(Box<Option<DataType>>, FunctionSignature), // Reciever, signature
 
     // Type Types
     // Unions allow types such as option and result
@@ -206,8 +206,8 @@ impl DataType {
             DataType::Struct(args, ownership) => {
                 DataType::Option(Box::new(DataType::Struct(args, ownership)))
             }
-            DataType::Function(signature) => {
-                DataType::Option(Box::new(DataType::Function(signature)))
+            DataType::Function(reciever, signature) => {
+                DataType::Option(Box::new(DataType::Function(reciever, signature)))
             }
             DataType::Template => DataType::Option(Box::new(DataType::Template)),
             DataType::Inferred => DataType::Option(Box::new(DataType::Inferred)),
@@ -296,7 +296,7 @@ impl DataType {
                 }
                 format!("Struct({})", arg_str)
             }
-            DataType::Function(signature) => {
+            DataType::Function(_, signature) => {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
                 for arg in &signature.parameters {
@@ -309,6 +309,7 @@ impl DataType {
                 }
                 format!("Function({} -> {})", arg_str, returns_string)
             }
+
             DataType::Template => "Template".to_string(),
             DataType::None => "None".to_string(),
             DataType::True => "True".to_string(),
@@ -362,7 +363,7 @@ impl PartialEq for DataType {
                         .zip(b.iter())
                         .all(|(arg_a, arg_b)| arg_a.id == arg_b.id)
             }
-            (DataType::Function(signature1), DataType::Function(signature2)) => {
+            (DataType::Function(_, signature1), DataType::Function(_, signature2)) => {
                 // If both functions have the same signature.returns types,
                 // then they are equal
                 signature1.returns.len() == signature2.returns.len()
@@ -429,7 +430,7 @@ impl Display for DataType {
                 write!(f, "{self:?} Arguments({arg_str})")
             }
 
-            DataType::Function(signature) => {
+            DataType::Function(_, signature) => {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
                 for arg in &signature.parameters {

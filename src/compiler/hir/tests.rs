@@ -5,10 +5,10 @@ mod tests {
     use crate::compiler::datatypes::{DataType, Ownership};
     use crate::compiler::hir::builder::HirBuilder;
     use crate::compiler::hir::lower_expression::{convert_operator, lower_expr, lower_rpn_to_expr};
-    use crate::compiler::hir::nodes::{HirExprKind, HirKind};
+    use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind};
     use crate::compiler::interned_path::InternedPath;
     use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
-    use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
+    use crate::compiler::parsers::expressions::expression::Expression;
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
     use crate::compiler::string_interning::StringTable;
 
@@ -645,5 +645,455 @@ mod tests {
 
         // Range should be handled separately
         assert!(convert_operator(Operator::Range).is_err());
+    }
+
+    // === Place Construction Tests ===
+
+    use crate::compiler::hir::lower_expression::{
+        build_nested_place, create_field_place, create_global_place, create_index_place,
+        create_local_place, PlaceAccess,
+    };
+    use crate::compiler::hir::place::Place;
+
+    #[test]
+    fn test_create_local_place() {
+        let mut string_table = StringTable::new();
+        let var_name = string_table.intern("x");
+
+        let place = create_local_place(var_name);
+
+        if let Place::Local(name) = place {
+            assert_eq!(name, var_name);
+        } else {
+            panic!("Expected Place::Local variant");
+        }
+    }
+
+    #[test]
+    fn test_create_field_place() {
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field_name = string_table.intern("field");
+
+        let base = create_local_place(obj_name);
+        let place = create_field_place(base, field_name);
+
+        if let Place::Field { base, field } = place {
+            if let Place::Local(name) = *base {
+                assert_eq!(name, obj_name);
+            } else {
+                panic!("Expected base to be Place::Local");
+            }
+            assert_eq!(field, field_name);
+        } else {
+            panic!("Expected Place::Field variant");
+        }
+    }
+
+    #[test]
+    fn test_create_index_place() {
+        let mut string_table = StringTable::new();
+        let arr_name = string_table.intern("arr");
+
+        let base = create_local_place(arr_name);
+        let index_expr = HirExpr {
+            kind: HirExprKind::Int(0),
+            data_type: DataType::Int,
+            location: create_test_location(),
+        };
+
+        let place = create_index_place(base, index_expr);
+
+        if let Place::Index { base, index } = place {
+            if let Place::Local(name) = *base {
+                assert_eq!(name, arr_name);
+            } else {
+                panic!("Expected base to be Place::Local");
+            }
+            assert!(matches!(index.kind, HirExprKind::Int(0)));
+        } else {
+            panic!("Expected Place::Index variant");
+        }
+    }
+
+    #[test]
+    fn test_create_global_place() {
+        let mut string_table = StringTable::new();
+        let global_name = string_table.intern("CONSTANT");
+
+        let place = create_global_place(global_name);
+
+        if let Place::Global(name) = place {
+            assert_eq!(name, global_name);
+        } else {
+            panic!("Expected Place::Global variant");
+        }
+    }
+
+    #[test]
+    fn test_nested_field_access() {
+        // Test: obj.field1.field2
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field1_name = string_table.intern("field1");
+        let field2_name = string_table.intern("field2");
+
+        let base = create_local_place(obj_name);
+        let place1 = create_field_place(base, field1_name);
+        let place2 = create_field_place(place1, field2_name);
+
+        // Verify the nested structure
+        if let Place::Field {
+            base: outer_base,
+            field: outer_field,
+        } = place2
+        {
+            assert_eq!(outer_field, field2_name);
+
+            if let Place::Field {
+                base: inner_base,
+                field: inner_field,
+            } = *outer_base
+            {
+                assert_eq!(inner_field, field1_name);
+
+                if let Place::Local(name) = *inner_base {
+                    assert_eq!(name, obj_name);
+                } else {
+                    panic!("Expected innermost base to be Place::Local");
+                }
+            } else {
+                panic!("Expected outer base to be Place::Field");
+            }
+        } else {
+            panic!("Expected Place::Field variant");
+        }
+    }
+
+    #[test]
+    fn test_field_then_index_access() {
+        // Test: obj.field[0]
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field_name = string_table.intern("field");
+
+        let base = create_local_place(obj_name);
+        let field_place = create_field_place(base, field_name);
+
+        let index_expr = HirExpr {
+            kind: HirExprKind::Int(0),
+            data_type: DataType::Int,
+            location: create_test_location(),
+        };
+
+        let place = create_index_place(field_place, index_expr);
+
+        // Verify the nested structure
+        if let Place::Index { base, index } = place {
+            assert!(matches!(index.kind, HirExprKind::Int(0)));
+
+            if let Place::Field {
+                base: field_base,
+                field,
+            } = *base
+            {
+                assert_eq!(field, field_name);
+
+                if let Place::Local(name) = *field_base {
+                    assert_eq!(name, obj_name);
+                } else {
+                    panic!("Expected field base to be Place::Local");
+                }
+            } else {
+                panic!("Expected base to be Place::Field");
+            }
+        } else {
+            panic!("Expected Place::Index variant");
+        }
+    }
+
+    #[test]
+    fn test_index_then_field_access() {
+        // Test: arr[0].field
+        let mut string_table = StringTable::new();
+        let arr_name = string_table.intern("arr");
+        let field_name = string_table.intern("field");
+
+        let base = create_local_place(arr_name);
+
+        let index_expr = HirExpr {
+            kind: HirExprKind::Int(0),
+            data_type: DataType::Int,
+            location: create_test_location(),
+        };
+
+        let index_place = create_index_place(base, index_expr);
+        let place = create_field_place(index_place, field_name);
+
+        // Verify the nested structure
+        if let Place::Field { base, field } = place {
+            assert_eq!(field, field_name);
+
+            if let Place::Index {
+                base: index_base,
+                index,
+            } = *base
+            {
+                assert!(matches!(index.kind, HirExprKind::Int(0)));
+
+                if let Place::Local(name) = *index_base {
+                    assert_eq!(name, arr_name);
+                } else {
+                    panic!("Expected index base to be Place::Local");
+                }
+            } else {
+                panic!("Expected base to be Place::Index");
+            }
+        } else {
+            panic!("Expected Place::Field variant");
+        }
+    }
+
+    #[test]
+    fn test_complex_nested_place() {
+        // Test: obj.field1[0].field2[1]
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field1_name = string_table.intern("field1");
+        let field2_name = string_table.intern("field2");
+
+        let base = create_local_place(obj_name);
+        let place1 = create_field_place(base, field1_name);
+
+        let index1_expr = HirExpr {
+            kind: HirExprKind::Int(0),
+            data_type: DataType::Int,
+            location: create_test_location(),
+        };
+        let place2 = create_index_place(place1, index1_expr);
+
+        let place3 = create_field_place(place2, field2_name);
+
+        let index2_expr = HirExpr {
+            kind: HirExprKind::Int(1),
+            data_type: DataType::Int,
+            location: create_test_location(),
+        };
+        let final_place = create_index_place(place3, index2_expr);
+
+        // Verify the outermost layer is an index
+        if let Place::Index { base, index } = final_place {
+            assert!(matches!(index.kind, HirExprKind::Int(1)));
+
+            // Next layer should be a field
+            if let Place::Field {
+                base: field_base,
+                field,
+            } = *base
+            {
+                assert_eq!(field, field2_name);
+
+                // Next layer should be an index
+                if let Place::Index {
+                    base: index_base,
+                    index: inner_index,
+                } = *field_base
+                {
+                    assert!(matches!(inner_index.kind, HirExprKind::Int(0)));
+
+                    // Next layer should be a field
+                    if let Place::Field {
+                        base: inner_field_base,
+                        field: inner_field,
+                    } = *index_base
+                    {
+                        assert_eq!(inner_field, field1_name);
+
+                        // Innermost should be the local
+                        if let Place::Local(name) = *inner_field_base {
+                            assert_eq!(name, obj_name);
+                        } else {
+                            panic!("Expected innermost base to be Place::Local");
+                        }
+                    } else {
+                        panic!("Expected inner index base to be Place::Field");
+                    }
+                } else {
+                    panic!("Expected field base to be Place::Index");
+                }
+            } else {
+                panic!("Expected outer index base to be Place::Field");
+            }
+        } else {
+            panic!("Expected Place::Index variant");
+        }
+    }
+
+    #[test]
+    fn test_build_nested_place_with_fields() {
+        // Test: obj.field1.field2 using build_nested_place
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field1_name = string_table.intern("field1");
+        let field2_name = string_table.intern("field2");
+
+        let base = create_local_place(obj_name);
+        let accesses = vec![
+            PlaceAccess::Field(field1_name),
+            PlaceAccess::Field(field2_name),
+        ];
+
+        let result = build_nested_place(base, accesses, &mut string_table);
+        assert!(result.is_ok());
+
+        let place = result.unwrap();
+
+        // Verify the nested structure
+        if let Place::Field {
+            base: outer_base,
+            field: outer_field,
+        } = place
+        {
+            assert_eq!(outer_field, field2_name);
+
+            if let Place::Field {
+                base: inner_base,
+                field: inner_field,
+            } = *outer_base
+            {
+                assert_eq!(inner_field, field1_name);
+
+                if let Place::Local(name) = *inner_base {
+                    assert_eq!(name, obj_name);
+                } else {
+                    panic!("Expected innermost base to be Place::Local");
+                }
+            } else {
+                panic!("Expected outer base to be Place::Field");
+            }
+        } else {
+            panic!("Expected Place::Field variant");
+        }
+    }
+
+    #[test]
+    fn test_build_nested_place_with_index() {
+        // Test: arr[0][1] using build_nested_place
+        let mut string_table = StringTable::new();
+        let arr_name = string_table.intern("arr");
+
+        let base = create_local_place(arr_name);
+        let accesses = vec![
+            PlaceAccess::Index(Expression::int(
+                0,
+                create_test_location(),
+                Ownership::ImmutableReference,
+            )),
+            PlaceAccess::Index(Expression::int(
+                1,
+                create_test_location(),
+                Ownership::ImmutableReference,
+            )),
+        ];
+
+        let result = build_nested_place(base, accesses, &mut string_table);
+        assert!(result.is_ok());
+
+        let place = result.unwrap();
+
+        // Verify the nested structure
+        if let Place::Index {
+            base: outer_base,
+            index: outer_index,
+        } = place
+        {
+            assert!(matches!(outer_index.kind, HirExprKind::Int(1)));
+
+            if let Place::Index {
+                base: inner_base,
+                index: inner_index,
+            } = *outer_base
+            {
+                assert!(matches!(inner_index.kind, HirExprKind::Int(0)));
+
+                if let Place::Local(name) = *inner_base {
+                    assert_eq!(name, arr_name);
+                } else {
+                    panic!("Expected innermost base to be Place::Local");
+                }
+            } else {
+                panic!("Expected outer base to be Place::Index");
+            }
+        } else {
+            panic!("Expected Place::Index variant");
+        }
+    }
+
+    #[test]
+    fn test_build_nested_place_mixed() {
+        // Test: obj.field[0] using build_nested_place
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field_name = string_table.intern("field");
+
+        let base = create_local_place(obj_name);
+        let accesses = vec![
+            PlaceAccess::Field(field_name),
+            PlaceAccess::Index(Expression::int(
+                0,
+                create_test_location(),
+                Ownership::ImmutableReference,
+            )),
+        ];
+
+        let result = build_nested_place(base, accesses, &mut string_table);
+        assert!(result.is_ok());
+
+        let place = result.unwrap();
+
+        // Verify the nested structure
+        if let Place::Index { base, index } = place {
+            assert!(matches!(index.kind, HirExprKind::Int(0)));
+
+            if let Place::Field {
+                base: field_base,
+                field,
+            } = *base
+            {
+                assert_eq!(field, field_name);
+
+                if let Place::Local(name) = *field_base {
+                    assert_eq!(name, obj_name);
+                } else {
+                    panic!("Expected field base to be Place::Local");
+                }
+            } else {
+                panic!("Expected base to be Place::Field");
+            }
+        } else {
+            panic!("Expected Place::Index variant");
+        }
+    }
+
+    #[test]
+    fn test_build_nested_place_empty_accesses() {
+        // Test: just a local with no accesses
+        let mut string_table = StringTable::new();
+        let var_name = string_table.intern("x");
+
+        let base = create_local_place(var_name);
+        let accesses = vec![];
+
+        let result = build_nested_place(base, accesses, &mut string_table);
+        assert!(result.is_ok());
+
+        let place = result.unwrap();
+
+        // Should just be the base place
+        if let Place::Local(name) = place {
+            assert_eq!(name, var_name);
+        } else {
+            panic!("Expected Place::Local variant");
+        }
     }
 }

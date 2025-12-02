@@ -47,6 +47,7 @@ mod compiler {
             pub(crate) mod variables;
         }
         pub(crate) mod builtin_methods;
+        pub(crate) mod field_access;
 
         pub(crate) mod tokenizer {
             pub(crate) mod compiler_directives;

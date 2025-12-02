@@ -5,7 +5,7 @@ use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKi
 use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 
@@ -40,7 +40,20 @@ pub enum NodeKind {
     Include(InternedString, PathBuf), // Name of file import, Imported file object
 
     // Control Flow
-    Access,
+    // For simple field access: obj.field
+    FieldAccess {
+        base: Box<AstNode>,   // The expression being accessed
+        field: StringId,      // The field name
+    },
+
+    // For method calls: obj.method(args)
+    MethodCall {
+        base: Box<AstNode>,
+        method: StringId,
+        args: Vec<AstNode>,
+        signature: FunctionSignature,
+    },
+
     Return(Vec<Expression>),                            // Return value,
     If(Expression, Vec<AstNode>, Option<Vec<AstNode>>), // Condition, If true, Else
 

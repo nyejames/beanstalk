@@ -264,3 +264,85 @@ pub(crate) fn convert_operator(op: Operator) -> Result<BinOp, CompilerError> {
     };
     Ok(bin_op)
 }
+
+// === Place Construction Functions ===
+
+/// Create a Place::Local for a variable reference
+///
+/// This is the simplest form of place construction, representing
+/// a direct reference to a local variable by its interned name.
+pub(crate) fn create_local_place(name: crate::compiler::string_interning::InternedString) -> Place {
+    Place::Local(name)
+}
+
+/// Create a Place::Field for a field access
+///
+/// Constructs a nested place representing field access on a base place.
+/// For example, `obj.field` becomes Place::Field { base: Place::Local("obj"), field: "field" }
+pub(crate) fn create_field_place(
+    base: Place,
+    field: crate::compiler::string_interning::InternedString,
+) -> Place {
+    Place::Field {
+        base: Box::new(base),
+        field,
+    }
+}
+
+/// Create a Place::Index for an index operation
+///
+/// Constructs a nested place representing index access on a base place.
+/// For example, `arr[i]` becomes Place::Index { base: Place::Local("arr"), index: Load(Place::Local("i")) }
+pub(crate) fn create_index_place(base: Place, index: HirExpr) -> Place {
+    Place::Index {
+        base: Box::new(base),
+        index: Box::new(index),
+    }
+}
+
+/// Create a Place::Global for a global variable reference
+///
+/// Represents a reference to a module-level constant or static variable.
+pub(crate) fn create_global_place(
+    name: crate::compiler::string_interning::InternedString,
+) -> Place {
+    Place::Global(name)
+}
+
+/// Build a nested place from a chain of accesses
+///
+/// This helper function constructs complex nested places like `obj.field[index].other_field`
+/// by recursively building the place structure from the innermost to outermost access.
+///
+/// # Example
+/// For `obj.field[0]`:
+/// 1. Start with Place::Local("obj")
+/// 2. Apply field access: Place::Field { base: Place::Local("obj"), field: "field" }
+/// 3. Apply index: Place::Index { base: Place::Field {...}, index: Int(0) }
+pub(crate) fn build_nested_place(
+    base: Place,
+    accesses: Vec<PlaceAccess>,
+    string_table: &mut StringTable,
+) -> Result<Place, CompilerError> {
+    let mut current_place = base;
+
+    for access in accesses {
+        current_place = match access {
+            PlaceAccess::Field(field_name) => create_field_place(current_place, field_name),
+            PlaceAccess::Index(index_expr) => {
+                let index_hir = lower_expr(index_expr, string_table)?;
+                create_index_place(current_place, index_hir)
+            }
+        };
+    }
+
+    Ok(current_place)
+}
+
+/// Represents a single access operation in a place chain
+///
+/// Used by `build_nested_place` to construct complex nested places.
+pub(crate) enum PlaceAccess {
+    Field(crate::compiler::string_interning::InternedString),
+    Index(Expression),
+}

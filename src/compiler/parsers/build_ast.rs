@@ -50,7 +50,7 @@ pub fn function_body_to_ast(
                     // Move past the name
                     token_stream.advance();
 
-                    check_for_dot_access(token_stream, arg, &context, &mut ast, string_table)?;
+                    let arg = parse_field_access()
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
@@ -104,12 +104,14 @@ pub fn function_body_to_ast(
                         }
 
                         // ----------------------------
-                        //        FUNCTION CALLS
+                        //   METHODS / FUNCTION CALLS
                         // ----------------------------
                         TokenKind::OpenParenthesis => {
-                            if let DataType::Function(signature) =
+                            if let DataType::Function(_, signature) =
                                 &arg.value.data_type
                             {
+                                // TODO: Do we error if trying to call a method here?
+
                                 ast.push(parse_function_call(
                                     token_stream,
                                     &id,

@@ -44,11 +44,37 @@ They can implement methods by defining a function that takes an instance of the 
 ```
 
 ## Constructor methods
-You can explicitly define a default method for a struct by providing an anonymous function as one of the struct's parameters.
+Methods in Beanstalk are created using the 'this' keyword.
+
+You define a reciever (The type this method will belong to)
+by defining a parameter with the special name 'this'.
 
 ```beanstalk
+    -- Define a struct
+    Rectangle:
+        width Float,
+        height Float,
+    ;
+
+    -- Define a method for the Rectangle struct
+    area |this ~Rectangle|:
+        return this.width * this.height
+    ;
+
+    rect = Rectangle(10, 5)
+    print(rect.area()) -- 50
+```
+
+'this' is a reserved keyword so you can't use it as a variable or field name outside of function parameters and inside the method that uses it.
+You are also limited to one 'this' parameter per method.
+
+### Custom Constructors
+You can also override the constructor method for a struct by providing an anonymous function as one of the struct's parameters.
+
+```beanstalk
+    -- This is how the default constructor would look automatically for this struct
     User:
-        |
+        | 
             new_name String, 
             new_preferences Preferences,
         |:
