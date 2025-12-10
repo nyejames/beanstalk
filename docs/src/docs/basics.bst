@@ -1,11 +1,11 @@
-#import(@libs/html/basic)
-#import(@styles/docs_styles)
+#import(@libs/html/Basic)
+#import(@styles/Docs)
 #import(@./components)
-[basic.page:
+[Basic.page:
 
-[docs_styles.Navbar]
-[docs_styles.Header, basic.Center:
-    [basic.Title: LANGUAGE BASICS]
+[Docs.navbar]
+[Docs.header, Basic.center:
+    [Basic.title: LANGUAGE BASICS]
 ]
 
 Every project needing to be split into multiple Wasm modules must have a config.bst file.
@@ -165,7 +165,7 @@ But new statements must start after a newline.
 All data type keywords contain methods from the standard library for common manipulation of types.
 
 ## Numerical Types
-[basic.table(3):
+[Basic.table(3):
     [: Type] [: Description]
 
     [: float ] [: 64 bit floating point number]
@@ -210,4 +210,4 @@ The "and / or" keywords are used for logical and / or and 'not' is used to inver
     [: `-`]        [: Subtraction]          [: 2]
 ```
 
-[docs_styles.Footer]
+[Docs.footer]

@@ -1,16 +1,18 @@
-#import(@libs/html/basic)
-#import(@styles/docs_styles)
+#import(@libs/html/Basic)
+#import(@styles/Docs)
 #import(@./components)
-[basic.page:
+[Basic.page:
 
-[docs_styles.Navbar]
+[Docs.Navbar]
 
-[docs_styles.Header, basic.Center: [basic.Title: STRUCTS]]
+[Docs.header, Basic.center: [Basic.title(): STRUCTS]]
 
 # Structs
 Structs are a collection of fields.
 
-They can implement methods by defining a function that takes an instance of the Struct as its first argument.
+First you define the struct type, then you can create instances of that type.
+
+They can implement methods by defining a function that takes an instance of the Struct as its first argument and has the name 'this'.
 
 ```beanstalk
     -- Define a new object
@@ -44,7 +46,7 @@ They can implement methods by defining a function that takes an instance of the 
 ```
 
 ## Constructor methods
-Methods in Beanstalk are created using the 'this' keyword.
+Methods in Beanstalk are created using the special 'this' keyword.
 
 You define a reciever (The type this method will belong to)
 by defining a parameter with the special name 'this'.
@@ -87,6 +89,6 @@ You can also override the constructor method for a struct by providing an anonym
     ;
 ```
 
-
+]
 
 [Footer]

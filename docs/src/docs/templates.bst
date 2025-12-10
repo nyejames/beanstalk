@@ -1,13 +1,13 @@
 #import(@libs/html/basic)
-#import(@styles/docs_styles)
+#import(@styles/Docs)
 #import(@./components)
-[basic.page:
+[Basic.page:
 
-[docs_styles.Navbar]
+[Docs.Navbar]
 
-[docs_styles.Header, basic.Center: [basic.Title: BEANSTALK TEMPLATES]]
+[Docs.Header, Basic.Center: [Basic.Title: BEANSTALK TEMPLATES]]
 
-[basic.Section:
+[Basic.Section:
 
 Beanstalk has unique, superpowered templating strings.
 
@@ -48,7 +48,7 @@ Inside the body of a template, you can nest more templates using square brackets
 
 ## Template example
 
-[basic.Code:
+[Basic.Code:
 
     [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
 
@@ -67,7 +67,7 @@ Inside the body of a template, you can nest more templates using square brackets
 If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. 
 This usually means that the variable with the error has reverted to its default value, which will be shown.
 
-[basic.Red, basic.Size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the template rather than a zero value being shown.*]
+[Basic.Red, Basic.Size(0.85): *This behaviour is an uncertain part of the design, tuples that contain errors might be better completely hidden from the template rather than a zero value being shown.*]
 
 
-[docs_styles.Footer]
+[Docs.Footer]

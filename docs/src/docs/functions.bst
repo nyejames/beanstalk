@@ -1,22 +1,22 @@
-#import(@libs/html/basic)
-#import(@styles/docs_styles)
+#import(@libs/html/Basic)
+#import(@styles/Docs)
 #import(@./components)
-[basic.page:
+[Basic.page:
 
-[docs_styles.Navbar]
+[Docs.Navbar]
 
-[docs_styles.Header, basic.Center: [basic.Title: FUNCTIONS]]
+[Docs.header, Basic.center: [Basic.title: FUNCTIONS]]
 
 Functions in Beanstalk pass arguments by reference.
 
-[basic.Code:
+```beanstalk
     -- The simplest possible function
     -- The name of the function first,
     -- Followed by a parameter definition that defines what arguments must be passed in
     main ||:
         -- Some code goes in here!
     ;
-]
+```
 
 ## The function signature
 The arrow symbol is used to define the return signature of a function. 
@@ -24,7 +24,7 @@ Functions can return multiple values.
 If the function returns values, 
 it must use a type signature or the name of one of the arguments if it's returning that reference back to the caller.
 
-[basic.Code:
+```beanstalk`
 
     get_doubled |value Int| -> Int:
         -- Creates a new immutable integer using value
@@ -81,4 +81,4 @@ it must use a type signature or the name of one of the arguments if it's returni
     ;
 ]
 
-[docs_styles.Footer]
+[Docs.Footer]

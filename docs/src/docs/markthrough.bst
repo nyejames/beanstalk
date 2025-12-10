@@ -1,26 +1,38 @@
 #import(@libs/html/basic)
-#import(@styles/docs_styles)
+#import(@styles/Docs)
 #import(@./components)
-[basic.page:
+[Basic.page:
 
-[docs_styles.Navbar]
+[Docs.Navbar]
 
-[docs_styles.Header, basic.Center: [basic.title(1): MARKTHROUGH FILES]]
+[Docs.Header, Basic.Center: [Basic.title(1): BEANSTALK MARKDOWN]]
 
-[basic.Section:
+[Basic.Section:
 
-# Markthrough
-Markthrough files are an extension of the Beanstalk template syntax into its own file type.
-Markthrough files are turned into HTML by Beanstalk's build system and always use the Beanstalk markdown parser by default.
+# Beanstalk for Frontend
+Beanstalk can be used to generate HTML via its powerful template syntax. 
 
-Markthrough files use the '.mt' extension and form the foundation of Beanstalk HTML projects.
+Templates by default are used to create strings, but can be customised to parse into any format. 
 
-In an HTML project, each markthrough file can act as an entry point for a web page or a component.
+Beanstalk has a built-in Markdown formatter that will parse templates into HTML at compiler time. 
 
-[basic.Code:
-    [#import(@html/basic)]
-    [#import(@some_module/CONSTANT)]
-    [basic.Section:
+The build system can also be configured to use templates at the top level of files any way it wishes.
+For web projects, the build system uses these templates to automatically represent a web page. 
+The top level template automatically uses the Markdown formatter and that template is used to build the web page.
+
+The build system for web projects can then separate out the Wasm, JS glue code and HTML/CSS into seperate or combined files
+while the user only has to write a single Beanstalk file per page.
+
+Beanstalk files can still import additional HTML, CSS, JS or Beanstalk files to help structure larger projects.
+
+```beanstalk
+    #import "html/Basic"
+    #import "some_module/CONSTANT"
+
+    -- This template is just a the top level of the file
+    -- It's also not assigned to any variabels or functions
+    -- This means the build system recognises it as a special top-level template
+    [Basic.section:
 
     The open square bracket is used to start a new template. 
     The colon begins the template body. 
@@ -31,24 +43,24 @@ In an HTML project, each markthrough file can act as an entry point for a web pa
     It uses the built-in markdown parser function to parse this template body into markdown at compile time.
 
     # A Heading
-    Some text that has a [@example.com: link to example.com] inside it.
+    Some text that has a [Basic.link("example.com"): link to example.com] inside it.
 
     A constant variable from some imported code inserted into the template: [ CONSTANT ].
 
     The body of a template is mostly like a simple flavour of markdown, 
-    the main difference being square brackets [basic.Red: *cannot*] be used without an escape character or by using backticks to create a raw string.
+    the main difference being square brackets [Basic.red: *cannot*] be used without an escape character or by using backticks to create a raw string.
 
     ]
-]
+```
 
 ## Imports
 Markthrough files can import other HTML, Markthrough, CSS, Wasm, JS or Beanstalk files.
 This gives them access to custom styles, components or runtime scripts.
 
 The syntax for this is:
-[basic.Code:
+```beanstalk
     [#import(@html/basic)]
-]
+```
 
 By creating a new child template and defining an import inside the template head, 
 the whole file gets access to everything that is exported from that file.
@@ -61,18 +73,18 @@ Styles use PascalCase by convention.
 
 You can also use functions that return styles inside of the template head.
 
-[basic.Code:
+```beanstalk
     [#import(@html/basic)]
 
     Here is a normal paragraph. 
-    [basic.Red: And now this is some red text inside this paragraph.]
+    [Basic.Red: And now this is some red text inside this paragraph.]
 
     Here is an example of using a function that returns a style.
     This function runs at compiletime and will return the correct table style depending on the argument you give it.
-    [basic.table(3):
+    [Basic.table(3):
         [: Column 1] [: Column 2] [: Column 3]
     ]
-]
+```
 
 
 # HTML Basic library
@@ -81,7 +93,7 @@ You can also use functions that return styles inside of the template head.
 More styles and template configs will be added overtime. Here are some of the ideas so far:
 
 ### Style
-[basic.table(2):
+[Basic.table(2):
     [: Property] [: Description]
 
     [: bg] [: Changes the background color of the element (will eventually just be passed a style argument such as a color and will automatically make those style changes to the background)]
@@ -92,7 +104,7 @@ More styles and template configs will be added overtime. Here are some of the id
 ]
 
 ### Layout
-[basic.table(2):
+[Basic.table(2):
     [: Property] [: Description]
 
     [: pad] [: The padding around the element]
@@ -111,7 +123,7 @@ More styles and template configs will be added overtime. Here are some of the id
 ]
 
 ### Interactive 
-[basic.table(2):
+[Basic.table(2):
     [: Property] [: Description]
 
     [: button] [: A button]
@@ -123,7 +135,7 @@ More styles and template configs will be added overtime. Here are some of the id
 ]
 
 ### Media
-[basic.table(2):
+[Basic.table(2):
     [: Property] [: Description]
 
     [: img] [: An image element ]
@@ -134,7 +146,7 @@ More styles and template configs will be added overtime. Here are some of the id
 
 ### HTTP 
 These are directly from the HTMX library and will be the same keywords, but without the leading 'hx-' prefix. More to be added soon!
-[basic.table(2):
+[Basic.table(2):
     [: Property] [: Description]
 
     [: get] [: ]
@@ -143,7 +155,7 @@ These are directly from the HTMX library and will be the same keywords, but with
 ]
 
 ### Other
-[basic.table(2): 
+[Basic.table(2): 
     [: Property] [: Description]
 
     [: ignore] [: Creates a comment, but does not add it to the final output]
@@ -157,16 +169,16 @@ Variables and expressions are typecast into strings when put into a template. Th
 If statements in a templatehead will conditonally hide or show itself based on the value of the boolean. 
 If the boolean is true, the template and it's children will be shown, if false, it will be hidden.
 
-[basic.Code:
+```beanstalk
     logged_in = false
 
     -- Scene is hidden
     [if not logged_in:
         [button: Log In]
     ]
-]
+```
 
 
 ]
 
-[docs_styles.Footer]
+[Docs.Footer]

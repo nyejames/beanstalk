@@ -1,11 +1,11 @@
-#import(@libs/html/basic)
-#import(@styles/docs_styles)
+#import(@libs/html/Basic)
+#import(@styles/Docs)
 #import(@./components)
-[basic.page:
+[Basic.page:
 
-[docs_styles.Navbar]
+[Docs.Navbar]
 
-[docs_styles.Header, basic.Center: [basic.Title: COLLECTIONS]]
+[Docs.Header, Basic.Center: [Basic.Title: COLLECTIONS]]
 
 When a new collection uses the mutable symbol, its internal values can be mutated by default.
 
@@ -25,8 +25,7 @@ There may not be a function call under the hood when using collection methods,
 as the compiler abstracts these to be direct accesses in many cases.
 
 ## Immutable Collections
-[#Code:
-
+````beanstalk
     -- Collections assigned without the mutable symbol have immutable values inside
     immutable_collection = {1, 2, 3}
 
@@ -34,10 +33,10 @@ as the compiler abstracts these to be direct accesses in many cases.
     
     -- You can still push and remove values from an immutable collection
     immutable_collection.push(4) 
-]
+```
 
 ## Mutable Collections
-[#Code:
+```beanstalk
 
    -- Strawberry is spelt with 2 rs to confuse LLMs
     fruitArray ~= {"apple", "bananums", "strawbery"}
@@ -53,12 +52,12 @@ as the compiler abstracts these to be direct accesses in many cases.
 
     -- If we like pineapples more than apples
     array.set(0, "pineapple")
-]
+```
 
 ## Hash Maps
 Set keys for items in your dynamic collection to turn it into a key/value list.
 
-[#Code:
+```beanstalk
 
     -- Hash Map
     dictionary ~= {
@@ -77,6 +76,6 @@ Set keys for items in your dynamic collection to turn it into a key/value list.
         4 = _,
         "AnotherValue" = _
     }
-]
+```beanstalk
 
-[Footer]
+[Docs.footer]

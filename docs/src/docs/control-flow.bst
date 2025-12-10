@@ -1,17 +1,17 @@
-#import(@libs/html/basic)
-#import(@styles/docs_styles)
-#import(@./components)
-[basic.page:
-[Navbar]
+#import(@libs/html/Basic)
+#import(@styles/Docs)
+#import(@./Components)
+[Basic.page:
+[Docs.navbar]
 
-[Header center: [title(1): CONTROL FLOW]]
+[Docs.header Basic.center: [Docs.title(1): CONTROL FLOW]]
 
-[Page:
+[Basic.Page:
 ## If Statements
 If statements can be used as expressions or statements.
 They can also be used for pattern matching, all with a similar syntax.
 
-[#Code:
+```beanstalk
     v = 1
 
     if v is not 1:
@@ -21,14 +21,14 @@ They can also be used for pattern matching, all with a similar syntax.
     ;
 
     print(msg) -- prints "defintely nope"
-]
+```
 
 # Loops
 Only 1 keyword for loops "loop". 
 
 Using the "in" keyword, you can specify an integer, float or collection to iterate through or define a new integer, float or collection. 
 
-[#Code:
+```beanstalk
     loop thing in things:
         print(thing)
     ;
@@ -63,10 +63,10 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     -- Name: Priya
     -- Name: Sam
     -- Name: Chad
-]
+```
 
 # Pattern matching
-[#Code:
+```beanstalk
     -- Pattern matching
     -- Must be exhaustive
     thing = 69
@@ -85,7 +85,6 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
             print(..)
         ;
     ;
+```
 
-]
-
-[Footer]
+[Basic.footer]

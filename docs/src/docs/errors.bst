@@ -1,10 +1,10 @@
 #import("libs/html/Basic")
-#import("styles/Docs_styles")
+#import("styles/Docs")
 #import("./Components")
 [Basic.page:
 [Components.Navbar]
 
-[Docs_styles.Header Basic.center: [Basic.title(1): ERROR HANDLING AND OPTIONALS]]
+[Docs.Header Basic.center: [Basic.title(1): ERROR HANDLING AND OPTIONALS]]
 [Basic.Page:
 
 Errors are treated as values in Beanstalk, and
