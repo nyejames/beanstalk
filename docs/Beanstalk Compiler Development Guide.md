@@ -299,8 +299,9 @@ See `Borrow Checker Design.md` for a more detailed breakdown of the design of Be
 
 ### Debugging HIR
 - Use `show_hir` to inspect the desugared program.
-- Verify move and borrow annotations.
+- Verify borrow and last-use annotations, which now include Polonius-style path-sensitive lifetimes.
 - Inspect template lowering, constant folding, and structured control flow.
+- HIR provides a clear view of how places, borrows, and references flow through the program.
 
 ---
 
