@@ -8,7 +8,7 @@
 
 # 🌱
 
-<p>⚠️ This is currently a work in progress compiler. See CONTRIBUTING.md if you're inspired to help out</p>
+<p>⚠️ This is currently a work in progress compiler. The IR is currently being developed. See CONTRIBUTING.md if you're inspired to help out</p>
 </div>
 
 ## HTML project Snippets
