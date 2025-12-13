@@ -221,9 +221,3 @@ By leveraging these design choices:
 * **IR simplicity**: hidden locals handle intermediate values; the language itself remains clean and predictable.
 
 > The combination of language restrictions and CFG-based borrow tracking allows Beanstalk to have a **fast, precise, and simpler borrow checker** than Rust, while still enabling reference-return semantics and non-trivial memory safety guarantees.
-
----
-
-If you want, I can also make a **diagram showing Place → Borrow → CFG tracking → Polonius-style checking**, which would make this document even more clear and serve as a design reference for the compiler implementation.
-
-Do you want me to create that diagram?
