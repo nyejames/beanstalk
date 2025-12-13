@@ -282,18 +282,20 @@ It is the first fully typed, canonical representation of a program, designed for
 
 HIR is still “Beanstalk-shaped”: it preserves high-level constructs, references, structured control flow and the semantics needed for ownership analysis.
 
+See `Borrow Checker Design.md` for a more detailed breakdown of the design of Beanstalk's memory management and borrow checking.
+
 ### Purpose
-- Represent Beanstalk programs in a form that is straightforward to analyze but not yet bound to Wasm.
+- Represent Beanstalk programs in a form that is straightforward to analyze but not yet tied to Wasm memory or types.
 - Provide a stable shape for borrow checking, move analysis and template resolution.
 - Normalise syntax sugar into canonical nodes while preserving structure.
 
 ### Key Features
 - **Structured Control Flow**: `if`, `loop`, `match`, and template bodies remain structured for analysis.
-- **Place-based Memory Model**: Locals, temporaries, and fields represented as “places” for borrowing analysis.
-- **Ownership & Move Tracking**: HIR nodes explicitly mark moves, borrows, and drops derived from last-use analysis.
+- **Place-based Memory Model**: Temporaries are not part of the language-level model. All intermediate computations are represented as locals in HIR for borrow checking. Locals, parameters, globals, and projections (fields/array indices/derefs) are tracked as places.
+- **Ownership & Move Tracking**: HIR nodes explicitly annotate borrow creation, last-use, and path-sensitive lifetimes, rather than explicit moves only. Moves are inferred via reference semantics and last-use analysis; explicit move annotations are unnecessary in the language. Borrows are Polonius-style: a conflict is illegal only if it occurs on all control-flow paths.
 - **Template Handling**: Compile-time templates are folded; runtime templates are converted into HIR function bodies.
-- **Desugared Semantics**: Error/option propagation, assignment sugar, and borrowing rules lowered into a uniform form.
-- **Not Tied to Wasm**: No stack machine semantics, no Wasm types, no address arithmetic.
+- **Desugared Semantics**: Error/option propagation, assignment sugar, and borrowing rules are lowered into a uniform canonical form that simplifies analysis.
+- **Not Tied to Wasm**: HIR does not yet model stack machine semantics, Wasm types, or linear memory addresses. Borrow checking operates symbolically on places.
 
 ### Debugging HIR
 - Use `show_hir` to inspect the desugared program.
@@ -320,7 +322,6 @@ Its job is to validate ownership correctness before the program is lowered towar
 
 ### Development Notes
 - All borrow errors must reference original source spans, not HIR internals.
-- Complex features (pattern binds, runtime templates) require additional region facts.
 - HIR must remain easy for the borrow checker to walk — keep constructs structured, not flattened.
 
 ---

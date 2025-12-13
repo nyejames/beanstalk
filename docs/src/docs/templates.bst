@@ -48,8 +48,7 @@ Inside the body of a template, you can nest more templates using square brackets
 
 ## Template example
 
-[Basic.Code:
-
+```
     [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
 
     [ loop text in text_array: 
@@ -61,7 +60,7 @@ Inside the body of a template, you can nest more templates using square brackets
     ]
 
     [ another_template_insert ]
-]
+```
 
 ### Errors
 If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. 
