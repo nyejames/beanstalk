@@ -136,12 +136,11 @@ impl<'a> HirBuilder<'a> {
 
                 // For type inference, we'll use the root variable's type
                 let target_type = match &target_place.root {
-                    crate::compiler::hir::place::PlaceRoot::Local(name) => {
-                        self.local_bindings
-                            .get(name)
-                            .cloned()
-                            .unwrap_or(DataType::Inferred)
-                    }
+                    crate::compiler::hir::place::PlaceRoot::Local(name) => self
+                        .local_bindings
+                        .get(name)
+                        .cloned()
+                        .unwrap_or(DataType::Inferred),
                     _ => DataType::Inferred,
                 };
 
@@ -342,7 +341,7 @@ impl<'a> HirBuilder<'a> {
             }]),
 
             // === Expression as Statement ===
-            NodeKind::Expression(expr) => {
+            NodeKind::Rvalue(expr) => {
                 let (expr_nodes, expr_place) = self.lower_expr_to_place(expr)?;
                 let mut nodes = expr_nodes;
                 nodes.push(HirNode {
@@ -619,7 +618,7 @@ impl<'a> HirBuilder<'a> {
         for node in rpn {
             match node.kind {
                 // Push operands (expressions) onto stack
-                NodeKind::Expression(expr) => {
+                NodeKind::Rvalue(expr) => {
                     let (expr_nodes, expr_place) = self.lower_expr_to_place(expr)?;
                     nodes.extend(expr_nodes);
                     stack.push(expr_place);
@@ -936,18 +935,17 @@ impl<'a> HirBuilder<'a> {
     /// Helper: convert AST node to Place (for assignment targets)
     fn lower_ast_node_to_place(&mut self, node: AstNode) -> Result<Place, CompilerError> {
         match node.kind {
-            NodeKind::Reference(name) => {
-                Ok(Place::local(name))
-            }
-            
+            NodeKind::Rvalue(expr) => {
+                Ok(self.lower_expr_to_place(expr)?.1)
+            },
+
             NodeKind::FieldAccess { base, field } => {
                 let base_place = self.lower_ast_node_to_place(*base)?;
                 Ok(base_place.field(field))
             }
-            
+
             // TODO: Add support for index access when it's implemented in the AST
             // For now, indexing might be handled through method calls like .get() and .set()
-            
             _ => {
                 return_compiler_error!(
                     "Invalid assignment target: {:?}",

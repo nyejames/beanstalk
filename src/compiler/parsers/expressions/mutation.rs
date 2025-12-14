@@ -83,12 +83,12 @@ pub fn handle_mutation(
 
             // Create an addition expression in RPN order: variable, add_value, +
             let variable_ref = AstNode {
-                kind: NodeKind::Expression(variable_arg.value.clone()),
+                kind: NodeKind::Rvalue(variable_arg.value.clone()),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
             let add_value_node = AstNode {
-                kind: NodeKind::Expression(add_value),
+                kind: NodeKind::Rvalue(add_value),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
@@ -124,12 +124,12 @@ pub fn handle_mutation(
 
             // Create a subtraction expression in RPN order: variable, subtract_value, -
             let variable_ref = AstNode {
-                kind: NodeKind::Expression(variable_arg.value.clone()),
+                kind: NodeKind::Rvalue(variable_arg.value.clone()),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
             let subtract_value_node = AstNode {
-                kind: NodeKind::Expression(subtract_value),
+                kind: NodeKind::Rvalue(subtract_value),
                 location: location.to_owned(),
                 scope: context.scope.clone(),
             };
@@ -165,12 +165,12 @@ pub fn handle_mutation(
 
             // Create a multiplication expression in RPN order: variable, multiply_value, *
             let variable_ref = AstNode {
-                kind: NodeKind::Expression(variable_arg.value.clone()),
+                kind: NodeKind::Rvalue(variable_arg.value.clone()),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
             let multiply_value_node = AstNode {
-                kind: NodeKind::Expression(multiply_value),
+                kind: NodeKind::Rvalue(multiply_value),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
@@ -206,12 +206,12 @@ pub fn handle_mutation(
 
             // Create a division expression in RPN order: variable, divide_value, /
             let variable_ref = AstNode {
-                kind: NodeKind::Expression(variable_arg.value.clone()),
+                kind: NodeKind::Rvalue(variable_arg.value.clone()),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
             let divide_value_node = AstNode {
-                kind: NodeKind::Expression(divide_value),
+                kind: NodeKind::Rvalue(divide_value),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };

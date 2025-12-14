@@ -21,11 +21,15 @@ pub struct Expression {
 impl Expression {
     pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
-            ExpressionKind::StringSlice(interned_string) => string_table.resolve(*interned_string).to_owned(),
+            ExpressionKind::StringSlice(interned_string) => {
+                string_table.resolve(*interned_string).to_owned()
+            }
             ExpressionKind::Int(int) => int.to_string(),
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
-            ExpressionKind::Reference(interned_name) => string_table.resolve(*interned_name).to_string(),
+            ExpressionKind::Reference(interned_name) => {
+                string_table.resolve(*interned_name).to_string()
+            }
             ExpressionKind::Template(..) => String::new(),
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
@@ -45,7 +49,11 @@ impl Expression {
             ExpressionKind::FunctionCall(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
             ExpressionKind::Range(lower, upper) => {
-                format!("{} to {}", lower.as_string(string_table), upper.as_string(string_table))
+                format!(
+                    "{} to {}",
+                    lower.as_string(string_table),
+                    upper.as_string(string_table)
+                )
             }
             ExpressionKind::None => String::new(),
         }
@@ -101,7 +109,11 @@ impl Expression {
             ownership,
         }
     }
-    pub fn string_slice(value: InternedString, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn string_slice(
+        value: InternedString,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
         Self {
             data_type: DataType::String,
             kind: ExpressionKind::StringSlice(value),
@@ -119,16 +131,13 @@ impl Expression {
     }
 
     pub fn reference(
-        name: InternedString,
-        data_type: DataType,
-        location: TextLocation,
-        ownership: Ownership,
+        arg: &Arg,
     ) -> Self {
         Self {
-            data_type,
-            kind: ExpressionKind::Reference(name),
-            location,
-            ownership,
+            data_type: arg.value.data_type.clone(),
+            kind: ExpressionKind::Reference(arg.id),
+            location: arg.value.location.to_owned(),
+            ownership: arg.value.ownership.clone(),
         }
     }
 
@@ -146,14 +155,17 @@ impl Expression {
             ownership: Ownership::ImmutableReference,
         }
     }
-    
+
     pub fn function_without_signature(body: Vec<AstNode>, location: TextLocation) -> Self {
         Self {
             data_type: DataType::Inferred,
-            kind: ExpressionKind::Function(FunctionSignature {
-                parameters: vec![],
-                returns: vec![],
-            }, body),
+            kind: ExpressionKind::Function(
+                FunctionSignature {
+                    parameters: vec![],
+                    returns: vec![],
+                },
+                body,
+            ),
             location,
             ownership: Ownership::ImmutableReference,
         }
@@ -317,7 +329,7 @@ pub enum ExpressionKind {
 
     // This is a special case for the range operator
     // This implementation will probably change in the future to be a more general operator
-    // Upper and lower bounds are inclusive
+    // Upper and lower bounds are inclusive,
     // Instead of making this a function; it has its own special case to make constant folding easier
     Range(Box<Expression>, Box<Expression>),
 }

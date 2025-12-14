@@ -55,10 +55,6 @@ pub enum NodeKind {
     // Basics
     VariableDeclaration(Arg), // Variable name, Value, Visibility,
 
-    // This is pretty much just the end of the chain of a field access
-    // Or just the final reference for mutation or expressions
-    Reference(StringId),
-
     // For simple field access: obj.field
     FieldAccess {
         base: Box<AstNode>, // The expression being accessed
@@ -108,7 +104,7 @@ pub enum NodeKind {
     },
 
     // An actual r-value
-    Expression(Expression),
+    Rvalue(Expression),
 
     // Built-in, always expected host Functions.
     // Print node - deprecated in favor of io() host function
@@ -136,7 +132,7 @@ impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompilerError> {
         match &self.kind {
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
-            NodeKind::Expression(value, ..) => Ok(value.to_owned()),
+            NodeKind::Rvalue(value, ..) => Ok(value.to_owned()),
             // NodeKind::Assignment(_, value) => Ok(value.to_owned()),
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(
@@ -177,7 +173,7 @@ impl AstNode {
 
     // If this is a boolean value, flip it to the opposite value
     pub fn flip(&mut self, string_table: &StringTable) -> Result<bool, CompilerError> {
-        if let NodeKind::Expression(value) = &mut self.kind {
+        if let NodeKind::Rvalue(value) = &mut self.kind {
             match value.kind {
                 ExpressionKind::Bool(val) => {
                     value.kind = ExpressionKind::Bool(!val);

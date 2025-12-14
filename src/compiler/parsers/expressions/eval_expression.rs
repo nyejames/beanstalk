@@ -104,7 +104,8 @@ pub fn evaluate_expression(
 
     'outer: for node in nodes {
         match node.kind {
-            NodeKind::Expression(ref expr, ..) => {
+            // Values
+            NodeKind::Rvalue(ref expr, ..) => {
                 if let DataType::Inferred = current_type {
                     *current_type = expr.data_type.to_owned();
                 }
@@ -117,7 +118,10 @@ pub fn evaluate_expression(
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FunctionCall(..) => {
+            NodeKind::FieldAccess { base, field } => {}
+
+            NodeKind::FunctionCall(_, _, ref returns, ..) => {
+                // Check the return type
                 simplified_expression.push(node.to_owned());
             }
 

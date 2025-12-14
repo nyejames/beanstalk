@@ -5,6 +5,7 @@ use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::AstNode;
 use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::field_access::parse_field_access;
 use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_function_call};
 use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
@@ -35,22 +36,8 @@ pub fn create_reference(
         ),
 
         _ => {
-            let ownership = if reference_arg.value.ownership.is_mutable() {
-                Ownership::MutableReference
-            } else {
-                Ownership::ImmutableReference
-            };
-
-            Ok(AstNode {
-                kind: NodeKind::Expression(Expression::reference(
-                    reference_arg.id,
-                    reference_arg.value.data_type.clone(),
-                    token_stream.current_location(),
-                    ownership,
-                )),
-                location: token_stream.current_location(),
-                scope: context.scope.clone(),
-            })
+            // This either becomes a reference or field access
+            parse_field_access(token_stream, reference_arg, context, string_table)
         }
     }
 }

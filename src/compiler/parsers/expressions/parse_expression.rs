@@ -132,7 +132,7 @@ pub fn create_expression(
                 let value = create_expression(token_stream, context, data_type, ownership, true, string_table)?;
 
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(value),
+                    kind: NodeKind::Rvalue(value),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
@@ -143,7 +143,7 @@ pub fn create_expression(
                 match &data_type {
                     DataType::Collection(inner_type, _) => {
                         expression.push(AstNode {
-                            kind: NodeKind::Expression(new_collection(
+                            kind: NodeKind::Rvalue(new_collection(
                                 token_stream,
                                 inner_type,
                                 context,
@@ -157,7 +157,7 @@ pub fn create_expression(
 
                     DataType::Inferred => {
                         expression.push(AstNode {
-                            kind: NodeKind::Expression(new_collection(
+                            kind: NodeKind::Rvalue(new_collection(
                                 token_stream,
                                 &DataType::Inferred,
                                 context,
@@ -253,7 +253,7 @@ pub fn create_expression(
                                 );
 
                                 expression.push(AstNode {
-                                    kind: NodeKind::Expression(func_call_expr),
+                                    kind: NodeKind::Rvalue(func_call_expr),
                                     location: function_call_node.location,
                                     scope: context.scope.clone(),
                                 });
@@ -304,7 +304,7 @@ pub fn create_expression(
                         );
 
                         expression.push(AstNode {
-                            kind: NodeKind::Expression(func_call_expr),
+                            kind: NodeKind::Rvalue(func_call_expr),
                             location: TextLocation::default(),
                             scope: context.scope.clone(),
                         });
@@ -341,7 +341,7 @@ pub fn create_expression(
                 );
 
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(float_expr),
+                    kind: NodeKind::Rvalue(float_expr),
                     location,
                     scope: context.scope.clone(),
                 });
@@ -362,7 +362,7 @@ pub fn create_expression(
                 );
 
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(int_expr),
+                    kind: NodeKind::Rvalue(int_expr),
                     scope: context.scope.clone(),
                     location,
                 });
@@ -378,7 +378,7 @@ pub fn create_expression(
                 );
 
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(string_expr),
+                    kind: NodeKind::Rvalue(string_expr),
                     scope: context.scope.clone(),
                     location,
                 });
@@ -435,7 +435,7 @@ pub fn create_expression(
                 );
 
                 expression.push(AstNode {
-                    kind: NodeKind::Expression(bool_expr),
+                    kind: NodeKind::Rvalue(bool_expr),
                     location,
                     scope: context.scope.clone(),
                 });

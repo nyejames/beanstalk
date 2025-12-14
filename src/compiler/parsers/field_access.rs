@@ -1,3 +1,4 @@
+use crate::compiler::parsers::expressions::expression::Expression;
 use crate::{
     compiler::{
         compiler_errors::CompilerError,
@@ -22,7 +23,7 @@ pub fn parse_field_access(
 ) -> Result<AstNode, CompilerError> {
     // Start with the base variable
     let mut current_node = AstNode {
-        kind: NodeKind::Reference(base_arg.id),
+        kind: NodeKind::Rvalue(Expression::reference(base_arg)),
         scope: base_arg.value.location.scope.to_owned(),
         location: base_arg.value.location.to_owned(),
     };
@@ -108,7 +109,7 @@ pub fn parse_field_access(
             // It's a method call
             parse_function_call(token_stream, &member.id, context, signature, string_table)?
         } else {
-            // It's a property access
+            // It's a property access.
             AstNode {
                 kind: NodeKind::FieldAccess {
                     base: Box::new(current_node),
