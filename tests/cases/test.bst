@@ -1,7 +1,3 @@
--- Test function with return
-simple_function |value String| -> String:
-    io(value)
-    return value
-;
-
-simple_function("beans")
+x = 42
+y = x + 10
+io(y)

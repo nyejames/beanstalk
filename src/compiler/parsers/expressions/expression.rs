@@ -134,17 +134,19 @@ impl Expression {
 
     // Creating Functions
     pub fn function(
+        receiver: Option<DataType>,
         signature: FunctionSignature,
         body: Vec<AstNode>,
         location: TextLocation,
     ) -> Self {
         Self {
-            data_type: DataType::Function(signature.to_owned()),
+            data_type: DataType::Function(Box::new(receiver), signature.to_owned()),
             kind: ExpressionKind::Function(signature, body),
             location,
             ownership: Ownership::ImmutableReference,
         }
     }
+    
     pub fn function_without_signature(body: Vec<AstNode>, location: TextLocation) -> Self {
         Self {
             data_type: DataType::Inferred,

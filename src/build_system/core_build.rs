@@ -4,6 +4,7 @@
 
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::hir::builder::HirBuilder;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::Arg;
@@ -204,6 +205,32 @@ pub fn compile_modules(
     // ----------------------------------
     //          HIR generation
     // ----------------------------------
+    let time = Instant::now();
+    
+    let hir_nodes = match HirBuilder::lower_ast(
+        module_ast.nodes,
+        module_ast.entry_path.clone(),
+        &mut compiler.string_table,
+    ) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            compiler_messages.errors.extend(e.errors);
+            compiler_messages.warnings.extend(e.warnings);
+            return Err(compiler_messages);
+        }
+    };
+
+    timer_log!(time, "HIR generated in: ");
+
+    // Debug output for HIR if enabled
+    #[cfg(feature = "show_hir")]
+    {
+        println!("=== HIR OUTPUT ===");
+        for (i, node) in hir_nodes.iter().enumerate() {
+            println!("HIR Node #{}: {:?}", i, node);
+        }
+        println!("=== END HIR OUTPUT ===");
+    }
 
     // ----------------------------------
     //          LIR generation

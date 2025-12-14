@@ -145,7 +145,7 @@ impl HostFunctionDef {
 
     /// Get the function signature as a DataType::Function for compatibility
     pub fn as_function_type(&self, string_table: &mut StringTable) -> DataType {
-        DataType::Function(self.params_to_signature(string_table))
+        DataType::Function(Box::new(None), self.params_to_signature(string_table))
     }
 
     pub fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {

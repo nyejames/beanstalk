@@ -1,9 +1,15 @@
-//! HIR core node definitions (scaffold)
+//! HIR core node definitions
 //!
-//! This module defines the minimal data structures for the High-Level IR (HIR)
-//! that other stages (borrow checker, lowering) can reference. These are
-//! intentionally lightweight placeholders and will evolve as the compiler is
-//! implemented.
+//! This module defines the High-Level Intermediate Representation (HIR) for Beanstalk.
+//! HIR is a structured, semantically rich IR designed for borrow checking, move analysis,
+//! and preparing code for reliable lowering to WebAssembly.
+//!
+//! Key design principles:
+//! - Structured control flow for CFG-based analysis
+//! - Place-based memory model for precise borrow tracking
+//! - No nested expressions - all computation linearized into statements
+//! - Borrow intent, not ownership outcome (determined by borrow checker)
+//! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::place::Place;
@@ -26,9 +32,7 @@ pub struct HirNode {
     pub kind: HirKind,
     pub location: TextLocation,
     pub scope: InternedPath,
-
-    // Metadata for borrow checker
-    pub id: HirNodeId, // Unique ID for CFG construction
+    pub id: HirNodeId, // Unique ID for CFG construction and borrow checking
 }
 
 pub type HirNodeId = usize;
@@ -36,60 +40,63 @@ pub type HirNodeId = usize;
 #[derive(Debug, Clone)]
 pub enum HirKind {
     // === Variable Bindings ===
-    Let {
+    /// Assignment to a place (local variable, field, etc.)
+    /// This covers both initial bindings and mutations
+    Assign {
         place: Place,
         value: HirExpr,
     },
 
-    LetMulti {
-        places: Vec<Place>,
-        value: HirExpr, // Must be multi-return call
-    },
-
-    // Store to existing place
-    Store {
+    /// Explicit borrow creation (shared or mutable)
+    /// Records where borrow access is requested
+    Borrow {
         place: Place,
-        value: HirExpr,
+        kind: BorrowKind,
+        target: Place, // Where the borrow is stored
     },
 
     // === Control Flow ===
+    /// Structured conditional with explicit blocks
     If {
-        condition: HirExpr,
+        condition: Place, // Condition must be stored in a place first
         then_block: Vec<HirNode>,
         else_block: Option<Vec<HirNode>>,
     },
 
+    /// Pattern matching with structured arms
     Match {
-        scrutinee: HirExpr,
+        scrutinee: Place, // Subject must be stored in a place first
         arms: Vec<HirMatchArm>,
         default: Option<Vec<HirNode>>,
     },
 
+    /// Structured loop with explicit binding
     Loop {
-        // For `loop item in collection:`
-        binding: Option<(InternedString, DataType)>,
-        iterator: HirExpr,
+        binding: Option<(InternedString, DataType)>, // Loop variable binding
+        iterator: Place, // Iterator must be stored in a place first
         body: Vec<HirNode>,
-        // Optional index binding for `loop item, index in collection:`
-        index_binding: Option<InternedString>,
+        index_binding: Option<InternedString>, // Optional index binding
     },
 
+    /// Loop control flow
     Break,
     Continue,
 
     // === Function Calls ===
+    /// Regular function call with explicit argument places and return destinations
     Call {
         target: InternedString,
-        args: Vec<HirExpr>,
-        returns: Vec<DataType>,
+        args: Vec<Place>, // Arguments must be stored in places first
+        returns: Vec<Place>, // Return values stored to places
     },
 
+    /// Host function call (builtin functions like io)
     HostCall {
         target: InternedString,
         module: InternedString,
         import: InternedString,
-        args: Vec<HirExpr>,
-        returns: Vec<DataType>,
+        args: Vec<Place>, // Arguments must be stored in places first
+        returns: Vec<Place>, // Return values stored to places
     },
 
     // === Error Handling (Desugared) ===
@@ -106,11 +113,14 @@ pub enum HirKind {
     },
 
     // === Returns ===
-    Return(Vec<HirExpr>),
-    ReturnError(HirExpr), // For `return!` syntax
+    /// Return statement with values from places
+    Return(Vec<Place>),
+    
+    /// Error return for `return!` syntax
+    ReturnError(Place),
 
     // === Resource Management ===
-    // Inserted by borrow checker after analysis
+    /// Drop operation (inserted by borrow checker after analysis)
     Drop(Place),
 
     // === Templates ===
@@ -140,8 +150,8 @@ pub enum HirKind {
     },
 
     // === Expressions as Statements ===
-    // For expressions evaluated for side effects
-    Expr(HirExpr),
+    /// Expression evaluated for side effects (result discarded)
+    ExprStmt(Place), // Expression result must be stored in a place first
 }
 
 #[derive(Debug, Clone)]
@@ -161,52 +171,60 @@ pub enum HirExprKind {
     Char(char),
 
     // === Place Operations ===
-    Load(Place),               // Read from place (immutable)
-    Borrow(Place, BorrowKind), // Borrow place (shared or mutable)
-    CandidateMove(Place),      // Potential move (refined by borrow checker)
+    /// Load value from a place (immutable access)
+    Load(Place),
+    
+    /// Create shared borrow of a place
+    SharedBorrow(Place),
+    
+    /// Create mutable borrow of a place (exclusive access)
+    MutableBorrow(Place),
+    
+    /// Candidate move (potential ownership transfer, refined by borrow checker)
+    CandidateMove(Place),
 
-    // === Operations ===
+    // === Binary Operations ===
+    /// Binary operation between two places (no nested expressions)
     BinOp {
-        left: Box<HirExpr>,
+        left: Place,
         op: BinOp,
-        right: Box<HirExpr>,
+        right: Place,
     },
 
+    /// Unary operation on a place
     UnaryOp {
         op: UnaryOp,
-        expr: Box<HirExpr>,
+        operand: Place,
     },
 
-    // === Calls ===
+    // === Function Calls ===
+    /// Function call with arguments from places
     Call {
         target: InternedString,
-        args: Vec<HirExpr>,
+        args: Vec<Place>,
     },
 
+    /// Method call with receiver and arguments from places
     MethodCall {
-        receiver: Box<HirExpr>,
+        receiver: Place,
         method: InternedString,
-        args: Vec<HirExpr>,
+        args: Vec<Place>,
     },
 
     // === Constructors ===
+    /// Struct construction with field values from places
     StructConstruct {
         type_name: InternedString,
-        fields: Vec<(InternedString, HirExpr)>,
+        fields: Vec<(InternedString, Place)>,
     },
 
-    Collection(Vec<HirExpr>),
+    /// Collection construction with elements from places
+    Collection(Vec<Place>),
 
-    // === Special ===
+    /// Range construction with start and end from places
     Range {
-        start: Box<HirExpr>,
-        end: Box<HirExpr>,
-    },
-
-    // Function values
-    Function {
-        signature: FunctionSignature,
-        body: Vec<HirNode>,
+        start: Place,
+        end: Place,
     },
 }
 

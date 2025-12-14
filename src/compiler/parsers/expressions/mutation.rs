@@ -3,6 +3,7 @@ use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
+use crate::compiler::parsers::field_access::parse_field_access;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::StringTable;
 use crate::{ast_log, return_rule_error, return_syntax_error};
@@ -16,6 +17,10 @@ pub fn handle_mutation(
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
+
+    // Check for field access on this arg,
+    // Or just provide the reference AST node
+    let node = parse_field_access(token_stream, variable_arg, &context, string_table)?;
 
     // Check if the variable is mutable
     let ownership = &variable_arg.value.ownership;
@@ -45,26 +50,21 @@ pub fn handle_mutation(
     }
 
     // Determine the assignment type and handle accordingly
-    match token_stream.current_token_kind() {
+    let value = match token_stream.current_token_kind() {
         TokenKind::Assign => {
             // Simple mutation: variable = new_value
             token_stream.advance();
 
             let mut expected_type = variable_arg.value.data_type.clone();
-            let new_value = create_expression(
+
+            create_expression(
                 token_stream,
                 context,
                 &mut expected_type,
                 ownership,
                 false,
                 string_table,
-            )?;
-
-            Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.id.to_owned(), new_value, false),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            })
+            )?
         }
 
         TokenKind::AddAssign => {
@@ -100,18 +100,12 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
 
-            let addition_expr = Expression::runtime(
+            Expression::runtime(
                 vec![variable_ref, add_value_node, add_op],
                 expected_type,
                 location.to_owned(),
                 variable_arg.value.ownership.to_owned(),
-            );
-
-            Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.id.to_owned(), addition_expr, false),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            })
+            )
         }
 
         TokenKind::SubtractAssign => {
@@ -147,18 +141,12 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
 
-            let subtraction_expr = Expression::runtime(
+            Expression::runtime(
                 vec![variable_ref, subtract_value_node, subtract_op],
                 expected_type,
                 location.to_owned(),
                 variable_arg.value.ownership.to_owned(),
-            );
-
-            Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.id.to_owned(), subtraction_expr, false),
-                location: location.to_owned(),
-                scope: context.scope.clone(),
-            })
+            )
         }
 
         TokenKind::MultiplyAssign => {
@@ -194,18 +182,12 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
 
-            let multiplication_expr = Expression::runtime(
+            Expression::runtime(
                 vec![variable_ref, multiply_value_node, multiply_op],
                 expected_type,
                 location.clone(),
                 variable_arg.value.ownership.to_owned(),
-            );
-
-            Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.id.to_owned(), multiplication_expr, false),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            })
+            )
         }
 
         TokenKind::DivideAssign => {
@@ -241,18 +223,12 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
 
-            let division_expr = Expression::runtime(
+            Expression::runtime(
                 vec![variable_ref, divide_value_node, divide_op],
                 expected_type,
                 location.clone(),
                 variable_arg.value.ownership.to_owned(),
-            );
-
-            Ok(AstNode {
-                kind: NodeKind::Mutation(variable_arg.id.to_owned(), division_expr, false),
-                location: location.clone(),
-                scope: context.scope.clone(),
-            })
+            )
         }
 
         _ => {
@@ -272,5 +248,14 @@ pub fn handle_mutation(
                 }
             );
         }
-    }
+    };
+
+    Ok(AstNode {
+        kind: NodeKind::Assignment {
+            target: Box::new(node),
+            value,
+        },
+        location: location.clone(),
+        scope: context.scope.clone(),
+    })
 }

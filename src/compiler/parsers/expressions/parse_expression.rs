@@ -228,7 +228,7 @@ pub fn create_expression(
             TokenKind::Symbol(ref id, ..) => {
                 if let Some(arg) = context.get_reference(id) {
                     match &arg.value.data_type {
-                        DataType::Function(signature) => {
+                        DataType::Function(_, signature) => {
                             // Advance past the function name to position at the opening parenthesis
                             token_stream.advance();
 
@@ -313,18 +313,16 @@ pub fn create_expression(
                     }
                 }
 
-                {
-                    let var_name_static: &'static str = Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
-                    return_rule_error!(
-                        format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
-                        token_stream.current_location().to_error_location(&string_table),
-                        {
-                            VariableName => var_name_static,
-                            CompilationStage => "Expression Parsing",
-                            PrimarySuggestion => "Declare the variable before using it in this expression",
-                        }
-                    )
-                }
+                let var_name_static: &'static str = Box::leak(string_table.resolve(*id).to_string().into_boxed_str());
+                return_rule_error!(
+                    format!("Undefined variable '{}'. Variable must be declared before use.", var_name_static),
+                    token_stream.current_location().to_error_location(&string_table),
+                    {
+                        VariableName => var_name_static,
+                        CompilationStage => "Expression Parsing",
+                        PrimarySuggestion => "Declare the variable before using it in this expression",
+                    }
+                )
             }
 
             // Check if is a literal

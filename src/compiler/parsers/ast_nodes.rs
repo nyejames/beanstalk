@@ -40,20 +40,6 @@ pub enum NodeKind {
     Include(InternedString, PathBuf), // Name of file import, Imported file object
 
     // Control Flow
-    // For simple field access: obj.field
-    FieldAccess {
-        base: Box<AstNode>,   // The expression being accessed
-        field: StringId,      // The field name
-    },
-
-    // For method calls: obj.method(args)
-    MethodCall {
-        base: Box<AstNode>,
-        method: StringId,
-        args: Vec<AstNode>,
-        signature: FunctionSignature,
-    },
-
     Return(Vec<Expression>),                            // Return value,
     If(Expression, Vec<AstNode>, Option<Vec<AstNode>>), // Condition, If true, Else
 
@@ -67,6 +53,26 @@ pub enum NodeKind {
     WhileLoop(Expression, Vec<AstNode>),         // Condition, Body,
 
     // Basics
+    VariableDeclaration(Arg), // Variable name, Value, Visibility,
+
+    // This is pretty much just the end of the chain of a field access
+    // Or just the final reference for mutation or expressions
+    Reference(StringId),
+
+    // For simple field access: obj.field
+    FieldAccess {
+        base: Box<AstNode>, // The expression being accessed
+        field: StringId,    // The field name
+    },
+
+    // For method calls: obj.method(args)
+    MethodCall {
+        base: Box<AstNode>,
+        method: StringId,
+        args: Vec<AstNode>,
+        signature: FunctionSignature,
+    },
+
     FunctionCall(
         InternedString,
         Vec<Expression>, // Arguments passed in (eventually will have a syntax for named arguments)
@@ -81,13 +87,10 @@ pub enum NodeKind {
         InternedString,  // Function name
         Vec<Expression>, // Arguments passed in - Can't be named for host functions
         Vec<DataType>,   // Return types
-        InternedString,  // WASM module name (e.g., "beanstalk_io")
-        InternedString,  // WASM import name (e.g., "print")
+        InternedString,  // WASM module name (e.g. "beanstalk_io")
+        InternedString,  // WASM import name (e.g. "print")
         TextLocation,    // Location for error reporting
     ),
-
-    // Variable names should be the full namespace (module path + variable name)
-    VariableDeclaration(Arg), // Variable name, Value, Visibility,
 
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
     //          new_struct_instance(arg) -- Calls the main function of the struct
@@ -99,7 +102,10 @@ pub enum NodeKind {
     Function(InternedString, FunctionSignature, Vec<AstNode>),
 
     // Mutation of existing mutable variables
-    Mutation(InternedString, Expression, bool), // Variable name, New value, Is mutable assignment (~=)
+    Assignment {
+        target: Box<AstNode>, // Variable, FieldAccess, Deref, etc.
+        value: Expression,
+    },
 
     // An actual r-value
     Expression(Expression),
@@ -130,9 +136,8 @@ impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompilerError> {
         match &self.kind {
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
-            NodeKind::Expression(value, ..) | NodeKind::Mutation(_, value, _) => {
-                Ok(value.to_owned())
-            }
+            NodeKind::Expression(value, ..) => Ok(value.to_owned()),
+            // NodeKind::Assignment(_, value) => Ok(value.to_owned()),
             NodeKind::FunctionCall(name, arguments, returns, location) => {
                 Ok(Expression::function_call(
                     *name,

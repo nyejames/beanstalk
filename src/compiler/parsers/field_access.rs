@@ -1,4 +1,18 @@
-use crate::{compiler::{compiler_errors::CompilerError, datatypes::DataType, parsers::{ast::ScopeContext, ast_nodes::{Arg, AstNode, NodeKind}, builtin_methods::get_builtin_methods, expressions::expression::{Expression, ExpressionKind}, statements::functions::parse_function_call, tokenizer::tokens::{FileTokens, TokenKind}}, string_interning::StringTable, traits::ContainsReferences}, return_rule_error};
+use crate::{
+    compiler::{
+        compiler_errors::CompilerError,
+        datatypes::DataType,
+        parsers::{
+            ast::ScopeContext,
+            ast_nodes::{Arg, AstNode, NodeKind},
+            statements::functions::parse_function_call,
+            tokenizer::tokens::{FileTokens, TokenKind},
+        },
+        string_interning::StringTable,
+        traits::ContainsReferences,
+    },
+    return_rule_error,
+};
 
 pub fn parse_field_access(
     token_stream: &mut FileTokens,
@@ -8,7 +22,7 @@ pub fn parse_field_access(
 ) -> Result<AstNode, CompilerError> {
     // Start with the base variable
     let mut current_node = AstNode {
-        kind: NodeKind::Expression(base_arg.value.to_owned()),
+        kind: NodeKind::Reference(base_arg.id),
         scope: base_arg.value.location.scope.to_owned(),
         location: base_arg.value.location.to_owned(),
     };
@@ -91,18 +105,10 @@ pub fn parse_field_access(
 
         // Decide if this is a method call or field access
         current_node = if let DataType::Function(_, signature) = &member.value.data_type {
-            
             // It's a method call
-            parse_function_call(
-                token_stream,
-                &member.id,
-                context,
-                &signature,
-                string_table,
-            )?
-
+            parse_function_call(token_stream, &member.id, context, signature, string_table)?
         } else {
-            // It's a field access
+            // It's a property access
             AstNode {
                 kind: NodeKind::FieldAccess {
                     base: Box::new(current_node),

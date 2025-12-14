@@ -26,7 +26,7 @@ pub fn create_reference(
 
     match reference_arg.value.data_type {
         // Function Call
-        DataType::Function(ref signature) => parse_function_call(
+        DataType::Function(_, ref signature) => parse_function_call(
             token_stream,
             &reference_arg.id,
             context,
@@ -111,6 +111,7 @@ pub fn new_arg(
             return Ok(Arg {
                 id,
                 value: Expression::function(
+                    None,
                     func_sig,
                     function_body,
                     token_stream.current_location(),

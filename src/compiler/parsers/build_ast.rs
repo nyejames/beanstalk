@@ -3,12 +3,12 @@ use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
-use crate::compiler::parsers::builtin_methods::get_builtin_methods;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
 
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
+use crate::compiler::parsers::field_access::parse_field_access;
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::parse_function_call;
@@ -40,7 +40,6 @@ pub fn function_body_to_ast(
                 token_stream.advance();
             }
 
-            // New Function or Variable declaration
             TokenKind::Symbol(id) => {
                 // Check if this has already been declared (is a reference)
                 if let Some(arg) = context.get_reference(&id) {
@@ -49,8 +48,6 @@ pub fn function_body_to_ast(
 
                     // Move past the name
                     token_stream.advance();
-
-                    let arg = parse_field_access()
 
                     // Check what comes after the variable reference
                     match token_stream.current_token_kind() {
@@ -66,7 +63,11 @@ pub fn function_body_to_ast(
                         | TokenKind::DivideAssign
                         | TokenKind::ExponentAssign
                         | TokenKind::RootAssign => {
-                            ast.push(handle_mutation(token_stream, arg, &context, string_table)?);
+                            // So this seems to be the only case where we have a reference as an L-value.
+                            // I think this means field access ONLY happens here if it happens at this stage,
+                            // expression parsing will need to do its own thing separately
+
+                            ast.push(handle_mutation(token_stream, &arg, &context, string_table)?);
                         }
 
                         // Type declarations after variable reference - error (shadowing not supported)
@@ -84,7 +85,7 @@ pub fn function_body_to_ast(
                                 let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_syntax_error!(
                                     format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
-                                    token_stream.current_location().to_error_location(&string_table), {
+                                    token_stream.current_location().to_error_location(string_table), {
                                         VariableName => var_name_static,
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable instead of '~='",
@@ -94,7 +95,7 @@ pub fn function_body_to_ast(
                                 let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_rule_error!(
                                     format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
-                                    token_stream.current_location().to_error_location(&string_table), {
+                                    token_stream.current_location().to_error_location(string_table), {
                                         VariableName => var_name_static,
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
@@ -104,13 +105,23 @@ pub fn function_body_to_ast(
                         }
 
                         // ----------------------------
-                        //   METHODS / FUNCTION CALLS
+                        //       FUNCTION CALLS
                         // ----------------------------
                         TokenKind::OpenParenthesis => {
-                            if let DataType::Function(_, signature) =
+                            if let DataType::Function(receiver, signature) =
                                 &arg.value.data_type
                             {
-                                // TODO: Do we error if trying to call a method here?
+                                // If this is a method, this should be an error
+                                // As methods can only be called from their receivers
+                                if receiver.is_some() {
+                                    return_rule_error!(
+                                        "This only exists as a method, not a standalone function. Method calls can only be made on the reciever of a function",
+                                        token_stream.current_location().to_error_location(string_table), {
+                                            CompilationStage => "AST Construction",
+                                            PrimarySuggestion => "Call this method from an instance of its reciever, or define this as its own function",
+                                        }
+                                    )
+                                }
 
                                 ast.push(parse_function_call(
                                     token_stream,
@@ -127,7 +138,7 @@ pub fn function_body_to_ast(
                             let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                             return_syntax_error!(
                                 format!("Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation", token_stream.current_token_kind(), string_table.resolve(id)),
-                                token_stream.current_location().to_error_location(&string_table), {
+                                token_stream.current_location().to_error_location(string_table), {
                                     VariableName => var_name_static,
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Add an assignment operator like '=' or '+=' after the variable",
@@ -153,8 +164,11 @@ pub fn function_body_to_ast(
                         &signature,
                         string_table,
                     )?)
+
+                // -----------------------------------------
+                //   New Function or Variable declaration
+                // -----------------------------------------
                 } else {
-                    // TODO: Change back to immediate colon afterwards syntax
                     let arg = new_arg(token_stream, id, &context, warnings, string_table)?;
 
                     // -----------------------------
@@ -342,92 +356,92 @@ pub fn function_body_to_ast(
     Ok(ast)
 }
 
-fn check_for_dot_access(
-    token_stream: &mut FileTokens,
-    arg: &Arg,
-    context: &ScopeContext,
-    ast: &mut Vec<AstNode>,
-    string_table: &mut StringTable,
-) -> Result<(), CompilerError> {
-    // Name of variable, with any accesses added to the path
-    let mut scope = context.scope.clone();
-
-    // We will need to keep pushing nodes if there are accesses after method calls
-    while token_stream.current_token_kind() == &TokenKind::Dot {
-        // Move past the dot
-        token_stream.advance();
-
-        // Currently, there is no just integer access.
-        // Only properties or methods are accessed on structs and collections.
-        // Collections have a .get() method for accessing elements, no [] syntax.
-        if let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() {
-            let members = match &arg.value.data_type {
-                DataType::Parameters(inner_args) => inner_args,
-                DataType::Function(sig) => &sig.returns,
-                _ => &get_builtin_methods(&arg.value.data_type, string_table),
-            };
-
-            // Nothing to access error
-            if members.is_empty() {
-                let var_name_static: &'static str =
-                    Box::leak(string_table.resolve(id).to_string().into_boxed_str());
-                return_rule_error!(
-                    format!("'{}' has no methods or properties to access 😞", string_table.resolve(id)),
-                    token_stream.current_location().to_error_location(&string_table), {
-                        VariableName => var_name_static,
-                        CompilationStage => "AST Construction",
-                        PrimarySuggestion => "This type doesn't support property or method access",
-                    }
-                )
-            }
-
-            // No access with that name exists error
-            let access = match members.iter().find(|member| member.id == id) {
-                Some(access) => access,
-                None => {
-                    let property_name_static: &'static str =
-                        Box::leak(string_table.resolve(id).to_string().into_boxed_str());
-                    let var_name_static: &'static str =
-                        Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
-                    return_rule_error!(
-                        format!("Can't find property or method '{}' inside '{}'", string_table.resolve(id), string_table.resolve(arg.id)),
-                        token_stream.current_location().to_error_location(&string_table), {
-                            VariableName => property_name_static,
-                            CompilationStage => "AST Construction",
-                            PrimarySuggestion => "Check the available methods and properties for this type",
-                        }
-                    )
-                }
-            };
-
-            // Add the name to the scope
-            scope.push(access.id);
-
-            // Move past the name
-            token_stream.advance();
-
-            // ----------------------------
-            //        METHOD CALLS
-            // ----------------------------
-            if let DataType::Function(signature) = &access.value.data_type {
-                ast.push(parse_function_call(
-                    token_stream,
-                    &id,
-                    context,
-                    signature,
-                    string_table,
-                )?)
-            }
-        } else {
-            return_rule_error!(
-                format!("Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.", token_stream.current_token_kind()),
-                token_stream.current_location().to_error_location(&string_table), {
-                    CompilationStage => "AST Construction",
-                    PrimarySuggestion => "Use a valid property or method name after the dot",
-                }
-            )
-        }
-    }
-
-    Ok(())
-}
+// fn check_for_dot_access(
+//     token_stream: &mut FileTokens,
+//     arg: &Arg,
+//     context: &ScopeContext,
+//     ast: &mut Vec<AstNode>,
+//     string_table: &mut StringTable,
+// ) -> Result<(), CompilerError> {
+//     // Name of variable, with any accesses added to the path
+//     let mut scope = context.scope.clone();
+//
+//     // We will need to keep pushing nodes if there are accesses after method calls
+//     while token_stream.current_token_kind() == &TokenKind::Dot {
+//         // Move past the dot
+//         token_stream.advance();
+//
+//         // Currently, there is no just integer access.
+//         // Only properties or methods are accessed on structs and collections.
+//         // Collections have a .get() method for accessing elements, no [] syntax.
+//         if let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() {
+//             let members = match &arg.value.data_type {
+//                 DataType::Parameters(inner_args) => inner_args,
+//                 DataType::Function(_, sig) => &sig.returns,
+//                 _ => &get_builtin_methods(&arg.value.data_type, string_table),
+//             };
+//
+//             // Nothing to access error
+//             if members.is_empty() {
+//                 let var_name_static: &'static str =
+//                     Box::leak(string_table.resolve(id).to_string().into_boxed_str());
+//                 return_rule_error!(
+//                     format!("'{}' has no methods or properties to access 😞", string_table.resolve(id)),
+//                     token_stream.current_location().to_error_location(&string_table), {
+//                         VariableName => var_name_static,
+//                         CompilationStage => "AST Construction",
+//                         PrimarySuggestion => "This type doesn't support property or method access",
+//                     }
+//                 )
+//             }
+//
+//             // No access with that name exists error
+//             let access = match members.iter().find(|member| member.id == id) {
+//                 Some(access) => access,
+//                 None => {
+//                     let property_name_static: &'static str =
+//                         Box::leak(string_table.resolve(id).to_string().into_boxed_str());
+//                     let var_name_static: &'static str =
+//                         Box::leak(string_table.resolve(arg.id).to_string().into_boxed_str());
+//                     return_rule_error!(
+//                         format!("Can't find property or method '{}' inside '{}'", string_table.resolve(id), string_table.resolve(arg.id)),
+//                         token_stream.current_location().to_error_location(&string_table), {
+//                             VariableName => property_name_static,
+//                             CompilationStage => "AST Construction",
+//                             PrimarySuggestion => "Check the available methods and properties for this type",
+//                         }
+//                     )
+//                 }
+//             };
+//
+//             // Add the name to the scope
+//             scope.push(access.id);
+//
+//             // Move past the name
+//             token_stream.advance();
+//
+//             // ----------------------------
+//             //        METHOD CALLS
+//             // ----------------------------
+//             if let DataType::Function(_, signature) = &access.value.data_type {
+//                 ast.push(parse_function_call(
+//                     token_stream,
+//                     &id,
+//                     context,
+//                     signature,
+//                     string_table,
+//                 )?)
+//             }
+//         } else {
+//             return_rule_error!(
+//                 format!("Expected the name of a property or method after the dot (accessing a member of the variable such as a method or property). Found '{:?}' instead.", token_stream.current_token_kind()),
+//                 token_stream.current_location().to_error_location(&string_table), {
+//                     CompilationStage => "AST Construction",
+//                     PrimarySuggestion => "Use a valid property or method name after the dot",
+//                 }
+//             )
+//         }
+//     }
+//
+//     Ok(())
+// }
