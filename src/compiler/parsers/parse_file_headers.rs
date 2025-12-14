@@ -409,6 +409,13 @@ fn create_header(
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                 }
+
+                // NOTE!!!!!!!!
+                // Colons used in templates parse into a different token (EndTemplateHead),
+                // so there isn't any issue with templates creating a colon imbalance.
+                // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
+                // The only violations of this rule have to be parsed differently in the tokenizer,
+                // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
                 TokenKind::Colon => {
                     scopes_opened += 1;
                     function_body.push(token_stream.tokens[token_stream.index].to_owned());

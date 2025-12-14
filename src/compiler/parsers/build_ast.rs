@@ -305,6 +305,7 @@ pub fn function_body_to_ast(
                         )
                     }
                     _ => {
+                        // Consume the end token
                         token_stream.advance();
                         break;
                     }

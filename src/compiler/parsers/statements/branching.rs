@@ -135,7 +135,7 @@ fn create_match_node(
                 "Expected ':' after the if condition to open a new scope, found '{:?}' instead",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location().to_error_location(&string_table),
+            token_stream.current_location().to_error_location(string_table),
             {
                 CompilationStage => "Match Statement Parsing",
                 PrimarySuggestion => "Add ':' after 'is' to open the match body",
@@ -147,22 +147,25 @@ fn create_match_node(
     token_stream.advance(); // Consume ':'
     let match_context = context.new_child_control_flow(ContextKind::Branch);
 
-    // SYNTAX EXAMPLE:
+    // SYNTAX EXAMPLE
+    // Each branch MUST have an open and closed block
+    // This is because every
     // if subject is:
     //     0: io("Choice is 0");
     //     1: io("Choice is 1");
     //     else: io("Choice is 2");
+    // ;
 
     // Parse each arm
     let mut arms: Vec<MatchArm> = Vec::new();
     let mut else_block = None;
-    while token_stream.current_token_kind() != &TokenKind::End {
+    loop {
         // Check for else condition
         if token_stream.current_token_kind() == &TokenKind::Else {
             if arms.is_empty() {
                 return_rule_error!(
                     "Should be at least one condition in the match statement before the 'else' arm",
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Add at least one match arm before the 'else' arm",
@@ -176,7 +179,7 @@ fn create_match_node(
                         "Expected ':' after the else arm to open a new scope, found '{:?}' instead",
                         token_stream.current_token_kind()
                     ),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Add ':' after 'else' to open the else body",
@@ -194,6 +197,8 @@ fn create_match_node(
                 warnings,
                 string_table,
             )?);
+
+            continue;
         }
 
         let condition = create_expression(
@@ -234,6 +239,13 @@ fn create_match_node(
             condition,
             body: block,
         });
+
+        // Check for double semicolon to close this match statement
+        if token_stream.current_token_kind() != &TokenKind::End {
+            // Move past the end token
+            token_stream.advance();
+            break;
+        }
     }
 
     Ok(AstNode {
