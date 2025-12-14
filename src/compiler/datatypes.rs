@@ -93,6 +93,7 @@ pub enum DataType {
 
     // Strings
     String, // UTF-8
+    Char,
 
     // Any type can be used in the expression and will be coerced to a string (for scenes only).
     // Mathematical operations will still work and take priority, but strings can be used in these expressions.
@@ -199,6 +200,7 @@ impl DataType {
             DataType::Int => DataType::Option(Box::new(DataType::Int)),
             DataType::Decimal => DataType::Option(Box::new(DataType::Decimal)),
             DataType::String => DataType::Option(Box::new(DataType::String)),
+            DataType::Char => DataType::Option(Box::new(DataType::Char)),
             DataType::Collection(inner_type, ownership) => {
                 DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
             }
@@ -274,6 +276,7 @@ impl DataType {
             DataType::CoerceToString => "CoerceToString".to_string(),
             DataType::Bool => "Bool".to_string(),
             DataType::String => "String".to_string(),
+            DataType::Char => "Char".to_string(),
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),
             DataType::Decimal => "Decimal".to_string(),
@@ -404,6 +407,9 @@ impl Display for DataType {
             DataType::Bool => write!(f, "Bool"),
             DataType::String => {
                 write!(f, "String")
+            }
+            DataType::Char => {
+                write!(f, "Char")
             }
             DataType::Float => {
                 write!(f, "Float")

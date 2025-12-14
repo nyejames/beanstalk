@@ -429,6 +429,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Int => "Int".to_string(),
         DataType::Float => "Float".to_string(),
         DataType::Bool => "Bool".to_string(),
+        DataType::Char => "Char".to_string(),
         DataType::Template => "Template".to_string(),
         DataType::Function(..) => "Function".to_string(),
         DataType::Parameters(..) => "Args".to_string(),

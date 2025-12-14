@@ -226,8 +226,8 @@ pub fn compile_modules(
     #[cfg(feature = "show_hir")]
     {
         println!("=== HIR OUTPUT ===");
-        for (i, node) in hir_nodes.iter().enumerate() {
-            println!("HIR Node #{}: {:?}", i, node);
+        for node in &hir_nodes {
+            println!("{}", node);
         }
         println!("=== END HIR OUTPUT ===");
     }

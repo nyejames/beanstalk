@@ -340,6 +340,21 @@ impl<'a> HirBuilder<'a> {
                 id: self.next_id(),
             }]),
 
+            // === Field Access ===
+            NodeKind::FieldAccess { base, field, .. } => {
+                // Field access as a statement (not assignment target)
+                let base_place = self.lower_ast_node_to_place(*base)?;
+                let field_place = base_place.field(field);
+                
+                // Create an expression statement that loads from the field
+                Ok(vec![HirNode {
+                    kind: HirKind::ExprStmt(field_place),
+                    location: node.location,
+                    scope: node.scope,
+                    id: self.next_id(),
+                }])
+            }
+
             // === Expression as Statement ===
             NodeKind::Rvalue(expr) => {
                 let (expr_nodes, expr_place) = self.lower_expr_to_place(expr)?;
@@ -353,13 +368,164 @@ impl<'a> HirBuilder<'a> {
                 Ok(nodes)
             }
 
-            // === Other nodes ===
-            _ => {
+            // === While Loops ===
+            NodeKind::WhileLoop(condition, body) => {
+                let (cond_nodes, cond_place) = self.lower_expr_to_place(condition)?;
+                let body = self.lower_block(body)?;
+
+                let mut nodes = cond_nodes;
+                nodes.push(HirNode {
+                    kind: HirKind::Loop {
+                        binding: None, // While loops don't have iterator bindings
+                        iterator: cond_place, // Use condition as iterator (will be checked each iteration)
+                        body,
+                        index_binding: None,
+                    },
+                    location: node.location,
+                    scope: node.scope,
+                    id: self.next_id(),
+                });
+                Ok(nodes)
+            }
+
+            // === Method Calls ===
+            NodeKind::MethodCall { base, method, args, signature } => {
+                let mut nodes = Vec::new();
+                let mut arg_places = Vec::new();
+
+                // Lower the base object to a place
+                let (base_nodes, base_place) = self.lower_expr_to_place(base.get_expr()?)?;
+                nodes.extend(base_nodes);
+                arg_places.push(base_place); // Base object is first argument
+
+                // Lower all method arguments to places
+                for arg in args {
+                    let (arg_nodes, arg_place) = self.lower_expr_to_place(arg.get_expr()?)?;
+                    nodes.extend(arg_nodes);
+                    arg_places.push(arg_place);
+                }
+
+                // Create return places
+                let return_places: Vec<Place> = signature.returns
+                    .iter()
+                    .enumerate()
+                    .map(|(i, _)| {
+                        let temp_name = format!("_ret_{}", i);
+                        Place::local(self.string_table.intern(&temp_name))
+                    })
+                    .collect();
+
+                nodes.push(HirNode {
+                    kind: HirKind::Call {
+                        target: method,
+                        args: arg_places,
+                        returns: return_places,
+                    },
+                    location: node.location,
+                    scope: node.scope,
+                    id: self.next_id(),
+                });
+                Ok(nodes)
+            }
+
+            // === Print (deprecated but still supported) ===
+            NodeKind::Print(expr) => {
+                // Convert print to io() host function call
+                let (expr_nodes, expr_place) = self.lower_expr_to_place(expr)?;
+                let mut nodes = expr_nodes;
+
+                let io_name = self.string_table.intern("io");
+                let module_name = self.string_table.intern("beanstalk_io");
+                let import_name = self.string_table.intern("print");
+
+                nodes.push(HirNode {
+                    kind: HirKind::HostCall {
+                        target: io_name,
+                        module: module_name,
+                        import: import_name,
+                        args: vec![expr_place],
+                        returns: vec![], // Print doesn't return anything
+                    },
+                    location: node.location,
+                    scope: node.scope,
+                    id: self.next_id(),
+                });
+                Ok(nodes)
+            }
+
+            // === Imports and Includes ===
+            NodeKind::Import(_path) => {
+                // Imports are handled at the module level, not in HIR
+                // They don't generate HIR nodes themselves
+                Ok(vec![])
+            }
+
+            NodeKind::Include(_name, _path) => {
+                // Includes are handled at the module level, not in HIR
+                // They don't generate HIR nodes themselves
+                Ok(vec![])
+            }
+
+            // === Configuration ===
+            NodeKind::Config(_settings) => {
+                // Config nodes are handled at the module level
+                // They don't generate HIR nodes themselves
+                Ok(vec![])
+            }
+
+            // === Warnings ===
+            NodeKind::Warning(_message) => {
+                // Warning nodes don't generate HIR - they're handled by the compiler messages system
+                Ok(vec![])
+            }
+
+            // === Template and Layout Nodes ===
+            NodeKind::ParentTemplate(_expr) => {
+                // Templates are deferred to later compilation stages
+                // For now, treat as no-op
+                Ok(vec![])
+            }
+
+            NodeKind::Slot => {
+                // Template slots are deferred to later compilation stages
+                Ok(vec![])
+            }
+
+            // === Code Blocks (JS/CSS) ===
+            NodeKind::JS(_code) => {
+                // JavaScript code blocks are handled by the build system
+                // They don't generate HIR nodes
+                Ok(vec![])
+            }
+
+            NodeKind::Css(_code) => {
+                // CSS code blocks are handled by the build system
+                // They don't generate HIR nodes
+                Ok(vec![])
+            }
+
+            // === Formatting Nodes ===
+            NodeKind::Empty => {
+                // Empty nodes don't generate HIR
+                Ok(vec![])
+            }
+
+            NodeKind::Newline => {
+                // Newline nodes are formatting only
+                Ok(vec![])
+            }
+
+            NodeKind::Spaces(_count) => {
+                // Space nodes are formatting only
+                Ok(vec![])
+            }
+
+            // === Operators (should only appear in RPN context) ===
+            NodeKind::Operator(_op) => {
                 return_compiler_error!(
-                    "Unsupported AST node in HIR lowering: {:?}",
-                    node.kind; {
+                    "Operator node found outside of RPN expression context"; {
                         CompilationStage => "HIR Generation",
-                        PrimarySuggestion => "This is a compiler bug"
+                        PrimarySuggestion => "Operators should only appear within Runtime expressions"
                     }
                 )
             }
@@ -442,6 +608,23 @@ impl<'a> HirBuilder<'a> {
                 let temp_place = Place::local(temp);
                 let literal_expr = HirExpr {
                     kind: HirExprKind::StringLiteral(s),
+                    data_type: expr.data_type,
+                    location: expr.location.clone(),
+                };
+                let assign_node = self.create_assign_node_with_expr(
+                    temp_place.clone(),
+                    literal_expr,
+                    expr.location,
+                    self.current_scope.clone(),
+                );
+                Ok((vec![assign_node], temp_place))
+            }
+
+            ExpressionKind::Char(c) => {
+                let temp = self.next_temp();
+                let temp_place = Place::local(temp);
+                let literal_expr = HirExpr {
+                    kind: HirExprKind::Char(c),
                     data_type: expr.data_type,
                     location: expr.location.clone(),
                 };
@@ -594,11 +777,99 @@ impl<'a> HirBuilder<'a> {
                 Ok((nodes, temp_place))
             }
 
-            _ => {
+            // === None Expression ===
+            ExpressionKind::None => {
+                // None expressions don't produce a value, so we create a placeholder
+                let temp = self.next_temp();
+                let temp_place = Place::local(temp);
+                let none_expr = HirExpr {
+                    kind: HirExprKind::Load(temp_place.clone()), // Load from self as placeholder
+                    data_type: DataType::None,
+                    location: expr.location.clone(),
+                };
+                let assign_node = self.create_assign_node_with_expr(
+                    temp_place.clone(),
+                    none_expr,
+                    expr.location,
+                    self.current_scope.clone(),
+                );
+                Ok((vec![assign_node], temp_place))
+            }
+
+            // === Function Expressions ===
+            ExpressionKind::Function(signature, body) => {
+                // Function expressions become function definitions
+                // Generate a unique name for the anonymous function
+                let func_name = format!("_anon_func_{}", self.temp_counter);
+                self.temp_counter += 1;
+                let func_name_interned = self.string_table.intern(&func_name);
+
+                // Lower the function body
+                let body_hir = self.lower_block(body)?;
+
+                // Create a function definition node
+                let func_def_node = HirNode {
+                    kind: HirKind::FunctionDef {
+                        name: func_name_interned,
+                        signature,
+                        body: body_hir,
+                    },
+                    location: expr.location.clone(),
+                    scope: self.current_scope.clone(),
+                    id: self.next_id(),
+                };
+
+                // Create a place that references this function
+                let temp = self.next_temp();
+                let temp_place = Place::local(temp);
+                let func_ref_expr = HirExpr {
+                    kind: HirExprKind::Load(Place::local(func_name_interned)),
+                    data_type: expr.data_type,
+                    location: expr.location.clone(),
+                };
+                let assign_node = self.create_assign_node_with_expr(
+                    temp_place.clone(),
+                    func_ref_expr,
+                    expr.location,
+                    self.current_scope.clone(),
+                );
+
+                Ok((vec![func_def_node, assign_node], temp_place))
+            }
+
+            // === Template Expressions ===
+            ExpressionKind::Template(template) => {
+                // Templates become runtime template calls or string literals
+                // For now, we'll treat them as string literals since template processing
+                // is typically done at compile time
+                let temp = self.next_temp();
+                let temp_place = Place::local(temp);
+
+                // Create a placeholder string literal for the template
+                let template_string = self.string_table.intern("template_placeholder");
+                let template_expr = HirExpr {
+                    kind: HirExprKind::StringLiteral(template_string),
+                    data_type: DataType::String,
+                    location: expr.location.clone(),
+                };
+                let assign_node = self.create_assign_node_with_expr(
+                    temp_place.clone(),
+                    template_expr,
+                    expr.location,
+                    self.current_scope.clone(),
+                );
+                Ok((vec![assign_node], temp_place))
+            }
+
+            // === Struct Definition Expressions ===
+            ExpressionKind::StructDefinition(fields) => {
+                // Struct definitions as expressions are not typical in HIR
+                // We'll treat this as an error for now since struct definitions
+                // should be handled at the statement level
                 return_compiler_error!(
-                    "Unsupported expression kind in HIR lowering: {:?}",
-                    expr.kind; {
-                        CompilationStage => "HIR Generation"
+                    "Struct definitions as expressions are not supported in HIR"; {
+                        CompilationStage => "HIR Generation",
+                        PrimarySuggestion => "Move struct definition to statement level"
                     }
                 )
             }
@@ -821,12 +1092,12 @@ impl<'a> HirBuilder<'a> {
         // Lower the condition expression to create a pattern
         let pattern = self.lower_expr_to_pattern(arm.condition)?;
 
-        // Lower the body
+        // Lower the body recursively
         let body = self.lower_block(arm.body)?;
 
         Ok(HirMatchArm {
             pattern,
-            guard: None, // TODO: Add guard support when needed
+            guard: None, // Guards not yet supported in AST - will be added when parser supports them
             body,
         })
     }
@@ -839,7 +1110,7 @@ impl<'a> HirBuilder<'a> {
         use crate::compiler::hir::nodes::HirPattern;
 
         match expr.kind {
-            // Literal patterns
+            // Literal patterns - these match exact values
             ExpressionKind::Int(n) => {
                 let literal_expr = HirExpr {
                     kind: HirExprKind::Int(n),
@@ -876,7 +1147,16 @@ impl<'a> HirBuilder<'a> {
                 Ok(HirPattern::Literal(literal_expr))
             }
 
-            // Range patterns
+            ExpressionKind::Char(c) => {
+                let literal_expr = HirExpr {
+                    kind: HirExprKind::Char(c),
+                    data_type: expr.data_type,
+                    location: expr.location,
+                };
+                Ok(HirPattern::Literal(literal_expr))
+            }
+
+            // Range patterns - match values within a range
             ExpressionKind::Range(start_expr, end_expr) => {
                 let start_hir = self.lower_expr_to_hir_expr(*start_expr)?;
                 let end_hir = self.lower_expr_to_hir_expr(*end_expr)?;
@@ -886,11 +1166,26 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
-            _ => {
-                // For now, treat everything else as wildcard
-                // TODO: Add more pattern types as needed
-                Ok(HirPattern::Wildcard)
+            // Variable references in patterns - these would be binding patterns
+            // For now, treat as wildcard since binding patterns aren't fully implemented
+            ExpressionKind::Reference(_) => Ok(HirPattern::Wildcard),
+
+            // Complex expressions that can't be patterns
+            ExpressionKind::Runtime(_)
+            | ExpressionKind::Collection(_)
+            | ExpressionKind::StructInstance(_)
+            | ExpressionKind::FunctionCall(_, _) => {
+                return_compiler_error!(
+                    "Complex expressions cannot be used as match patterns: {:?}",
+                    expr.kind; {
+                        CompilationStage => "HIR Generation",
+                        PrimarySuggestion => "Use literal values, ranges, or variables in match patterns"
+                    }
+                )
             }
+
+            // Unsupported pattern types - treat as wildcard for now
+            _ => Ok(HirPattern::Wildcard),
         }
     }
 
@@ -921,11 +1216,30 @@ impl<'a> HirBuilder<'a> {
                 location: expr.location,
             }),
 
+            ExpressionKind::Char(c) => Ok(HirExpr {
+                kind: HirExprKind::Char(c),
+                data_type: expr.data_type,
+                location: expr.location,
+            }),
+
+            // Variable references in pattern contexts
+            ExpressionKind::Reference(name) => {
+                // For range bounds, we need to look up the variable's current value
+                // This creates a Load operation to get the variable's place
+                let place = Place::local(name);
+                Ok(HirExpr {
+                    kind: HirExprKind::Load(place),
+                    data_type: expr.data_type,
+                    location: expr.location,
+                })
+            }
+
             _ => {
                 return_compiler_error!(
                     "Unsupported expression in pattern context: {:?}",
                     expr.kind; {
-                        CompilationStage => "HIR Generation"
+                        CompilationStage => "HIR Generation",
+                        PrimarySuggestion => "Only literal values and variables can be used in pattern expressions"
                     }
                 )
             }
@@ -935,9 +1249,7 @@ impl<'a> HirBuilder<'a> {
     /// Helper: convert AST node to Place (for assignment targets)
     fn lower_ast_node_to_place(&mut self, node: AstNode) -> Result<Place, CompilerError> {
         match node.kind {
-            NodeKind::Rvalue(expr) => {
-                Ok(self.lower_expr_to_place(expr)?.1)
-            },
+            NodeKind::Rvalue(expr) => Ok(self.lower_expr_to_place(expr)?.1),
 
             NodeKind::FieldAccess { base, field, .. } => {
                 let base_place = self.lower_ast_node_to_place(*base)?;

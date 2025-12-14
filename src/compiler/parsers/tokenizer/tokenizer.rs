@@ -234,6 +234,7 @@ pub fn get_token_kind(
             if let Some(&char_after_next) = stream.peek()
                 && char_after_next == '\''
             {
+                stream.next(); // Consume the closing quote
                 return_token!(TokenKind::CharLiteral(c), stream);
             }
         };

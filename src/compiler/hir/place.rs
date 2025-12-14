@@ -5,6 +5,7 @@
 //! structured access to memory that can be analyzed by the borrow checker.
 
 use crate::compiler::string_interning::InternedString;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// A Place represents a precise logical memory location
 /// 
@@ -148,6 +149,47 @@ impl IndexKind {
             
             // Dynamic indices conservatively overlap with everything
             (IndexKind::Dynamic, _) | (_, IndexKind::Dynamic) => true,
+        }
+    }
+}
+
+// === Display Implementations for HIR Debugging ===
+
+impl Display for Place {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "{}", self.root)?;
+        for projection in &self.projections {
+            write!(f, "{}", projection)?;
+        }
+        Ok(())
+    }
+}
+
+impl Display for PlaceRoot {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            PlaceRoot::Local(name) => write!(f, "{}", name),
+            PlaceRoot::Param(name) => write!(f, "param:{}", name),
+            PlaceRoot::Global(name) => write!(f, "global:{}", name),
+        }
+    }
+}
+
+impl Display for Projection {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            Projection::Field(field) => write!(f, ".{}", field),
+            Projection::Index(index) => write!(f, "[{}]", index),
+            Projection::Deref => write!(f, "*"),
+        }
+    }
+}
+
+impl Display for IndexKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        match self {
+            IndexKind::Constant(index) => write!(f, "{}", index),
+            IndexKind::Dynamic => write!(f, "?"),
         }
     }
 }

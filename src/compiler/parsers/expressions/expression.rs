@@ -27,6 +27,7 @@ impl Expression {
             ExpressionKind::Int(int) => int.to_string(),
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
+            ExpressionKind::Char(char) => char.to_string(),
             ExpressionKind::Reference(interned_name) => {
                 string_table.resolve(*interned_name).to_string()
             }
@@ -129,10 +130,16 @@ impl Expression {
             ownership,
         }
     }
+    pub fn char(value: char, location: TextLocation, ownership: Ownership) -> Self {
+        Self {
+            data_type: DataType::Char,
+            kind: ExpressionKind::Char(value),
+            location,
+            ownership,
+        }
+    }
 
-    pub fn reference(
-        arg: &Arg,
-    ) -> Self {
+    pub fn reference(arg: &Arg) -> Self {
         Self {
             data_type: arg.value.data_type.clone(),
             kind: ExpressionKind::Reference(arg.id),
@@ -304,6 +311,7 @@ pub enum ExpressionKind {
     Float(f64),
     StringSlice(InternedString),
     Bool(bool),
+    Char(char),
 
     // Reference to a variable by name
     Reference(InternedString),

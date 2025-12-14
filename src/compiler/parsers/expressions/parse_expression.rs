@@ -441,6 +441,22 @@ pub fn create_expression(
                 });
             }
 
+            TokenKind::CharLiteral(value) => {
+                let location = token_stream.current_location();
+
+                let char_expr = Expression::char(
+                    value,
+                    location.to_owned(),
+                    ownership.to_owned(),
+                );
+
+                expression.push(AstNode {
+                    kind: NodeKind::Rvalue(char_expr),
+                    location,
+                    scope: context.scope.clone(),
+                });
+            }
+
             // OPERATORS
             // Will push as a string, so shunting yard can handle it later just as a string
             TokenKind::Negative => {

@@ -1,3 +1,5 @@
+-- Test various AST node types in HIR generation
 x = 42
-y = x + 10
-io(y)
+y ~= x
+
+io("Done")
