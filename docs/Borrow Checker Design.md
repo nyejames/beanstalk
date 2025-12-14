@@ -165,11 +165,7 @@ let s = &x;   -- error
    * Only references to parameters can be returned.
    * No references to locals, globals, or temporary values.
 
-8. **Optional additional restrictions for speed and clarity:**
-
-   * Dynamic array indices cannot be borrowed mutably (or must be proven constant).
-   * No reborrowing through references (`let s = &*r;` forbidden).
-   * Struct fields cannot store references (simplifies lifetime reasoning).
+8. **Struct fields cannot store references** (simplifies lifetime reasoning)
 
 ---
 
@@ -213,11 +209,7 @@ Even though temporaries do not exist at the language level:
 
 ## 8. Summary
 
-By leveraging these design choices:
-
 * **Simpler Place model**: no temporaries, no unsafe, no interior mutability.
 * **Path-sensitive borrow checking**: Polonius-style reasoning achievable without Datalog.
 * **Memory safety guaranteed**: all aliasing and borrowing rules enforced at compile time.
 * **IR simplicity**: hidden locals handle intermediate values; the language itself remains clean and predictable.
-
-> The combination of language restrictions and CFG-based borrow tracking allows Beanstalk to have a **fast, precise, and simpler borrow checker** than Rust, while still enabling reference-return semantics and non-trivial memory safety guarantees.
