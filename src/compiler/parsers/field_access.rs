@@ -114,6 +114,8 @@ pub fn parse_field_access(
                 kind: NodeKind::FieldAccess {
                     base: Box::new(current_node),
                     field: field_id,
+                    data_type: member.value.data_type.to_owned(),
+                    ownership: member.value.ownership.to_owned(),
                 },
                 scope: context.scope.to_owned(),
                 location: field_location,

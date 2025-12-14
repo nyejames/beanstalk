@@ -103,9 +103,9 @@ pub fn evaluate_expression(
     let location = extract_location(&nodes)?;
 
     'outer: for node in nodes {
-        match node.kind {
+        match &node.kind {
             // Values
-            NodeKind::Rvalue(ref expr, ..) => {
+            NodeKind::Rvalue(expr, ..) => {
                 if let DataType::Inferred = current_type {
                     *current_type = expr.data_type.to_owned();
                 }
@@ -118,14 +118,25 @@ pub fn evaluate_expression(
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FieldAccess { base, field } => {}
+            NodeKind::FieldAccess { base: _base, field: _field, data_type, .. } => {
+                if let DataType::Inferred = current_type {
+                    *current_type = data_type.to_owned();
+                }
 
-            NodeKind::FunctionCall(_, _, ref returns, ..) => {
+                if let DataType::CoerceToString | DataType::String = current_type {
+                    simplified_expression.push(node.to_owned());
+                    continue 'outer;
+                }
+
+                output_queue.push(node.to_owned());
+            }
+
+            NodeKind::FunctionCall(_, _, returns, ..) => {
                 // Check the return type
                 simplified_expression.push(node.to_owned());
             }
 
-            NodeKind::Operator(ref op) => {
+            NodeKind::Operator(op) => {
                 match current_type {
                     DataType::String | DataType::Template => {
                         let found_type_static: &'static str = match current_type {

@@ -59,6 +59,8 @@ pub enum NodeKind {
     FieldAccess {
         base: Box<AstNode>, // The expression being accessed
         field: StringId,    // The field name
+        data_type: DataType, // Resolved type of this field access
+        ownership: Ownership, // Ownership of the resolved field
     },
 
     // For method calls: obj.method(args)
@@ -164,6 +166,12 @@ impl AstNode {
                     location.to_owned(),
                 ))
             }
+            NodeKind::FieldAccess { data_type, ownership, .. } => Ok(Expression::runtime(
+                vec![self.to_owned()],
+                data_type.to_owned(),
+                self.location.to_owned(),
+                ownership.to_owned(),
+            )),
             // Compiler tried to get the expression of a node that cannot contain expressions
             _ => return_compiler_error!(
                 "Compiler tried to get the expression of a node that cannot contain expressions in src/compiler/parsers/ast_nodes.rs"

@@ -939,7 +939,7 @@ impl<'a> HirBuilder<'a> {
                 Ok(self.lower_expr_to_place(expr)?.1)
             },
 
-            NodeKind::FieldAccess { base, field } => {
+            NodeKind::FieldAccess { base, field, .. } => {
                 let base_place = self.lower_ast_node_to_place(*base)?;
                 Ok(base_place.field(field))
             }
