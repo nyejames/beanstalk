@@ -122,36 +122,28 @@ impl<'a> HirBuilder<'a> {
                 Ok(nodes)
             }
 
-            // Mutating an exising variable or field on that variable.
+            // Mutating an existing variable or field on that variable.
             // This reference is already enforced to be mutable by the parser
             NodeKind::Assignment {
                 target,
                 value: value_ast,
             } => {
-                let name = match target.kind {
-                    NodeKind::Reference(target) => target,
-                    NodeKind::FieldAccess { base: _, field } => field,
-                    _ => {
-                        return_compiler_error!(
-                            "Invalid assignment target: {:?}",
-                            target; {
-                                CompilationStage => "HIR Generation",
-                                PrimarySuggestion => "This is a compiler bug"
-                            }
-                        )
-                    }
-                };
-
-                let target_place = Place::local(name);
+                // Convert the target AST node to a proper Place
+                let target_place = self.lower_ast_node_to_place(*target)?;
 
                 let (value_nodes, value_place) = self.lower_expr_to_place(value_ast)?;
                 let mut nodes = value_nodes;
 
-                let target_type = self
-                    .local_bindings
-                    .get(&name)
-                    .cloned()
-                    .unwrap_or(DataType::Inferred);
+                // For type inference, we'll use the root variable's type
+                let target_type = match &target_place.root {
+                    crate::compiler::hir::place::PlaceRoot::Local(name) => {
+                        self.local_bindings
+                            .get(name)
+                            .cloned()
+                            .unwrap_or(DataType::Inferred)
+                    }
+                    _ => DataType::Inferred,
+                };
 
                 // Create a candidate move
                 let value_expr = HirExpr {
@@ -935,6 +927,33 @@ impl<'a> HirBuilder<'a> {
                     "Unsupported expression in pattern context: {:?}",
                     expr.kind; {
                         CompilationStage => "HIR Generation"
+                    }
+                )
+            }
+        }
+    }
+
+    /// Helper: convert AST node to Place (for assignment targets)
+    fn lower_ast_node_to_place(&mut self, node: AstNode) -> Result<Place, CompilerError> {
+        match node.kind {
+            NodeKind::Reference(name) => {
+                Ok(Place::local(name))
+            }
+            
+            NodeKind::FieldAccess { base, field } => {
+                let base_place = self.lower_ast_node_to_place(*base)?;
+                Ok(base_place.field(field))
+            }
+            
+            // TODO: Add support for index access when it's implemented in the AST
+            // For now, indexing might be handled through method calls like .get() and .set()
+            
+            _ => {
+                return_compiler_error!(
+                    "Invalid assignment target: {:?}",
+                    node.kind; {
+                        CompilationStage => "HIR Generation",
+                        PrimarySuggestion => "Only variables and fields can be assigned to"
                     }
                 )
             }

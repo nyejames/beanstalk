@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A programming language for the future
+  A modern, Wasm powered programming language
 </em></p>
 
 # 🌱
@@ -53,15 +53,13 @@ post = PostGenerator.create_post(date, [:
 <br>
 
 ## Goals 
+- Wasm focused backend designed around producing high-quality Wasm
 - The syntax minimalism and fast compile speed of Go
 - The memory safety of Rust, with no 'unsafe' mode
-- Predictable performance
 - **The King of Strings**: String templates that can double up as a tiny HTML/markup engine or anything else you want
 - A complete build system for web projects and beyond
 - Simple, static and strong type system
 - Clean and deterministic error handling
-- Wasm focused backend designed around producing high-quality Wasm efficiently and integrating with that ecosystem
-
 
 [//]: # (  <h1>)
 
