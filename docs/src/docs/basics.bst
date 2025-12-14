@@ -139,10 +139,10 @@ All copies are explicit and must use the 'copy' keyword in place of a type.
 
     -- a_reference is still a reference to the original collection
     a_reference.push(5)
-    print(a_collection) -- {1, 2, 3, 4, 5, 5}
+    io(a_collection) -- {1, 2, 3, 4, 5, 5}
 
     a_collection.pull(a_collection.length() - 1)
-    print(a_collection) -- {23.0}
+    io(a_collection) -- {23.0}
 ```
 
 Expressions can span over multiple lines.

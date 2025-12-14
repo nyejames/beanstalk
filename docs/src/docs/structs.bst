@@ -27,8 +27,8 @@ They can implement methods by defining a function that takes an instance of the 
     person ~= Person("Alice", 30)
 
     -- Access fields using dot notation
-    print(person.name) -- "Alice"
-    print(person.age)  -- 30
+    io(person.name) -- "Alice"
+    io(person.age)  -- 30
 
     -- Defining a struct, then defining a method for it
     Vector2:
@@ -64,7 +64,7 @@ by defining a parameter with the special name 'this'.
     ;
 
     rect = Rectangle(10, 5)
-    print(rect.area()) -- 50
+    io(rect.area()) -- 50
 ```
 
 'this' is a reserved keyword so you can't use it as a variable or field name outside of function parameters and inside the method that uses it.

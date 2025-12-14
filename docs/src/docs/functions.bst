@@ -75,7 +75,7 @@ it must use a type signature or the name of one of the arguments if it's returni
 
     panics ||:
         canError("") e!:
-            print("Error: ", e)
+            io("Error: ", e)
             #panic()
         ;
     ;

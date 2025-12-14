@@ -15,12 +15,12 @@ They can also be used for pattern matching, all with a similar syntax.
     v = 1
 
     if v is not 1:
-        print("nope")
+        io("nope")
     else
-        print("yep")
+        io("yep")
     ;
 
-    print(msg) -- prints "defintely nope"
+    io(msg) -- prints "defintely nope"
 ```
 
 # Loops
@@ -30,25 +30,25 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 
 ```beanstalk
     loop thing in things:
-        print(thing)
+        io(thing)
     ;
 
     loop -20 to big_number:
-        print("hello")
+        io("hello")
     ;
 
     -- reverse loop
     loop n in big_number to smaller_number:
-        print(n)
+        io(n)
     ;
 
     loop item in collection:
-        print(item.to_string())
+        io(item.to_string())
     ;
 
     -- Getting the index
     loop item, index in collection:
-        print(index.to_string())
+        io(index.to_string())
     ;
 
     -- Using a loop in a scene
@@ -66,23 +66,34 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 ```
 
 # Pattern matching
+
 ```beanstalk
     -- Pattern matching
     -- Must be exhaustive
     thing = 69
     if thing is:
-        0: print("zero")
-        < 0: print("negative")
-        > 1: print("big number")
-        not 5: print("not 5")
-        else: print("only one")
+        0: io("zero");
+        < 0: io("negative");
+        > 1: io("big number");
+        not 5: io("not 5");
+        else io("only one")
+    ;
+
+    -- Matching choices
+    if Catagory is:
+        Category::A: io("Category A");
+        Category::B: io("Category B");
+        Catagory::C |message|: 
+            io([:Category C with message: [message]])
+        ;
+        else io("Other Category")
     ;
 
     loop c in collection_of_choices:
         if c is Thing::cool: 
-            print(..)
+            io(..)
         else
-            print(..)
+            io(..)
         ;
     ;
 ```

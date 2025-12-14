@@ -31,7 +31,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     -- Only one value can use the ! symbol to represent the error value
     parent_func || -> String, Int, BadStuff!:
         text = func_call_that_can_return_an_error() !err:
-            print("Error: ", err)
+            io("Error: ", err)
             return! BadStuff(err.msg)
         ;
 
@@ -39,7 +39,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     ;
     
     text, number = parent_func() !err:
-        print("Error from parent_func: ", err.msg)
+        io("Error from parent_func: ", err.msg)
         return
     ;
 
@@ -64,7 +64,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     value ~= my_list.get(5) !(
         my_list.length() - 1
     ) !msg:
-        print("Index out of bounds error: ", msg)
+        io("Index out of bounds error: ", msg)
     ;
 ```
 
@@ -109,7 +109,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     text, number, error? = parent_func_no_sugar()
 
     if error is not None:
-        print("Error from parent_func_no_sugar: ", error.msg)
+        io("Error from parent_func_no_sugar: ", error.msg)
         return
 ```
 

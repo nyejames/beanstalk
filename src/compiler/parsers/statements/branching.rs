@@ -14,17 +14,17 @@ use crate::{ast_log, return_rule_error};
 // Example:
 
 // if x < 5:
-//     print("x is less than 5")
+//     io("x is less than 5")
 // else
-//     print("x is greater than 5")
+//     io("x is greater than 5")
 // ;
 //
 // Match statements example:
 //
 // if choice is:
-//     0: print("Choice is 0")
-//     1: print("Choice is 1")
-//     else: print("Choice is 2")
+//     0: io("Choice is 0")
+//     1: io("Choice is 1")
+//     else: io("Choice is 2")
 // ;
 
 #[derive(Debug, Clone)]
@@ -149,9 +149,9 @@ fn create_match_node(
 
     // SYNTAX EXAMPLE:
     // if subject is:
-    //     0: print("Choice is 0")
-    //     1: print("Choice is 1")
-    //     else: print("Choice is 2")
+    //     0: io("Choice is 0")
+    //     1: io("Choice is 1")
+    //     else: io("Choice is 2")
 
     // Parse each arm
     let mut arms: Vec<MatchArm> = Vec::new();

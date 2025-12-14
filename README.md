@@ -13,7 +13,6 @@
 
 ## HTML project Snippets
 
-(For illustrative purposes, the build system and compiler is still missing features to compile all of this correctly)
 ```haskell
 #import "html/Basic"
 

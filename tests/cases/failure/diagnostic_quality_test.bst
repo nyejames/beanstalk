@@ -5,10 +5,10 @@
 
 -- Type error  
 number = 42
-print(number + "string")
+io(number + "string")
 
 -- Undefined variable
-print(undefined_variable)
+io(undefined_variable)
 
 -- Host function error
-print(123)  -- Wrong argument type
+io(123)  -- Wrong argument type

@@ -3,7 +3,7 @@
 #import @utils/calculator
 #import @data/storage
 
-print("Starting complex module test")
+io("Starting complex module test")
 
 -- Test host function with imported module interaction
 logger.log("Initializing calculator")
@@ -13,6 +13,6 @@ logger.log("Calculation complete")
 -- Test storage operations
 storage.save("result", result)
 saved_value = storage.load("result")
-print("Saved and loaded value: " + saved_value)
+io("Saved and loaded value: " + saved_value)
 
-print("Complex module test complete")
+io("Complex module test complete")
