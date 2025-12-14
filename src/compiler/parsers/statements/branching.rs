@@ -22,9 +22,9 @@ use crate::{ast_log, return_rule_error};
 // Match statements example:
 //
 // if choice is:
-//     0: io("Choice is 0")
-//     1: io("Choice is 1")
-//     else: io("Choice is 2")
+//     0: io("Choice is 0");
+//     1: io("Choice is 1");
+//     else: io("Choice is 2");
 // ;
 
 #[derive(Debug, Clone)]
@@ -149,9 +149,9 @@ fn create_match_node(
 
     // SYNTAX EXAMPLE:
     // if subject is:
-    //     0: io("Choice is 0")
-    //     1: io("Choice is 1")
-    //     else: io("Choice is 2")
+    //     0: io("Choice is 0");
+    //     1: io("Choice is 1");
+    //     else: io("Choice is 2");
 
     // Parse each arm
     let mut arms: Vec<MatchArm> = Vec::new();

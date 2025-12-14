@@ -2,7 +2,7 @@
 
 The goal of Beanstalk’s memory and borrow system is to **ensure safety and avoid common bugs** without requiring a garbage collector or significantly impacting performance. The design leverages **reference semantics, precise borrow tracking, and compiler-inferred lifetimes** to achieve this.
 
-## 1. High-Level Goals
+## High-Level Goals
 
 * No garbage collector. Memory is managed statically.
 * Borrow checking ensures safety at compile time.
@@ -14,7 +14,7 @@ The goal of Beanstalk’s memory and borrow system is to **ensure safety and avo
 
 ---
 
-## 2. Lifetimes and References
+## Lifetimes and References
 
 * Functions can return references **only to parameters**.
 * Return references using the parameter name in the function signature.
@@ -31,7 +31,7 @@ The goal of Beanstalk’s memory and borrow system is to **ensure safety and avo
 
 ---
 
-## 3. Place Model
+## Place Model
 
 A **Place** represents a logical storage location in memory.
 
@@ -42,7 +42,7 @@ struct Place {
 }
 ```
 
-### 3.1 PlaceRoot
+### PlaceRoot
 
 ```rust
 enum PlaceRoot {
@@ -60,7 +60,7 @@ enum PlaceRoot {
 
 ---
 
-### 3.2 Projection
+### Projection
 
 ```rust
 enum Projection {
@@ -83,7 +83,7 @@ enum IndexKind {
 
 ---
 
-### 3.3 Overlap Rules
+### Overlap Rules
 
 Overlap is a **structural check**, much simpler than Rust:
 
@@ -111,7 +111,7 @@ x.a      does NOT overlap x.b
 
 ---
 
-## 4. Borrows
+## Borrows
 
 ```rust
 struct Borrow {
@@ -127,7 +127,7 @@ For each borrow, the compiler tracks:
 * Last use
 * Control-flow paths where the borrow is active
 
-### 4.1 Borrow Checking
+###  Borrow Checking
 
 * **Mutable borrows** (`~`) are exclusive.
 * **Shared borrows** are allowed concurrently if no mutable borrow exists.
@@ -136,7 +136,7 @@ For each borrow, the compiler tracks:
 
 ---
 
-## 5. Additional Language Restrictions
+## Additional Language Restrictions
 
 1. **No interior mutability**
 
@@ -169,7 +169,7 @@ let s = &x;   -- error
 
 ---
 
-## 6. Compiler IR and Temporaries
+## Compiler IR and Temporaries
 
 Even though temporaries do not exist at the language level:
 
@@ -184,7 +184,7 @@ Even though temporaries do not exist at the language level:
 
 ---
 
-## 7. Borrow Checker Implementation Strategy
+## Borrow Checker Implementation Strategy
 
 1. **Build CFG** from the lowered IR.
 2. **Track borrows per basic block**:
@@ -207,9 +207,12 @@ Even though temporaries do not exist at the language level:
 
 ---
 
-## 8. Summary
+## Summary
 
 * **Simpler Place model**: no temporaries, no unsafe, no interior mutability.
 * **Path-sensitive borrow checking**: Polonius-style reasoning achievable without Datalog.
 * **Memory safety guaranteed**: all aliasing and borrowing rules enforced at compile time.
 * **IR simplicity**: hidden locals handle intermediate values; the language itself remains clean and predictable.
+
+## Notes
+- Automatic implicit boxing / unboxing may also be implemented to allow recursive structures

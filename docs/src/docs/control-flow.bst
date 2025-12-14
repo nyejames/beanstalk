@@ -76,7 +76,7 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         < 0: io("negative");
         > 1: io("big number");
         not 5: io("not 5");
-        else io("only one")
+        else: io("only one");
     ;
 
     -- Matching choices
@@ -86,7 +86,7 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
         Catagory::C |message|: 
             io([:Category C with message: [message]])
         ;
-        else io("Other Category")
+        else: io("Other Category");
     ;
 
     loop c in collection_of_choices:

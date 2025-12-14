@@ -228,9 +228,9 @@ else
 
 -- Pattern matching (always exhaustive)
 if value is:
-    0: return "zero"
-    < 0: return "negative"
-    else: return "other"
+    0: return "zero";
+    < 0: return "negative";
+    else return "other"
 ;
 ```
 
