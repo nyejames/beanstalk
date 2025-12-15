@@ -7,9 +7,6 @@ show_eval = []
 show_codegen = []
 show_hir = []
 show_borrow_checker = []
-wasix_native_functions = []
-wasix_enhanced_io = []
-verbose_codegen_logging = []
 
 [package]
 name = "beanstalk"
@@ -24,7 +21,6 @@ path = "src/main.rs"
 fs_extra = "1.3.0"
 colour = "2.1.0"
 wasmparser = "0.242.0"
-rayon = "1.10.0"
 wasmer = "6.1.0-rc.5"
-wasm-encoder = "0.242.0"
+wasm-encoder = "0.243.0"
 wasmer-types = "6.1.0-rc.5"

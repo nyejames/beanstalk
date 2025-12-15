@@ -547,7 +547,10 @@ tests/cases/
 cargo run -- run tests
 
 # Run with debugging
-cargo run --features "show_headers,show_ast" -- run tests/cases/success/multi_file_module
+cargo run --features "show_ast,show_hir" -- run tests/cases/success/multi_file_module
+
+# Show borrow checker and codegen output on single test file, ignore warnings
+RUSTFLAGS="-A warnings" cargo run --features "detailed_timers,show_hir,show_borrow_checker" -- run tests/cases/test.bst
 ```
 
 When testing something new or experimenting with the language, 

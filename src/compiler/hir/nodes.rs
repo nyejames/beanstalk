@@ -17,7 +17,7 @@ use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler::string_interning::InternedString;
+use crate::compiler::string_interning::{InternedString, StringTable};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// A complete HIR module for a single source file or compilation unit.
@@ -313,6 +313,191 @@ impl Display for HirModule {
     }
 }
 
+impl HirNode {
+    /// Display HIR node with resolved string IDs for debugging
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        let mut result = format!("HIR Node #{} ({}:{}:{}): ", 
+                                self.id, 
+                                self.location.start_pos.line_number, 
+                                self.location.start_pos.char_column,
+                                self.scope.to_string(string_table));
+        
+        match &self.kind {
+            HirKind::Assign { place, value } => {
+                result.push_str("Assign\n");
+                result.push_str(&format!("  Place: {}\n", place.display_with_table(string_table)));
+                result.push_str(&format!("  Value: {}", value.display_with_table(string_table)));
+            }
+            
+            HirKind::Borrow { place, kind, target } => {
+                result.push_str(&format!("Borrow ({:?})\n", kind));
+                result.push_str(&format!("  Place: {}\n", place.display_with_table(string_table)));
+                result.push_str(&format!("  Target: {}", target.display_with_table(string_table)));
+            }
+            
+            HirKind::If { condition, then_block, else_block } => {
+                result.push_str("If\n");
+                result.push_str(&format!("  Condition: {}\n", condition.display_with_table(string_table)));
+                result.push_str("  Then:\n");
+                for node in then_block {
+                    result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                }
+                if let Some(else_nodes) = else_block {
+                    result.push_str("  Else:\n");
+                    for node in else_nodes {
+                        result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                    }
+                }
+            }
+            
+            HirKind::Match { scrutinee, arms, default } => {
+                result.push_str("Match\n");
+                result.push_str(&format!("  Scrutinee: {}\n", scrutinee.display_with_table(string_table)));
+                result.push_str("  Arms:\n");
+                for (i, arm) in arms.iter().enumerate() {
+                    result.push_str(&format!("    Arm {}:\n", i));
+                    result.push_str(&format!("      Pattern: {:?}\n", arm.pattern));
+                    if let Some(guard) = &arm.guard {
+                        result.push_str(&format!("      Guard: {}\n", guard.display_with_table(string_table)));
+                    }
+                    result.push_str("      Body:\n");
+                    for node in &arm.body {
+                        result.push_str(&indent_lines(&node.display_with_table(string_table), 8));
+                    }
+                }
+                if let Some(default_nodes) = default {
+                    result.push_str("  Default:\n");
+                    for node in default_nodes {
+                        result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                    }
+                }
+            }
+            
+            HirKind::Loop { binding, iterator, body, index_binding } => {
+                result.push_str("Loop\n");
+                if let Some((name, data_type)) = binding {
+                    result.push_str(&format!("  Binding: {} : {:?}\n", string_table.resolve(*name), data_type));
+                }
+                if let Some(index_name) = index_binding {
+                    result.push_str(&format!("  Index Binding: {}\n", string_table.resolve(*index_name)));
+                }
+                result.push_str(&format!("  Iterator: {}\n", iterator.display_with_table(string_table)));
+                result.push_str("  Body:\n");
+                for node in body {
+                    result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                }
+            }
+            
+            HirKind::Break => result.push_str("Break"),
+            HirKind::Continue => result.push_str("Continue"),
+            
+            HirKind::Call { target, args, returns } => {
+                result.push_str("Call\n");
+                result.push_str(&format!("  Target: {}\n", string_table.resolve(*target)));
+                result.push_str(&format!("  Args: [{}]\n", format_place_list_with_table(args, string_table)));
+                result.push_str(&format!("  Returns: [{}]", format_place_list_with_table(returns, string_table)));
+            }
+            
+            HirKind::HostCall { target, module, import, args, returns } => {
+                result.push_str("HostCall\n");
+                result.push_str(&format!("  Target: {}\n", string_table.resolve(*target)));
+                result.push_str(&format!("  Module: {}\n", string_table.resolve(*module)));
+                result.push_str(&format!("  Import: {}\n", string_table.resolve(*import)));
+                result.push_str(&format!("  Args: [{}]\n", format_place_list_with_table(args, string_table)));
+                result.push_str(&format!("  Returns: [{}]", format_place_list_with_table(returns, string_table)));
+            }
+            
+            HirKind::TryCall { call, error_binding, error_handler, default_values } => {
+                result.push_str("TryCall\n");
+                result.push_str("  Call:\n");
+                result.push_str(&indent_lines(&call.display_with_table(string_table), 4));
+                if let Some(binding) = error_binding {
+                    result.push_str(&format!("  Error Binding: {}\n", string_table.resolve(*binding)));
+                }
+                result.push_str("  Error Handler:\n");
+                for node in error_handler {
+                    result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                }
+                if let Some(defaults) = default_values {
+                    result.push_str("  Default Values:\n");
+                    for (i, default) in defaults.iter().enumerate() {
+                        result.push_str(&format!("    {}: {}\n", i, default.display_with_table(string_table)));
+                    }
+                }
+            }
+            
+            HirKind::OptionUnwrap { expr, default_value } => {
+                result.push_str("OptionUnwrap\n");
+                result.push_str(&format!("  Expr: {}\n", expr.display_with_table(string_table)));
+                if let Some(default) = default_value {
+                    result.push_str(&format!("  Default: {}", default.display_with_table(string_table)));
+                } else {
+                    result.push_str("  Default: None");
+                }
+            }
+            
+            HirKind::Return(places) => {
+                result.push_str(&format!("Return [{}]", format_place_list_with_table(places, string_table)));
+            }
+            
+            HirKind::ReturnError(place) => {
+                result.push_str(&format!("ReturnError {}", place.display_with_table(string_table)));
+            }
+            
+            HirKind::Drop(place) => {
+                result.push_str(&format!("Drop {}", place.display_with_table(string_table)));
+            }
+            
+            HirKind::RuntimeTemplateCall { template_fn, captures, id } => {
+                result.push_str("RuntimeTemplateCall\n");
+                result.push_str(&format!("  Template: {}\n", string_table.resolve(*template_fn)));
+                if let Some(template_id) = id {
+                    result.push_str(&format!("  ID: {}\n", string_table.resolve(*template_id)));
+                }
+                result.push_str("  Captures:\n");
+                for (i, capture) in captures.iter().enumerate() {
+                    result.push_str(&format!("    {}: {}\n", i, capture.display_with_table(string_table)));
+                }
+            }
+            
+            HirKind::TemplateFn { name, params, body } => {
+                result.push_str(&format!("TemplateFn {}\n", string_table.resolve(*name)));
+                result.push_str("  Params:\n");
+                for (param_name, param_type) in params {
+                    result.push_str(&format!("    {} : {:?}\n", string_table.resolve(*param_name), param_type));
+                }
+                result.push_str("  Body:\n");
+                for node in body {
+                    result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                }
+            }
+            
+            HirKind::FunctionDef { name, signature, body } => {
+                result.push_str(&format!("FunctionDef {}\n", string_table.resolve(*name)));
+                result.push_str(&format!("  Signature: {:?}\n", signature));
+                result.push_str("  Body:\n");
+                for node in body {
+                    result.push_str(&indent_lines(&node.display_with_table(string_table), 4));
+                }
+            }
+            
+            HirKind::StructDef { name, fields } => {
+                result.push_str(&format!("StructDef {}\n", string_table.resolve(*name)));
+                result.push_str("  Fields:\n");
+                for field in fields {
+                    result.push_str(&format!("    {:?}\n", field));
+                }
+            }
+            
+            HirKind::ExprStmt(place) => {
+                result.push_str(&format!("ExprStmt {}", place.display_with_table(string_table)));
+            }
+        }
+        
+        result
+    }
+}
+
 impl Display for HirNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "HIR Node #{} ({}:{}:{:?}): ", 
@@ -321,6 +506,8 @@ impl Display for HirNode {
                self.location.start_pos.char_column,
                self.scope)?;
         
+        // Note: This Display implementation shows StringID placeholders.
+        // Use display_with_table() for debugging with resolved strings.
         match &self.kind {
             HirKind::Assign { place, value } => {
                 writeln!(f, "Assign")?;
@@ -497,14 +684,88 @@ impl Display for HirNode {
     }
 }
 
+
+
+impl HirExpr {
+    /// Display HIR expression with resolved string IDs for debugging
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        format!("{} : {:?}", self.kind.display_with_table(string_table), self.data_type)
+    }
+}
+
 impl Display for HirExpr {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        // Note: This Display implementation shows StringID placeholders.
+        // Use display_with_table() for debugging with resolved strings.
         write!(f, "{} : {:?}", self.kind, self.data_type)
+    }
+}
+
+
+
+impl HirExprKind {
+    /// Display HIR expression kind with resolved string IDs for debugging
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        match self {
+            HirExprKind::Int(value) => value.to_string(),
+            HirExprKind::Float(value) => value.to_string(),
+            HirExprKind::Bool(value) => value.to_string(),
+            HirExprKind::StringLiteral(value) => format!("\"{}\"", string_table.resolve(*value)),
+            HirExprKind::Char(value) => format!("'{}'", value),
+            
+            HirExprKind::Load(place) => format!("Load({})", place.display_with_table(string_table)),
+            HirExprKind::SharedBorrow(place) => format!("SharedBorrow({})", place.display_with_table(string_table)),
+            HirExprKind::MutableBorrow(place) => format!("MutableBorrow({})", place.display_with_table(string_table)),
+            HirExprKind::CandidateMove(place) => format!("CandidateMove({})", place.display_with_table(string_table)),
+            
+            HirExprKind::BinOp { left, op, right } => {
+                format!("({} {} {})", left.display_with_table(string_table), op, right.display_with_table(string_table))
+            }
+            
+            HirExprKind::UnaryOp { op, operand } => {
+                format!("({} {})", op, operand.display_with_table(string_table))
+            }
+            
+            HirExprKind::Call { target, args } => {
+                format!("{}({})", string_table.resolve(*target), format_place_list_with_table(args, string_table))
+            }
+            
+            HirExprKind::MethodCall { receiver, method, args } => {
+                format!("{}.{}({})", 
+                       receiver.display_with_table(string_table), 
+                       string_table.resolve(*method), 
+                       format_place_list_with_table(args, string_table))
+            }
+            
+            HirExprKind::StructConstruct { type_name, fields } => {
+                let mut result = format!("{} {{ ", string_table.resolve(*type_name));
+                for (i, (field_name, place)) in fields.iter().enumerate() {
+                    if i > 0 {
+                        result.push_str(", ");
+                    }
+                    result.push_str(&format!("{}: {}", 
+                                           string_table.resolve(*field_name), 
+                                           place.display_with_table(string_table)));
+                }
+                result.push_str(" }");
+                result
+            }
+            
+            HirExprKind::Collection(places) => {
+                format!("[{}]", format_place_list_with_table(places, string_table))
+            }
+            
+            HirExprKind::Range { start, end } => {
+                format!("{}..{}", start.display_with_table(string_table), end.display_with_table(string_table))
+            }
+        }
     }
 }
 
 impl Display for HirExprKind {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        // Note: This Display implementation shows StringID placeholders.
+        // Use display_with_table() for debugging with resolved strings.
         match self {
             HirExprKind::Int(value) => write!(f, "{}", value),
             HirExprKind::Float(value) => write!(f, "{}", value),
@@ -555,6 +816,8 @@ impl Display for HirExprKind {
     }
 }
 
+
+
 impl Display for BinOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let op_str = match self {
@@ -593,6 +856,13 @@ impl Display for UnaryOp {
 fn format_place_list(places: &[Place]) -> String {
     places.iter()
         .map(|p| p.to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn format_place_list_with_table(places: &[Place], string_table: &StringTable) -> String {
+    places.iter()
+        .map(|p| p.display_with_table(string_table))
         .collect::<Vec<_>>()
         .join(", ")
 }

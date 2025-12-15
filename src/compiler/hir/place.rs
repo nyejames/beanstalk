@@ -4,7 +4,7 @@
 //! Places are the foundation of Beanstalk's ownership system, providing
 //! structured access to memory that can be analyzed by the borrow checker.
 
-use crate::compiler::string_interning::InternedString;
+use crate::compiler::string_interning::{InternedString, StringTable};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// A Place represents a precise logical memory location
@@ -61,6 +61,15 @@ pub enum IndexKind {
 }
 
 impl Place {
+    /// Display place with resolved string IDs for debugging
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        let mut result = self.root.display_with_table(string_table);
+        for projection in &self.projections {
+            result.push_str(&projection.display_with_table(string_table));
+        }
+        result
+    }
+
     /// Create a new local place
     pub fn local(name: InternedString) -> Self {
         Self {
@@ -170,6 +179,8 @@ impl IndexKind {
 
 impl Display for Place {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        // Note: This Display implementation shows StringID placeholders.
+        // Use display_with_table() for debugging with resolved strings.
         write!(f, "{}", self.root)?;
         for projection in &self.projections {
             write!(f, "{}", projection)?;
@@ -178,8 +189,21 @@ impl Display for Place {
     }
 }
 
+impl PlaceRoot {
+    /// Display place root with resolved string IDs for debugging
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        match self {
+            PlaceRoot::Local(name) => string_table.resolve(*name).to_string(),
+            PlaceRoot::Param(name) => format!("param:{}", string_table.resolve(*name)),
+            PlaceRoot::Global(name) => format!("global:{}", string_table.resolve(*name)),
+        }
+    }
+}
+
 impl Display for PlaceRoot {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        // Note: This Display implementation shows StringID placeholders.
+        // Use display_with_table() for debugging with resolved strings.
         match self {
             PlaceRoot::Local(name) => write!(f, "{}", name),
             PlaceRoot::Param(name) => write!(f, "param:{}", name),
@@ -188,8 +212,21 @@ impl Display for PlaceRoot {
     }
 }
 
+impl Projection {
+    /// Display projection with resolved string IDs for debugging
+    pub fn display_with_table(&self, string_table: &StringTable) -> String {
+        match self {
+            Projection::Field(field) => format!(".{}", string_table.resolve(*field)),
+            Projection::Index(index) => format!("[{}]", index),
+            Projection::Deref => "*".to_string(),
+        }
+    }
+}
+
 impl Display for Projection {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        // Note: This Display implementation shows StringID placeholders.
+        // Use display_with_table() for debugging with resolved strings.
         match self {
             Projection::Field(field) => write!(f, ".{}", field),
             Projection::Index(index) => write!(f, "[{}]", index),

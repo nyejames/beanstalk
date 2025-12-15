@@ -227,7 +227,7 @@ pub fn compile_modules(
     {
         println!("=== HIR OUTPUT ===");
         for node in &hir_nodes {
-            println!("{}", node);
+            println!("{}", node.display_with_table(&compiler.string_table));
         }
         println!("=== END HIR OUTPUT ===");
     }
