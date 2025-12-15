@@ -19,12 +19,12 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::path::PathBuf;
 
 /// A complete HIR module for a single source file or compilation unit.
+/// Currently unused but kept for future module-level HIR processing.
+#[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
 pub struct HirModule {
-    pub source_path: Option<PathBuf>,
     pub functions: Vec<HirNode>,
 }
 
@@ -50,6 +50,7 @@ pub enum HirKind {
 
     /// Explicit borrow creation (shared or mutable)
     /// Records where borrow access is requested
+    #[allow(dead_code)]
     Borrow {
         place: Place,
         kind: BorrowKind,
@@ -80,7 +81,9 @@ pub enum HirKind {
     },
 
     /// Loop control flow
+    #[allow(dead_code)]
     Break,
+    #[allow(dead_code)]
     Continue,
 
     // === Function Calls ===
@@ -101,6 +104,7 @@ pub enum HirKind {
     },
 
     // === Error Handling (Desugared) ===
+    #[allow(dead_code)]
     TryCall {
         call: Box<HirNode>,
         error_binding: Option<InternedString>,
@@ -108,6 +112,7 @@ pub enum HirKind {
         default_values: Option<Vec<HirExpr>>,
     },
 
+    #[allow(dead_code)]
     OptionUnwrap {
         expr: HirExpr,
         default_value: Option<HirExpr>,
@@ -118,19 +123,23 @@ pub enum HirKind {
     Return(Vec<Place>),
     
     /// Error return for `return!` syntax
+    #[allow(dead_code)]
     ReturnError(Place),
 
     // === Resource Management ===
     /// Drop operation (inserted by borrow checker after analysis)
+    #[allow(dead_code)]
     Drop(Place),
 
     // === Templates ===
+    #[allow(dead_code)]
     RuntimeTemplateCall {
         template_fn: InternedString,
         captures: Vec<HirExpr>,
         id: Option<InternedString>,
     },
 
+    #[allow(dead_code)]
     TemplateFn {
         name: InternedString,
         params: Vec<(InternedString, DataType)>,
@@ -159,6 +168,7 @@ pub enum HirKind {
 pub struct HirExpr {
     pub kind: HirExprKind,
     pub data_type: DataType,
+    #[allow(dead_code)]
     pub location: TextLocation,
 }
 
@@ -176,9 +186,11 @@ pub enum HirExprKind {
     Load(Place),
     
     /// Create shared borrow of a place
+    #[allow(dead_code)]
     SharedBorrow(Place),
     
     /// Create mutable borrow of a place (exclusive access)
+    #[allow(dead_code)]
     MutableBorrow(Place),
     
     /// Candidate move (potential ownership transfer, refined by borrow checker)
@@ -193,6 +205,7 @@ pub enum HirExprKind {
     },
 
     /// Unary operation on a place
+    #[allow(dead_code)]
     UnaryOp {
         op: UnaryOp,
         operand: Place,
@@ -206,6 +219,7 @@ pub enum HirExprKind {
     },
 
     /// Method call with receiver and arguments from places
+    #[allow(dead_code)]
     MethodCall {
         receiver: Place,
         method: InternedString,
@@ -231,7 +245,9 @@ pub enum HirExprKind {
 
 #[derive(Debug, Clone, Copy)]
 pub enum BorrowKind {
+    #[allow(dead_code)]
     Shared,  // Default: `x = y`
+    #[allow(dead_code)]
     Mutable, // Explicit: `x ~= y` before move analysis
 }
 
@@ -244,7 +260,9 @@ pub struct HirMatchArm {
 
 #[derive(Debug, Clone)]
 pub enum HirPattern {
+    #[allow(dead_code)]
     Literal(HirExpr),
+    #[allow(dead_code)]
     Range { start: HirExpr, end: HirExpr },
     Wildcard,
     // Future: Binding(InternedString) for pattern matching with bindings
@@ -258,6 +276,7 @@ pub enum BinOp {
     Div,
     Mod,
     Eq,
+    #[allow(dead_code)]
     Ne,
     Lt,
     Le,
@@ -271,7 +290,9 @@ pub enum BinOp {
 
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
+    #[allow(dead_code)]
     Neg,
+    #[allow(dead_code)]
     Not,
 }
 
@@ -279,11 +300,7 @@ pub enum UnaryOp {
 
 impl Display for HirModule {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        if let Some(path) = &self.source_path {
-            writeln!(f, "HIR Module: {}", path.display())?;
-        } else {
-            writeln!(f, "HIR Module: <unknown>")?;
-        }
+        writeln!(f, "HIR Module")?;
         
         for (i, function) in self.functions.iter().enumerate() {
             if i > 0 {

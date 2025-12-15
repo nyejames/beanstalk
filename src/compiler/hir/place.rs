@@ -25,9 +25,11 @@ pub enum PlaceRoot {
     Local(InternedString),
     
     /// Function parameter
+    #[allow(dead_code)]
     Param(InternedString),
     
     /// Global variable or constant
+    #[allow(dead_code)]
     Global(InternedString),
 }
 
@@ -38,9 +40,11 @@ pub enum Projection {
     Field(InternedString),
     
     /// Index access ([index])
+    #[allow(dead_code)]
     Index(IndexKind),
     
     /// Dereference (*)
+    #[allow(dead_code)]
     Deref,
 }
 
@@ -48,9 +52,11 @@ pub enum Projection {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum IndexKind {
     /// Constant index (e.g., arr[3])
+    #[allow(dead_code)]
     Constant(u32),
     
     /// Dynamic index (e.g., arr[i]) - conservative analysis
+    #[allow(dead_code)]
     Dynamic,
 }
 
@@ -64,6 +70,7 @@ impl Place {
     }
     
     /// Create a new parameter place
+    #[allow(dead_code)]
     pub fn param(name: InternedString) -> Self {
         Self {
             root: PlaceRoot::Param(name),
@@ -72,6 +79,7 @@ impl Place {
     }
     
     /// Create a new global place
+    #[allow(dead_code)]
     pub fn global(name: InternedString) -> Self {
         Self {
             root: PlaceRoot::Global(name),
@@ -86,12 +94,14 @@ impl Place {
     }
     
     /// Add an index projection to this place
+    #[allow(dead_code)]
     pub fn index(mut self, index: IndexKind) -> Self {
         self.projections.push(Projection::Index(index));
         self
     }
     
     /// Add a dereference projection to this place
+    #[allow(dead_code)]
     pub fn deref(mut self) -> Self {
         self.projections.push(Projection::Deref);
         self
@@ -102,6 +112,7 @@ impl Place {
     /// Two places overlap if they share the same root and one projection
     /// list is a prefix of the other. This is used by the borrow checker
     /// to detect conflicting accesses.
+    #[allow(dead_code)]
     pub fn overlaps_with(&self, other: &Place) -> bool {
         // Must have same root
         if self.root != other.root {
@@ -123,6 +134,7 @@ impl Place {
 
 impl Projection {
     /// Check if this projection overlaps with another
+    #[allow(dead_code)]
     fn overlaps_with(&self, other: &Projection) -> bool {
         match (self, other) {
             // Field accesses overlap only if same field
@@ -142,6 +154,7 @@ impl Projection {
 
 impl IndexKind {
     /// Check if this index overlaps with another
+    #[allow(dead_code)]
     fn overlaps_with(&self, other: &IndexKind) -> bool {
         match (self, other) {
             // Same constant indices overlap

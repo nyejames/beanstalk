@@ -42,6 +42,7 @@ pub struct HirBuilder<'a> {
     temp_counter: usize,
 
     /// Counter for generating unique runtime template function names
+    #[allow(dead_code)]
     template_counter: usize,
 
     /// Accumulated errors and warnings during lowering
@@ -101,6 +102,29 @@ impl<'a> HirBuilder<'a> {
         let name = format!("_temp_{}", self.temp_counter);
         self.temp_counter += 1;
         self.string_table.intern(&name)
+    }
+
+    /// Helper: create a literal expression assignment to a temporary place
+    fn create_literal_assignment(
+        &mut self,
+        expr_kind: HirExprKind,
+        data_type: DataType,
+        location: crate::compiler::parsers::tokenizer::tokens::TextLocation,
+    ) -> (Vec<HirNode>, Place) {
+        let temp = self.next_temp();
+        let temp_place = Place::local(temp);
+        let literal_expr = HirExpr {
+            kind: expr_kind,
+            data_type,
+            location: location.clone(),
+        };
+        let assign_node = self.create_assign_node_with_expr(
+            temp_place.clone(),
+            literal_expr,
+            location,
+            self.current_scope.clone(),
+        );
+        (vec![assign_node], temp_place)
     }
 
     /// Lower a single AST node to HIR
@@ -553,88 +577,48 @@ impl<'a> HirBuilder<'a> {
         match expr.kind {
             // === Literals ===
             ExpressionKind::Int(n) => {
-                let temp = self.next_temp();
-                let temp_place = Place::local(temp);
-                let literal_expr = HirExpr {
-                    kind: HirExprKind::Int(n),
-                    data_type: expr.data_type,
-                    location: expr.location.clone(),
-                };
-                let assign_node = self.create_assign_node_with_expr(
-                    temp_place.clone(),
-                    literal_expr,
+                let (nodes, place) = self.create_literal_assignment(
+                    HirExprKind::Int(n),
+                    expr.data_type,
                     expr.location,
-                    self.current_scope.clone(),
                 );
-                Ok((vec![assign_node], temp_place))
+                Ok((nodes, place))
             }
 
             ExpressionKind::Float(f) => {
-                let temp = self.next_temp();
-                let temp_place = Place::local(temp);
-                let literal_expr = HirExpr {
-                    kind: HirExprKind::Float(f),
-                    data_type: expr.data_type,
-                    location: expr.location.clone(),
-                };
-                let assign_node = self.create_assign_node_with_expr(
-                    temp_place.clone(),
-                    literal_expr,
+                let (nodes, place) = self.create_literal_assignment(
+                    HirExprKind::Float(f),
+                    expr.data_type,
                     expr.location,
-                    self.current_scope.clone(),
                 );
-                Ok((vec![assign_node], temp_place))
+                Ok((nodes, place))
             }
 
             ExpressionKind::Bool(b) => {
-                let temp = self.next_temp();
-                let temp_place = Place::local(temp);
-                let literal_expr = HirExpr {
-                    kind: HirExprKind::Bool(b),
-                    data_type: expr.data_type,
-                    location: expr.location.clone(),
-                };
-                let assign_node = self.create_assign_node_with_expr(
-                    temp_place.clone(),
-                    literal_expr,
+                let (nodes, place) = self.create_literal_assignment(
+                    HirExprKind::Bool(b),
+                    expr.data_type,
                     expr.location,
-                    self.current_scope.clone(),
                 );
-                Ok((vec![assign_node], temp_place))
+                Ok((nodes, place))
             }
 
             ExpressionKind::StringSlice(s) => {
-                let temp = self.next_temp();
-                let temp_place = Place::local(temp);
-                let literal_expr = HirExpr {
-                    kind: HirExprKind::StringLiteral(s),
-                    data_type: expr.data_type,
-                    location: expr.location.clone(),
-                };
-                let assign_node = self.create_assign_node_with_expr(
-                    temp_place.clone(),
-                    literal_expr,
+                let (nodes, place) = self.create_literal_assignment(
+                    HirExprKind::StringLiteral(s),
+                    expr.data_type,
                     expr.location,
-                    self.current_scope.clone(),
                 );
-                Ok((vec![assign_node], temp_place))
+                Ok((nodes, place))
             }
 
             ExpressionKind::Char(c) => {
-                let temp = self.next_temp();
-                let temp_place = Place::local(temp);
-                let literal_expr = HirExpr {
-                    kind: HirExprKind::Char(c),
-                    data_type: expr.data_type,
-                    location: expr.location.clone(),
-                };
-                let assign_node = self.create_assign_node_with_expr(
-                    temp_place.clone(),
-                    literal_expr,
+                let (nodes, place) = self.create_literal_assignment(
+                    HirExprKind::Char(c),
+                    expr.data_type,
                     expr.location,
-                    self.current_scope.clone(),
                 );
-                Ok((vec![assign_node], temp_place))
+                Ok((nodes, place))
             }
 
             // === Variable References ===
@@ -800,19 +784,19 @@ impl<'a> HirBuilder<'a> {
             ExpressionKind::Function(signature, body) => {
                 // Function expressions become function definitions
                 // Generate a unique name for the anonymous function
-                let func_name = format!("_anon_func_{}", self.temp_counter);
+                let anonymous_function_name = format!("_anon_func_{}", self.temp_counter);
                 self.temp_counter += 1;
-                let func_name_interned = self.string_table.intern(&func_name);
+                let anonymous_function_name_interned = self.string_table.intern(&anonymous_function_name);
 
                 // Lower the function body
-                let body_hir = self.lower_block(body)?;
+                let function_body_hir = self.lower_block(body)?;
 
                 // Create a function definition node
-                let func_def_node = HirNode {
+                let function_definition_node = HirNode {
                     kind: HirKind::FunctionDef {
-                        name: func_name_interned,
+                        name: anonymous_function_name_interned,
                         signature,
-                        body: body_hir,
+                        body: function_body_hir,
                     },
                     location: expr.location.clone(),
                     scope: self.current_scope.clone(),
@@ -820,25 +804,25 @@ impl<'a> HirBuilder<'a> {
                 };
 
                 // Create a place that references this function
-                let temp = self.next_temp();
-                let temp_place = Place::local(temp);
-                let func_ref_expr = HirExpr {
-                    kind: HirExprKind::Load(Place::local(func_name_interned)),
+                let temp_place_name = self.next_temp();
+                let temp_place = Place::local(temp_place_name);
+                let function_reference_expr = HirExpr {
+                    kind: HirExprKind::Load(Place::local(anonymous_function_name_interned)),
                     data_type: expr.data_type,
                     location: expr.location.clone(),
                 };
-                let assign_node = self.create_assign_node_with_expr(
+                let assignment_node = self.create_assign_node_with_expr(
                     temp_place.clone(),
-                    func_ref_expr,
+                    function_reference_expr,
                     expr.location,
                     self.current_scope.clone(),
                 );
 
-                Ok((vec![func_def_node, assign_node], temp_place))
+                Ok((vec![function_definition_node, assignment_node], temp_place))
             }
 
             // === Template Expressions ===
-            ExpressionKind::Template(template) => {
+            ExpressionKind::Template(_template) => {
                 // Templates become runtime template calls or string literals
                 // For now, we'll treat them as string literals since template processing
                 // is typically done at compile time
@@ -862,7 +846,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             // === Struct Definition Expressions ===
-            ExpressionKind::StructDefinition(fields) => {
+            ExpressionKind::StructDefinition(_fields) => {
                 // Struct definitions as expressions are not typical in HIR
                 // We'll treat this as an error for now since struct definitions
                 // should be handled at the statement level
@@ -897,62 +881,34 @@ impl<'a> HirBuilder<'a> {
 
                 // Pop operands, apply operator, push result
                 NodeKind::Operator(op) => {
-                    let right = stack.pop().ok_or_else(|| {
+                    let right_operand = stack.pop().ok_or_else(|| {
                         use crate::compiler::compiler_messages::compiler_errors::{
                             ErrorLocation, ErrorType,
                         };
-                        use crate::compiler::parsers::tokenizer::tokens::CharPosition;
-                        use std::path::PathBuf;
-
-                        let error_location = ErrorLocation::new(
-                            PathBuf::new(),
-                            CharPosition {
-                                line_number: 0,
-                                char_column: 0,
-                            },
-                            CharPosition {
-                                line_number: 0,
-                                char_column: 0,
-                            },
-                        );
                         CompilerError::new(
                             "RPN stack underflow (right operand)",
-                            error_location,
+                            ErrorLocation::default(),
                             ErrorType::Compiler,
                         )
                     })?;
 
-                    let left = stack.pop().ok_or_else(|| {
+                    let left_operand = stack.pop().ok_or_else(|| {
                         use crate::compiler::compiler_messages::compiler_errors::{
                             ErrorLocation, ErrorType,
                         };
-                        use crate::compiler::parsers::tokenizer::tokens::CharPosition;
-                        use std::path::PathBuf;
-
-                        let error_location = ErrorLocation::new(
-                            PathBuf::new(),
-                            CharPosition {
-                                line_number: 0,
-                                char_column: 0,
-                            },
-                            CharPosition {
-                                line_number: 0,
-                                char_column: 0,
-                            },
-                        );
                         CompilerError::new(
                             "RPN stack underflow (left operand)",
-                            error_location,
+                            ErrorLocation::default(),
                             ErrorType::Compiler,
                         )
                     })?;
 
-                    let bin_op = self.convert_operator(op)?;
-                    let temp = self.next_temp();
-                    let temp_place = Place::local(temp);
+                    let binary_operator = self.convert_operator(op)?;
+                    let result_temp_name = self.next_temp();
+                    let result_temp_place = Place::local(result_temp_name);
 
                     // Determine result type based on operator
-                    let op_result_type = match bin_op {
+                    let operation_result_type = match binary_operator {
                         BinOp::Eq
                         | BinOp::Ne
                         | BinOp::Lt
@@ -964,24 +920,24 @@ impl<'a> HirBuilder<'a> {
                         _ => result_type.clone(),
                     };
 
-                    let binop_expr = HirExpr {
+                    let binary_operation_expr = HirExpr {
                         kind: HirExprKind::BinOp {
-                            left,
-                            op: bin_op,
-                            right,
+                            left: left_operand,
+                            op: binary_operator,
+                            right: right_operand,
                         },
-                        data_type: op_result_type,
+                        data_type: operation_result_type,
                         location: node.location,
                     };
 
-                    let assign_node = self.create_assign_node_with_expr(
-                        temp_place.clone(),
-                        binop_expr,
+                    let assignment_node = self.create_assign_node_with_expr(
+                        result_temp_place.clone(),
+                        binary_operation_expr,
                         location.clone(),
                         self.current_scope.clone(),
                     );
-                    nodes.push(assign_node);
-                    stack.push(temp_place);
+                    nodes.push(assignment_node);
+                    stack.push(result_temp_place);
                 }
 
                 _ => {
@@ -1009,8 +965,8 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Convert AST operator to HIR BinOp
-    fn convert_operator(&self, op: Operator) -> Result<BinOp, CompilerError> {
-        let bin_op = match op {
+    fn convert_operator(&self, ast_operator: Operator) -> Result<BinOp, CompilerError> {
+        let hir_binary_operator = match ast_operator {
             Operator::Add => BinOp::Add,
             Operator::Subtract => BinOp::Sub,
             Operator::Multiply => BinOp::Mul,
@@ -1040,7 +996,7 @@ impl<'a> HirBuilder<'a> {
                 )
             }
         };
-        Ok(bin_op)
+        Ok(hir_binary_operator)
     }
 
     /// Create an assignment node from place to place
