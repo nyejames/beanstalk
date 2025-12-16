@@ -18,7 +18,7 @@ Beanstalk makes deliberate tradeoffs for compilation speed:
 - Functions should be self-documenting through clear naming
 - Compiler-specific prefixes: `ast_`, `hir_`, `lir_`, `wasm_` for clarity
 - Compiler passes: descriptive names (`build_ast`, `generate_hir`, `emit_wasm`)
-- Comments should use correct grammar without dropping connectives (`// Build AST` vs `// Builds the AST`)
+- Comments should use correct grammar without dropping definitive articles or connectives (`BAD:// Build AST` vs `GOOD:// Builds the AST`)
 
 ### Import Guidelines
 - **Avoid inline imports**: If a function/type is used more than once in a file, import it at the top
@@ -98,7 +98,7 @@ The error system is built around three core types:
 - **`ErrorMetaDataKey`**: Structured metadata keys for intelligent error analysis
 
 CompilerError Best practices:
-- **Be Specific**: Include exact tokens, types, or names in errors.
+- **Be Specific**: Include exact tokens, types or names in errors.
 - **Be Helpful**: Suggest corrections when possible, especially for borrow checker errors. Provide actionable messages with context
 - **User errors**: Use `return_syntax_error!`, `return_rule_error!`, or `return_type_error!`
 - **Compiler bugs**: Use `return_compiler_error!` (prefix added automatically)
@@ -278,7 +278,7 @@ pub enum HeaderKind {
 
 ## Stage 5: HIR Generation (`src/compiler/hir/`)
 HIR (High-Level IR) is Beanstalk’s semantic IR.  
-It is the first fully typed, canonical representation of a program, designed for **borrow checking, last-use analysis, and structured lowering**.
+It is the first fully typed, canonical representation of a program, designed for **borrow checking, last-use analysis and structured lowering**.
 
 HIR is still “Beanstalk-shaped”: it preserves high-level constructs, references, structured control flow and the semantics needed for ownership analysis.
 
@@ -294,14 +294,14 @@ See `Borrow Checker Design.md` for a more detailed breakdown of the design of Be
 - **Place-based Memory Model**: Temporaries are not part of the language-level model. All intermediate computations are represented as locals in HIR for borrow checking. Locals, parameters, globals, and projections (fields/array indices/derefs) are tracked as places.
 - **Ownership & Move Tracking**: HIR nodes explicitly annotate borrow creation, last-use, and path-sensitive lifetimes, rather than explicit moves only. Moves are inferred via reference semantics and last-use analysis; explicit move annotations are unnecessary in the language. Borrows are Polonius-style: a conflict is illegal only if it occurs on all control-flow paths.
 - **Template Handling**: Compile-time templates are folded; runtime templates are converted into HIR function bodies.
-- **Desugared Semantics**: Error/option propagation, assignment sugar, and borrowing rules are lowered into a uniform canonical form that simplifies analysis.
-- **Not Tied to Wasm**: HIR does not yet model stack machine semantics, Wasm types, or linear memory addresses. Borrow checking operates symbolically on places.
+- **Desugared Semantics**: Error/option propagation, assignment sugar and borrowing rules are lowered into a uniform canonical form that simplifies analysis.
+- **Not Tied to Wasm**: HIR does not yet model stack machine semantics, Wasm types or linear memory addresses. Borrow checking operates symbolically on places.
 
 ### Debugging HIR
 - Use `show_hir` to inspect the desugared program.
 - Verify borrow and last-use annotations, which now include Polonius-style path-sensitive lifetimes.
 - Inspect template lowering, constant folding, and structured control flow.
-- HIR provides a clear view of how places, borrows, and references flow through the program.
+- HIR provides a clear view of how places, borrows and references flow through the program.
 
 ---
 
@@ -339,7 +339,7 @@ LIR contains no remaining high-level constructs from Beanstalk: everything has b
 - Insert drops, compute field offsets and rewrite multi-value returns.
 
 ### Key Features
-- **Wasm-Friendly Control Flow**: Blocks, loops, and branches match Wasm’s structured CFG.
+- **Wasm-Friendly Control Flow**: Blocks, loops and branches match Wasm’s structured CFG.
 - **Concrete Memory Access**: All field and array accesses lowered to explicit offsets and load/store instructions.
 - **Explicit Locals**: All temporaries materialized as Wasm locals or stack values.
 - **Drop Semantics**: Ownership outcomes from HIR lowering translated to explicit drop/free operations.

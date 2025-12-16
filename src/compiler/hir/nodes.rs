@@ -186,11 +186,11 @@ pub enum HirExprKind {
     #[allow(dead_code)]
     SharedBorrow(Place),
 
-    /// Create mutable borrow of a place (exclusive access)
+    /// Create a mutable borrow of a place (exclusive access)
     #[allow(dead_code)]
     MutableBorrow(Place),
 
-    /// Candidate move (potential ownership transfer, refined by borrow checker)
+    /// Candidate move (potential ownership transfer, refined by the borrow checker)
     CandidateMove(Place),
 
     // === Binary Operations ===

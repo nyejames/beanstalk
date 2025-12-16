@@ -97,6 +97,8 @@ mod compiler {
         pub(crate) mod nodes;
         pub(crate) mod place;
         pub(crate) mod display_hir;
+        pub(crate) mod lower_node;
+        pub(crate) mod lower_expression;
     }
     pub(crate) mod borrow_checker {
         pub(crate) mod borrow_tracking;
