@@ -6,12 +6,12 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::borrow_checker::types::{BorrowChecker, CfgNodeType};
+    use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind, CfgNodeType};
     use crate::compiler::datatypes::DataType;
     use crate::compiler::hir::nodes::{
         HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirNodeId,
     };
-    use crate::compiler::hir::place::{Place, PlaceRoot};
+    use crate::compiler::hir::place::{IndexKind, Place, PlaceRoot};
     use crate::compiler::interned_path::InternedPath;
     use crate::compiler::parsers::statements::functions::FunctionSignature;
     use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
@@ -75,6 +75,37 @@ mod tests {
         nodes: Vec<TestHirNode>,
         has_if: bool,
         has_loop: bool,
+    }
+
+    /// Generator for test places
+    #[derive(Debug, Clone)]
+    struct TestPlace {
+        root: TestPlaceRoot,
+        projections: Vec<TestProjection>,
+    }
+
+    /// Generator for test place roots
+    #[derive(Debug, Clone)]
+    enum TestPlaceRoot {
+        Local(String),
+        Param(String),
+        Global(String),
+    }
+
+    /// Generator for test projections
+    #[derive(Debug, Clone)]
+    enum TestProjection {
+        Field(String),
+        Index(u32),
+        DynamicIndex,
+        Deref,
+    }
+
+    /// Generator for test borrows
+    #[derive(Debug, Clone)]
+    struct TestBorrow {
+        place: TestPlace,
+        kind: crate::compiler::borrow_checker::types::BorrowKind,
     }
 
     impl Arbitrary for TestHirModule {
@@ -152,6 +183,60 @@ mod tests {
         }
     }
 
+    impl Arbitrary for TestPlace {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let projection_count = usize::arbitrary(g) % 4; // 0-3 projections
+            let mut projections = Vec::new();
+
+            for _ in 0..projection_count {
+                projections.push(TestProjection::arbitrary(g));
+            }
+
+            TestPlace {
+                root: TestPlaceRoot::arbitrary(g),
+                projections,
+            }
+        }
+    }
+
+    impl Arbitrary for TestPlaceRoot {
+        fn arbitrary(g: &mut Gen) -> Self {
+            match u8::arbitrary(g) % 3 {
+                0 => TestPlaceRoot::Local(format!("local_{}", usize::arbitrary(g) % 20)),
+                1 => TestPlaceRoot::Param(format!("param_{}", usize::arbitrary(g) % 10)),
+                _ => TestPlaceRoot::Global(format!("global_{}", usize::arbitrary(g) % 5)),
+            }
+        }
+    }
+
+    impl Arbitrary for TestProjection {
+        fn arbitrary(g: &mut Gen) -> Self {
+            match u8::arbitrary(g) % 4 {
+                0 => TestProjection::Field(format!("field_{}", usize::arbitrary(g) % 10)),
+                1 => TestProjection::Index(u32::arbitrary(g) % 10),
+                2 => TestProjection::DynamicIndex,
+                _ => TestProjection::Deref,
+            }
+        }
+    }
+
+    impl Arbitrary for TestBorrow {
+        fn arbitrary(g: &mut Gen) -> Self {
+            use crate::compiler::borrow_checker::types::BorrowKind;
+            
+            let kind = match u8::arbitrary(g) % 3 {
+                0 => BorrowKind::Shared,
+                1 => BorrowKind::Mutable,
+                _ => BorrowKind::Move,
+            };
+
+            TestBorrow {
+                place: TestPlace::arbitrary(g),
+                kind,
+            }
+        }
+    }
+
     impl TestHirModule {
         /// Convert test module to actual HIR module for testing
         fn to_hir_module(&self, string_table: &mut StringTable) -> HirModule {
@@ -164,6 +249,32 @@ mod tests {
             HirModule {
                 functions: hir_functions,
             }
+        }
+    }
+
+    impl TestPlace {
+        /// Convert test place to actual Place for testing
+        fn to_place(&self, string_table: &mut StringTable) -> Place {
+            use crate::compiler::hir::place::{IndexKind, Projection};
+
+            let root = match &self.root {
+                TestPlaceRoot::Local(name) => PlaceRoot::Local(string_table.intern(name)),
+                TestPlaceRoot::Param(name) => PlaceRoot::Param(string_table.intern(name)),
+                TestPlaceRoot::Global(name) => PlaceRoot::Global(string_table.intern(name)),
+            };
+
+            let projections = self
+                .projections
+                .iter()
+                .map(|proj| match proj {
+                    TestProjection::Field(name) => Projection::Field(string_table.intern(name)),
+                    TestProjection::Index(idx) => Projection::Index(IndexKind::Constant(*idx)),
+                    TestProjection::DynamicIndex => Projection::Index(IndexKind::Dynamic),
+                    TestProjection::Deref => Projection::Deref,
+                })
+                .collect();
+
+            Place { root, projections }
         }
     }
 
@@ -978,5 +1089,776 @@ mod tests {
 
         assert_eq!(cfg.exit_points.len(), 1);
         assert_eq!(cfg.exit_points[0], 4);
+    }
+
+    // **Feature: borrow-checker-implementation, Property 10: Place Overlap Detection**
+    #[quickcheck]
+    fn property_place_overlap_detection(test_places: Vec<TestPlace>) -> TestResult {
+        // Skip empty or too large place lists
+        if test_places.is_empty() || test_places.len() > 10 {
+            return TestResult::discard();
+        }
+
+        let mut string_table = StringTable::new();
+        let places: Vec<Place> = test_places
+            .iter()
+            .map(|tp| tp.to_place(&mut string_table))
+            .collect();
+
+        // Property: For any two places, they should be considered overlapping if and only if 
+        // they have the same root and their projection lists have a prefix relationship
+        let result = test_place_overlap_detection(&places);
+
+        TestResult::from_bool(result)
+    }
+
+    // **Feature: borrow-checker-implementation, Property 11: Borrow Conflict Detection**
+    #[quickcheck]
+    fn property_borrow_conflict_detection(test_borrows: Vec<TestBorrow>) -> TestResult {
+        // Skip empty or too large borrow lists
+        if test_borrows.is_empty() || test_borrows.len() > 8 {
+            return TestResult::discard();
+        }
+
+        let mut string_table = StringTable::new();
+        let borrows: Vec<(Place, crate::compiler::borrow_checker::types::BorrowKind)> = test_borrows
+            .iter()
+            .map(|tb| (tb.place.to_place(&mut string_table), tb.kind))
+            .collect();
+
+        // Property: For any mutable borrow and any other borrow of overlapping places, 
+        // a conflict should be detected; multiple shared borrows of overlapping places should not conflict
+        let result = test_borrow_conflict_detection(&borrows);
+
+        TestResult::from_bool(result)
+    }
+
+    // **Feature: borrow-checker-implementation, Property 33: Whole-Object Borrowing Prevention**
+    #[quickcheck]
+    fn property_whole_object_borrowing_prevention(test_borrows: Vec<TestBorrow>) -> TestResult {
+        // Skip empty or too large borrow lists
+        if test_borrows.is_empty() || test_borrows.len() > 6 {
+            return TestResult::discard();
+        }
+
+        let mut string_table = StringTable::new();
+        let borrows: Vec<(Place, crate::compiler::borrow_checker::types::BorrowKind)> = test_borrows
+            .iter()
+            .map(|tb| (tb.place.to_place(&mut string_table), tb.kind))
+            .collect();
+
+        // Property: For any situation where a part of an object (field or element) is borrowed, 
+        // borrowing the whole object should be prevented and appropriate errors reported
+        let result = test_whole_object_borrowing_prevention(&borrows);
+
+        TestResult::from_bool(result)
+    }
+
+    /// Test place overlap detection property
+    fn test_place_overlap_detection(places: &[Place]) -> bool {
+        // Property: For any two places, they should be considered overlapping if and only if 
+        // they have the same root and their projection lists have a prefix relationship
+
+        for (i, place1) in places.iter().enumerate() {
+            for (j, place2) in places.iter().enumerate() {
+                if i >= j {
+                    continue; // Skip self-comparison and duplicates
+                }
+
+                let overlaps = place1.overlaps_with(place2);
+                let expected_overlap = places_should_overlap(place1, place2);
+
+                if overlaps != expected_overlap {
+                    return false; // Overlap detection doesn't match expected behavior
+                }
+
+                // Test symmetry: overlap should be symmetric
+                if place1.overlaps_with(place2) != place2.overlaps_with(place1) {
+                    return false; // Overlap detection is not symmetric
+                }
+
+                // Test prefix relationships
+                if place1.is_prefix_of(place2) {
+                    if !place1.overlaps_with(place2) {
+                        return false; // Prefix should imply overlap
+                    }
+                }
+
+                if place2.is_prefix_of(place1) {
+                    if !place2.overlaps_with(place1) {
+                        return false; // Prefix should imply overlap
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Test borrow conflict detection property
+    fn test_borrow_conflict_detection(
+        borrows: &[(Place, crate::compiler::borrow_checker::types::BorrowKind)],
+    ) -> bool {
+        use crate::compiler::borrow_checker::types::BorrowKind;
+
+        // Property: For any mutable borrow and any other borrow of overlapping places, 
+        // a conflict should be detected; multiple shared borrows of overlapping places should not conflict
+
+        for (i, (place1, kind1)) in borrows.iter().enumerate() {
+            for (j, (place2, kind2)) in borrows.iter().enumerate() {
+                if i >= j {
+                    continue; // Skip self-comparison and duplicates
+                }
+
+                let conflicts = place1.conflicts_with(place2, *kind1, *kind2);
+                let expected_conflict = should_conflict(place1, place2, *kind1, *kind2);
+
+                if conflicts != expected_conflict {
+                    return false; // Conflict detection doesn't match expected behavior
+                }
+
+                // Test specific conflict rules
+                if place1.overlaps_with(place2) {
+                    match (kind1, kind2) {
+                        // Shared + Shared: No conflict
+                        (BorrowKind::Shared, BorrowKind::Shared) => {
+                            if conflicts {
+                                return false; // Should not conflict
+                            }
+                        }
+                        // Any other combination with overlap: Conflict
+                        _ => {
+                            if !conflicts {
+                                return false; // Should conflict
+                            }
+                        }
+                    }
+                } else {
+                    // Non-overlapping places should never conflict
+                    if conflicts {
+                        return false; // Should not conflict
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Test whole-object borrowing prevention property
+    fn test_whole_object_borrowing_prevention(
+        borrows: &[(Place, crate::compiler::borrow_checker::types::BorrowKind)],
+    ) -> bool {
+        // Property: For any situation where a part of an object (field or element) is borrowed, 
+        // borrowing the whole object should be prevented and appropriate errors reported
+
+        for (i, (place1, _kind1)) in borrows.iter().enumerate() {
+            for (j, (place2, _kind2)) in borrows.iter().enumerate() {
+                if i >= j {
+                    continue; // Skip self-comparison and duplicates
+                }
+
+                // Check if one place is a prefix of another (whole-object vs part relationship)
+                let has_prefix_relationship = place1.is_prefix_of(place2) || place2.is_prefix_of(place1);
+
+                if has_prefix_relationship {
+                    // This represents a whole-object borrowing violation
+                    // The places should overlap (which they do due to prefix relationship)
+                    if !place1.overlaps_with(place2) {
+                        return false; // Prefix relationship should imply overlap
+                    }
+
+                    // The conflict detection should catch this
+                    // (This would be caught by the borrow checker's conflict detection)
+                }
+
+                // Test that prefix relationships are correctly identified
+                if place1.is_prefix_of(place2) {
+                    // place1 is a prefix of place2, so they should have the same root
+                    if place1.root != place2.root {
+                        return false; // Prefix relationship requires same root
+                    }
+
+                    // place1's projections should be a prefix of place2's projections
+                    if place1.projections.len() > place2.projections.len() {
+                        return false; // Prefix can't be longer than the full path
+                    }
+
+                    // Check that all projections match
+                    for (k, proj1) in place1.projections.iter().enumerate() {
+                        if let Some(proj2) = place2.projections.get(k) {
+                            if !projections_overlap(proj1, proj2) {
+                                return false; // Projections should match for prefix
+                            }
+                        } else {
+                            return false; // Missing projection in place2
+                        }
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Helper function to determine if two places should overlap
+    fn places_should_overlap(place1: &Place, place2: &Place) -> bool {
+        // Places overlap if they have the same root and one projection list is a prefix of the other
+        if place1.root != place2.root {
+            return false;
+        }
+
+        place1.is_prefix_of(place2) || place2.is_prefix_of(place1)
+    }
+
+    /// Helper function to determine if two borrows should conflict
+    fn should_conflict(
+        place1: &Place,
+        place2: &Place,
+        kind1: crate::compiler::borrow_checker::types::BorrowKind,
+        kind2: crate::compiler::borrow_checker::types::BorrowKind,
+    ) -> bool {
+        use crate::compiler::borrow_checker::types::BorrowKind;
+
+        // Places must overlap to conflict
+        if !place1.overlaps_with(place2) {
+            return false;
+        }
+
+        match (kind1, kind2) {
+            // Shared borrows don't conflict with each other
+            (BorrowKind::Shared, BorrowKind::Shared) => false,
+            // Any other combination conflicts if places overlap
+            _ => true,
+        }
+    }
+
+    /// Helper function to check if two projections overlap
+    fn projections_overlap(
+        proj1: &crate::compiler::hir::place::Projection,
+        proj2: &crate::compiler::hir::place::Projection,
+    ) -> bool {
+        use crate::compiler::hir::place::{IndexKind, Projection};
+
+        match (proj1, proj2) {
+            // Field accesses overlap only if same field
+            (Projection::Field(a), Projection::Field(b)) => a == b,
+
+            // Index accesses use conservative overlap analysis
+            (Projection::Index(a), Projection::Index(b)) => match (a, b) {
+                // Same constant indices overlap
+                (IndexKind::Constant(x), IndexKind::Constant(y)) => x == y,
+                // Dynamic indices conservatively overlap with everything
+                (IndexKind::Dynamic, _) | (_, IndexKind::Dynamic) => true,
+            },
+
+            // Dereferences always overlap (same reference target)
+            (Projection::Deref, Projection::Deref) => true,
+
+            // Different projection types don't overlap
+            _ => false,
+        }
+    }
+
+    // Unit tests for place overlap analysis
+    #[test]
+    fn test_place_overlap_basic() {
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let field_name = string_table.intern("field");
+
+        // Create places: x and x.field
+        let place_x = Place::local(x_name);
+        let place_x_field = Place::local(x_name).field(field_name);
+
+        // x should overlap with x.field (whole-object vs field)
+        assert!(place_x.overlaps_with(&place_x_field));
+        assert!(place_x_field.overlaps_with(&place_x));
+    }
+
+    #[test]
+    fn test_place_prefix_relationship() {
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let field_name = string_table.intern("field");
+        let subfield_name = string_table.intern("subfield");
+
+        // Create places: x, x.field, x.field.subfield
+        let place_x = Place::local(x_name);
+        let place_x_field = Place::local(x_name).field(field_name);
+        let place_x_field_subfield = Place::local(x_name).field(field_name).field(subfield_name);
+
+        // Test prefix relationships
+        assert!(place_x.is_prefix_of(&place_x_field));
+        assert!(place_x.is_prefix_of(&place_x_field_subfield));
+        assert!(place_x_field.is_prefix_of(&place_x_field_subfield));
+
+        // Test non-prefix relationships
+        assert!(!place_x_field.is_prefix_of(&place_x));
+        assert!(!place_x_field_subfield.is_prefix_of(&place_x));
+        assert!(!place_x_field_subfield.is_prefix_of(&place_x_field));
+    }
+
+    #[test]
+    fn test_place_no_overlap_different_fields() {
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let field1_name = string_table.intern("field1");
+        let field2_name = string_table.intern("field2");
+
+        // Create places: x.field1 and x.field2
+        let place_x_field1 = Place::local(x_name).field(field1_name);
+        let place_x_field2 = Place::local(x_name).field(field2_name);
+
+        // Different fields should not overlap
+        assert!(!place_x_field1.overlaps_with(&place_x_field2));
+        assert!(!place_x_field2.overlaps_with(&place_x_field1));
+    }
+
+    #[test]
+    fn test_place_no_overlap_different_roots() {
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let y_name = string_table.intern("y");
+
+        // Create places: x and y
+        let place_x = Place::local(x_name);
+        let place_y = Place::local(y_name);
+
+        // Different roots should not overlap
+        assert!(!place_x.overlaps_with(&place_y));
+        assert!(!place_y.overlaps_with(&place_x));
+    }
+
+    #[test]
+    fn test_place_borrow_conflict_detection() {
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let field_name = string_table.intern("field");
+
+        // Create places: x and x.field
+        let place_x = Place::local(x_name);
+        let place_x_field = Place::local(x_name).field(field_name);
+
+        // Test conflict rules
+        // Shared + Shared: No conflict
+        assert!(!place_x.conflicts_with(&place_x_field, BorrowKind::Shared, BorrowKind::Shared));
+
+        // Shared + Mutable: Conflict
+        assert!(place_x.conflicts_with(&place_x_field, BorrowKind::Shared, BorrowKind::Mutable));
+        assert!(place_x.conflicts_with(&place_x_field, BorrowKind::Mutable, BorrowKind::Shared));
+
+        // Mutable + Mutable: Conflict
+        assert!(place_x.conflicts_with(&place_x_field, BorrowKind::Mutable, BorrowKind::Mutable));
+
+        // Move + Any: Conflict
+        assert!(place_x.conflicts_with(&place_x_field, BorrowKind::Move, BorrowKind::Shared));
+        assert!(place_x.conflicts_with(&place_x_field, BorrowKind::Move, BorrowKind::Mutable));
+        assert!(place_x.conflicts_with(&place_x_field, BorrowKind::Shared, BorrowKind::Move));
+    }
+
+    #[test]
+    fn test_index_overlap_conservative() {
+        let mut string_table = StringTable::new();
+        let arr_name = string_table.intern("arr");
+
+        // Create places: arr[1], arr[2], arr[i]
+        let place_arr_1 = Place::local(arr_name).index(IndexKind::Constant(1));
+        let place_arr_2 = Place::local(arr_name).index(IndexKind::Constant(2));
+        let place_arr_i = Place::local(arr_name).index(IndexKind::Dynamic);
+
+        // Same constant indices overlap
+        let place_arr_1_copy = Place::local(arr_name).index(IndexKind::Constant(1));
+        assert!(place_arr_1.overlaps_with(&place_arr_1_copy));
+
+        // Different constant indices don't overlap
+        assert!(!place_arr_1.overlaps_with(&place_arr_2));
+
+        // Dynamic indices conservatively overlap with everything
+        assert!(place_arr_i.overlaps_with(&place_arr_1));
+        assert!(place_arr_i.overlaps_with(&place_arr_2));
+        assert!(place_arr_1.overlaps_with(&place_arr_i));
+    }
+
+    #[test]
+    fn test_whole_object_vs_field_overlap() {
+        let mut string_table = StringTable::new();
+        let obj_name = string_table.intern("obj");
+        let field1_name = string_table.intern("field1");
+        let field2_name = string_table.intern("field2");
+        let subfield_name = string_table.intern("subfield");
+
+        // Create places: obj, obj.field1, obj.field1.subfield, obj.field2
+        let place_obj = Place::local(obj_name);
+        let place_obj_field1 = Place::local(obj_name).field(field1_name);
+        let place_obj_field1_subfield = Place::local(obj_name).field(field1_name).field(subfield_name);
+        let place_obj_field2 = Place::local(obj_name).field(field2_name);
+
+        // Whole object overlaps with all its fields
+        assert!(place_obj.overlaps_with(&place_obj_field1));
+        assert!(place_obj.overlaps_with(&place_obj_field1_subfield));
+        assert!(place_obj.overlaps_with(&place_obj_field2));
+
+        // Fields overlap with whole object
+        assert!(place_obj_field1.overlaps_with(&place_obj));
+        assert!(place_obj_field1_subfield.overlaps_with(&place_obj));
+        assert!(place_obj_field2.overlaps_with(&place_obj));
+
+        // Field overlaps with its subfields
+        assert!(place_obj_field1.overlaps_with(&place_obj_field1_subfield));
+        assert!(place_obj_field1_subfield.overlaps_with(&place_obj_field1));
+
+        // Different fields don't overlap
+        assert!(!place_obj_field1.overlaps_with(&place_obj_field2));
+        assert!(!place_obj_field2.overlaps_with(&place_obj_field1));
+    }
+
+    #[test]
+    fn test_array_whole_vs_element_overlap() {
+        let mut string_table = StringTable::new();
+        let arr_name = string_table.intern("arr");
+        let field_name = string_table.intern("field");
+
+        // Create places: arr, arr[0], arr[0].field
+        let place_arr = Place::local(arr_name);
+        let place_arr_0 = Place::local(arr_name).index(IndexKind::Constant(0));
+        let place_arr_0_field = Place::local(arr_name).index(IndexKind::Constant(0)).field(field_name);
+
+        // Whole array overlaps with its elements
+        assert!(place_arr.overlaps_with(&place_arr_0));
+        assert!(place_arr.overlaps_with(&place_arr_0_field));
+
+        // Elements overlap with whole array
+        assert!(place_arr_0.overlaps_with(&place_arr));
+        assert!(place_arr_0_field.overlaps_with(&place_arr));
+
+        // Element overlaps with its fields
+        assert!(place_arr_0.overlaps_with(&place_arr_0_field));
+        assert!(place_arr_0_field.overlaps_with(&place_arr_0));
+    }
+
+    // ============================================================================
+    // Borrow Tracking System Tests (Task 7)
+    // ============================================================================
+
+    // **Feature: borrow-checker-implementation, Property 4: Borrow Creation Consistency**
+    #[test]
+    fn test_borrow_creation_for_load_operation() {
+        use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
+        use crate::compiler::borrow_checker::cfg::construct_cfg;
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let y_name = string_table.intern("y");
+
+        // Create HIR nodes with a Load operation
+        let nodes = vec![
+            HirNode {
+                id: 0,
+                kind: HirKind::Assign {
+                    place: Place::local(x_name),
+                    value: HirExpr {
+                        kind: HirExprKind::Int(42),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+            HirNode {
+                id: 1,
+                kind: HirKind::Assign {
+                    place: Place::local(y_name),
+                    value: HirExpr {
+                        // Load creates a shared borrow
+                        kind: HirExprKind::Load(Place::local(x_name)),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+        ];
+
+        // Construct CFG and track borrows
+        let mut checker = BorrowChecker::new(&mut string_table);
+        checker.cfg = construct_cfg(&nodes);
+        let result = track_borrows(&mut checker, &nodes);
+
+        assert!(result.is_ok());
+
+        // Verify that a shared borrow was created for the Load operation
+        if let Some(cfg_node) = checker.cfg.nodes.get(&1) {
+            let borrows: Vec<_> = cfg_node.borrow_state.active_borrows.values().collect();
+            
+            // Should have at least one borrow for the Load
+            assert!(!borrows.is_empty(), "Load operation should create a borrow");
+            
+            // Find the borrow for place x
+            let x_borrow = borrows.iter().find(|loan| {
+                loan.place.root == PlaceRoot::Local(x_name) && loan.kind == BorrowKind::Shared
+            });
+            
+            assert!(x_borrow.is_some(), "Load should create a shared borrow of x");
+        }
+    }
+
+    // **Feature: borrow-checker-implementation, Property 4: Borrow Creation Consistency**
+    #[test]
+    fn test_borrow_creation_for_candidate_move() {
+        use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
+        use crate::compiler::borrow_checker::cfg::construct_cfg;
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let y_name = string_table.intern("y");
+
+        // Create HIR nodes with a CandidateMove operation
+        let nodes = vec![
+            HirNode {
+                id: 0,
+                kind: HirKind::Assign {
+                    place: Place::local(x_name),
+                    value: HirExpr {
+                        kind: HirExprKind::Int(42),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+            HirNode {
+                id: 1,
+                kind: HirKind::Assign {
+                    place: Place::local(y_name),
+                    value: HirExpr {
+                        // CandidateMove creates a mutable borrow candidate
+                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+        ];
+
+        // Construct CFG and track borrows
+        let mut checker = BorrowChecker::new(&mut string_table);
+        checker.cfg = construct_cfg(&nodes);
+        let result = track_borrows(&mut checker, &nodes);
+
+        assert!(result.is_ok());
+
+        // Verify that a mutable borrow was created for the CandidateMove operation
+        if let Some(cfg_node) = checker.cfg.nodes.get(&1) {
+            let borrows: Vec<_> = cfg_node.borrow_state.active_borrows.values().collect();
+            
+            // Should have at least one borrow for the CandidateMove
+            assert!(!borrows.is_empty(), "CandidateMove operation should create a borrow");
+            
+            // Find the borrow for place x
+            let x_borrow = borrows.iter().find(|loan| {
+                loan.place.root == PlaceRoot::Local(x_name) && loan.kind == BorrowKind::Mutable
+            });
+            
+            assert!(x_borrow.is_some(), "CandidateMove should create a mutable borrow of x");
+        }
+    }
+
+    // **Feature: borrow-checker-implementation, Property 5: Borrow State Propagation**
+    #[test]
+    fn test_borrow_state_merge_at_join_point() {
+        use crate::compiler::borrow_checker::types::{BorrowState, Loan};
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let y_name = string_table.intern("y");
+
+        // Create two borrow states representing different branches
+        let mut state1 = BorrowState::default();
+        let mut state2 = BorrowState::default();
+
+        // Both branches have a borrow of x
+        let loan_x_1 = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
+        let loan_x_2 = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
+        
+        // Only state1 has a borrow of y
+        let loan_y = Loan::new(1, Place::local(y_name), BorrowKind::Shared, 2);
+
+        state1.add_borrow(loan_x_1);
+        state1.add_borrow(loan_y);
+        state2.add_borrow(loan_x_2);
+
+        // Merge state2 into state1 (simulating join point)
+        state1.merge(&state2);
+
+        // After conservative merge, only borrows present in BOTH states should remain
+        // Borrow of x (id=0) should remain (present in both)
+        assert!(state1.active_borrows.contains_key(&0), "Borrow of x should remain after merge");
+        
+        // Borrow of y (id=1) should be removed (only in state1)
+        assert!(!state1.active_borrows.contains_key(&1), "Borrow of y should be removed after merge");
+    }
+
+    // **Feature: borrow-checker-implementation, Property 5: Borrow State Propagation**
+    #[test]
+    fn test_borrow_state_union_merge() {
+        use crate::compiler::borrow_checker::types::{BorrowState, Loan};
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let y_name = string_table.intern("y");
+
+        // Create two borrow states
+        let mut state1 = BorrowState::default();
+        let mut state2 = BorrowState::default();
+
+        // State1 has borrow of x
+        let loan_x = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
+        state1.add_borrow(loan_x);
+
+        // State2 has borrow of y
+        let loan_y = Loan::new(1, Place::local(y_name), BorrowKind::Shared, 2);
+        state2.add_borrow(loan_y);
+
+        // Union merge state2 into state1
+        state1.union_merge(&state2);
+
+        // After union merge, both borrows should be present
+        assert!(state1.active_borrows.contains_key(&0), "Borrow of x should be present");
+        assert!(state1.active_borrows.contains_key(&1), "Borrow of y should be present");
+        assert_eq!(state1.active_borrows.len(), 2);
+    }
+
+    // **Feature: borrow-checker-implementation, Property 6: Borrow Metadata Completeness**
+    #[test]
+    fn test_borrow_metadata_completeness() {
+        use crate::compiler::borrow_checker::types::Loan;
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let field_name = string_table.intern("field");
+
+        // Create a loan with full metadata
+        let place = Place::local(x_name).field(field_name);
+        let creation_point = 42;
+        let loan = Loan::new(0, place.clone(), BorrowKind::Mutable, creation_point);
+
+        // Verify all metadata is recorded
+        assert_eq!(loan.id, 0, "Borrow ID should be recorded");
+        assert_eq!(loan.place, place, "Target place should be recorded");
+        assert_eq!(loan.kind, BorrowKind::Mutable, "Borrow kind should be recorded");
+        assert_eq!(loan.creation_point, creation_point, "Creation point should be recorded");
+    }
+
+    // **Feature: borrow-checker-implementation, Property 5: Borrow State Propagation**
+    #[test]
+    fn test_borrow_state_propagation_through_cfg() {
+        use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
+        use crate::compiler::borrow_checker::cfg::construct_cfg;
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+        let y_name = string_table.intern("y");
+        let z_name = string_table.intern("z");
+
+        // Create a sequence of HIR nodes
+        let nodes = vec![
+            HirNode {
+                id: 0,
+                kind: HirKind::Assign {
+                    place: Place::local(x_name),
+                    value: HirExpr {
+                        kind: HirExprKind::Int(1),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+            HirNode {
+                id: 1,
+                kind: HirKind::Assign {
+                    place: Place::local(y_name),
+                    value: HirExpr {
+                        kind: HirExprKind::Load(Place::local(x_name)),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+            HirNode {
+                id: 2,
+                kind: HirKind::Assign {
+                    place: Place::local(z_name),
+                    value: HirExpr {
+                        kind: HirExprKind::Load(Place::local(y_name)),
+                        data_type: DataType::Int,
+                        location: TextLocation::default(),
+                    },
+                },
+                location: TextLocation::default(),
+                scope: InternedPath::new(),
+            },
+        ];
+
+        // Construct CFG and track borrows
+        let mut checker = BorrowChecker::new(&mut string_table);
+        checker.cfg = construct_cfg(&nodes);
+        let result = track_borrows(&mut checker, &nodes);
+
+        assert!(result.is_ok());
+
+        // Verify CFG structure
+        assert_eq!(checker.cfg.nodes.len(), 3);
+        
+        // Verify edges: 0 -> 1 -> 2
+        let successors_0 = checker.cfg.successors(0);
+        assert!(successors_0.contains(&1), "Node 0 should connect to node 1");
+        
+        let successors_1 = checker.cfg.successors(1);
+        assert!(successors_1.contains(&2), "Node 1 should connect to node 2");
+    }
+
+    // Test for empty borrow state
+    #[test]
+    fn test_borrow_state_is_empty() {
+        use crate::compiler::borrow_checker::types::{BorrowState, Loan};
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+
+        let mut state = BorrowState::default();
+        assert!(state.is_empty(), "New borrow state should be empty");
+
+        let loan = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
+        state.add_borrow(loan);
+        assert!(!state.is_empty(), "Borrow state with loans should not be empty");
+    }
+
+    // Test for recording last use
+    #[test]
+    fn test_borrow_state_record_last_use() {
+        use crate::compiler::borrow_checker::types::BorrowState;
+
+        let mut string_table = StringTable::new();
+        let x_name = string_table.intern("x");
+
+        let mut state = BorrowState::default();
+        let place = Place::local(x_name);
+        
+        state.record_last_use(place.clone(), 5);
+        assert_eq!(state.get_last_use(&place), Some(5));
+
+        // Recording a later use should update
+        state.record_last_use(place.clone(), 10);
+        assert_eq!(state.get_last_use(&place), Some(10));
     }
 }

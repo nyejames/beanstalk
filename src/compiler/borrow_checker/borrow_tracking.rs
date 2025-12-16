@@ -341,18 +341,66 @@ fn process_expression_for_borrows(
 }
 
 /// Propagate borrow state through the control flow graph
+/// 
+/// This function implements a worklist-based dataflow analysis to propagate
+/// borrow state through the CFG. It handles:
+/// - Forward propagation along CFG edges
+/// - Conservative merging at join points (multiple predecessors)
+/// - Iterative refinement until a fixed point is reached
 fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMessages> {
-    // Perform a topological traversal of the CFG to propagate borrow state
-    let mut visited = HashSet::new();
-    let mut work_list = checker.cfg.entry_points.clone();
+    // Use a worklist algorithm for dataflow analysis
+    // This handles cycles in the CFG (from loops) correctly
+    let mut work_list: Vec<HirNodeId> = checker.cfg.entry_points.clone();
+    let mut iterations = 0;
+    let max_iterations = checker.cfg.nodes.len() * 10; // Prevent infinite loops
 
     while let Some(node_id) = work_list.pop() {
-        if visited.contains(&node_id) {
-            continue;
+        iterations += 1;
+        if iterations > max_iterations {
+            // Safety limit reached - this shouldn't happen with well-formed CFGs
+            break;
         }
-        visited.insert(node_id);
 
-        // Get current node's borrow state
+        // First, merge incoming borrow states from all predecessors
+        let predecessors = checker.cfg.predecessors(node_id);
+        
+        if !predecessors.is_empty() {
+            // Collect predecessor states
+            let predecessor_states: Vec<_> = predecessors
+                .iter()
+                .filter_map(|&pred_id| {
+                    checker.cfg.nodes.get(&pred_id).map(|n| n.borrow_state.clone())
+                })
+                .collect();
+
+            // Merge all predecessor states into the current node
+            if let Some(current_node) = checker.cfg.nodes.get_mut(&node_id) {
+                // Start with the node's own borrows (created at this node)
+                let own_borrows = current_node.borrow_state.clone();
+                
+                // Merge incoming states from predecessors
+                for (i, pred_state) in predecessor_states.iter().enumerate() {
+                    if i == 0 && own_borrows.is_empty() {
+                        // First predecessor and no own borrows - use union merge
+                        current_node.borrow_state.union_merge(pred_state);
+                    } else {
+                        // Multiple predecessors - use conservative merge (intersection)
+                        // This implements Polonius-style analysis where conflicts
+                        // are only errors if they exist on ALL incoming paths
+                        current_node.borrow_state.merge(pred_state);
+                    }
+                }
+                
+                // Re-add own borrows that were created at this node
+                for loan in own_borrows.active_borrows.values() {
+                    if !current_node.borrow_state.active_borrows.contains_key(&loan.id) {
+                        current_node.borrow_state.add_borrow(loan.clone());
+                    }
+                }
+            }
+        }
+
+        // Get current node's borrow state after merging
         let current_state = if let Some(node) = checker.cfg.nodes.get(&node_id) {
             node.borrow_state.clone()
         } else {
@@ -364,13 +412,19 @@ fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMes
 
         // Propagate to successors
         for successor_id in successors {
-            if let Some(successor_node) = checker.cfg.nodes.get_mut(&successor_id) {
-                // Merge current state into successor
-                successor_node.borrow_state.merge(&current_state);
-            }
+            // Check if the successor's state would change
+            let state_changed = if let Some(successor_node) = checker.cfg.nodes.get(&successor_id) {
+                // Check if merging would change the state
+                let old_count = successor_node.borrow_state.active_borrows.len();
+                let mut test_state = successor_node.borrow_state.clone();
+                test_state.union_merge(&current_state);
+                test_state.active_borrows.len() != old_count
+            } else {
+                false
+            };
 
-            // Add successor to work list if not visited
-            if !visited.contains(&successor_id) {
+            // If state would change, add to worklist for re-processing
+            if state_changed && !work_list.contains(&successor_id) {
                 work_list.push(successor_id);
             }
         }

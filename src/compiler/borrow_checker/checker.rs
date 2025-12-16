@@ -10,6 +10,7 @@ use crate::compiler::borrow_checker::cfg::construct_cfg;
 use crate::compiler::borrow_checker::conflict_detection::{
     check_move_while_borrowed, check_use_after_move, detect_conflicts,
 };
+use crate::compiler::borrow_checker::last_use::{analyze_last_uses, apply_last_use_analysis};
 use crate::compiler::borrow_checker::types::BorrowChecker;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::{HirModule, HirNode};
@@ -83,15 +84,27 @@ fn perform_borrow_analysis(
     borrow_log!("Tracking borrows across CFG");
     track_borrows(&mut checker, hir_nodes)?;
 
-    // Phase 3: Detect borrow conflicts
+    // Phase 3: Perform last-use analysis
+    borrow_log!("Performing last-use analysis");
+    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg.clone(), hir_nodes);
+    borrow_log!(
+        "Last-use analysis complete: {} places analyzed, {} last-use points identified",
+        last_use_analysis.place_usages.len(),
+        last_use_analysis.last_use_nodes.len()
+    );
+    
+    // Apply last-use analysis results to borrow checker state
+    apply_last_use_analysis(&mut checker, &last_use_analysis);
+
+    // Phase 4: Detect borrow conflicts
     borrow_log!("Detecting borrow conflicts");
     detect_conflicts(&mut checker, hir_nodes);
 
-    // Phase 4: Check for use-after-move violations
+    // Phase 5: Check for use-after-move violations
     borrow_log!("Checking for use-after-move violations");
     check_use_after_move(&mut checker, hir_nodes);
 
-    // Phase 5: Check for move-while-borrowed violations
+    // Phase 6: Check for move-while-borrowed violations
     borrow_log!("Checking for move-while-borrowed violations");
     check_move_while_borrowed(&mut checker, hir_nodes);
 

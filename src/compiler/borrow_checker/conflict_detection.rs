@@ -39,7 +39,11 @@ fn check_node_conflicts(checker: &mut BorrowChecker, node: &HirNode) {
 
     for (i, loan1) in active_borrows.iter().enumerate() {
         for loan2 in active_borrows.iter().skip(i + 1) {
-            if loan1.conflicts_with(loan2) {
+            // Use enhanced place conflict detection
+            if loan1
+                .place
+                .conflicts_with(&loan2.place, loan1.kind, loan2.kind)
+            {
                 // Check if this conflict exists on all incoming paths (Polonius-style)
                 if conflict_exists_on_all_paths(checker, node.id, &loan1.place, &loan2.place) {
                     if let Some(error) =
@@ -51,6 +55,9 @@ fn check_node_conflicts(checker: &mut BorrowChecker, node: &HirNode) {
             }
         }
     }
+
+    // Check for whole-object borrowing violations
+    check_whole_object_borrowing_violations(checker, &borrow_state, node, &mut errors);
 
     // Add all collected errors
     for error in errors {
@@ -186,6 +193,48 @@ pub fn check_use_after_move(checker: &mut BorrowChecker, hir_nodes: &[HirNode]) 
     // Add all collected errors
     for error in errors {
         checker.add_error(error);
+    }
+}
+
+/// Check for whole-object borrowing violations
+///
+/// This function enforces the design constraint that prevents borrowing the whole
+/// object when a part is already borrowed. For example:
+/// - If `x.field` is borrowed, then borrowing `x` should be prevented
+/// - If `arr[i]` is borrowed, then borrowing `arr` should be prevented
+fn check_whole_object_borrowing_violations(
+    checker: &mut BorrowChecker,
+    borrow_state: &crate::compiler::borrow_checker::types::BorrowState,
+    node: &HirNode,
+    errors: &mut Vec<crate::compiler::compiler_messages::compiler_errors::CompilerError>,
+) {
+    let active_borrows: Vec<&Loan> = borrow_state.active_borrows.values().collect();
+
+    for (i, loan1) in active_borrows.iter().enumerate() {
+        for loan2 in active_borrows.iter().skip(i + 1) {
+            // Check if one place is a prefix of another (whole-object vs part relationship)
+            let (whole_loan, part_loan) = if loan1.place.is_prefix_of(&loan2.place) {
+                (loan1, loan2) // loan1 is the whole object, loan2 is the part
+            } else if loan2.place.is_prefix_of(&loan1.place) {
+                (loan2, loan1) // loan2 is the whole object, loan1 is the part
+            } else {
+                continue; // No prefix relationship
+            };
+
+            // Report error: cannot borrow whole object when part is borrowed
+            let error_location = node
+                .location
+                .clone()
+                .to_error_location(checker.string_table);
+
+            let error = crate::create_whole_object_borrow_error!(
+                whole_loan.place,
+                part_loan.place,
+                error_location.clone(),
+                error_location
+            );
+            errors.push(error);
+        }
     }
 }
 

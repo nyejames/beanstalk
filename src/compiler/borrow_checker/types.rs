@@ -309,6 +309,11 @@ impl BorrowState {
         Self::default()
     }
 
+    /// Check if this borrow state is empty
+    pub fn is_empty(&self) -> bool {
+        self.active_borrows.is_empty()
+    }
+
     /// Add a borrow to this state
     pub fn add_borrow(&mut self, loan: Loan) {
         let borrow_id = loan.id;
@@ -351,13 +356,42 @@ impl BorrowState {
         }
     }
 
+    /// Get all borrows for places that overlap with the given place
+    pub fn borrows_for_overlapping_places(&self, place: &Place) -> Vec<&Loan> {
+        let mut result = Vec::new();
+        for (existing_place, borrow_ids) in &self.place_to_borrows {
+            if place.overlaps_with(existing_place) {
+                for &borrow_id in borrow_ids {
+                    if let Some(loan) = self.active_borrows.get(&borrow_id) {
+                        result.push(loan);
+                    }
+                }
+            }
+        }
+        result
+    }
+
     /// Merge another borrow state into this one (for CFG join points)
+    /// 
+    /// This implements conservative merging for Polonius-style analysis:
+    /// - At join points, we keep borrows that exist in BOTH incoming states
+    /// - This ensures that conflicts are only reported if they exist on ALL paths
     pub fn merge(&mut self, other: &BorrowState) {
-        // Conservative merge: include borrows that exist in both states
+        // If this state is empty, copy from other (first incoming edge)
+        if self.is_empty() {
+            self.active_borrows = other.active_borrows.clone();
+            self.place_to_borrows = other.place_to_borrows.clone();
+            self.last_uses = other.last_uses.clone();
+            return;
+        }
+
+        // Conservative merge: keep borrows that exist in both states
+        // This is correct for Polonius-style analysis where conflicts
+        // are only errors if they exist on ALL incoming paths
         let mut borrows_to_keep = HashMap::new();
 
-        for (&borrow_id, loan) in &other.active_borrows {
-            if self.active_borrows.contains_key(&borrow_id) {
+        for (&borrow_id, loan) in &self.active_borrows {
+            if other.active_borrows.contains_key(&borrow_id) {
                 borrows_to_keep.insert(borrow_id, loan.clone());
             }
         }
@@ -373,6 +407,74 @@ impl BorrowState {
                 .or_default()
                 .push(loan.id);
         }
+
+        // Merge last uses - keep the later use point for each place
+        for (place, &node_id) in &other.last_uses {
+            self.last_uses
+                .entry(place.clone())
+                .and_modify(|existing| {
+                    // Keep the larger node ID (later in execution)
+                    if node_id > *existing {
+                        *existing = node_id;
+                    }
+                })
+                .or_insert(node_id);
+        }
+    }
+
+    /// Union merge: combine borrows from both states (for propagation)
+    /// 
+    /// This is used when propagating state along CFG edges where we want
+    /// to accumulate all borrows that could be active.
+    pub fn union_merge(&mut self, other: &BorrowState) {
+        // Add all borrows from other that don't exist in self
+        for (&borrow_id, loan) in &other.active_borrows {
+            if !self.active_borrows.contains_key(&borrow_id) {
+                self.active_borrows.insert(borrow_id, loan.clone());
+                self.place_to_borrows
+                    .entry(loan.place.clone())
+                    .or_default()
+                    .push(borrow_id);
+            }
+        }
+
+        // Merge last uses
+        for (place, &node_id) in &other.last_uses {
+            self.last_uses
+                .entry(place.clone())
+                .and_modify(|existing| {
+                    if node_id > *existing {
+                        *existing = node_id;
+                    }
+                })
+                .or_insert(node_id);
+        }
+    }
+
+    /// Record a last use for a place
+    pub fn record_last_use(&mut self, place: Place, node_id: HirNodeId) {
+        self.last_uses.insert(place, node_id);
+    }
+
+    /// Get the last use point for a place, if known
+    #[allow(dead_code)]
+    pub fn get_last_use(&self, place: &Place) -> Option<HirNodeId> {
+        self.last_uses.get(place).copied()
+    }
+
+    /// Check if a place has any active borrows
+    pub fn has_active_borrows(&self, place: &Place) -> bool {
+        self.place_to_borrows.contains_key(place)
+    }
+
+    /// Get all active borrow IDs
+    pub fn active_borrow_ids(&self) -> impl Iterator<Item = BorrowId> + '_ {
+        self.active_borrows.keys().copied()
+    }
+
+    /// Get a specific loan by ID
+    pub fn get_loan(&self, borrow_id: BorrowId) -> Option<&Loan> {
+        self.active_borrows.get(&borrow_id)
     }
 }
 
@@ -391,18 +493,8 @@ impl Loan {
 
     /// Check if this loan conflicts with another loan
     pub fn conflicts_with(&self, other: &Loan) -> bool {
-        // Loans conflict if they overlap in memory and at least one is mutable
-        if !self.place.overlaps_with(&other.place) {
-            return false;
-        }
-
-        match (self.kind, other.kind) {
-            // Shared borrows don't conflict with each other
-            (BorrowKind::Shared, BorrowKind::Shared) => false,
-
-            // Any other combination conflicts
-            _ => true,
-        }
+        // Use enhanced place conflict detection
+        self.place.conflicts_with(&other.place, self.kind, other.kind)
     }
 }
 

@@ -46,6 +46,7 @@
 //! - [`create_shared_mutable_conflict_error!`]: Shared/mutable borrow conflicts
 //! - [`create_use_after_move_error!`]: Use after move violations
 //! - [`create_move_while_borrowed_error!`]: Move while borrowed violations
+//! - [`create_whole_object_borrow_error!`]: Whole-object borrowing violations
 //!
 //! ## Usage Examples
 //!
@@ -189,6 +190,9 @@ pub enum ErrorMetaDataKey {
     MovedVariable,       // Variable name that was moved
     BorrowedVariable,    // Variable name that was borrowed
     ConflictingVariable, // Variable causing a borrow conflict
+    ConflictingPlace,    // Place that conflicts with another
+    ExistingBorrowPlace, // Place that has an existing borrow
+    ConflictType,        // Type of conflict (e.g., "WholeObjectBorrowingViolation")
 }
 
 // A completely owned version of TextLocation
@@ -991,6 +995,63 @@ macro_rules! return_move_while_borrowed_error {
             $borrow_kind,
             $borrow_location,
             $move_location
+        ));
+    }};
+}
+
+/// Creates a CompileError for whole-object borrowing violations (non-returning version).
+///
+/// This error occurs when attempting to borrow a whole object while a part of it
+/// is already borrowed, violating Beanstalk's design constraint (Requirement 15).
+///
+/// Usage: `let error = create_whole_object_borrow_error!(whole_place, part_place, part_location, whole_location);`;
+#[macro_export]
+macro_rules! create_whole_object_borrow_error {
+    ($whole_place:expr, $part_place:expr, $part_location:expr, $whole_location:expr) => {{
+        let whole_place_str: &'static str = Box::leak(format!("{}", $whole_place).into_boxed_str());
+        let part_place_str: &'static str = Box::leak(format!("{}", $part_place).into_boxed_str());
+
+        $crate::compiler::compiler_messages::compiler_errors::CompilerError::new_borrow_checker_error(
+            format!(
+                "Cannot borrow whole object '{}' while part '{}' is already borrowed",
+                $whole_place, $part_place
+            ),
+            $whole_location,
+            {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::ConflictingPlace,
+                    whole_place_str
+                );
+                map.insert(
+                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::ExistingBorrowPlace,
+                    part_place_str
+                );
+                map.insert(
+                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::ConflictType,
+                    "WholeObjectBorrowingViolation"
+                );
+                map.insert(
+                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Consider using the existing borrow of the part, or end the part borrow first"
+                );
+                map
+            }
+        )
+    }};
+}
+
+/// Returns a CompileError for whole-object borrowing violations (returning version).
+///
+/// Usage: `return_whole_object_borrow_error!(whole_place, part_place, part_location, whole_location)`;
+#[macro_export]
+macro_rules! return_whole_object_borrow_error {
+    ($whole_place:expr, $part_place:expr, $part_location:expr, $whole_location:expr) => {{
+        return Err(create_whole_object_borrow_error!(
+            $whole_place,
+            $part_place,
+            $part_location,
+            $whole_location
         ));
     }};
 }

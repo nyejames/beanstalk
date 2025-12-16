@@ -26,6 +26,7 @@ pub mod checker;
 pub mod cfg;
 pub mod borrow_tracking;
 pub mod conflict_detection;
+pub mod last_use;
 pub mod types;
 
 
@@ -38,3 +39,6 @@ pub use types::{
     BorrowChecker, ControlFlowGraph, BorrowState, Loan, BorrowKind, CfgNodeType,
     BorrowId, CfgRegion
 };
+
+// Re-export last-use analysis types
+pub use last_use::{LastUseAnalysis, PlaceUsageInfo, analyze_last_uses};

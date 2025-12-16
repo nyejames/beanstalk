@@ -105,6 +105,7 @@ mod compiler {
         pub(crate) mod cfg;
         pub(crate) mod checker;
         pub(crate) mod conflict_detection;
+        pub(crate) mod last_use;
         pub(crate) mod types;
     }
 }
