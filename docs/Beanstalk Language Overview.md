@@ -208,7 +208,7 @@ name = "Alice"
 io([: Hello, [name]!])
 
 -- Print in functions
-greet |name String| -> Void:
+greet |name String|:
     io([: Hello, [name]!])
 ;
 ```
