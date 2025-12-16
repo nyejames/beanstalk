@@ -24,3 +24,7 @@ wasmparser = "0.242.0"
 wasmer = "6.1.0-rc.5"
 wasm-encoder = "0.243.0"
 wasmer-types = "6.1.0-rc.5"
+
+[dev-dependencies]
+quickcheck = "1.0"
+quickcheck_macros = "1.0"

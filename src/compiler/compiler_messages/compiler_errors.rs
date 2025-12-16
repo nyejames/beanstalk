@@ -324,6 +324,20 @@ impl CompilerError {
         }
     }
 
+    /// Create a new borrow checker error with metadata
+    pub fn new_borrow_checker_error(
+        msg: impl Into<String>,
+        location: ErrorLocation,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::BorrowChecker,
+            metadata,
+        }
+    }
+
     /// Create a file system error from a Path
     pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
         CompilerError {
@@ -756,15 +770,17 @@ macro_rules! create_shared_mutable_conflict_error {
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
         let existing_kind_str: &'static str = match $existing_kind {
             BorrowKind::Shared => "Shared",
-            BorrowKind::Mut => "Mutable",
+            BorrowKind::Mutable => "Mutable",
+            BorrowKind::Move => "Move",
         };
         let new_kind_str: &'static str = match $new_kind {
             BorrowKind::Shared => "Shared",
-            BorrowKind::Mut => "Mutable",
+            BorrowKind::Mutable => "Mutable",
+            BorrowKind::Move => "Move",
         };
 
         let (message, suggestion, lifetime_hint) = match (&$existing_kind, &$new_kind) {
-            (BorrowKind::Shared, BorrowKind::Mut) => (
+            (BorrowKind::Shared, BorrowKind::Mutable) => (
                 format!(
                     "cannot mutably borrow `{:?}` because it is already referenced",
                     $place
@@ -772,13 +788,18 @@ macro_rules! create_shared_mutable_conflict_error {
                 "Ensure all shared references are finished before creating mutable access",
                 "Mutable borrows require exclusive access - no other borrows can exist",
             ),
-            (BorrowKind::Mut, BorrowKind::Shared) => (
+            (BorrowKind::Mutable, BorrowKind::Shared) => (
                 format!(
                     "cannot reference `{:?}` because it is already mutably borrowed",
                     $place
                 ),
                 "Finish using the mutable borrow before creating shared references",
                 "Mutable borrows are exclusive - no other borrows can exist while active",
+            ),
+            (BorrowKind::Move, _) | (_, BorrowKind::Move) => (
+                format!("use of moved value `{:?}`", $place),
+                "Consider borrowing instead of moving, or clone the value",
+                "Once a value is moved, ownership transfers and the original variable can no longer be used",
             ),
             _ => (
                 format!("conflicting borrows of `{:?}`", $place),
@@ -906,12 +927,14 @@ macro_rules! create_move_while_borrowed_error {
         let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
         let borrow_kind_str: &'static str = match $borrow_kind {
             BorrowKind::Shared => "Shared",
-            BorrowKind::Mut => "Mutable",
+            BorrowKind::Mutable => "Mutable",
+            BorrowKind::Move => "Move",
         };
 
         let borrow_type = match $borrow_kind {
             BorrowKind::Shared => "referenced",
-            BorrowKind::Mut => "mutably borrowed",
+            BorrowKind::Mutable => "mutably borrowed",
+            BorrowKind::Move => "moved",
         };
 
         $crate::compiler::compiler_errors::CompilerError {
@@ -972,6 +995,51 @@ macro_rules! return_move_while_borrowed_error {
     }};
 }
 
+/// Creates a CompileError for general borrow checker violations (non-returning version).
+///
+/// This macro creates a borrow checker error with custom message and metadata.
+/// Use this for borrow checker errors that don't fit the specific patterns above.
+///
+/// Usage: `let error = create_borrow_checker_error!("Custom message", location, { metadata });`;
+#[macro_export]
+macro_rules! create_borrow_checker_error {
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        $crate::compiler::compiler_errors::CompilerError::new_borrow_checker_error(
+            $msg,
+            $location,
+            {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            }
+        )
+    }};
+    ($msg:expr, $location:expr) => {{
+        $crate::compiler::compiler_errors::CompilerError::new_borrow_checker_error(
+            $msg,
+            $location,
+            std::collections::HashMap::new()
+        )
+    }};
+}
+
+/// Creates a borrow checker error for general violations (returning version).
+///
+/// Usage: `return_borrow_checker_error_with_metadata!("Custom message", location, { metadata })`;
+#[macro_export]
+macro_rules! return_borrow_checker_error_with_metadata {
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err(create_borrow_checker_error!(
+            $msg,
+            $location,
+            { $( $key => $value ),* }
+        ));
+    }};
+    ($msg:expr, $location:expr) => {{
+        return Err(create_borrow_checker_error!($msg, $location));
+    }};
+}
+
 /// Returns a new CompileError for HIR transformation failures.
 ///
 /// HIR transformation errors indicate failures during AST to HIR conversion.
@@ -986,7 +1054,7 @@ macro_rules! return_hir_transformation_error {
         return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
-            error_type: $crate::compiler::compiler_errors::ErrorType:HirTransformationn,
+            error_type: $crate::compiler::compiler_errors::ErrorType::HirTransformation,
             metadata: {
                 let mut map = std::collections::HashMap::new();
                 $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
@@ -998,7 +1066,7 @@ macro_rules! return_hir_transformation_error {
         return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
             location: $location,
-            error_type: $crate::compiler::compiler_errors::ErrorType:HirTransformationn,
+            error_type: $crate::compiler::compiler_errors::ErrorType::HirTransformation,
             metadata: std::collections::HashMap::new(),
         })
     };

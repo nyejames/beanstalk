@@ -4,7 +4,6 @@
 
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::hir::builder::HirBuilder;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::Arg;
@@ -207,11 +206,7 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
     
-    let hir_nodes = match HirBuilder::lower_ast(
-        module_ast.nodes,
-        module_ast.entry_path.clone(),
-        &mut compiler.string_table,
-    ) {
+    let hir_nodes = match compiler.generate_hir(module_ast) {
         Ok(nodes) => nodes,
         Err(e) => {
             compiler_messages.errors.extend(e.errors);
@@ -233,8 +228,32 @@ pub fn compile_modules(
     }
 
     // ----------------------------------
+    //          BORROW CHECKING
+    // ----------------------------------
+    let time = Instant::now();
+    
+    let checked_hir_nodes = match compiler.check_borrows(hir_nodes) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            compiler_messages.errors.push(e);
+            return Err(compiler_messages);
+        }
+    };
+
+    timer_log!(time, "Borrow checking completed in: ");
+
+    // Debug output for borrow checker if enabled
+    #[cfg(feature = "show_borrow_checker")]
+    {
+        println!("=== BORROW CHECKER OUTPUT ===");
+        println!("Borrow checking completed successfully");
+        println!("=== END BORROW CHECKER OUTPUT ===");
+    }
+
+    // ----------------------------------
     //          LIR generation
     // ----------------------------------
+    // TODO: Add LIR generation using checked_hir_nodes
 
     // ----------------------------------
     //          WASM generation
@@ -242,6 +261,9 @@ pub fn compile_modules(
 
     // TEMPORARY UNTIL NEW BACKEND IS IMPLEMENTED
     let wasm_bytes = Vec::new();
+    
+    // Suppress unused variable warning for now
+    let _ = checked_hir_nodes;
 
     if !flags.contains(&Flag::DisableTimers) {
         print!("WASM generated in: ");

@@ -7,7 +7,7 @@
 //! - Eliminate nested expressions by introducing temporary locals
 //! - Convert borrow intent (not ownership outcome)
 //! - Preserve structured control flow for CFG analysis
-//! - Maintain place-based memory model
+//! - Maintain a place-based memory model
 
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
@@ -369,7 +369,7 @@ impl<'a> HirBuilder<'a> {
                 // Field access as a statement (not assignment target)
                 let base_place = self.lower_ast_node_to_place(*base)?;
                 let field_place = base_place.field(field);
-                
+
                 // Create an expression statement that loads from the field
                 Ok(vec![HirNode {
                     kind: HirKind::ExprStmt(field_place),
@@ -400,7 +400,7 @@ impl<'a> HirBuilder<'a> {
                 let mut nodes = cond_nodes;
                 nodes.push(HirNode {
                     kind: HirKind::Loop {
-                        binding: None, // While loops don't have iterator bindings
+                        binding: None,        // While loops don't have iterator bindings
                         iterator: cond_place, // Use condition as iterator (will be checked each iteration)
                         body,
                         index_binding: None,
@@ -413,7 +413,12 @@ impl<'a> HirBuilder<'a> {
             }
 
             // === Method Calls ===
-            NodeKind::MethodCall { base, method, args, signature } => {
+            NodeKind::MethodCall {
+                base,
+                method,
+                args,
+                signature,
+            } => {
                 let mut nodes = Vec::new();
                 let mut arg_places = Vec::new();
 
@@ -430,7 +435,8 @@ impl<'a> HirBuilder<'a> {
                 }
 
                 // Create return places
-                let return_places: Vec<Place> = signature.returns
+                let return_places: Vec<Place> = signature
+                    .returns
                     .iter()
                     .enumerate()
                     .map(|(i, _)| {
@@ -786,7 +792,8 @@ impl<'a> HirBuilder<'a> {
                 // Generate a unique name for the anonymous function
                 let anonymous_function_name = format!("_anon_func_{}", self.temp_counter);
                 self.temp_counter += 1;
-                let anonymous_function_name_interned = self.string_table.intern(&anonymous_function_name);
+                let anonymous_function_name_interned =
+                    self.string_table.intern(&anonymous_function_name);
 
                 // Lower the function body
                 let function_body_hir = self.lower_block(body)?;
