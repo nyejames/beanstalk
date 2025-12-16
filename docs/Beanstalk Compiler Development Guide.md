@@ -492,21 +492,6 @@ See the Cargo.toml for all feature flags.
 - `verbose_errors` - Extended error information with stack traces
 - `borrow_checker_debug` - Detailed borrow checking analysis
 
-### Example Debug Session
-```bash
-# Debug header parsing issues
-cargo run --features "show_headers,verbose_errors" -- run main.bst
-
-# Debug entry point detection
-cargo run --features "show_headers,show_ast" -- run main.bst
-
-# Debug import resolution
-cargo run --features "show_headers,show_ast,verbose_errors" -- run main.bst
-
-# Full pipeline debugging
-cargo run --features "show_headers,show_ast,show_hir,detailed_timers" -- run main.bst
-```
-
 ## Testing Workflow
 The primary goal is to get the language working end-to-end. Focus on real-world usage patterns and language features.
 

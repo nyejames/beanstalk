@@ -63,6 +63,9 @@ pub fn parse_headers(
     for mut file in tokenized_files {
         let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
 
+        //println!("\n\nfile src path: {:?}", file.src_path.to_path_buf(string_table));
+        //println!("entry_file_path: {:?}\n\n", entry_file_path);
+
         let headers_from_file = parse_headers_in_file(
             &mut file,
             host_registry,

@@ -1,6 +1,5 @@
 pub(crate) mod build;
 pub mod settings;
-
 pub mod cli;
 mod create_new_project;
 mod dev_server;
@@ -97,6 +96,7 @@ mod compiler {
         pub(crate) mod builder;
         pub(crate) mod nodes;
         pub(crate) mod place;
+        pub(crate) mod display_hir;
     }
     pub(crate) mod borrow_checker {
         pub(crate) mod borrow_tracking;

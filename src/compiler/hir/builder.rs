@@ -22,6 +22,7 @@ use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Build a HIR module from the AST
 ///
@@ -31,7 +32,7 @@ pub struct HirBuilder<'a> {
     /// Current module scope for name resolution
     current_scope: InternedPath,
 
-    /// Sequential ID generator for HIR nodes (used by borrow checker for CFG)
+    /// Sequential ID generator for HIR nodes (used by the borrow checker for CFG)
     next_node_id: usize,
 
     /// Track local variable bindings and their types
@@ -108,7 +109,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         expr_kind: HirExprKind,
         data_type: DataType,
-        location: crate::compiler::parsers::tokenizer::tokens::TextLocation,
+        location: TextLocation,
     ) -> (Vec<HirNode>, Place) {
         let temp = self.next_temp();
         let temp_place = Place::local(temp);
@@ -138,9 +139,8 @@ impl<'a> HirBuilder<'a> {
                     .insert(arg.id, arg.value.data_type.clone());
 
                 let place = Place::local(arg.id);
-                let (value_nodes, value_place) = self.lower_expr_to_place(arg.value)?;
+                let (mut nodes, value_place) = self.lower_expr_to_place(arg.value)?;
 
-                let mut nodes = value_nodes;
                 nodes.push(self.create_assign_node(place, value_place, node.location, node.scope));
                 Ok(nodes)
             }
@@ -400,7 +400,7 @@ impl<'a> HirBuilder<'a> {
                 nodes.push(HirNode {
                     kind: HirKind::Loop {
                         binding: None,        // While loops don't have iterator bindings
-                        iterator: cond_place, // Use condition as iterator (will be checked each iteration)
+                        iterator: cond_place, // Use condition as an iterator (will be checked each iteration)
                         body,
                         index_binding: None,
                     },
@@ -866,26 +866,26 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    /// Lower RPN expression sequence to a place
+    /// Lower an RPN expression sequence to a place
     fn lower_rpn_to_place(
         &mut self,
         rpn: Vec<AstNode>,
         result_type: DataType,
-        location: crate::compiler::parsers::tokenizer::tokens::TextLocation,
+        location: TextLocation,
     ) -> Result<(Vec<HirNode>, Place), CompilerError> {
         let mut nodes = Vec::new();
         let mut stack: Vec<Place> = Vec::new();
 
         for node in rpn {
             match node.kind {
-                // Push operands (expressions) onto stack
+                // Push operands (expressions) onto the stack
                 NodeKind::Rvalue(expr) => {
                     let (expr_nodes, expr_place) = self.lower_expr_to_place(expr)?;
                     nodes.extend(expr_nodes);
                     stack.push(expr_place);
                 }
 
-                // Pop operands, apply operator, push result
+                // Pop operands, apply operator, push the result
                 NodeKind::Operator(op) => {
                     let right_operand = stack.pop().ok_or_else(|| {
                         use crate::compiler::compiler_messages::compiler_errors::{
@@ -913,7 +913,7 @@ impl<'a> HirBuilder<'a> {
                     let result_temp_name = self.next_temp();
                     let result_temp_place = Place::local(result_temp_name);
 
-                    // Determine result type based on operator
+                    // Determine the result type based on operator
                     let operation_result_type = match binary_operator {
                         BinOp::Eq
                         | BinOp::Ne
@@ -1010,7 +1010,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         target: Place,
         source: Place,
-        location: crate::compiler::parsers::tokenizer::tokens::TextLocation,
+        location: TextLocation,
         scope: InternedPath,
     ) -> HirNode {
         let load_expr = HirExpr {
@@ -1030,12 +1030,12 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    /// Create an assignment node from expression
+    /// Create an assignment node from an expression
     fn create_assign_node_with_expr(
         &mut self,
         target: Place,
         expr: HirExpr,
-        location: crate::compiler::parsers::tokenizer::tokens::TextLocation,
+        location: TextLocation,
         scope: InternedPath,
     ) -> HirNode {
         HirNode {

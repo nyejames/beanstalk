@@ -120,15 +120,15 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         Some("help") => Ok(Command::Help),
 
         Some("new") => {
-            // Check type of project
+            // Check which type of project it is
             match args.get(1).map(String::as_str) {
                 Some("html") => {
                     let dir = &prompt_user_for_input("Enter project path: ");
 
                     if dir.len() == 1 {
                         let dir = dir[0].to_string();
-                        check_if_valid_directory_path(&dir)?;
-                        Ok(Command::NewHTMLProject(PathBuf::from(dir)))
+                        let valid_path = check_if_valid_directory_path(&dir)?;
+                        Ok(Command::NewHTMLProject(valid_path))
                     } else {
                         // use the current directory
                         Ok(Command::NewHTMLProject(PathBuf::from("")))
@@ -145,7 +145,10 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 .map_err(|e| format!("Error getting current directory: {:?}", e))?;
 
             match args.get(1).map(String::as_str) {
-                Some(string) => Ok(Command::Build(entry_path.join(string))),
+                Some(string) => {
+                    let valid_path = check_if_valid_file_path(string)?;
+                    Ok(Command::Build(entry_path.join(valid_path)))
+                },
                 _ => {
                     // Return the current working directory path
                     Ok(Command::Build(entry_path))
@@ -158,7 +161,10 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 .map_err(|e| format!("Error getting current directory: {:?}", e))?;
 
             match args.get(1).map(String::as_str) {
-                Some(string) => Ok(Command::Run(entry_path.join(string))),
+                Some(string) => {
+                    let valid_path = check_if_valid_file_path(string)?;
+                    Ok(Command::Run(entry_path.join(valid_path)))
+                },
                 _ => Ok(Command::Run(entry_path)),
             }
         }
@@ -168,7 +174,10 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 .map_err(|e| format!("Error getting current directory: {:?}", e))?;
 
             match args.get(1).map(String::as_str) {
-                Some(string) => Ok(Command::Release(entry_path.join(string))),
+                Some(string) => {
+                    let valid_path = check_if_valid_file_path(string)?;
+                    Ok(Command::Release(entry_path.join(valid_path)))
+                },
                 _ => Ok(Command::Release(entry_path)),
             }
         }
@@ -207,7 +216,17 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
     flags
 }
 
-fn check_if_valid_directory_path(path: &str) -> Result<(), String> {
+// Checks the path and converts it to a PathBuf
+// Resolves mixing unix and windows paths
+fn check_if_valid_directory_path(path: &str) -> Result<PathBuf, String> {
+    // If it contains Unix-style slashes, convert them
+    let path = if cfg!(windows) && path.contains('/') {
+        // Replace forward slashes with backslashes
+        &path.replace('/', "\\")
+    } else {
+        path
+    };
+
     let path = Path::new(path);
 
     // Check if the path exists
@@ -226,7 +245,33 @@ fn check_if_valid_directory_path(path: &str) -> Result<(), String> {
         return Err(format!("Directory is not writable: {}", path.display()));
     }
 
-    Ok(())
+    Ok(path.to_path_buf())
+}
+
+// Checks the path and converts it to a PathBuf
+// Resolves mixing unix and windows paths
+fn check_if_valid_file_path(path: &str) -> Result<PathBuf, String> {
+    // If it contains Unix-style slashes, convert them
+    let path = if cfg!(windows) && path.contains('/') {
+        // Replace forward slashes with backslashes
+        &path.replace('/', "\\")
+    } else {
+        path
+    };
+
+    let path = Path::new(path);
+
+    // Check if the path exists
+    if !path.exists() {
+        return Err(format!("Path does not exist: {}", path.display()));
+    }
+
+    // Check if the path is a directory
+    if !path.is_file() {
+        return Err(format!("Path is not a file: {}", path.display()));
+    }
+
+    Ok(path.to_path_buf())
 }
 
 fn prompt_user_for_input(msg: &str) -> Vec<String> {
@@ -242,17 +287,17 @@ fn prompt_user_for_input(msg: &str) -> Vec<String> {
 fn print_help(commands_only: bool) {
     if !commands_only {
         grey_ln!("------------------------------------");
-        green_ln_bold!("The Beanstalk compiler and build system!");
+        green_ln_bold!("The Beanstalk compiler and build system");
         println!("Usage: <command> <args>");
     }
-    green_ln_bold!("Commands:");
+    green_ln_bold!("\nCommands:");
     //println!("  new <project name>   - Creates a new project");
     //println!(
     //   // "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
     //);
     //println!("  build <path>         - Builds a file");
     println!("  run <path>           - JITs a file");
-    //println!("  release <path>       - Builds a project in release mode");
+    println!("  release <path>       - Builds a project in release mode");
     println!("  tests                - Runs the test suite");
-    println!("  wat <path>           - Compiles a WAT file to WebAssembly");
+    // println!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }

@@ -151,8 +151,8 @@ pub fn build_project_files(
 
     let entry_dir = current_dir.join(project_config.entry_point.to_owned());
 
-    // print_ln_bold!("Project Directory: ");
-    // dark_yellow_ln!("{:?}", &entry_dir);
+    //println!("Project Directory: ");
+    //dark_yellow_ln!("{:?}", &entry_dir);
 
     let mut beanstalk_modules_to_parse: Vec<InputModule> = Vec::with_capacity(1);
 

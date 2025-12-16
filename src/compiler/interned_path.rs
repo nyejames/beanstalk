@@ -1,5 +1,6 @@
 use crate::compiler::string_interning::{StringId, StringTable};
 use std::path::{Path, PathBuf};
+use colour::red_ln;
 
 /// An efficient path representation using interned string components.
 ///
@@ -31,19 +32,7 @@ impl InternedPath {
         let components = path
             .components()
             .filter_map(|component| {
-                match component {
-                    std::path::Component::Normal(os_str) => {
-                        // Convert OsStr to string, handling potential UTF-8 issues
-                        os_str.to_str().map(|s| string_table.intern(s))
-                    }
-                    std::path::Component::RootDir => {
-                        // Represent root directory as empty string
-                        Some(string_table.intern(""))
-                    }
-                    // Skip current dir (.) and parent dir (..) for now
-                    // These could be handled specially if needed
-                    _ => None,
-                }
+                component.as_os_str().to_str().map(|s| string_table.intern(s))
             })
             .collect();
 
@@ -64,12 +53,7 @@ impl InternedPath {
         let mut path = PathBuf::new();
         for &component_id in &self.components {
             let component_str = string_table.resolve(component_id);
-            if component_str.is_empty() {
-                // Empty string represents root directory
-                path.push("/");
-            } else {
-                path.push(component_str);
-            }
+            path.push(component_str);
         }
         path
     }
