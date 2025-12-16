@@ -19,7 +19,7 @@ impl ContainsReferences for Vec<Arg> {
 
 impl ContainsReferences for ScopeContext {
     fn get_reference(&self, name: &StringId) -> Option<&Arg> {
-        self.declarations.iter().rfind(|arg|&arg.id == name)
+        self.declarations.iter().rfind(|arg| &arg.id == name)
     }
     fn get_reference_mut(&mut self, name: &StringId) -> Option<&mut Arg> {
         self.declarations.iter_mut().rfind(|arg| &arg.id == name)

@@ -6,8 +6,8 @@ mod create_new_project;
 mod dev_server;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod test_runner;
     pub(crate) mod borrow_checker_property_tests;
+    pub(crate) mod test_runner;
 }
 
 // New runtime and build system modules
@@ -99,13 +99,11 @@ mod compiler {
         pub(crate) mod place;
     }
     pub(crate) mod borrow_checker {
-        pub(crate) mod checker;
-        pub(crate) mod types;
-        pub(crate) mod cfg;
         pub(crate) mod borrow_tracking;
+        pub(crate) mod cfg;
+        pub(crate) mod checker;
         pub(crate) mod conflict_detection;
-        
-
+        pub(crate) mod types;
     }
 }
 
@@ -116,17 +114,17 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 // Re-export types for the build system
+use crate::compiler::borrow_checker::checker::check_borrows;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
+use crate::compiler::hir::builder::HirBuilder;
+use crate::compiler::hir::nodes::{HirModule, HirNode};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::compiler::hir::builder::HirBuilder;
-use crate::compiler::hir::nodes::{HirModule, HirNode};
-use crate::compiler::borrow_checker::checker::check_borrows;
 pub(crate) use build::*;
 
 pub struct OutputModule {
@@ -258,11 +256,7 @@ impl<'a> Compiler<'a> {
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<Vec<HirNode>, CompilerMessages> {
-        HirBuilder::lower_ast(
-            ast.nodes,
-            ast.entry_path,
-            &mut self.string_table,
-        )
+        HirBuilder::lower_ast(ast.nodes, ast.entry_path, &mut self.string_table)
     }
 
     /// -----------------------------
@@ -270,7 +264,10 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     /// Perform borrow checking on HIR nodes to validate memory safety
     /// and ownership rules according to Beanstalk's reference semantics.
-    pub fn check_borrows(&mut self, hir_nodes: Vec<HirNode>) -> Result<Vec<HirNode>, CompilerError> {
+    pub fn check_borrows(
+        &mut self,
+        hir_nodes: Vec<HirNode>,
+    ) -> Result<Vec<HirNode>, CompilerError> {
         // Create a HIR module from the nodes for borrow checking
         let mut hir_module = HirModule {
             functions: hir_nodes,

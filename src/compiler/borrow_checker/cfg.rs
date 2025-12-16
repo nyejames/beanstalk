@@ -4,8 +4,8 @@
 //! The CFG is essential for borrow checking as it enables path-sensitive analysis
 //! and lifetime inference across different execution paths.
 
-use crate::compiler::hir::nodes::{HirNode, HirKind};
-use crate::compiler::borrow_checker::types::{ControlFlowGraph, CfgNodeType};
+use crate::compiler::borrow_checker::types::{CfgNodeType, ControlFlowGraph};
+use crate::compiler::hir::nodes::{HirKind, HirNode};
 
 /// Construct a control flow graph from HIR nodes
 ///
@@ -13,20 +13,20 @@ use crate::compiler::borrow_checker::types::{ControlFlowGraph, CfgNodeType};
 /// creating appropriate edges for all possible execution paths.
 pub fn construct_cfg(hir_nodes: &[HirNode]) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::new();
-    
+
     if hir_nodes.is_empty() {
         return cfg;
     }
-    
+
     // Add all nodes to the CFG first (including nested nodes)
     add_all_nodes_to_cfg(&mut cfg, hir_nodes);
-    
+
     // Build edges between nodes
     build_cfg_edges(&mut cfg, hir_nodes);
-    
+
     // Identify entry and exit points
     identify_entry_exit_points(&mut cfg, hir_nodes);
-    
+
     cfg
 }
 
@@ -35,16 +35,20 @@ fn add_all_nodes_to_cfg(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
     for node in hir_nodes {
         let node_type = classify_node(node);
         cfg.add_node(node.id, node_type);
-        
+
         // Recursively add nested nodes
         match &node.kind {
-            HirKind::If { then_block, else_block, .. } => {
+            HirKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
                 add_all_nodes_to_cfg(cfg, then_block);
                 if let Some(else_nodes) = else_block {
                     add_all_nodes_to_cfg(cfg, else_nodes);
                 }
             }
-            
+
             HirKind::Match { arms, default, .. } => {
                 for arm in arms {
                     add_all_nodes_to_cfg(cfg, &arm.body);
@@ -53,32 +57,41 @@ fn add_all_nodes_to_cfg(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     add_all_nodes_to_cfg(cfg, default_nodes);
                 }
             }
-            
+
             HirKind::Loop { body, .. } => {
                 add_all_nodes_to_cfg(cfg, body);
             }
-            
-            HirKind::TryCall { call, error_handler, .. } => {
+
+            HirKind::TryCall {
+                call,
+                error_handler,
+                ..
+            } => {
                 // Add the call node
                 let call_node_type = classify_node(call);
                 cfg.add_node(call.id, call_node_type);
-                
+
                 // Add nested nodes in call if any
-                if let HirKind::If { then_block, else_block, .. } = &call.kind {
+                if let HirKind::If {
+                    then_block,
+                    else_block,
+                    ..
+                } = &call.kind
+                {
                     add_all_nodes_to_cfg(cfg, then_block);
                     if let Some(else_nodes) = else_block {
                         add_all_nodes_to_cfg(cfg, else_nodes);
                     }
                 }
-                
+
                 // Add error handler nodes
                 add_all_nodes_to_cfg(cfg, error_handler);
             }
-            
+
             HirKind::FunctionDef { body, .. } | HirKind::TemplateFn { body, .. } => {
                 add_all_nodes_to_cfg(cfg, body);
             }
-            
+
             _ => {} // No nested nodes for other types
         }
     }
@@ -89,19 +102,19 @@ fn classify_node(node: &HirNode) -> CfgNodeType {
     match &node.kind {
         // Branch points
         HirKind::If { .. } | HirKind::Match { .. } | HirKind::TryCall { .. } => CfgNodeType::Branch,
-        
+
         // Loop constructs
         HirKind::Loop { .. } => CfgNodeType::LoopHeader,
-        
+
         // Function definitions
         HirKind::FunctionDef { .. } | HirKind::TemplateFn { .. } => CfgNodeType::FunctionEntry,
-        
+
         // Function exits
         HirKind::Return(_) | HirKind::ReturnError(_) => CfgNodeType::FunctionExit,
-        
+
         // Loop control flow
         HirKind::Break | HirKind::Continue => CfgNodeType::Statement, // Could be specialized later
-        
+
         // All other nodes are statements
         _ => CfgNodeType::Statement,
     }
@@ -124,14 +137,18 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     cfg.add_edge(node.id, hir_nodes[i + 1].id);
                 }
             }
-            
+
             // Conditional branches
-            HirKind::If { then_block, else_block, .. } => {
+            HirKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
                 // Connect to then block
                 if let Some(first_then) = then_block.first() {
                     cfg.add_edge(node.id, first_then.id);
                 }
-                
+
                 // Connect to else block if it exists
                 if let Some(else_nodes) = else_block {
                     if let Some(first_else) = else_nodes.first() {
@@ -143,20 +160,20 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                         cfg.add_edge(node.id, hir_nodes[i + 1].id);
                     }
                 }
-                
+
                 // Build edges within blocks
                 build_block_edges(cfg, then_block);
                 if let Some(else_nodes) = else_block {
                     build_block_edges(cfg, else_nodes);
                 }
-                
+
                 // Connect blocks to next node after if statement
                 let next_node_id = if i + 1 < hir_nodes.len() {
                     Some(hir_nodes[i + 1].id)
                 } else {
                     None
                 };
-                
+
                 if let Some(next_id) = next_node_id {
                     // Connect end of then block
                     if let Some(last_then) = then_block.last() {
@@ -164,7 +181,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                             cfg.add_edge(last_then.id, next_id);
                         }
                     }
-                    
+
                     // Connect end of else block
                     if let Some(else_nodes) = else_block {
                         if let Some(last_else) = else_nodes.last() {
@@ -175,7 +192,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     }
                 }
             }
-            
+
             // Match statements
             HirKind::Match { arms, default, .. } => {
                 // Connect to each match arm
@@ -185,7 +202,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     }
                     build_block_edges(cfg, &arm.body);
                 }
-                
+
                 // Connect to default arm if it exists
                 if let Some(default_nodes) = default {
                     if let Some(first_default) = default_nodes.first() {
@@ -193,14 +210,14 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     }
                     build_block_edges(cfg, default_nodes);
                 }
-                
+
                 // Connect arms to next node after match
                 let next_node_id = if i + 1 < hir_nodes.len() {
                     Some(hir_nodes[i + 1].id)
                 } else {
                     None
                 };
-                
+
                 if let Some(next_id) = next_node_id {
                     // Connect end of each arm
                     for arm in arms {
@@ -210,7 +227,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                             }
                         }
                     }
-                    
+
                     // Connect end of default arm
                     if let Some(default_nodes) = default {
                         if let Some(last_default) = default_nodes.last() {
@@ -221,35 +238,39 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     }
                 }
             }
-            
+
             // Loop statements
             HirKind::Loop { body, .. } => {
                 // Connect loop header to body
                 if let Some(first_body) = body.first() {
                     cfg.add_edge(node.id, first_body.id);
                 }
-                
+
                 // Build edges within loop body
                 build_block_edges(cfg, body);
-                
+
                 // Connect end of body back to loop header (for iteration)
                 if let Some(last_body) = body.last() {
                     if !is_terminating_node(last_body) {
                         cfg.add_edge(last_body.id, node.id);
                     }
                 }
-                
+
                 // Connect loop to next node (for loop exit)
                 if i + 1 < hir_nodes.len() {
                     cfg.add_edge(node.id, hir_nodes[i + 1].id);
                 }
             }
-            
+
             // Try call with error handling
-            HirKind::TryCall { call, error_handler, .. } => {
+            HirKind::TryCall {
+                call,
+                error_handler,
+                ..
+            } => {
                 // Connect to the call
                 cfg.add_edge(node.id, call.id);
-                
+
                 // Build edges within the call (if it's a complex node)
                 if let HirKind::Call { .. } | HirKind::HostCall { .. } = call.kind {
                     // Simple call - connect to error handler or next node
@@ -260,14 +281,14 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                         build_block_edges(cfg, error_handler);
                     }
                 }
-                
+
                 // Connect to next node after try call
                 if i + 1 < hir_nodes.len() {
                     let next_id = hir_nodes[i + 1].id;
-                    
+
                     // Success path from call
                     cfg.add_edge(call.id, next_id);
-                    
+
                     // Error path from handler
                     if let Some(last_handler) = error_handler.last() {
                         if !is_terminating_node(last_handler) {
@@ -276,7 +297,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     }
                 }
             }
-            
+
             // Option unwrap
             HirKind::OptionUnwrap { .. } => {
                 // Simple sequential flow for option unwrap
@@ -284,7 +305,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     cfg.add_edge(node.id, hir_nodes[i + 1].id);
                 }
             }
-            
+
             // Runtime template call
             HirKind::RuntimeTemplateCall { .. } => {
                 // Sequential flow for template calls
@@ -292,34 +313,34 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
                     cfg.add_edge(node.id, hir_nodes[i + 1].id);
                 }
             }
-            
+
             // Template function definition
             HirKind::TemplateFn { body, .. } => {
                 // Connect function entry to body
                 if let Some(first_body) = body.first() {
                     cfg.add_edge(node.id, first_body.id);
                 }
-                
+
                 // Build edges within function body
                 build_block_edges(cfg, body);
             }
-            
+
             // Function definitions
             HirKind::FunctionDef { body, .. } => {
                 // Connect function entry to body
                 if let Some(first_body) = body.first() {
                     cfg.add_edge(node.id, first_body.id);
                 }
-                
+
                 // Build edges within function body
                 build_block_edges(cfg, body);
             }
-            
+
             // Terminating statements don't connect to next node
             HirKind::Return(_) | HirKind::ReturnError(_) => {
                 // No outgoing edges for returns
             }
-            
+
             // Break and continue statements
             HirKind::Break | HirKind::Continue => {
                 // These are handled specially in loop context
@@ -334,12 +355,16 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
     for (i, node) in block.iter().enumerate() {
         match &node.kind {
             // Handle structured control flow within blocks
-            HirKind::If { then_block, else_block, .. } => {
+            HirKind::If {
+                then_block,
+                else_block,
+                ..
+            } => {
                 // Connect to then block
                 if let Some(first_then) = then_block.first() {
                     cfg.add_edge(node.id, first_then.id);
                 }
-                
+
                 // Connect to else block if it exists
                 if let Some(else_nodes) = else_block {
                     if let Some(first_else) = else_nodes.first() {
@@ -351,24 +376,24 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                         cfg.add_edge(node.id, block[i + 1].id);
                     }
                 }
-                
+
                 // Recursively build edges within nested blocks
                 build_block_edges(cfg, then_block);
                 if let Some(else_nodes) = else_block {
                     build_block_edges(cfg, else_nodes);
                 }
-                
+
                 // Connect blocks to next node after if statement
                 if i + 1 < block.len() {
                     let next_id = block[i + 1].id;
-                    
+
                     // Connect end of then block
                     if let Some(last_then) = then_block.last() {
                         if !is_terminating_node(last_then) {
                             cfg.add_edge(last_then.id, next_id);
                         }
                     }
-                    
+
                     // Connect end of else block
                     if let Some(else_nodes) = else_block {
                         if let Some(last_else) = else_nodes.last() {
@@ -379,7 +404,7 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                     }
                 }
             }
-            
+
             HirKind::Match { arms, default, .. } => {
                 // Connect to each match arm
                 for arm in arms {
@@ -388,7 +413,7 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                     }
                     build_block_edges(cfg, &arm.body);
                 }
-                
+
                 // Connect to default arm if it exists
                 if let Some(default_nodes) = default {
                     if let Some(first_default) = default_nodes.first() {
@@ -396,11 +421,11 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                     }
                     build_block_edges(cfg, default_nodes);
                 }
-                
+
                 // Connect arms to next node after match
                 if i + 1 < block.len() {
                     let next_id = block[i + 1].id;
-                    
+
                     // Connect end of each arm
                     for arm in arms {
                         if let Some(last_arm) = arm.body.last() {
@@ -409,7 +434,7 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                             }
                         }
                     }
-                    
+
                     // Connect end of default arm
                     if let Some(default_nodes) = default {
                         if let Some(last_default) = default_nodes.last() {
@@ -420,33 +445,37 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                     }
                 }
             }
-            
+
             HirKind::Loop { body, .. } => {
                 // Connect loop header to body
                 if let Some(first_body) = body.first() {
                     cfg.add_edge(node.id, first_body.id);
                 }
-                
+
                 // Build edges within loop body
                 build_block_edges(cfg, body);
-                
+
                 // Connect end of body back to loop header (for iteration)
                 if let Some(last_body) = body.last() {
                     if !is_terminating_node(last_body) {
                         cfg.add_edge(last_body.id, node.id);
                     }
                 }
-                
+
                 // Connect loop to next node (for loop exit)
                 if i + 1 < block.len() {
                     cfg.add_edge(node.id, block[i + 1].id);
                 }
             }
-            
-            HirKind::TryCall { call, error_handler, .. } => {
+
+            HirKind::TryCall {
+                call,
+                error_handler,
+                ..
+            } => {
                 // Connect to the call
                 cfg.add_edge(node.id, call.id);
-                
+
                 // Connect to error handler
                 if !error_handler.is_empty() {
                     if let Some(first_handler) = error_handler.first() {
@@ -454,14 +483,14 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                     }
                     build_block_edges(cfg, error_handler);
                 }
-                
+
                 // Connect to next node after try call
                 if i + 1 < block.len() {
                     let next_id = block[i + 1].id;
-                    
+
                     // Success path from call
                     cfg.add_edge(call.id, next_id);
-                    
+
                     // Error path from handler
                     if let Some(last_handler) = error_handler.last() {
                         if !is_terminating_node(last_handler) {
@@ -470,7 +499,7 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
                     }
                 }
             }
-            
+
             // For all other nodes, simple sequential flow
             _ => {
                 if i + 1 < block.len() && !is_terminating_node(node) {
@@ -497,21 +526,21 @@ fn identify_entry_exit_points(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode])
             HirKind::FunctionDef { .. } | HirKind::TemplateFn { .. } => {
                 cfg.add_entry_point(node.id);
             }
-            
+
             // Returns are exit points
             HirKind::Return(_) | HirKind::ReturnError(_) => {
                 cfg.add_exit_point(node.id);
             }
-            
+
             _ => {}
         }
     }
-    
+
     // If no explicit entry points, first node is entry
     if cfg.entry_points.is_empty() && !hir_nodes.is_empty() {
         cfg.add_entry_point(hir_nodes[0].id);
     }
-    
+
     // If no explicit exit points, last non-terminating node is exit
     if cfg.exit_points.is_empty() {
         if let Some(last_node) = hir_nodes.last() {

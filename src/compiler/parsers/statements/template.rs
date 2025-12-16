@@ -1,7 +1,7 @@
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 
-use std::collections::HashMap;
 use crate::compiler::string_interning::InternedString;
+use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TemplateType {

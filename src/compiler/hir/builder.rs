@@ -9,8 +9,7 @@
 //! - Preserve structured control flow for CFG analysis
 //! - Maintain a place-based memory model
 
-use crate::compiler::compiler_errors::CompilerError;
-use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
+use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{
     BinOp, HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirNodeId,
@@ -65,6 +64,19 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
+    fn next_id(&mut self) -> HirNodeId {
+        let id = self.next_node_id;
+        self.next_node_id += 1;
+        id
+    }
+
+    /// Generate a unique temporary variable name
+    fn next_temp(&mut self) -> InternedString {
+        let name = format!("_temp_{}", self.temp_counter);
+        self.temp_counter += 1;
+        self.string_table.intern(&name)
+    }
+
     /// Main entry point: lower the entire AST to HIR
     pub fn lower_ast(
         ast: Vec<AstNode>,
@@ -89,19 +101,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(hir_nodes)
-    }
-
-    fn next_id(&mut self) -> HirNodeId {
-        let id = self.next_node_id;
-        self.next_node_id += 1;
-        id
-    }
-
-    /// Generate a unique temporary variable name
-    fn next_temp(&mut self) -> InternedString {
-        let name = format!("_temp_{}", self.temp_counter);
-        self.temp_counter += 1;
-        self.string_table.intern(&name)
     }
 
     /// Helper: create a literal expression assignment to a temporary place

@@ -8,9 +8,9 @@ use crate::compiler::compiler_messages::compiler_errors::{CompilerError, Compile
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirNodeId;
 use crate::compiler::hir::place::Place;
-use crate::compiler::string_interning::StringTable;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::string_interning::InternedString;
+use crate::compiler::string_interning::StringTable;
 use std::collections::HashMap;
 
 /// Unique identifier for borrows
@@ -24,20 +24,21 @@ pub type BorrowId = usize;
 pub struct BorrowChecker<'a> {
     /// Control flow graph for the current function
     pub cfg: ControlFlowGraph,
-    
+
     /// String table for resolving interned strings in error messages
     pub string_table: &'a mut StringTable,
-    
+
     /// Accumulated borrow checker errors
     pub errors: Vec<CompilerError>,
-    
+
     /// Accumulated borrow checker warnings
     pub warnings: Vec<CompilerWarning>,
-    
+
     /// Next available borrow ID for unique identification
     pub next_borrow_id: BorrowId,
-    
-    /// Function signatures for return validation
+
+    /// Function signatures for return validation (future use)
+    #[allow(dead_code)]
     pub function_signatures: HashMap<InternedString, FunctionSignature>,
 }
 
@@ -49,13 +50,13 @@ pub struct BorrowChecker<'a> {
 pub struct ControlFlowGraph {
     /// Mapping from HIR node IDs to CFG nodes
     pub nodes: HashMap<HirNodeId, CfgNode>,
-    
+
     /// Edges between CFG nodes (node_id -> list of successor node_ids)
     pub edges: HashMap<HirNodeId, Vec<HirNodeId>>,
-    
+
     /// Entry points for functions (typically one per function)
     pub entry_points: Vec<HirNodeId>,
-    
+
     /// Exit points for functions (return statements and implicit exits)
     pub exit_points: Vec<HirNodeId>,
 }
@@ -67,18 +68,20 @@ pub struct ControlFlowGraph {
 #[derive(Debug, Clone)]
 pub struct CfgNode {
     /// The HIR node ID this CFG node represents
+    #[allow(dead_code)]
     pub hir_id: HirNodeId,
-    
+
     /// Predecessor nodes in the CFG
     pub predecessors: Vec<HirNodeId>,
-    
+
     /// Successor nodes in the CFG
     pub successors: Vec<HirNodeId>,
-    
+
     /// Borrow state at this node
     pub borrow_state: BorrowState,
-    
+
     /// Type of CFG node for analysis purposes
+    #[allow(dead_code)]
     pub node_type: CfgNodeType,
 }
 
@@ -87,23 +90,25 @@ pub struct CfgNode {
 pub enum CfgNodeType {
     /// Regular statement or expression
     Statement,
-    
+
     /// Conditional branch point (if, match)
     Branch,
-    
+
     /// Loop header
     LoopHeader,
-    
+
     /// Loop body
+    #[allow(dead_code)]
     LoopBody,
-    
+
     /// Function entry point
     FunctionEntry,
-    
+
     /// Function exit point (return or implicit)
     FunctionExit,
-    
+
     /// Join point where multiple control flow paths merge
+    #[allow(dead_code)]
     Join,
 }
 
@@ -115,11 +120,12 @@ pub enum CfgNodeType {
 pub struct BorrowState {
     /// All currently active borrows, indexed by borrow ID
     pub active_borrows: HashMap<BorrowId, Loan>,
-    
+
     /// Mapping from places to the borrows that reference them
     pub place_to_borrows: HashMap<Place, Vec<BorrowId>>,
-    
+
     /// Last use points for each place (for move analysis)
+    #[allow(dead_code)]
     pub last_uses: HashMap<Place, HirNodeId>,
 }
 
@@ -131,20 +137,22 @@ pub struct BorrowState {
 pub struct Loan {
     /// Unique identifier for this borrow
     pub id: BorrowId,
-    
+
     /// The place being borrowed
     pub place: Place,
-    
+
     /// Kind of borrow (shared, mutable, or move)
     pub kind: BorrowKind,
-    
+
     /// HIR node where this borrow was created
     pub creation_point: HirNodeId,
-    
+
     /// HIR node where this borrow was last used (if determined)
+    #[allow(dead_code)]
     pub last_use_point: Option<HirNodeId>,
-    
+
     /// CFG regions where this borrow is active
+    #[allow(dead_code)]
     pub active_regions: Vec<CfgRegion>,
 }
 
@@ -153,10 +161,10 @@ pub struct Loan {
 pub enum BorrowKind {
     /// Shared/immutable borrow (default for loads)
     Shared,
-    
+
     /// Mutable/exclusive borrow (from mutable access)
     Mutable,
-    
+
     /// Move (refined from CandidateMove by last-use analysis)
     Move,
 }
@@ -166,13 +174,14 @@ pub enum BorrowKind {
 /// CFG regions represent spans of execution where a particular borrow
 /// remains valid, used for lifetime inference and conflict detection.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct CfgRegion {
     /// Starting CFG node for this region
     pub start: HirNodeId,
-    
+
     /// Ending CFG node for this region
     pub end: HirNodeId,
-    
+
     /// All execution paths through this region
     pub paths: Vec<Vec<HirNodeId>>,
 }
@@ -189,24 +198,25 @@ impl<'a> BorrowChecker<'a> {
             function_signatures: HashMap::new(),
         }
     }
-    
+
     /// Generate a new unique borrow ID
     pub fn next_borrow_id(&mut self) -> BorrowId {
         let id = self.next_borrow_id;
         self.next_borrow_id += 1;
         id
     }
-    
+
     /// Add an error to the error collection
     pub fn add_error(&mut self, error: CompilerError) {
         self.errors.push(error);
     }
-    
+
     /// Add a warning to the warning collection
+    #[allow(dead_code)]
     pub fn add_warning(&mut self, warning: CompilerWarning) {
         self.warnings.push(warning);
     }
-    
+
     /// Finish borrow checking and return results
     pub fn finish(self) -> Result<(), CompilerMessages> {
         if self.errors.is_empty() {
@@ -237,7 +247,7 @@ impl ControlFlowGraph {
             exit_points: Vec::new(),
         }
     }
-    
+
     /// Add a node to the CFG
     pub fn add_node(&mut self, hir_id: HirNodeId, node_type: CfgNodeType) {
         let node = CfgNode {
@@ -249,12 +259,12 @@ impl ControlFlowGraph {
         };
         self.nodes.insert(hir_id, node);
     }
-    
+
     /// Add an edge between two CFG nodes
     pub fn add_edge(&mut self, from: HirNodeId, to: HirNodeId) {
         // Add to edges map
         self.edges.entry(from).or_default().push(to);
-        
+
         // Update successor/predecessor relationships
         if let Some(from_node) = self.nodes.get_mut(&from) {
             from_node.successors.push(to);
@@ -263,22 +273,25 @@ impl ControlFlowGraph {
             to_node.predecessors.push(from);
         }
     }
-    
+
     /// Mark a node as an entry point
     pub fn add_entry_point(&mut self, hir_id: HirNodeId) {
         self.entry_points.push(hir_id);
     }
-    
+
     /// Mark a node as an exit point
     pub fn add_exit_point(&mut self, hir_id: HirNodeId) {
         self.exit_points.push(hir_id);
     }
-    
+
     /// Get successors of a node
     pub fn successors(&self, node_id: HirNodeId) -> &[HirNodeId] {
-        self.edges.get(&node_id).map(|v| v.as_slice()).unwrap_or(&[])
+        self.edges
+            .get(&node_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
-    
+
     /// Get predecessors of a node
     pub fn predecessors(&self, node_id: HirNodeId) -> Vec<HirNodeId> {
         if let Some(node) = self.nodes.get(&node_id) {
@@ -291,23 +304,28 @@ impl ControlFlowGraph {
 
 impl BorrowState {
     /// Create a new empty borrow state
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Add a borrow to this state
     pub fn add_borrow(&mut self, loan: Loan) {
         let borrow_id = loan.id;
         let place = loan.place.clone();
-        
+
         // Add to active borrows
         self.active_borrows.insert(borrow_id, loan);
-        
+
         // Add to place mapping
-        self.place_to_borrows.entry(place).or_default().push(borrow_id);
+        self.place_to_borrows
+            .entry(place)
+            .or_default()
+            .push(borrow_id);
     }
-    
+
     /// Remove a borrow from this state
+    #[allow(dead_code)]
     pub fn remove_borrow(&mut self, borrow_id: BorrowId) {
         if let Some(loan) = self.active_borrows.remove(&borrow_id) {
             // Remove from place mapping
@@ -319,32 +337,34 @@ impl BorrowState {
             }
         }
     }
-    
+
     /// Get all borrows for a specific place
+    #[allow(dead_code)]
     pub fn borrows_for_place(&self, place: &Place) -> Vec<&Loan> {
         if let Some(borrow_ids) = self.place_to_borrows.get(place) {
-            borrow_ids.iter()
+            borrow_ids
+                .iter()
                 .filter_map(|&id| self.active_borrows.get(&id))
                 .collect()
         } else {
             Vec::new()
         }
     }
-    
+
     /// Merge another borrow state into this one (for CFG join points)
     pub fn merge(&mut self, other: &BorrowState) {
         // Conservative merge: include borrows that exist in both states
         let mut borrows_to_keep = HashMap::new();
-        
+
         for (&borrow_id, loan) in &other.active_borrows {
             if self.active_borrows.contains_key(&borrow_id) {
                 borrows_to_keep.insert(borrow_id, loan.clone());
             }
         }
-        
+
         // Replace with merged state
         self.active_borrows = borrows_to_keep;
-        
+
         // Rebuild place mapping
         self.place_to_borrows.clear();
         for loan in self.active_borrows.values() {
@@ -358,12 +378,7 @@ impl BorrowState {
 
 impl Loan {
     /// Create a new loan
-    pub fn new(
-        id: BorrowId,
-        place: Place,
-        kind: BorrowKind,
-        creation_point: HirNodeId,
-    ) -> Self {
+    pub fn new(id: BorrowId, place: Place, kind: BorrowKind, creation_point: HirNodeId) -> Self {
         Self {
             id,
             place,
@@ -373,18 +388,18 @@ impl Loan {
             active_regions: Vec::new(),
         }
     }
-    
+
     /// Check if this loan conflicts with another loan
     pub fn conflicts_with(&self, other: &Loan) -> bool {
         // Loans conflict if they overlap in memory and at least one is mutable
         if !self.place.overlaps_with(&other.place) {
             return false;
         }
-        
+
         match (self.kind, other.kind) {
             // Shared borrows don't conflict with each other
             (BorrowKind::Shared, BorrowKind::Shared) => false,
-            
+
             // Any other combination conflicts
             _ => true,
         }

@@ -57,9 +57,9 @@ pub enum NodeKind {
 
     // For simple field access: obj.field
     FieldAccess {
-        base: Box<AstNode>, // The expression being accessed
-        field: StringId,    // The field name
-        data_type: DataType, // Resolved type of this field access
+        base: Box<AstNode>,   // The expression being accessed
+        field: StringId,      // The field name
+        data_type: DataType,  // Resolved type of this field access
         ownership: Ownership, // Ownership of the resolved field
     },
 
@@ -166,7 +166,11 @@ impl AstNode {
                     location.to_owned(),
                 ))
             }
-            NodeKind::FieldAccess { data_type, ownership, .. } => Ok(Expression::runtime(
+            NodeKind::FieldAccess {
+                data_type,
+                ownership,
+                ..
+            } => Ok(Expression::runtime(
                 vec![self.to_owned()],
                 data_type.to_owned(),
                 self.location.to_owned(),

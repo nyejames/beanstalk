@@ -205,7 +205,7 @@ pub fn compile_modules(
     //          HIR generation
     // ----------------------------------
     let time = Instant::now();
-    
+
     let hir_nodes = match compiler.generate_hir(module_ast) {
         Ok(nodes) => nodes,
         Err(e) => {
@@ -231,7 +231,7 @@ pub fn compile_modules(
     //          BORROW CHECKING
     // ----------------------------------
     let time = Instant::now();
-    
+
     let checked_hir_nodes = match compiler.check_borrows(hir_nodes) {
         Ok(nodes) => nodes,
         Err(e) => {
@@ -261,7 +261,7 @@ pub fn compile_modules(
 
     // TEMPORARY UNTIL NEW BACKEND IS IMPLEMENTED
     let wasm_bytes = Vec::new();
-    
+
     // Suppress unused variable warning for now
     let _ = checked_hir_nodes;
 

@@ -1,7 +1,7 @@
-use colour::yellow_ln_bold;
-use std::path::PathBuf;
 use crate::compiler::compiler_errors::ErrorLocation;
 use crate::compiler::string_interning::StringTable;
+use colour::yellow_ln_bold;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct CompilerWarning {

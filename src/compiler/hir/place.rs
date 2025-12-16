@@ -8,7 +8,7 @@ use crate::compiler::string_interning::{InternedString, StringTable};
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 /// A Place represents a precise logical memory location
-/// 
+///
 /// Places are used by the borrow checker to track ownership, borrowing,
 /// and lifetimes. They provide a structured way to represent memory
 /// access patterns that can be analyzed for conflicts.
@@ -23,11 +23,11 @@ pub struct Place {
 pub enum PlaceRoot {
     /// Local variable (stack-allocated)
     Local(InternedString),
-    
+
     /// Function parameter
     #[allow(dead_code)]
     Param(InternedString),
-    
+
     /// Global variable or constant
     #[allow(dead_code)]
     Global(InternedString),
@@ -38,11 +38,11 @@ pub enum PlaceRoot {
 pub enum Projection {
     /// Field access (.field)
     Field(InternedString),
-    
+
     /// Index access ([index])
     #[allow(dead_code)]
     Index(IndexKind),
-    
+
     /// Dereference (*)
     #[allow(dead_code)]
     Deref,
@@ -54,7 +54,7 @@ pub enum IndexKind {
     /// Constant index (e.g., arr[3])
     #[allow(dead_code)]
     Constant(u32),
-    
+
     /// Dynamic index (e.g., arr[i]) - conservative analysis
     #[allow(dead_code)]
     Dynamic,
@@ -77,7 +77,7 @@ impl Place {
             projections: Vec::new(),
         }
     }
-    
+
     /// Create a new parameter place
     #[allow(dead_code)]
     pub fn param(name: InternedString) -> Self {
@@ -86,7 +86,7 @@ impl Place {
             projections: Vec::new(),
         }
     }
-    
+
     /// Create a new global place
     #[allow(dead_code)]
     pub fn global(name: InternedString) -> Self {
@@ -95,29 +95,29 @@ impl Place {
             projections: Vec::new(),
         }
     }
-    
+
     /// Add a field projection to this place
     pub fn field(mut self, field: InternedString) -> Self {
         self.projections.push(Projection::Field(field));
         self
     }
-    
+
     /// Add an index projection to this place
     #[allow(dead_code)]
     pub fn index(mut self, index: IndexKind) -> Self {
         self.projections.push(Projection::Index(index));
         self
     }
-    
+
     /// Add a dereference projection to this place
     #[allow(dead_code)]
     pub fn deref(mut self) -> Self {
         self.projections.push(Projection::Deref);
         self
     }
-    
+
     /// Check if this place overlaps with another place
-    /// 
+    ///
     /// Two places overlap if they share the same root and one projection
     /// list is a prefix of the other. This is used by the borrow checker
     /// to detect conflicting accesses.
@@ -127,16 +127,16 @@ impl Place {
         if self.root != other.root {
             return false;
         }
-        
+
         // One projection list must be a prefix of the other
         let min_len = self.projections.len().min(other.projections.len());
-        
+
         for i in 0..min_len {
             if !self.projections[i].overlaps_with(&other.projections[i]) {
                 return false;
             }
         }
-        
+
         true
     }
 }
@@ -148,13 +148,13 @@ impl Projection {
         match (self, other) {
             // Field accesses overlap only if same field
             (Projection::Field(a), Projection::Field(b)) => a == b,
-            
+
             // Index accesses
             (Projection::Index(a), Projection::Index(b)) => a.overlaps_with(b),
-            
+
             // Dereferences always overlap
             (Projection::Deref, Projection::Deref) => true,
-            
+
             // Different projection types don't overlap
             _ => false,
         }
@@ -168,7 +168,7 @@ impl IndexKind {
         match (self, other) {
             // Same constant indices overlap
             (IndexKind::Constant(a), IndexKind::Constant(b)) => a == b,
-            
+
             // Dynamic indices conservatively overlap with everything
             (IndexKind::Dynamic, _) | (_, IndexKind::Dynamic) => true,
         }

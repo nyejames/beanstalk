@@ -118,7 +118,12 @@ pub fn evaluate_expression(
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FieldAccess { base: _base, field: _field, data_type, .. } => {
+            NodeKind::FieldAccess {
+                base: _base,
+                field: _field,
+                data_type,
+                ..
+            } => {
                 if let DataType::Inferred = current_type {
                     *current_type = data_type.to_owned();
                 }
