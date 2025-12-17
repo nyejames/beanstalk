@@ -1862,3 +1862,40 @@ mod tests {
         assert_eq!(state.get_last_use(&place), Some(10));
     }
 }
+    // **Feature: borrow-checker-implementation, Last-Use Analysis Tests**
+    #[test]
+    fn test_last_use_analysis_creation() {
+        use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
+        
+        let analysis = LastUseAnalysis::new();
+        assert!(analysis.last_use_statements.is_empty());
+        assert!(analysis.statement_to_last_uses.is_empty());
+        assert!(analysis.place_to_last_uses.is_empty());
+    }
+    
+    #[test]
+    fn test_last_use_analysis_api() {
+        use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
+        use crate::compiler::hir::place::Place;
+        use crate::compiler::string_interning::StringTable;
+        
+        let mut analysis = LastUseAnalysis::new();
+        let mut string_table = StringTable::new();
+        let place_name = string_table.intern("x");
+        let place = Place::local(place_name);
+        
+        // Test empty analysis
+        assert!(!analysis.is_last_use(&place, 1));
+        assert!(analysis.places_with_last_use_at(1).is_empty());
+        assert!(analysis.last_use_statements_for(&place).is_empty());
+        
+        // Add some test data
+        analysis.last_use_statements.insert(1);
+        analysis.statement_to_last_uses.insert(1, vec![place.clone()]);
+        analysis.place_to_last_uses.insert(place.clone(), vec![1]);
+        
+        // Test populated analysis
+        assert!(analysis.is_last_use(&place, 1));
+        assert_eq!(analysis.places_with_last_use_at(1).len(), 1);
+        assert_eq!(analysis.last_use_statements_for(&place), vec![1]);
+    }

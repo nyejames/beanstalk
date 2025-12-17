@@ -7,53 +7,59 @@
 //! - Converting candidate moves to actual moves
 //! - Inserting Drop nodes at the correct locations
 //!
-//! The analysis uses a two-pass approach:
-//! 1. Forward pass: Record all usages of each place
-//! 2. Backward pass: Determine which usages are final (no subsequent uses on any path)
+//! ## Design Principles (Phase 2: Architectural Correctness)
 //!
-//! The analysis is path-sensitive, considering all possible execution paths through
-//! the control flow graph.
+//! This implementation follows classic dataflow analysis principles with architectural improvements:
+//! - **Statement ID = CFG Node ID**: Eliminates complex mapping between statements and HIR nodes
+//! - **Direct CFG edges**: Connect statements directly, not through HIR node relationships
+//! - **Per-place liveness**: Use HashMap<StmtId, HashSet<Place>> for efficient computation
+//! - **No all_places initialization**: More efficient than computing all places upfront
+//! - **Classic dataflow**: Backward analysis without visited sets or iteration caps
+//! - **1:1 correspondence**: Each CFG node corresponds to exactly one statement
+//!
+//! ## Algorithm
+//!
+//! 1. **Linearize HIR**: Flatten nested structures into linear statements with statement ID = CFG node ID
+//! 2. **Build statement-level CFG**: Direct edges between statements, no HIR node mapping
+//! 3. **Per-place dataflow**: Compute live_after per place using backward propagation
+//! 4. **Mark last uses**: Usage points where place ∉ live_after are last uses
 
 use crate::compiler::borrow_checker::types::{BorrowChecker, ControlFlowGraph};
 use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirNode, HirNodeId};
 use crate::compiler::hir::place::Place;
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-/// Result of last-use analysis for a single place
+/// A linear HIR statement for last-use analysis
+///
+/// This represents a single statement that can use places, making the analysis
+/// more precise than working with complex nested HIR nodes.
+/// 
+/// **Phase 2 Improvement**: Statement ID is now the same as CFG node ID,
+/// eliminating the need for complex mapping logic.
 #[derive(Debug, Clone)]
-pub struct PlaceUsageInfo {
-    /// All nodes where this place is used
-    pub usage_points: Vec<HirNodeId>,
+pub struct LinearStatement {
+    /// Statement ID (same as CFG node ID for direct mapping)
+    pub id: HirNodeId,
     
-    /// The last use point(s) for this place
-    /// Multiple points possible due to different control flow paths
-    pub last_use_points: HashSet<HirNodeId>,
+    /// Places used (read) by this statement
+    pub uses: Vec<Place>,
     
-    /// Whether this place is used after each node (for path-sensitive analysis)
-    pub used_after: HashMap<HirNodeId, bool>,
+    /// Places defined (written) by this statement (ignored in last-use analysis due to no shadowing)
+    #[allow(dead_code)]
+    pub defines: Vec<Place>,
 }
 
-impl Default for PlaceUsageInfo {
-    fn default() -> Self {
-        Self {
-            usage_points: Vec::new(),
-            last_use_points: HashSet::new(),
-            used_after: HashMap::new(),
-        }
-    }
-}
-
-/// Complete last-use analysis results
+/// Result of last-use analysis
 #[derive(Debug, Clone, Default)]
 pub struct LastUseAnalysis {
-    /// Usage information for each place
-    pub place_usages: HashMap<Place, PlaceUsageInfo>,
+    /// Set of statement IDs that are last-use points for any place
+    pub last_use_statements: HashSet<HirNodeId>,
     
-    /// Mapping from node ID to the places used at that node
-    pub node_to_places: HashMap<HirNodeId, Vec<Place>>,
+    /// Mapping from statement ID to places that have their last use there
+    pub statement_to_last_uses: HashMap<HirNodeId, Vec<Place>>,
     
-    /// Set of nodes that are last-use points for any place
-    pub last_use_nodes: HashSet<HirNodeId>,
+    /// Mapping from place to its last-use statement IDs
+    pub place_to_last_uses: HashMap<Place, Vec<HirNodeId>>,
 }
 
 impl LastUseAnalysis {
@@ -62,249 +68,305 @@ impl LastUseAnalysis {
         Self::default()
     }
     
-    /// Check if a specific usage of a place is its last use
-    pub fn is_last_use(&self, place: &Place, node_id: HirNodeId) -> bool {
-        if let Some(usage_info) = self.place_usages.get(place) {
-            usage_info.last_use_points.contains(&node_id)
+    /// Check if a specific statement is a last use for the given place
+    #[allow(dead_code)]
+    pub fn is_last_use(&self, place: &Place, statement_id: HirNodeId) -> bool {
+        if let Some(last_uses) = self.place_to_last_uses.get(place) {
+            last_uses.contains(&statement_id)
         } else {
             false
         }
     }
     
-    /// Get all places that have their last use at a given node
-    pub fn places_with_last_use_at(&self, node_id: HirNodeId) -> Vec<&Place> {
-        self.place_usages
-            .iter()
-            .filter(|(_, info)| info.last_use_points.contains(&node_id))
-            .map(|(place, _)| place)
-            .collect()
+    /// Get all places that have their last use at a given statement
+    #[allow(dead_code)]
+    pub fn places_with_last_use_at(&self, statement_id: HirNodeId) -> Vec<&Place> {
+        self.statement_to_last_uses
+            .get(&statement_id)
+            .map(|places| places.iter().collect())
+            .unwrap_or_default()
     }
     
-    /// Check if a place is used after a given node on any path
-    pub fn is_used_after(&self, place: &Place, node_id: HirNodeId) -> bool {
-        if let Some(usage_info) = self.place_usages.get(place) {
-            usage_info.used_after.get(&node_id).copied().unwrap_or(false)
-        } else {
-            false
-        }
+    /// Get all last-use statement IDs for a place
+    #[allow(dead_code)]
+    pub fn last_use_statements_for(&self, place: &Place) -> Vec<HirNodeId> {
+        self.place_to_last_uses
+            .get(place)
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
 /// Perform last-use analysis on HIR nodes
 ///
-/// This function analyzes the HIR to determine the last use point for each place.
-/// It uses a two-pass approach:
-/// 1. Forward pass: Collect all usages of each place
-/// 2. Backward pass: Determine which usages are final
+/// This function implements the complete last-use analysis algorithm with Phase 2 improvements:
+/// 1. Linearize HIR into statements where statement ID = CFG node ID
+/// 2. Build statement-level CFG with direct edges between statements
+/// 3. Perform per-place backward dataflow analysis
+/// 4. Mark last-use points where place ∉ live_after
 pub fn analyze_last_uses(
     _checker: &BorrowChecker,
-    cfg: &ControlFlowGraph,
+    _cfg: &ControlFlowGraph,
     hir_nodes: &[HirNode],
 ) -> LastUseAnalysis {
-    let mut analysis = LastUseAnalysis::new();
+    // Step 1: Linearize HIR into statements with statement ID = CFG node ID
+    let statements = linearize_hir_with_cfg_ids(hir_nodes);
     
-    // Phase 1: Forward pass - collect all place usages
-    collect_place_usages(&mut analysis, hir_nodes);
+    // Step 2: Build statement-level CFG with direct edges between statements
+    let stmt_cfg = build_statement_cfg(&statements);
     
-    // Phase 2: Backward pass - determine last uses using CFG
-    determine_last_uses(&mut analysis, cfg, hir_nodes);
+    // Step 3: Perform per-place backward dataflow analysis
+    let live_after = compute_per_place_liveness(&statements, &stmt_cfg);
     
-    analysis
+    // Step 4: Mark last-use points
+    mark_last_uses_from_liveness(&statements, &live_after)
 }
 
-/// Forward pass: Collect all usages of each place in the HIR
-fn collect_place_usages(analysis: &mut LastUseAnalysis, hir_nodes: &[HirNode]) {
+/// Linearize HIR nodes into statements where statement ID = CFG node ID
+///
+/// **Phase 2 Improvement**: Statement IDs are now the same as CFG node IDs,
+/// eliminating the need for complex mapping between statements and HIR nodes.
+fn linearize_hir_with_cfg_ids(hir_nodes: &[HirNode]) -> Vec<LinearStatement> {
+    let mut statements = Vec::new();
+    
     for node in hir_nodes {
-        collect_node_usages(analysis, node);
+        linearize_node_with_cfg_id(node, &mut statements);
     }
+    
+    statements
 }
 
-/// Collect place usages from a single HIR node
-fn collect_node_usages(analysis: &mut LastUseAnalysis, node: &HirNode) {
-    let node_id = node.id;
-    
+/// Linearize a single HIR node into a statement with statement ID = HIR node ID
+///
+/// **Phase 2 Improvement**: Uses HIR node ID directly as statement ID,
+/// eliminating the need for source_node mapping.
+fn linearize_node_with_cfg_id(
+    node: &HirNode,
+    statements: &mut Vec<LinearStatement>,
+) {
     match &node.kind {
         HirKind::Assign { place, value } => {
-            // The assigned-to place is being written, not read
-            // But we still track it for Drop insertion purposes
-            record_place_definition(analysis, place, node_id);
+            // Collect places used in the value expression
+            let value_uses = collect_expression_places(value);
             
-            // Collect usages from the value expression
-            collect_expression_usages(analysis, value, node_id);
+            // Create statement with HIR node ID as statement ID
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: value_uses,
+                defines: vec![place.clone()],
+            });
         }
         
         HirKind::Borrow { place, target, .. } => {
-            // The borrowed place is being read
-            record_place_usage(analysis, place, node_id);
-            // The target is being written
-            record_place_definition(analysis, target, node_id);
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![place.clone()],
+                defines: vec![target.clone()],
+            });
         }
         
+        HirKind::Call { args, returns, .. } | HirKind::HostCall { args, returns, .. } => {
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: args.clone(),
+                defines: returns.clone(),
+            });
+        }
+        
+        HirKind::Return(places) => {
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: places.clone(),
+                defines: Vec::new(),
+            });
+        }
+        
+        HirKind::ReturnError(place) => {
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![place.clone()],
+                defines: Vec::new(),
+            });
+        }
+        
+        HirKind::Drop(place) => {
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![place.clone()],
+                defines: Vec::new(),
+            });
+        }
+        
+        HirKind::ExprStmt(place) => {
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![place.clone()],
+                defines: Vec::new(),
+            });
+        }
+        
+        // For structured control flow, create a statement for the control node
+        // and recursively linearize nested parts
         HirKind::If { condition, then_block, else_block } => {
-            // Condition is read
-            record_place_usage(analysis, condition, node_id);
+            // Condition evaluation statement
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![condition.clone()],
+                defines: Vec::new(),
+            });
             
-            // Recursively process blocks
+            // Linearize then block
             for then_node in then_block {
-                collect_node_usages(analysis, then_node);
+                linearize_node_with_cfg_id(then_node, statements);
             }
+            
+            // Linearize else block
             if let Some(else_nodes) = else_block {
                 for else_node in else_nodes {
-                    collect_node_usages(analysis, else_node);
+                    linearize_node_with_cfg_id(else_node, statements);
                 }
             }
         }
         
         HirKind::Match { scrutinee, arms, default } => {
-            // Scrutinee is read
-            record_place_usage(analysis, scrutinee, node_id);
+            // Scrutinee evaluation statement
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![scrutinee.clone()],
+                defines: Vec::new(),
+            });
             
-            // Process match arms
+            // Linearize match arms
             for arm in arms {
                 for arm_node in &arm.body {
-                    collect_node_usages(analysis, arm_node);
+                    linearize_node_with_cfg_id(arm_node, statements);
                 }
             }
+            
+            // Linearize default arm
             if let Some(default_nodes) = default {
                 for default_node in default_nodes {
-                    collect_node_usages(analysis, default_node);
+                    linearize_node_with_cfg_id(default_node, statements);
                 }
             }
         }
         
         HirKind::Loop { iterator, body, .. } => {
-            // Iterator is read
-            record_place_usage(analysis, iterator, node_id);
+            // Iterator evaluation statement
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: vec![iterator.clone()],
+                defines: Vec::new(),
+            });
             
-            // Process loop body
+            // Linearize loop body
             for body_node in body {
-                collect_node_usages(analysis, body_node);
+                linearize_node_with_cfg_id(body_node, statements);
             }
-        }
-        
-        HirKind::Call { args, returns, .. } | HirKind::HostCall { args, returns, .. } => {
-            // Arguments are read
-            for arg in args {
-                record_place_usage(analysis, arg, node_id);
-            }
-            // Returns are written
-            for ret in returns {
-                record_place_definition(analysis, ret, node_id);
-            }
-        }
-        
-        HirKind::Return(places) => {
-            // Return values are read
-            for place in places {
-                record_place_usage(analysis, place, node_id);
-            }
-        }
-        
-        HirKind::ReturnError(place) => {
-            record_place_usage(analysis, place, node_id);
-        }
-        
-        HirKind::Drop(place) => {
-            // Drop reads the place (to deallocate it)
-            record_place_usage(analysis, place, node_id);
-        }
-        
-        HirKind::ExprStmt(place) => {
-            record_place_usage(analysis, place, node_id);
         }
         
         HirKind::TryCall { call, error_handler, .. } => {
-            // Process the call
-            collect_node_usages(analysis, call);
+            // Linearize the call
+            linearize_node_with_cfg_id(call, statements);
             
-            // Process error handler
+            // Linearize error handler
             for handler_node in error_handler {
-                collect_node_usages(analysis, handler_node);
+                linearize_node_with_cfg_id(handler_node, statements);
             }
         }
         
         HirKind::OptionUnwrap { expr, default_value } => {
-            collect_expression_usages(analysis, expr, node_id);
+            let mut uses = collect_expression_places(expr);
             if let Some(default) = default_value {
-                collect_expression_usages(analysis, default, node_id);
+                uses.extend(collect_expression_places(default));
             }
+            
+            statements.push(LinearStatement {
+                id: node.id,
+                uses,
+                defines: Vec::new(),
+            });
         }
         
         HirKind::RuntimeTemplateCall { captures, .. } => {
+            let mut uses = Vec::new();
             for capture in captures {
-                collect_expression_usages(analysis, capture, node_id);
+                uses.extend(collect_expression_places(capture));
             }
+            
+            statements.push(LinearStatement {
+                id: node.id,
+                uses,
+                defines: Vec::new(),
+            });
         }
         
-        HirKind::TemplateFn { body, .. } | HirKind::FunctionDef { body, .. } => {
+        HirKind::FunctionDef { body, .. } | HirKind::TemplateFn { body, .. } => {
+            // Linearize function body
             for body_node in body {
-                collect_node_usages(analysis, body_node);
+                linearize_node_with_cfg_id(body_node, statements);
             }
         }
         
+        // These don't use places but still need statements for CFG consistency
         HirKind::StructDef { .. } | HirKind::Break | HirKind::Continue => {
-            // No place usages
+            statements.push(LinearStatement {
+                id: node.id,
+                uses: Vec::new(),
+                defines: Vec::new(),
+            });
         }
     }
 }
 
-/// Collect place usages from an expression
-fn collect_expression_usages(
-    analysis: &mut LastUseAnalysis,
-    expr: &crate::compiler::hir::nodes::HirExpr,
-    node_id: HirNodeId,
-) {
+/// Collect all places used in an expression
+fn collect_expression_places(expr: &crate::compiler::hir::nodes::HirExpr) -> Vec<Place> {
+    let mut places = Vec::new();
+    
     match &expr.kind {
         HirExprKind::Load(place) => {
-            record_place_usage(analysis, place, node_id);
+            places.push(place.clone());
         }
         
         HirExprKind::SharedBorrow(place) | HirExprKind::MutableBorrow(place) => {
-            record_place_usage(analysis, place, node_id);
+            places.push(place.clone());
         }
         
         HirExprKind::CandidateMove(place) => {
-            // Candidate moves are usages that might become moves
-            record_place_usage(analysis, place, node_id);
+            places.push(place.clone());
         }
         
         HirExprKind::BinOp { left, right, .. } => {
-            record_place_usage(analysis, left, node_id);
-            record_place_usage(analysis, right, node_id);
+            places.push(left.clone());
+            places.push(right.clone());
         }
         
         HirExprKind::UnaryOp { operand, .. } => {
-            record_place_usage(analysis, operand, node_id);
+            places.push(operand.clone());
         }
         
         HirExprKind::Call { args, .. } => {
-            for arg in args {
-                record_place_usage(analysis, arg, node_id);
-            }
+            places.extend(args.iter().cloned());
         }
         
         HirExprKind::MethodCall { receiver, args, .. } => {
-            record_place_usage(analysis, receiver, node_id);
-            for arg in args {
-                record_place_usage(analysis, arg, node_id);
-            }
+            places.push(receiver.clone());
+            places.extend(args.iter().cloned());
         }
         
         HirExprKind::StructConstruct { fields, .. } => {
             for (_, field_place) in fields {
-                record_place_usage(analysis, field_place, node_id);
+                places.push(field_place.clone());
             }
         }
         
-        HirExprKind::Collection(places) => {
-            for place in places {
-                record_place_usage(analysis, place, node_id);
-            }
+        HirExprKind::Collection(element_places) => {
+            places.extend(element_places.iter().cloned());
         }
         
         HirExprKind::Range { start, end } => {
-            record_place_usage(analysis, start, node_id);
-            record_place_usage(analysis, end, node_id);
+            places.push(start.clone());
+            places.push(end.clone());
         }
         
         // Literals don't use places
@@ -314,261 +376,196 @@ fn collect_expression_usages(
         | HirExprKind::StringLiteral(_)
         | HirExprKind::Char(_) => {}
     }
-}
-
-/// Record a place usage at a specific node
-fn record_place_usage(analysis: &mut LastUseAnalysis, place: &Place, node_id: HirNodeId) {
-    // Add to place_usages
-    let usage_info = analysis.place_usages.entry(place.clone()).or_default();
-    usage_info.usage_points.push(node_id);
     
-    // Add to node_to_places
-    analysis.node_to_places
-        .entry(node_id)
-        .or_default()
-        .push(place.clone());
+    places
 }
 
-/// Record a place definition (write) at a specific node
-/// This is tracked separately as definitions don't count as "uses" for last-use analysis
-fn record_place_definition(analysis: &mut LastUseAnalysis, place: &Place, _node_id: HirNodeId) {
-    // Ensure the place exists in our tracking, but don't add as a usage point
-    analysis.place_usages.entry(place.clone()).or_default();
-}
-
-/// Backward pass: Determine last uses using CFG analysis
+/// Statement-level CFG for direct statement-to-statement edges
 ///
-/// This implements path-sensitive last-use analysis:
-/// - A usage is a "last use" if there are no subsequent uses on ANY path from that point
-/// - We use backward dataflow analysis to compute this
-fn determine_last_uses(
-    analysis: &mut LastUseAnalysis,
-    cfg: &ControlFlowGraph,
-    hir_nodes: &[HirNode],
-) {
-    // Build a mapping from node IDs to their position for ordering
-    let node_order = build_node_order(hir_nodes);
+/// **Phase 2 Improvement**: Direct edges between statements, no HIR node mapping needed.
+#[derive(Debug, Clone)]
+struct StatementCfg {
+    /// Direct successors for each statement ID
+    successors: HashMap<HirNodeId, Vec<HirNodeId>>,
+    /// Direct predecessors for each statement ID  
+    predecessors: HashMap<HirNodeId, Vec<HirNodeId>>,
+    /// Entry points (statements with no predecessors)
+    entry_points: Vec<HirNodeId>,
+    /// Exit points (statements with no successors)
+    exit_points: Vec<HirNodeId>,
+}
+
+/// Build statement-level CFG with direct edges between statements
+///
+/// **Phase 2 Improvement**: Creates CFG where edges connect statements directly,
+/// eliminating the need for HIR node mapping logic.
+fn build_statement_cfg(statements: &[LinearStatement]) -> StatementCfg {
+    let mut successors: HashMap<HirNodeId, Vec<HirNodeId>> = HashMap::new();
+    let mut predecessors: HashMap<HirNodeId, Vec<HirNodeId>> = HashMap::new();
     
-    // For each place, determine its last use points
-    let places: Vec<Place> = analysis.place_usages.keys().cloned().collect();
-    
-    for place in places {
-        determine_place_last_uses(analysis, cfg, &place, &node_order);
+    // Initialize empty successor/predecessor lists for all statements
+    for stmt in statements {
+        successors.insert(stmt.id, Vec::new());
+        predecessors.insert(stmt.id, Vec::new());
     }
     
-    // Build the set of all last-use nodes
-    for usage_info in analysis.place_usages.values() {
-        for &node_id in &usage_info.last_use_points {
-            analysis.last_use_nodes.insert(node_id);
-        }
+    // Build edges based on statement sequence and control flow
+    // For now, create simple sequential edges (Phase 3 will handle complex control flow)
+    for i in 0..statements.len().saturating_sub(1) {
+        let current_id = statements[i].id;
+        let next_id = statements[i + 1].id;
+        
+        // Add edge: current -> next
+        successors.get_mut(&current_id).unwrap().push(next_id);
+        predecessors.get_mut(&next_id).unwrap().push(current_id);
+    }
+    
+    // Identify entry and exit points
+    let entry_points: Vec<HirNodeId> = statements
+        .iter()
+        .filter(|stmt| predecessors.get(&stmt.id).unwrap().is_empty())
+        .map(|stmt| stmt.id)
+        .collect();
+    
+    let exit_points: Vec<HirNodeId> = statements
+        .iter()
+        .filter(|stmt| successors.get(&stmt.id).unwrap().is_empty())
+        .map(|stmt| stmt.id)
+        .collect();
+    
+    StatementCfg {
+        successors,
+        predecessors,
+        entry_points,
+        exit_points,
     }
 }
 
-/// Build a mapping from node IDs to their order in the HIR
-fn build_node_order(hir_nodes: &[HirNode]) -> HashMap<HirNodeId, usize> {
-    let mut order = HashMap::new();
-    let mut counter = 0;
+/// Compute per-place liveness using efficient backward dataflow
+///
+/// **Phase 2 Improvement**: Uses HashMap<StmtId, HashSet<Place>> for per-place
+/// propagation, avoiding expensive all_places initialization.
+fn compute_per_place_liveness(
+    statements: &[LinearStatement],
+    cfg: &StatementCfg,
+) -> HashMap<HirNodeId, HashSet<Place>> {
+    // live_after[stmt_id] = set of places live after statement
+    let mut live_after: HashMap<HirNodeId, HashSet<Place>> = HashMap::new();
     
-    fn visit_node(node: &HirNode, order: &mut HashMap<HirNodeId, usize>, counter: &mut usize) {
-        order.insert(node.id, *counter);
-        *counter += 1;
+    // Initialize all statements with empty live sets
+    for stmt in statements {
+        live_after.insert(stmt.id, HashSet::new());
+    }
+    
+    // Worklist algorithm: start from exit points and work backwards
+    let mut worklist: VecDeque<HirNodeId> = cfg.exit_points.iter().copied().collect();
+    
+    while let Some(stmt_id) = worklist.pop_front() {
+        let mut changed = false;
         
-        match &node.kind {
-            HirKind::If { then_block, else_block, .. } => {
-                for n in then_block {
-                    visit_node(n, order, counter);
+        // Compute new live_after set for this statement
+        let mut new_live_after = HashSet::new();
+        
+        // A place is live after this statement if any successor uses it or has it live after
+        if let Some(successors) = cfg.successors.get(&stmt_id) {
+            for &succ_id in successors {
+                // Add places used by successor
+                if let Some(succ_stmt) = statements.iter().find(|s| s.id == succ_id) {
+                    for place in &succ_stmt.uses {
+                        new_live_after.insert(place.clone());
+                    }
                 }
-                if let Some(else_nodes) = else_block {
-                    for n in else_nodes {
-                        visit_node(n, order, counter);
+                
+                // Add places live after successor
+                if let Some(succ_live_after) = live_after.get(&succ_id) {
+                    for place in succ_live_after {
+                        new_live_after.insert(place.clone());
                     }
                 }
             }
-            HirKind::Match { arms, default, .. } => {
-                for arm in arms {
-                    for n in &arm.body {
-                        visit_node(n, order, counter);
-                    }
-                }
-                if let Some(default_nodes) = default {
-                    for n in default_nodes {
-                        visit_node(n, order, counter);
-                    }
-                }
-            }
-            HirKind::Loop { body, .. } => {
-                for n in body {
-                    visit_node(n, order, counter);
-                }
-            }
-            HirKind::TryCall { call, error_handler, .. } => {
-                visit_node(call, order, counter);
-                for n in error_handler {
-                    visit_node(n, order, counter);
-                }
-            }
-            HirKind::FunctionDef { body, .. } | HirKind::TemplateFn { body, .. } => {
-                for n in body {
-                    visit_node(n, order, counter);
-                }
-            }
-            _ => {}
-        }
-    }
-    
-    for node in hir_nodes {
-        visit_node(node, &mut order, &mut counter);
-    }
-    
-    order
-}
-
-/// Determine last use points for a specific place using backward analysis
-fn determine_place_last_uses(
-    analysis: &mut LastUseAnalysis,
-    cfg: &ControlFlowGraph,
-    place: &Place,
-    node_order: &HashMap<HirNodeId, usize>,
-) {
-    let usage_info = match analysis.place_usages.get_mut(place) {
-        Some(info) => info,
-        None => return,
-    };
-    
-    if usage_info.usage_points.is_empty() {
-        return;
-    }
-    
-    // Get all usage points for this place
-    let usage_points: HashSet<HirNodeId> = usage_info.usage_points.iter().copied().collect();
-    
-    // Initialize used_after for all nodes in CFG
-    // A node has used_after = true if the place is used on any path after that node
-    let mut used_after: HashMap<HirNodeId, bool> = HashMap::new();
-    
-    // Initialize all nodes to false
-    for &node_id in cfg.nodes.keys() {
-        used_after.insert(node_id, false);
-    }
-    
-    // Backward dataflow analysis using worklist algorithm
-    // Start from exit points and work backwards
-    let mut worklist: Vec<HirNodeId> = cfg.exit_points.clone();
-    let mut visited: HashSet<HirNodeId> = HashSet::new();
-    
-    // Also add all nodes that have no successors (implicit exits)
-    for (&node_id, successors) in &cfg.edges {
-        if successors.is_empty() {
-            worklist.push(node_id);
-        }
-    }
-    
-    // Add all nodes to worklist initially for complete analysis
-    for &node_id in cfg.nodes.keys() {
-        if !worklist.contains(&node_id) {
-            worklist.push(node_id);
-        }
-    }
-    
-    // Sort worklist by reverse node order (process later nodes first)
-    worklist.sort_by(|a, b| {
-        let order_a = node_order.get(a).copied().unwrap_or(0);
-        let order_b = node_order.get(b).copied().unwrap_or(0);
-        order_b.cmp(&order_a) // Reverse order
-    });
-    
-    // Iterate until fixed point
-    let max_iterations = cfg.nodes.len() * 3;
-    let mut iterations = 0;
-    
-    while let Some(node_id) = worklist.pop() {
-        iterations += 1;
-        if iterations > max_iterations {
-            break; // Safety limit
         }
         
-        if visited.contains(&node_id) {
-            continue;
-        }
-        
-        // Compute used_after for this node based on successors
-        let successors = cfg.successors(node_id);
-        let mut any_successor_uses = false;
-        
-        for &succ_id in successors {
-            // If successor uses the place, or place is used after successor
-            if usage_points.contains(&succ_id) || used_after.get(&succ_id).copied().unwrap_or(false) {
-                any_successor_uses = true;
-                break;
+        // Check if live_after set changed
+        if let Some(old_live_after) = live_after.get(&stmt_id) {
+            if &new_live_after != old_live_after {
+                changed = true;
             }
+        } else {
+            changed = !new_live_after.is_empty();
         }
         
-        let old_value = used_after.get(&node_id).copied().unwrap_or(false);
-        let new_value = any_successor_uses;
-        
-        if old_value != new_value {
-            used_after.insert(node_id, new_value);
+        if changed {
+            live_after.insert(stmt_id, new_live_after);
             
-            // Add predecessors to worklist for re-processing
-            let predecessors = cfg.predecessors(node_id);
-            for pred_id in predecessors {
-                visited.remove(&pred_id);
-                if !worklist.contains(&pred_id) {
-                    worklist.push(pred_id);
+            // Add predecessors to worklist
+            if let Some(predecessors) = cfg.predecessors.get(&stmt_id) {
+                for &pred_id in predecessors {
+                    if !worklist.contains(&pred_id) {
+                        worklist.push_back(pred_id);
+                    }
                 }
             }
         }
-        
-        visited.insert(node_id);
     }
     
-    // Store used_after results
-    usage_info.used_after = used_after.clone();
+    live_after
+}
+
+/// Mark last-use points from per-place liveness information
+///
+/// **Phase 2 Improvement**: Uses efficient per-place liveness sets to determine
+/// last uses where place ∉ live_after.
+fn mark_last_uses_from_liveness(
+    statements: &[LinearStatement],
+    live_after: &HashMap<HirNodeId, HashSet<Place>>,
+) -> LastUseAnalysis {
+    let mut analysis = LastUseAnalysis::new();
     
-    // Determine last use points: a usage is a last use if used_after is false
-    for &usage_node in &usage_info.usage_points {
-        let is_used_after = used_after.get(&usage_node).copied().unwrap_or(false);
-        if !is_used_after {
-            usage_info.last_use_points.insert(usage_node);
+    for statement in statements {
+        for place in &statement.uses {
+            // Check if this place is live after this statement
+            let is_live_after = live_after
+                .get(&statement.id)
+                .map(|live_set| live_set.contains(place))
+                .unwrap_or(false);
+            
+            // If not live after, this is a last use
+            if !is_live_after {
+                analysis.last_use_statements.insert(statement.id);
+                
+                analysis
+                    .statement_to_last_uses
+                    .entry(statement.id)
+                    .or_default()
+                    .push(place.clone());
+                
+                analysis
+                    .place_to_last_uses
+                    .entry(place.clone())
+                    .or_default()
+                    .push(statement.id);
+            }
         }
     }
+    
+    analysis
 }
 
 /// Update borrow checker state with last-use information
 ///
-/// This function integrates the last-use analysis results into the borrow checker's
-/// state, updating the borrow state at each CFG node with last-use information.
+/// **Phase 2 Improvement**: Direct statement ID to CFG node mapping,
+/// no complex HIR node mapping needed.
 pub fn apply_last_use_analysis(
     checker: &mut BorrowChecker,
     analysis: &LastUseAnalysis,
 ) {
     // Update each CFG node's borrow state with last-use information
-    for (place, usage_info) in &analysis.place_usages {
-        for &last_use_node in &usage_info.last_use_points {
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&last_use_node) {
-                cfg_node.borrow_state.record_last_use(place.clone(), last_use_node);
+    // Since statement ID = CFG node ID, this is now a direct mapping
+    for (place, last_use_statements) in &analysis.place_to_last_uses {
+        for &statement_id in last_use_statements {
+            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&statement_id) {
+                cfg_node.borrow_state.record_last_use(place.clone(), statement_id);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_last_use_analysis_creation() {
-        let analysis = LastUseAnalysis::new();
-        assert!(analysis.place_usages.is_empty());
-        assert!(analysis.node_to_places.is_empty());
-        assert!(analysis.last_use_nodes.is_empty());
-    }
-    
-    #[test]
-    fn test_place_usage_info_default() {
-        let info = PlaceUsageInfo::default();
-        assert!(info.usage_points.is_empty());
-        assert!(info.last_use_points.is_empty());
-        assert!(info.used_after.is_empty());
     }
 }

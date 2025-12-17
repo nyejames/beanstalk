@@ -41,4 +41,4 @@ pub use types::{
 };
 
 // Re-export last-use analysis types
-pub use last_use::{LastUseAnalysis, PlaceUsageInfo, analyze_last_uses};
+pub use last_use::{LastUseAnalysis, analyze_last_uses};
