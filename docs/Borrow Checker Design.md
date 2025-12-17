@@ -42,6 +42,16 @@ struct Place {
 }
 ```
 
+### No Shadowing Simplification
+
+**Critical Language Design**: Beanstalk disallows variable shadowing.
+
+**Borrow Checker Benefits:**
+- Each place name refers to exactly one memory location throughout its scope
+- No need to track variable redefinitions or scope-based disambiguation
+- Last-use analysis can safely ignore 'defines' since they don't change place identity
+- Simplified place identity management without SSA-style renaming
+
 ### PlaceRoot
 
 ```rust
@@ -169,41 +179,77 @@ let s = &x;   -- error
 
 ---
 
-## Compiler IR and Temporaries
+## HIR and Last-Use Analysis Integration
 
-Even though temporaries do not exist at the language level:
+The borrow checker operates exclusively on HIR, which provides the right level of abstraction:
 
-* **Compiler IR may still use hidden locals** to store intermediate values for operations such as `x + y` or function calls.
-* These are treated **identically to `Local` roots** in the borrow checker.
-* No separate `Temporary` root is necessary; this keeps the **Place model simple**.
+### HIR Characteristics for Borrow Checking
+* **No nested expressions**: All computation linearized into statements operating on places
+* **Structured control flow**: If/match/loop preserved for CFG-based analysis  
+* **Place-based memory model**: All memory access expressed through precise place representations
+* **Borrow intent recording**: HIR records where access is requested, not ownership outcome
 
-**Benefit:**
+### Linearization for Precision
+Even though HIR is structured, the borrow checker linearizes it for analysis:
 
-* Borrow checker remains simple, precise, and fast.
-* CFG-based analysis of borrows is sufficient to enforce Polonius-style reasoning.
+* **Statement extraction**: Each HIR node becomes one or more linear statements
+* **Single operation per statement**: Eliminates ambiguity about usage order within nodes
+* **Precise CFG mapping**: Each CFG node represents exactly one statement
+* **No temporaries needed**: Compiler IR uses hidden locals treated as `Local` roots
+
+### Last-Use Analysis Requirements
+* **Statement-level CFG**: Each CFG node corresponds to exactly one statement (1:1 mapping)
+* **Statement ID = CFG node ID**: Eliminates complex mapping between statements and HIR nodes
+* **Direct CFG connections**: Successors/predecessors between statements, not HIR nodes
+* **Per-place propagation**: Efficient liveness computation without all_places initialization
+* **Topological correctness**: Proper handling of complex control flow (early returns, break/continue)
+* **Classic dataflow**: Backward analysis without visited sets or iteration caps
+
+**Benefits:**
+
+* Borrow checker remains simple, precise, and fast
+* CFG-based analysis sufficient for Polonius-style reasoning
+* Statement-level precision enables accurate Drop insertion
+* No complex lifetime annotations required
 
 ---
 
 ## Borrow Checker Implementation Strategy
 
-1. **Build CFG** from the lowered IR.
-2. **Track borrows per basic block**:
+The borrow checker operates on HIR using a multi-phase approach:
 
-   * Store `{borrow_id → Place, kind}` for each active borrow.
-   * Record creation, last use, and active paths.
-3. **At CFG joins**:
+### Phase 1: HIR Linearization
+* **Flatten nested structures** into linear statements where each statement represents one operation
+* **Statement-level granularity**: Each CFG node corresponds to one HIR statement, not complex nested nodes
+* **Place extraction**: Identify all places used (read) and defined (written) by each statement
 
-   * Merge borrow sets conservatively for shared borrows.
-   * Only reject mutable access if a conflicting borrow is active on **all incoming paths**.
-4. **Last-use analysis**:
+### Phase 2: Control Flow Graph Construction
+* **Build CFG** from the linearized HIR statements
+* **Structured control flow**: Preserve if/match/loop structure for analysis
+* **Edge creation**: Connect statements based on execution flow, not traversal order
 
-   * Borrow ends immediately after its last use.
-5. **Overlap checking**:
+### Phase 3: Borrow Tracking
+* **Track borrows per statement**: Store `{borrow_id → Place, kind}` for each active borrow
+* **Record creation points**: Where each borrow is first created
+* **Propagate through CFG**: Use dataflow analysis to track borrow state
 
-   * Compare `Place` roots and projections structurally.
-6. **Violation detection**:
+### Phase 4: Last-Use Analysis (Classic Dataflow)
+* **Statement-level CFG**: Build CFG where statement ID = CFG node ID (eliminate mapping)
+* **Direct CFG edges**: Successors/predecessors defined between statements, not HIR nodes
+* **Per-place liveness**: Compute live_after as HashMap<StmtId, HashSet<Place>>
+* **Backward dataflow**: Worklist algorithm until fixed point without visited sets
+* **Last-use detection**: Usage points where place ∉ live_after are last uses
+* **Topological correctness**: Handle early returns, break/continue, fallthrough properly
 
-   * A conflict exists only if a mutable/immutable rule is violated on all paths reaching the use.
+### Phase 5: Conflict Detection
+* **At CFG joins**: Merge borrow sets conservatively - conflicts only illegal on ALL incoming paths
+* **Overlap checking**: Compare Place roots and projections structurally
+* **Polonius-style reasoning**: Only reject access if conflicting borrow exists on all paths
+
+### Phase 6: Move Refinement
+* **Candidate move analysis**: Convert candidate moves to actual moves when they are last uses
+* **Lifetime inference**: Borrows end immediately after their last use
+* **Drop insertion**: Insert Drop nodes at precise last-use points
 
 ---
 

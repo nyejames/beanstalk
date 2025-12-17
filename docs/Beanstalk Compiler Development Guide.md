@@ -323,7 +323,10 @@ Its job is to validate ownership correctness before the program is lowered towar
 
 ### Development Notes
 - All borrow errors must reference original source spans, not HIR internals.
-- HIR must remain easy for the borrow checker to walk — keep constructs structured, not flattened.
+- HIR maintains structured control flow, but borrow checker creates statement-level CFG for analysis.
+- Statement-level CFG requires 1:1 correspondence between CFG nodes and statements for topological correctness.
+- Complex control flow (early returns, break/continue, fallthrough) requires careful CFG edge construction.
+- Architectural evolution: Phase 1 (basic) → Phase 2 (efficient) → Phase 3 (topologically correct).
 
 ---
 
