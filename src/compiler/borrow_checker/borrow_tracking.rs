@@ -1,4 +1,28 @@
-//! Borrow Tracking System
+//! # Borrow Checker Module
+//!
+//! This module implements Beanstalk's borrow checker, which validates memory safety
+//! and ownership rules on HIR (High-Level Intermediate Representation). The borrow
+//! checker ensures all borrowing, ownership transfers, and memory access patterns
+//! are safe before lowering to LIR.
+//!
+//! ## Architecture
+//!
+//! The borrow checker consists of several key components:
+//! - **Control Flow Graph (CFG) Construction**: Builds a graph representation of program flow
+//! - **Borrow Tracking**: Tracks active borrows and their lifetimes across the CFG
+//! - **Last-Use Analysis**: Determines when values are used for the final time
+//! - **Conflict Detection**: Detects memory safety violations using place overlap analysis
+//!
+//! ## Key Design Principles
+//!
+//! - **HIR-Only Operation**: Operates exclusively on HIR, never on AST or LIR
+//! - **Automatic Lifetime Inference**: No explicit lifetime annotations required
+//! - **Last-Use Move Optimization**: Candidate moves become actual moves when they are the final use
+//! - **Polonius-Style Analysis**: Path-sensitive conflict detection
+//! - **Place-Based Memory Model**: All memory access tracked through precise place representations
+//! - **Conservative Analysis**: When in doubt, chooses the safe option
+//!
+//! # Borrow Tracking System
 //!
 //! This module implements the core borrow tracking functionality for the borrow checker.
 //! It handles the creation, propagation, and management of borrows across the control
@@ -7,7 +31,6 @@
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind, Loan};
 use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirNode, HirNodeId};
-use std::collections::HashSet;
 
 /// Track borrows across the control flow graph
 ///

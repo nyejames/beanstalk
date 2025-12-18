@@ -107,6 +107,7 @@ mod compiler {
         pub(crate) mod conflict_detection;
         pub(crate) mod last_use;
         pub(crate) mod types;
+        pub(crate) mod candidate_move_refinement;
     }
 }
 

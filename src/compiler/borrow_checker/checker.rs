@@ -6,6 +6,7 @@
 
 use crate::borrow_log;
 use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
+use crate::compiler::borrow_checker::candidate_move_refinement::{refine_candidate_moves, validate_move_decisions};
 use crate::compiler::borrow_checker::cfg::construct_cfg;
 use crate::compiler::borrow_checker::conflict_detection::{
     check_move_while_borrowed, check_use_after_move, detect_conflicts,
@@ -89,14 +90,26 @@ fn perform_borrow_analysis(
     let last_use_analysis = analyze_last_uses(&checker, &checker.cfg.clone(), hir_nodes);
     borrow_log!(
         "Last-use analysis complete: {} places analyzed, {} last-use points identified",
-        last_use_analysis.place_usages.len(),
-        last_use_analysis.last_use_nodes.len()
+        last_use_analysis.last_use_statements.len(),
+        last_use_analysis.statement_to_last_uses.len()
     );
     
     // Apply last-use analysis results to borrow checker state
     apply_last_use_analysis(&mut checker, &last_use_analysis);
 
-    // Phase 4: Detect borrow conflicts
+    // Phase 4: Refine candidate moves based on last-use analysis
+    borrow_log!("Refining candidate moves");
+    let candidate_move_refinement = refine_candidate_moves(&mut checker, hir_nodes, &last_use_analysis)?;
+    borrow_log!(
+        "Candidate move refinement complete: {} moves, {} mutable borrows",
+        candidate_move_refinement.moved_places.len(),
+        candidate_move_refinement.mutable_borrows.len()
+    );
+    
+    // Validate that move decisions don't conflict with active borrows
+    validate_move_decisions(&checker, &candidate_move_refinement)?;
+
+    // Phase 5: Detect borrow conflicts
     borrow_log!("Detecting borrow conflicts");
     detect_conflicts(&mut checker, hir_nodes);
 
