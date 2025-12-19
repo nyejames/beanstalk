@@ -1662,10 +1662,10 @@ mod tests {
             
             // Find the borrow for place x
             let x_borrow = borrows.iter().find(|loan| {
-                loan.place.root == PlaceRoot::Local(x_name) && loan.kind == BorrowKind::Mutable
+                loan.place.root == PlaceRoot::Local(x_name) && loan.kind == BorrowKind::CandidateMove
             });
             
-            assert!(x_borrow.is_some(), "CandidateMove should create a mutable borrow of x");
+            assert!(x_borrow.is_some(), "CandidateMove should create a CandidateMove borrow of x");
         }
     }
 

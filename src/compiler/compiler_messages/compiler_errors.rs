@@ -775,11 +775,13 @@ macro_rules! create_shared_mutable_conflict_error {
         let existing_kind_str: &'static str = match $existing_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mutable => "Mutable",
+            BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
             BorrowKind::Move => "Move",
         };
         let new_kind_str: &'static str = match $new_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mutable => "Mutable",
+            BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
             BorrowKind::Move => "Move",
         };
 
@@ -932,12 +934,14 @@ macro_rules! create_move_while_borrowed_error {
         let borrow_kind_str: &'static str = match $borrow_kind {
             BorrowKind::Shared => "Shared",
             BorrowKind::Mutable => "Mutable",
+            BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
             BorrowKind::Move => "Move",
         };
 
         let borrow_type = match $borrow_kind {
             BorrowKind::Shared => "referenced",
             BorrowKind::Mutable => "mutably borrowed",
+            BorrowKind::CandidateMove => "mutably borrowed", // Treat as mutable for error reporting
             BorrowKind::Move => "moved",
         };
 

@@ -239,9 +239,10 @@ fn process_expression_for_borrows(
         }
 
         HirExprKind::CandidateMove(place) => {
-            // Create mutable borrow candidate (will be refined by last-use analysis)
+            // Create candidate move borrow (will be refined by last-use analysis)
+            // This is treated conservatively as mutable for conflict detection
             let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Mutable, node_id);
+            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::CandidateMove, node_id);
 
             if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
                 cfg_node.borrow_state.add_borrow(loan);

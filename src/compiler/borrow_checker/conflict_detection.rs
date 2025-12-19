@@ -119,11 +119,30 @@ fn report_borrow_conflict(
             error_location
         )),
 
-        (BorrowKind::Shared, BorrowKind::Mutable) | (BorrowKind::Mutable, BorrowKind::Shared) => {
-            let (existing_kind, new_kind) = if loan1.kind == BorrowKind::Mutable {
-                (loan1.kind, loan2.kind)
-            } else {
-                (loan2.kind, loan1.kind)
+        // CandidateMove conflicts are treated as mutable conflicts for error reporting
+        (BorrowKind::CandidateMove, BorrowKind::CandidateMove) => Some(create_multiple_mutable_borrows_error!(
+            loan2.place,
+            error_location.clone(),
+            error_location
+        )),
+
+        (BorrowKind::Mutable, BorrowKind::CandidateMove) | (BorrowKind::CandidateMove, BorrowKind::Mutable) => {
+            Some(create_multiple_mutable_borrows_error!(
+                loan2.place,
+                error_location.clone(),
+                error_location
+            ))
+        }
+
+        (BorrowKind::Shared, BorrowKind::Mutable) 
+        | (BorrowKind::Mutable, BorrowKind::Shared)
+        | (BorrowKind::Shared, BorrowKind::CandidateMove)
+        | (BorrowKind::CandidateMove, BorrowKind::Shared) => {
+            // For error reporting, treat CandidateMove as Mutable
+            let (existing_kind, new_kind) = match (loan1.kind, loan2.kind) {
+                (BorrowKind::CandidateMove, other) => (BorrowKind::Mutable, other),
+                (other, BorrowKind::CandidateMove) => (other, BorrowKind::Mutable),
+                (kind1, kind2) => (kind1, kind2),
             };
 
             Some(create_shared_mutable_conflict_error!(
@@ -252,7 +271,7 @@ pub fn check_move_while_borrowed(checker: &mut BorrowChecker, hir_nodes: &[HirNo
                         if loan.id != other_loan.id
                             && loan.place.overlaps_with(&other_loan.place)
                             && other_loan.creation_point < loan.creation_point
-                            && matches!(other_loan.kind, BorrowKind::Shared | BorrowKind::Mutable)
+                            && matches!(other_loan.kind, BorrowKind::Shared | BorrowKind::Mutable | BorrowKind::CandidateMove)
                         {
                             let error_location = node
                                 .location

@@ -165,6 +165,10 @@ pub enum BorrowKind {
     /// Mutable/exclusive borrow (from mutable access)
     Mutable,
 
+    /// Candidate move (potential ownership transfer, treated conservatively as mutable)
+    /// This is refined to either Move or Mutable by last-use analysis
+    CandidateMove,
+
     /// Move (refined from CandidateMove by last-use analysis)
     Move,
 }

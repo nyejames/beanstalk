@@ -177,8 +177,12 @@ impl Place {
     /// Conflict rules:
     /// - Shared + Shared: No conflict (multiple readers allowed)
     /// - Shared + Mutable: Conflict (reader/writer conflict)
+    /// - Shared + CandidateMove: Conflict (reader/potential writer conflict)
     /// - Mutable + Mutable: Conflict (multiple writers not allowed)
+    /// - Mutable + CandidateMove: Conflict (writer/potential writer conflict)
+    /// - CandidateMove + CandidateMove: Conflict (multiple potential writers)
     /// - Move + Any: Conflict (moved value cannot be accessed)
+    /// - Any + Move: Conflict (cannot access moved value)
     pub fn conflicts_with(&self, other: &Place, self_kind: BorrowKind, other_kind: BorrowKind) -> bool {
         use crate::compiler::borrow_checker::types::BorrowKind;
 
@@ -190,6 +194,17 @@ impl Place {
         match (self_kind, other_kind) {
             // Shared borrows don't conflict with each other
             (BorrowKind::Shared, BorrowKind::Shared) => false,
+
+            // CandidateMove is treated conservatively as mutable for conflict detection
+            // This ensures safety during the refinement phase
+            (BorrowKind::CandidateMove, _) | (_, BorrowKind::CandidateMove) => {
+                // CandidateMove conflicts with everything except shared-shared
+                // (which is already handled above)
+                true
+            }
+
+            // Move conflicts with everything (moved values cannot be accessed)
+            (BorrowKind::Move, _) | (_, BorrowKind::Move) => true,
 
             // Any other combination conflicts if places overlap
             _ => true,
