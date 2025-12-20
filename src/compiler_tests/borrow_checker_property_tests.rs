@@ -223,7 +223,7 @@ mod tests {
     impl Arbitrary for TestBorrow {
         fn arbitrary(g: &mut Gen) -> Self {
             use crate::compiler::borrow_checker::types::BorrowKind;
-            
+
             let kind = match u8::arbitrary(g) % 3 {
                 0 => BorrowKind::Shared,
                 1 => BorrowKind::Mutable,
@@ -1105,7 +1105,7 @@ mod tests {
             .map(|tp| tp.to_place(&mut string_table))
             .collect();
 
-        // Property: For any two places, they should be considered overlapping if and only if 
+        // Property: For any two places, they should be considered overlapping if and only if
         // they have the same root and their projection lists have a prefix relationship
         let result = test_place_overlap_detection(&places);
 
@@ -1121,12 +1121,13 @@ mod tests {
         }
 
         let mut string_table = StringTable::new();
-        let borrows: Vec<(Place, crate::compiler::borrow_checker::types::BorrowKind)> = test_borrows
-            .iter()
-            .map(|tb| (tb.place.to_place(&mut string_table), tb.kind))
-            .collect();
+        let borrows: Vec<(Place, crate::compiler::borrow_checker::types::BorrowKind)> =
+            test_borrows
+                .iter()
+                .map(|tb| (tb.place.to_place(&mut string_table), tb.kind))
+                .collect();
 
-        // Property: For any mutable borrow and any other borrow of overlapping places, 
+        // Property: For any mutable borrow and any other borrow of overlapping places,
         // a conflict should be detected; multiple shared borrows of overlapping places should not conflict
         let result = test_borrow_conflict_detection(&borrows);
 
@@ -1142,12 +1143,13 @@ mod tests {
         }
 
         let mut string_table = StringTable::new();
-        let borrows: Vec<(Place, crate::compiler::borrow_checker::types::BorrowKind)> = test_borrows
-            .iter()
-            .map(|tb| (tb.place.to_place(&mut string_table), tb.kind))
-            .collect();
+        let borrows: Vec<(Place, crate::compiler::borrow_checker::types::BorrowKind)> =
+            test_borrows
+                .iter()
+                .map(|tb| (tb.place.to_place(&mut string_table), tb.kind))
+                .collect();
 
-        // Property: For any situation where a part of an object (field or element) is borrowed, 
+        // Property: For any situation where a part of an object (field or element) is borrowed,
         // borrowing the whole object should be prevented and appropriate errors reported
         let result = test_whole_object_borrowing_prevention(&borrows);
 
@@ -1156,7 +1158,7 @@ mod tests {
 
     /// Test place overlap detection property
     fn test_place_overlap_detection(places: &[Place]) -> bool {
-        // Property: For any two places, they should be considered overlapping if and only if 
+        // Property: For any two places, they should be considered overlapping if and only if
         // they have the same root and their projection lists have a prefix relationship
 
         for (i, place1) in places.iter().enumerate() {
@@ -1201,7 +1203,7 @@ mod tests {
     ) -> bool {
         use crate::compiler::borrow_checker::types::BorrowKind;
 
-        // Property: For any mutable borrow and any other borrow of overlapping places, 
+        // Property: For any mutable borrow and any other borrow of overlapping places,
         // a conflict should be detected; multiple shared borrows of overlapping places should not conflict
 
         for (i, (place1, kind1)) in borrows.iter().enumerate() {
@@ -1249,7 +1251,7 @@ mod tests {
     fn test_whole_object_borrowing_prevention(
         borrows: &[(Place, crate::compiler::borrow_checker::types::BorrowKind)],
     ) -> bool {
-        // Property: For any situation where a part of an object (field or element) is borrowed, 
+        // Property: For any situation where a part of an object (field or element) is borrowed,
         // borrowing the whole object should be prevented and appropriate errors reported
 
         for (i, (place1, _kind1)) in borrows.iter().enumerate() {
@@ -1259,7 +1261,8 @@ mod tests {
                 }
 
                 // Check if one place is a prefix of another (whole-object vs part relationship)
-                let has_prefix_relationship = place1.is_prefix_of(place2) || place2.is_prefix_of(place1);
+                let has_prefix_relationship =
+                    place1.is_prefix_of(place2) || place2.is_prefix_of(place1);
 
                 if has_prefix_relationship {
                     // This represents a whole-object borrowing violation
@@ -1491,7 +1494,9 @@ mod tests {
         // Create places: obj, obj.field1, obj.field1.subfield, obj.field2
         let place_obj = Place::local(obj_name);
         let place_obj_field1 = Place::local(obj_name).field(field1_name);
-        let place_obj_field1_subfield = Place::local(obj_name).field(field1_name).field(subfield_name);
+        let place_obj_field1_subfield = Place::local(obj_name)
+            .field(field1_name)
+            .field(subfield_name);
         let place_obj_field2 = Place::local(obj_name).field(field2_name);
 
         // Whole object overlaps with all its fields
@@ -1522,7 +1527,9 @@ mod tests {
         // Create places: arr, arr[0], arr[0].field
         let place_arr = Place::local(arr_name);
         let place_arr_0 = Place::local(arr_name).index(IndexKind::Constant(0));
-        let place_arr_0_field = Place::local(arr_name).index(IndexKind::Constant(0)).field(field_name);
+        let place_arr_0_field = Place::local(arr_name)
+            .index(IndexKind::Constant(0))
+            .field(field_name);
 
         // Whole array overlaps with its elements
         assert!(place_arr.overlaps_with(&place_arr_0));
@@ -1592,16 +1599,19 @@ mod tests {
         // Verify that a shared borrow was created for the Load operation
         if let Some(cfg_node) = checker.cfg.nodes.get(&1) {
             let borrows: Vec<_> = cfg_node.borrow_state.active_borrows.values().collect();
-            
+
             // Should have at least one borrow for the Load
             assert!(!borrows.is_empty(), "Load operation should create a borrow");
-            
+
             // Find the borrow for place x
             let x_borrow = borrows.iter().find(|loan| {
                 loan.place.root == PlaceRoot::Local(x_name) && loan.kind == BorrowKind::Shared
             });
-            
-            assert!(x_borrow.is_some(), "Load should create a shared borrow of x");
+
+            assert!(
+                x_borrow.is_some(),
+                "Load should create a shared borrow of x"
+            );
         }
     }
 
@@ -1656,16 +1666,23 @@ mod tests {
         // Verify that a mutable borrow was created for the CandidateMove operation
         if let Some(cfg_node) = checker.cfg.nodes.get(&1) {
             let borrows: Vec<_> = cfg_node.borrow_state.active_borrows.values().collect();
-            
+
             // Should have at least one borrow for the CandidateMove
-            assert!(!borrows.is_empty(), "CandidateMove operation should create a borrow");
-            
+            assert!(
+                !borrows.is_empty(),
+                "CandidateMove operation should create a borrow"
+            );
+
             // Find the borrow for place x
             let x_borrow = borrows.iter().find(|loan| {
-                loan.place.root == PlaceRoot::Local(x_name) && loan.kind == BorrowKind::CandidateMove
+                loan.place.root == PlaceRoot::Local(x_name)
+                    && loan.kind == BorrowKind::CandidateMove
             });
-            
-            assert!(x_borrow.is_some(), "CandidateMove should create a CandidateMove borrow of x");
+
+            assert!(
+                x_borrow.is_some(),
+                "CandidateMove should create a CandidateMove borrow of x"
+            );
         }
     }
 
@@ -1685,7 +1702,7 @@ mod tests {
         // Both branches have a borrow of x
         let loan_x_1 = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
         let loan_x_2 = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
-        
+
         // Only state1 has a borrow of y
         let loan_y = Loan::new(1, Place::local(y_name), BorrowKind::Shared, 2);
 
@@ -1698,10 +1715,16 @@ mod tests {
 
         // After conservative merge, only borrows present in BOTH states should remain
         // Borrow of x (id=0) should remain (present in both)
-        assert!(state1.active_borrows.contains_key(&0), "Borrow of x should remain after merge");
-        
+        assert!(
+            state1.active_borrows.contains_key(&0),
+            "Borrow of x should remain after merge"
+        );
+
         // Borrow of y (id=1) should be removed (only in state1)
-        assert!(!state1.active_borrows.contains_key(&1), "Borrow of y should be removed after merge");
+        assert!(
+            !state1.active_borrows.contains_key(&1),
+            "Borrow of y should be removed after merge"
+        );
     }
 
     // **Feature: borrow-checker-implementation, Property 5: Borrow State Propagation**
@@ -1729,8 +1752,14 @@ mod tests {
         state1.union_merge(&state2);
 
         // After union merge, both borrows should be present
-        assert!(state1.active_borrows.contains_key(&0), "Borrow of x should be present");
-        assert!(state1.active_borrows.contains_key(&1), "Borrow of y should be present");
+        assert!(
+            state1.active_borrows.contains_key(&0),
+            "Borrow of x should be present"
+        );
+        assert!(
+            state1.active_borrows.contains_key(&1),
+            "Borrow of y should be present"
+        );
         assert_eq!(state1.active_borrows.len(), 2);
     }
 
@@ -1751,8 +1780,15 @@ mod tests {
         // Verify all metadata is recorded
         assert_eq!(loan.id, 0, "Borrow ID should be recorded");
         assert_eq!(loan.place, place, "Target place should be recorded");
-        assert_eq!(loan.kind, BorrowKind::Mutable, "Borrow kind should be recorded");
-        assert_eq!(loan.creation_point, creation_point, "Creation point should be recorded");
+        assert_eq!(
+            loan.kind,
+            BorrowKind::Mutable,
+            "Borrow kind should be recorded"
+        );
+        assert_eq!(
+            loan.creation_point, creation_point,
+            "Creation point should be recorded"
+        );
     }
 
     // **Feature: borrow-checker-implementation, Property 5: Borrow State Propagation**
@@ -1818,11 +1854,11 @@ mod tests {
 
         // Verify CFG structure
         assert_eq!(checker.cfg.nodes.len(), 3);
-        
+
         // Verify edges: 0 -> 1 -> 2
         let successors_0 = checker.cfg.successors(0);
         assert!(successors_0.contains(&1), "Node 0 should connect to node 1");
-        
+
         let successors_1 = checker.cfg.successors(1);
         assert!(successors_1.contains(&2), "Node 1 should connect to node 2");
     }
@@ -1840,7 +1876,10 @@ mod tests {
 
         let loan = Loan::new(0, Place::local(x_name), BorrowKind::Shared, 1);
         state.add_borrow(loan);
-        assert!(!state.is_empty(), "Borrow state with loans should not be empty");
+        assert!(
+            !state.is_empty(),
+            "Borrow state with loans should not be empty"
+        );
     }
 
     // Test for recording last use
@@ -1853,7 +1892,7 @@ mod tests {
 
         let mut state = BorrowState::default();
         let place = Place::local(x_name);
-        
+
         state.record_last_use(place.clone(), 5);
         assert_eq!(state.get_last_use(&place), Some(5));
 
@@ -1865,34 +1904,36 @@ mod tests {
     #[test]
     fn test_last_use_analysis_creation() {
         use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
-        
+
         let analysis = LastUseAnalysis::new();
         assert!(analysis.last_use_statements.is_empty());
         assert!(analysis.statement_to_last_uses.is_empty());
         assert!(analysis.place_to_last_uses.is_empty());
     }
-    
+
     #[test]
     fn test_last_use_analysis_api() {
         use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
         use crate::compiler::hir::place::Place;
         use crate::compiler::string_interning::StringTable;
-        
+
         let mut analysis = LastUseAnalysis::new();
         let mut string_table = StringTable::new();
         let place_name = string_table.intern("x");
         let place = Place::local(place_name);
-        
+
         // Test empty analysis
         assert!(!analysis.is_last_use(&place, 1));
         assert!(analysis.places_with_last_use_at(1).is_empty());
         assert!(analysis.last_use_statements_for(&place).is_empty());
-        
+
         // Add some test data
         analysis.last_use_statements.insert(1);
-        analysis.statement_to_last_uses.insert(1, vec![place.clone()]);
+        analysis
+            .statement_to_last_uses
+            .insert(1, vec![place.clone()]);
         analysis.place_to_last_uses.insert(place.clone(), vec![1]);
-        
+
         // Test populated analysis
         assert!(analysis.is_last_use(&place, 1));
         assert_eq!(analysis.places_with_last_use_at(1).len(), 1);
@@ -1904,13 +1945,13 @@ mod tests {
     fn test_topologically_correct_cfg_construction() {
         use crate::compiler::borrow_checker::cfg::construct_cfg;
         use crate::compiler::borrow_checker::last_use::analyze_last_uses;
-        
+
         let mut string_table = StringTable::new();
-        
+
         // Create a simple function with sequential statements
         let func_name = string_table.intern("test_func");
         let var_name = string_table.intern("x");
-        
+
         let simple_assign = HirNode {
             id: 1,
             kind: HirKind::Assign {
@@ -1927,7 +1968,7 @@ mod tests {
             location: create_test_location(),
             scope: InternedPath::new(),
         };
-        
+
         let function_node = HirNode {
             id: 0,
             kind: HirKind::FunctionDef {
@@ -1938,35 +1979,40 @@ mod tests {
             location: create_test_location(),
             scope: InternedPath::new(),
         };
-        
+
         let hir_nodes = vec![function_node];
-        
+
         // Test CFG construction
         let cfg = construct_cfg(&hir_nodes);
         assert!(cfg.nodes.len() > 0, "CFG should have nodes");
-        
+
         // Test last-use analysis with the improved CFG
         let checker = BorrowChecker::new(&mut string_table);
         let analysis = analyze_last_uses(&checker, &cfg, &hir_nodes);
-        
+
         // Verify that the analysis completes without errors
-        assert!(analysis.last_use_statements.len() >= 0, "Should have last-use information");
+        assert!(
+            analysis.last_use_statements.len() >= 0,
+            "Should have last-use information"
+        );
     }
-    
+
     /// Test that the linearization properly handles control flow types
     #[test]
     fn test_linearization_control_flow_types() {
-        use crate::compiler::borrow_checker::last_use::{linearize_hir_with_cfg_ids, ControlFlowType};
-        
+        use crate::compiler::borrow_checker::last_use::{
+            ControlFlowType, linearize_hir_with_cfg_ids,
+        };
+
         let mut string_table = StringTable::new();
         let var_name = string_table.intern("condition");
-        
+
         // Create an if statement
         let condition_place = Place {
             root: PlaceRoot::Local(var_name),
             projections: vec![],
         };
-        
+
         let if_node = HirNode {
             id: 1,
             kind: HirKind::If {
@@ -1977,260 +2023,224 @@ mod tests {
             location: create_test_location(),
             scope: InternedPath::new(),
         };
-        
+
         let hir_nodes = vec![if_node];
         let statements = linearize_hir_with_cfg_ids(&hir_nodes);
-        
+
         // Verify that the if condition is properly classified
         assert!(statements.len() > 0, "Should have linearized statements");
-        assert_eq!(statements[0].control_flow_type, ControlFlowType::IfCondition, "If condition should be properly classified");
+        assert_eq!(
+            statements[0].control_flow_type,
+            ControlFlowType::IfCondition,
+            "If condition should be properly classified"
+        );
     }
-    
+
     fn create_test_location() -> TextLocation {
         TextLocation {
             scope: InternedPath::new(),
-            start_pos: CharPosition { line_number: 1, char_column: 1 },
-            end_pos: CharPosition { line_number: 1, char_column: 10 },
+            start_pos: CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            end_pos: CharPosition {
+                line_number: 1,
+                char_column: 10,
+            },
         }
     }
 }
-    // **Property 8: Candidate Move Refinement**
-    // Tests that candidate moves are properly refined based on last-use analysis
-    
-    /// Test that candidate moves become actual moves when they are last uses
-    #[test]
-    fn test_candidate_move_to_actual_move() {
-        use crate::compiler::borrow_checker::candidate_move_refinement::{refine_candidate_moves, MoveDecision};
-        use crate::compiler::borrow_checker::cfg::construct_cfg;
-        use crate::compiler::borrow_checker::last_use::{analyze_last_uses, LastUseAnalysis};
-        use crate::compiler::borrow_checker::types::BorrowChecker;
-        use crate::compiler::datatypes::DataType;
-        use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
-        use crate::compiler::hir::place::Place;
-        use crate::compiler::interned_path::InternedPath;
-        use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-        use crate::compiler::string_interning::StringTable;
-        
-        let mut string_table = StringTable::new();
-        let x_name = string_table.intern("x");
-        let y_name = string_table.intern("y");
-        
-        // Create HIR nodes: y = CandidateMove(x), where x is not used after this point
-        let nodes = vec![
-            HirNode {
-                id: 1,
-                kind: HirKind::Assign {
-                    place: Place::local(y_name),
-                    value: HirExpr {
-                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
-                        data_type: DataType::Int,
-                        location: TextLocation::default(),
-                    },
-                },
+// **Property 8: Candidate Move Refinement**
+// Tests that candidate moves are properly refined based on last-use analysis
+
+/// Test that candidate moves become actual moves when they are last uses
+#[test]
+fn test_candidate_move_to_actual_move() {
+    use crate::compiler::borrow_checker::candidate_move_refinement::{
+        MoveDecision, refine_candidate_moves,
+    };
+    use crate::compiler::borrow_checker::cfg::construct_cfg;
+    use crate::compiler::borrow_checker::last_use::{LastUseAnalysis, analyze_last_uses};
+    use crate::compiler::borrow_checker::types::BorrowChecker;
+    use crate::compiler::datatypes::DataType;
+    use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
+    use crate::compiler::hir::place::Place;
+    use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+    use crate::compiler::string_interning::StringTable;
+
+    let mut string_table = StringTable::new();
+    let x_name = string_table.intern("x");
+    let y_name = string_table.intern("y");
+
+    // Create HIR nodes: y = CandidateMove(x), where x is not used after this point
+    let nodes = vec![HirNode {
+        id: 1,
+        kind: HirKind::Assign {
+            place: Place::local(y_name),
+            value: HirExpr {
+                kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                data_type: DataType::Int,
                 location: TextLocation::default(),
-                scope: InternedPath::new(),
             },
-        ];
-        
-        let mut checker = BorrowChecker::new(&mut string_table);
-        checker.cfg = construct_cfg(&nodes);
-        
-        // Perform last-use analysis
-        let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
-        
-        // Refine candidate moves
-        let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
-        assert!(refinement.is_ok(), "Candidate move refinement should succeed");
-        
-        let refinement = refinement.unwrap();
-        
-        // Since x is not used after the candidate move, it should become an actual move
-        if let Some(decision) = refinement.move_decisions.get(&1) {
-            match decision {
-                MoveDecision::Move(place) => {
-                    assert_eq!(*place, Place::local(x_name), "Should be a move of x");
-                }
-                MoveDecision::MutableBorrow(_) => {
-                    // This could also be valid if the last-use analysis determines x is used later
-                    // The exact decision depends on the control flow analysis
-                }
+        },
+        location: TextLocation::default(),
+        scope: InternedPath::new(),
+    }];
+
+    let mut checker = BorrowChecker::new(&mut string_table);
+    checker.cfg = construct_cfg(&nodes);
+
+    // Perform last-use analysis
+    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
+
+    // Refine candidate moves
+    let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
+    assert!(
+        refinement.is_ok(),
+        "Candidate move refinement should succeed"
+    );
+
+    let refinement = refinement.unwrap();
+
+    // Since x is not used after the candidate move, it should become an actual move
+    if let Some(decision) = refinement.move_decisions.get(&1) {
+        match decision {
+            MoveDecision::Move(place) => {
+                assert_eq!(*place, Place::local(x_name), "Should be a move of x");
+            }
+            MoveDecision::MutableBorrow(_) => {
+                // This could also be valid if the last-use analysis determines x is used later
+                // The exact decision depends on the control flow analysis
             }
         }
-        
-        // Verify that the refinement recorded the decision
-        assert!(!refinement.move_decisions.is_empty(), "Should have move decisions");
     }
-    
-    /// Test that candidate moves remain mutable borrows when not last uses
-    #[test]
-    fn test_candidate_move_to_mutable_borrow() {
-        use crate::compiler::borrow_checker::candidate_move_refinement::{refine_candidate_moves, MoveDecision};
-        use crate::compiler::borrow_checker::cfg::construct_cfg;
-        use crate::compiler::borrow_checker::last_use::{analyze_last_uses, LastUseAnalysis};
-        use crate::compiler::borrow_checker::types::BorrowChecker;
-        use crate::compiler::datatypes::DataType;
-        use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
-        use crate::compiler::hir::place::Place;
-        use crate::compiler::interned_path::InternedPath;
-        use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-        use crate::compiler::string_interning::StringTable;
-        
-        let mut string_table = StringTable::new();
-        let x_name = string_table.intern("x");
-        let y_name = string_table.intern("y");
-        let z_name = string_table.intern("z");
-        
-        // Create HIR nodes: y = CandidateMove(x), z = Load(x)
-        // Here x is used after the candidate move, so it should remain a mutable borrow
-        let nodes = vec![
-            HirNode {
-                id: 1,
-                kind: HirKind::Assign {
-                    place: Place::local(y_name),
-                    value: HirExpr {
-                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
-                        data_type: DataType::Int,
-                        location: TextLocation::default(),
-                    },
+
+    // Verify that the refinement recorded the decision
+    assert!(
+        !refinement.move_decisions.is_empty(),
+        "Should have move decisions"
+    );
+}
+
+/// Test that candidate moves remain mutable borrows when not last uses
+#[test]
+fn test_candidate_move_to_mutable_borrow() {
+    use crate::compiler::borrow_checker::candidate_move_refinement::{
+        MoveDecision, refine_candidate_moves,
+    };
+    use crate::compiler::borrow_checker::cfg::construct_cfg;
+    use crate::compiler::borrow_checker::last_use::{LastUseAnalysis, analyze_last_uses};
+    use crate::compiler::borrow_checker::types::BorrowChecker;
+    use crate::compiler::datatypes::DataType;
+    use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
+    use crate::compiler::hir::place::Place;
+    use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+    use crate::compiler::string_interning::StringTable;
+
+    let mut string_table = StringTable::new();
+    let x_name = string_table.intern("x");
+    let y_name = string_table.intern("y");
+    let z_name = string_table.intern("z");
+
+    // Create HIR nodes: y = CandidateMove(x), z = Load(x)
+    // Here x is used after the candidate move, so it should remain a mutable borrow
+    let nodes = vec![
+        HirNode {
+            id: 1,
+            kind: HirKind::Assign {
+                place: Place::local(y_name),
+                value: HirExpr {
+                    kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                    data_type: DataType::Int,
+                    location: TextLocation::default(),
                 },
-                location: TextLocation::default(),
-                scope: InternedPath::new(),
             },
-            HirNode {
+            location: TextLocation::default(),
+            scope: InternedPath::new(),
+        },
+        HirNode {
+            id: 2,
+            kind: HirKind::Assign {
+                place: Place::local(z_name),
+                value: HirExpr {
+                    kind: HirExprKind::Load(Place::local(x_name)),
+                    data_type: DataType::Int,
+                    location: TextLocation::default(),
+                },
+            },
+            location: TextLocation::default(),
+            scope: InternedPath::new(),
+        },
+    ];
+
+    let mut checker = BorrowChecker::new(&mut string_table);
+    checker.cfg = construct_cfg(&nodes);
+
+    // Perform last-use analysis
+    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
+
+    // Refine candidate moves
+    let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
+    assert!(
+        refinement.is_ok(),
+        "Candidate move refinement should succeed"
+    );
+
+    let refinement = refinement.unwrap();
+
+    // The candidate move should remain a mutable borrow since x is used later
+    if let Some(decision) = refinement.move_decisions.get(&1) {
+        match decision {
+            MoveDecision::MutableBorrow(place) => {
+                assert_eq!(
+                    *place,
+                    Place::local(x_name),
+                    "Should be a mutable borrow of x"
+                );
+            }
+            MoveDecision::Move(_) => {
+                // This could happen if the last-use analysis determines this is actually the last use
+                // The exact decision depends on the control flow analysis
+            }
+        }
+    }
+
+    // Verify that the refinement recorded the decision
+    assert!(
+        !refinement.move_decisions.is_empty(),
+        "Should have move decisions"
+    );
+}
+
+/// Test candidate move refinement with complex control flow
+#[test]
+fn test_candidate_move_refinement_with_control_flow() {
+    use crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves;
+    use crate::compiler::borrow_checker::cfg::construct_cfg;
+    use crate::compiler::borrow_checker::last_use::analyze_last_uses;
+    use crate::compiler::borrow_checker::types::BorrowChecker;
+    use crate::compiler::datatypes::DataType;
+    use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
+    use crate::compiler::hir::place::Place;
+    use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+    use crate::compiler::string_interning::StringTable;
+
+    let mut string_table = StringTable::new();
+    let x_name = string_table.intern("x");
+    let y_name = string_table.intern("y");
+    let condition_name = string_table.intern("condition");
+
+    // Create HIR nodes with an if statement containing a candidate move
+    let nodes = vec![HirNode {
+        id: 1,
+        kind: HirKind::If {
+            condition: Place::local(condition_name),
+            then_block: vec![HirNode {
                 id: 2,
                 kind: HirKind::Assign {
-                    place: Place::local(z_name),
-                    value: HirExpr {
-                        kind: HirExprKind::Load(Place::local(x_name)),
-                        data_type: DataType::Int,
-                        location: TextLocation::default(),
-                    },
-                },
-                location: TextLocation::default(),
-                scope: InternedPath::new(),
-            },
-        ];
-        
-        let mut checker = BorrowChecker::new(&mut string_table);
-        checker.cfg = construct_cfg(&nodes);
-        
-        // Perform last-use analysis
-        let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
-        
-        // Refine candidate moves
-        let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
-        assert!(refinement.is_ok(), "Candidate move refinement should succeed");
-        
-        let refinement = refinement.unwrap();
-        
-        // The candidate move should remain a mutable borrow since x is used later
-        if let Some(decision) = refinement.move_decisions.get(&1) {
-            match decision {
-                MoveDecision::MutableBorrow(place) => {
-                    assert_eq!(*place, Place::local(x_name), "Should be a mutable borrow of x");
-                }
-                MoveDecision::Move(_) => {
-                    // This could happen if the last-use analysis determines this is actually the last use
-                    // The exact decision depends on the control flow analysis
-                }
-            }
-        }
-        
-        // Verify that the refinement recorded the decision
-        assert!(!refinement.move_decisions.is_empty(), "Should have move decisions");
-    }
-    
-    /// Test candidate move refinement with complex control flow
-    #[test]
-    fn test_candidate_move_refinement_with_control_flow() {
-        use crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves;
-        use crate::compiler::borrow_checker::cfg::construct_cfg;
-        use crate::compiler::borrow_checker::last_use::analyze_last_uses;
-        use crate::compiler::borrow_checker::types::BorrowChecker;
-        use crate::compiler::datatypes::DataType;
-        use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
-        use crate::compiler::hir::place::Place;
-        use crate::compiler::interned_path::InternedPath;
-        use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-        use crate::compiler::string_interning::StringTable;
-        
-        let mut string_table = StringTable::new();
-        let x_name = string_table.intern("x");
-        let y_name = string_table.intern("y");
-        let condition_name = string_table.intern("condition");
-        
-        // Create HIR nodes with an if statement containing a candidate move
-        let nodes = vec![
-            HirNode {
-                id: 1,
-                kind: HirKind::If {
-                    condition: Place::local(condition_name),
-                    then_block: vec![
-                        HirNode {
-                            id: 2,
-                            kind: HirKind::Assign {
-                                place: Place::local(y_name),
-                                value: HirExpr {
-                                    kind: HirExprKind::CandidateMove(Place::local(x_name)),
-                                    data_type: DataType::Int,
-                                    location: TextLocation::default(),
-                                },
-                            },
-                            location: TextLocation::default(),
-                            scope: InternedPath::new(),
-                        },
-                    ],
-                    else_block: None,
-                },
-                location: TextLocation::default(),
-                scope: InternedPath::new(),
-            },
-        ];
-        
-        let mut checker = BorrowChecker::new(&mut string_table);
-        checker.cfg = construct_cfg(&nodes);
-        
-        // Perform last-use analysis
-        let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
-        
-        // Refine candidate moves
-        let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
-        assert!(refinement.is_ok(), "Candidate move refinement should succeed with control flow");
-        
-        let refinement = refinement.unwrap();
-        
-        // Should have processed the candidate move inside the if statement
-        // The exact decision depends on whether x is used after the if statement
-        if let Some(_decision) = refinement.move_decisions.get(&2) {
-            // Decision could be either move or mutable borrow depending on usage
-            // The important thing is that the refinement process handled the control flow correctly
-        }
-    }
-    
-    /// Test that move decisions are properly validated
-    #[test]
-    fn test_move_decision_validation() {
-        use crate::compiler::borrow_checker::candidate_move_refinement::{
-            refine_candidate_moves, validate_move_decisions
-        };
-        use crate::compiler::borrow_checker::cfg::construct_cfg;
-        use crate::compiler::borrow_checker::last_use::analyze_last_uses;
-        use crate::compiler::borrow_checker::types::BorrowChecker;
-        use crate::compiler::datatypes::DataType;
-        use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
-        use crate::compiler::hir::place::Place;
-        use crate::compiler::interned_path::InternedPath;
-        use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-        use crate::compiler::string_interning::StringTable;
-        
-        let mut string_table = StringTable::new();
-        let x_name = string_table.intern("x");
-        let y_name = string_table.intern("y");
-        
-        let nodes = vec![
-            HirNode {
-                id: 1,
-                kind: HirKind::Assign {
                     place: Place::local(y_name),
                     value: HirExpr {
                         kind: HirExprKind::CandidateMove(Place::local(x_name)),
@@ -2240,89 +2250,163 @@ mod tests {
                 },
                 location: TextLocation::default(),
                 scope: InternedPath::new(),
-            },
-        ];
-        
-        let mut checker = BorrowChecker::new(&mut string_table);
-        checker.cfg = construct_cfg(&nodes);
-        
-        let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
-        let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
-        assert!(refinement.is_ok(), "Candidate move refinement should succeed");
-        
-        let refinement = refinement.unwrap();
-        
-        // Validate the move decisions
-        let validation_result = validate_move_decisions(&checker, &refinement);
-        assert!(validation_result.is_ok(), "Move decision validation should succeed");
+            }],
+            else_block: None,
+        },
+        location: TextLocation::default(),
+        scope: InternedPath::new(),
+    }];
+
+    let mut checker = BorrowChecker::new(&mut string_table);
+    checker.cfg = construct_cfg(&nodes);
+
+    // Perform last-use analysis
+    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
+
+    // Refine candidate moves
+    let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
+    assert!(
+        refinement.is_ok(),
+        "Candidate move refinement should succeed with control flow"
+    );
+
+    let refinement = refinement.unwrap();
+
+    // Should have processed the candidate move inside the if statement
+    // The exact decision depends on whether x is used after the if statement
+    if let Some(_decision) = refinement.move_decisions.get(&2) {
+        // Decision could be either move or mutable borrow depending on usage
+        // The important thing is that the refinement process handled the control flow correctly
     }
-    
-    /// **Property 30: Move/Borrow Decision Marking**
-    /// Test that move/borrow decisions are properly marked in the borrow checker state
-    #[test]
-    fn test_move_borrow_decision_marking() {
-        use crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves;
-        use crate::compiler::borrow_checker::cfg::construct_cfg;
-        use crate::compiler::borrow_checker::last_use::analyze_last_uses;
-        use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind};
-        use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
-        use crate::compiler::datatypes::DataType;
-        use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
-        use crate::compiler::hir::place::Place;
-        use crate::compiler::interned_path::InternedPath;
-        use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-        use crate::compiler::string_interning::StringTable;
-        
-        let mut string_table = StringTable::new();
-        let x_name = string_table.intern("x");
-        let y_name = string_table.intern("y");
-        
-        let nodes = vec![
-            HirNode {
-                id: 1,
-                kind: HirKind::Assign {
-                    place: Place::local(y_name),
-                    value: HirExpr {
-                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
-                        data_type: DataType::Int,
-                        location: TextLocation::default(),
-                    },
-                },
+}
+
+/// Test that move decisions are properly validated
+#[test]
+fn test_move_decision_validation() {
+    use crate::compiler::borrow_checker::candidate_move_refinement::{
+        refine_candidate_moves, validate_move_decisions,
+    };
+    use crate::compiler::borrow_checker::cfg::construct_cfg;
+    use crate::compiler::borrow_checker::last_use::analyze_last_uses;
+    use crate::compiler::borrow_checker::types::BorrowChecker;
+    use crate::compiler::datatypes::DataType;
+    use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
+    use crate::compiler::hir::place::Place;
+    use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+    use crate::compiler::string_interning::StringTable;
+
+    let mut string_table = StringTable::new();
+    let x_name = string_table.intern("x");
+    let y_name = string_table.intern("y");
+
+    let nodes = vec![HirNode {
+        id: 1,
+        kind: HirKind::Assign {
+            place: Place::local(y_name),
+            value: HirExpr {
+                kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                data_type: DataType::Int,
                 location: TextLocation::default(),
-                scope: InternedPath::new(),
             },
-        ];
-        
-        let mut checker = BorrowChecker::new(&mut string_table);
-        checker.cfg = construct_cfg(&nodes);
-        
-        // Track borrows first to create the initial borrow state
-        let track_result = track_borrows(&mut checker, &nodes);
-        assert!(track_result.is_ok(), "Borrow tracking should succeed");
-        
-        let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
-        let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
-        assert!(refinement.is_ok(), "Candidate move refinement should succeed");
-        
-        // Check that the borrow checker state has been updated with the refined decisions
-        if let Some(cfg_node) = checker.cfg.nodes.get(&1) {
-            let has_borrows = !cfg_node.borrow_state.active_borrows.is_empty();
-            assert!(has_borrows, "CFG node should have borrow information after refinement");
-            
-            // Check that at least one borrow has been marked with the correct kind
-            let mut found_refined_borrow = false;
-            for loan in cfg_node.borrow_state.active_borrows.values() {
-                if loan.place == Place::local(x_name) {
-                    // The borrow kind should be either Move or Mutable based on the refinement
-                    assert!(
-                        matches!(loan.kind, BorrowKind::Move | BorrowKind::Mutable),
-                        "Refined borrow should be either Move or Mutable, got {:?}",
-                        loan.kind
-                    );
-                    found_refined_borrow = true;
-                    break;
-                }
+        },
+        location: TextLocation::default(),
+        scope: InternedPath::new(),
+    }];
+
+    let mut checker = BorrowChecker::new(&mut string_table);
+    checker.cfg = construct_cfg(&nodes);
+
+    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
+    let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
+    assert!(
+        refinement.is_ok(),
+        "Candidate move refinement should succeed"
+    );
+
+    let refinement = refinement.unwrap();
+
+    // Validate the move decisions
+    let validation_result = validate_move_decisions(&checker, &refinement);
+    assert!(
+        validation_result.is_ok(),
+        "Move decision validation should succeed"
+    );
+}
+
+/// **Property 30: Move/Borrow Decision Marking**
+/// Test that move/borrow decisions are properly marked in the borrow checker state
+#[test]
+fn test_move_borrow_decision_marking() {
+    use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
+    use crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves;
+    use crate::compiler::borrow_checker::cfg::construct_cfg;
+    use crate::compiler::borrow_checker::last_use::analyze_last_uses;
+    use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind};
+    use crate::compiler::datatypes::DataType;
+    use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode};
+    use crate::compiler::hir::place::Place;
+    use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+    use crate::compiler::string_interning::StringTable;
+
+    let mut string_table = StringTable::new();
+    let x_name = string_table.intern("x");
+    let y_name = string_table.intern("y");
+
+    let nodes = vec![HirNode {
+        id: 1,
+        kind: HirKind::Assign {
+            place: Place::local(y_name),
+            value: HirExpr {
+                kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                data_type: DataType::Int,
+                location: TextLocation::default(),
+            },
+        },
+        location: TextLocation::default(),
+        scope: InternedPath::new(),
+    }];
+
+    let mut checker = BorrowChecker::new(&mut string_table);
+    checker.cfg = construct_cfg(&nodes);
+
+    // Track borrows first to create the initial borrow state
+    let track_result = track_borrows(&mut checker, &nodes);
+    assert!(track_result.is_ok(), "Borrow tracking should succeed");
+
+    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg, &nodes);
+    let refinement = refine_candidate_moves(&mut checker, &nodes, &last_use_analysis);
+    assert!(
+        refinement.is_ok(),
+        "Candidate move refinement should succeed"
+    );
+
+    // Check that the borrow checker state has been updated with the refined decisions
+    if let Some(cfg_node) = checker.cfg.nodes.get(&1) {
+        let has_borrows = !cfg_node.borrow_state.active_borrows.is_empty();
+        assert!(
+            has_borrows,
+            "CFG node should have borrow information after refinement"
+        );
+
+        // Check that at least one borrow has been marked with the correct kind
+        let mut found_refined_borrow = false;
+        for loan in cfg_node.borrow_state.active_borrows.values() {
+            if loan.place == Place::local(x_name) {
+                // The borrow kind should be either Move or Mutable based on the refinement
+                assert!(
+                    matches!(loan.kind, BorrowKind::Move | BorrowKind::Mutable),
+                    "Refined borrow should be either Move or Mutable, got {:?}",
+                    loan.kind
+                );
+                found_refined_borrow = true;
+                break;
             }
-            assert!(found_refined_borrow, "Should find the refined borrow for place x");
         }
+        assert!(
+            found_refined_borrow,
+            "Should find the refined borrow for place x"
+        );
     }
+}

@@ -1,3 +1,2 @@
--- Test HIR with string literals
-message = "Hello World"
-io(message)
+-- Simple test
+io("Hello, World!")
