@@ -1,11 +1,16 @@
 pub(crate) mod build;
-pub mod settings;
 pub mod cli;
 mod create_new_project;
 mod dev_server;
+pub mod settings;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod borrow_checker_property_tests;
+    pub(crate) mod lifetime_inference_comprehensive_tests;
+    pub(crate) mod lifetime_inference_full_integration_tests;
+    pub(crate) mod lifetime_inference_integration_tests;
+    pub(crate) mod lifetime_inference_performance_tests;
+    pub(crate) mod lifetime_inference_property_tests;
     pub(crate) mod test_runner;
 }
 
@@ -94,20 +99,21 @@ mod compiler {
 
     pub(crate) mod hir {
         pub(crate) mod builder;
+        pub(crate) mod display_hir;
+        pub(crate) mod lower_expression;
+        pub(crate) mod lower_node;
         pub(crate) mod nodes;
         pub(crate) mod place;
-        pub(crate) mod display_hir;
-        pub(crate) mod lower_node;
-        pub(crate) mod lower_expression;
     }
     pub(crate) mod borrow_checker {
         pub(crate) mod borrow_tracking;
+        pub(crate) mod candidate_move_refinement;
         pub(crate) mod cfg;
         pub(crate) mod checker;
         pub(crate) mod conflict_detection;
         pub(crate) mod last_use;
+        pub(crate) mod lifetime_inference;
         pub(crate) mod types;
-        pub(crate) mod candidate_move_refinement;
     }
 }
 

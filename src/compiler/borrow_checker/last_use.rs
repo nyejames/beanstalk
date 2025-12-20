@@ -48,21 +48,21 @@ use std::collections::{HashMap, HashSet, VecDeque};
 ///
 /// This represents a single statement that can use places, making the analysis
 /// more precise than working with complex nested HIR nodes.
-/// 
+///
 /// **Phase 3 Improvement**: Enhanced with control flow type information for
 /// topologically correct CFG construction.
 #[derive(Debug, Clone)]
 pub struct LinearStatement {
     /// Statement ID (same as CFG node ID for direct mapping)
     pub id: HirNodeId,
-    
+
     /// Places used (read) by this statement
     pub uses: Vec<Place>,
-    
+
     /// Places defined (written) by this statement (ignored in last-use analysis due to no shadowing)
     #[allow(dead_code)]
     pub defines: Vec<Place>,
-    
+
     /// Control flow type for this statement
     pub control_flow_type: ControlFlowType,
 }
@@ -93,13 +93,13 @@ pub enum ControlFlowType {
 pub struct LastUseAnalysis {
     /// Set of statement IDs that are last-use points for any place
     pub last_use_statements: HashSet<HirNodeId>,
-    
+
     /// Mapping from statement ID to places that have their last use there
     pub statement_to_last_uses: HashMap<HirNodeId, Vec<Place>>,
-    
+
     /// Mapping from place to its last-use statement IDs
     pub place_to_last_uses: HashMap<Place, Vec<HirNodeId>>,
-    
+
     /// Validation data for debugging and correctness checking
     pub validation_data: LastUseValidationData,
 }
@@ -109,13 +109,10 @@ pub struct LastUseAnalysis {
 pub struct LastUseValidationData {
     /// All places that were analyzed
     pub analyzed_places: HashSet<Place>,
-    
-    /// CFG paths explored during validation
-    pub explored_paths: Vec<Vec<HirNodeId>>,
-    
+
     /// Validation errors found during analysis
     pub validation_errors: Vec<String>,
-    
+
     /// Conservative checks performed
     pub conservative_checks: Vec<ConservativeCheck>,
 }
@@ -125,16 +122,16 @@ pub struct LastUseValidationData {
 pub struct ConservativeCheck {
     /// Description of the check
     pub description: String,
-    
+
     /// Statement ID where check was performed
     pub statement_id: HirNodeId,
-    
+
     /// Place being checked
     pub place: Place,
-    
+
     /// Result of the check
     pub passed: bool,
-    
+
     /// Additional context
     pub context: String,
 }
@@ -144,7 +141,7 @@ impl LastUseAnalysis {
     pub fn new() -> Self {
         Self::default()
     }
-    
+
     /// Check if a specific statement is a last use for the given place
     #[allow(dead_code)]
     pub fn is_last_use(&self, place: &Place, statement_id: HirNodeId) -> bool {
@@ -154,7 +151,7 @@ impl LastUseAnalysis {
             false
         }
     }
-    
+
     /// Get all places that have their last use at a given statement
     #[allow(dead_code)]
     pub fn places_with_last_use_at(&self, statement_id: HirNodeId) -> Vec<&Place> {
@@ -163,7 +160,7 @@ impl LastUseAnalysis {
             .map(|places| places.iter().collect())
             .unwrap_or_default()
     }
-    
+
     /// Get all last-use statement IDs for a place
     #[allow(dead_code)]
     pub fn last_use_statements_for(&self, place: &Place) -> Vec<HirNodeId> {
@@ -172,7 +169,7 @@ impl LastUseAnalysis {
             .cloned()
             .unwrap_or_default()
     }
-    
+
     /// Validate the correctness of last-use analysis results
     ///
     /// This performs comprehensive validation to ensure:
@@ -185,7 +182,7 @@ impl LastUseAnalysis {
         cfg: &StatementCfg,
     ) -> bool {
         let mut all_valid = true;
-        
+
         // Validate each last-use decision
         for (place, last_use_statements) in &self.place_to_last_uses.clone() {
             for &last_use_stmt in last_use_statements {
@@ -194,18 +191,18 @@ impl LastUseAnalysis {
                 }
             }
         }
-        
+
         // Perform conservative checks
         self.perform_conservative_checks(statements, cfg);
-        
+
         // Check for validation errors
         if !self.validation_data.validation_errors.is_empty() {
             all_valid = false;
         }
-        
+
         all_valid
     }
-    
+
     /// Validate that no later uses exist on any reachable CFG path after a last-use point
     fn validate_no_later_uses(
         &mut self,
@@ -215,26 +212,25 @@ impl LastUseAnalysis {
         cfg: &StatementCfg,
     ) -> bool {
         use std::collections::VecDeque;
-        
+
         // Find all paths from the last-use statement to exit points
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
-        let mut _current_path: Vec<HirNodeId> = Vec::new();
-        
+
         // Start exploration from successors of the last-use statement
         if let Some(successors) = cfg.successors.get(&last_use_stmt) {
             for &successor in successors {
                 queue.push_back((successor, vec![last_use_stmt, successor]));
             }
         }
-        
+
         while let Some((stmt_id, path)) = queue.pop_front() {
             // Avoid infinite loops in CFG
             if visited.contains(&stmt_id) {
                 continue;
             }
             visited.insert(stmt_id);
-            
+
             // Check if this statement uses the place
             if let Some(stmt) = statements.iter().find(|s| s.id == stmt_id) {
                 if stmt.uses.contains(place) {
@@ -244,20 +240,25 @@ impl LastUseAnalysis {
                         place, stmt_id, last_use_stmt, path
                     );
                     self.validation_data.validation_errors.push(error_msg);
-                    
+
                     // Add conservative check
-                    self.validation_data.conservative_checks.push(ConservativeCheck {
-                        description: "Later use after last-use detected".to_string(),
-                        statement_id: stmt_id,
-                        place: place.clone(),
-                        passed: false,
-                        context: format!("Last-use at {}, later use at {}", last_use_stmt, stmt_id),
-                    });
-                    
+                    self.validation_data
+                        .conservative_checks
+                        .push(ConservativeCheck {
+                            description: "Later use after last-use detected".to_string(),
+                            statement_id: stmt_id,
+                            place: place.clone(),
+                            passed: false,
+                            context: format!(
+                                "Last-use at {}, later use at {}",
+                                last_use_stmt, stmt_id
+                            ),
+                        });
+
                     return false;
                 }
             }
-            
+
             // Continue exploring successors
             if let Some(successors) = cfg.successors.get(&stmt_id) {
                 for &successor in successors {
@@ -267,84 +268,90 @@ impl LastUseAnalysis {
                         queue.push_back((successor, new_path));
                     }
                 }
-            } else {
-                // Reached an exit point, record the path
-                self.validation_data.explored_paths.push(path);
             }
         }
-        
+
         // Add successful conservative check
-        self.validation_data.conservative_checks.push(ConservativeCheck {
-            description: "No later uses validation".to_string(),
-            statement_id: last_use_stmt,
-            place: place.clone(),
-            passed: true,
-            context: format!("Validated {} paths from last-use point", visited.len()),
-        });
-        
+        self.validation_data
+            .conservative_checks
+            .push(ConservativeCheck {
+                description: "No later uses validation".to_string(),
+                statement_id: last_use_stmt,
+                place: place.clone(),
+                passed: true,
+                context: format!("Validated {} paths from last-use point", visited.len()),
+            });
+
         true
     }
-    
+
     /// Perform conservative checks to surface potential bugs early
-    fn perform_conservative_checks(
-        &mut self,
-        statements: &[LinearStatement],
-        cfg: &StatementCfg,
-    ) {
+    fn perform_conservative_checks(&mut self, statements: &[LinearStatement], cfg: &StatementCfg) {
         // Check 1: Verify CFG connectivity
         self.check_cfg_connectivity(cfg);
-        
+
         // Check 2: Verify statement-CFG correspondence
         self.check_statement_cfg_correspondence(statements, cfg);
-        
+
         // Check 3: Verify place usage consistency
         self.check_place_usage_consistency(statements);
-        
+
         // Check 4: Verify path-sensitive analysis
         self.check_path_sensitivity(statements, cfg);
     }
-    
+
     /// Check CFG connectivity and structure
     fn check_cfg_connectivity(&mut self, cfg: &StatementCfg) {
         let mut check_passed = true;
         let mut context = String::new();
-        
+
         // Verify entry points exist
         if cfg.entry_points.is_empty() {
             check_passed = false;
             context.push_str("No entry points found in CFG; ");
         }
-        
+
         // Verify exit points exist
         if cfg.exit_points.is_empty() {
             check_passed = false;
             context.push_str("No exit points found in CFG; ");
         }
-        
+
         // Check for orphaned nodes (nodes with no predecessors or successors)
         for (node_id, successors) in &cfg.successors {
             let predecessors = cfg.predecessors.get(node_id).map(|p| p.len()).unwrap_or(0);
-            
+
             if predecessors == 0 && !cfg.entry_points.contains(node_id) {
                 check_passed = false;
-                context.push_str(&format!("Node {} has no predecessors but is not an entry point; ", node_id));
+                context.push_str(&format!(
+                    "Node {} has no predecessors but is not an entry point; ",
+                    node_id
+                ));
             }
-            
+
             if successors.is_empty() && !cfg.exit_points.contains(node_id) {
                 check_passed = false;
-                context.push_str(&format!("Node {} has no successors but is not an exit point; ", node_id));
+                context.push_str(&format!(
+                    "Node {} has no successors but is not an exit point; ",
+                    node_id
+                ));
             }
         }
-        
-        self.validation_data.conservative_checks.push(ConservativeCheck {
-            description: "CFG connectivity check".to_string(),
-            statement_id: 0, // Not specific to a statement
-            place: Place { root: PlaceRoot::Local(InternedString::from_u32(0)), projections: Vec::new() }, // Dummy place
-            passed: check_passed,
-            context,
-        });
+
+        self.validation_data
+            .conservative_checks
+            .push(ConservativeCheck {
+                description: "CFG connectivity check".to_string(),
+                statement_id: 0, // Not specific to a statement
+                place: Place {
+                    root: PlaceRoot::Local(InternedString::from_u32(0)),
+                    projections: Vec::new(),
+                }, // Dummy place
+                passed: check_passed,
+                context,
+            });
     }
-    
+
     /// Check statement-CFG correspondence
     fn check_statement_cfg_correspondence(
         &mut self,
@@ -353,7 +360,7 @@ impl LastUseAnalysis {
     ) {
         let mut check_passed = true;
         let mut context = String::new();
-        
+
         // Verify every statement has a corresponding CFG node
         for stmt in statements {
             if !cfg.successors.contains_key(&stmt.id) && !cfg.predecessors.contains_key(&stmt.id) {
@@ -361,30 +368,38 @@ impl LastUseAnalysis {
                 context.push_str(&format!("Statement {} not found in CFG; ", stmt.id));
             }
         }
-        
+
         // Verify every CFG node corresponds to a statement
         let stmt_ids: HashSet<_> = statements.iter().map(|s| s.id).collect();
         for &cfg_node_id in cfg.successors.keys() {
             if !stmt_ids.contains(&cfg_node_id) {
                 // This might be valid for complex control flow, so just note it
-                context.push_str(&format!("CFG node {} has no corresponding statement; ", cfg_node_id));
+                context.push_str(&format!(
+                    "CFG node {} has no corresponding statement; ",
+                    cfg_node_id
+                ));
             }
         }
-        
-        self.validation_data.conservative_checks.push(ConservativeCheck {
-            description: "Statement-CFG correspondence check".to_string(),
-            statement_id: 0,
-            place: Place { root: PlaceRoot::Local(InternedString::from_u32(0)), projections: Vec::new() },
-            passed: check_passed,
-            context,
-        });
+
+        self.validation_data
+            .conservative_checks
+            .push(ConservativeCheck {
+                description: "Statement-CFG correspondence check".to_string(),
+                statement_id: 0,
+                place: Place {
+                    root: PlaceRoot::Local(InternedString::from_u32(0)),
+                    projections: Vec::new(),
+                },
+                passed: check_passed,
+                context,
+            });
     }
-    
+
     /// Check place usage consistency
     fn check_place_usage_consistency(&mut self, statements: &[LinearStatement]) {
         let mut check_passed = true;
         let mut context = String::new();
-        
+
         // Collect all places used in statements
         let mut all_places = HashSet::new();
         for stmt in statements {
@@ -395,10 +410,10 @@ impl LastUseAnalysis {
                 all_places.insert(place.clone());
             }
         }
-        
+
         // Update analyzed places
         self.validation_data.analyzed_places = all_places.clone();
-        
+
         // Check that every used place has last-use information
         for place in &all_places {
             if !self.place_to_last_uses.contains_key(place) {
@@ -406,7 +421,7 @@ impl LastUseAnalysis {
                 context.push_str(&format!("Place {:?} has no last-use information; ", place));
             }
         }
-        
+
         // Check that every last-use place is actually used
         for place in self.place_to_last_uses.keys() {
             if !all_places.contains(place) {
@@ -414,25 +429,26 @@ impl LastUseAnalysis {
                 context.push_str(&format!("Last-use recorded for unused place {:?}; ", place));
             }
         }
-        
-        self.validation_data.conservative_checks.push(ConservativeCheck {
-            description: "Place usage consistency check".to_string(),
-            statement_id: 0,
-            place: Place { root: PlaceRoot::Local(InternedString::from_u32(0)), projections: Vec::new() },
-            passed: check_passed,
-            context,
-        });
+
+        self.validation_data
+            .conservative_checks
+            .push(ConservativeCheck {
+                description: "Place usage consistency check".to_string(),
+                statement_id: 0,
+                place: Place {
+                    root: PlaceRoot::Local(InternedString::from_u32(0)),
+                    projections: Vec::new(),
+                },
+                passed: check_passed,
+                context,
+            });
     }
-    
+
     /// Check path-sensitive analysis correctness
-    fn check_path_sensitivity(
-        &mut self,
-        _statements: &[LinearStatement],
-        cfg: &StatementCfg,
-    ) {
+    fn check_path_sensitivity(&mut self, _statements: &[LinearStatement], cfg: &StatementCfg) {
         let mut check_passed = true;
         let mut context = String::new();
-        
+
         // For each place with multiple last-use points, verify they are on different paths
         for (place, last_use_stmts) in &self.place_to_last_uses {
             if last_use_stmts.len() > 1 {
@@ -441,7 +457,7 @@ impl LastUseAnalysis {
                     for j in i + 1..last_use_stmts.len() {
                         let stmt1 = last_use_stmts[i];
                         let stmt2 = last_use_stmts[j];
-                        
+
                         if self.are_statements_on_same_path(stmt1, stmt2, cfg) {
                             check_passed = false;
                             context.push_str(&format!(
@@ -453,16 +469,21 @@ impl LastUseAnalysis {
                 }
             }
         }
-        
-        self.validation_data.conservative_checks.push(ConservativeCheck {
-            description: "Path-sensitive analysis check".to_string(),
-            statement_id: 0,
-            place: Place { root: PlaceRoot::Local(InternedString::from_u32(0)), projections: Vec::new() },
-            passed: check_passed,
-            context,
-        });
+
+        self.validation_data
+            .conservative_checks
+            .push(ConservativeCheck {
+                description: "Path-sensitive analysis check".to_string(),
+                statement_id: 0,
+                place: Place {
+                    root: PlaceRoot::Local(InternedString::from_u32(0)),
+                    projections: Vec::new(),
+                },
+                passed: check_passed,
+                context,
+            });
     }
-    
+
     /// Check if two statements can be reached on the same execution path
     fn are_statements_on_same_path(
         &self,
@@ -471,19 +492,19 @@ impl LastUseAnalysis {
         cfg: &StatementCfg,
     ) -> bool {
         use std::collections::VecDeque;
-        
+
         // Check if stmt2 is reachable from stmt1
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
-        
+
         queue.push_back(stmt1);
         visited.insert(stmt1);
-        
+
         while let Some(current) = queue.pop_front() {
             if current == stmt2 {
                 return true; // stmt2 is reachable from stmt1
             }
-            
+
             if let Some(successors) = cfg.successors.get(&current) {
                 for &successor in successors {
                     if !visited.contains(&successor) {
@@ -493,19 +514,19 @@ impl LastUseAnalysis {
                 }
             }
         }
-        
+
         // Check if stmt1 is reachable from stmt2
         queue.clear();
         visited.clear();
-        
+
         queue.push_back(stmt2);
         visited.insert(stmt2);
-        
+
         while let Some(current) = queue.pop_front() {
             if current == stmt1 {
                 return true; // stmt1 is reachable from stmt2
             }
-            
+
             if let Some(successors) = cfg.successors.get(&current) {
                 for &successor in successors {
                     if !visited.contains(&successor) {
@@ -515,7 +536,7 @@ impl LastUseAnalysis {
                 }
             }
         }
-        
+
         false // Neither is reachable from the other
     }
 }
@@ -534,24 +555,19 @@ pub fn validate_last_use_analysis_comprehensive(
         errors: Vec::new(),
         warnings: Vec::new(),
         checks_performed: Vec::new(),
-        paths_explored: analysis.validation_data.explored_paths.len(),
     };
-    
+
     // Perform all validation checks
     for (place, last_use_statements) in &analysis.place_to_last_uses {
         for &last_use_stmt in last_use_statements {
-            let check_result = validate_no_later_uses_external(
-                place, 
-                last_use_stmt, 
-                statements, 
-                cfg
-            );
-            
+            let check_result =
+                validate_no_later_uses_external(place, last_use_stmt, statements, cfg);
+
             result.checks_performed.push(format!(
-                "No later uses check for place {:?} at statement {}", 
+                "No later uses check for place {:?} at statement {}",
                 place, last_use_stmt
             ));
-            
+
             if !check_result.is_valid {
                 result.is_valid = false;
                 result.errors.extend(check_result.errors);
@@ -559,13 +575,21 @@ pub fn validate_last_use_analysis_comprehensive(
             result.warnings.extend(check_result.warnings);
         }
     }
-    
+
     // Add conservative checks
-    result.checks_performed.push("CFG connectivity check".to_string());
-    result.checks_performed.push("Statement-CFG correspondence check".to_string());
-    result.checks_performed.push("Place usage consistency check".to_string());
-    result.checks_performed.push("Path-sensitive analysis check".to_string());
-    
+    result
+        .checks_performed
+        .push("CFG connectivity check".to_string());
+    result
+        .checks_performed
+        .push("Statement-CFG correspondence check".to_string());
+    result
+        .checks_performed
+        .push("Place usage consistency check".to_string());
+    result
+        .checks_performed
+        .push("Path-sensitive analysis check".to_string());
+
     result
 }
 
@@ -574,18 +598,15 @@ pub fn validate_last_use_analysis_comprehensive(
 pub struct ValidationResult {
     /// Whether the analysis is valid
     pub is_valid: bool,
-    
+
     /// Validation errors found
     pub errors: Vec<String>,
-    
+
     /// Validation warnings
     pub warnings: Vec<String>,
-    
+
     /// List of checks performed
     pub checks_performed: Vec<String>,
-    
-    /// Number of CFG paths explored
-    pub paths_explored: usize,
 }
 
 /// External validation function for no later uses (for testing)
@@ -596,34 +617,32 @@ fn validate_no_later_uses_external(
     cfg: &StatementCfg,
 ) -> ValidationResult {
     use std::collections::VecDeque;
-    
+
     let mut result = ValidationResult {
         is_valid: true,
         errors: Vec::new(),
         warnings: Vec::new(),
         checks_performed: vec![format!("No later uses validation for place {:?}", place)],
-        paths_explored: 0,
     };
-    
+
     // Find all paths from the last-use statement to exit points
     let mut queue = VecDeque::new();
     let mut visited = HashSet::new();
-    
+
     // Start exploration from successors of the last-use statement
     if let Some(successors) = cfg.successors.get(&last_use_stmt) {
         for &successor in successors {
             queue.push_back((successor, vec![last_use_stmt, successor]));
         }
     }
-    
+
     while let Some((stmt_id, path)) = queue.pop_front() {
         // Avoid infinite loops in CFG
         if visited.contains(&stmt_id) {
             continue;
         }
         visited.insert(stmt_id);
-        result.paths_explored += 1;
-        
+
         // Check if this statement uses the place
         if let Some(stmt) = statements.iter().find(|s| s.id == stmt_id) {
             if stmt.uses.contains(place) {
@@ -636,7 +655,7 @@ fn validate_no_later_uses_external(
                 result.is_valid = false;
             }
         }
-        
+
         // Continue exploring successors
         if let Some(successors) = cfg.successors.get(&stmt_id) {
             for &successor in successors {
@@ -648,7 +667,7 @@ fn validate_no_later_uses_external(
             }
         }
     }
-    
+
     result
 }
 
@@ -667,21 +686,21 @@ pub fn analyze_last_uses(
 ) -> LastUseAnalysis {
     // Step 1: Linearize HIR into statements with statement ID = CFG node ID
     let statements = linearize_hir_with_cfg_ids(hir_nodes);
-    
+
     // Step 2: Build statement-level CFG with direct edges between statements
     let stmt_cfg = build_statement_cfg(&statements);
-    
+
     // Step 3: Perform per-place backward dataflow analysis
     let live_after = compute_per_place_liveness(&statements, &stmt_cfg);
-    
+
     // Step 4: Mark last-use points
     let mut analysis = mark_last_uses_from_liveness(&statements, &live_after);
-    
+
     // Step 5: Validate correctness (only in debug builds for performance)
     #[cfg(debug_assertions)]
     {
         let validation_result = analysis.validate_correctness(&statements, &stmt_cfg);
-        
+
         // In debug builds, panic if validation fails to surface bugs early
         if !validation_result {
             panic!(
@@ -689,18 +708,21 @@ pub fn analyze_last_uses(
                 analysis.validation_data.validation_errors
             );
         }
-        
+
         // Log validation results for debugging
         if !analysis.validation_data.conservative_checks.is_empty() {
             eprintln!("Last-use analysis validation completed:");
             for check in &analysis.validation_data.conservative_checks {
-                eprintln!("  - {}: {} ({})", check.description, 
-                         if check.passed { "PASS" } else { "FAIL" }, 
-                         check.context);
+                eprintln!(
+                    "  - {}: {} ({})",
+                    check.description,
+                    if check.passed { "PASS" } else { "FAIL" },
+                    check.context
+                );
             }
         }
     }
-    
+
     analysis
 }
 
@@ -710,11 +732,11 @@ pub fn analyze_last_uses(
 /// eliminating the need for complex mapping between statements and HIR nodes.
 pub fn linearize_hir_with_cfg_ids(hir_nodes: &[HirNode]) -> Vec<LinearStatement> {
     let mut statements = Vec::new();
-    
+
     for node in hir_nodes {
         linearize_node_with_cfg_id(node, &mut statements);
     }
-    
+
     statements
 }
 
@@ -722,15 +744,12 @@ pub fn linearize_hir_with_cfg_ids(hir_nodes: &[HirNode]) -> Vec<LinearStatement>
 ///
 /// **Phase 3 Improvement**: Enhanced linearization that preserves control flow structure
 /// information needed for topologically correct CFG construction.
-fn linearize_node_with_cfg_id(
-    node: &HirNode,
-    statements: &mut Vec<LinearStatement>,
-) {
+fn linearize_node_with_cfg_id(node: &HirNode, statements: &mut Vec<LinearStatement>) {
     match &node.kind {
         HirKind::Assign { place, value } => {
             // Collect places used in the value expression
             let value_uses = collect_expression_places(value);
-            
+
             // Create statement with HIR node ID as statement ID
             statements.push(LinearStatement {
                 id: node.id,
@@ -739,7 +758,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         HirKind::Borrow { place, target, .. } => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -748,7 +767,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         HirKind::Call { args, returns, .. } | HirKind::HostCall { args, returns, .. } => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -757,7 +776,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         HirKind::Return(places) => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -766,7 +785,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Return,
             });
         }
-        
+
         HirKind::ReturnError(place) => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -775,7 +794,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Return,
             });
         }
-        
+
         HirKind::Drop(place) => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -784,7 +803,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         HirKind::ExprStmt(place) => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -793,10 +812,14 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         // For structured control flow, create a statement for the control node
         // and recursively linearize nested parts with proper structure tracking
-        HirKind::If { condition, then_block, else_block } => {
+        HirKind::If {
+            condition,
+            then_block,
+            else_block,
+        } => {
             // Condition evaluation statement
             statements.push(LinearStatement {
                 id: node.id,
@@ -804,22 +827,22 @@ fn linearize_node_with_cfg_id(
                 defines: Vec::new(),
                 control_flow_type: ControlFlowType::IfCondition,
             });
-            
+
             // Linearize then block with early return detection
             for then_node in then_block {
                 linearize_node_with_cfg_id(then_node, statements);
-                
+
                 // If this is an early return, subsequent statements in this block are unreachable
                 if is_early_return_node(then_node) {
                     break;
                 }
             }
-            
+
             // Linearize else block with early return detection
             if let Some(else_nodes) = else_block {
                 for else_node in else_nodes {
                     linearize_node_with_cfg_id(else_node, statements);
-                    
+
                     // If this is an early return, subsequent statements in this block are unreachable
                     if is_early_return_node(else_node) {
                         break;
@@ -827,8 +850,12 @@ fn linearize_node_with_cfg_id(
                 }
             }
         }
-        
-        HirKind::Match { scrutinee, arms, default } => {
+
+        HirKind::Match {
+            scrutinee,
+            arms,
+            default,
+        } => {
             // Scrutinee evaluation statement
             statements.push(LinearStatement {
                 id: node.id,
@@ -836,24 +863,24 @@ fn linearize_node_with_cfg_id(
                 defines: Vec::new(),
                 control_flow_type: ControlFlowType::MatchCondition,
             });
-            
+
             // Linearize match arms with early return detection
             for arm in arms {
                 for arm_node in &arm.body {
                     linearize_node_with_cfg_id(arm_node, statements);
-                    
+
                     // If this is an early return, subsequent statements in this arm are unreachable
                     if is_early_return_node(arm_node) {
                         break;
                     }
                 }
             }
-            
+
             // Linearize default arm with early return detection
             if let Some(default_nodes) = default {
                 for default_node in default_nodes {
                     linearize_node_with_cfg_id(default_node, statements);
-                    
+
                     // If this is an early return, subsequent statements in this arm are unreachable
                     if is_early_return_node(default_node) {
                         break;
@@ -861,7 +888,7 @@ fn linearize_node_with_cfg_id(
                 }
             }
         }
-        
+
         HirKind::Loop { iterator, body, .. } => {
             // Iterator evaluation statement (loop header)
             statements.push(LinearStatement {
@@ -870,37 +897,44 @@ fn linearize_node_with_cfg_id(
                 defines: Vec::new(),
                 control_flow_type: ControlFlowType::LoopHeader,
             });
-            
+
             // Linearize loop body with break/continue detection
             for body_node in body {
                 linearize_node_with_cfg_id(body_node, statements);
-                
+
                 // Break and continue affect control flow but don't stop linearization
                 // (other statements in the loop body might be reachable via different paths)
             }
         }
-        
-        HirKind::TryCall { call, error_handler, .. } => {
+
+        HirKind::TryCall {
+            call,
+            error_handler,
+            ..
+        } => {
             // Linearize the call
             linearize_node_with_cfg_id(call, statements);
-            
+
             // Linearize error handler with early return detection
             for handler_node in error_handler {
                 linearize_node_with_cfg_id(handler_node, statements);
-                
+
                 // If this is an early return, subsequent statements in handler are unreachable
                 if is_early_return_node(handler_node) {
                     break;
                 }
             }
         }
-        
-        HirKind::OptionUnwrap { expr, default_value } => {
+
+        HirKind::OptionUnwrap {
+            expr,
+            default_value,
+        } => {
             let mut uses = collect_expression_places(expr);
             if let Some(default) = default_value {
                 uses.extend(collect_expression_places(default));
             }
-            
+
             statements.push(LinearStatement {
                 id: node.id,
                 uses,
@@ -908,13 +942,13 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         HirKind::RuntimeTemplateCall { captures, .. } => {
             let mut uses = Vec::new();
             for capture in captures {
                 uses.extend(collect_expression_places(capture));
             }
-            
+
             statements.push(LinearStatement {
                 id: node.id,
                 uses,
@@ -922,7 +956,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Sequential,
             });
         }
-        
+
         HirKind::FunctionDef { body, .. } => {
             // Function entry statement
             statements.push(LinearStatement {
@@ -931,18 +965,18 @@ fn linearize_node_with_cfg_id(
                 defines: Vec::new(),
                 control_flow_type: ControlFlowType::FunctionEntry,
             });
-            
+
             // Linearize function body with early return detection
             for body_node in body {
                 linearize_node_with_cfg_id(body_node, statements);
-                
+
                 // If this is an early return, subsequent statements are unreachable
                 if is_early_return_node(body_node) {
                     break;
                 }
             }
         }
-        
+
         HirKind::TemplateFn { body, .. } => {
             // Template function entry statement
             statements.push(LinearStatement {
@@ -951,18 +985,18 @@ fn linearize_node_with_cfg_id(
                 defines: Vec::new(),
                 control_flow_type: ControlFlowType::FunctionEntry,
             });
-            
+
             // Linearize function body with early return detection
             for body_node in body {
                 linearize_node_with_cfg_id(body_node, statements);
-                
+
                 // If this is an early return, subsequent statements are unreachable
                 if is_early_return_node(body_node) {
                     break;
                 }
             }
         }
-        
+
         // Control flow statements that need special CFG handling
         HirKind::Break => {
             statements.push(LinearStatement {
@@ -972,7 +1006,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Break,
             });
         }
-        
+
         HirKind::Continue => {
             statements.push(LinearStatement {
                 id: node.id,
@@ -981,7 +1015,7 @@ fn linearize_node_with_cfg_id(
                 control_flow_type: ControlFlowType::Continue,
             });
         }
-        
+
         // These don't use places but still need statements for CFG consistency
         HirKind::StructDef { .. } => {
             statements.push(LinearStatement {
@@ -996,62 +1030,59 @@ fn linearize_node_with_cfg_id(
 
 /// Check if a HIR node represents an early return that terminates the current block
 fn is_early_return_node(node: &HirNode) -> bool {
-    matches!(
-        node.kind,
-        HirKind::Return(_) | HirKind::ReturnError(_)
-    )
+    matches!(node.kind, HirKind::Return(_) | HirKind::ReturnError(_))
 }
 
 /// Collect all places used in an expression
 fn collect_expression_places(expr: &crate::compiler::hir::nodes::HirExpr) -> Vec<Place> {
     let mut places = Vec::new();
-    
+
     match &expr.kind {
         HirExprKind::Load(place) => {
             places.push(place.clone());
         }
-        
+
         HirExprKind::SharedBorrow(place) | HirExprKind::MutableBorrow(place) => {
             places.push(place.clone());
         }
-        
+
         HirExprKind::CandidateMove(place) => {
             places.push(place.clone());
         }
-        
+
         HirExprKind::BinOp { left, right, .. } => {
             places.push(left.clone());
             places.push(right.clone());
         }
-        
+
         HirExprKind::UnaryOp { operand, .. } => {
             places.push(operand.clone());
         }
-        
+
         HirExprKind::Call { args, .. } => {
             places.extend(args.iter().cloned());
         }
-        
+
         HirExprKind::MethodCall { receiver, args, .. } => {
             places.push(receiver.clone());
             places.extend(args.iter().cloned());
         }
-        
+
         HirExprKind::StructConstruct { fields, .. } => {
             for (_, field_place) in fields {
                 places.push(field_place.clone());
             }
         }
-        
+
         HirExprKind::Collection(element_places) => {
             places.extend(element_places.iter().cloned());
         }
-        
+
         HirExprKind::Range { start, end } => {
             places.push(start.clone());
             places.push(end.clone());
         }
-        
+
         // Literals don't use places
         HirExprKind::Int(_)
         | HirExprKind::Float(_)
@@ -1059,7 +1090,7 @@ fn collect_expression_places(expr: &crate::compiler::hir::nodes::HirExpr) -> Vec
         | HirExprKind::StringLiteral(_)
         | HirExprKind::Char(_) => {}
     }
-    
+
     places
 }
 
@@ -1088,35 +1119,33 @@ struct StatementCfg {
 fn build_statement_cfg(statements: &[LinearStatement]) -> StatementCfg {
     let mut successors: HashMap<HirNodeId, Vec<HirNodeId>> = HashMap::new();
     let mut predecessors: HashMap<HirNodeId, Vec<HirNodeId>> = HashMap::new();
-    
+
     // Initialize empty successor/predecessor lists for all statements
     for stmt in statements {
         successors.insert(stmt.id, Vec::new());
         predecessors.insert(stmt.id, Vec::new());
     }
-    
+
     // Build a mapping from statement ID to statement for quick lookup
-    let stmt_map: HashMap<HirNodeId, &LinearStatement> = statements
-        .iter()
-        .map(|stmt| (stmt.id, stmt))
-        .collect();
-    
+    let stmt_map: HashMap<HirNodeId, &LinearStatement> =
+        statements.iter().map(|stmt| (stmt.id, stmt)).collect();
+
     // Build edges with topologically correct complex control flow handling
     build_topologically_correct_edges(statements, &stmt_map, &mut successors, &mut predecessors);
-    
+
     // Identify entry and exit points
     let entry_points: Vec<HirNodeId> = statements
         .iter()
         .filter(|stmt| predecessors.get(&stmt.id).unwrap().is_empty())
         .map(|stmt| stmt.id)
         .collect();
-    
+
     let exit_points: Vec<HirNodeId> = statements
         .iter()
         .filter(|stmt| successors.get(&stmt.id).unwrap().is_empty())
         .map(|stmt| stmt.id)
         .collect();
-    
+
     StatementCfg {
         successors,
         predecessors,
@@ -1141,12 +1170,12 @@ fn build_topologically_correct_edges(
 ) {
     // Track control flow context for break/continue handling
     let mut loop_stack: Vec<LoopContext> = Vec::new();
-    
+
     // Build a more sophisticated CFG by analyzing statement patterns
     let mut i = 0;
     while i < statements.len() {
         let stmt = &statements[i];
-        
+
         match stmt.control_flow_type {
             ControlFlowType::Sequential => {
                 // Regular statements flow to next statement if it exists
@@ -1155,16 +1184,16 @@ fn build_topologically_correct_edges(
                 }
                 i += 1;
             }
-            
+
             ControlFlowType::IfCondition => {
                 // If condition: analyze the structure to find then/else blocks
                 let (then_start, else_start, after_if) = analyze_if_structure(statements, i);
-                
+
                 // Connect condition to then block
                 if let Some(then_id) = then_start {
                     add_cfg_edge(stmt.id, then_id, successors, predecessors);
                 }
-                
+
                 // Connect condition to else block or fallthrough
                 if let Some(else_id) = else_start {
                     add_cfg_edge(stmt.id, else_id, successors, predecessors);
@@ -1172,15 +1201,22 @@ fn build_topologically_correct_edges(
                     // No else block, condition can fall through
                     add_cfg_edge(stmt.id, after_id, successors, predecessors);
                 }
-                
+
                 // Process the blocks and connect them to after_if
                 if let Some(after_id) = after_if {
-                    connect_block_ends_to_target(statements, then_start, else_start, after_id, successors, predecessors);
+                    connect_block_ends_to_target(
+                        statements,
+                        then_start,
+                        else_start,
+                        after_id,
+                        successors,
+                        predecessors,
+                    );
                 }
-                
+
                 i += 1;
             }
-            
+
             ControlFlowType::MatchCondition => {
                 // Match condition: similar to if but with multiple arms
                 // For now, treat like if with simple fallthrough
@@ -1189,7 +1225,7 @@ fn build_topologically_correct_edges(
                 }
                 i += 1;
             }
-            
+
             ControlFlowType::LoopHeader => {
                 // Loop header: find loop body and exit
                 let loop_end = find_loop_end(statements, i);
@@ -1198,31 +1234,31 @@ fn build_topologically_correct_edges(
                 } else {
                     None
                 };
-                
+
                 let loop_ctx = LoopContext {
                     header_id: stmt.id,
                     exit_id: loop_exit,
                 };
-                
+
                 // Connect to loop body (next statement)
                 if i + 1 < statements.len() {
                     add_cfg_edge(stmt.id, statements[i + 1].id, successors, predecessors);
                 }
-                
+
                 // Also connect to loop exit for condition check
                 if let Some(exit_id) = loop_exit {
                     add_cfg_edge(stmt.id, exit_id, successors, predecessors);
                 }
-                
+
                 loop_stack.push(loop_ctx);
                 i += 1;
             }
-            
+
             ControlFlowType::Return => {
                 // Return statements are terminating - no outgoing edges
                 i += 1;
             }
-            
+
             ControlFlowType::Break => {
                 // Break jumps to loop exit
                 if let Some(loop_ctx) = loop_stack.last() {
@@ -1232,7 +1268,7 @@ fn build_topologically_correct_edges(
                 }
                 i += 1;
             }
-            
+
             ControlFlowType::Continue => {
                 // Continue jumps to loop header
                 if let Some(loop_ctx) = loop_stack.last() {
@@ -1240,7 +1276,7 @@ fn build_topologically_correct_edges(
                 }
                 i += 1;
             }
-            
+
             ControlFlowType::FunctionEntry => {
                 // Function entry flows to next statement
                 if i + 1 < statements.len() {
@@ -1249,7 +1285,7 @@ fn build_topologically_correct_edges(
                 i += 1;
             }
         }
-        
+
         // Pop loop context when we exit a loop
         // This is a simplified heuristic - in a full implementation,
         // we'd track loop boundaries more precisely
@@ -1264,17 +1300,20 @@ fn build_topologically_correct_edges(
 }
 
 /// Analyze if statement structure to find then/else blocks and fallthrough point
-fn analyze_if_structure(statements: &[LinearStatement], if_index: usize) -> (Option<HirNodeId>, Option<HirNodeId>, Option<HirNodeId>) {
+fn analyze_if_structure(
+    statements: &[LinearStatement],
+    if_index: usize,
+) -> (Option<HirNodeId>, Option<HirNodeId>, Option<HirNodeId>) {
     // This is a simplified analysis - in a full implementation,
     // we'd need to parse the original HIR structure to determine
     // the exact boundaries of then/else blocks
-    
+
     let then_start = if if_index + 1 < statements.len() {
         Some(statements[if_index + 1].id)
     } else {
         None
     };
-    
+
     // For now, assume no else block and simple fallthrough
     let else_start = None;
     let after_if = if if_index + 2 < statements.len() {
@@ -1282,7 +1321,7 @@ fn analyze_if_structure(statements: &[LinearStatement], if_index: usize) -> (Opt
     } else {
         None
     };
-    
+
     (then_start, else_start, after_if)
 }
 
@@ -1311,7 +1350,7 @@ fn connect_block_ends_to_target(
 fn find_loop_end(statements: &[LinearStatement], loop_start: usize) -> usize {
     // This is a simplified heuristic - in a full implementation,
     // we'd analyze the HIR structure to find the actual loop boundaries
-    
+
     // For now, assume the loop body is the next few statements until we find
     // a break, continue, or return, or reach the end
     let mut end = loop_start + 1;
@@ -1329,7 +1368,7 @@ fn find_loop_end(statements: &[LinearStatement], loop_start: usize) -> usize {
             }
         }
     }
-    
+
     end - loop_start - 1
 }
 
@@ -1370,8 +1409,6 @@ fn classify_statement_type(
     }
 }
 
-
-
 /// Add a CFG edge between two statements
 fn add_cfg_edge(
     from: HirNodeId,
@@ -1393,21 +1430,21 @@ fn compute_per_place_liveness(
 ) -> HashMap<HirNodeId, HashSet<Place>> {
     // live_after[stmt_id] = set of places live after statement
     let mut live_after: HashMap<HirNodeId, HashSet<Place>> = HashMap::new();
-    
+
     // Initialize all statements with empty live sets
     for stmt in statements {
         live_after.insert(stmt.id, HashSet::new());
     }
-    
+
     // Worklist algorithm: start from exit points and work backwards
     let mut worklist: VecDeque<HirNodeId> = cfg.exit_points.iter().copied().collect();
-    
+
     while let Some(stmt_id) = worklist.pop_front() {
         let mut changed = false;
-        
+
         // Compute new live_after set for this statement
         let mut new_live_after = HashSet::new();
-        
+
         // A place is live after this statement if any successor uses it or has it live after
         if let Some(successors) = cfg.successors.get(&stmt_id) {
             for &succ_id in successors {
@@ -1417,7 +1454,7 @@ fn compute_per_place_liveness(
                         new_live_after.insert(place.clone());
                     }
                 }
-                
+
                 // Add places live after successor
                 if let Some(succ_live_after) = live_after.get(&succ_id) {
                     for place in succ_live_after {
@@ -1426,7 +1463,7 @@ fn compute_per_place_liveness(
                 }
             }
         }
-        
+
         // Check if live_after set changed
         if let Some(old_live_after) = live_after.get(&stmt_id) {
             if &new_live_after != old_live_after {
@@ -1435,10 +1472,10 @@ fn compute_per_place_liveness(
         } else {
             changed = !new_live_after.is_empty();
         }
-        
+
         if changed {
             live_after.insert(stmt_id, new_live_after);
-            
+
             // Add predecessors to worklist
             if let Some(predecessors) = cfg.predecessors.get(&stmt_id) {
                 for &pred_id in predecessors {
@@ -1449,7 +1486,7 @@ fn compute_per_place_liveness(
             }
         }
     }
-    
+
     live_after
 }
 
@@ -1462,7 +1499,7 @@ fn mark_last_uses_from_liveness(
     live_after: &HashMap<HirNodeId, HashSet<Place>>,
 ) -> LastUseAnalysis {
     let mut analysis = LastUseAnalysis::new();
-    
+
     for statement in statements {
         for place in &statement.uses {
             // Check if this place is live after this statement
@@ -1470,39 +1507,42 @@ fn mark_last_uses_from_liveness(
                 .get(&statement.id)
                 .map(|live_set| live_set.contains(place))
                 .unwrap_or(false);
-            
+
             // If not live after, this is a last use
             if !is_live_after {
                 analysis.last_use_statements.insert(statement.id);
-                
+
                 analysis
                     .statement_to_last_uses
                     .entry(statement.id)
                     .or_default()
                     .push(place.clone());
-                
+
                 analysis
                     .place_to_last_uses
                     .entry(place.clone())
                     .or_default()
                     .push(statement.id);
-                
+
                 // Add debug assertion to verify this is truly a last use
                 #[cfg(debug_assertions)]
                 {
                     // Record that we're making a last-use decision for validation
-                    analysis.validation_data.conservative_checks.push(ConservativeCheck {
-                        description: "Last-use decision".to_string(),
-                        statement_id: statement.id,
-                        place: place.clone(),
-                        passed: true, // Assume correct until validation proves otherwise
-                        context: format!("Place not live after statement {}", statement.id),
-                    });
+                    analysis
+                        .validation_data
+                        .conservative_checks
+                        .push(ConservativeCheck {
+                            description: "Last-use decision".to_string(),
+                            statement_id: statement.id,
+                            place: place.clone(),
+                            passed: true, // Assume correct until validation proves otherwise
+                            context: format!("Place not live after statement {}", statement.id),
+                        });
                 }
             }
         }
     }
-    
+
     analysis
 }
 
@@ -1513,10 +1553,7 @@ fn mark_last_uses_from_liveness(
 ///
 /// **Validation Enhancement**: Includes debug assertions to ensure proper
 /// coupling between last-use analysis and borrow checker state.
-pub fn apply_last_use_analysis(
-    checker: &mut BorrowChecker,
-    analysis: &LastUseAnalysis,
-) {
+pub fn apply_last_use_analysis(checker: &mut BorrowChecker, analysis: &LastUseAnalysis) {
     // Debug assertion: Verify analysis has been validated
     #[cfg(debug_assertions)]
     {
@@ -1527,7 +1564,7 @@ pub fn apply_last_use_analysis(
             );
         }
     }
-    
+
     // Update each CFG node's borrow state with last-use information
     // Since statement ID = CFG node ID, this is now a direct mapping
     for (place, last_use_statements) in &analysis.place_to_last_uses {
@@ -1542,25 +1579,29 @@ pub fn apply_last_use_analysis(
                     );
                 }
             }
-            
+
             if let Some(cfg_node) = checker.cfg.nodes.get_mut(&statement_id) {
-                cfg_node.borrow_state.record_last_use(place.clone(), statement_id);
-                
+                cfg_node
+                    .borrow_state
+                    .record_last_use(place.clone(), statement_id);
+
                 // Debug assertion: Verify borrow state consistency
                 #[cfg(debug_assertions)]
                 {
                     // Check that recording last-use doesn't conflict with active borrows
-                    let overlapping_borrows = cfg_node.borrow_state.borrows_for_overlapping_places(place);
+                    let overlapping_borrows =
+                        cfg_node.borrow_state.borrows_for_overlapping_places(place);
                     for borrow in &overlapping_borrows {
                         // If there's an active mutable borrow or move, this could be problematic
                         if matches!(borrow.kind, BorrowKind::Mutable | BorrowKind::Move) {
                             eprintln!(
                                 "Warning: Recording last-use for place {:?} at statement {} while active {} borrow {} exists",
-                                place, statement_id, 
+                                place,
+                                statement_id,
                                 match borrow.kind {
                                     BorrowKind::Mutable => "mutable",
                                     BorrowKind::Move => "move",
-                                    _ => "unknown"
+                                    _ => "unknown",
                                 },
                                 borrow.id
                             );
@@ -1570,7 +1611,7 @@ pub fn apply_last_use_analysis(
             }
         }
     }
-    
+
     // Debug assertion: Verify coupling completeness
     #[cfg(debug_assertions)]
     {
@@ -1581,9 +1622,11 @@ pub fn apply_last_use_analysis(
                 updated_places.insert(place.clone());
             }
         }
-        
+
         for analyzed_place in &analysis.validation_data.analyzed_places {
-            if analysis.place_to_last_uses.contains_key(analyzed_place) && !updated_places.contains(analyzed_place) {
+            if analysis.place_to_last_uses.contains_key(analyzed_place)
+                && !updated_places.contains(analyzed_place)
+            {
                 eprintln!(
                     "Warning: Analyzed place {:?} with last-use information was not updated in borrow checker state",
                     analyzed_place

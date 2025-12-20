@@ -365,7 +365,7 @@ fn process_expression_for_borrows(
 }
 
 /// Propagate borrow state through the control flow graph
-/// 
+///
 /// This function implements a worklist-based dataflow analysis to propagate
 /// borrow state through the CFG. It handles:
 /// - Forward propagation along CFG edges
@@ -387,13 +387,17 @@ fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMes
 
         // First, merge incoming borrow states from all predecessors
         let predecessors = checker.cfg.predecessors(node_id);
-        
+
         if !predecessors.is_empty() {
             // Collect predecessor states
             let predecessor_states: Vec<_> = predecessors
                 .iter()
                 .filter_map(|&pred_id| {
-                    checker.cfg.nodes.get(&pred_id).map(|n| n.borrow_state.clone())
+                    checker
+                        .cfg
+                        .nodes
+                        .get(&pred_id)
+                        .map(|n| n.borrow_state.clone())
                 })
                 .collect();
 
@@ -401,7 +405,7 @@ fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMes
             if let Some(current_node) = checker.cfg.nodes.get_mut(&node_id) {
                 // Start with the node's own borrows (created at this node)
                 let own_borrows = current_node.borrow_state.clone();
-                
+
                 // Merge incoming states from predecessors
                 for (i, pred_state) in predecessor_states.iter().enumerate() {
                     if i == 0 && own_borrows.is_empty() {
@@ -414,10 +418,14 @@ fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMes
                         current_node.borrow_state.merge(pred_state);
                     }
                 }
-                
+
                 // Re-add own borrows that were created at this node
                 for loan in own_borrows.active_borrows.values() {
-                    if !current_node.borrow_state.active_borrows.contains_key(&loan.id) {
+                    if !current_node
+                        .borrow_state
+                        .active_borrows
+                        .contains_key(&loan.id)
+                    {
                         current_node.borrow_state.add_borrow(loan.clone());
                     }
                 }

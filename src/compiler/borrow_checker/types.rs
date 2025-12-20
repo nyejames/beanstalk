@@ -16,6 +16,9 @@ use std::collections::HashMap;
 /// Unique identifier for borrows
 pub type BorrowId = usize;
 
+/// Unique identifier for CFG nodes (same as HIR node IDs)
+pub type CfgNodeId = HirNodeId;
+
 /// The main borrow checker state and context
 ///
 /// This struct maintains all the state needed for borrow checking analysis,
@@ -150,10 +153,6 @@ pub struct Loan {
     /// HIR node where this borrow was last used (if determined)
     #[allow(dead_code)]
     pub last_use_point: Option<HirNodeId>,
-
-    /// CFG regions where this borrow is active
-    #[allow(dead_code)]
-    pub active_regions: Vec<CfgRegion>,
 }
 
 /// Kind of borrow for conflict analysis
@@ -171,23 +170,6 @@ pub enum BorrowKind {
 
     /// Move (refined from CandidateMove by last-use analysis)
     Move,
-}
-
-/// A region in the control flow graph where a borrow is active
-///
-/// CFG regions represent spans of execution where a particular borrow
-/// remains valid, used for lifetime inference and conflict detection.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct CfgRegion {
-    /// Starting CFG node for this region
-    pub start: HirNodeId,
-
-    /// Ending CFG node for this region
-    pub end: HirNodeId,
-
-    /// All execution paths through this region
-    pub paths: Vec<Vec<HirNodeId>>,
 }
 
 impl<'a> BorrowChecker<'a> {
@@ -237,6 +219,17 @@ impl<'a> BorrowChecker<'a> {
                 errors: self.errors,
                 warnings: self.warnings,
             })
+        }
+    }
+
+    /// Record a last use for move refinement integration
+    pub fn record_last_use(&mut self, borrow_id: BorrowId, kill_point: CfgNodeId) {
+        // Find the loan and update its last use point
+        for cfg_node in self.cfg.nodes.values_mut() {
+            if let Some(loan) = cfg_node.borrow_state.active_borrows.get_mut(&borrow_id) {
+                loan.last_use_point = Some(kill_point);
+                break;
+            }
         }
     }
 }
@@ -334,7 +327,6 @@ impl BorrowState {
     }
 
     /// Remove a borrow from this state
-    #[allow(dead_code)]
     pub fn remove_borrow(&mut self, borrow_id: BorrowId) {
         if let Some(loan) = self.active_borrows.remove(&borrow_id) {
             // Remove from place mapping
@@ -376,7 +368,7 @@ impl BorrowState {
     }
 
     /// Merge another borrow state into this one (for CFG join points)
-    /// 
+    ///
     /// This implements conservative merging for Polonius-style analysis:
     /// - At join points, we keep borrows that exist in BOTH incoming states
     /// - This ensures that conflicts are only reported if they exist on ALL paths
@@ -427,7 +419,7 @@ impl BorrowState {
     }
 
     /// Union merge: combine borrows from both states (for propagation)
-    /// 
+    ///
     /// This is used when propagating state along CFG edges where we want
     /// to accumulate all borrows that could be active.
     pub fn union_merge(&mut self, other: &BorrowState) {
@@ -480,6 +472,36 @@ impl BorrowState {
     pub fn get_loan(&self, borrow_id: BorrowId) -> Option<&Loan> {
         self.active_borrows.get(&borrow_id)
     }
+
+    /// Update borrow state from a live set (for lifetime inference integration)
+    ///
+    /// This method integrates the corrected lifetime inference results with the borrow
+    /// state, ensuring that only borrows that are actually live according to the
+    /// algebraic analysis are considered active.
+    pub fn update_from_live_set(
+        &mut self,
+        live_set: &crate::compiler::borrow_checker::lifetime_inference::borrow_live_sets::BorrowSet,
+    ) {
+        // Remove borrows that are no longer live according to the corrected analysis
+        let mut borrows_to_remove = Vec::new();
+
+        for &borrow_id in self.active_borrows.keys() {
+            if !live_set.contains(&borrow_id) {
+                borrows_to_remove.push(borrow_id);
+            }
+        }
+
+        // Remove inactive borrows
+        for borrow_id in borrows_to_remove {
+            self.remove_borrow(borrow_id);
+        }
+
+        // Note: We don't add new borrows here because the live set might contain
+        // borrows that don't have full loan information. The borrow state should
+        // already contain all relevant borrows from the borrow tracking phase.
+        // This method only removes borrows that are no longer live according to
+        // the corrected lifetime analysis.
+    }
 }
 
 impl Loan {
@@ -491,14 +513,14 @@ impl Loan {
             kind,
             creation_point,
             last_use_point: None,
-            active_regions: Vec::new(),
         }
     }
 
     /// Check if this loan conflicts with another loan
     pub fn conflicts_with(&self, other: &Loan) -> bool {
         // Use enhanced place conflict detection
-        self.place.conflicts_with(&other.place, self.kind, other.kind)
+        self.place
+            .conflicts_with(&other.place, self.kind, other.kind)
     }
 }
 

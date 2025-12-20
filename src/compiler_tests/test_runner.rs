@@ -14,16 +14,16 @@ use crate::compiler_tests::lifetime_inference_performance_tests;
 #[cfg(test)]
 pub fn run_performance_tests() {
     println!("Running lifetime inference performance tests...\n");
-    
+
     lifetime_inference_performance_tests::benchmark_dataflow_performance();
     println!();
-    
+
     lifetime_inference_performance_tests::test_efficient_data_structures();
     println!();
-    
+
     lifetime_inference_performance_tests::test_minimal_cloning();
     println!();
-    
+
     println!("Performance tests completed.");
 }
 
@@ -238,16 +238,16 @@ pub fn run_performance_benchmarks() -> Result<(), String> {
 /// Run lifetime inference performance benchmarks
 fn run_lifetime_inference_benchmarks() -> Result<(), String> {
     use crate::compiler_tests::lifetime_inference_performance_tests;
-    
+
     println!("  Running dataflow performance benchmark...");
     lifetime_inference_performance_tests::benchmark_dataflow_performance();
-    
+
     println!("  Testing efficient data structures...");
     lifetime_inference_performance_tests::test_efficient_data_structures();
-    
+
     println!("  Testing minimal cloning optimizations...");
     lifetime_inference_performance_tests::test_minimal_cloning();
-    
+
     println!("  ✓ Lifetime inference benchmarks completed");
     Ok(())
 }

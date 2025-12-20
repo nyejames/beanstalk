@@ -148,7 +148,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 Some(string) => {
                     let valid_path = check_if_valid_file_path(string)?;
                     Ok(Command::Build(entry_path.join(valid_path)))
-                },
+                }
                 _ => {
                     // Return the current working directory path
                     Ok(Command::Build(entry_path))
@@ -164,7 +164,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 Some(string) => {
                     let valid_path = check_if_valid_file_path(string)?;
                     Ok(Command::Run(entry_path.join(valid_path)))
-                },
+                }
                 _ => Ok(Command::Run(entry_path)),
             }
         }
@@ -177,7 +177,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                 Some(string) => {
                     let valid_path = check_if_valid_file_path(string)?;
                     Ok(Command::Release(entry_path.join(valid_path)))
-                },
+                }
                 _ => Ok(Command::Release(entry_path)),
             }
         }

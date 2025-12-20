@@ -1,6 +1,6 @@
 use crate::compiler::string_interning::{StringId, StringTable};
-use std::path::{Path, PathBuf};
 use colour::red_ln;
+use std::path::{Path, PathBuf};
 
 /// An efficient path representation using interned string components.
 ///
@@ -32,7 +32,10 @@ impl InternedPath {
         let components = path
             .components()
             .filter_map(|component| {
-                component.as_os_str().to_str().map(|s| string_table.intern(s))
+                component
+                    .as_os_str()
+                    .to_str()
+                    .map(|s| string_table.intern(s))
             })
             .collect();
 

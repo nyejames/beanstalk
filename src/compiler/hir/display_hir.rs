@@ -1,7 +1,9 @@
-use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, HirKind, HirModule, HirNode, UnaryOp};
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use crate::compiler::hir::nodes::{
+    BinOp, HirExpr, HirExprKind, HirKind, HirModule, HirNode, UnaryOp,
+};
 use crate::compiler::hir::place::Place;
 use crate::compiler::string_interning::StringTable;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 
 // === Display Implementations for HIR Debugging ===
 impl Display for HirModule {

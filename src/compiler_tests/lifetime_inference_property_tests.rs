@@ -9,9 +9,9 @@
 mod tests {
     use crate::compiler::borrow_checker::cfg::construct_cfg;
     use crate::compiler::borrow_checker::lifetime_inference::{
-        BorrowDataflow, BorrowLiveSets, ParameterAnalysis, TemporalAnalysis,
-        apply_lifetime_inference, infer_lifetimes, is_last_use_according_to_lifetime_inference,
-        LifetimeInferenceResult,
+        BorrowDataflow, BorrowLiveSets, LifetimeInferenceResult, ParameterAnalysis,
+        TemporalAnalysis, apply_lifetime_inference, infer_lifetimes,
+        is_last_use_according_to_lifetime_inference,
     };
     use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowId, BorrowKind, CfgNodeId};
     use crate::compiler::datatypes::DataType;
@@ -361,21 +361,21 @@ mod tests {
         // Property 1: Temporal ordering should use CFG dominance, not node ID ordering
         // Test that dominance relationships are based on CFG structure
         let mut cfg_based_ordering_correct = true;
-        
+
         // For each pair of nodes, verify that dominance is based on CFG structure
         for &node_a in test_cfg.nodes.iter().map(|n| &n.id) {
             for &node_b in test_cfg.nodes.iter().map(|n| &n.id) {
                 if node_a != node_b {
                     let dominates = dominance_info.dominates(node_a, node_b);
                     let can_reach = dominance_info.can_reach(node_a, node_b);
-                    
+
                     // If A dominates B, then A should be able to reach B
                     // (dominance implies reachability)
                     if dominates && !can_reach {
                         cfg_based_ordering_correct = false;
                         break;
                     }
-                    
+
                     // Node ID ordering should NOT determine dominance
                     // (this tests that we're not using the old incorrect approach)
                     let node_id_suggests_dominance = node_a < node_b;
@@ -397,7 +397,7 @@ mod tests {
 
         // Property 2: Reachability should be based on CFG paths, not node ID comparison
         let mut reachability_correct = true;
-        
+
         // Test that reachability follows CFG edges
         for &node in test_cfg.nodes.iter().map(|n| &n.id) {
             // A node should always be able to reach itself
@@ -405,12 +405,14 @@ mod tests {
                 reachability_correct = false;
                 break;
             }
-            
+
             // Test transitivity: if A can reach B and B can reach C, then A can reach C
             for &other_node in test_cfg.nodes.iter().map(|n| &n.id) {
                 if node != other_node && dominance_info.can_reach(node, other_node) {
                     for &third_node in test_cfg.nodes.iter().map(|n| &n.id) {
-                        if other_node != third_node && dominance_info.can_reach(other_node, third_node) {
+                        if other_node != third_node
+                            && dominance_info.can_reach(other_node, third_node)
+                        {
                             // Transitivity: node -> other_node -> third_node implies node -> third_node
                             if !dominance_info.can_reach(node, third_node) {
                                 reachability_correct = false;
@@ -430,14 +432,14 @@ mod tests {
 
         // Property 3: Dominance should be reflexive and transitive
         let mut dominance_properties_correct = true;
-        
+
         for &node in test_cfg.nodes.iter().map(|n| &n.id) {
             // Reflexivity: every node dominates itself
             if !dominance_info.dominates(node, node) {
                 dominance_properties_correct = false;
                 break;
             }
-            
+
             // Test transitivity: if A dominates B and B dominates C, then A dominates C
             for &node_b in test_cfg.nodes.iter().map(|n| &n.id) {
                 if dominance_info.dominates(node, node_b) {
@@ -464,17 +466,25 @@ mod tests {
         // Property 4: Test that temporal analysis uses CFG structure for validation
         let validation_uses_cfg = test_cfg.nodes.len() >= 2 && {
             // Create test borrow data for validation
-            let test_borrows: Vec<_> = test_cfg.nodes.iter().take(2).enumerate().map(|(i, node)| {
-                (i, node.id, vec![node.id]) // Simple case: borrow created and used at same node
-            }).collect();
-            
+            let test_borrows: Vec<_> = test_cfg
+                .nodes
+                .iter()
+                .take(2)
+                .enumerate()
+                .map(|(i, node)| {
+                    (i, node.id, vec![node.id]) // Simple case: borrow created and used at same node
+                })
+                .collect();
+
             // Validation should succeed for well-formed dominance relationships
-            temporal_analysis.validate_dominance(&dominance_info, &test_borrows).is_ok()
+            temporal_analysis
+                .validate_dominance(&dominance_info, &test_borrows)
+                .is_ok()
         };
 
-        let result = cfg_based_ordering_correct 
-            && reachability_correct 
-            && dominance_properties_correct 
+        let result = cfg_based_ordering_correct
+            && reachability_correct
+            && dominance_properties_correct
             && validation_uses_cfg;
 
         TestResult::from_bool(result)
@@ -1119,7 +1129,7 @@ mod tests {
 
         let mut string_table1 = StringTable::new();
         let hir_nodes = create_hir_nodes_with_candidate_moves(&mut string_table1);
-        
+
         let mut string_table2 = StringTable::new();
         let checker = BorrowChecker::new(&mut string_table2);
 
@@ -1131,20 +1141,21 @@ mod tests {
                 let mut string_table3 = StringTable::new();
                 let test_place = create_test_place(&mut string_table3);
                 let test_node_id = 1;
-                
+
                 // Should be able to query last-use information without error
                 let _is_last_use = is_last_use_according_to_lifetime_inference(
-                    &test_place, 
-                    test_node_id, 
-                    &inference_result
+                    &test_place,
+                    test_node_id,
+                    &inference_result,
                 );
-                
+
                 // Test 2: Integration with candidate move refinement should work
-                let refinement_result = test_move_refinement_integration(&checker, &hir_nodes, &inference_result);
-                
+                let refinement_result =
+                    test_move_refinement_integration(&checker, &hir_nodes, &inference_result);
+
                 // Test 3: Lifetime inference should provide consistent last-use information
                 let consistency_check = validate_last_use_consistency(&inference_result);
-                
+
                 refinement_result && consistency_check
             }
             Err(_) => true, // Error is acceptable for this test - focus on successful integration
@@ -1433,22 +1444,22 @@ mod tests {
     ) -> bool {
         // Test that the integration interface works correctly
         // This validates that move refinement can successfully query lifetime inference results
-        
+
         // Test 1: Can query borrow count
         let borrow_count = inference_result.live_sets.borrow_count();
-        
-        // Test 2: Can query node count  
+
+        // Test 2: Can query node count
         let node_count = inference_result.live_sets.node_count();
-        
+
         // Test 3: Can iterate over all borrows
         let all_borrows: Vec<_> = inference_result.live_sets.all_borrows().collect();
-        
+
         // Test 4: Can query kill points
         let kill_points: Vec<_> = inference_result.live_sets.all_kill_points().collect();
-        
+
         // Basic consistency checks
-        borrow_count >= 0 
-            && node_count >= 0 
+        borrow_count >= 0
+            && node_count >= 0
             && all_borrows.len() == borrow_count
             && kill_points.len() <= borrow_count
     }
@@ -1456,7 +1467,7 @@ mod tests {
     /// Validate that last-use information is consistent across the lifetime inference result
     fn validate_last_use_consistency(inference_result: &LifetimeInferenceResult) -> bool {
         // Test consistency of last-use information
-        
+
         // Test 1: Every borrow with a kill point should have that kill point be reachable from creation
         for borrow_id in inference_result.live_sets.all_borrows() {
             if let Some(creation_point) = inference_result.live_sets.creation_point(borrow_id)
@@ -1469,7 +1480,7 @@ mod tests {
                 }
             }
         }
-        
+
         // Test 2: Live sets should be consistent - no borrow should be live after its kill point
         for (node_id, live_set) in inference_result.live_sets.all_live_sets() {
             for &borrow_id in live_set {
@@ -1481,14 +1492,18 @@ mod tests {
                 }
             }
         }
-        
+
         // Test 3: All borrows should have creation points
         for borrow_id in inference_result.live_sets.all_borrows() {
-            if inference_result.live_sets.creation_point(borrow_id).is_none() {
+            if inference_result
+                .live_sets
+                .creation_point(borrow_id)
+                .is_none()
+            {
                 return false;
             }
         }
-        
+
         true
     }
 

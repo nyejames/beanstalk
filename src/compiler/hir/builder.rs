@@ -11,17 +11,15 @@
 
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::datatypes::DataType;
-use crate::compiler::hir::nodes::{
-    HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirNodeId,
-};
+use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirNodeId};
 use crate::compiler::hir::place::Place;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::statements::branching::MatchArm;
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
 /// Build a HIR module from the AST
 ///
@@ -127,7 +125,10 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Helper: lower a block of nodes
-    pub(crate) fn lower_block(&mut self, nodes: Vec<AstNode>) -> Result<Vec<HirNode>, CompilerError> {
+    pub(crate) fn lower_block(
+        &mut self,
+        nodes: Vec<AstNode>,
+    ) -> Result<Vec<HirNode>, CompilerError> {
         let mut hir_nodes = Vec::new();
         for node in nodes {
             let mut node_hir = self.lower_node(node)?;
@@ -196,7 +197,10 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Helper: convert AST node to Place (for assignment targets)
-    pub(crate) fn lower_ast_node_to_place(&mut self, node: AstNode) -> Result<Place, CompilerError> {
+    pub(crate) fn lower_ast_node_to_place(
+        &mut self,
+        node: AstNode,
+    ) -> Result<Place, CompilerError> {
         match node.kind {
             NodeKind::Rvalue(expr) => Ok(self.lower_expr_to_place(expr)?.1),
 

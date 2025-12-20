@@ -10,7 +10,7 @@ use crate::return_compiler_error;
 ///
 /// This method linearizes expressions by introducing temporary variables
 /// and converts all operations to work on places rather than nested expressions.
-impl <'a> HirBuilder<'a> {
+impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_node(&mut self, node: AstNode) -> Result<Vec<HirNode>, CompilerError> {
         match node.kind {
             // === Variable Declaration ===
@@ -432,11 +432,11 @@ impl <'a> HirBuilder<'a> {
             // === Operators (should only appear in RPN context) ===
             NodeKind::Operator(_op) => {
                 return_compiler_error!(
-                        "Operator node found outside of RPN expression context"; {
-                            CompilationStage => "HIR Generation",
-                            PrimarySuggestion => "Operators should only appear within Runtime expressions"
-                        }
-                    )
+                    "Operator node found outside of RPN expression context"; {
+                        CompilationStage => "HIR Generation",
+                        PrimarySuggestion => "Operators should only appear within Runtime expressions"
+                    }
+                )
             }
         }
     }

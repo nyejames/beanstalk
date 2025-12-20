@@ -183,7 +183,12 @@ impl Place {
     /// - CandidateMove + CandidateMove: Conflict (multiple potential writers)
     /// - Move + Any: Conflict (moved value cannot be accessed)
     /// - Any + Move: Conflict (cannot access moved value)
-    pub fn conflicts_with(&self, other: &Place, self_kind: BorrowKind, other_kind: BorrowKind) -> bool {
+    pub fn conflicts_with(
+        &self,
+        other: &Place,
+        self_kind: BorrowKind,
+        other_kind: BorrowKind,
+    ) -> bool {
         use crate::compiler::borrow_checker::types::BorrowKind;
 
         // Places must overlap to conflict
@@ -303,8 +308,6 @@ impl Display for PlaceRoot {
     }
 }
 
-
-
 impl Display for Projection {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         // Note: This Display implementation shows StringID placeholders.
@@ -325,5 +328,3 @@ impl Display for IndexKind {
         }
     }
 }
-
-
