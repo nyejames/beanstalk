@@ -1,24 +1,7 @@
-//! Drop Node Insertion
+//! Drop node insertion for precise value cleanup.
 //!
-//! This module implements Drop node insertion for the borrow checker. Drop insertion
-//! ensures that values are cleaned up exactly when their ownership ends by inserting
-//! explicit Drop nodes in the HIR at precise locations.
-//!
-//! ## Design Principles
-//!
-//! - **Precise Placement**: Drop nodes are inserted immediately after the last use of values
-//! - **Move Awareness**: No Drop nodes are inserted for moved values at the move source
-//! - **Scope Exit Handling**: Values that go out of scope without being moved get Drop nodes
-//! - **Path Completeness**: Drop nodes are placed on all possible execution paths
-//! - **HIR Preservation**: Node ID ordering and structural integrity are maintained
-//!
-//! ## Algorithm
-//!
-//! 1. **Last-Use Integration**: Use last-use analysis results to identify Drop insertion points
-//! 2. **Move Analysis**: Skip Drop insertion for places that have been moved
-//! 3. **Scope Analysis**: Insert Drop nodes at scope exits for non-moved values
-//! 4. **Path Coverage**: Ensure Drop nodes are inserted on all execution paths
-//! 5. **HIR Update**: Insert Drop nodes while preserving node ID ordering
+//! Inserts explicit Drop nodes in HIR at precise locations to ensure values
+//! are cleaned up exactly when their ownership ends.
 
 use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind};
@@ -29,10 +12,10 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
 use std::collections::{HashMap, HashSet};
 
-/// Determine if a place needs cleanup (Drop insertion) based on its type and content
+/// Determine if a place needs cleanup (Drop insertion).
 /// 
-/// Heap-allocated strings created by templates need explicit cleanup, while
-/// stack-allocated string slices do not.
+/// Heap-allocated strings created by templates need explicit cleanup,
+/// while stack-allocated string slices do not.
 fn place_needs_cleanup(place: &Place, hir_nodes: &[HirNode]) -> bool {
     // For now, we'll be conservative and assume all places might need cleanup
     // In the future, this should check the actual type and origin of the place
