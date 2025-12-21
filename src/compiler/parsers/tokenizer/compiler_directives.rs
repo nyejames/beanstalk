@@ -22,12 +22,6 @@ pub fn compiler_directive(
         }
 
         match token_value.as_str() {
-            // Special
-            // Import Statement
-            "import" => {
-                return_token!(TokenKind::Import, stream)
-            }
-
             // For exporting functions or constants out of the final Wasm module
             "export" => return_token!(TokenKind::Export, stream),
 
@@ -50,7 +44,6 @@ pub fn compiler_directive(
                     stream.new_location().to_error_location(string_table),
                     {
                         CompilationStage => "Tokenization",
-                        PrimarySuggestion => "Valid compiler directives are: #import, #export, #panic, #async, #WAT, #slot",
                     }
                 )
             }

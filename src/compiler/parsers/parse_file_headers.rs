@@ -302,7 +302,7 @@ pub fn parse_headers_in_file(
             }
 
             // Nameless import,
-            // #import(@libraries/math/sqrt)
+            // import @libraries/math/sqrt
             // Just uses the end of the path as the name of the header being imported.
             // Named imports not yet supported, will need to be added through create_header.
             TokenKind::Import => {

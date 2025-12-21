@@ -1,6 +1,6 @@
-#import(@libs/html/Basic)
-#import(@styles/Docs)
-#import(@./components)
+import @libs/html/Basic
+import @styles/Docs
+import @./components
 [Basic.page:
 
 [Docs.Navbar]
@@ -24,7 +24,7 @@ Functions can return multiple values.
 If the function returns values, 
 it must use a type signature or the name of one of the arguments if it's returning that reference back to the caller.
 
-```beanstalk`
+```beanstalk
 
     get_doubled |value Int| -> Int:
         -- Creates a new immutable integer using value
@@ -76,7 +76,7 @@ it must use a type signature or the name of one of the arguments if it's returni
     panics ||:
         canError("") e!:
             io("Error: ", e)
-            #panic()
+            #panic "Panicking due to error"
         ;
     ;
 ]

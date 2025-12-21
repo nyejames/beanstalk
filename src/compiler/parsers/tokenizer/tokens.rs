@@ -502,6 +502,12 @@ pub enum TokenKind {
     Id(InternedString), // ID for scenes
 
     Empty,
+
+    // Channels
+    CreateChannel,
+    ChannelSend,    // >>
+    ChannelReceive, // <<
+    Yield,
 }
 
 impl TokenKind {

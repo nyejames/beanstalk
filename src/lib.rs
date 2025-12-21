@@ -113,6 +113,7 @@ mod compiler {
         pub(crate) mod conflict_detection;
         pub(crate) mod last_use;
         pub(crate) mod lifetime_inference;
+        pub(crate) mod structured_control_flow;
         pub(crate) mod types;
     }
 }

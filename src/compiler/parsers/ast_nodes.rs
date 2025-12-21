@@ -114,10 +114,6 @@ pub enum NodeKind {
     // It accepts any type through CoerceToString and automatically adds newlines
     Print(Expression),
 
-    // Other language code blocks
-    JS(InternedString),  // Code,
-    Css(InternedString), // Code,
-
     ParentTemplate(Expression),
     Slot,
     Empty, //
@@ -125,7 +121,7 @@ pub enum NodeKind {
     // Operators
     // Operator, Precedence
     Operator(Operator), // Operator,
-    // UnaryOperator(Token, bool, TokenPosition), // Operator, is_postfix,
+
     Newline,
     Spaces(u32),
 }

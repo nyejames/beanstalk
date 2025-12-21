@@ -8,12 +8,11 @@ test_output/
 
 # Ignore IDE specific folders
 .vscode
-/.VSCodeCounter
 .idea
-.cursor/
+.cursor
 .cursorignore
-.kiro/
-/.github/instructions
-/.clinerules
+.kiro
+.github/instructions
+.clinerules
 .aiignore
-/.junie
+.junie

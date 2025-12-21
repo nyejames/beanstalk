@@ -15,6 +15,7 @@ use crate::compiler::borrow_checker::last_use::{analyze_last_uses, apply_last_us
 use crate::compiler::borrow_checker::lifetime_inference::{
     apply_lifetime_inference, infer_lifetimes,
 };
+use crate::compiler::borrow_checker::structured_control_flow::handle_structured_control_flow;
 use crate::compiler::borrow_checker::types::BorrowChecker;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::{HirModule, HirNode};
@@ -131,6 +132,13 @@ fn perform_borrow_analysis(
 
     // 6c: Merge borrow states at CFG join points
     merge_control_flow_states(&mut checker);
+
+    // 6d: Handle structured control flow with enhanced separate branch tracking
+    // This provides additional structured control flow analysis on top of the
+    // existing Polonius-style analysis
+    // Handling structured control flow
+    handle_structured_control_flow(&checker, hir_nodes)?;
+    // Structured control flow handling complete
 
     // Phase 7: Detect borrow conflicts using Polonius-style analysis
     // Detecting borrow conflicts with Polonius-style analysis

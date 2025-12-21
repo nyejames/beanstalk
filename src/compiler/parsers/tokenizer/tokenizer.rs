@@ -579,12 +579,20 @@ fn keyword_or_variable(
         match token_value.as_str() {
             // Control Flow
             // END_KEYWORD => return_token!(TokenKind::End, stream),
+            
+            
+            // Import Statement
+            "import" => {
+                return_token!(TokenKind::Import, stream)
+            }
+            
             "if" => return_token!(TokenKind::If, stream),
             "return" => return_token!(TokenKind::Return, stream),
-
+            "yield" => return_token!(TokenKind::Yield, stream),
             "else" => return_token!(TokenKind::Else, stream),
             "for" => return_token!(TokenKind::For, stream),
             "break" => return_token!(TokenKind::Break, stream),
+            "continue" => return_token!(TokenKind::Continue, stream),
             "defer" => return_token!(TokenKind::Defer, stream),
             "in" => return_token!(TokenKind::In, stream),
             "as" => return_token!(TokenKind::As, stream),

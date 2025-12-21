@@ -1,6 +1,6 @@
-#import(@libs/html/basic)
-#import(@styles/docs_styles)
-#import(@./components)
+import @libs/html/Basic
+import @styles/Docs
+import @./components
 [basic.page:
 [Navbar]
 
@@ -29,28 +29,5 @@ allowing for more compatibility between libraries while also allowing custom err
 
 ### Function Context
 Function signatures must be given a context if they are not pure.
-
-
-### Concurrency (channels/threads) syntax
-Like go, but hopefully simpler and clearer control flow. 
-
-Uses >> and << to specify send / receive channels. No "chan" keyword.
-
-keyword 'async' to mark async function calls.
-
-[Code:
-    -- Create a channel
-    channel <<int>>
-
-    -- Send a value to the channel (notice value on the left, not right)
-    -- Channel operator can't be used in the middle of an expression, must be right at the end
-    5 >> channel
-
-    -- Recieve a value from the channel
-    x = << channel
-
-    -- Close the channel
-    channel close()
-]
 
 [Footer]

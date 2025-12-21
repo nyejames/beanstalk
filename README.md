@@ -77,5 +77,13 @@ See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Developme
 <h2>Tools</h2>
 <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>
 
+# Development Progress
+A full backend refactor of the compiler is underway.
+The IR and borrow checker is being developed, currently this is some rough scaffold.
+
+This is V2 of the backend, the original tried to do too much in a single IR pass.
+This new refactor will use 2 IR stages, details are inside `docs/Beanstalk Compiler Development Guide.md`
+
+
 <br>
 <br>

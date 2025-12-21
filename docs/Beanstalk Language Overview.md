@@ -175,7 +175,7 @@ The bang symbol ! is used for creating Result types and handling errors.
 ### Panics
 Panics use a compiler directive.
 ```beanstalk
-    #panic "Message about the panic"
+    #panic
 ```
 
 **Collections**
@@ -322,7 +322,7 @@ Currently imports can't yet be aliased, so the import will just have the same na
 Imports use a compiler directve (a hash keyword with a string afterwards)
 ```beanstalk
 -- Import another file in the same module
-#import "path/to/file"
+import @path/to/file
 ```
 
 **Entry files and implicit main functions:**
@@ -334,7 +334,7 @@ Imports use a compiler directve (a hash keyword with a string afterwards)
 **File execution semantics:**
 ```beanstalk
 -- main.bst (entry file)
-#import "utils/helper"
+import @utils/helper
 
 -- This executes automatically when the module starts
 io("Starting main")

@@ -408,7 +408,7 @@ fn validate_mutable_borrow_consistency(
     // might be suboptimal (we could have moved instead), but it's not incorrect
     // The decision to keep as mutable borrow is always safe, just potentially less optimal
 
-    !is_last_use || true // Always allow mutable borrow as it's the conservative choice
+    true // Always allow mutable borrow as it's the conservative choice
 }
 
 #[cfg(test)]

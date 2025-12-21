@@ -1,6 +1,6 @@
-#import(@libs/html/basic)
-#import(@styles/Docs)
-#import(@./components)
+import @libs/html/Basic
+import @styles/Docs
+import @./components
 [Basic.page:
 
 [Docs.Navbar]
@@ -52,40 +52,6 @@ Beanstalk files can still import additional HTML, CSS, JS or Beanstalk files to 
 
     ]
 ```
-
-## Imports
-Markthrough files can import other HTML, Markthrough, CSS, Wasm, JS or Beanstalk files.
-This gives them access to custom styles, components or runtime scripts.
-
-The syntax for this is:
-```beanstalk
-    [#import(@html/basic)]
-```
-
-By creating a new child template and defining an import inside the template head, 
-the whole file gets access to everything that is exported from that file.
-
-In this example, 
-we are importing a basic HTML styles file that will give us access to styles we can use in the head of templates.
-
-We can then use those styles anywhere in our file, namespaced to the name of the file. 
-Styles use PascalCase by convention.
-
-You can also use functions that return styles inside of the template head.
-
-```beanstalk
-    [#import(@html/basic)]
-
-    Here is a normal paragraph. 
-    [Basic.Red: And now this is some red text inside this paragraph.]
-
-    Here is an example of using a function that returns a style.
-    This function runs at compiletime and will return the correct table style depending on the argument you give it.
-    [Basic.table(3):
-        [: Column 1] [: Column 2] [: Column 3]
-    ]
-```
-
 
 # HTML Basic library
 

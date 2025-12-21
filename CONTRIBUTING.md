@@ -2,12 +2,16 @@
 This project is at a very early stage.
 
 If you are interested in compilers/programming languages or the goals of this language 
-or want to contribute soon, please get in touch or open a discussion on GitHub.
+and want to contribute or make suggestions, please get in touch or open a discussion on GitHub.
 
-Any suggestions or questions about the future / design of this language are welcome. 
-If you think you can help out or are interested in implementing fresh, ambitious codegen, build system or borrow checker strategies, then get involved!
+Any suggestions or questions about the future / design of this language are welcome.
 
 See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Development Guide.md` for more in depth details.
+
+## Best starting points for contribution
+- Discussion and review of the technical design is welcome, a lot of the ideas are unusual for compilers so figuring out what might create roadblocks is important
+- Backend is in active development, so review of the lifetime inference / borrow checker and IR code would be very helpful
+- Build system for embedded Rust projects and other build system tooling needs work as a priority
 
 ## Commands:
 The two basic commands for running and building files are "run" and "build".

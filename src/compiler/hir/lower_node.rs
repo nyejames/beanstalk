@@ -400,19 +400,6 @@ impl<'a> HirBuilder<'a> {
                 Ok(vec![])
             }
 
-            // === Code Blocks (JS/CSS) ===
-            NodeKind::JS(_code) => {
-                // JavaScript code blocks are handled by the build system
-                // They don't generate HIR nodes
-                Ok(vec![])
-            }
-
-            NodeKind::Css(_code) => {
-                // CSS code blocks are handled by the build system
-                // They don't generate HIR nodes
-                Ok(vec![])
-            }
-
             // === Formatting Nodes ===
             NodeKind::Empty => {
                 // Empty nodes don't generate HIR
