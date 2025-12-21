@@ -363,17 +363,14 @@ pub enum TokenKind {
     // Module Import/Export
     /// For Wasm files or host environment - importing from a different module or the host
     Import,
+    Export,
 
     /// For other Beanstalk files - indicates using public items from another file
     Use,
 
-    /// For exporting functions or variables outside the final module.
-    Export,
-
     // Special compiler directives
     /// The only way to manually force a panic in the compiler in release mode
     Panic,
-    // Wat(String),
     Ignore,
 
     /// Function Signatures
@@ -430,10 +427,6 @@ pub enum TokenKind {
     DatatypeTrue,
     DatatypeFalse,
     DatatypeString,
-
-    /// Not yet implemented,
-    /// Design of async and concurrency is still being considered
-    Async,
 
     /// For Errors
     Bang,

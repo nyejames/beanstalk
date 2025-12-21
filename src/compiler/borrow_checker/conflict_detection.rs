@@ -327,7 +327,8 @@ fn is_borrow_live_at_node(
 /// Report a borrow conflict error with precise location information
 ///
 /// This enhanced version uses corrected lifetime information to provide
-/// more accurate error locations and context.
+/// more accurate error locations and context, along with actionable suggestions
+/// for fixing the violations.
 fn report_borrow_conflict_with_precise_location(
     string_table: &mut crate::compiler::string_interning::StringTable,
     loan1: &Loan,
@@ -337,23 +338,63 @@ fn report_borrow_conflict_with_precise_location(
 ) -> Option<crate::compiler::compiler_messages::compiler_errors::CompilerError> {
     let error_location = location.clone().to_error_location(string_table);
 
-    // Create enhanced error with precise lifetime information
+    // Create enhanced error with precise lifetime information and actionable suggestions
     let mut metadata = std::collections::HashMap::new();
     metadata.insert(
         crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
         "Borrow Checking - Conflict Detection",
     );
 
-    // Add lifetime information to error context
-    let lifetime_context = format!(
-        "Borrow {} created at node {}, Borrow {} created at node {}, conflict at node {}",
-        loan1.id, loan1.creation_point, loan2.id, loan2.creation_point, node_id
-    );
-    metadata.insert(
-        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-        &lifetime_context,
+    // Add detailed context about the conflicting borrows
+    let conflict_context = format!(
+        "Borrow {} ({:?}) created at node {} conflicts with borrow {} ({:?}) created at node {} at conflict point node {}",
+        loan1.id, loan1.kind, loan1.creation_point, 
+        loan2.id, loan2.kind, loan2.creation_point, 
+        node_id
     );
 
+    // Generate specific actionable suggestions based on borrow kinds
+    let suggestion = match (loan1.kind, loan2.kind) {
+        (BorrowKind::Mutable, BorrowKind::Mutable) | 
+        (BorrowKind::CandidateMove, BorrowKind::CandidateMove) |
+        (BorrowKind::Mutable, BorrowKind::CandidateMove) |
+        (BorrowKind::CandidateMove, BorrowKind::Mutable) => {
+            format!(
+                "Only one mutable borrow of '{}' is allowed at a time. Consider: 1) Using the borrows sequentially instead of simultaneously, 2) Restructuring code to avoid overlapping mutable access, 3) Using immutable borrows where possible",
+                loan1.place.display_with_table(string_table)
+            )
+        },
+        (BorrowKind::Shared, BorrowKind::Mutable) |
+        (BorrowKind::Mutable, BorrowKind::Shared) |
+        (BorrowKind::Shared, BorrowKind::CandidateMove) |
+        (BorrowKind::CandidateMove, BorrowKind::Shared) => {
+            format!(
+                "Cannot have mutable and immutable borrows of '{}' at the same time. Consider: 1) Finishing the immutable borrow before creating the mutable one, 2) Using only immutable borrows if mutation isn't needed, 3) Restructuring to avoid overlapping access patterns",
+                loan1.place.display_with_table(string_table)
+            )
+        },
+        (BorrowKind::Move, _) | (_, BorrowKind::Move) => {
+            let moved_loan = if loan1.kind == BorrowKind::Move { loan1 } else { loan2 };
+            let other_loan = if loan1.kind == BorrowKind::Move { loan2 } else { loan1 };
+            format!(
+                "Cannot use '{}' after it has been moved. Consider: 1) Using the value before moving it, 2) Borrowing instead of moving if you need to use it later, 3) Cloning the value if you need multiple copies",
+                moved_loan.place.display_with_table(string_table)
+            )
+        },
+        (BorrowKind::Shared, BorrowKind::Shared) => {
+            // This should not happen as shared borrows don't conflict
+            "Multiple immutable borrows should be allowed - this may be a compiler bug".to_string()
+        },
+    };
+
+    metadata.insert(
+        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+        "Resolve borrow conflicts by ensuring exclusive access or using different variables",
+    );
+
+    // Add additional context metadata
+    let place_display = loan1.place.display_with_table(string_table);
+    
     match (loan1.kind, loan2.kind) {
         (BorrowKind::Mutable, BorrowKind::Mutable) => Some(create_multiple_mutable_borrows_error!(
             loan2.place,
@@ -416,7 +457,11 @@ fn report_borrow_conflict_with_precise_location(
         // Shared borrows don't conflict with each other
         (BorrowKind::Shared, BorrowKind::Shared) => {
             // This should not happen as shared borrows don't conflict
-            None
+            // Create a compiler error to investigate
+            Some(crate::create_borrow_checker_error!(
+                format!("Unexpected shared-shared borrow conflict for place '{}' - this may be a compiler bug", place_display),
+                error_location
+            ))
         }
     }
 }
@@ -501,7 +546,8 @@ fn report_borrow_conflict(
 ///
 /// This function detects attempts to use a value after it has been moved.
 /// It uses path-sensitive analysis to only report violations that occur on
-/// all possible execution paths.
+/// all possible execution paths, and provides detailed error messages with
+/// actionable suggestions for fixing the violations.
 pub fn check_use_after_move(checker: &mut BorrowChecker, hir_nodes: &[HirNode]) {
     // Checking for use-after-move violations
     let mut errors = Vec::new();
@@ -527,12 +573,29 @@ pub fn check_use_after_move(checker: &mut BorrowChecker, hir_nodes: &[HirNode]) 
                                     .clone()
                                     .to_error_location(checker.string_table);
 
-                                let error = create_use_after_move_error!(
+                                // Create detailed error with actionable suggestions
+                                let place_display = other_loan.place.display_with_table(checker.string_table);
+                                let move_location_info = format!("moved at node {}", loan.creation_point);
+                                let use_location_info = format!("used at node {}", other_loan.creation_point);
+
+                                let suggestion = format!(
+                                    "Value '{}' was {} but then {}. Consider: 1) Using the value before moving it, 2) Borrowing instead of moving if you need to use it later, 3) Cloning the value if you need multiple copies",
+                                    place_display, move_location_info, use_location_info
+                                );
+
+                                let mut enhanced_error = create_use_after_move_error!(
                                     other_loan.place,
                                     error_location.clone(),
                                     error_location
                                 );
-                                errors.push(error);
+
+                                // Add enhanced metadata with actionable suggestions
+                                enhanced_error.metadata.insert(
+                                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                                    "Use value before moving or borrow instead of moving",
+                                );
+
+                                errors.push(enhanced_error);
                             }
                         }
                     }
@@ -600,7 +663,8 @@ fn use_after_move_on_all_paths(
 /// Check for whole-object borrowing violations with precise lifetime information
 ///
 /// This enhanced version uses corrected lifetime information to provide more
-/// accurate detection of whole-object borrowing violations.
+/// accurate detection of whole-object borrowing violations and includes
+/// detailed error messages with actionable suggestions.
 fn check_whole_object_borrowing_violations_with_lifetime_info(
     checker: &mut BorrowChecker,
     borrow_state: &crate::compiler::borrow_checker::types::BorrowState,
@@ -628,11 +692,19 @@ fn check_whole_object_borrowing_violations_with_lifetime_info(
                 continue; // No prefix relationship
             };
 
-            // Report error with enhanced context including lifetime information
+            // Report error with enhanced context including lifetime information and actionable suggestions
             let error_location = node
                 .location
                 .clone()
                 .to_error_location(checker.string_table);
+
+            let whole_place_display = whole_loan.place.display_with_table(checker.string_table);
+            let part_place_display = part_loan.place.display_with_table(checker.string_table);
+
+            let suggestion = format!(
+                "Cannot borrow whole object '{}' when part '{}' is already borrowed. This is a design constraint in Beanstalk to keep lifetime reasoning simple. Consider: 1) Finishing the part borrow before borrowing the whole object, 2) Only borrowing the specific parts you need, 3) Restructuring code to avoid overlapping whole/part borrows",
+                whole_place_display, part_place_display
+            );
 
             let mut metadata = std::collections::HashMap::new();
             metadata.insert(
@@ -642,13 +714,13 @@ fn check_whole_object_borrowing_violations_with_lifetime_info(
 
             metadata.insert(
                 crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                "Cannot borrow whole object when part is already borrowed"
+                "Cannot borrow whole object when part is already borrowed - design constraint for simple lifetime reasoning"
             );
 
             let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
                 msg: format!(
-                    "Cannot borrow whole object {:?} when part {:?} is already borrowed",
-                    whole_loan.place, part_loan.place
+                    "Cannot borrow whole object '{}' when part '{}' is already borrowed (design constraint)",
+                    whole_place_display, part_place_display
                 ),
                 location: error_location,
                 error_type:
@@ -706,7 +778,8 @@ fn check_whole_object_borrowing_violations(
 ///
 /// This function detects attempts to move a value while it is still borrowed.
 /// It uses path-sensitive analysis to only report violations that occur on
-/// all possible execution paths.
+/// all possible execution paths, and provides detailed error messages with
+/// actionable suggestions for fixing the violations.
 pub fn check_move_while_borrowed(checker: &mut BorrowChecker, hir_nodes: &[HirNode]) {
     // Checking for move-while-borrowed violations
     let mut errors = Vec::new();
@@ -739,13 +812,37 @@ pub fn check_move_while_borrowed(checker: &mut BorrowChecker, hir_nodes: &[HirNo
                                     .clone()
                                     .to_error_location(checker.string_table);
 
-                                let error = create_move_while_borrowed_error!(
+                                // Create detailed error with actionable suggestions
+                                let place_display = loan.place.display_with_table(checker.string_table);
+                                let borrow_kind_display = match other_loan.kind {
+                                    BorrowKind::Shared => "immutable",
+                                    BorrowKind::Mutable => "mutable",
+                                    BorrowKind::CandidateMove => "mutable",
+                                    BorrowKind::Move => "move",
+                                };
+                                
+                                let borrow_location_info = format!("borrowed as {} at node {}", borrow_kind_display, other_loan.creation_point);
+                                let move_location_info = format!("moved at node {}", loan.creation_point);
+
+                                let suggestion = format!(
+                                    "Cannot move '{}' while it is still borrowed. The value was {} but then {}. Consider: 1) Finishing the borrow before moving, 2) Restructuring code to avoid overlapping borrows and moves, 3) Using the borrowed value instead of moving",
+                                    place_display, borrow_location_info, move_location_info
+                                );
+
+                                let mut enhanced_error = create_move_while_borrowed_error!(
                                     loan.place,
                                     other_loan.kind,
                                     error_location.clone(),
                                     error_location
                                 );
-                                errors.push(error);
+
+                                // Add enhanced metadata with actionable suggestions
+                                enhanced_error.metadata.insert(
+                                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                                    "Finish borrow before moving or restructure to avoid overlapping access",
+                                );
+
+                                errors.push(enhanced_error);
                             }
                         }
                     }

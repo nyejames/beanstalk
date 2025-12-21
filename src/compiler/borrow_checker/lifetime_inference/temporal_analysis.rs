@@ -97,6 +97,18 @@ pub(crate) struct DominanceInfo {
 }
 
 impl DominanceInfo {
+    /// Create a new empty DominanceInfo
+    pub(crate) fn new() -> Self {
+        Self {
+            dominators: HashMap::new(),
+            immediate_dominators: HashMap::new(),
+            reachability: HashMap::new(),
+            post_dominators: HashMap::new(),
+            entry_points: Vec::new(),
+            exit_points: Vec::new(),
+        }
+    }
+
     /// Check if node A dominates node B
     ///
     /// A dominates B if every path from the entry to B must pass through A.

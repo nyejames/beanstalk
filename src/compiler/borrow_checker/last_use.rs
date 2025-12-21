@@ -1136,6 +1136,7 @@ fn collect_expression_places(expr: &crate::compiler::hir::nodes::HirExpr) -> Vec
         | HirExprKind::Float(_)
         | HirExprKind::Bool(_)
         | HirExprKind::StringLiteral(_)
+        | HirExprKind::HeapString(_)
         | HirExprKind::Char(_) => {}
     }
 

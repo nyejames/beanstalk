@@ -111,6 +111,7 @@ mod compiler {
         pub(crate) mod cfg;
         pub(crate) mod checker;
         pub(crate) mod conflict_detection;
+        pub(crate) mod drop_insertion;
         pub(crate) mod last_use;
         pub(crate) mod lifetime_inference;
         pub(crate) mod structured_control_flow;

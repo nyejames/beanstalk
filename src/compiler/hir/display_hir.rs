@@ -586,6 +586,7 @@ impl HirExprKind {
             HirExprKind::Float(value) => value.to_string(),
             HirExprKind::Bool(value) => value.to_string(),
             HirExprKind::StringLiteral(value) => format!("\"{}\"", string_table.resolve(*value)),
+            HirExprKind::HeapString(value) => format!("heap_string(\"{}\")", string_table.resolve(*value)),
             HirExprKind::Char(value) => format!("'{}'", value),
 
             HirExprKind::Load(place) => format!("Load({})", place.display_with_table(string_table)),
@@ -673,6 +674,7 @@ impl Display for HirExprKind {
             HirExprKind::Float(value) => write!(f, "{}", value),
             HirExprKind::Bool(value) => write!(f, "{}", value),
             HirExprKind::StringLiteral(value) => write!(f, "\"{}\"", value),
+            HirExprKind::HeapString(value) => write!(f, "heap_string(\"{}\")", value),
             HirExprKind::Char(value) => write!(f, "'{}'", value),
 
             HirExprKind::Load(place) => write!(f, "Load({})", place),

@@ -125,6 +125,18 @@ pub(crate) struct ParameterLifetimeInfo {
     pub(crate) total_parameter_borrows: usize,
 }
 
+impl ParameterLifetimeInfo {
+    /// Create a new empty ParameterLifetimeInfo
+    pub(crate) fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+            all_parameter_borrows: HashMap::new(),
+            total_functions_analyzed: 0,
+            total_parameter_borrows: 0,
+        }
+    }
+}
+
 /// Parameter lifetime analysis engine
 ///
 /// Implements simplified parameter lifetime analysis that focuses on

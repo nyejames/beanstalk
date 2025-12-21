@@ -174,7 +174,8 @@ pub enum HirExprKind {
     Int(i64),
     Float(f64),
     Bool(bool),
-    StringLiteral(InternedString), // Includes compile-time folded templates
+    StringLiteral(InternedString), // Includes compile-time folded templates (stack-allocated)
+    HeapString(InternedString), // Runtime template strings (heap-allocated)
     Char(char),
 
     // === Place Operations ===

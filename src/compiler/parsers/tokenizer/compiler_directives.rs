@@ -22,12 +22,7 @@ pub fn compiler_directive(
         }
 
         match token_value.as_str() {
-            // For exporting functions or constants out of the final Wasm module
-            "export" => return_token!(TokenKind::Export, stream),
-
             "panic" => return_token!(TokenKind::Panic, stream),
-
-            "async" => return_token!(TokenKind::Async, stream),
 
             // External language blocks
             // PROBABLY WONT DO THIS

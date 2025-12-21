@@ -98,6 +98,20 @@ pub(crate) struct DataflowResult {
     pub(crate) performance_metrics: PerformanceMetrics,
 }
 
+impl DataflowResult {
+    /// Create a new empty DataflowResult
+    pub(crate) fn new() -> Self {
+        Self {
+            iterations: 0,
+            converged: false,
+            nodes_processed: 0,
+            max_worklist_size: 0,
+            analysis_time: Duration::ZERO,
+            performance_metrics: PerformanceMetrics::new(),
+        }
+    }
+}
+
 /// Performance metrics for validating linear time complexity
 #[derive(Debug, Clone)]
 pub(crate) struct PerformanceMetrics {
@@ -128,6 +142,23 @@ pub(crate) struct PerformanceMetrics {
 
     /// Total time spent in analysis
     pub(crate) analysis_time: Duration,
+}
+
+impl PerformanceMetrics {
+    /// Create a new empty PerformanceMetrics
+    pub(crate) fn new() -> Self {
+        Self {
+            total_nodes: 0,
+            total_edges: 0,
+            total_borrows: 0,
+            avg_live_set_size: 0.0,
+            max_live_set_size: 0,
+            time_per_node: Duration::ZERO,
+            time_per_borrow: Duration::ZERO,
+            complexity_factor: 0.0,
+            analysis_time: Duration::ZERO,
+        }
+    }
 }
 
 /// Fixpoint dataflow analysis engine for borrow propagation

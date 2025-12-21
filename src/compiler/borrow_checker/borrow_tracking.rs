@@ -32,6 +32,23 @@ use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind, Loan};
 use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirNode, HirNodeId};
 
+/// Check if a place contains a heap-allocated string
+/// 
+/// This is used to determine if special ownership handling is needed for
+/// function parameter passing and assignment operations.
+fn is_heap_string_place(place: &crate::compiler::hir::place::Place, checker: &BorrowChecker) -> bool {
+    // For now, use a simple heuristic based on place name
+    // In the future, this should use proper type information
+    match &place.root {
+        crate::compiler::hir::place::PlaceRoot::Local(name) => {
+            let name_str = checker.string_table.resolve(*name);
+            // Check if this looks like a heap string variable
+            name_str.contains("template") || name_str.contains("heap") || name_str.starts_with("_temp_")
+        }
+        _ => false,
+    }
+}
+
 /// Track borrows across the control flow graph
 ///
 /// This function performs the main borrow tracking analysis, creating borrows
@@ -60,7 +77,15 @@ fn process_node_for_borrows(
     match &node.kind {
         HirKind::Assign { place: _, value } => {
             // Create borrows based on the value expression
+            // For heap strings, this represents the creation or transfer of ownership
             process_expression_for_borrows(checker, value, node.id)?;
+            
+            // Special handling for heap string assignments
+            if let HirExprKind::HeapString(_) = &value.kind {
+                // This is the creation of a new heap-allocated string
+                // No additional borrow tracking needed here since this is the creation point
+                // The place will be tracked for Drop insertion later
+            }
         }
 
         HirKind::Borrow {
@@ -84,9 +109,20 @@ fn process_node_for_borrows(
 
         HirKind::Call { args, .. } | HirKind::HostCall { args, .. } => {
             // Create borrows for function arguments
+            // For heap strings, this represents ownership transfer validation
             for arg_place in args {
                 let borrow_id = checker.next_borrow_id();
-                let loan = Loan::new(borrow_id, arg_place.clone(), BorrowKind::Shared, node.id);
+                
+                // Check if this argument is a heap-allocated string
+                let borrow_kind = if is_heap_string_place(arg_place, checker) {
+                    // Heap strings passed to functions need careful ownership analysis
+                    // This will be refined by candidate move analysis
+                    BorrowKind::Mutable
+                } else {
+                    BorrowKind::Shared
+                };
+                
+                let loan = Loan::new(borrow_id, arg_place.clone(), borrow_kind, node.id);
 
                 if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
                     cfg_node.borrow_state.add_borrow(loan);
@@ -353,12 +389,19 @@ fn process_expression_for_borrows(
             }
         }
 
-        // Literal expressions don't create borrows
+        // Literal expressions don't create borrows, except heap strings
         HirExprKind::Int(_)
         | HirExprKind::Float(_)
         | HirExprKind::Bool(_)
         | HirExprKind::StringLiteral(_)
         | HirExprKind::Char(_) => {}
+
+        HirExprKind::HeapString(_) => {
+            // Heap-allocated strings are owned values that need tracking
+            // They are created by runtime templates and need proper ownership management
+            // No borrow is created here since this is the creation point
+            // The string will be assigned to a place and tracked from there
+        }
     }
 
     Ok(())

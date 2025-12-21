@@ -523,52 +523,394 @@ fn update_loan_kind(
 }
 
 /// Validate that moves don't conflict with active borrows
+///
+/// This function enforces correctness by validating that all move decisions are sound
+/// and don't violate borrow checker invariants. It serves as a critical correctness
+/// enforcement point that prevents incorrect move refinements from proceeding.
+///
+/// ## Correctness Enforcement
+///
+/// This function MUST prevent moves that would violate memory safety by:
+/// 1. Detecting moves that occur while conflicting borrows are active
+/// 2. Ensuring all candidate moves have been properly refined
+/// 3. Validating temporal consistency of move decisions
+/// 4. Preventing phase-order hazards in borrow checking
+///
+/// ## Debug Assertions and Validation
+///
+/// The function includes debug assertions and validation checks that will panic
+/// in debug builds if correctness violations are detected, helping catch bugs
+/// during compiler development.
 pub fn validate_move_decisions(
     checker: &BorrowChecker,
     refinement: &CandidateMoveRefinement,
 ) -> Result<(), CompilerMessages> {
+    let mut errors = Vec::new();
+    let mut validation_failures = 0;
+
+    // Validate each move decision for correctness
     for (node_id, decision) in &refinement.move_decisions {
         if let MoveDecision::Move(place) = decision {
-            validate_single_move_decision(checker, *node_id, place)?;
+            match validate_single_move_decision(checker, *node_id, place) {
+                Ok(()) => {
+                    // Move decision is valid
+                }
+                Err(mut move_errors) => {
+                    validation_failures += 1;
+                    errors.append(&mut move_errors.errors);
+                    
+                    // DEBUG ASSERTION: Move refined despite conflicting borrows
+                    // This indicates a serious bug in the move refinement logic
+                    debug_assert!(
+                        false,
+                        "CORRECTNESS VIOLATION: Move decision for place {:?} at node {} conflicts with active borrows. \
+                         This indicates a bug in move refinement that could lead to use-after-move or move-while-borrowed violations.",
+                        place, node_id
+                    );
+                    
+                    // In debug builds, provide detailed information about the violation
+                    #[cfg(debug_assertions)]
+                    {
+                        eprintln!("=== MOVE VALIDATION FAILURE ===");
+                        eprintln!("Place: {:?}", place);
+                        eprintln!("Node ID: {}", node_id);
+                        eprintln!("Conflicting borrows detected - this move should not have been refined");
+                        eprintln!("This is a compiler bug that must be fixed");
+                        eprintln!("===============================");
+                    }
+                }
+            }
         }
     }
 
-    validate_all_candidates_refined(checker)?;
-    Ok(())
+    // Validate that all candidate moves have been properly refined
+    match validate_all_candidates_refined(checker) {
+        Ok(()) => {
+            // All candidates properly refined
+        }
+        Err(mut refinement_errors) => {
+            validation_failures += 1;
+            errors.append(&mut refinement_errors.errors);
+            
+            // DEBUG ASSERTION: Unrefined candidate moves detected
+            // This indicates a phase-order hazard in borrow checking
+            debug_assert!(
+                false,
+                "CORRECTNESS VIOLATION: Found unrefined candidate moves. \
+                 This indicates a phase-order hazard that could lead to incorrect borrow checking."
+            );
+            
+            // In debug builds, provide detailed information about the hazard
+            #[cfg(debug_assertions)]
+            {
+                eprintln!("=== REFINEMENT VALIDATION FAILURE ===");
+                eprintln!("Found unrefined candidate moves in borrow checker state");
+                eprintln!("This indicates a phase-order hazard - all candidates should be refined");
+                eprintln!("This is a compiler bug that must be fixed");
+                eprintln!("====================================");
+            }
+        }
+    }
+
+    // Additional validation: Check temporal consistency
+    validate_temporal_consistency(checker, refinement, &mut errors)?;
+
+    // If we found validation failures, this is a serious correctness issue
+    if validation_failures > 0 {
+        // LOUD COMMENT: VALIDATION FUNCTION ENFORCEMENT
+        // This validation function has detected correctness violations that MUST be fixed.
+        // The move refinement logic has bugs that could lead to memory safety violations.
+        // These errors indicate compiler bugs, not user code issues.
+        
+        eprintln!("!!! BORROW CHECKER VALIDATION FAILURES DETECTED !!!");
+        eprintln!("Found {} validation failures in move refinement", validation_failures);
+        eprintln!("These indicate serious bugs in the compiler that must be addressed");
+        eprintln!("The validation function is enforcing correctness as designed");
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(CompilerMessages {
+            errors,
+            warnings: Vec::new(),
+        })
+    }
 }
 
 /// Validate a single move decision doesn't conflict with active borrows
+///
+/// This function performs detailed validation of individual move decisions to ensure
+/// they don't violate memory safety invariants. It checks for conflicting borrows
+/// and provides detailed error information when violations are detected.
 fn validate_single_move_decision(
     checker: &BorrowChecker,
     node_id: HirNodeId,
     place: &Place,
 ) -> Result<(), CompilerMessages> {
     let Some(cfg_node) = checker.cfg.nodes.get(&node_id) else {
-        return Ok(());
+        // Node doesn't exist in CFG - this is a compiler bug
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(
+            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+            "Borrow Checking - Move Validation",
+        );
+        metadata.insert(
+            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            "This is a compiler bug - move decision references non-existent CFG node",
+        );
+
+        let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+            msg: format!(
+                "Move validation error: CFG node {} does not exist for move decision of place {:?}",
+                node_id, place
+            ),
+            location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+            error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+            metadata,
+        };
+
+        return Err(CompilerMessages {
+            errors: vec![error],
+            warnings: Vec::new(),
+        });
     };
 
     let conflicting_borrows = cfg_node.borrow_state.borrows_for_overlapping_places(place);
 
+    // Filter out the move itself and other candidate moves (which should have been refined)
     let actual_conflicts: Vec<_> = conflicting_borrows
         .into_iter()
-        .filter(|loan| loan.creation_point != node_id && loan.kind != BorrowKind::CandidateMove)
+        .filter(|loan| {
+            loan.creation_point != node_id && 
+            loan.kind != BorrowKind::CandidateMove &&
+            loan.kind != BorrowKind::Move  // Don't conflict with other moves of the same place
+        })
         .collect();
 
     if !actual_conflicts.is_empty() {
-        // Conflict detection in other parts of the borrow checker will handle this
-        // This validation is primarily for debugging phase-order issues
+        let mut errors = Vec::new();
+        
+        // Create detailed error for each conflicting borrow
+        for conflicting_loan in actual_conflicts {
+            let mut metadata = std::collections::HashMap::new();
+            metadata.insert(
+                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                "Borrow Checking - Move Validation",
+            );
+            
+            let conflict_description = format!(
+                "Move of {:?} at node {} conflicts with {} borrow {} created at node {}",
+                place, node_id, 
+                match conflicting_loan.kind {
+                    BorrowKind::Shared => "shared",
+                    BorrowKind::Mutable => "mutable", 
+                    BorrowKind::CandidateMove => "candidate move",
+                    BorrowKind::Move => "move",
+                },
+                conflicting_loan.id, conflicting_loan.creation_point
+            );
+            
+            metadata.insert(
+                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                "Resolve move conflicts by ensuring exclusive access",
+            );
+
+            let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                msg: format!(
+                    "Invalid move decision: Cannot move {:?} while {} borrow is active",
+                    place,
+                    match conflicting_loan.kind {
+                        BorrowKind::Shared => "shared",
+                        BorrowKind::Mutable => "mutable",
+                        BorrowKind::CandidateMove => "candidate move", 
+                        BorrowKind::Move => "move",
+                    }
+                ),
+                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                metadata,
+            };
+            errors.push(error);
+        }
+
+        return Err(CompilerMessages {
+            errors,
+            warnings: Vec::new(),
+        });
     }
 
     Ok(())
 }
 
 /// Validate that all candidate moves have been refined
+///
+/// This function enforces the critical invariant that no CandidateMove borrows
+/// should remain in the borrow checker state after refinement. Any remaining
+/// candidate moves indicate a phase-order hazard that could lead to incorrect
+/// borrow checking results.
 fn validate_all_candidates_refined(checker: &BorrowChecker) -> Result<(), CompilerMessages> {
-    for cfg_node in checker.cfg.nodes.values() {
+    let mut unrefined_candidates = Vec::new();
+    let mut errors = Vec::new();
+
+    // Check all CFG nodes for remaining CandidateMove borrows
+    for (node_id, cfg_node) in &checker.cfg.nodes {
         for loan in cfg_node.borrow_state.active_borrows.values() {
             if loan.kind == BorrowKind::CandidateMove {
-                // Phase-order hazard detected - should be investigated
-                // In production, this would be a compiler error
+                unrefined_candidates.push((*node_id, loan.place.clone(), loan.id));
+                
+                // Create detailed error for each unrefined candidate
+                let mut metadata = std::collections::HashMap::new();
+                metadata.insert(
+                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking - Candidate Move Refinement",
+                );
+                metadata.insert(
+                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "This is a compiler bug - all candidate moves should be refined before validation",
+                );
+
+                let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                    msg: format!(
+                        "Phase-order hazard: Unrefined candidate move for place {:?} (borrow {}) at node {}",
+                        loan.place, loan.id, node_id
+                    ),
+                    location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                    error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                    metadata,
+                };
+                errors.push(error);
+            }
+        }
+    }
+
+    if !unrefined_candidates.is_empty() {
+        // LOUD COMMENT: CRITICAL PHASE-ORDER HAZARD DETECTED
+        // This is a serious compiler bug that indicates the move refinement phase
+        // failed to process all candidate moves. This could lead to incorrect
+        // borrow checking results and potential memory safety violations.
+        
+        eprintln!("!!! CRITICAL PHASE-ORDER HAZARD DETECTED !!!");
+        eprintln!("Found {} unrefined candidate moves:", unrefined_candidates.len());
+        for (node_id, place, borrow_id) in &unrefined_candidates {
+            eprintln!("  - Place {:?} (borrow {}) at node {}", place, borrow_id, node_id);
+        }
+        eprintln!("This indicates a serious bug in move refinement that must be fixed immediately");
+        eprintln!("Unrefined candidate moves can lead to incorrect borrow checking");
+
+        // DEBUG PANIC: In debug builds, this should cause a panic to catch the bug early
+        debug_assert!(
+            false,
+            "PHASE-ORDER HAZARD: Found {} unrefined candidate moves. \
+             This is a critical compiler bug that must be fixed. \
+             All candidate moves should be refined to either Move or Mutable before validation.",
+            unrefined_candidates.len()
+        );
+
+        return Err(CompilerMessages {
+            errors,
+            warnings: Vec::new(),
+        });
+    }
+
+    Ok(())
+}
+/// Validate temporal consistency of move decisions
+///
+/// This function ensures that move decisions are temporally consistent with the
+/// control flow graph and borrow lifetimes. It checks that moves don't occur
+/// before their corresponding borrows are created and that the temporal ordering
+/// makes sense within the CFG structure.
+fn validate_temporal_consistency(
+    checker: &BorrowChecker,
+    refinement: &CandidateMoveRefinement,
+    errors: &mut Vec<crate::compiler::compiler_messages::compiler_errors::CompilerError>,
+) -> Result<(), CompilerMessages> {
+    for (node_id, decision) in &refinement.move_decisions {
+        if let MoveDecision::Move(place) = decision {
+            // Find the corresponding loan in the borrow state
+            if let Some(cfg_node) = checker.cfg.nodes.get(node_id) {
+                let move_loan = cfg_node.borrow_state.active_borrows.values()
+                    .find(|loan| loan.place == *place && loan.creation_point == *node_id);
+
+                if let Some(loan) = move_loan {
+                    // Check temporal consistency: creation should not be after the move point
+                    if loan.creation_point > *node_id {
+                        let mut metadata = std::collections::HashMap::new();
+                        metadata.insert(
+                            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                            "Borrow Checking - Temporal Validation",
+                        );
+                        metadata.insert(
+                            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                            "This is a compiler bug - move cannot occur before borrow creation",
+                        );
+
+                        let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                            msg: format!(
+                                "Temporal inconsistency: Move of {:?} at node {} occurs before borrow creation at node {}",
+                                place, node_id, loan.creation_point
+                            ),
+                            location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                            error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                            metadata,
+                        };
+                        errors.push(error);
+                    }
+
+                    // Check for conflicting active borrows that should prevent this move
+                    let overlapping_borrows: Vec<_> = cfg_node.borrow_state.active_borrows.values()
+                        .filter(|other_loan| {
+                            other_loan.id != loan.id &&
+                            other_loan.place.overlaps_with(place) &&
+                            other_loan.creation_point < *node_id &&
+                            matches!(other_loan.kind, BorrowKind::Shared | BorrowKind::Mutable)
+                        })
+                        .collect();
+
+                    if !overlapping_borrows.is_empty() {
+                        for conflicting_loan in overlapping_borrows {
+                            let mut metadata = std::collections::HashMap::new();
+                            metadata.insert(
+                                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                                "Borrow Checking - Temporal Validation",
+                            );
+                            
+                            let conflict_description = format!(
+                                "Move conflicts with {} borrow {} of overlapping place {:?} created at node {}",
+                                match conflicting_loan.kind {
+                                    BorrowKind::Shared => "shared",
+                                    BorrowKind::Mutable => "mutable",
+                                    _ => "unknown",
+                                },
+                                conflicting_loan.id,
+                                conflicting_loan.place,
+                                conflicting_loan.creation_point
+                            );
+                            
+                            metadata.insert(
+                                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                                "Resolve temporal conflicts by ensuring proper ordering",
+                            );
+
+                            let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                                msg: format!(
+                                    "Temporal conflict: Move of {:?} at node {} conflicts with active {} borrow",
+                                    place, node_id,
+                                    match conflicting_loan.kind {
+                                        BorrowKind::Shared => "shared",
+                                        BorrowKind::Mutable => "mutable",
+                                        _ => "unknown",
+                                    }
+                                ),
+                                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                                metadata,
+                            };
+                            errors.push(error);
+                        }
+                    }
+                }
             }
         }
     }

@@ -11,6 +11,7 @@ use crate::compiler::borrow_checker::conflict_detection::{
     analyze_control_flow_divergence, check_move_while_borrowed, check_use_after_move,
     detect_conflicts, merge_control_flow_states, propagate_borrow_states,
 };
+use crate::compiler::borrow_checker::drop_insertion::insert_drop_nodes;
 use crate::compiler::borrow_checker::last_use::{analyze_last_uses, apply_last_use_analysis};
 use crate::compiler::borrow_checker::lifetime_inference::{
     apply_lifetime_inference, infer_lifetimes,
@@ -42,7 +43,7 @@ pub fn check_borrows(
     // to handle the full module structure.
 
     // Extract HIR nodes from the module
-    let hir_nodes = &hir.functions;
+    let hir_nodes = &mut hir.functions;
 
     if hir_nodes.is_empty() {
         // No HIR nodes to analyze
@@ -70,11 +71,15 @@ pub fn check_borrows(
 }
 
 /// Perform the core borrow checking analysis
+///
+/// This function implements comprehensive error reporting by collecting multiple errors
+/// in a single analysis pass and providing detailed error messages with actionable
+/// suggestions for fixing violations.
 fn perform_borrow_analysis(
-    hir_nodes: &[HirNode],
+    hir_nodes: &mut Vec<HirNode>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    // Create borrow checker instance
+    // Create borrow checker instance with comprehensive error collection
     let mut checker = BorrowChecker::new(string_table);
 
     // Phase 1: Construct Control Flow Graph
@@ -84,7 +89,11 @@ fn perform_borrow_analysis(
 
     // Phase 2: Track borrows across the CFG
     // Tracking borrows across CFG
-    track_borrows(&mut checker, hir_nodes)?;
+    if let Err(mut messages) = track_borrows(&mut checker, hir_nodes) {
+        // Collect borrow tracking errors but continue analysis to find more errors
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
 
     // Phase 3: Perform last-use analysis
     // Performing last-use analysis
@@ -96,30 +105,67 @@ fn perform_borrow_analysis(
 
     // Phase 4: Infer lifetimes for all borrows
     // Inferring lifetimes
-    let lifetime_inference = infer_lifetimes(&checker, hir_nodes)?;
+    let lifetime_inference = match infer_lifetimes(&checker, hir_nodes) {
+        Ok(inference) => inference,
+        Err(mut messages) => {
+            // Collect lifetime inference errors but continue with default inference
+            checker.errors.append(&mut messages.errors);
+            checker.warnings.append(&mut messages.warnings);
+            
+            // Create a default lifetime inference to allow continued analysis
+            crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult {
+                live_sets: crate::compiler::borrow_checker::lifetime_inference::borrow_live_sets::BorrowLiveSets::new(),
+                temporal_info: crate::compiler::borrow_checker::lifetime_inference::temporal_analysis::DominanceInfo::new(),
+                parameter_info: crate::compiler::borrow_checker::lifetime_inference::parameter_analysis::ParameterLifetimeInfo::new(),
+                dataflow_result: crate::compiler::borrow_checker::lifetime_inference::dataflow_engine::DataflowResult::new(),
+            }
+        }
+    };
     // Lifetime inference complete
 
     // Apply lifetime inference results to borrow checker
     // This updates CFG nodes with accurate live borrow information for conflict detection
-    apply_lifetime_inference(&mut checker, &lifetime_inference)?;
+    if let Err(mut messages) = apply_lifetime_inference(&mut checker, &lifetime_inference) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
 
     // Update borrow state with precise lifetime spans for accurate error reporting
-    update_borrow_state_with_lifetime_spans(&mut checker, &lifetime_inference)?;
+    if let Err(mut messages) = update_borrow_state_with_lifetime_spans(&mut checker, &lifetime_inference) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
 
     // Phase 5: Refine candidate moves using corrected lifetime inference
     // Refining candidate moves with corrected lifetime inference
-    let candidate_move_refinement = crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves_with_lifetime_inference(
+    let candidate_move_refinement = match crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves_with_lifetime_inference(
         &mut checker,
         hir_nodes,
         &lifetime_inference
-    )?;
+    ) {
+        Ok(refinement) => refinement,
+        Err(mut messages) => {
+            // Collect move refinement errors but continue with empty refinement
+            checker.errors.append(&mut messages.errors);
+            checker.warnings.append(&mut messages.warnings);
+            
+            // Create empty refinement to allow continued analysis
+            crate::compiler::borrow_checker::candidate_move_refinement::CandidateMoveRefinement::default()
+        }
+    };
     // Candidate move refinement complete with CFG-based temporal analysis
 
     // Validate that move decisions don't conflict with active borrows
-    validate_move_decisions(&checker, &candidate_move_refinement)?;
+    if let Err(mut messages) = validate_move_decisions(&checker, &candidate_move_refinement) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
 
     // Validate that all candidate moves have been properly refined
-    validate_complete_refinement(&checker)?;
+    if let Err(mut messages) = validate_complete_refinement(&checker) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
 
     // Phase 6: Perform Polonius-style control flow analysis
     // Performing Polonius-style control flow analysis
@@ -137,7 +183,10 @@ fn perform_borrow_analysis(
     // This provides additional structured control flow analysis on top of the
     // existing Polonius-style analysis
     // Handling structured control flow
-    handle_structured_control_flow(&checker, hir_nodes)?;
+    if let Err(mut messages) = handle_structured_control_flow(&checker, hir_nodes) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
     // Structured control flow handling complete
 
     // Phase 7: Detect borrow conflicts using Polonius-style analysis
@@ -152,7 +201,21 @@ fn perform_borrow_analysis(
     // Checking for move-while-borrowed violations
     check_move_while_borrowed(&mut checker, hir_nodes);
 
-    // Return results
+    // Phase 10: Insert Drop nodes based on last-use analysis and move decisions
+    // Inserting Drop nodes
+    if let Err(mut messages) = insert_drop_nodes(&checker, hir_nodes, &last_use_analysis) {
+        // Collect drop insertion errors
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
+    // Drop insertion complete
+
+    // Generate comprehensive error summary if errors were found
+    if !checker.errors.is_empty() {
+        generate_error_summary(&mut checker);
+    }
+
+    // Return comprehensive results with all collected errors and warnings
     checker.finish()
 }
 
@@ -299,4 +362,113 @@ fn validate_complete_refinement(checker: &BorrowChecker) -> Result<(), CompilerM
     }
 
     Ok(())
+}
+/// Generate a comprehensive error summary for multiple borrow checker violations
+///
+/// This function creates a summary error that provides an overview of all detected
+/// violations and actionable suggestions for fixing them. It helps users understand
+/// the overall pattern of errors and prioritize fixes.
+fn generate_error_summary(checker: &mut BorrowChecker) {
+    let total_errors = checker.errors.len();
+    
+    if total_errors == 0 {
+        return;
+    }
+
+    // Categorize errors by type for better reporting
+    let mut conflict_errors = 0;
+    let mut use_after_move_errors = 0;
+    let mut move_while_borrowed_errors = 0;
+    let mut validation_errors = 0;
+    let mut other_errors = 0;
+
+    for error in &checker.errors {
+        match error.error_type {
+            crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker => {
+                if error.msg.contains("conflict") || error.msg.contains("multiple") {
+                    conflict_errors += 1;
+                } else if error.msg.contains("use after move") || error.msg.contains("moved") {
+                    use_after_move_errors += 1;
+                } else if error.msg.contains("move while borrowed") {
+                    move_while_borrowed_errors += 1;
+                } else {
+                    other_errors += 1;
+                }
+            }
+            crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler => {
+                validation_errors += 1;
+            }
+            _ => {
+                other_errors += 1;
+            }
+        }
+    }
+
+    // Create comprehensive summary with actionable suggestions
+    let mut summary_msg = format!(
+        "Borrow checker found {} memory safety violation{}",
+        total_errors,
+        if total_errors == 1 { "" } else { "s" }
+    );
+
+    let mut suggestions = Vec::new();
+
+    if conflict_errors > 0 {
+        summary_msg.push_str(&format!("\n  - {} borrow conflict{}", conflict_errors, if conflict_errors == 1 { "" } else { "s" }));
+        suggestions.push("Consider using borrows sequentially rather than simultaneously");
+        suggestions.push("Ensure mutable and immutable borrows don't overlap in time");
+    }
+
+    if use_after_move_errors > 0 {
+        summary_msg.push_str(&format!("\n  - {} use-after-move violation{}", use_after_move_errors, if use_after_move_errors == 1 { "" } else { "s" }));
+        suggestions.push("Avoid using values after they have been moved");
+        suggestions.push("Consider borrowing instead of moving if you need to use the value later");
+    }
+
+    if move_while_borrowed_errors > 0 {
+        summary_msg.push_str(&format!("\n  - {} move-while-borrowed violation{}", move_while_borrowed_errors, if move_while_borrowed_errors == 1 { "" } else { "s" }));
+        suggestions.push("Ensure all borrows are finished before moving values");
+        suggestions.push("Consider restructuring code to avoid overlapping borrows and moves");
+    }
+
+    if validation_errors > 0 {
+        summary_msg.push_str(&format!("\n  - {} compiler validation error{}", validation_errors, if validation_errors == 1 { "" } else { "s" }));
+        suggestions.push("These indicate compiler bugs - please report them");
+    }
+
+    if other_errors > 0 {
+        summary_msg.push_str(&format!("\n  - {} other error{}", other_errors, if other_errors == 1 { "" } else { "s" }));
+    }
+
+    // Add actionable suggestions
+    if !suggestions.is_empty() {
+        summary_msg.push_str("\n\nSuggestions for fixing these issues:");
+        for (i, suggestion) in suggestions.iter().enumerate() {
+            summary_msg.push_str(&format!("\n  {}. {}", i + 1, suggestion));
+        }
+    }
+
+    // Add general guidance
+    summary_msg.push_str("\n\nFor more information about Beanstalk's memory management, see the language documentation.");
+
+    // Create summary error with comprehensive metadata
+    let mut metadata = std::collections::HashMap::new();
+    metadata.insert(
+        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+        "Borrow Checking - Summary",
+    );
+    metadata.insert(
+        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+        "Fix the individual errors listed above to resolve all memory safety violations",
+    );
+
+    let summary_error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+        msg: summary_msg,
+        location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+        error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+        metadata,
+    };
+
+    // Add summary as the first error for better visibility
+    checker.errors.insert(0, summary_error);
 }

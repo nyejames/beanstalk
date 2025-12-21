@@ -266,20 +266,42 @@ impl<'a> HirBuilder<'a> {
             }
 
             // === Template Expressions ===
-            ExpressionKind::Template(_template) => {
-                // Templates become runtime template calls or string literals
-                // For now, we'll treat them as string literals since template processing
-                // is typically done at compile time
+            ExpressionKind::Template(template) => {
+                // Templates can be either compile-time folded or runtime functions
                 let temp = self.next_temp();
                 let temp_place = Place::local(temp);
 
-                // Create a placeholder string literal for the template
-                let template_string = self.string_table.intern("template_placeholder");
-                let template_expr = HirExpr {
-                    kind: HirExprKind::StringLiteral(template_string),
-                    data_type: DataType::String,
-                    location: expr.location.clone(),
+                let template_expr = match template.kind {
+                    crate::compiler::parsers::statements::template::TemplateType::String => {
+                        // Compile-time folded template becomes a string literal
+                        let folded_string = template.fold(&None, self.string_table)
+                            .unwrap_or_else(|_| self.string_table.intern("template_error"));
+                        HirExpr {
+                            kind: HirExprKind::StringLiteral(folded_string),
+                            data_type: DataType::String,
+                            location: expr.location.clone(),
+                        }
+                    }
+                    crate::compiler::parsers::statements::template::TemplateType::StringFunction => {
+                        // Runtime template becomes a heap-allocated string
+                        let template_string = self.string_table.intern("runtime_template");
+                        HirExpr {
+                            kind: HirExprKind::HeapString(template_string),
+                            data_type: DataType::String,
+                            location: expr.location.clone(),
+                        }
+                    }
+                    _ => {
+                        // Other template types default to string literal for now
+                        let template_string = self.string_table.intern("template_placeholder");
+                        HirExpr {
+                            kind: HirExprKind::StringLiteral(template_string),
+                            data_type: DataType::String,
+                            location: expr.location.clone(),
+                        }
+                    }
                 };
+
                 let assign_node = self.create_assign_node_with_expr(
                     temp_place.clone(),
                     template_expr,
