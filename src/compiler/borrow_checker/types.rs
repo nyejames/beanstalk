@@ -1,7 +1,8 @@
-//! Core data structures for the borrow checker.
+//! Core data structures for the borrow checker
 //!
-//! Defines fundamental types including BorrowChecker, ControlFlowGraph,
-//! BorrowState, and Loan for borrow checking analysis.
+//! This module defines the fundamental types used throughout the borrow checking
+//! process, including the main BorrowChecker struct, control flow graph representation,
+//! borrow state tracking, and loan management.
 
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
@@ -10,8 +11,7 @@ use crate::compiler::hir::place::Place;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::string_interning::InternedString;
 use crate::compiler::string_interning::StringTable;
-use std::collections::{HashMap, HashSet, VecDeque};
-use indexmap::IndexMap;
+use std::collections::HashMap;
 
 /// Unique identifier for borrows
 pub type BorrowId = usize;
@@ -19,10 +19,11 @@ pub type BorrowId = usize;
 /// Unique identifier for CFG nodes (same as HIR node IDs)
 pub type CfgNodeId = HirNodeId;
 
-/// Main borrow checker state and context.
+/// The main borrow checker state and context
 ///
-/// Maintains all state needed for borrow checking analysis including CFG,
-/// active borrows, error collection, and string table for error reporting.
+/// This struct maintains all the state needed for borrow checking analysis,
+/// including the control flow graph, active borrows, error collection, and
+/// string table for error reporting.
 pub struct BorrowChecker<'a> {
     /// Control flow graph for the current function
     pub cfg: ControlFlowGraph,
@@ -44,30 +45,26 @@ pub struct BorrowChecker<'a> {
     pub function_signatures: HashMap<InternedString, FunctionSignature>,
 }
 
-/// Control Flow Graph for borrow analysis.
+/// Control Flow Graph representation for borrow analysis
 ///
-/// Provides graph-based view of program execution flow for path-sensitive
-/// borrow checking and lifetime analysis.
+/// The CFG provides a graph-based view of program execution flow, enabling
+/// path-sensitive borrow checking and lifetime analysis.
 #[derive(Debug, Clone)]
 pub struct ControlFlowGraph {
-    /// Mapping from HIR node IDs to CFG nodes (deterministic iteration)
-    pub nodes: IndexMap<HirNodeId, CfgNode>,
+    /// Mapping from HIR node IDs to CFG nodes
+    pub nodes: HashMap<HirNodeId, CfgNode>,
 
     /// Edges between CFG nodes (node_id -> list of successor node_ids)
-    /// Uses IndexMap for deterministic iteration during traversal
-    pub edges: IndexMap<HirNodeId, Vec<HirNodeId>>,
+    pub edges: HashMap<HirNodeId, Vec<HirNodeId>>,
 
     /// Entry points for functions (typically one per function)
     pub entry_points: Vec<HirNodeId>,
 
     /// Exit points for functions (return statements and implicit exits)
     pub exit_points: Vec<HirNodeId>,
-
-    /// Cached predecessor relationships for efficient reverse traversal
-    predecessors_cache: HashMap<HirNodeId, Vec<HirNodeId>>,
 }
 
-/// Single node in the control flow graph.
+/// A single node in the control flow graph
 ///
 /// Each CFG node corresponds to a HIR node and maintains borrow state
 /// information for analysis.
@@ -118,31 +115,27 @@ pub enum CfgNodeType {
     Join,
 }
 
-/// Borrow state tracking for a CFG node.
+/// Borrow state tracking for a single CFG node
 ///
-/// Tracks all active borrows at a particular point in the program for
-/// conflict detection and lifetime analysis.
+/// This tracks all active borrows at a particular point in the program,
+/// enabling conflict detection and lifetime analysis.
 #[derive(Debug, Clone, Default)]
 pub struct BorrowState {
-    /// All currently active borrows, indexed by borrow ID (deterministic iteration)
-    pub active_borrows: IndexMap<BorrowId, Loan>,
+    /// All currently active borrows, indexed by borrow ID
+    pub active_borrows: HashMap<BorrowId, Loan>,
 
     /// Mapping from places to the borrows that reference them
-    /// Uses IndexMap for deterministic iteration during conflict detection
-    pub place_to_borrows: IndexMap<Place, Vec<BorrowId>>,
+    pub place_to_borrows: HashMap<Place, Vec<BorrowId>>,
 
     /// Last use points for each place (for move analysis)
     #[allow(dead_code)]
     pub last_uses: HashMap<Place, HirNodeId>,
-
-    /// Cached overlapping places for efficient conflict detection
-    overlapping_places_cache: HashMap<Place, Vec<Place>>,
 }
 
-/// Tracked borrow with metadata.
+/// A tracked borrow with its metadata
 ///
-/// Represents active borrows with creation point, kind, target place,
-/// and active regions for lifetime analysis.
+/// Loans represent active borrows in the system, tracking their creation point,
+/// kind, target place, and active regions for lifetime analysis.
 #[derive(Debug, Clone)]
 pub struct Loan {
     /// Unique identifier for this borrow
@@ -180,7 +173,7 @@ pub enum BorrowKind {
 }
 
 impl<'a> BorrowChecker<'a> {
-    /// Create a new borrow checker instance.
+    /// Create a new borrow checker instance
     pub fn new(string_table: &'a mut StringTable) -> Self {
         Self {
             cfg: ControlFlowGraph::new(),
@@ -192,14 +185,14 @@ impl<'a> BorrowChecker<'a> {
         }
     }
 
-    /// Generate a new unique borrow ID.
+    /// Generate a new unique borrow ID
     pub fn next_borrow_id(&mut self) -> BorrowId {
         let id = self.next_borrow_id;
         self.next_borrow_id += 1;
         id
     }
 
-    /// Add an error to the error collection.
+    /// Add an error to the error collection
     pub fn add_error(&mut self, error: CompilerError) {
         self.errors.push(error);
     }
@@ -210,7 +203,7 @@ impl<'a> BorrowChecker<'a> {
         self.warnings.push(warning);
     }
 
-    /// Finish borrow checking and return results.
+    /// Finish borrow checking and return results
     pub fn finish(self) -> Result<(), CompilerMessages> {
         if self.errors.is_empty() {
             if self.warnings.is_empty() {
@@ -245,11 +238,10 @@ impl ControlFlowGraph {
     /// Create a new empty control flow graph
     pub fn new() -> Self {
         Self {
-            nodes: IndexMap::new(),
-            edges: IndexMap::new(),
+            nodes: HashMap::new(),
+            edges: HashMap::new(),
             entry_points: Vec::new(),
             exit_points: Vec::new(),
-            predecessors_cache: HashMap::new(),
         }
     }
 
@@ -277,9 +269,6 @@ impl ControlFlowGraph {
         if let Some(to_node) = self.nodes.get_mut(&to) {
             to_node.predecessors.push(from);
         }
-
-        // Update predecessors cache
-        self.predecessors_cache.entry(to).or_default().push(from);
     }
 
     /// Mark a node as an entry point
@@ -302,86 +291,10 @@ impl ControlFlowGraph {
 
     /// Get predecessors of a node
     pub fn predecessors(&self, node_id: HirNodeId) -> Vec<HirNodeId> {
-        self.predecessors_cache
-            .get(&node_id)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get predecessors as slice for efficient iteration
-    pub fn predecessors_slice(&self, node_id: HirNodeId) -> &[HirNodeId] {
-        self.predecessors_cache
-            .get(&node_id)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
-    }
-
-    /// Efficient worklist-based traversal
-    pub fn traverse_postorder<F>(&self, mut visit: F) 
-    where
-        F: FnMut(HirNodeId),
-    {
-        let mut visited = HashSet::new();
-        let mut stack = Vec::new();
-        let mut post_order = Vec::new();
-
-        // Start from all entry points
-        for &entry in &self.entry_points {
-            if !visited.contains(&entry) {
-                stack.push(entry);
-            }
-        }
-
-        // DFS to build post-order
-        while let Some(node_id) = stack.pop() {
-            if visited.contains(&node_id) {
-                continue;
-            }
-
-            visited.insert(node_id);
-            post_order.push(node_id);
-
-            // Add successors to stack
-            for &successor in self.successors(node_id) {
-                if !visited.contains(&successor) {
-                    stack.push(successor);
-                }
-            }
-        }
-
-        // Visit in post-order
-        for node_id in post_order.into_iter().rev() {
-            visit(node_id);
-        }
-    }
-
-    /// Efficient reverse post-order traversal for dataflow analysis
-    pub fn traverse_reverse_postorder<F>(&self, mut visit: F)
-    where
-        F: FnMut(HirNodeId),
-    {
-        let mut visited = HashSet::new();
-        let mut worklist = VecDeque::new();
-
-        // Start from exit points for backward analysis
-        for &exit in &self.exit_points {
-            worklist.push_back(exit);
-        }
-
-        while let Some(node_id) = worklist.pop_front() {
-            if visited.contains(&node_id) {
-                continue;
-            }
-
-            visited.insert(node_id);
-            visit(node_id);
-
-            // Add predecessors to worklist
-            for &pred in self.predecessors_slice(node_id) {
-                if !visited.contains(&pred) {
-                    worklist.push_back(pred);
-                }
-            }
+        if let Some(node) = self.nodes.get(&node_id) {
+            node.predecessors.clone()
+        } else {
+            Vec::new()
         }
     }
 }
@@ -415,22 +328,18 @@ impl BorrowState {
 
     /// Remove a borrow from this state
     pub fn remove_borrow(&mut self, borrow_id: BorrowId) {
-        if let Some(loan) = self.active_borrows.swap_remove(&borrow_id) {
+        if let Some(loan) = self.active_borrows.remove(&borrow_id) {
             // Remove from place mapping
             if let Some(borrow_list) = self.place_to_borrows.get_mut(&loan.place) {
                 borrow_list.retain(|&id| id != borrow_id);
                 if borrow_list.is_empty() {
-                    self.place_to_borrows.swap_remove(&loan.place);
+                    self.place_to_borrows.remove(&loan.place);
                 }
             }
-
-            // Invalidate overlapping places cache for this place
-            self.overlapping_places_cache.remove(&loan.place);
         }
     }
 
     /// Get all borrows for a specific place
-    /// **Optimization**: Direct slice access without allocation
     #[allow(dead_code)]
     pub fn borrows_for_place(&self, place: &Place) -> Vec<&Loan> {
         if let Some(borrow_ids) = self.place_to_borrows.get(place) {
@@ -446,107 +355,48 @@ impl BorrowState {
     /// Get all borrows for places that overlap with the given place
     pub fn borrows_for_overlapping_places(&self, place: &Place) -> Vec<&Loan> {
         let mut result = Vec::new();
-        
-        // Check cache first
-        if let Some(cached_places) = self.overlapping_places_cache.get(place) {
-            for existing_place in cached_places {
-                if let Some(borrow_ids) = self.place_to_borrows.get(existing_place) {
-                    for &borrow_id in borrow_ids {
-                        if let Some(loan) = self.active_borrows.get(&borrow_id) {
-                            result.push(loan);
-                        }
-                    }
-                }
-            }
-        } else {
-            // Cache miss - compute without updating cache (since this is immutable method)
-            for (existing_place, borrow_ids) in &self.place_to_borrows {
-                if place.overlaps_with(existing_place) {
-                    for &borrow_id in borrow_ids {
-                        if let Some(loan) = self.active_borrows.get(&borrow_id) {
-                            result.push(loan);
-                        }
+        for (existing_place, borrow_ids) in &self.place_to_borrows {
+            if place.overlaps_with(existing_place) {
+                for &borrow_id in borrow_ids {
+                    if let Some(loan) = self.active_borrows.get(&borrow_id) {
+                        result.push(loan);
                     }
                 }
             }
         }
-        
         result
     }
 
-    /// Get all borrows for places that overlap with the given place (mutable version)
-    /// **Optimization**: Uses cached overlapping places and updates cache for future lookups
-    pub fn borrows_for_overlapping_places_mut(&mut self, place: &Place) -> Vec<&Loan> {
-        let mut result = Vec::new();
-        
-        // Check cache first
-        if let Some(cached_places) = self.overlapping_places_cache.get(place) {
-            for existing_place in cached_places {
-                if let Some(borrow_ids) = self.place_to_borrows.get(existing_place) {
-                    for &borrow_id in borrow_ids {
-                        if let Some(loan) = self.active_borrows.get(&borrow_id) {
-                            result.push(loan);
-                        }
-                    }
-                }
-            }
-        } else {
-            // Build cache and collect results
-            let mut overlapping_places = Vec::new();
-            for (existing_place, borrow_ids) in &self.place_to_borrows {
-                if place.overlaps_with(existing_place) {
-                    overlapping_places.push(existing_place.clone());
-                    for &borrow_id in borrow_ids {
-                        if let Some(loan) = self.active_borrows.get(&borrow_id) {
-                            result.push(loan);
-                        }
-                    }
-                }
-            }
-            
-            // Cache the overlapping places for future lookups
-            self.overlapping_places_cache.insert(place.clone(), overlapping_places);
-        }
-        
-        result
-    }
-
-    /// Merge another borrow state into this one (for CFG join points).
+    /// Merge another borrow state into this one (for CFG join points)
     ///
-    /// Implements conservative merging for Polonius-style analysis:
-    /// keeps borrows that exist in BOTH incoming states to ensure conflicts
-    /// are only reported if they exist on ALL paths.
+    /// This implements conservative merging for Polonius-style analysis:
+    /// - At join points, we keep borrows that exist in BOTH incoming states
+    /// - This ensures that conflicts are only reported if they exist on ALL paths
     pub fn merge(&mut self, other: &BorrowState) {
-        // If this state is empty, use efficient move from other (first incoming edge)
+        // If this state is empty, copy from other (first incoming edge)
         if self.is_empty() {
-            // Reserve capacity to reduce reallocations
-            self.active_borrows.reserve(other.active_borrows.len());
-            self.place_to_borrows.reserve(other.place_to_borrows.len());
-            
-            for (&borrow_id, loan) in &other.active_borrows {
-                self.active_borrows.insert(borrow_id, loan.clone());
-            }
-            
-            for (place, borrow_ids) in &other.place_to_borrows {
-                self.place_to_borrows.insert(place.clone(), borrow_ids.clone());
-            }
-            
-            self.last_uses.reserve(other.last_uses.len());
-            for (place, &node_id) in &other.last_uses {
-                self.last_uses.insert(place.clone(), node_id);
-            }
+            self.active_borrows = other.active_borrows.clone();
+            self.place_to_borrows = other.place_to_borrows.clone();
+            self.last_uses = other.last_uses.clone();
             return;
         }
 
         // Conservative merge: keep borrows that exist in both states
-        // **Optimization**: Use retain for efficient in-place filtering
-        self.active_borrows.retain(|&borrow_id, _| {
-            other.active_borrows.contains_key(&borrow_id)
-        });
+        // This is correct for Polonius-style analysis where conflicts
+        // are only errors if they exist on ALL incoming paths
+        let mut borrows_to_keep = HashMap::new();
 
-        // Rebuild place mapping efficiently
+        for (&borrow_id, loan) in &self.active_borrows {
+            if other.active_borrows.contains_key(&borrow_id) {
+                borrows_to_keep.insert(borrow_id, loan.clone());
+            }
+        }
+
+        // Replace with merged state
+        self.active_borrows = borrows_to_keep;
+
+        // Rebuild place mapping
         self.place_to_borrows.clear();
-        self.place_to_borrows.reserve(self.active_borrows.len());
         for loan in self.active_borrows.values() {
             self.place_to_borrows
                 .entry(loan.place.clone())
@@ -556,59 +406,45 @@ impl BorrowState {
 
         // Merge last uses - keep the later use point for each place
         for (place, &node_id) in &other.last_uses {
-            match self.last_uses.get_mut(place) {
-                Some(existing) => {
+            self.last_uses
+                .entry(place.clone())
+                .and_modify(|existing| {
                     // Keep the larger node ID (later in execution)
                     if node_id > *existing {
                         *existing = node_id;
                     }
-                }
-                None => {
-                    self.last_uses.insert(place.clone(), node_id);
-                }
-            }
+                })
+                .or_insert(node_id);
         }
-
-        // Clear cache after merge
-        self.overlapping_places_cache.clear();
     }
 
-    /// Union merge: combine borrows from both states (for propagation).
+    /// Union merge: combine borrows from both states (for propagation)
     ///
-    /// Used when propagating state along CFG edges where we want to
-    /// accumulate all borrows that could be active.
+    /// This is used when propagating state along CFG edges where we want
+    /// to accumulate all borrows that could be active.
     pub fn union_merge(&mut self, other: &BorrowState) {
-        // Reserve capacity to reduce reallocations
-        self.active_borrows.reserve(other.active_borrows.len());
-        
         // Add all borrows from other that don't exist in self
         for (&borrow_id, loan) in &other.active_borrows {
             if !self.active_borrows.contains_key(&borrow_id) {
-                // Update place mapping
+                self.active_borrows.insert(borrow_id, loan.clone());
                 self.place_to_borrows
                     .entry(loan.place.clone())
                     .or_default()
                     .push(borrow_id);
-                self.active_borrows.insert(borrow_id, loan.clone());
             }
         }
 
-        // Merge last uses efficiently
+        // Merge last uses
         for (place, &node_id) in &other.last_uses {
-            match self.last_uses.get_mut(place) {
-                Some(existing) => {
+            self.last_uses
+                .entry(place.clone())
+                .and_modify(|existing| {
                     if node_id > *existing {
                         *existing = node_id;
                     }
-                }
-                None => {
-                    self.last_uses.insert(place.clone(), node_id);
-                }
-            }
+                })
+                .or_insert(node_id);
         }
-
-        // Clear cache after union merge
-        self.overlapping_places_cache.clear();
     }
 
     /// Record a last use for a place
@@ -623,19 +459,16 @@ impl BorrowState {
     }
 
     /// Check if a place has any active borrows
-    /// **Optimization**: Direct contains_key check
     pub fn has_active_borrows(&self, place: &Place) -> bool {
         self.place_to_borrows.contains_key(place)
     }
 
     /// Get all active borrow IDs
-    /// **Optimization**: Direct iterator over keys
     pub fn active_borrow_ids(&self) -> impl Iterator<Item = BorrowId> + '_ {
         self.active_borrows.keys().copied()
     }
 
     /// Get a specific loan by ID
-    /// **Optimization**: Direct get operation
     pub fn get_loan(&self, borrow_id: BorrowId) -> Option<&Loan> {
         self.active_borrows.get(&borrow_id)
     }
@@ -644,54 +477,31 @@ impl BorrowState {
     ///
     /// This method integrates the corrected lifetime inference results with the borrow
     /// state, ensuring that only borrows that are actually live according to the
-    /// simplified analysis are considered active.
-    ///
-    /// Note: This is a simplified stub implementation since we removed the complex
-    /// BorrowLiveSets architecture as part of the cleanup.
-    pub fn update_from_simplified_analysis(&mut self, _active_borrows: &[BorrowId]) {
-        // Simplified implementation - no complex state updates needed
-        // The borrow state should already contain all relevant borrows from the borrow tracking phase.
-        // This method is kept for API compatibility but doesn't perform complex operations.
-    }
+    /// algebraic analysis are considered active.
+    pub fn update_from_live_set(
+        &mut self,
+        live_set: &crate::compiler::borrow_checker::lifetime_inference::borrow_live_sets::BorrowSet,
+    ) {
+        // Remove borrows that are no longer live according to the corrected analysis
+        let mut borrows_to_remove = Vec::new();
 
-    /// Efficient batch borrow removal
-    /// **Optimization**: Removes multiple borrows efficiently
-    pub fn remove_borrows_batch(&mut self, borrow_ids: &[BorrowId]) {
-        for &borrow_id in borrow_ids {
-            if let Some(loan) = self.active_borrows.swap_remove(&borrow_id) {
-                // Remove from place mapping
-                if let Some(borrow_list) = self.place_to_borrows.get_mut(&loan.place) {
-                    borrow_list.retain(|&id| id != borrow_id);
-                    if borrow_list.is_empty() {
-                        self.place_to_borrows.swap_remove(&loan.place);
-                    }
-                }
+        for &borrow_id in self.active_borrows.keys() {
+            if !live_set.contains(&borrow_id) {
+                borrows_to_remove.push(borrow_id);
             }
         }
-        
-        // Clear cache after batch removal
-        self.overlapping_places_cache.clear();
-    }
 
-    /// Get statistics for performance monitoring
-    /// **Optimization**: Provides metrics for performance analysis
-    pub fn get_stats(&self) -> BorrowStateStats {
-        BorrowStateStats {
-            active_borrows_count: self.active_borrows.len(),
-            place_mappings_count: self.place_to_borrows.len(),
-            cache_entries_count: self.overlapping_places_cache.len(),
-            last_uses_count: self.last_uses.len(),
+        // Remove inactive borrows
+        for borrow_id in borrows_to_remove {
+            self.remove_borrow(borrow_id);
         }
-    }
-}
 
-/// Statistics for borrow state performance monitoring
-#[derive(Debug, Clone)]
-pub struct BorrowStateStats {
-    pub active_borrows_count: usize,
-    pub place_mappings_count: usize,
-    pub cache_entries_count: usize,
-    pub last_uses_count: usize,
+        // Note: We don't add new borrows here because the live set might contain
+        // borrows that don't have full loan information. The borrow state should
+        // already contain all relevant borrows from the borrow tracking phase.
+        // This method only removes borrows that are no longer live according to
+        // the corrected lifetime analysis.
+    }
 }
 
 impl Loan {

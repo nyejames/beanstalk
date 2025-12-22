@@ -1,6 +1,8 @@
-//! Candidate move refinement based on last-use analysis.
+//! Candidate Move Refinement
 //!
-//! Refines candidate moves: last use → actual move, not last use → mutable borrow.
+//! Refines candidate moves based on last-use analysis:
+//! - Last use → actual move
+//! - Not last use → mutable borrow
 
 use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowId, BorrowKind};
@@ -32,7 +34,7 @@ pub enum MoveDecision {
     MutableBorrow(Place),
 }
 
-/// Refine candidate moves based on last-use analysis.
+/// Refine candidate moves based on last-use analysis
 pub fn refine_candidate_moves(
     checker: &mut BorrowChecker,
     hir_nodes: &[HirNode],
@@ -149,13 +151,12 @@ fn process_expression_for_candidate_moves(
     refinement: &mut CandidateMoveRefinement,
 ) -> Result<(), CompilerMessages> {
     if let HirExprKind::CandidateMove(place) = &expr.kind {
-        let place_owned = place.clone();  // Clone once and reuse
         let decision = if last_use_analysis.is_last_use(place, node_id) {
-            refinement.moved_places.insert(place_owned.clone(), node_id);
-            MoveDecision::Move(place_owned)
+            refinement.moved_places.insert(place.clone(), node_id);
+            MoveDecision::Move(place.clone())
         } else {
-            refinement.mutable_borrows.insert(node_id, place_owned.clone());
-            MoveDecision::MutableBorrow(place_owned)
+            refinement.mutable_borrows.insert(node_id, place.clone());
+            MoveDecision::MutableBorrow(place.clone())
         };
 
         refinement.move_decisions.insert(node_id, decision);
@@ -269,15 +270,14 @@ fn process_expression_with_lifetime_inference(
         // Use the corrected lifetime inference to determine if this is a last use
         let is_last_use = is_last_use_with_lifetime_inference(place, node_id, lifetime_inference);
 
-        let place_owned = place.clone();  // Clone once and reuse
         let decision = if is_last_use {
             // This is the actual last use - convert to move
-            refinement.moved_places.insert(place_owned.clone(), node_id);
-            MoveDecision::Move(place_owned)
+            refinement.moved_places.insert(place.clone(), node_id);
+            MoveDecision::Move(place.clone())
         } else {
             // Not the last use - keep as mutable borrow
-            refinement.mutable_borrows.insert(node_id, place_owned.clone());
-            MoveDecision::MutableBorrow(place_owned)
+            refinement.mutable_borrows.insert(node_id, place.clone());
+            MoveDecision::MutableBorrow(place.clone())
         };
 
         refinement.move_decisions.insert(node_id, decision);
@@ -320,22 +320,15 @@ fn validate_move_decisions_with_lifetime_inference(
             MoveDecision::Move(place) => {
                 // Validate that this move decision is consistent with lifetime inference
                 if !validate_move_consistency(checker, *node_id, place, lifetime_inference) {
-                    let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-                        format!(
+                    let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                        msg: format!(
                             "Move refinement inconsistency: Move decision for place {:?} at node {} conflicts with lifetime inference",
                             place, node_id
                         ),
-                        crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                        crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
-                    );
-                    error.new_metadata_entry(
-                        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                        "Borrow Checking - Move Refinement"
-                    );
-                    error.new_metadata_entry(
-                        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                        "This is a compiler bug - please report it"
-                    );
+                        location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                        error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                        metadata: std::collections::HashMap::new(),
+                    };
                     errors.push(error);
                 }
             }
@@ -347,22 +340,15 @@ fn validate_move_decisions_with_lifetime_inference(
                     place,
                     lifetime_inference,
                 ) {
-                    let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-                        format!(
+                    let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                        msg: format!(
                             "Move refinement inconsistency: Mutable borrow decision for place {:?} at node {} conflicts with lifetime inference",
                             place, node_id
                         ),
-                        crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                        crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
-                    );
-                    error.new_metadata_entry(
-                        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                        "Borrow Checking - Move Refinement"
-                    );
-                    error.new_metadata_entry(
-                        crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                        "This is a compiler bug - please report it"
-                    );
+                        location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                        error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                        metadata: std::collections::HashMap::new(),
+                    };
                     errors.push(error);
                 }
             }
@@ -563,26 +549,6 @@ pub fn validate_move_decisions(
     let mut validation_failures = 0;
 
     // Validate each move decision for correctness
-    validation_failures += validate_individual_move_decisions(checker, refinement, &mut errors)?;
-
-    // Validate that all candidate moves have been properly refined
-    validation_failures += validate_candidate_refinement_completeness(checker, &mut errors)?;
-
-    // Additional validation: Check temporal consistency
-    validate_temporal_consistency(checker, refinement, &mut errors)?;
-
-    // Handle validation failures
-    handle_validation_failures(validation_failures, errors)
-}
-
-/// Validate individual move decisions
-fn validate_individual_move_decisions(
-    checker: &BorrowChecker,
-    refinement: &CandidateMoveRefinement,
-    errors: &mut Vec<crate::compiler::compiler_messages::compiler_errors::CompilerError>,
-) -> Result<usize, CompilerMessages> {
-    let mut validation_failures = 0;
-
     for (node_id, decision) in &refinement.move_decisions {
         if let MoveDecision::Move(place) = decision {
             match validate_single_move_decision(checker, *node_id, place) {
@@ -602,22 +568,22 @@ fn validate_individual_move_decisions(
                         place, node_id
                     );
                     
-                    log_move_validation_failure(place, *node_id);
+                    // In debug builds, provide detailed information about the violation
+                    #[cfg(debug_assertions)]
+                    {
+                        eprintln!("=== MOVE VALIDATION FAILURE ===");
+                        eprintln!("Place: {:?}", place);
+                        eprintln!("Node ID: {}", node_id);
+                        eprintln!("Conflicting borrows detected - this move should not have been refined");
+                        eprintln!("This is a compiler bug that must be fixed");
+                        eprintln!("===============================");
+                    }
                 }
             }
         }
     }
 
-    Ok(validation_failures)
-}
-
-/// Validate that all candidate moves have been refined
-fn validate_candidate_refinement_completeness(
-    checker: &BorrowChecker,
-    errors: &mut Vec<crate::compiler::compiler_messages::compiler_errors::CompilerError>,
-) -> Result<usize, CompilerMessages> {
-    let mut validation_failures = 0;
-
+    // Validate that all candidate moves have been properly refined
     match validate_all_candidates_refined(checker) {
         Ok(()) => {
             // All candidates properly refined
@@ -634,18 +600,21 @@ fn validate_candidate_refinement_completeness(
                  This indicates a phase-order hazard that could lead to incorrect borrow checking."
             );
             
-            log_refinement_validation_failure();
+            // In debug builds, provide detailed information about the hazard
+            #[cfg(debug_assertions)]
+            {
+                eprintln!("=== REFINEMENT VALIDATION FAILURE ===");
+                eprintln!("Found unrefined candidate moves in borrow checker state");
+                eprintln!("This indicates a phase-order hazard - all candidates should be refined");
+                eprintln!("This is a compiler bug that must be fixed");
+                eprintln!("====================================");
+            }
         }
     }
 
-    Ok(validation_failures)
-}
+    // Additional validation: Check temporal consistency
+    validate_temporal_consistency(checker, refinement, &mut errors)?;
 
-/// Handle validation failures and return appropriate result
-fn handle_validation_failures(
-    validation_failures: usize,
-    errors: Vec<crate::compiler::compiler_messages::compiler_errors::CompilerError>,
-) -> Result<(), CompilerMessages> {
     // If we found validation failures, this is a serious correctness issue
     if validation_failures > 0 {
         // LOUD COMMENT: VALIDATION FUNCTION ENFORCEMENT
@@ -669,33 +638,6 @@ fn handle_validation_failures(
     }
 }
 
-/// Log move validation failure details
-fn log_move_validation_failure(place: &Place, node_id: HirNodeId) {
-    // In debug builds, provide detailed information about the violation
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("=== MOVE VALIDATION FAILURE ===");
-        eprintln!("Place: {:?}", place);
-        eprintln!("Node ID: {}", node_id);
-        eprintln!("Conflicting borrows detected - this move should not have been refined");
-        eprintln!("This is a compiler bug that must be fixed");
-        eprintln!("===============================");
-    }
-}
-
-/// Log refinement validation failure details
-fn log_refinement_validation_failure() {
-    // In debug builds, provide detailed information about the hazard
-    #[cfg(debug_assertions)]
-    {
-        eprintln!("=== REFINEMENT VALIDATION FAILURE ===");
-        eprintln!("Found unrefined candidate moves in borrow checker state");
-        eprintln!("This indicates a phase-order hazard - all candidates should be refined");
-        eprintln!("This is a compiler bug that must be fixed");
-        eprintln!("====================================");
-    }
-}
-
 /// Validate a single move decision doesn't conflict with active borrows
 ///
 /// This function performs detailed validation of individual move decisions to ensure
@@ -708,22 +650,25 @@ fn validate_single_move_decision(
 ) -> Result<(), CompilerMessages> {
     let Some(cfg_node) = checker.cfg.nodes.get(&node_id) else {
         // Node doesn't exist in CFG - this is a compiler bug
-        let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-            format!(
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert(
+            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+            "Borrow Checking - Move Validation",
+        );
+        metadata.insert(
+            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            "This is a compiler bug - move decision references non-existent CFG node",
+        );
+
+        let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+            msg: format!(
                 "Move validation error: CFG node {} does not exist for move decision of place {:?}",
                 node_id, place
             ),
-            crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-            crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
-        );
-        error.new_metadata_entry(
-            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-            "Borrow Checking - Move Validation"
-        );
-        error.new_metadata_entry(
-            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-            "This is a compiler bug - move decision references non-existent CFG node"
-        );
+            location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+            error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+            metadata,
+        };
 
         return Err(CompilerMessages {
             errors: vec![error],
@@ -748,8 +693,31 @@ fn validate_single_move_decision(
         
         // Create detailed error for each conflicting borrow
         for conflicting_loan in actual_conflicts {
-            let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-                format!(
+            let mut metadata = std::collections::HashMap::new();
+            metadata.insert(
+                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                "Borrow Checking - Move Validation",
+            );
+            
+            let conflict_description = format!(
+                "Move of {:?} at node {} conflicts with {} borrow {} created at node {}",
+                place, node_id, 
+                match conflicting_loan.kind {
+                    BorrowKind::Shared => "shared",
+                    BorrowKind::Mutable => "mutable", 
+                    BorrowKind::CandidateMove => "candidate move",
+                    BorrowKind::Move => "move",
+                },
+                conflicting_loan.id, conflicting_loan.creation_point
+            );
+            
+            metadata.insert(
+                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                "Resolve move conflicts by ensuring exclusive access",
+            );
+
+            let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                msg: format!(
                     "Invalid move decision: Cannot move {:?} while {} borrow is active",
                     place,
                     match conflicting_loan.kind {
@@ -759,17 +727,10 @@ fn validate_single_move_decision(
                         BorrowKind::Move => "move",
                     }
                 ),
-                crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
-            );
-            error.new_metadata_entry(
-                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                "Borrow Checking - Move Validation"
-            );
-            error.new_metadata_entry(
-                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                "Cannot move value while it is borrowed - finish using the borrow first"
-            );
+                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                metadata,
+            };
             errors.push(error);
         }
 
@@ -799,22 +760,25 @@ fn validate_all_candidates_refined(checker: &BorrowChecker) -> Result<(), Compil
                 unrefined_candidates.push((*node_id, loan.place.clone(), loan.id));
                 
                 // Create detailed error for each unrefined candidate
-                let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-                    format!(
+                let mut metadata = std::collections::HashMap::new();
+                metadata.insert(
+                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking - Candidate Move Refinement",
+                );
+                metadata.insert(
+                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "This is a compiler bug - all candidate moves should be refined before validation",
+                );
+
+                let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                    msg: format!(
                         "Phase-order hazard: Unrefined candidate move for place {:?} (borrow {}) at node {}",
                         loan.place, loan.id, node_id
                     ),
-                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                    crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
-                );
-                error.new_metadata_entry(
-                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                    "Borrow Checking - Candidate Move Refinement"
-                );
-                error.new_metadata_entry(
-                    crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                    "This is a compiler bug - all candidate moves should be refined before validation"
-                );
+                    location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                    error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                    metadata,
+                };
                 errors.push(error);
             }
         }
@@ -872,22 +836,25 @@ fn validate_temporal_consistency(
                 if let Some(loan) = move_loan {
                     // Check temporal consistency: creation should not be after the move point
                     if loan.creation_point > *node_id {
-                        let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-                            format!(
+                        let mut metadata = std::collections::HashMap::new();
+                        metadata.insert(
+                            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                            "Borrow Checking - Temporal Validation",
+                        );
+                        metadata.insert(
+                            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                            "This is a compiler bug - move cannot occur before borrow creation",
+                        );
+
+                        let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                            msg: format!(
                                 "Temporal inconsistency: Move of {:?} at node {} occurs before borrow creation at node {}",
                                 place, node_id, loan.creation_point
                             ),
-                            crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                            crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
-                        );
-                        error.new_metadata_entry(
-                            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                            "Borrow Checking - Temporal Validation"
-                        );
-                        error.new_metadata_entry(
-                            crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                            "This is a compiler bug - move cannot occur before borrow creation"
-                        );
+                            location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                            error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                            metadata,
+                        };
                         errors.push(error);
                     }
 
@@ -903,8 +870,31 @@ fn validate_temporal_consistency(
 
                     if !overlapping_borrows.is_empty() {
                         for conflicting_loan in overlapping_borrows {
-                            let mut error = crate::compiler::compiler_messages::compiler_errors::CompilerError::new(
-                                format!(
+                            let mut metadata = std::collections::HashMap::new();
+                            metadata.insert(
+                                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                                "Borrow Checking - Temporal Validation",
+                            );
+                            
+                            let conflict_description = format!(
+                                "Move conflicts with {} borrow {} of overlapping place {:?} created at node {}",
+                                match conflicting_loan.kind {
+                                    BorrowKind::Shared => "shared",
+                                    BorrowKind::Mutable => "mutable",
+                                    _ => "unknown",
+                                },
+                                conflicting_loan.id,
+                                conflicting_loan.place,
+                                conflicting_loan.creation_point
+                            );
+                            
+                            metadata.insert(
+                                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                                "Resolve temporal conflicts by ensuring proper ordering",
+                            );
+
+                            let error = crate::compiler::compiler_messages::compiler_errors::CompilerError {
+                                msg: format!(
                                     "Temporal conflict: Move of {:?} at node {} conflicts with active {} borrow",
                                     place, node_id,
                                     match conflicting_loan.kind {
@@ -913,17 +903,10 @@ fn validate_temporal_consistency(
                                         _ => "unknown",
                                     }
                                 ),
-                                crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                                crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
-                            );
-                            error.new_metadata_entry(
-                                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
-                                "Borrow Checking - Temporal Validation"
-                            );
-                            error.new_metadata_entry(
-                                crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                                "Resolve temporal conflicts by ensuring proper ordering"
-                            );
+                                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                                metadata,
+                            };
                             errors.push(error);
                         }
                     }

@@ -1,18 +1,38 @@
-//! Structured control flow handling for borrow checker.
+//! Structured Control Flow Handling for Borrow Checker
 //!
-//! Provides separate borrow tracking for different execution paths and
-//! implements conservative merging at control flow join points.
+//! This module implements sophisticated structured control flow handling for the borrow checker.
+//! It provides separate borrow tracking for different execution paths (if branches, match arms,
+//! loop iterations) and implements conservative merging at control flow join points.
+//!
+//! ## Key Features
+//!
+//! - **Separate Branch Tracking**: If statements track borrows separately in then/else branches
+//! - **Per-Arm Analysis**: Match statements track borrows separately for each match arm
+//! - **Loop Boundary Handling**: Loops handle borrows that cross iteration boundaries
+//! - **Conservative Merging**: Join points merge borrow states conservatively
+//! - **Path-Sensitive Analysis**: Maintains separate borrow states for different execution paths
+//!
+//! ## Design Principles
+//!
+//! - **Polonius-Style Analysis**: Only report conflicts that exist on all paths
+//! - **Conservative Safety**: When in doubt, choose the safer option
+//! - **Structured Preservation**: Maintain the structured nature of control flow
+//! - **Precise Tracking**: Track borrows with fine-grained path sensitivity
 
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowState, CfgNodeId};
 use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler::hir::nodes::{HirKind, HirMatchArm, HirNode, HirNodeId};
 use std::collections::HashMap;
 
-/// Handle structured control flow for borrow checking.
+/// Handle structured control flow for borrow checking
 ///
-/// Main entry point for structured control flow analysis. Processes HIR nodes
-/// and applies appropriate control flow handling based on node type.
-/// Performs read-only analysis without modifying existing CFG node states.
+/// This is the main entry point for structured control flow analysis.
+/// It processes HIR nodes and applies appropriate control flow handling
+/// based on the node type.
+///
+/// **Non-destructive Analysis**: This function now only performs read-only analysis
+/// without modifying existing CFG node states, ensuring compatibility with
+/// completed last-use analysis.
 pub fn handle_structured_control_flow(
     checker: &BorrowChecker,
     hir_nodes: &[HirNode],

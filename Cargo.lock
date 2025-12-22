@@ -71,7 +71,6 @@ version = "0.0.1-alpha"
 dependencies = [
  "colour",
  "fs_extra",
- "indexmap",
  "quickcheck",
  "quickcheck_macros",
  "wasm-encoder",

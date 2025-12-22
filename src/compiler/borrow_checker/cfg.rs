@@ -1,14 +1,16 @@
-//! Control Flow Graph construction from HIR nodes.
+//! Control Flow Graph Construction
 //!
-//! Builds CFG for path-sensitive borrow checking analysis and lifetime inference.
+//! This module handles the construction of control flow graphs from HIR nodes.
+//! The CFG is essential for borrow checking as it enables path-sensitive analysis
+//! and lifetime inference across different execution paths.
 
 use crate::compiler::borrow_checker::types::{CfgNodeType, ControlFlowGraph};
 use crate::compiler::hir::nodes::{HirKind, HirNode};
 
-/// Construct a control flow graph from HIR nodes.
+/// Construct a control flow graph from HIR nodes
 ///
-/// Builds CFG by analyzing HIR node structure and creating appropriate
-/// edges for all possible execution paths.
+/// This function builds a CFG by analyzing the structure of HIR nodes and
+/// creating appropriate edges for all possible execution paths.
 pub fn construct_cfg(hir_nodes: &[HirNode]) -> ControlFlowGraph {
     let mut cfg = ControlFlowGraph::new();
 

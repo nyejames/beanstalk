@@ -31,26 +31,22 @@ mod tests {
                 // Integration successful - lifetime inference is working with conflict detection
                 println!("Conflict detection integration test passed - no conflicts detected");
             }
-            Err(messages) => {
+            Err(error) => {
                 // This is expected for our simple test HIR structure
                 // The important thing is that the integration completed without panicking
-                if let Some(first_error) = messages.errors.first() {
-                    println!(
-                        "Conflict detection integration test completed with expected validation error: {}",
-                        first_error.msg
-                    );
+                println!(
+                    "Conflict detection integration test completed with expected validation error: {}",
+                    error.msg
+                );
 
-                    // Verify this is the expected validation error, not a crash
-                    assert!(
-                        first_error.msg.contains("Last-use analysis validation failed")
-                            || first_error.msg.contains("Borrow")
-                            || first_error.msg.contains("Lifetime"),
-                        "Expected borrow checking or validation error, got: {}",
-                        first_error.msg
-                    );
-                } else {
-                    panic!("Expected at least one error in CompilerMessages");
-                }
+                // Verify this is the expected validation error, not a crash
+                assert!(
+                    error.msg.contains("Last-use analysis validation failed")
+                        || error.msg.contains("Borrow")
+                        || error.msg.contains("Lifetime"),
+                    "Expected borrow checking or validation error, got: {}",
+                    error.msg
+                );
             }
         }
     }

@@ -6,8 +6,10 @@ pub mod settings;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod borrow_checker_property_tests;
+    pub(crate) mod lifetime_inference_comprehensive_tests;
     pub(crate) mod lifetime_inference_full_integration_tests;
     pub(crate) mod lifetime_inference_integration_tests;
+    pub(crate) mod lifetime_inference_performance_tests;
     pub(crate) mod lifetime_inference_property_tests;
     pub(crate) mod test_runner;
 }
@@ -284,13 +286,7 @@ impl<'a> Compiler<'a> {
         };
 
         // Perform borrow checking analysis
-        if let Err(messages) = check_borrows(&mut hir_module, &mut self.string_table) {
-            // If there are errors, return the first one (for now)
-            // TODO: Consider returning all errors in a future enhancement
-            if let Some(first_error) = messages.errors.into_iter().next() {
-                return Err(first_error);
-            }
-        }
+        check_borrows(&mut hir_module, &mut self.string_table)?;
 
         // Return the potentially modified HIR nodes
         Ok(hir_module.functions)
