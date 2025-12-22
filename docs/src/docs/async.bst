@@ -10,7 +10,9 @@ import @./components
 
 ## Coroutines and Async in Beanstalk (Design Overview)
 
-Beanstalk approaches async and concurrency by making **control flow explicit** and **communication safe by default**. Instead of hiding async behind keywords like `async` / `await` or complex runtime abstractions, Beanstalk uses a small set of primitives that make data flow, suspension, and concurrency visible in the syntax.
+Beanstalk approaches async and concurrency by making **control flow explicit** and **communication safe by default**. 
+Instead of hiding async behind keywords like `async` / `await` or complex runtime abstractions, 
+Beanstalk uses a small set of primitives that make data flow, suspension, and concurrency visible in the syntax.
 
 At a high level:
 
@@ -56,7 +58,6 @@ This transfers the value into the channel. Sending may **suspend** the current c
 Visually, the value flows to the right into the channel.
 
 ---
-
 ### Receiving values: `<<`
 
 To receive a value from a channel, use `<<`:
@@ -94,7 +95,6 @@ consumer |in ~Channel[Int]|:
 ```
 
 Here:
-
 * `producer` sends integers into the channel
 * `consumer` receives and prints them
 * Neither shares memory directly
