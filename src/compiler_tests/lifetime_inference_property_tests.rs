@@ -1413,7 +1413,7 @@ mod tests {
                                 projections: vec![],
                             },
                             value: HirExpr {
-                                kind: HirExprKind::CandidateMove(test_place),
+                                kind: HirExprKind::CandidateMove(test_place, Some(200)),
                                 data_type: DataType::Int,
                                 location: TextLocation::default(),
                             },

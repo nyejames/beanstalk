@@ -1,8 +1,4 @@
-//! Core data structures for the borrow checker
-//!
-//! This module defines the fundamental types used throughout the borrow checking
-//! process, including the main BorrowChecker struct, control flow graph representation,
-//! borrow state tracking, and loan management.
+//! Core data structures for the borrow checker.
 
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
@@ -19,11 +15,7 @@ pub type BorrowId = usize;
 /// Unique identifier for CFG nodes (same as HIR node IDs)
 pub type CfgNodeId = HirNodeId;
 
-/// The main borrow checker state and context
-///
-/// This struct maintains all the state needed for borrow checking analysis,
-/// including the control flow graph, active borrows, error collection, and
-/// string table for error reporting.
+/// The main borrow checker state and context.
 pub struct BorrowChecker<'a> {
     /// Control flow graph for the current function
     pub cfg: ControlFlowGraph,
@@ -45,10 +37,7 @@ pub struct BorrowChecker<'a> {
     pub function_signatures: HashMap<InternedString, FunctionSignature>,
 }
 
-/// Control Flow Graph representation for borrow analysis
-///
-/// The CFG provides a graph-based view of program execution flow, enabling
-/// path-sensitive borrow checking and lifetime analysis.
+/// Control Flow Graph representation for borrow analysis.
 #[derive(Debug, Clone)]
 pub struct ControlFlowGraph {
     /// Mapping from HIR node IDs to CFG nodes
@@ -64,10 +53,7 @@ pub struct ControlFlowGraph {
     pub exit_points: Vec<HirNodeId>,
 }
 
-/// A single node in the control flow graph
-///
-/// Each CFG node corresponds to a HIR node and maintains borrow state
-/// information for analysis.
+/// A single node in the control flow graph.
 #[derive(Debug, Clone)]
 pub struct CfgNode {
     /// The HIR node ID this CFG node represents
@@ -115,10 +101,7 @@ pub enum CfgNodeType {
     Join,
 }
 
-/// Borrow state tracking for a single CFG node
-///
-/// This tracks all active borrows at a particular point in the program,
-/// enabling conflict detection and lifetime analysis.
+/// Borrow state tracking for a single CFG node.
 #[derive(Debug, Clone, Default)]
 pub struct BorrowState {
     /// All currently active borrows, indexed by borrow ID
@@ -132,10 +115,7 @@ pub struct BorrowState {
     pub last_uses: HashMap<Place, HirNodeId>,
 }
 
-/// A tracked borrow with its metadata
-///
-/// Loans represent active borrows in the system, tracking their creation point,
-/// kind, target place, and active regions for lifetime analysis.
+/// A tracked borrow with its metadata.
 #[derive(Debug, Clone)]
 pub struct Loan {
     /// Unique identifier for this borrow
@@ -367,11 +347,8 @@ impl BorrowState {
         result
     }
 
-    /// Merge another borrow state into this one (for CFG join points)
-    ///
-    /// This implements conservative merging for Polonius-style analysis:
-    /// - At join points, we keep borrows that exist in BOTH incoming states
-    /// - This ensures that conflicts are only reported if they exist on ALL paths
+    /// Merge another borrow state into this one (for CFG join points).
+    /// Implements conservative merging for Polonius-style analysis.
     pub fn merge(&mut self, other: &BorrowState) {
         // If this state is empty, copy from other (first incoming edge)
         if self.is_empty() {
@@ -382,8 +359,6 @@ impl BorrowState {
         }
 
         // Conservative merge: keep borrows that exist in both states
-        // This is correct for Polonius-style analysis where conflicts
-        // are only errors if they exist on ALL incoming paths
         let mut borrows_to_keep = HashMap::new();
 
         for (&borrow_id, loan) in &self.active_borrows {
@@ -418,10 +393,7 @@ impl BorrowState {
         }
     }
 
-    /// Union merge: combine borrows from both states (for propagation)
-    ///
-    /// This is used when propagating state along CFG edges where we want
-    /// to accumulate all borrows that could be active.
+    /// Union merge: combine borrows from both states (for propagation).
     pub fn union_merge(&mut self, other: &BorrowState) {
         // Add all borrows from other that don't exist in self
         for (&borrow_id, loan) in &other.active_borrows {
@@ -473,11 +445,7 @@ impl BorrowState {
         self.active_borrows.get(&borrow_id)
     }
 
-    /// Update borrow state from a live set (for lifetime inference integration)
-    ///
-    /// This method integrates the corrected lifetime inference results with the borrow
-    /// state, ensuring that only borrows that are actually live according to the
-    /// algebraic analysis are considered active.
+    /// Update borrow state from a live set (for lifetime inference integration).
     pub fn update_from_live_set(
         &mut self,
         live_set: &crate::compiler::borrow_checker::lifetime_inference::borrow_live_sets::BorrowSet,
@@ -495,12 +463,6 @@ impl BorrowState {
         for borrow_id in borrows_to_remove {
             self.remove_borrow(borrow_id);
         }
-
-        // Note: We don't add new borrows here because the live set might contain
-        // borrows that don't have full loan information. The borrow state should
-        // already contain all relevant borrows from the borrow tracking phase.
-        // This method only removes borrows that are no longer live according to
-        // the corrected lifetime analysis.
     }
 }
 

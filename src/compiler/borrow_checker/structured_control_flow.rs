@@ -1,23 +1,7 @@
 //! Structured Control Flow Handling for Borrow Checker
 //!
-//! This module implements sophisticated structured control flow handling for the borrow checker.
-//! It provides separate borrow tracking for different execution paths (if branches, match arms,
-//! loop iterations) and implements conservative merging at control flow join points.
-//!
-//! ## Key Features
-//!
-//! - **Separate Branch Tracking**: If statements track borrows separately in then/else branches
-//! - **Per-Arm Analysis**: Match statements track borrows separately for each match arm
-//! - **Loop Boundary Handling**: Loops handle borrows that cross iteration boundaries
-//! - **Conservative Merging**: Join points merge borrow states conservatively
-//! - **Path-Sensitive Analysis**: Maintains separate borrow states for different execution paths
-//!
-//! ## Design Principles
-//!
-//! - **Polonius-Style Analysis**: Only report conflicts that exist on all paths
-//! - **Conservative Safety**: When in doubt, choose the safer option
-//! - **Structured Preservation**: Maintain the structured nature of control flow
-//! - **Precise Tracking**: Track borrows with fine-grained path sensitivity
+//! Handles structured control flow (if, match, loop) with separate borrow tracking
+//! for different execution paths and conservative merging at join points.
 
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowState, CfgNodeId};
 use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
@@ -25,14 +9,6 @@ use crate::compiler::hir::nodes::{HirKind, HirMatchArm, HirNode, HirNodeId};
 use std::collections::HashMap;
 
 /// Handle structured control flow for borrow checking
-///
-/// This is the main entry point for structured control flow analysis.
-/// It processes HIR nodes and applies appropriate control flow handling
-/// based on the node type.
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis
-/// without modifying existing CFG node states, ensuring compatibility with
-/// completed last-use analysis.
 pub fn handle_structured_control_flow(
     checker: &BorrowChecker,
     hir_nodes: &[HirNode],
@@ -79,21 +55,6 @@ pub fn handle_structured_control_flow(
 }
 
 /// Handle If statements with separate borrow tracking in branches
-///
-/// This function implements separate borrow tracking for then and else branches,
-/// ensuring that borrows are tracked independently in each branch and then
-/// merged conservatively at the join point.
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis
-/// without modifying existing CFG node states.
-///
-/// ## Algorithm
-///
-/// 1. **Save Current State**: Capture the borrow state before the if statement
-/// 2. **Process Then Branch**: Track borrows separately in the then branch
-/// 3. **Process Else Branch**: Track borrows separately in the else branch (if exists)
-/// 4. **Conservative Merge**: Analyze branch states at the join point
-/// 5. **Read-Only**: Do not modify existing CFG nodes
 fn handle_if_statement(
     checker: &BorrowChecker,
     if_node_id: HirNodeId,
@@ -144,21 +105,6 @@ fn handle_if_statement(
 }
 
 /// Handle Match statements with separate tracking per arm
-///
-/// This function implements separate borrow tracking for each match arm,
-/// ensuring that borrows are tracked independently in each arm and then
-/// merged conservatively at the join point.
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis
-/// without modifying existing CFG node states.
-///
-/// ## Algorithm
-///
-/// 1. **Save Current State**: Capture the borrow state before the match statement
-/// 2. **Process Each Arm**: Track borrows separately in each match arm
-/// 3. **Process Default**: Track borrows separately in the default arm (if exists)
-/// 4. **Conservative Merge**: Analyze all arm states at the join point
-/// 5. **Read-Only**: Do not modify existing CFG nodes
 fn handle_match_statement(
     checker: &BorrowChecker,
     match_node_id: HirNodeId,
@@ -209,22 +155,6 @@ fn handle_match_statement(
 }
 
 /// Handle Loop statements with borrow boundary crossing
-///
-/// This function implements sophisticated loop handling that manages borrows
-/// that cross loop iteration boundaries. It handles the complex interaction
-/// between borrows created inside the loop and borrows that persist across
-/// iterations.
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis
-/// without modifying existing CFG node states.
-///
-/// ## Algorithm
-///
-/// 1. **Save Pre-Loop State**: Capture borrows that exist before the loop
-/// 2. **Analyze Loop Body**: Process the loop body with boundary tracking
-/// 3. **Handle Iteration Boundary**: Analyze borrows that cross iterations
-/// 4. **Conservative Loop Exit**: Analyze states for loop exit conditions
-/// 5. **Read-Only**: Do not modify existing CFG nodes
 fn handle_loop_statement(
     checker: &BorrowChecker,
     loop_node_id: HirNodeId,
@@ -260,14 +190,7 @@ fn handle_loop_statement(
     Ok(())
 }
 
-/// Process a branch (then/else/arm) with separate state tracking
-///
-/// This function processes a block of HIR nodes while maintaining separate
-/// borrow state tracking. It starts with the given initial state and tracks
-/// how borrows evolve through the branch.
-/// 
-/// **Non-destructive Analysis**: This function only reads existing borrow states
-/// and does not modify them, ensuring compatibility with completed last-use analysis.
+/// Process a branch with separate state tracking
 fn process_branch_with_separate_tracking(
     checker: &BorrowChecker,
     branch_nodes: &[HirNode],
@@ -330,13 +253,6 @@ fn process_branch_with_separate_tracking(
 }
 
 /// Process loop body with boundary crossing analysis
-///
-/// This function handles the complex case of borrows that cross loop iteration
-/// boundaries. It tracks which borrows persist across iterations and which
-/// are created/destroyed within each iteration.
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis
-/// without modifying existing CFG node states.
 fn process_loop_body_with_boundary_tracking(
     checker: &BorrowChecker,
     body: &[HirNode],
@@ -402,13 +318,7 @@ fn process_loop_body_with_boundary_tracking(
     Ok(loop_iteration_state)
 }
 
-/// Handle loop iteration boundary by analyzing the back-edge
-///
-/// This function analyzes the complex interaction between the end of one loop
-/// iteration and the beginning of the next. It ensures that borrows are
-/// correctly analyzed across iteration boundaries.
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis.
+/// Analyze loop iteration boundary
 fn analyze_loop_iteration_boundary(
     _checker: &BorrowChecker,
     _loop_node_id: HirNodeId,
@@ -424,8 +334,6 @@ fn analyze_loop_iteration_boundary(
 }
 
 /// Analyze the back-edge from loop body to loop header
-///
-/// **Non-destructive Analysis**: This function now only performs read-only analysis.
 fn analyze_loop_back_edge(
     _checker: &BorrowChecker,
     _loop_node_id: HirNodeId,
@@ -440,14 +348,6 @@ fn analyze_loop_back_edge(
 }
 
 /// Perform conservative merge at a control flow join point
-///
-/// This function implements the core conservative merging strategy for
-/// Polonius-style analysis. At join points, only borrows that exist on
-/// ALL incoming paths are preserved.
-///
-/// **Non-destructive Analysis**: This function now only performs analysis
-/// without modifying existing CFG node states, ensuring compatibility with
-/// completed last-use analysis.
 fn conservative_merge_at_join_point(
     _checker: &BorrowChecker,
     _join_node_id: CfgNodeId,
@@ -467,9 +367,6 @@ fn conservative_merge_at_join_point(
 }
 
 /// Find the join point after an if statement
-///
-/// This function identifies the CFG node where control flow from the then
-/// and else branches reconverges.
 fn find_if_join_point(
     checker: &BorrowChecker,
     if_node_id: HirNodeId,
@@ -510,9 +407,6 @@ fn find_if_join_point(
 }
 
 /// Find the join point after a match statement
-///
-/// This function identifies the CFG node where control flow from all
-/// match arms reconverges.
 fn find_match_join_point(
     checker: &BorrowChecker,
     _match_node_id: HirNodeId,
@@ -557,9 +451,6 @@ fn find_match_join_point(
 }
 
 /// Find the exit point of a loop
-///
-/// This function identifies the CFG node that represents the exit from
-/// a loop (where control flow continues after the loop completes).
 fn find_loop_exit_point(
     checker: &BorrowChecker,
     loop_node_id: HirNodeId,

@@ -596,7 +596,7 @@ impl HirExprKind {
             HirExprKind::MutableBorrow(place) => {
                 format!("MutableBorrow({})", place.display_with_table(string_table))
             }
-            HirExprKind::CandidateMove(place) => {
+            HirExprKind::CandidateMove(place, _) => {
                 format!("CandidateMove({})", place.display_with_table(string_table))
             }
 
@@ -680,7 +680,7 @@ impl Display for HirExprKind {
             HirExprKind::Load(place) => write!(f, "Load({})", place),
             HirExprKind::SharedBorrow(place) => write!(f, "SharedBorrow({})", place),
             HirExprKind::MutableBorrow(place) => write!(f, "MutableBorrow({})", place),
-            HirExprKind::CandidateMove(place) => write!(f, "CandidateMove({})", place),
+            HirExprKind::CandidateMove(place, _) => write!(f, "CandidateMove({})", place),
 
             HirExprKind::BinOp { left, op, right } => {
                 write!(f, "({} {} {})", left, op, right)

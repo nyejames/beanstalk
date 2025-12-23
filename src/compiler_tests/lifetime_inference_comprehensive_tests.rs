@@ -437,7 +437,7 @@ mod tests {
                         kind: HirExprKind::CandidateMove(Place {
                             root: PlaceRoot::Local(x_name),
                             projections: vec![],
-                        }),
+                        }, None),
                         data_type: DataType::Int,
                         location: TextLocation::default(),
                     },

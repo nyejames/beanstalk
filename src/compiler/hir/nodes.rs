@@ -191,7 +191,8 @@ pub enum HirExprKind {
     MutableBorrow(Place),
 
     /// Candidate move (potential ownership transfer, refined by the borrow checker)
-    CandidateMove(Place),
+    /// The BorrowId is attached during HIR generation for direct O(1) refinement
+    CandidateMove(Place, Option<crate::compiler::borrow_checker::types::BorrowId>),
 
     // === Binary Operations ===
     /// Binary operation between two places (no nested expressions)

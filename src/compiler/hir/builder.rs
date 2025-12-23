@@ -32,6 +32,9 @@ pub struct HirBuilder<'a> {
     /// Sequential ID generator for HIR nodes (used by the borrow checker for CFG)
     next_node_id: usize,
 
+    /// Sequential ID generator for borrow IDs (for direct O(1) candidate move refinement)
+    next_borrow_id: usize,
+
     /// Track local variable bindings and their types
     pub(crate) local_bindings: HashMap<InternedString, DataType>,
 
@@ -54,6 +57,7 @@ impl<'a> HirBuilder<'a> {
         Self {
             current_scope: scope,
             next_node_id: 0,
+            next_borrow_id: 0,
             local_bindings: HashMap::new(),
             temp_counter: 0,
             template_counter: 0,
@@ -65,6 +69,13 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn next_id(&mut self) -> HirNodeId {
         let id = self.next_node_id;
         self.next_node_id += 1;
+        id
+    }
+
+    /// Generate a new unique borrow ID for direct O(1) candidate move refinement
+    pub(crate) fn next_borrow_id(&mut self) -> crate::compiler::borrow_checker::types::BorrowId {
+        let id = self.next_borrow_id;
+        self.next_borrow_id += 1;
         id
     }
 

@@ -1,8 +1,4 @@
-//! Borrow Checker Entry Point
-//!
-//! This module provides the main entry point for borrow checking analysis.
-//! It coordinates the various phases of borrow checking including CFG construction,
-//! borrow tracking, conflict detection, and error reporting.
+//! Borrow checker entry point and coordination logic.
 
 use crate::compiler::borrow_checker::borrow_tracking::track_borrows;
 use crate::compiler::borrow_checker::candidate_move_refinement::validate_move_decisions;
@@ -22,45 +18,26 @@ use crate::compiler::compiler_messages::compiler_errors::{CompilerError, Compile
 use crate::compiler::hir::nodes::{HirModule, HirNode};
 use crate::compiler::string_interning::StringTable;
 
-/// Perform borrow checking on the provided HIR module.
-///
-/// This is the main entry point for borrow checking analysis. It performs:
-/// 1. Control Flow Graph (CFG) construction
-/// 2. Borrow tracking across the CFG
-/// 3. Conflict detection using Polonius-style analysis
-/// 4. Error collection and reporting
-///
-/// The function operates exclusively on HIR and modifies it by inserting
-/// Drop nodes and refining candidate moves based on last-use analysis.
+/// Main entry point for borrow checking analysis.
+/// Performs CFG construction, borrow tracking, conflict detection, and error reporting.
 pub fn check_borrows(
     hir: &mut HirModule,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     // Starting borrow checking analysis
 
-    // For now, we'll work with a simple implementation that processes
-    // the HIR functions individually. In the future, this will be expanded
-    // to handle the full module structure.
-
     // Extract HIR nodes from the module
     let hir_nodes = &mut hir.functions;
 
     if hir_nodes.is_empty() {
-        // No HIR nodes to analyze
         return Ok(());
     }
 
     // Perform borrow checking analysis
     match perform_borrow_analysis(hir_nodes, string_table) {
-        Ok(()) => {
-            // Borrow checking completed successfully
-            Ok(())
-        }
+        Ok(()) => Ok(()),
         Err(messages) => {
-            // Borrow checking failed with errors
-
-            // For now, return the first error. In the future, we should
-            // handle multiple errors properly.
+            // Return the first error if any exist
             if let Some(first_error) = messages.errors.into_iter().next() {
                 Err(first_error)
             } else {
@@ -70,49 +47,75 @@ pub fn check_borrows(
     }
 }
 
-/// Perform the core borrow checking analysis
-///
-/// This function implements comprehensive error reporting by collecting multiple errors
-/// in a single analysis pass and providing detailed error messages with actionable
-/// suggestions for fixing violations.
+/// Core borrow checking analysis with comprehensive error reporting.
 fn perform_borrow_analysis(
     hir_nodes: &mut Vec<HirNode>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    // Create borrow checker instance with comprehensive error collection
     let mut checker = BorrowChecker::new(string_table);
 
-    // Phase 1: Construct Control Flow Graph
-    // Constructing CFG from HIR nodes
-    checker.cfg = construct_cfg(hir_nodes);
-    // CFG constructed
+    // Phase 1: Construct CFG and track borrows
+    construct_cfg_and_track_borrows(&mut checker, hir_nodes)?;
 
-    // Phase 2: Track borrows across the CFG
-    // Tracking borrows across CFG
-    if let Err(mut messages) = track_borrows(&mut checker, hir_nodes) {
-        // Collect borrow tracking errors but continue analysis to find more errors
+    // Phase 2: Perform last-use analysis
+    let last_use_analysis = perform_last_use_analysis(&mut checker, hir_nodes);
+
+    // Phase 3: Infer lifetimes and apply results
+    let lifetime_inference = perform_lifetime_inference(&mut checker, hir_nodes);
+    apply_lifetime_results(&mut checker, &lifetime_inference)?;
+
+    // Phase 4: Refine candidate moves and validate decisions
+    let candidate_move_refinement = refine_and_validate_moves(&mut checker, hir_nodes, &lifetime_inference);
+
+    // Phase 5: Perform Polonius-style control flow analysis
+    perform_control_flow_analysis(&mut checker, hir_nodes)?;
+
+    // Phase 6: Detect conflicts and violations
+    detect_borrow_violations(&mut checker, hir_nodes);
+
+    // Phase 7: Insert Drop nodes and finalize
+    finalize_analysis(&mut checker, hir_nodes, &last_use_analysis)?;
+
+    checker.finish()
+}
+
+/// Construct CFG and track borrows across it
+fn construct_cfg_and_track_borrows(
+    checker: &mut BorrowChecker,
+    hir_nodes: &[HirNode],
+) -> Result<(), CompilerMessages> {
+    checker.cfg = construct_cfg(hir_nodes);
+    
+    if let Err(mut messages) = track_borrows(checker, hir_nodes) {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
+    
+    Ok(())
+}
 
-    // Phase 3: Perform last-use analysis
-    // Performing last-use analysis
-    let last_use_analysis = analyze_last_uses(&checker, &checker.cfg.clone(), hir_nodes);
-    // Last-use analysis complete
+/// Perform last-use analysis and apply results
+fn perform_last_use_analysis(
+    checker: &mut BorrowChecker,
+    hir_nodes: &[HirNode],
+) -> crate::compiler::borrow_checker::last_use::LastUseAnalysis {
+    let last_use_analysis = analyze_last_uses(checker, &checker.cfg.clone(), hir_nodes);
+    apply_last_use_analysis(checker, &last_use_analysis);
+    last_use_analysis
+}
 
-    // Apply last-use analysis results to borrow checker state
-    apply_last_use_analysis(&mut checker, &last_use_analysis);
-
-    // Phase 4: Infer lifetimes for all borrows
-    // Inferring lifetimes
-    let lifetime_inference = match infer_lifetimes(&checker, hir_nodes) {
+/// Perform lifetime inference with error handling
+fn perform_lifetime_inference(
+    checker: &mut BorrowChecker,
+    hir_nodes: &[HirNode],
+) -> crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult {
+    match infer_lifetimes(checker, hir_nodes) {
         Ok(inference) => inference,
         Err(mut messages) => {
-            // Collect lifetime inference errors but continue with default inference
             checker.errors.append(&mut messages.errors);
             checker.warnings.append(&mut messages.warnings);
             
-            // Create a default lifetime inference to allow continued analysis
+            // Create default inference to allow continued analysis
             crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult {
                 live_sets: crate::compiler::borrow_checker::lifetime_inference::borrow_live_sets::BorrowLiveSets::new(),
                 temporal_info: crate::compiler::borrow_checker::lifetime_inference::temporal_analysis::DominanceInfo::new(),
@@ -120,110 +123,103 @@ fn perform_borrow_analysis(
                 dataflow_result: crate::compiler::borrow_checker::lifetime_inference::dataflow_engine::DataflowResult::new(),
             }
         }
-    };
-    // Lifetime inference complete
+    }
+}
 
-    // Apply lifetime inference results to borrow checker
-    // This updates CFG nodes with accurate live borrow information for conflict detection
-    if let Err(mut messages) = apply_lifetime_inference(&mut checker, &lifetime_inference) {
+/// Apply lifetime inference results to borrow checker
+fn apply_lifetime_results(
+    checker: &mut BorrowChecker,
+    lifetime_inference: &crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult,
+) -> Result<(), CompilerMessages> {
+    if let Err(mut messages) = apply_lifetime_inference(checker, lifetime_inference) {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
 
-    // Update borrow state with precise lifetime spans for accurate error reporting
-    if let Err(mut messages) = update_borrow_state_with_lifetime_spans(&mut checker, &lifetime_inference) {
+    if let Err(mut messages) = update_borrow_state_with_lifetime_spans(checker, lifetime_inference) {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
 
-    // Phase 5: Refine candidate moves using corrected lifetime inference
-    // Refining candidate moves with corrected lifetime inference
-    let candidate_move_refinement = match crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves_with_lifetime_inference(
-        &mut checker,
+    Ok(())
+}
+
+/// Refine candidate moves and validate move decisions
+fn refine_and_validate_moves(
+    checker: &mut BorrowChecker,
+    hir_nodes: &[HirNode],
+    lifetime_inference: &crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult,
+) -> crate::compiler::borrow_checker::candidate_move_refinement::CandidateMoveRefinement {
+    let _candidate_move_refinement = match crate::compiler::borrow_checker::candidate_move_refinement::refine_candidate_moves_with_lifetime_inference(
+        checker,
         hir_nodes,
-        &lifetime_inference
+        lifetime_inference
     ) {
         Ok(refinement) => refinement,
         Err(mut messages) => {
-            // Collect move refinement errors but continue with empty refinement
             checker.errors.append(&mut messages.errors);
             checker.warnings.append(&mut messages.warnings);
-            
-            // Create empty refinement to allow continued analysis
             crate::compiler::borrow_checker::candidate_move_refinement::CandidateMoveRefinement::default()
         }
     };
-    // Candidate move refinement complete with CFG-based temporal analysis
 
-    // Validate that move decisions don't conflict with active borrows
-    if let Err(mut messages) = validate_move_decisions(&checker, &candidate_move_refinement) {
+    // Validate move decisions
+    if let Err(mut messages) = validate_move_decisions(checker, &_candidate_move_refinement) {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
 
-    // Validate that all candidate moves have been properly refined
-    if let Err(mut messages) = validate_complete_refinement(&checker) {
+    if let Err(mut messages) = validate_complete_refinement(checker) {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
 
-    // Phase 6: Perform Polonius-style control flow analysis
-    // Performing Polonius-style control flow analysis
-
-    // 6a: Analyze control flow divergence points
-    analyze_control_flow_divergence(&mut checker);
-
-    // 6b: Propagate borrow states along CFG edges
-    propagate_borrow_states(&mut checker);
-
-    // 6c: Merge borrow states at CFG join points
-    merge_control_flow_states(&mut checker);
-
-    // 6d: Handle structured control flow with enhanced separate branch tracking
-    // This provides additional structured control flow analysis on top of the
-    // existing Polonius-style analysis
-    // Handling structured control flow
-    if let Err(mut messages) = handle_structured_control_flow(&checker, hir_nodes) {
-        checker.errors.append(&mut messages.errors);
-        checker.warnings.append(&mut messages.warnings);
-    }
-    // Structured control flow handling complete
-
-    // Phase 7: Detect borrow conflicts using Polonius-style analysis
-    // Detecting borrow conflicts with Polonius-style analysis
-    detect_conflicts(&mut checker, hir_nodes);
-
-    // Phase 8: Check for use-after-move violations
-    // Checking for use-after-move violations
-    check_use_after_move(&mut checker, hir_nodes);
-
-    // Phase 9: Check for move-while-borrowed violations
-    // Checking for move-while-borrowed violations
-    check_move_while_borrowed(&mut checker, hir_nodes);
-
-    // Phase 10: Insert Drop nodes based on last-use analysis and move decisions
-    // Inserting Drop nodes
-    if let Err(mut messages) = insert_drop_nodes(&checker, hir_nodes, &last_use_analysis) {
-        // Collect drop insertion errors
-        checker.errors.append(&mut messages.errors);
-        checker.warnings.append(&mut messages.warnings);
-    }
-    // Drop insertion complete
-
-    // Generate comprehensive error summary if errors were found
-    if !checker.errors.is_empty() {
-        generate_error_summary(&mut checker);
-    }
-
-    // Return comprehensive results with all collected errors and warnings
-    checker.finish()
+    _candidate_move_refinement
 }
 
-/// Update borrow state with precise lifetime spans for accurate error reporting
-///
-/// This function integrates the corrected lifetime inference results with the borrow
-/// checker state to ensure that conflict detection and drop insertion use accurate
-/// lifetime information instead of the previous over-conservative approach.
+/// Perform Polonius-style control flow analysis
+fn perform_control_flow_analysis(
+    checker: &mut BorrowChecker,
+    hir_nodes: &[HirNode],
+) -> Result<(), CompilerMessages> {
+    analyze_control_flow_divergence(checker);
+    propagate_borrow_states(checker);
+    merge_control_flow_states(checker);
+
+    if let Err(mut messages) = handle_structured_control_flow(checker, hir_nodes) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
+
+    Ok(())
+}
+
+/// Detect all types of borrow violations
+fn detect_borrow_violations(checker: &mut BorrowChecker, hir_nodes: &[HirNode]) {
+    detect_conflicts(checker, hir_nodes);
+    check_use_after_move(checker, hir_nodes);
+    check_move_while_borrowed(checker, hir_nodes);
+}
+
+/// Finalize analysis by inserting Drop nodes and generating error summary
+fn finalize_analysis(
+    checker: &mut BorrowChecker,
+    hir_nodes: &mut Vec<HirNode>,
+    last_use_analysis: &crate::compiler::borrow_checker::last_use::LastUseAnalysis,
+) -> Result<(), CompilerMessages> {
+    if let Err(mut messages) = insert_drop_nodes(checker, hir_nodes, last_use_analysis) {
+        checker.errors.append(&mut messages.errors);
+        checker.warnings.append(&mut messages.warnings);
+    }
+
+    if !checker.errors.is_empty() {
+        generate_error_summary(checker);
+    }
+
+    Ok(())
+}
+
+/// Update borrow state with precise lifetime spans for accurate error reporting.
 fn update_borrow_state_with_lifetime_spans(
     checker: &mut BorrowChecker,
     lifetime_inference: &crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult,
@@ -259,10 +255,7 @@ fn update_borrow_state_with_lifetime_spans(
     Ok(())
 }
 
-/// Validate that lifetime spans are consistent with CFG structure
-///
-/// This ensures that the corrected lifetime inference produces results that are
-/// consistent with the control flow graph structure and borrow checker state.
+/// Validate that lifetime spans are consistent with CFG structure.
 fn validate_lifetime_spans_consistency(
     checker: &BorrowChecker,
     lifetime_inference: &crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult,
@@ -317,11 +310,7 @@ fn validate_lifetime_spans_consistency(
     }
 }
 
-/// Validate that all candidate moves have been properly refined
-///
-/// This function ensures that no CandidateMove borrows remain in the borrow checker
-/// state after refinement, which would indicate a phase-order hazard or incomplete
-/// analysis.
+/// Validate that all candidate moves have been properly refined.
 fn validate_complete_refinement(checker: &BorrowChecker) -> Result<(), CompilerMessages> {
     use crate::compiler::borrow_checker::types::BorrowKind;
 
@@ -363,11 +352,7 @@ fn validate_complete_refinement(checker: &BorrowChecker) -> Result<(), CompilerM
 
     Ok(())
 }
-/// Generate a comprehensive error summary for multiple borrow checker violations
-///
-/// This function creates a summary error that provides an overview of all detected
-/// violations and actionable suggestions for fixing them. It helps users understand
-/// the overall pattern of errors and prioritize fixes.
+/// Generate a comprehensive error summary for multiple borrow checker violations.
 fn generate_error_summary(checker: &mut BorrowChecker) {
     let total_errors = checker.errors.len();
     

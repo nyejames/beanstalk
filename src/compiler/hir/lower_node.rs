@@ -47,9 +47,11 @@ impl<'a> HirBuilder<'a> {
                     _ => DataType::Inferred,
                 };
 
-                // Create a candidate move
+                // Create a candidate move with pre-allocated BorrowId for O(1) refinement
+                // This eliminates the fragile loan lookup during candidate move refinement
+                let borrow_id = self.next_borrow_id();
                 let value_expr = HirExpr {
-                    kind: HirExprKind::CandidateMove(value_place),
+                    kind: HirExprKind::CandidateMove(value_place, Some(borrow_id)),
                     data_type: target_type,
                     location: node.location.clone(),
                 };

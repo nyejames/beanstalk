@@ -1,41 +1,13 @@
-//! # Borrow Checker Module
-//!
-//! This module implements Beanstalk's borrow checker, which validates memory safety
-//! and ownership rules on HIR (High-Level Intermediate Representation). The borrow
-//! checker ensures all borrowing, ownership transfers, and memory access patterns
-//! are safe before lowering to LIR.
-//!
-//! ## Architecture
-//!
-//! The borrow checker consists of several key components:
-//! - **Control Flow Graph (CFG) Construction**: Builds a graph representation of program flow
-//! - **Borrow Tracking**: Tracks active borrows and their lifetimes across the CFG
-//! - **Last-Use Analysis**: Determines when values are used for the final time
-//! - **Conflict Detection**: Detects memory safety violations using place overlap analysis
-//!
-//! ## Key Design Principles
-//!
-//! - **HIR-Only Operation**: Operates exclusively on HIR, never on AST or LIR
-//! - **Automatic Lifetime Inference**: No explicit lifetime annotations required
-//! - **Last-Use Move Optimization**: Candidate moves become actual moves when they are the final use
-//! - **Polonius-Style Analysis**: Path-sensitive conflict detection
-//! - **Place-Based Memory Model**: All memory access tracked through precise place representations
-//! - **Conservative Analysis**: When in doubt, chooses the safe option
-//!
-//! # Borrow Tracking System
-//!
-//! This module implements the core borrow tracking functionality for the borrow checker.
-//! It handles the creation, propagation, and management of borrows across the control
+//! Borrow tracking system for the borrow checker.
+//! 
+//! Handles creation, propagation, and management of borrows across the control
 //! flow graph, enabling precise lifetime analysis and conflict detection.
 
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind, Loan};
 use crate::compiler::compiler_messages::compiler_errors::CompilerMessages;
 use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirNode, HirNodeId};
 
-/// Check if a place contains a heap-allocated string
-/// 
-/// This is used to determine if special ownership handling is needed for
-/// function parameter passing and assignment operations.
+/// Check if a place contains a heap-allocated string for special ownership handling.
 fn is_heap_string_place(place: &crate::compiler::hir::place::Place, checker: &BorrowChecker) -> bool {
     // For now, use a simple heuristic based on place name
     // In the future, this should use proper type information
@@ -49,11 +21,7 @@ fn is_heap_string_place(place: &crate::compiler::hir::place::Place, checker: &Bo
     }
 }
 
-/// Track borrows across the control flow graph
-///
-/// This function performs the main borrow tracking analysis, creating borrows
-/// for Load and CandidateMove operations and propagating borrow state through
-/// the CFG.
+/// Track borrows across the control flow graph.
 pub fn track_borrows(
     checker: &mut BorrowChecker,
     hir_nodes: &[HirNode],
@@ -76,164 +44,243 @@ fn process_node_for_borrows(
 ) -> Result<(), CompilerMessages> {
     match &node.kind {
         HirKind::Assign { place: _, value } => {
-            // Create borrows based on the value expression
-            // For heap strings, this represents the creation or transfer of ownership
-            process_expression_for_borrows(checker, value, node.id)?;
-            
-            // Special handling for heap string assignments
-            if let HirExprKind::HeapString(_) = &value.kind {
-                // This is the creation of a new heap-allocated string
-                // No additional borrow tracking needed here since this is the creation point
-                // The place will be tracked for Drop insertion later
-            }
+            process_assign_node(checker, value, node.id)
         }
 
-        HirKind::Borrow {
-            place,
-            kind,
-            target: _,
-        } => {
-            // Explicit borrow creation
-            let borrow_id = checker.next_borrow_id();
-            let borrow_kind = match kind {
-                crate::compiler::hir::nodes::BorrowKind::Shared => BorrowKind::Shared,
-                crate::compiler::hir::nodes::BorrowKind::Mutable => BorrowKind::Mutable,
-            };
-            let loan = Loan::new(borrow_id, place.clone(), borrow_kind, node.id);
-
-            // Add to CFG node's borrow state
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+        HirKind::Borrow { place, kind, target } => {
+            process_borrow_node(checker, place, kind, target, node.id)
         }
 
         HirKind::Call { args, .. } | HirKind::HostCall { args, .. } => {
-            // Create borrows for function arguments
-            // For heap strings, this represents ownership transfer validation
-            for arg_place in args {
-                let borrow_id = checker.next_borrow_id();
-                
-                // Check if this argument is a heap-allocated string
-                let borrow_kind = if is_heap_string_place(arg_place, checker) {
-                    // Heap strings passed to functions need careful ownership analysis
-                    // This will be refined by candidate move analysis
-                    BorrowKind::Mutable
-                } else {
-                    BorrowKind::Shared
-                };
-                
-                let loan = Loan::new(borrow_id, arg_place.clone(), borrow_kind, node.id);
-
-                if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                    cfg_node.borrow_state.add_borrow(loan);
-                }
-            }
+            process_call_node(checker, args, node.id)
         }
 
-        HirKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            // Create borrow for condition
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, condition.clone(), BorrowKind::Shared, node.id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
-
-            // Process blocks recursively
-            for then_node in then_block {
-                process_node_for_borrows(checker, then_node)?;
-            }
-
-            if let Some(else_nodes) = else_block {
-                for else_node in else_nodes {
-                    process_node_for_borrows(checker, else_node)?;
-                }
-            }
+        HirKind::If { condition, then_block, else_block } => {
+            process_if_node(checker, condition, then_block, else_block, node.id)
         }
 
-        HirKind::Match {
-            scrutinee,
-            arms,
-            default,
-        } => {
-            // Create borrow for scrutinee
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, scrutinee.clone(), BorrowKind::Shared, node.id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
-
-            // Process match arms
-            for arm in arms {
-                for arm_node in &arm.body {
-                    process_node_for_borrows(checker, arm_node)?;
-                }
-            }
-
-            // Process default arm
-            if let Some(default_nodes) = default {
-                for default_node in default_nodes {
-                    process_node_for_borrows(checker, default_node)?;
-                }
-            }
+        HirKind::Match { scrutinee, arms, default } => {
+            process_match_node(checker, scrutinee, arms, default, node.id)
         }
 
         HirKind::Loop { iterator, body, .. } => {
-            // Create borrow for iterator
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, iterator.clone(), BorrowKind::Shared, node.id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
-
-            // Process loop body
-            for body_node in body {
-                process_node_for_borrows(checker, body_node)?;
-            }
+            process_loop_node(checker, iterator, body, node.id)
         }
 
         HirKind::Return(places) => {
-            // Create borrows for return values
-            for return_place in places {
-                let borrow_id = checker.next_borrow_id();
-                let loan = Loan::new(borrow_id, return_place.clone(), BorrowKind::Shared, node.id);
-
-                if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                    cfg_node.borrow_state.add_borrow(loan);
-                }
-            }
+            process_return_node(checker, places, node.id)
         }
 
         HirKind::ReturnError(place) => {
-            // Create borrow for error return
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node.id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+            process_return_error_node(checker, place, node.id)
         }
 
         HirKind::ExprStmt(place) => {
-            // Create borrow for expression statement
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node.id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node.id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+            process_expr_stmt_node(checker, place, node.id)
         }
 
         // Other node types don't create borrows directly
-        _ => {}
+        _ => Ok(()),
+    }
+}
+
+/// Process assignment node for borrow creation
+fn process_assign_node(
+    checker: &mut BorrowChecker,
+    value: &crate::compiler::hir::nodes::HirExpr,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    process_expression_for_borrows(checker, value, node_id)?;
+    
+    // Special handling for heap string assignments
+    if let HirExprKind::HeapString(_) = &value.kind {
+        // This is the creation of a new heap-allocated string
+        // No additional borrow tracking needed here since this is the creation point
+    }
+    
+    Ok(())
+}
+
+/// Process explicit borrow node
+fn process_borrow_node(
+    checker: &mut BorrowChecker,
+    place: &crate::compiler::hir::place::Place,
+    kind: &crate::compiler::hir::nodes::BorrowKind,
+    _target: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    let borrow_id = checker.next_borrow_id();
+    let borrow_kind = match kind {
+        crate::compiler::hir::nodes::BorrowKind::Shared => BorrowKind::Shared,
+        crate::compiler::hir::nodes::BorrowKind::Mutable => BorrowKind::Mutable,
+    };
+    let loan = Loan::new(borrow_id, place.clone(), borrow_kind, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+    
+    Ok(())
+}
+
+/// Process function call node for argument borrows
+fn process_call_node(
+    checker: &mut BorrowChecker,
+    args: &[crate::compiler::hir::place::Place],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    for arg_place in args {
+        let borrow_id = checker.next_borrow_id();
+        
+        let borrow_kind = if is_heap_string_place(arg_place, checker) {
+            BorrowKind::Mutable
+        } else {
+            BorrowKind::Shared
+        };
+        
+        let loan = Loan::new(borrow_id, arg_place.clone(), borrow_kind, node_id);
+
+        if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+            cfg_node.borrow_state.add_borrow(loan);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Process if statement node
+fn process_if_node(
+    checker: &mut BorrowChecker,
+    condition: &crate::compiler::hir::place::Place,
+    then_block: &[HirNode],
+    else_block: &Option<Vec<HirNode>>,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    // Create borrow for condition
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, condition.clone(), BorrowKind::Shared, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
     }
 
+    // Process blocks recursively
+    for then_node in then_block {
+        process_node_for_borrows(checker, then_node)?;
+    }
+
+    if let Some(else_nodes) = else_block {
+        for else_node in else_nodes {
+            process_node_for_borrows(checker, else_node)?;
+        }
+    }
+    
+    Ok(())
+}
+
+/// Process match statement node
+fn process_match_node(
+    checker: &mut BorrowChecker,
+    scrutinee: &crate::compiler::hir::place::Place,
+    arms: &[crate::compiler::hir::nodes::HirMatchArm],
+    default: &Option<Vec<HirNode>>,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    // Create borrow for scrutinee
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, scrutinee.clone(), BorrowKind::Shared, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+
+    // Process match arms
+    for arm in arms {
+        for arm_node in &arm.body {
+            process_node_for_borrows(checker, arm_node)?;
+        }
+    }
+
+    // Process default arm
+    if let Some(default_nodes) = default {
+        for default_node in default_nodes {
+            process_node_for_borrows(checker, default_node)?;
+        }
+    }
+    
+    Ok(())
+}
+
+/// Process loop node
+fn process_loop_node(
+    checker: &mut BorrowChecker,
+    iterator: &crate::compiler::hir::place::Place,
+    body: &[HirNode],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    // Create borrow for iterator
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, iterator.clone(), BorrowKind::Shared, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+
+    // Process loop body
+    for body_node in body {
+        process_node_for_borrows(checker, body_node)?;
+    }
+    
+    Ok(())
+}
+
+/// Process return statement node
+fn process_return_node(
+    checker: &mut BorrowChecker,
+    places: &[crate::compiler::hir::place::Place],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    for return_place in places {
+        let borrow_id = checker.next_borrow_id();
+        let loan = Loan::new(borrow_id, return_place.clone(), BorrowKind::Shared, node_id);
+
+        if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+            cfg_node.borrow_state.add_borrow(loan);
+        }
+    }
+    
+    Ok(())
+}
+
+/// Process return error node
+fn process_return_error_node(
+    checker: &mut BorrowChecker,
+    place: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+    
+    Ok(())
+}
+
+/// Process expression statement node
+fn process_expr_stmt_node(
+    checker: &mut BorrowChecker,
+    place: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+    
     Ok(())
 }
 
@@ -245,148 +292,47 @@ fn process_expression_for_borrows(
 ) -> Result<(), CompilerMessages> {
     match &expr.kind {
         HirExprKind::Load(place) => {
-            // Create shared borrow for load
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+            create_shared_borrow(checker, place, node_id)
         }
 
         HirExprKind::SharedBorrow(place) => {
-            // Create shared borrow
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+            create_shared_borrow(checker, place, node_id)
         }
 
         HirExprKind::MutableBorrow(place) => {
-            // Create mutable borrow
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Mutable, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+            create_mutable_borrow(checker, place, node_id)
         }
 
-        HirExprKind::CandidateMove(place) => {
-            // Create candidate move borrow (will be refined by last-use analysis)
-            // This is treated conservatively as mutable for conflict detection
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, place.clone(), BorrowKind::CandidateMove, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+        HirExprKind::CandidateMove(place, borrow_id_opt) => {
+            create_candidate_move_borrow(checker, place, borrow_id_opt, node_id)
         }
 
         HirExprKind::BinOp { left, right, .. } => {
-            // Create borrows for binary operation operands
-            let left_borrow_id = checker.next_borrow_id();
-            let left_loan = Loan::new(left_borrow_id, left.clone(), BorrowKind::Shared, node_id);
-
-            let right_borrow_id = checker.next_borrow_id();
-            let right_loan = Loan::new(right_borrow_id, right.clone(), BorrowKind::Shared, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(left_loan);
-                cfg_node.borrow_state.add_borrow(right_loan);
-            }
+            create_binary_op_borrows(checker, left, right, node_id)
         }
 
         HirExprKind::UnaryOp { operand, .. } => {
-            // Create borrow for unary operation operand
-            let borrow_id = checker.next_borrow_id();
-            let loan = Loan::new(borrow_id, operand.clone(), BorrowKind::Shared, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(loan);
-            }
+            create_shared_borrow(checker, operand, node_id)
         }
 
         HirExprKind::Call { args, .. } => {
-            // Create borrows for function call arguments
-            for arg_place in args {
-                let borrow_id = checker.next_borrow_id();
-                let loan = Loan::new(borrow_id, arg_place.clone(), BorrowKind::Shared, node_id);
-
-                if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                    cfg_node.borrow_state.add_borrow(loan);
-                }
-            }
+            create_call_arg_borrows(checker, args, node_id)
         }
 
         HirExprKind::MethodCall { receiver, args, .. } => {
-            // Create borrow for receiver
-            let receiver_borrow_id = checker.next_borrow_id();
-            let receiver_loan = Loan::new(
-                receiver_borrow_id,
-                receiver.clone(),
-                BorrowKind::Shared,
-                node_id,
-            );
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(receiver_loan);
-            }
-
-            // Create borrows for arguments
-            for arg_place in args {
-                let borrow_id = checker.next_borrow_id();
-                let loan = Loan::new(borrow_id, arg_place.clone(), BorrowKind::Shared, node_id);
-
-                if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                    cfg_node.borrow_state.add_borrow(loan);
-                }
-            }
+            create_method_call_borrows(checker, receiver, args, node_id)
         }
 
         HirExprKind::StructConstruct { fields, .. } => {
-            // Create borrows for struct field values
-            for (_, field_place) in fields {
-                let borrow_id = checker.next_borrow_id();
-                let loan = Loan::new(borrow_id, field_place.clone(), BorrowKind::Shared, node_id);
-
-                if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                    cfg_node.borrow_state.add_borrow(loan);
-                }
-            }
+            create_struct_field_borrows(checker, fields, node_id)
         }
 
         HirExprKind::Collection(places) => {
-            // Create borrows for collection elements
-            for element_place in places {
-                let borrow_id = checker.next_borrow_id();
-                let loan = Loan::new(
-                    borrow_id,
-                    element_place.clone(),
-                    BorrowKind::Shared,
-                    node_id,
-                );
-
-                if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                    cfg_node.borrow_state.add_borrow(loan);
-                }
-            }
+            create_collection_element_borrows(checker, places, node_id)
         }
 
         HirExprKind::Range { start, end } => {
-            // Create borrows for range bounds
-            let start_borrow_id = checker.next_borrow_id();
-            let start_loan = Loan::new(start_borrow_id, start.clone(), BorrowKind::Shared, node_id);
-
-            let end_borrow_id = checker.next_borrow_id();
-            let end_loan = Loan::new(end_borrow_id, end.clone(), BorrowKind::Shared, node_id);
-
-            if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
-                cfg_node.borrow_state.add_borrow(start_loan);
-                cfg_node.borrow_state.add_borrow(end_loan);
-            }
+            create_range_borrows(checker, start, end, node_id)
         }
 
         // Literal expressions don't create borrows, except heap strings
@@ -394,29 +340,150 @@ fn process_expression_for_borrows(
         | HirExprKind::Float(_)
         | HirExprKind::Bool(_)
         | HirExprKind::StringLiteral(_)
-        | HirExprKind::Char(_) => {}
+        | HirExprKind::Char(_) => Ok(()),
 
         HirExprKind::HeapString(_) => {
             // Heap-allocated strings are owned values that need tracking
-            // They are created by runtime templates and need proper ownership management
             // No borrow is created here since this is the creation point
-            // The string will be assigned to a place and tracked from there
+            Ok(())
         }
     }
+}
 
+/// Create a shared borrow for a place
+fn create_shared_borrow(
+    checker: &mut BorrowChecker,
+    place: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Shared, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+    
     Ok(())
 }
 
-/// Propagate borrow state through the control flow graph
-///
-/// This function implements a worklist-based dataflow analysis to propagate
-/// borrow state through the CFG. It handles:
-/// - Forward propagation along CFG edges
-/// - Conservative merging at join points (multiple predecessors)
-/// - Iterative refinement until a fixed point is reached
+/// Create a mutable borrow for a place
+fn create_mutable_borrow(
+    checker: &mut BorrowChecker,
+    place: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    let borrow_id = checker.next_borrow_id();
+    let loan = Loan::new(borrow_id, place.clone(), BorrowKind::Mutable, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+    
+    Ok(())
+}
+
+/// Create a candidate move borrow with optional pre-allocated ID
+fn create_candidate_move_borrow(
+    checker: &mut BorrowChecker,
+    place: &crate::compiler::hir::place::Place,
+    borrow_id_opt: &Option<crate::compiler::borrow_checker::types::BorrowId>,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    // Use pre-allocated BorrowId from HIR generation for O(1) refinement
+    let borrow_id = if let Some(id) = borrow_id_opt {
+        *id
+    } else {
+        // Fallback for legacy HIR nodes without pre-allocated BorrowId
+        checker.next_borrow_id()
+    };
+    
+    let loan = Loan::new(borrow_id, place.clone(), BorrowKind::CandidateMove, node_id);
+
+    if let Some(cfg_node) = checker.cfg.nodes.get_mut(&node_id) {
+        cfg_node.borrow_state.add_borrow(loan);
+    }
+    
+    Ok(())
+}
+
+/// Create borrows for binary operation operands
+fn create_binary_op_borrows(
+    checker: &mut BorrowChecker,
+    left: &crate::compiler::hir::place::Place,
+    right: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    create_shared_borrow(checker, left, node_id)?;
+    create_shared_borrow(checker, right, node_id)?;
+    Ok(())
+}
+
+/// Create borrows for function call arguments
+fn create_call_arg_borrows(
+    checker: &mut BorrowChecker,
+    args: &[crate::compiler::hir::place::Place],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    for arg_place in args {
+        create_shared_borrow(checker, arg_place, node_id)?;
+    }
+    Ok(())
+}
+
+/// Create borrows for method call receiver and arguments
+fn create_method_call_borrows(
+    checker: &mut BorrowChecker,
+    receiver: &crate::compiler::hir::place::Place,
+    args: &[crate::compiler::hir::place::Place],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    create_shared_borrow(checker, receiver, node_id)?;
+    
+    for arg_place in args {
+        create_shared_borrow(checker, arg_place, node_id)?;
+    }
+    
+    Ok(())
+}
+
+/// Create borrows for struct field values
+fn create_struct_field_borrows(
+    checker: &mut BorrowChecker,
+    fields: &[(crate::compiler::string_interning::InternedString, crate::compiler::hir::place::Place)],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    for (_, field_place) in fields {
+        create_shared_borrow(checker, field_place, node_id)?;
+    }
+    Ok(())
+}
+
+/// Create borrows for collection elements
+fn create_collection_element_borrows(
+    checker: &mut BorrowChecker,
+    places: &[crate::compiler::hir::place::Place],
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    for element_place in places {
+        create_shared_borrow(checker, element_place, node_id)?;
+    }
+    Ok(())
+}
+
+/// Create borrows for range bounds
+fn create_range_borrows(
+    checker: &mut BorrowChecker,
+    start: &crate::compiler::hir::place::Place,
+    end: &crate::compiler::hir::place::Place,
+    node_id: HirNodeId,
+) -> Result<(), CompilerMessages> {
+    create_shared_borrow(checker, start, node_id)?;
+    create_shared_borrow(checker, end, node_id)?;
+    Ok(())
+}
+
+/// Propagate borrow state through the control flow graph using worklist-based dataflow analysis.
 fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMessages> {
-    // Use a worklist algorithm for dataflow analysis
-    // This handles cycles in the CFG (from loops) correctly
     let mut work_list: Vec<HirNodeId> = checker.cfg.entry_points.clone();
     let mut iterations = 0;
     let max_iterations = checker.cfg.nodes.len() * 10; // Prevent infinite loops
@@ -424,86 +491,135 @@ fn propagate_borrow_state(checker: &mut BorrowChecker) -> Result<(), CompilerMes
     while let Some(node_id) = work_list.pop() {
         iterations += 1;
         if iterations > max_iterations {
-            // Safety limit reached - this shouldn't happen with well-formed CFGs
-            break;
+            break; // Safety limit reached
         }
 
-        // First, merge incoming borrow states from all predecessors
-        let predecessors = checker.cfg.predecessors(node_id);
-
-        if !predecessors.is_empty() {
-            // Collect predecessor states
-            let predecessor_states: Vec<_> = predecessors
-                .iter()
-                .filter_map(|&pred_id| {
-                    checker
-                        .cfg
-                        .nodes
-                        .get(&pred_id)
-                        .map(|n| n.borrow_state.clone())
-                })
-                .collect();
-
-            // Merge all predecessor states into the current node
-            if let Some(current_node) = checker.cfg.nodes.get_mut(&node_id) {
-                // Start with the node's own borrows (created at this node)
-                let own_borrows = current_node.borrow_state.clone();
-
-                // Merge incoming states from predecessors
-                for (i, pred_state) in predecessor_states.iter().enumerate() {
-                    if i == 0 && own_borrows.is_empty() {
-                        // First predecessor and no own borrows - use union merge
-                        current_node.borrow_state.union_merge(pred_state);
-                    } else {
-                        // Multiple predecessors - use conservative merge (intersection)
-                        // This implements Polonius-style analysis where conflicts
-                        // are only errors if they exist on ALL incoming paths
-                        current_node.borrow_state.merge(pred_state);
-                    }
-                }
-
-                // Re-add own borrows that were created at this node
-                for loan in own_borrows.active_borrows.values() {
-                    if !current_node
-                        .borrow_state
-                        .active_borrows
-                        .contains_key(&loan.id)
-                    {
-                        current_node.borrow_state.add_borrow(loan.clone());
-                    }
-                }
-            }
-        }
-
-        // Get current node's borrow state after merging
-        let current_state = if let Some(node) = checker.cfg.nodes.get(&node_id) {
-            node.borrow_state.clone()
-        } else {
-            continue;
-        };
-
-        // Get successors first to avoid borrowing conflicts
-        let successors: Vec<HirNodeId> = checker.cfg.successors(node_id).to_vec();
-
-        // Propagate to successors
-        for successor_id in successors {
-            // Check if the successor's state would change
-            let state_changed = if let Some(successor_node) = checker.cfg.nodes.get(&successor_id) {
-                // Check if merging would change the state
-                let old_count = successor_node.borrow_state.active_borrows.len();
-                let mut test_state = successor_node.borrow_state.clone();
-                test_state.union_merge(&current_state);
-                test_state.active_borrows.len() != old_count
-            } else {
-                false
-            };
-
-            // If state would change, add to worklist for re-processing
-            if state_changed && !work_list.contains(&successor_id) {
-                work_list.push(successor_id);
-            }
+        // Process current node and propagate to successors
+        if process_node_propagation(checker, node_id) {
+            // State changed, add successors to worklist
+            add_successors_to_worklist(checker, node_id, &mut work_list);
         }
     }
 
     Ok(())
+}
+
+/// Process borrow state propagation for a single node
+/// Returns true if any successor state changed
+fn process_node_propagation(checker: &mut BorrowChecker, node_id: HirNodeId) -> bool {
+    // Merge incoming states from predecessors
+    merge_predecessor_states(checker, node_id);
+
+    // Check if successors would change
+    check_successor_state_changes(checker, node_id)
+}
+
+/// Merge borrow states from all predecessor nodes
+fn merge_predecessor_states(checker: &mut BorrowChecker, node_id: HirNodeId) {
+    let predecessors = checker.cfg.predecessors(node_id);
+    
+    if predecessors.is_empty() {
+        return;
+    }
+
+    let predecessor_states = collect_predecessor_states(checker, &predecessors);
+    apply_merged_state(checker, node_id, &predecessor_states);
+}
+
+/// Collect borrow states from predecessor nodes
+fn collect_predecessor_states(
+    checker: &BorrowChecker,
+    predecessors: &[HirNodeId],
+) -> Vec<crate::compiler::borrow_checker::types::BorrowState> {
+    predecessors
+        .iter()
+        .filter_map(|&pred_id| {
+            checker
+                .cfg
+                .nodes
+                .get(&pred_id)
+                .map(|n| n.borrow_state.clone())
+        })
+        .collect()
+}
+
+/// Apply merged predecessor states to current node
+fn apply_merged_state(
+    checker: &mut BorrowChecker,
+    node_id: HirNodeId,
+    predecessor_states: &[crate::compiler::borrow_checker::types::BorrowState],
+) {
+    if let Some(current_node) = checker.cfg.nodes.get_mut(&node_id) {
+        let own_borrows = current_node.borrow_state.clone();
+
+        // Merge incoming states from predecessors
+        for (i, pred_state) in predecessor_states.iter().enumerate() {
+            if i == 0 && own_borrows.is_empty() {
+                current_node.borrow_state.union_merge(pred_state);
+            } else {
+                current_node.borrow_state.merge(pred_state);
+            }
+        }
+
+        // Re-add own borrows created at this node
+        restore_own_borrows(&mut current_node.borrow_state, &own_borrows);
+    }
+}
+
+/// Restore borrows that were created at the current node
+fn restore_own_borrows(
+    current_state: &mut crate::compiler::borrow_checker::types::BorrowState,
+    own_borrows: &crate::compiler::borrow_checker::types::BorrowState,
+) {
+    for loan in own_borrows.active_borrows.values() {
+        if !current_state.active_borrows.contains_key(&loan.id) {
+            current_state.add_borrow(loan.clone());
+        }
+    }
+}
+
+/// Check if propagating to successors would change their states
+fn check_successor_state_changes(checker: &BorrowChecker, node_id: HirNodeId) -> bool {
+    let current_state = if let Some(node) = checker.cfg.nodes.get(&node_id) {
+        node.borrow_state.clone()
+    } else {
+        return false;
+    };
+
+    let successors: Vec<HirNodeId> = checker.cfg.successors(node_id).to_vec();
+    
+    successors.iter().any(|&successor_id| {
+        would_successor_state_change(checker, successor_id, &current_state)
+    })
+}
+
+/// Check if a successor's state would change with new input
+fn would_successor_state_change(
+    checker: &BorrowChecker,
+    successor_id: HirNodeId,
+    current_state: &crate::compiler::borrow_checker::types::BorrowState,
+) -> bool {
+    if let Some(successor_node) = checker.cfg.nodes.get(&successor_id) {
+        let old_count = successor_node.borrow_state.active_borrows.len();
+        let mut test_state = successor_node.borrow_state.clone();
+        test_state.union_merge(current_state);
+        test_state.active_borrows.len() != old_count
+    } else {
+        false
+    }
+}
+
+/// Add successors to worklist if they're not already present
+fn add_successors_to_worklist(
+    checker: &BorrowChecker,
+    node_id: HirNodeId,
+    work_list: &mut Vec<HirNodeId>,
+) {
+    let successors: Vec<HirNodeId> = checker.cfg.successors(node_id).to_vec();
+    
+    for successor_id in successors {
+        if !work_list.contains(&successor_id) {
+            work_list.push(successor_id);
+        }
+    }
 }

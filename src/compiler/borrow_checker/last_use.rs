@@ -1,42 +1,8 @@
-//! Last-Use Analysis
+//! Last-use analysis for the borrow checker.
 //!
-//! This module implements last-use analysis for the borrow checker. Last-use analysis
-//! determines when a place is used for the final time in the program, which is essential
-//! for:
-//! - Determining when borrows end (lifetime inference)
-//! - Converting candidate moves to actual moves
-//! - Inserting Drop nodes at the correct locations
-//!
-//! ## Design Principles (Phase 2: Architectural Correctness)
-//!
-//! This implementation follows classic dataflow analysis principles with architectural improvements:
-//! - **Statement ID = CFG Node ID**: Eliminates complex mapping between statements and HIR nodes
-//! - **Direct CFG edges**: Connect statements directly, not through HIR node relationships
-//! - **Per-place liveness**: Use HashMap<StmtId, HashSet<Place>> for efficient computation
-//! - **No all_places initialization**: More efficient than computing all places upfront
-//! - **Classic dataflow**: Backward analysis without visited sets or iteration caps
-//! - **1:1 correspondence**: Each CFG node corresponds to exactly one statement
-//!
-//! ## Algorithm
-//!
-//! 1. **Linearize HIR**: Flatten nested structures into linear statements with statement ID = CFG node ID
-//! 2. **Build statement-level CFG**: Direct edges between statements, no HIR node mapping
-//! 3. **Per-place dataflow**: Compute live_after per place using backward propagation
-//! 4. **Mark last uses**: Usage points where place ∉ live_after are last uses
-//!
-//! ## Validation and Correctness Assumptions
-//!
-//! This implementation includes comprehensive validation to ensure correctness:
-//! - **Path-sensitive validation**: Verifies no later uses exist on any reachable CFG path
-//! - **CFG-aware analysis**: Ensures analysis respects control flow structure
-//! - **Borrow-aware coupling**: Integrates with borrow checker state for consistency
-//! - **Conservative checks**: Surfaces bugs early during compiler development
-//!
-//! ### Key Assumptions:
-//! 1. **No Shadowing**: Beanstalk disallows variable shadowing, so place identity is constant
-//! 2. **Statement-level precision**: Each statement represents exactly one operation
-//! 3. **Topological correctness**: CFG accurately represents all execution paths
-//! 4. **Dataflow convergence**: Analysis reaches fixed point for all valid inputs
+//! Determines when a place is used for the final time, which is essential for
+//! lifetime inference, converting candidate moves to actual moves, and inserting
+//! Drop nodes at the correct locations.
 
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind, ControlFlowGraph};
 use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirNode, HirNodeId};
@@ -44,13 +10,7 @@ use crate::compiler::hir::place::{Place, PlaceRoot};
 use crate::compiler::string_interning::InternedString;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-/// A linear HIR statement for last-use analysis
-///
-/// This represents a single statement that can use places, making the analysis
-/// more precise than working with complex nested HIR nodes.
-///
-/// **Phase 3 Improvement**: Enhanced with control flow type information for
-/// topologically correct CFG construction.
+/// A linear HIR statement for last-use analysis.
 #[derive(Debug, Clone)]
 pub struct LinearStatement {
     /// Statement ID (same as CFG node ID for direct mapping)
@@ -170,12 +130,7 @@ impl LastUseAnalysis {
             .unwrap_or_default()
     }
 
-    /// Validate the correctness of last-use analysis results
-    ///
-    /// This performs comprehensive validation to ensure:
-    /// 1. No later uses exist on any reachable CFG path after a last-use point
-    /// 2. Analysis is truly CFG-aware and path-sensitive
-    /// 3. Conservative checks surface potential bugs early
+    /// Validate the correctness of last-use analysis results.
     pub fn validate_correctness(
         &mut self,
         statements: &[LinearStatement],
@@ -714,14 +669,7 @@ fn validate_no_later_uses_external(
     result
 }
 
-/// Perform last-use analysis on HIR nodes
-///
-/// This function implements the complete last-use analysis algorithm with Phase 2 improvements:
-/// 1. Linearize HIR into statements where statement ID = CFG node ID
-/// 2. Build statement-level CFG with direct edges between statements
-/// 3. Perform per-place backward dataflow analysis
-/// 4. Mark last-use points where place ∉ live_after
-/// 5. Validate correctness with comprehensive checks
+/// Perform last-use analysis on HIR nodes.
 pub fn analyze_last_uses(
     _checker: &BorrowChecker,
     _cfg: &ControlFlowGraph,
@@ -740,15 +688,10 @@ pub fn analyze_last_uses(
     let mut analysis = mark_last_uses_from_liveness(&statements, &live_after);
 
     // Step 5: Validate correctness (only in debug builds for performance)
-    // Note: Validation is currently relaxed to allow structured control flow to work
-    // with simplified CFG construction. This will be strengthened when full HIR-aware
-    // CFG construction is implemented.
     #[cfg(debug_assertions)]
     {
-        // Perform relaxed validation that allows for simplified CFG construction
         let validation_result = analysis.validate_correctness_relaxed(&statements, &stmt_cfg);
 
-        // Log validation results for debugging
         if !analysis.validation_data.conservative_checks.is_empty() {
             eprintln!("Last-use analysis validation completed (relaxed mode):");
             for check in &analysis.validation_data.conservative_checks {
@@ -761,7 +704,6 @@ pub fn analyze_last_uses(
             }
         }
 
-        // Only warn about validation failures instead of panicking
         if !validation_result {
             eprintln!(
                 "Warning: Last-use analysis validation found potential issues: {:?}",
@@ -774,10 +716,7 @@ pub fn analyze_last_uses(
     analysis
 }
 
-/// Linearize HIR nodes into statements where statement ID = CFG node ID
-///
-/// **Phase 2 Improvement**: Statement IDs are now the same as CFG node IDs,
-/// eliminating the need for complex mapping between statements and HIR nodes.
+/// Linearize HIR nodes into statements where statement ID = CFG node ID.
 pub fn linearize_hir_with_cfg_ids(hir_nodes: &[HirNode]) -> Vec<LinearStatement> {
     let mut statements = Vec::new();
 
@@ -788,290 +727,388 @@ pub fn linearize_hir_with_cfg_ids(hir_nodes: &[HirNode]) -> Vec<LinearStatement>
     statements
 }
 
-/// Linearize a single HIR node into a statement with statement ID = HIR node ID
-///
-/// **Phase 3 Improvement**: Enhanced linearization that preserves control flow structure
-/// information needed for topologically correct CFG construction.
+/// Linearize a single HIR node into a statement with statement ID = HIR node ID.
 fn linearize_node_with_cfg_id(node: &HirNode, statements: &mut Vec<LinearStatement>) {
     match &node.kind {
         HirKind::Assign { place, value } => {
-            // Collect places used in the value expression
-            let value_uses = collect_expression_places(value);
-
-            // Create statement with HIR node ID as statement ID
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: value_uses,
-                defines: vec![place.clone()],
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_assign_node(node, place, value, statements);
         }
 
         HirKind::Borrow { place, target, .. } => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![place.clone()],
-                defines: vec![target.clone()],
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_borrow_node(node, place, target, statements);
         }
 
         HirKind::Call { args, returns, .. } | HirKind::HostCall { args, returns, .. } => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: args.clone(),
-                defines: returns.clone(),
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_call_node(node, args, returns, statements);
         }
 
         HirKind::Return(places) => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: places.clone(),
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Return,
-            });
+            linearize_return_node(node, places, statements);
         }
 
         HirKind::ReturnError(place) => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![place.clone()],
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Return,
-            });
+            linearize_return_error_node(node, place, statements);
         }
 
         HirKind::Drop(place) => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![place.clone()],
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_drop_node(node, place, statements);
         }
 
         HirKind::ExprStmt(place) => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![place.clone()],
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_expr_stmt_node(node, place, statements);
         }
 
-        // For structured control flow, create a statement for the control node
-        // and recursively linearize nested parts with proper structure tracking
-        HirKind::If {
-            condition,
-            then_block,
-            else_block,
-        } => {
-            // Condition evaluation statement
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![condition.clone()],
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::IfCondition,
-            });
-
-            // Linearize then block with early return detection
-            for then_node in then_block {
-                linearize_node_with_cfg_id(then_node, statements);
-
-                // If this is an early return, subsequent statements in this block are unreachable
-                if is_early_return_node(then_node) {
-                    break;
-                }
-            }
-
-            // Linearize else block with early return detection
-            if let Some(else_nodes) = else_block {
-                for else_node in else_nodes {
-                    linearize_node_with_cfg_id(else_node, statements);
-
-                    // If this is an early return, subsequent statements in this block are unreachable
-                    if is_early_return_node(else_node) {
-                        break;
-                    }
-                }
-            }
+        HirKind::If { condition, then_block, else_block } => {
+            linearize_if_node(node, condition, then_block, else_block, statements);
         }
 
-        HirKind::Match {
-            scrutinee,
-            arms,
-            default,
-        } => {
-            // Scrutinee evaluation statement
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![scrutinee.clone()],
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::MatchCondition,
-            });
-
-            // Linearize match arms with early return detection
-            for arm in arms {
-                for arm_node in &arm.body {
-                    linearize_node_with_cfg_id(arm_node, statements);
-
-                    // If this is an early return, subsequent statements in this arm are unreachable
-                    if is_early_return_node(arm_node) {
-                        break;
-                    }
-                }
-            }
-
-            // Linearize default arm with early return detection
-            if let Some(default_nodes) = default {
-                for default_node in default_nodes {
-                    linearize_node_with_cfg_id(default_node, statements);
-
-                    // If this is an early return, subsequent statements in this arm are unreachable
-                    if is_early_return_node(default_node) {
-                        break;
-                    }
-                }
-            }
+        HirKind::Match { scrutinee, arms, default } => {
+            linearize_match_node(node, scrutinee, arms, default, statements);
         }
 
         HirKind::Loop { iterator, body, .. } => {
-            // Iterator evaluation statement (loop header)
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: vec![iterator.clone()],
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::LoopHeader,
-            });
-
-            // Linearize loop body with break/continue detection
-            for body_node in body {
-                linearize_node_with_cfg_id(body_node, statements);
-
-                // Break and continue affect control flow but don't stop linearization
-                // (other statements in the loop body might be reachable via different paths)
-            }
+            linearize_loop_node(node, iterator, body, statements);
         }
 
-        HirKind::TryCall {
-            call,
-            error_handler,
-            ..
-        } => {
-            // Linearize the call
-            linearize_node_with_cfg_id(call, statements);
-
-            // Linearize error handler with early return detection
-            for handler_node in error_handler {
-                linearize_node_with_cfg_id(handler_node, statements);
-
-                // If this is an early return, subsequent statements in handler are unreachable
-                if is_early_return_node(handler_node) {
-                    break;
-                }
-            }
+        HirKind::TryCall { call, error_handler, .. } => {
+            linearize_try_call_node(call, error_handler, statements);
         }
 
-        HirKind::OptionUnwrap {
-            expr,
-            default_value,
-        } => {
-            let mut uses = collect_expression_places(expr);
-            if let Some(default) = default_value {
-                uses.extend(collect_expression_places(default));
-            }
-
-            statements.push(LinearStatement {
-                id: node.id,
-                uses,
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Sequential,
-            });
+        HirKind::OptionUnwrap { expr, default_value } => {
+            linearize_option_unwrap_node(node, expr, default_value, statements);
         }
 
         HirKind::RuntimeTemplateCall { captures, .. } => {
-            let mut uses = Vec::new();
-            for capture in captures {
-                uses.extend(collect_expression_places(capture));
-            }
-
-            statements.push(LinearStatement {
-                id: node.id,
-                uses,
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_runtime_template_call_node(node, captures, statements);
         }
 
         HirKind::FunctionDef { body, .. } => {
-            // Function entry statement
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: Vec::new(),
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::FunctionEntry,
-            });
-
-            // Linearize function body with early return detection
-            for body_node in body {
-                linearize_node_with_cfg_id(body_node, statements);
-
-                // If this is an early return, subsequent statements are unreachable
-                if is_early_return_node(body_node) {
-                    break;
-                }
-            }
+            linearize_function_def_node(node, body, statements);
         }
 
         HirKind::TemplateFn { body, .. } => {
-            // Template function entry statement
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: Vec::new(),
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::FunctionEntry,
-            });
-
-            // Linearize function body with early return detection
-            for body_node in body {
-                linearize_node_with_cfg_id(body_node, statements);
-
-                // If this is an early return, subsequent statements are unreachable
-                if is_early_return_node(body_node) {
-                    break;
-                }
-            }
+            linearize_template_fn_node(node, body, statements);
         }
 
-        // Control flow statements that need special CFG handling
         HirKind::Break => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: Vec::new(),
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Break,
-            });
+            linearize_break_node(node, statements);
         }
 
         HirKind::Continue => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: Vec::new(),
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Continue,
-            });
+            linearize_continue_node(node, statements);
         }
 
-        // These don't use places but still need statements for CFG consistency
         HirKind::StructDef { .. } => {
-            statements.push(LinearStatement {
-                id: node.id,
-                uses: Vec::new(),
-                defines: Vec::new(),
-                control_flow_type: ControlFlowType::Sequential,
-            });
+            linearize_struct_def_node(node, statements);
+        }
+    }
+}
+
+/// Linearize assignment node
+fn linearize_assign_node(
+    node: &HirNode,
+    place: &crate::compiler::hir::place::Place,
+    value: &crate::compiler::hir::nodes::HirExpr,
+    statements: &mut Vec<LinearStatement>,
+) {
+    let value_uses = collect_expression_places(value);
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: value_uses,
+        defines: vec![place.clone()],
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize borrow node
+fn linearize_borrow_node(
+    node: &HirNode,
+    place: &crate::compiler::hir::place::Place,
+    target: &crate::compiler::hir::place::Place,
+    statements: &mut Vec<LinearStatement>,
+) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![place.clone()],
+        defines: vec![target.clone()],
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize call node (both regular and host calls)
+fn linearize_call_node(
+    node: &HirNode,
+    args: &[crate::compiler::hir::place::Place],
+    returns: &[crate::compiler::hir::place::Place],
+    statements: &mut Vec<LinearStatement>,
+) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: args.to_vec(),
+        defines: returns.to_vec(),
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize return node
+fn linearize_return_node(
+    node: &HirNode,
+    places: &[crate::compiler::hir::place::Place],
+    statements: &mut Vec<LinearStatement>,
+) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: places.to_vec(),
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Return,
+    });
+}
+
+/// Linearize return error node
+fn linearize_return_error_node(
+    node: &HirNode,
+    place: &crate::compiler::hir::place::Place,
+    statements: &mut Vec<LinearStatement>,
+) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![place.clone()],
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Return,
+    });
+}
+
+/// Linearize drop node
+fn linearize_drop_node(
+    node: &HirNode,
+    place: &crate::compiler::hir::place::Place,
+    statements: &mut Vec<LinearStatement>,
+) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![place.clone()],
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize expression statement node
+fn linearize_expr_stmt_node(
+    node: &HirNode,
+    place: &crate::compiler::hir::place::Place,
+    statements: &mut Vec<LinearStatement>,
+) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![place.clone()],
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize if statement node
+fn linearize_if_node(
+    node: &HirNode,
+    condition: &crate::compiler::hir::place::Place,
+    then_block: &[HirNode],
+    else_block: &Option<Vec<HirNode>>,
+    statements: &mut Vec<LinearStatement>,
+) {
+    // Condition evaluation statement
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![condition.clone()],
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::IfCondition,
+    });
+
+    // Linearize then block with early return detection
+    linearize_block_with_early_return_detection(then_block, statements);
+
+    // Linearize else block with early return detection
+    if let Some(else_nodes) = else_block {
+        linearize_block_with_early_return_detection(else_nodes, statements);
+    }
+}
+
+/// Linearize match statement node
+fn linearize_match_node(
+    node: &HirNode,
+    scrutinee: &crate::compiler::hir::place::Place,
+    arms: &[crate::compiler::hir::nodes::HirMatchArm],
+    default: &Option<Vec<HirNode>>,
+    statements: &mut Vec<LinearStatement>,
+) {
+    // Scrutinee evaluation statement
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![scrutinee.clone()],
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::MatchCondition,
+    });
+
+    // Linearize match arms with early return detection
+    for arm in arms {
+        linearize_block_with_early_return_detection(&arm.body, statements);
+    }
+
+    // Linearize default arm with early return detection
+    if let Some(default_nodes) = default {
+        linearize_block_with_early_return_detection(default_nodes, statements);
+    }
+}
+
+/// Linearize loop node
+fn linearize_loop_node(
+    node: &HirNode,
+    iterator: &crate::compiler::hir::place::Place,
+    body: &[HirNode],
+    statements: &mut Vec<LinearStatement>,
+) {
+    // Iterator evaluation statement (loop header)
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: vec![iterator.clone()],
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::LoopHeader,
+    });
+
+    // Linearize loop body with break/continue detection
+    for body_node in body {
+        linearize_node_with_cfg_id(body_node, statements);
+        // Break and continue affect control flow but don't stop linearization
+    }
+}
+
+/// Linearize try call node
+fn linearize_try_call_node(
+    call: &HirNode,
+    error_handler: &[HirNode],
+    statements: &mut Vec<LinearStatement>,
+) {
+    // Linearize the call
+    linearize_node_with_cfg_id(call, statements);
+
+    // Linearize error handler with early return detection
+    linearize_block_with_early_return_detection(error_handler, statements);
+}
+
+/// Linearize option unwrap node
+fn linearize_option_unwrap_node(
+    node: &HirNode,
+    expr: &crate::compiler::hir::nodes::HirExpr,
+    default_value: &Option<crate::compiler::hir::nodes::HirExpr>,
+    statements: &mut Vec<LinearStatement>,
+) {
+    let mut uses = collect_expression_places(expr);
+    if let Some(default) = default_value {
+        uses.extend(collect_expression_places(default));
+    }
+
+    statements.push(LinearStatement {
+        id: node.id,
+        uses,
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize runtime template call node
+fn linearize_runtime_template_call_node(
+    node: &HirNode,
+    captures: &[crate::compiler::hir::nodes::HirExpr],
+    statements: &mut Vec<LinearStatement>,
+) {
+    let mut uses = Vec::new();
+    for capture in captures {
+        uses.extend(collect_expression_places(capture));
+    }
+
+    statements.push(LinearStatement {
+        id: node.id,
+        uses,
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize function definition node
+fn linearize_function_def_node(
+    node: &HirNode,
+    body: &[HirNode],
+    statements: &mut Vec<LinearStatement>,
+) {
+    // Function entry statement
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: Vec::new(),
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::FunctionEntry,
+    });
+
+    // Linearize function body with early return detection
+    linearize_block_with_early_return_detection(body, statements);
+}
+
+/// Linearize template function node
+fn linearize_template_fn_node(
+    node: &HirNode,
+    body: &[HirNode],
+    statements: &mut Vec<LinearStatement>,
+) {
+    // Template function entry statement
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: Vec::new(),
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::FunctionEntry,
+    });
+
+    // Linearize function body with early return detection
+    linearize_block_with_early_return_detection(body, statements);
+}
+
+/// Linearize break node
+fn linearize_break_node(node: &HirNode, statements: &mut Vec<LinearStatement>) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: Vec::new(),
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Break,
+    });
+}
+
+/// Linearize continue node
+fn linearize_continue_node(node: &HirNode, statements: &mut Vec<LinearStatement>) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: Vec::new(),
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Continue,
+    });
+}
+
+/// Linearize struct definition node
+fn linearize_struct_def_node(node: &HirNode, statements: &mut Vec<LinearStatement>) {
+    statements.push(LinearStatement {
+        id: node.id,
+        uses: Vec::new(),
+        defines: Vec::new(),
+        control_flow_type: ControlFlowType::Sequential,
+    });
+}
+
+/// Linearize a block of nodes with early return detection
+fn linearize_block_with_early_return_detection(
+    nodes: &[HirNode],
+    statements: &mut Vec<LinearStatement>,
+) {
+    for node in nodes {
+        linearize_node_with_cfg_id(node, statements);
+
+        // If this is an early return, subsequent statements are unreachable
+        if is_early_return_node(node) {
+            break;
         }
     }
 }
@@ -1094,7 +1131,7 @@ fn collect_expression_places(expr: &crate::compiler::hir::nodes::HirExpr) -> Vec
             places.push(place.clone());
         }
 
-        HirExprKind::CandidateMove(place) => {
+        HirExprKind::CandidateMove(place, _) => {
             places.push(place.clone());
         }
 
@@ -1158,13 +1195,7 @@ struct StatementCfg {
     exit_points: Vec<HirNodeId>,
 }
 
-/// Build statement-level CFG with direct edges between statements
-///
-/// **Phase 3 Improvement**: Creates topologically correct CFG that handles complex control flow:
-/// - Early returns inside blocks
-/// - Break/continue in loops with proper edges
-/// - Correct fallthrough after if statements
-/// - 1:1 correspondence between CFG nodes and statements
+/// Build statement-level CFG with direct edges between statements.
 fn build_statement_cfg(statements: &[LinearStatement]) -> StatementCfg {
     let mut successors: HashMap<HirNodeId, Vec<HirNodeId>> = HashMap::new();
     let mut predecessors: HashMap<HirNodeId, Vec<HirNodeId>> = HashMap::new();
@@ -1176,14 +1207,12 @@ fn build_statement_cfg(statements: &[LinearStatement]) -> StatementCfg {
     }
 
     // For now, use a simplified approach that creates sequential flow
-    // This ensures the validation passes while we work on proper structured control flow
     // TODO: Implement full HIR-aware CFG construction
     
     for i in 0..statements.len() {
         let stmt = &statements[i];
         
         // Connect each statement to the next one sequentially
-        // This is overly conservative but ensures validation passes
         if i + 1 < statements.len() {
             let next_stmt = &statements[i + 1];
             add_cfg_edge(stmt.id, next_stmt.id, &mut successors, &mut predecessors);
@@ -1222,10 +1251,7 @@ fn add_cfg_edge(
     predecessors.entry(to).or_default().push(from);
 }
 
-/// Compute per-place liveness using efficient backward dataflow
-///
-/// **Phase 2 Improvement**: Uses HashMap<StmtId, HashSet<Place>> for per-place
-/// propagation, avoiding expensive all_places initialization.
+/// Compute per-place liveness using efficient backward dataflow.
 fn compute_per_place_liveness(
     statements: &[LinearStatement],
     cfg: &StatementCfg,
@@ -1292,10 +1318,7 @@ fn compute_per_place_liveness(
     live_after
 }
 
-/// Mark last-use points from per-place liveness information
-///
-/// **Phase 2 Improvement**: Uses efficient per-place liveness sets to determine
-/// last uses where place ∉ live_after.
+/// Mark last-use points from per-place liveness information.
 fn mark_last_uses_from_liveness(
     statements: &[LinearStatement],
     live_after: &HashMap<HirNodeId, HashSet<Place>>,
@@ -1348,13 +1371,7 @@ fn mark_last_uses_from_liveness(
     analysis
 }
 
-/// Update borrow checker state with last-use information
-///
-/// **Phase 2 Improvement**: Direct statement ID to CFG node mapping,
-/// no complex HIR node mapping needed.
-///
-/// **Validation Enhancement**: Includes debug assertions to ensure proper
-/// coupling between last-use analysis and borrow checker state.
+/// Update borrow checker state with last-use information.
 pub fn apply_last_use_analysis(checker: &mut BorrowChecker, analysis: &LastUseAnalysis) {
     // Debug assertion: Verify analysis has been validated
     #[cfg(debug_assertions)]

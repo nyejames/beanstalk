@@ -1645,8 +1645,8 @@ mod tests {
                 kind: HirKind::Assign {
                     place: Place::local(y_name),
                     value: HirExpr {
-                        // CandidateMove creates a mutable borrow candidate
-                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                        // CandidateMove creates a mutable borrow candidate with pre-allocated BorrowId
+                        kind: HirExprKind::CandidateMove(Place::local(x_name), Some(100)),
                         data_type: DataType::Int,
                         location: TextLocation::default(),
                     },
@@ -2680,7 +2680,7 @@ mod tests {
                 kind: HirKind::Assign {
                     place: Place::local(y_name),
                     value: HirExpr {
-                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                        kind: HirExprKind::CandidateMove(Place::local(x_name), Some(105)),
                         data_type: DataType::Int,
                         location: TextLocation::default(),
                     },
@@ -2827,7 +2827,7 @@ fn test_candidate_move_to_actual_move() {
         kind: HirKind::Assign {
             place: Place::local(y_name),
             value: HirExpr {
-                kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                kind: HirExprKind::CandidateMove(Place::local(x_name), Some(101)),
                 data_type: DataType::Int,
                 location: TextLocation::default(),
             },
@@ -2900,7 +2900,7 @@ fn test_candidate_move_to_mutable_borrow() {
             kind: HirKind::Assign {
                 place: Place::local(y_name),
                 value: HirExpr {
-                    kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                    kind: HirExprKind::CandidateMove(Place::local(x_name), Some(102)),
                     data_type: DataType::Int,
                     location: TextLocation::default(),
                 },
@@ -2991,7 +2991,7 @@ fn test_candidate_move_refinement_with_control_flow() {
                 kind: HirKind::Assign {
                     place: Place::local(y_name),
                     value: HirExpr {
-                        kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                        kind: HirExprKind::CandidateMove(Place::local(x_name), Some(103)),
                         data_type: DataType::Int,
                         location: TextLocation::default(),
                     },
@@ -3053,7 +3053,7 @@ fn test_move_decision_validation() {
         kind: HirKind::Assign {
             place: Place::local(y_name),
             value: HirExpr {
-                kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                kind: HirExprKind::CandidateMove(Place::local(x_name), Some(104)),
                 data_type: DataType::Int,
                 location: TextLocation::default(),
             },
@@ -3107,7 +3107,7 @@ fn test_move_borrow_decision_marking() {
         kind: HirKind::Assign {
             place: Place::local(y_name),
             value: HirExpr {
-                kind: HirExprKind::CandidateMove(Place::local(x_name)),
+                kind: HirExprKind::CandidateMove(Place::local(x_name), Some(106)),
                 data_type: DataType::Int,
                 location: TextLocation::default(),
             },

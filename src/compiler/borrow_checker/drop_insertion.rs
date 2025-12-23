@@ -1,24 +1,7 @@
 //! Drop Node Insertion
 //!
-//! This module implements Drop node insertion for the borrow checker. Drop insertion
-//! ensures that values are cleaned up exactly when their ownership ends by inserting
-//! explicit Drop nodes in the HIR at precise locations.
-//!
-//! ## Design Principles
-//!
-//! - **Precise Placement**: Drop nodes are inserted immediately after the last use of values
-//! - **Move Awareness**: No Drop nodes are inserted for moved values at the move source
-//! - **Scope Exit Handling**: Values that go out of scope without being moved get Drop nodes
-//! - **Path Completeness**: Drop nodes are placed on all possible execution paths
-//! - **HIR Preservation**: Node ID ordering and structural integrity are maintained
-//!
-//! ## Algorithm
-//!
-//! 1. **Last-Use Integration**: Use last-use analysis results to identify Drop insertion points
-//! 2. **Move Analysis**: Skip Drop insertion for places that have been moved
-//! 3. **Scope Analysis**: Insert Drop nodes at scope exits for non-moved values
-//! 4. **Path Coverage**: Ensure Drop nodes are inserted on all execution paths
-//! 5. **HIR Update**: Insert Drop nodes while preserving node ID ordering
+//! Inserts Drop nodes in HIR at precise locations where values need cleanup.
+//! Drop nodes are placed after last use of values and at scope exits.
 
 use crate::compiler::borrow_checker::last_use::LastUseAnalysis;
 use crate::compiler::borrow_checker::types::{BorrowChecker, BorrowKind};
@@ -29,10 +12,7 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
 use std::collections::{HashMap, HashSet};
 
-/// Determine if a place needs cleanup (Drop insertion) based on its type and content
-/// 
-/// Heap-allocated strings created by templates need explicit cleanup, while
-/// stack-allocated string slices do not.
+/// Determine if a place needs cleanup based on its type
 fn place_needs_cleanup(place: &Place, hir_nodes: &[HirNode]) -> bool {
     // For now, we'll be conservative and assume all places might need cleanup
     // In the future, this should check the actual type and origin of the place
@@ -140,10 +120,6 @@ pub struct PathCheck {
 }
 
 /// Insert Drop nodes based on last-use analysis and move decisions
-///
-/// This is the main entry point for Drop insertion. It analyzes the HIR nodes,
-/// integrates with last-use analysis and move decisions, and determines where
-/// Drop nodes should be inserted.
 pub fn insert_drop_nodes(
     checker: &BorrowChecker,
     hir_nodes: &mut Vec<HirNode>,
@@ -186,9 +162,6 @@ pub fn insert_drop_nodes(
 }
 
 /// Analyze move decisions to identify places that have been moved
-///
-/// Moved places should not get Drop nodes at the move source, since ownership
-/// has been transferred.
 fn analyze_moved_places(checker: &BorrowChecker, hir_nodes: &[HirNode]) -> HashSet<Place> {
     let mut moved_places = HashSet::new();
     
@@ -213,7 +186,7 @@ fn analyze_moved_places(checker: &BorrowChecker, hir_nodes: &[HirNode]) -> HashS
 fn collect_moved_places_from_node(node: &HirNode, moved_places: &mut HashSet<Place>) {
     match &node.kind {
         HirKind::Assign { value, .. } => {
-            if let crate::compiler::hir::nodes::HirExprKind::CandidateMove(place) = &value.kind {
+            if let crate::compiler::hir::nodes::HirExprKind::CandidateMove(place, _) = &value.kind {
                 // Note: CandidateMove that becomes Move should be tracked
                 // For now, we'll be conservative and not mark it as moved here
                 // since the refinement might have kept it as a mutable borrow
@@ -276,9 +249,6 @@ fn collect_moved_places_from_node(node: &HirNode, moved_places: &mut HashSet<Pla
 }
 
 /// Identify Drop insertion points from last-use analysis
-///
-/// This creates Drop insertions immediately after the last use of values,
-/// unless the value has been moved.
 fn identify_drop_insertion_points(
     checker: &BorrowChecker,
     hir_nodes: &[HirNode],
@@ -322,9 +292,6 @@ fn identify_drop_insertion_points(
 }
 
 /// Identify scope exit Drop points
-///
-/// This identifies places that go out of scope without being moved and need
-/// Drop nodes at scope exits.
 fn identify_scope_exit_drops(
     checker: &BorrowChecker,
     hir_nodes: &[HirNode],
@@ -368,9 +335,6 @@ fn identify_scope_exit_drops(
 }
 
 /// Validate Drop coverage on all execution paths
-///
-/// This ensures that Drop nodes are placed on all possible execution paths
-/// where values need cleanup.
 fn validate_drop_coverage(
     checker: &BorrowChecker,
     hir_nodes: &[HirNode],
@@ -466,9 +430,6 @@ fn validate_path_coverage(
 }
 
 /// Insert Drop nodes into HIR while preserving node ID ordering
-///
-/// This modifies the HIR by inserting Drop nodes at the identified locations
-/// while maintaining the structural integrity and node ID ordering.
 fn insert_drops_into_hir(
     hir_nodes: &mut Vec<HirNode>,
     result: &mut DropInsertionResult,
@@ -538,10 +499,6 @@ fn get_next_available_node_id(hir_nodes: &[HirNode]) -> HirNodeId {
 }
 
 /// Check if a place needs Drop cleanup
-///
-/// This determines whether a place represents a value that needs explicit
-/// cleanup when it goes out of scope. Heap-allocated strings created by
-/// templates need cleanup, while stack-allocated primitives do not.
 fn place_needs_drop(place: &Place, string_table: &StringTable) -> bool {
     // Check if this is a primitive type that doesn't need Drop
     match &place.root {
@@ -822,7 +779,7 @@ fn collect_places_from_expression(
             places.insert(place.clone());
         }
         
-        HirExprKind::CandidateMove(place) => {
+        HirExprKind::CandidateMove(place, _) => {
             places.insert(place.clone());
         }
         
