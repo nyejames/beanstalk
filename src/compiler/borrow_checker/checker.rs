@@ -15,19 +15,16 @@ use crate::compiler::borrow_checker::lifetime_inference::{
 use crate::compiler::borrow_checker::structured_control_flow::handle_structured_control_flow;
 use crate::compiler::borrow_checker::types::BorrowChecker;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::hir::nodes::{HirModule, HirNode};
+use crate::compiler::hir::nodes::HirNode;
 use crate::compiler::string_interning::StringTable;
 
 /// Main entry point for borrow checking analysis.
 /// Performs CFG construction, borrow tracking, conflict detection, and error reporting.
 pub fn check_borrows(
-    hir: &mut HirModule,
+    hir_nodes: &mut Vec<HirNode>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     // Starting borrow checking analysis
-
-    // Extract HIR nodes from the module
-    let hir_nodes = &mut hir.functions;
 
     if hir_nodes.is_empty() {
         return Ok(());
@@ -65,7 +62,8 @@ fn perform_borrow_analysis(
     apply_lifetime_results(&mut checker, &lifetime_inference)?;
 
     // Phase 4: Refine candidate moves and validate decisions
-    let candidate_move_refinement = refine_and_validate_moves(&mut checker, hir_nodes, &lifetime_inference);
+    let candidate_move_refinement =
+        refine_and_validate_moves(&mut checker, hir_nodes, &lifetime_inference);
 
     // Phase 5: Perform Polonius-style control flow analysis
     perform_control_flow_analysis(&mut checker, hir_nodes)?;
@@ -85,12 +83,12 @@ fn construct_cfg_and_track_borrows(
     hir_nodes: &[HirNode],
 ) -> Result<(), CompilerMessages> {
     checker.cfg = construct_cfg(hir_nodes);
-    
+
     if let Err(mut messages) = track_borrows(checker, hir_nodes) {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
-    
+
     Ok(())
 }
 
@@ -114,7 +112,7 @@ fn perform_lifetime_inference(
         Err(mut messages) => {
             checker.errors.append(&mut messages.errors);
             checker.warnings.append(&mut messages.warnings);
-            
+
             // Create default inference to allow continued analysis
             crate::compiler::borrow_checker::lifetime_inference::LifetimeInferenceResult {
                 live_sets: crate::compiler::borrow_checker::lifetime_inference::borrow_live_sets::BorrowLiveSets::new(),
@@ -136,7 +134,8 @@ fn apply_lifetime_results(
         checker.warnings.append(&mut messages.warnings);
     }
 
-    if let Err(mut messages) = update_borrow_state_with_lifetime_spans(checker, lifetime_inference) {
+    if let Err(mut messages) = update_borrow_state_with_lifetime_spans(checker, lifetime_inference)
+    {
         checker.errors.append(&mut messages.errors);
         checker.warnings.append(&mut messages.warnings);
     }
@@ -355,7 +354,7 @@ fn validate_complete_refinement(checker: &BorrowChecker) -> Result<(), CompilerM
 /// Generate a comprehensive error summary for multiple borrow checker violations.
 fn generate_error_summary(checker: &mut BorrowChecker) {
     let total_errors = checker.errors.len();
-    
+
     if total_errors == 0 {
         return;
     }
@@ -399,30 +398,54 @@ fn generate_error_summary(checker: &mut BorrowChecker) {
     let mut suggestions = Vec::new();
 
     if conflict_errors > 0 {
-        summary_msg.push_str(&format!("\n  - {} borrow conflict{}", conflict_errors, if conflict_errors == 1 { "" } else { "s" }));
+        summary_msg.push_str(&format!(
+            "\n  - {} borrow conflict{}",
+            conflict_errors,
+            if conflict_errors == 1 { "" } else { "s" }
+        ));
         suggestions.push("Consider using borrows sequentially rather than simultaneously");
         suggestions.push("Ensure mutable and immutable borrows don't overlap in time");
     }
 
     if use_after_move_errors > 0 {
-        summary_msg.push_str(&format!("\n  - {} use-after-move violation{}", use_after_move_errors, if use_after_move_errors == 1 { "" } else { "s" }));
+        summary_msg.push_str(&format!(
+            "\n  - {} use-after-move violation{}",
+            use_after_move_errors,
+            if use_after_move_errors == 1 { "" } else { "s" }
+        ));
         suggestions.push("Avoid using values after they have been moved");
         suggestions.push("Consider borrowing instead of moving if you need to use the value later");
     }
 
     if move_while_borrowed_errors > 0 {
-        summary_msg.push_str(&format!("\n  - {} move-while-borrowed violation{}", move_while_borrowed_errors, if move_while_borrowed_errors == 1 { "" } else { "s" }));
+        summary_msg.push_str(&format!(
+            "\n  - {} move-while-borrowed violation{}",
+            move_while_borrowed_errors,
+            if move_while_borrowed_errors == 1 {
+                ""
+            } else {
+                "s"
+            }
+        ));
         suggestions.push("Ensure all borrows are finished before moving values");
         suggestions.push("Consider restructuring code to avoid overlapping borrows and moves");
     }
 
     if validation_errors > 0 {
-        summary_msg.push_str(&format!("\n  - {} compiler validation error{}", validation_errors, if validation_errors == 1 { "" } else { "s" }));
+        summary_msg.push_str(&format!(
+            "\n  - {} compiler validation error{}",
+            validation_errors,
+            if validation_errors == 1 { "" } else { "s" }
+        ));
         suggestions.push("These indicate compiler bugs - please report them");
     }
 
     if other_errors > 0 {
-        summary_msg.push_str(&format!("\n  - {} other error{}", other_errors, if other_errors == 1 { "" } else { "s" }));
+        summary_msg.push_str(&format!(
+            "\n  - {} other error{}",
+            other_errors,
+            if other_errors == 1 { "" } else { "s" }
+        ));
     }
 
     // Add actionable suggestions

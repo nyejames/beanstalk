@@ -117,6 +117,17 @@ mod compiler {
         pub(crate) mod structured_control_flow;
         pub(crate) mod types;
     }
+
+    pub(crate) mod lir {
+        pub(crate) mod lowering;
+        pub(crate) mod nodes;
+    }
+
+    pub(crate) mod codegen {
+        pub(crate) mod wasm {
+            pub(crate) mod encode;
+        }
+    }
 }
 
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
@@ -130,14 +141,17 @@ use crate::compiler::borrow_checker::checker::check_borrows;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::builder::HirBuilder;
-use crate::compiler::hir::nodes::{HirModule, HirNode};
+use crate::compiler::hir::nodes::HirNode;
 use crate::compiler::interned_path::InternedPath;
+use crate::compiler::lir::lowering::lower_to_lir;
+use crate::compiler::lir::nodes::LirModule;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build::*;
+use crate::compiler::codegen::wasm::encode::encode_wasm;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -276,19 +290,25 @@ impl<'a> Compiler<'a> {
     /// -----------------------------
     /// Perform borrow checking on HIR nodes to validate memory safety
     /// and ownership rules according to Beanstalk's reference semantics.
-    pub fn check_borrows(
-        &mut self,
-        hir_nodes: Vec<HirNode>,
-    ) -> Result<Vec<HirNode>, CompilerError> {
-        // Create a HIR module from the nodes for borrow checking
-        let mut hir_module = HirModule {
-            functions: hir_nodes,
-        };
-
+    pub fn check_borrows(&mut self, hir_nodes: &mut Vec<HirNode>) -> Result<(), CompilerError> {
         // Perform borrow checking analysis
-        check_borrows(&mut hir_module, &mut self.string_table)?;
+        check_borrows(hir_nodes, &mut self.string_table)
+    }
 
-        // Return the potentially modified HIR nodes
-        Ok(hir_module.functions)
+    /// -----------------------------
+    ///         LIR GENERATION
+    /// -----------------------------
+    /// Generate LIR from HIR nodes.
+    /// LIR is a representation designed for lowering to Was
+    pub fn generate_lir(&mut self, hir_nodes: &[HirNode]) -> Result<LirModule, CompilerError> {
+        lower_to_lir(hir_nodes)
+    }
+
+    /// -----------------------------
+    ///         Wasm Codegen
+    /// -----------------------------
+    /// Lower to wasm bytes from the lir
+    pub fn generate_wasm(&self, lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
+        encode_wasm(lir)
     }
 }

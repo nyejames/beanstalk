@@ -41,7 +41,7 @@ impl<'a> HirBuilder<'a> {
                 let target_type = match &target_place.root {
                     crate::compiler::hir::place::PlaceRoot::Local(name) => self
                         .local_bindings
-                        .get(&name)
+                        .get(name)
                         .cloned()
                         .unwrap_or(DataType::Inferred),
                     _ => DataType::Inferred,

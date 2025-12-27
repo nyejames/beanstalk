@@ -206,7 +206,7 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
 
-    let hir_nodes = match compiler.generate_hir(module_ast) {
+    let mut hir_nodes = match compiler.generate_hir(module_ast) {
         Ok(nodes) => nodes,
         Err(e) => {
             compiler_messages.errors.extend(e.errors);
@@ -232,8 +232,8 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
 
-    let checked_hir_nodes = match compiler.check_borrows(hir_nodes) {
-        Ok(nodes) => nodes,
+    match compiler.check_borrows(&mut hir_nodes) {
+        Ok(..) => {}
         Err(e) => {
             compiler_messages.errors.push(e);
             return Err(compiler_messages);
@@ -253,17 +253,26 @@ pub fn compile_modules(
     // ----------------------------------
     //          LIR generation
     // ----------------------------------
-    // TODO: Add LIR generation using checked_hir_nodes
+    // NOT IMPLEMENTED YET - RETURNS AN EMPTY MODULE
+    let lir = match compiler.generate_lir(&hir_nodes) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            compiler_messages.errors.push(e);
+            return Err(compiler_messages);
+        }
+    };
 
     // ----------------------------------
     //          WASM generation
     // ----------------------------------
-
-    // TEMPORARY UNTIL NEW BACKEND IS IMPLEMENTED
-    let wasm_bytes = Vec::new();
-
-    // Suppress unused variable warning for now
-    let _ = checked_hir_nodes;
+    // NOT IMPLEMENTED YET - RETURNS EMPTY BYTES
+    let wasm_bytes = match compiler.generate_wasm(&lir) {
+        Ok(wasm) => wasm,
+        Err(e) => {
+            compiler_messages.errors.push(e);
+            return Err(compiler_messages);
+        }
+    };
 
     if !flags.contains(&Flag::DisableTimers) {
         print!("WASM generated in: ");

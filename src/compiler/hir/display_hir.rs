@@ -1,26 +1,11 @@
 use crate::compiler::hir::nodes::{
-    BinOp, HirExpr, HirExprKind, HirKind, HirModule, HirNode, UnaryOp,
+    BinOp, HirExpr, HirExprKind, HirKind, HirNode, UnaryOp,
 };
 use crate::compiler::hir::place::Place;
 use crate::compiler::string_interning::StringTable;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 
 // === Display Implementations for HIR Debugging ===
-impl Display for HirModule {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        writeln!(f, "HIR Module")?;
-
-        for (i, function) in self.functions.iter().enumerate() {
-            if i > 0 {
-                writeln!(f)?;
-            }
-            write!(f, "{}", function)?;
-        }
-
-        Ok(())
-    }
-}
-
 impl HirNode {
     /// Display HIR node with resolved string IDs for debugging
     pub fn display_with_table(&self, string_table: &StringTable) -> String {

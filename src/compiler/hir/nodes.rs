@@ -19,14 +19,6 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 
-/// A complete HIR module for a single source file or compilation unit.
-/// Currently unused but kept for future module-level HIR processing.
-#[allow(dead_code)]
-#[derive(Debug, Default, Clone)]
-pub struct HirModule {
-    pub functions: Vec<HirNode>,
-}
-
 #[derive(Debug, Clone)]
 pub struct HirNode {
     pub kind: HirKind,
