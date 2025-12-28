@@ -222,7 +222,7 @@ pub fn parse_headers_in_file(
                 });
             }
 
-            // New Function, Struct, Choice, or Variable declaration
+            // New Function, Struct, Choice, or Constant declaration
             TokenKind::Symbol(name_id) => {
                 if host_function_registry.get_function(&name_id).is_none() {
                     // Reference to an existing symbol
@@ -387,56 +387,81 @@ fn create_header(
     // Starts at the first token after the declaration symbol
     let current_token = token_stream.current_token_kind().to_owned();
 
-    if current_token == TokenKind::TypeParameterBracket {
-        let empty_context = ScopeContext::new(
-            ContextKind::Module,
-            path.to_owned(),
-            &[],
-            host_registry.to_owned(),
-            Vec::new(),
-        );
+    // FUNCTIONS
+    match current_token {
+        TokenKind::TypeParameterBracket => {
+            let empty_context = ScopeContext::new(
+                ContextKind::Module,
+                path.to_owned(),
+                &[],
+                host_registry.to_owned(),
+                Vec::new(),
+            );
 
-        let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
+            let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
 
-        let mut scopes_opened = 1;
-        let mut scopes_closed = 0;
-        let mut function_body = Vec::new();
+            let mut scopes_opened = 1;
+            let mut scopes_closed = 0;
+            let mut function_body = Vec::new();
 
-        // FunctionSignature::new leaves us at the first token of the function body
-        // Don't advance before the first iteration
-        while scopes_opened > scopes_closed {
-            match token_stream.current_token_kind() {
-                TokenKind::End => {
-                    scopes_closed += 1;
-                    if scopes_opened > scopes_closed {
+            // FunctionSignature::new leaves us at the first token of the function body
+            // Don't advance before the first iteration
+            while scopes_opened > scopes_closed {
+                match token_stream.current_token_kind() {
+                    TokenKind::End => {
+                        scopes_closed += 1;
+                        if scopes_opened > scopes_closed {
+                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                    }
+
+                    // Colons used in templates parse into a different token (EndTemplateHead),
+                    // so there isn't any issue with templates creating a colon imbalance
+                    // (also double colons are their own separate token).
+                    // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
+                    // The only violations of this rule have to be parsed differently in the tokenizer,
+                    // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
+                    TokenKind::Colon => {
+                        scopes_opened += 1;
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+                    TokenKind::Symbol(name_id) => {
+                        if let Some(path) = file_imports.get(name_id) {
+                            dependencies.insert(path.to_owned());
+                        }
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+                    _ => {
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                 }
-
-                // NOTE!!!!!!!!
-                // Colons used in templates parse into a different token (EndTemplateHead),
-                // so there isn't any issue with templates creating a colon imbalance.
-                // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
-                // The only violations of this rule have to be parsed differently in the tokenizer,
-                // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
-                TokenKind::Colon => {
-                    scopes_opened += 1;
-                    function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                }
-                TokenKind::Symbol(name_id) => {
-                    if let Some(path) = file_imports.get(name_id) {
-                        dependencies.insert(path.to_owned());
-                    }
-                    function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                }
-                _ => {
-                    function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                }
+                token_stream.advance();
             }
-            token_stream.advance();
+
+            kind = HeaderKind::Function(signature, function_body)
         }
 
-        kind = HeaderKind::Function(signature, function_body);
+        // Could be a struct or immutable variable
+        TokenKind::Assign => {
+            // Type parameter bracket is a new struct
+            if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
+                // TODO: Struct headers
+            } else if exported {
+                // This is a global constant (exported immutable variable)
+                // TODO: Constant headers
+                // This is exported and immutable, which means it must be enforced to be a compile time constant
+                // Normal immutable variables can be assigned runtime values, but these kinds of constants can't
+            }
+
+            // Anything else just goes into the start function
+        }
+
+        // Should be a choice declaration
+        // Choice :: Option1, Option2, Option3;
+        TokenKind::DoubleColon => {}
+
+        // Ignored, going into the start function
+        _ => {}
     }
 
     Ok(Header {

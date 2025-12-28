@@ -403,6 +403,7 @@ pub enum TokenKind {
     Comma,
     Dot,
     Colon,  // :
+    DoubleColon, // ::
     Assign, // =
 
     // Scope
@@ -417,7 +418,6 @@ pub enum TokenKind {
 
     // Type Declarations
     Mutable,
-    Choice,
 
     // Datatypes
     DatatypeNone,
@@ -497,7 +497,7 @@ pub enum TokenKind {
     Empty,
 
     // Channels
-    CreateChannel,
+    CreateChannel,  // =>
     ChannelSend,    // >>
     ChannelReceive, // <<
     Yield,

@@ -207,14 +207,14 @@ pub fn get_token_kind(
             return_token!(TokenKind::EndTemplateHead, stream);
         }
 
-        // :: (not currently using)
-        // if let Some(&next_char) = stream.peek() {
-        //     if next_char == ':' {
-        //         stream.next();
-        //
-        //         return_token!(TokenKind::Choice, stream);
-        //     }
-        // }
+        // ::
+        if let Some(&next_char) = stream.peek() {
+            if next_char == ':' {
+                stream.next();
+        
+                return_token!(TokenKind::DoubleColon, stream);
+            }
+        }
 
         return_token!(TokenKind::Colon, stream);
     }
