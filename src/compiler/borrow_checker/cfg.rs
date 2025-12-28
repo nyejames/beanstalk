@@ -106,7 +106,7 @@ fn classify_node(node: &HirNode) -> CfgNodeType {
         HirKind::Return(_) | HirKind::ReturnError(_) => CfgNodeType::FunctionExit,
 
         // Loop control flow
-        HirKind::Break | HirKind::Continue => CfgNodeType::Statement, // Could be specialized later
+        HirKind::Break { .. } | HirKind::Continue { .. } => CfgNodeType::Statement, // Could be specialized later
 
         // All other nodes are statements
         _ => CfgNodeType::Statement,
@@ -335,7 +335,7 @@ fn build_cfg_edges(cfg: &mut ControlFlowGraph, hir_nodes: &[HirNode]) {
             }
 
             // Break and continue statements
-            HirKind::Break | HirKind::Continue => {
+            HirKind::Break { .. } | HirKind::Continue { .. } => {
                 // These are handled specially in loop context
                 // For now, treat as terminating
             }
@@ -507,7 +507,7 @@ fn build_block_edges(cfg: &mut ControlFlowGraph, block: &[HirNode]) {
 fn is_terminating_node(node: &HirNode) -> bool {
     matches!(
         node.kind,
-        HirKind::Return(_) | HirKind::ReturnError(_) | HirKind::Break | HirKind::Continue
+        HirKind::Return(_) | HirKind::ReturnError(_) | HirKind::Break { .. } | HirKind::Continue { .. }
     )
 }
 

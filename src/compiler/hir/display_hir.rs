@@ -1,6 +1,4 @@
-use crate::compiler::hir::nodes::{
-    BinOp, HirExpr, HirExprKind, HirKind, HirNode, UnaryOp,
-};
+use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, HirKind, HirNode, UnaryOp};
 use crate::compiler::hir::place::Place;
 use crate::compiler::string_interning::StringTable;
 use std::fmt::{Display, Formatter, Result as FmtResult};
@@ -102,6 +100,7 @@ impl HirNode {
             }
 
             HirKind::Loop {
+                label: id,
                 binding,
                 iterator,
                 body,
@@ -131,8 +130,8 @@ impl HirNode {
                 }
             }
 
-            HirKind::Break => result.push_str("Break"),
-            HirKind::Continue => result.push_str("Continue"),
+            HirKind::Break { .. } => result.push_str("Break"),
+            HirKind::Continue { .. } => result.push_str("Continue"),
 
             HirKind::Call {
                 target,
@@ -389,6 +388,7 @@ impl Display for HirNode {
             }
 
             HirKind::Loop {
+                label: id,
                 binding,
                 iterator,
                 body,
@@ -408,8 +408,8 @@ impl Display for HirNode {
                 }
             }
 
-            HirKind::Break => write!(f, "Break")?,
-            HirKind::Continue => write!(f, "Continue")?,
+            HirKind::Break { .. } => write!(f, "Break")?,
+            HirKind::Continue { .. } => write!(f, "Continue")?,
 
             HirKind::Call {
                 target,
@@ -571,7 +571,9 @@ impl HirExprKind {
             HirExprKind::Float(value) => value.to_string(),
             HirExprKind::Bool(value) => value.to_string(),
             HirExprKind::StringLiteral(value) => format!("\"{}\"", string_table.resolve(*value)),
-            HirExprKind::HeapString(value) => format!("heap_string(\"{}\")", string_table.resolve(*value)),
+            HirExprKind::HeapString(value) => {
+                format!("heap_string(\"{}\")", string_table.resolve(*value))
+            }
             HirExprKind::Char(value) => format!("'{}'", value),
 
             HirExprKind::Load(place) => format!("Load({})", place.display_with_table(string_table)),

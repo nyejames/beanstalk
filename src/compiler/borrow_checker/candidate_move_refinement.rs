@@ -24,7 +24,8 @@ pub struct CandidateMoveRefinement {
     pub mutable_borrows: HashMap<HirNodeId, Place>,
 
     /// Direct BorrowId mapping for O(1) loan mutation (eliminates fragile lookup)
-    pub borrow_id_mapping: HashMap<(HirNodeId, Place), crate::compiler::borrow_checker::types::BorrowId>,
+    pub borrow_id_mapping:
+        HashMap<(HirNodeId, Place), crate::compiler::borrow_checker::types::BorrowId>,
 }
 
 /// Decision made for a candidate move operation
@@ -54,7 +55,9 @@ impl CandidateMoveRefinement {
         node_id: HirNodeId,
         place: &Place,
     ) -> Option<crate::compiler::borrow_checker::types::BorrowId> {
-        self.borrow_id_mapping.get(&(node_id, place.clone())).copied()
+        self.borrow_id_mapping
+            .get(&(node_id, place.clone()))
+            .copied()
     }
 }
 
@@ -80,10 +83,10 @@ pub fn refine_candidate_moves(
     validate_data_structure_consistency(&refinement)?;
 
     apply_refinement_to_borrow_state(checker, &refinement)?;
-    
+
     // Validate that move refinement decisions are consistent across all paths
     validate_path_consistency(checker, &refinement)?;
-    
+
     Ok(refinement)
 }
 
@@ -130,7 +133,7 @@ pub fn refine_candidate_moves_with_lifetime_inference(
 /// completeness and future-proofing. Even though many HIR nodes don't currently
 /// contain expressions that could have CandidateMove operations, this comprehensive
 /// approach ensures:
-/// 
+///
 /// 1. No candidate moves are missed due to incomplete traversal
 /// 2. Future HIR evolution won't break candidate move refinement
 /// 3. All expression-containing nodes are properly handled
@@ -149,9 +152,13 @@ fn process_node_for_candidate_moves(
             process_expression_for_candidate_moves(node.id, value, last_use_analysis, refinement)?;
         }
 
-        HirKind::Borrow { place: _, kind: _, target: _ } => {
+        HirKind::Borrow {
+            place: _,
+            kind: _,
+            target: _,
+        } => {
             // Explicit borrow creation - no expressions to traverse
-            // Places are not expressions in current HIR design
+            // Places are not expressions in the current HIR design
         }
 
         // === Control Flow ===
@@ -168,13 +175,22 @@ fn process_node_for_candidate_moves(
             }
         }
 
-        HirKind::Match { scrutinee: _, arms, default } => {
+        HirKind::Match {
+            scrutinee: _,
+            arms,
+            default,
+        } => {
             // Scrutinee is a Place, not an expression in current HIR
             // Process all match arms and default case
             for arm in arms {
                 // Process guard expression if present
                 if let Some(guard_expr) = &arm.guard {
-                    process_expression_for_candidate_moves(node.id, guard_expr, last_use_analysis, refinement)?;
+                    process_expression_for_candidate_moves(
+                        node.id,
+                        guard_expr,
+                        last_use_analysis,
+                        refinement,
+                    )?;
                 }
                 // Process arm body
                 process_node_list(&arm.body, last_use_analysis, refinement)?;
@@ -184,23 +200,39 @@ fn process_node_for_candidate_moves(
             }
         }
 
-        HirKind::Loop { binding: _, iterator: _, body, index_binding: _ } => {
+        HirKind::Loop {
+            label: _,
+            binding: _,
+            iterator: _,
+            body,
+            index_binding: _,
+        } => {
             // Iterator is a Place, not an expression in current HIR
             // Process loop body
             process_node_list(body, last_use_analysis, refinement)?;
         }
 
-        HirKind::Break | HirKind::Continue => {
+        HirKind::Break { .. } | HirKind::Continue { .. } => {
             // Loop control flow - no expressions to traverse
         }
 
         // === Function Calls ===
-        HirKind::Call { target: _, args: _, returns: _ } => {
+        HirKind::Call {
+            target: _,
+            args: _,
+            returns: _,
+        } => {
             // Arguments and returns are Places, not expressions in current HIR
             // No expressions to traverse
         }
 
-        HirKind::HostCall { target: _, module: _, import: _, args: _, returns: _ } => {
+        HirKind::HostCall {
+            target: _,
+            module: _,
+            import: _,
+            args: _,
+            returns: _,
+        } => {
             // Arguments and returns are Places, not expressions in current HIR
             // No expressions to traverse
         }
@@ -219,17 +251,30 @@ fn process_node_for_candidate_moves(
             // Process default values if present
             if let Some(defaults) = default_values {
                 for default_expr in defaults {
-                    process_expression_for_candidate_moves(node.id, default_expr, last_use_analysis, refinement)?;
+                    process_expression_for_candidate_moves(
+                        node.id,
+                        default_expr,
+                        last_use_analysis,
+                        refinement,
+                    )?;
                 }
             }
         }
 
-        HirKind::OptionUnwrap { expr, default_value } => {
+        HirKind::OptionUnwrap {
+            expr,
+            default_value,
+        } => {
             // Process the main expression
             process_expression_for_candidate_moves(node.id, expr, last_use_analysis, refinement)?;
             // Process default value if present
             if let Some(default_expr) = default_value {
-                process_expression_for_candidate_moves(node.id, default_expr, last_use_analysis, refinement)?;
+                process_expression_for_candidate_moves(
+                    node.id,
+                    default_expr,
+                    last_use_analysis,
+                    refinement,
+                )?;
             }
         }
 
@@ -251,20 +296,37 @@ fn process_node_for_candidate_moves(
         }
 
         // === Templates ===
-        HirKind::RuntimeTemplateCall { template_fn: _, captures, id: _ } => {
+        HirKind::RuntimeTemplateCall {
+            template_fn: _,
+            captures,
+            id: _,
+        } => {
             // Process capture expressions
             for capture_expr in captures {
-                process_expression_for_candidate_moves(node.id, capture_expr, last_use_analysis, refinement)?;
+                process_expression_for_candidate_moves(
+                    node.id,
+                    capture_expr,
+                    last_use_analysis,
+                    refinement,
+                )?;
             }
         }
 
-        HirKind::TemplateFn { name: _, params: _, body } => {
+        HirKind::TemplateFn {
+            name: _,
+            params: _,
+            body,
+        } => {
             // Process template function body
             process_node_list(body, last_use_analysis, refinement)?;
         }
 
         // === Function Definitions ===
-        HirKind::FunctionDef { name: _, signature: _, body } => {
+        HirKind::FunctionDef {
+            name: _,
+            signature: _,
+            body,
+        } => {
             // Process function body
             process_node_list(body, last_use_analysis, refinement)?;
         }
@@ -300,19 +362,19 @@ fn process_node_list(
 /// Process an expression to find and refine candidate moves
 ///
 /// ## HIR Invariant Documentation
-/// 
+///
 /// **IMPORTANT**: According to Beanstalk's HIR design, there should be NO nested expressions
 /// that could embed CandidateMove operations. HIR is designed to be linearized with all
 /// computation broken into statements operating on named places.
-/// 
+///
 /// However, this function implements defensive recursive traversal to:
 /// 1. Catch any violations of the HIR invariant during development
 /// 2. Provide future-proof traversal if HIR evolution introduces nested structures
 /// 3. Ensure completeness even if the invariant is temporarily violated
-/// 
+///
 /// **Current HIR Design**: All intermediate values should be stored in places first,
 /// so CandidateMove should only appear at the top level of expressions, never nested.
-/// 
+///
 /// **Future-Proofing**: This traversal handles all expression kinds to remain resilient
 /// to potential HIR changes that might introduce more complex expression nesting.
 fn process_expression_for_candidate_moves(
@@ -331,9 +393,10 @@ fn process_expression_for_candidate_moves(
                 verify_no_later_uses_on_reachable_paths(place, node_id, last_use_analysis),
                 "ROBUSTNESS VIOLATION: Move decision for place {:?} at node {} has later uses on reachable CFG paths. \
                  This indicates a bug in last-use analysis that could lead to use-after-move violations.",
-                place, node_id
+                place,
+                node_id
             );
-            
+
             refinement.moved_places.insert(place.clone(), node_id);
             MoveDecision::Move(place.clone())
         } else {
@@ -342,7 +405,7 @@ fn process_expression_for_candidate_moves(
         };
 
         refinement.move_decisions.insert(node_id, decision);
-        
+
         // Store the BorrowId for O(1) refinement if available
         if let Some(borrow_id) = borrow_id_opt {
             // Store the BorrowId mapping for direct O(1) loan mutation
@@ -356,30 +419,34 @@ fn process_expression_for_candidate_moves(
     // completeness and future-proofing against HIR evolution
     match &expr.kind {
         // === Literals (no nested expressions) ===
-        HirExprKind::Int(_) 
-        | HirExprKind::Float(_) 
-        | HirExprKind::Bool(_) 
-        | HirExprKind::StringLiteral(_) 
-        | HirExprKind::HeapString(_) 
+        HirExprKind::Int(_)
+        | HirExprKind::Float(_)
+        | HirExprKind::Bool(_)
+        | HirExprKind::StringLiteral(_)
+        | HirExprKind::HeapString(_)
         | HirExprKind::Char(_) => {
             // No nested expressions to traverse
         }
 
         // === Place Operations (no nested expressions in current HIR) ===
-        HirExprKind::Load(_) 
-        | HirExprKind::SharedBorrow(_) 
-        | HirExprKind::MutableBorrow(_) 
+        HirExprKind::Load(_)
+        | HirExprKind::SharedBorrow(_)
+        | HirExprKind::MutableBorrow(_)
         | HirExprKind::CandidateMove(_, _) => {
             // Already handled above for CandidateMove
             // Other place operations have no nested expressions in current HIR
         }
 
         // === Binary Operations ===
-        HirExprKind::BinOp { left: _, op: _, right: _ } => {
+        HirExprKind::BinOp {
+            left: _,
+            op: _,
+            right: _,
+        } => {
             // In current HIR design, left and right are Places, not nested expressions
             // This case is included for future-proofing if HIR evolves to allow
             // nested expressions in binary operations
-            
+
             // NOTE: If HIR ever evolves to have nested expressions here,
             // we would need to recursively process them:
             // process_expression_for_candidate_moves(node_id, left_expr, last_use_analysis, refinement)?;
@@ -401,18 +468,25 @@ fn process_expression_for_candidate_moves(
         }
 
         // === Method Calls ===
-        HirExprKind::MethodCall { receiver: _, method: _, args: _ } => {
+        HirExprKind::MethodCall {
+            receiver: _,
+            method: _,
+            args: _,
+        } => {
             // In current HIR design, receiver and args are Places, not nested expressions
             // This case is included for future-proofing if HIR evolves to allow
             // nested expressions in method calls
         }
 
         // === Constructors ===
-        HirExprKind::StructConstruct { type_name: _, fields } => {
+        HirExprKind::StructConstruct {
+            type_name: _,
+            fields,
+        } => {
             // In current HIR design, field values are Places, not nested expressions
             // This case is included for future-proofing if HIR evolves to allow
             // nested expressions in struct construction
-            
+
             // NOTE: If HIR ever evolves to have nested expressions in field values,
             // we would need to recursively process them:
             // for (_, field_expr) in fields {
@@ -451,7 +525,7 @@ fn process_expression_for_candidate_moves(
 /// completeness and future-proofing. Even though many HIR nodes don't currently
 /// contain expressions that could have CandidateMove operations, this comprehensive
 /// approach ensures:
-/// 
+///
 /// 1. No candidate moves are missed due to incomplete traversal
 /// 2. Future HIR evolution won't break candidate move refinement
 /// 3. All expression-containing nodes are properly handled
@@ -475,9 +549,13 @@ fn process_node_with_lifetime_inference(
             )?;
         }
 
-        HirKind::Borrow { place: _, kind: _, target: _ } => {
+        HirKind::Borrow {
+            place: _,
+            kind: _,
+            target: _,
+        } => {
             // Explicit borrow creation - no expressions to traverse
-            // Places are not expressions in current HIR design
+            // Places are not expressions in the current HIR design
         }
 
         // === Control Flow ===
@@ -498,13 +576,22 @@ fn process_node_with_lifetime_inference(
             }
         }
 
-        HirKind::Match { scrutinee: _, arms, default } => {
-            // Scrutinee is a Place, not an expression in current HIR
+        HirKind::Match {
+            scrutinee: _,
+            arms,
+            default,
+        } => {
+            // Scrutinee is a Place, not an expression in the current HIR
             // Process all match arms and default case
             for arm in arms {
                 // Process guard expression if present
                 if let Some(guard_expr) = &arm.guard {
-                    process_expression_with_lifetime_inference(node.id, guard_expr, lifetime_inference, refinement)?;
+                    process_expression_with_lifetime_inference(
+                        node.id,
+                        guard_expr,
+                        lifetime_inference,
+                        refinement,
+                    )?;
                 }
                 // Process arm body
                 process_node_list_with_lifetime_inference(
@@ -522,23 +609,39 @@ fn process_node_with_lifetime_inference(
             }
         }
 
-        HirKind::Loop { binding: _, iterator: _, body, index_binding: _ } => {
+        HirKind::Loop {
+            label: _,
+            binding: _,
+            iterator: _,
+            body,
+            index_binding: _,
+        } => {
             // Iterator is a Place, not an expression in current HIR
             // Process loop body
             process_node_list_with_lifetime_inference(body, lifetime_inference, refinement)?;
         }
 
-        HirKind::Break | HirKind::Continue => {
+        HirKind::Break { .. } | HirKind::Continue { .. } => {
             // Loop control flow - no expressions to traverse
         }
 
         // === Function Calls ===
-        HirKind::Call { target: _, args: _, returns: _ } => {
+        HirKind::Call {
+            target: _,
+            args: _,
+            returns: _,
+        } => {
             // Arguments and returns are Places, not expressions in current HIR
             // No expressions to traverse
         }
 
-        HirKind::HostCall { target: _, module: _, import: _, args: _, returns: _ } => {
+        HirKind::HostCall {
+            target: _,
+            module: _,
+            import: _,
+            args: _,
+            returns: _,
+        } => {
             // Arguments and returns are Places, not expressions in current HIR
             // No expressions to traverse
         }
@@ -561,17 +664,35 @@ fn process_node_with_lifetime_inference(
             // Process default values if present
             if let Some(defaults) = default_values {
                 for default_expr in defaults {
-                    process_expression_with_lifetime_inference(node.id, default_expr, lifetime_inference, refinement)?;
+                    process_expression_with_lifetime_inference(
+                        node.id,
+                        default_expr,
+                        lifetime_inference,
+                        refinement,
+                    )?;
                 }
             }
         }
 
-        HirKind::OptionUnwrap { expr, default_value } => {
+        HirKind::OptionUnwrap {
+            expr,
+            default_value,
+        } => {
             // Process the main expression
-            process_expression_with_lifetime_inference(node.id, expr, lifetime_inference, refinement)?;
+            process_expression_with_lifetime_inference(
+                node.id,
+                expr,
+                lifetime_inference,
+                refinement,
+            )?;
             // Process default value if present
             if let Some(default_expr) = default_value {
-                process_expression_with_lifetime_inference(node.id, default_expr, lifetime_inference, refinement)?;
+                process_expression_with_lifetime_inference(
+                    node.id,
+                    default_expr,
+                    lifetime_inference,
+                    refinement,
+                )?;
             }
         }
 
@@ -593,20 +714,37 @@ fn process_node_with_lifetime_inference(
         }
 
         // === Templates ===
-        HirKind::RuntimeTemplateCall { template_fn: _, captures, id: _ } => {
+        HirKind::RuntimeTemplateCall {
+            template_fn: _,
+            captures,
+            id: _,
+        } => {
             // Process capture expressions
             for capture_expr in captures {
-                process_expression_with_lifetime_inference(node.id, capture_expr, lifetime_inference, refinement)?;
+                process_expression_with_lifetime_inference(
+                    node.id,
+                    capture_expr,
+                    lifetime_inference,
+                    refinement,
+                )?;
             }
         }
 
-        HirKind::TemplateFn { name: _, params: _, body } => {
+        HirKind::TemplateFn {
+            name: _,
+            params: _,
+            body,
+        } => {
             // Process template function body
             process_node_list_with_lifetime_inference(body, lifetime_inference, refinement)?;
         }
 
         // === Function Definitions ===
-        HirKind::FunctionDef { name: _, signature: _, body } => {
+        HirKind::FunctionDef {
+            name: _,
+            signature: _,
+            body,
+        } => {
             // Process function body
             process_node_list_with_lifetime_inference(body, lifetime_inference, refinement)?;
         }
@@ -645,19 +783,19 @@ fn process_node_list_with_lifetime_inference(
 /// accurate last-use information from the new CFG-based lifetime inference system.
 ///
 /// ## HIR Invariant Documentation
-/// 
+///
 /// **IMPORTANT**: According to Beanstalk's HIR design, there should be NO nested expressions
 /// that could embed CandidateMove operations. HIR is designed to be linearized with all
 /// computation broken into statements operating on named places.
-/// 
+///
 /// However, this function implements defensive recursive traversal to:
 /// 1. Catch any violations of the HIR invariant during development
 /// 2. Provide future-proof traversal if HIR evolution introduces nested structures
 /// 3. Ensure completeness even if the invariant is temporarily violated
-/// 
+///
 /// **Current HIR Design**: All intermediate values should be stored in places first,
 /// so CandidateMove should only appear at the top level of expressions, never nested.
-/// 
+///
 /// **Future-Proofing**: This traversal handles all expression kinds to remain resilient
 /// to potential HIR changes that might introduce more complex expression nesting.
 fn process_expression_with_lifetime_inference(
@@ -679,9 +817,10 @@ fn process_expression_with_lifetime_inference(
                 verify_no_later_uses_with_lifetime_inference(place, node_id, lifetime_inference),
                 "ROBUSTNESS VIOLATION: Move decision for place {:?} at node {} has later uses on reachable CFG paths. \
                  This indicates a bug in lifetime inference that could lead to use-after-move violations.",
-                place, node_id
+                place,
+                node_id
             );
-            
+
             // This is the actual last use - convert to move
             refinement.moved_places.insert(place.clone(), node_id);
             MoveDecision::Move(place.clone())
@@ -692,7 +831,7 @@ fn process_expression_with_lifetime_inference(
         };
 
         refinement.move_decisions.insert(node_id, decision);
-        
+
         // Store the BorrowId for O(1) refinement if available
         if let Some(borrow_id) = borrow_id_opt {
             // Store the BorrowId mapping for direct O(1) loan mutation
@@ -706,30 +845,34 @@ fn process_expression_with_lifetime_inference(
     // completeness and future-proofing against HIR evolution
     match &expr.kind {
         // === Literals (no nested expressions) ===
-        HirExprKind::Int(_) 
-        | HirExprKind::Float(_) 
-        | HirExprKind::Bool(_) 
-        | HirExprKind::StringLiteral(_) 
-        | HirExprKind::HeapString(_) 
+        HirExprKind::Int(_)
+        | HirExprKind::Float(_)
+        | HirExprKind::Bool(_)
+        | HirExprKind::StringLiteral(_)
+        | HirExprKind::HeapString(_)
         | HirExprKind::Char(_) => {
             // No nested expressions to traverse
         }
 
         // === Place Operations (no nested expressions in current HIR) ===
-        HirExprKind::Load(_) 
-        | HirExprKind::SharedBorrow(_) 
-        | HirExprKind::MutableBorrow(_) 
+        HirExprKind::Load(_)
+        | HirExprKind::SharedBorrow(_)
+        | HirExprKind::MutableBorrow(_)
         | HirExprKind::CandidateMove(_, _) => {
             // Already handled above for CandidateMove
             // Other place operations have no nested expressions in current HIR
         }
 
         // === Binary Operations ===
-        HirExprKind::BinOp { left: _, op: _, right: _ } => {
+        HirExprKind::BinOp {
+            left: _,
+            op: _,
+            right: _,
+        } => {
             // In current HIR design, left and right are Places, not nested expressions
             // This case is included for future-proofing if HIR evolves to allow
             // nested expressions in binary operations
-            
+
             // NOTE: If HIR ever evolves to have nested expressions here,
             // we would need to recursively process them:
             // process_expression_with_lifetime_inference(node_id, left_expr, lifetime_inference, refinement)?;
@@ -751,18 +894,25 @@ fn process_expression_with_lifetime_inference(
         }
 
         // === Method Calls ===
-        HirExprKind::MethodCall { receiver: _, method: _, args: _ } => {
+        HirExprKind::MethodCall {
+            receiver: _,
+            method: _,
+            args: _,
+        } => {
             // In current HIR design, receiver and args are Places, not nested expressions
             // This case is included for future-proofing if HIR evolves to allow
             // nested expressions in method calls
         }
 
         // === Constructors ===
-        HirExprKind::StructConstruct { type_name: _, fields } => {
+        HirExprKind::StructConstruct {
+            type_name: _,
+            fields,
+        } => {
             // In current HIR design, field values are Places, not nested expressions
             // This case is included for future-proofing if HIR evolves to allow
             // nested expressions in struct construction
-            
+
             // NOTE: If HIR ever evolves to have nested expressions in field values,
             // we would need to recursively process them:
             // for (_, field_expr) in fields {
@@ -980,7 +1130,9 @@ fn apply_refinement_to_borrow_state(
         };
 
         // Use direct O(1) BorrowId lookup - this is the primary path now
-        let loan_id = if let Some(borrow_id) = get_borrow_id_from_candidate_move(refinement, *node_id, place) {
+        let loan_id = if let Some(borrow_id) =
+            get_borrow_id_from_candidate_move(refinement, *node_id, place)
+        {
             Some(borrow_id)
         } else {
             // This should be rare after HIR generation improvements
@@ -993,7 +1145,7 @@ fn apply_refinement_to_borrow_state(
                     place, node_id
                 );
             }
-            
+
             find_candidate_move_loan(&cfg_node.borrow_state, place, *node_id)
         };
 
@@ -1022,8 +1174,10 @@ fn apply_refinement_to_borrow_state(
                     "Failed to find loan for candidate move refinement: place {:?} at node {}",
                     place, node_id
                 ),
-                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                location:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
                 metadata,
             };
             errors.push(error);
@@ -1044,7 +1198,7 @@ fn apply_refinement_to_borrow_state(
 ///
 /// This function extracts the pre-allocated BorrowId from the refinement mapping,
 /// enabling direct O(1) loan mutation instead of fragile lookup.
-/// 
+///
 /// This is the primary lookup path that eliminates the need for fragile loan searching.
 /// The BorrowId is pre-allocated during HIR generation and stored in the refinement mapping
 /// for guaranteed-correct matching.
@@ -1130,7 +1284,7 @@ pub fn validate_move_decisions(
                 Err(mut move_errors) => {
                     validation_failures += 1;
                     errors.append(&mut move_errors.errors);
-                    
+
                     // DEBUG ASSERTION: Move refined despite conflicting borrows
                     // This indicates a serious bug in the move refinement logic
                     debug_assert!(
@@ -1139,14 +1293,16 @@ pub fn validate_move_decisions(
                          This indicates a bug in move refinement that could lead to use-after-move or move-while-borrowed violations.",
                         place, node_id
                     );
-                    
+
                     // In debug builds, provide detailed information about the violation
                     #[cfg(debug_assertions)]
                     {
                         eprintln!("=== MOVE VALIDATION FAILURE ===");
                         eprintln!("Place: {:?}", place);
                         eprintln!("Node ID: {}", node_id);
-                        eprintln!("Conflicting borrows detected - this move should not have been refined");
+                        eprintln!(
+                            "Conflicting borrows detected - this move should not have been refined"
+                        );
                         eprintln!("This is a compiler bug that must be fixed");
                         eprintln!("===============================");
                     }
@@ -1163,7 +1319,7 @@ pub fn validate_move_decisions(
         Err(mut refinement_errors) => {
             validation_failures += 1;
             errors.append(&mut refinement_errors.errors);
-            
+
             // DEBUG ASSERTION: Unrefined candidate moves detected
             // This indicates a phase-order hazard in borrow checking
             debug_assert!(
@@ -1171,7 +1327,7 @@ pub fn validate_move_decisions(
                 "CORRECTNESS VIOLATION: Found unrefined candidate moves. \
                  This indicates a phase-order hazard that could lead to incorrect borrow checking."
             );
-            
+
             // In debug builds, provide detailed information about the hazard
             #[cfg(debug_assertions)]
             {
@@ -1193,9 +1349,12 @@ pub fn validate_move_decisions(
         // This validation function has detected correctness violations that MUST be fixed.
         // The move refinement logic has bugs that could lead to memory safety violations.
         // These errors indicate compiler bugs, not user code issues.
-        
+
         eprintln!("!!! BORROW CHECKER VALIDATION FAILURES DETECTED !!!");
-        eprintln!("Found {} validation failures in move refinement", validation_failures);
+        eprintln!(
+            "Found {} validation failures in move refinement",
+            validation_failures
+        );
         eprintln!("These indicate serious bugs in the compiler that must be addressed");
         eprintln!("The validation function is enforcing correctness as designed");
     }
@@ -1254,15 +1413,15 @@ fn validate_single_move_decision(
     let actual_conflicts: Vec<_> = conflicting_borrows
         .into_iter()
         .filter(|loan| {
-            loan.creation_point != node_id && 
-            loan.kind != BorrowKind::CandidateMove &&
-            loan.kind != BorrowKind::Move  // Don't conflict with other moves of the same place
+            loan.creation_point != node_id
+                && loan.kind != BorrowKind::CandidateMove
+                && loan.kind != BorrowKind::Move // Don't conflict with other moves of the same place
         })
         .collect();
 
     if !actual_conflicts.is_empty() {
         let mut errors = Vec::new();
-        
+
         // Create detailed error for each conflicting borrow
         for conflicting_loan in actual_conflicts {
             let mut metadata = std::collections::HashMap::new();
@@ -1270,19 +1429,21 @@ fn validate_single_move_decision(
                 crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
                 "Borrow Checking - Move Validation",
             );
-            
+
             let conflict_description = format!(
                 "Move of {:?} at node {} conflicts with {} borrow {} created at node {}",
-                place, node_id, 
+                place,
+                node_id,
                 match conflicting_loan.kind {
                     BorrowKind::Shared => "shared",
-                    BorrowKind::Mutable => "mutable", 
+                    BorrowKind::Mutable => "mutable",
                     BorrowKind::CandidateMove => "candidate move",
                     BorrowKind::Move => "move",
                 },
-                conflicting_loan.id, conflicting_loan.creation_point
+                conflicting_loan.id,
+                conflicting_loan.creation_point
             );
-            
+
             metadata.insert(
                 crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
                 "Resolve move conflicts by ensuring exclusive access",
@@ -1295,12 +1456,14 @@ fn validate_single_move_decision(
                     match conflicting_loan.kind {
                         BorrowKind::Shared => "shared",
                         BorrowKind::Mutable => "mutable",
-                        BorrowKind::CandidateMove => "candidate move", 
+                        BorrowKind::CandidateMove => "candidate move",
                         BorrowKind::Move => "move",
                     }
                 ),
-                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                location:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
                 metadata,
             };
             errors.push(error);
@@ -1330,7 +1493,7 @@ fn validate_all_candidates_refined(checker: &BorrowChecker) -> Result<(), Compil
         for loan in cfg_node.borrow_state.active_borrows.values() {
             if loan.kind == BorrowKind::CandidateMove {
                 unrefined_candidates.push((*node_id, loan.place.clone(), loan.id));
-                
+
                 // Create detailed error for each unrefined candidate
                 let mut metadata = std::collections::HashMap::new();
                 metadata.insert(
@@ -1347,8 +1510,11 @@ fn validate_all_candidates_refined(checker: &BorrowChecker) -> Result<(), Compil
                         "Phase-order hazard: Unrefined candidate move for place {:?} (borrow {}) at node {}",
                         loan.place, loan.id, node_id
                     ),
-                    location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                    error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                    location:
+                        crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(
+                        ),
+                    error_type:
+                        crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
                     metadata,
                 };
                 errors.push(error);
@@ -1361,11 +1527,17 @@ fn validate_all_candidates_refined(checker: &BorrowChecker) -> Result<(), Compil
         // This is a serious compiler bug that indicates the move refinement phase
         // failed to process all candidate moves. This could lead to incorrect
         // borrow checking results and potential memory safety violations.
-        
+
         eprintln!("!!! CRITICAL PHASE-ORDER HAZARD DETECTED !!!");
-        eprintln!("Found {} unrefined candidate moves:", unrefined_candidates.len());
+        eprintln!(
+            "Found {} unrefined candidate moves:",
+            unrefined_candidates.len()
+        );
         for (node_id, place, borrow_id) in &unrefined_candidates {
-            eprintln!("  - Place {:?} (borrow {}) at node {}", place, borrow_id, node_id);
+            eprintln!(
+                "  - Place {:?} (borrow {}) at node {}",
+                place, borrow_id, node_id
+            );
         }
         eprintln!("This indicates a serious bug in move refinement that must be fixed immediately");
         eprintln!("Unrefined candidate moves can lead to incorrect borrow checking");
@@ -1402,7 +1574,10 @@ fn validate_temporal_consistency(
         if let MoveDecision::Move(place) = decision {
             // Find the corresponding loan in the borrow state
             if let Some(cfg_node) = checker.cfg.nodes.get(node_id) {
-                let move_loan = cfg_node.borrow_state.active_borrows.values()
+                let move_loan = cfg_node
+                    .borrow_state
+                    .active_borrows
+                    .values()
                     .find(|loan| loan.place == *place && loan.creation_point == *node_id);
 
                 if let Some(loan) = move_loan {
@@ -1431,12 +1606,18 @@ fn validate_temporal_consistency(
                     }
 
                     // Check for conflicting active borrows that should prevent this move
-                    let overlapping_borrows: Vec<_> = cfg_node.borrow_state.active_borrows.values()
+                    let overlapping_borrows: Vec<_> = cfg_node
+                        .borrow_state
+                        .active_borrows
+                        .values()
                         .filter(|other_loan| {
-                            other_loan.id != loan.id &&
-                            other_loan.place.overlaps_with(place) &&
-                            other_loan.creation_point < *node_id &&
-                            matches!(other_loan.kind, BorrowKind::Shared | BorrowKind::Mutable)
+                            other_loan.id != loan.id
+                                && other_loan.place.overlaps_with(place)
+                                && other_loan.creation_point < *node_id
+                                && matches!(
+                                    other_loan.kind,
+                                    BorrowKind::Shared | BorrowKind::Mutable
+                                )
                         })
                         .collect();
 
@@ -1447,7 +1628,7 @@ fn validate_temporal_consistency(
                                 crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::CompilationStage,
                                 "Borrow Checking - Temporal Validation",
                             );
-                            
+
                             let conflict_description = format!(
                                 "Move conflicts with {} borrow {} of overlapping place {:?} created at node {}",
                                 match conflicting_loan.kind {
@@ -1459,7 +1640,7 @@ fn validate_temporal_consistency(
                                 conflicting_loan.place,
                                 conflicting_loan.creation_point
                             );
-                            
+
                             metadata.insert(
                                 crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
                                 "Resolve temporal conflicts by ensuring proper ordering",
@@ -1516,10 +1697,10 @@ fn verify_no_later_uses_on_reachable_paths(
 ) -> bool {
     // Basic verification: if this is marked as a last use, then by definition
     // the last-use analysis should not find any later uses
-    
+
     // This is a simplified check - a full implementation would traverse the CFG
     // to verify no later uses exist on any reachable path
-    
+
     // For now, we trust the last-use analysis and return true
     // This can be enhanced with more sophisticated CFG traversal if needed
     let _ = (place, node_id, last_use_analysis);
@@ -1551,10 +1732,10 @@ fn verify_no_later_uses_with_lifetime_inference(
 ) -> bool {
     // Basic verification: if this is marked as a last use by lifetime inference,
     // then by definition there should be no later uses
-    
+
     // This is a simplified check - a full implementation would traverse the CFG
     // to verify no later uses exist on any reachable path
-    
+
     // For now, we trust the lifetime inference and return true
     // This can be enhanced with more sophisticated CFG traversal if needed
     let _ = (place, node_id, lifetime_inference);
@@ -1614,31 +1795,33 @@ pub fn validate_path_consistency(
     refinement: &CandidateMoveRefinement,
 ) -> Result<(), CompilerMessages> {
     let mut errors = Vec::new();
-    
+
     // Group move decisions by place to check for global consistency
     let mut place_decisions: HashMap<Place, Vec<(HirNodeId, &MoveDecision)>> = HashMap::new();
-    
+
     for (node_id, decision) in &refinement.move_decisions {
         let place = match decision {
             MoveDecision::Move(p) | MoveDecision::MutableBorrow(p) => p,
         };
-        
+
         place_decisions
             .entry(place.clone())
             .or_default()
             .push((*node_id, decision));
     }
-    
+
     // Validate global consistency for each place
     for (place, decisions) in place_decisions {
         // Check for conflicting decisions for the same place
-        let move_decisions: Vec<_> = decisions.iter()
+        let move_decisions: Vec<_> = decisions
+            .iter()
             .filter(|(_, d)| matches!(d, MoveDecision::Move(_)))
             .collect();
-        let borrow_decisions: Vec<_> = decisions.iter()
+        let borrow_decisions: Vec<_> = decisions
+            .iter()
             .filter(|(_, d)| matches!(d, MoveDecision::MutableBorrow(_)))
             .collect();
-        
+
         // ENFORCE GLOBAL CONSISTENCY INVARIANT
         // If we have both moves and borrows for the same place, this violates
         // Beanstalk's global consistency requirement
@@ -1655,10 +1838,12 @@ pub fn validate_path_consistency(
             );
 
             // Create detailed error showing the conflicting decisions
-            let move_locations: Vec<String> = move_decisions.iter()
+            let move_locations: Vec<String> = move_decisions
+                .iter()
                 .map(|(node_id, _)| format!("node {}", node_id))
                 .collect();
-            let borrow_locations: Vec<String> = borrow_decisions.iter()
+            let borrow_locations: Vec<String> = borrow_decisions
+                .iter()
                 .map(|(node_id, _)| format!("node {}", node_id))
                 .collect();
 
@@ -1671,12 +1856,14 @@ pub fn validate_path_consistency(
                     move_locations.join(", "),
                     borrow_locations.join(", ")
                 ),
-                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                location:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
                 metadata,
             };
             errors.push(error);
-            
+
             // DEBUG ASSERTION: This should not happen with correct last-use analysis
             debug_assert!(
                 false,
@@ -1686,11 +1873,11 @@ pub fn validate_path_consistency(
                 place
             );
         }
-        
+
         // Additional validation: Check for temporal consistency within the same place
         validate_temporal_consistency_for_place(&place, &decisions, checker, &mut errors)?;
     }
-    
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -1716,17 +1903,20 @@ fn validate_temporal_consistency_for_place(
         // Check that the decision is consistent with the borrow state at that node
         if let Some(cfg_node) = checker.cfg.nodes.get(node_id) {
             // Find the corresponding loan for this place at this node
-            let relevant_loans: Vec<_> = cfg_node.borrow_state.active_borrows.values()
+            let relevant_loans: Vec<_> = cfg_node
+                .borrow_state
+                .active_borrows
+                .values()
                 .filter(|loan| loan.place == *place && loan.creation_point == *node_id)
                 .collect();
-            
+
             // Validate that the decision matches the loan kind
             for loan in relevant_loans {
                 let expected_kind = match decision {
                     MoveDecision::Move(_) => BorrowKind::Move,
                     MoveDecision::MutableBorrow(_) => BorrowKind::Mutable,
                 };
-                
+
                 // Note: We allow CandidateMove here since this validation might run
                 // before the loan kinds are updated
                 if loan.kind != expected_kind && loan.kind != BorrowKind::CandidateMove {
@@ -1755,7 +1945,7 @@ fn validate_temporal_consistency_for_place(
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1782,23 +1972,23 @@ pub fn enforce_global_ownership_consistency(
     refinement: &CandidateMoveRefinement,
 ) -> Result<(), CompilerMessages> {
     let mut errors = Vec::new();
-    
+
     // Group all decisions by place to check for global consistency
     let mut place_outcomes: HashMap<Place, (Vec<HirNodeId>, Vec<HirNodeId>)> = HashMap::new();
-    
+
     for (node_id, decision) in &refinement.move_decisions {
         let place = match decision {
             MoveDecision::Move(p) | MoveDecision::MutableBorrow(p) => p,
         };
-        
+
         let (moves, borrows) = place_outcomes.entry(place.clone()).or_default();
-        
+
         match decision {
             MoveDecision::Move(_) => moves.push(*node_id),
             MoveDecision::MutableBorrow(_) => borrows.push(*node_id),
         }
     }
-    
+
     // Check each place for consistency violations
     for (place, (move_nodes, borrow_nodes)) in place_outcomes {
         if !move_nodes.is_empty() && !borrow_nodes.is_empty() {
@@ -1820,12 +2010,14 @@ pub fn enforce_global_ownership_consistency(
                      Beanstalk requires the same ownership outcome for a place across all control flow paths.",
                     place, move_nodes, borrow_nodes
                 ),
-                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
+                location:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorType::BorrowChecker,
                 metadata,
             };
             errors.push(error);
-            
+
             // DEBUG ASSERTION: This should be caught by last-use analysis
             debug_assert!(
                 false,
@@ -1835,7 +2027,7 @@ pub fn enforce_global_ownership_consistency(
             );
         }
     }
-    
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -1891,7 +2083,7 @@ pub fn enforce_global_ownership_consistency(
 pub fn document_data_structure_design_decisions() {
     // This function exists purely for documentation purposes
     // It serves as a record of the design decisions and their rationale
-    
+
     // The current data structures are correctly designed for Beanstalk's
     // global ownership consistency model and do not need modification
 }
@@ -1907,13 +2099,13 @@ pub fn validate_data_structure_consistency(
     refinement: &CandidateMoveRefinement,
 ) -> Result<(), CompilerMessages> {
     let mut errors = Vec::new();
-    
+
     // Validate moved_places consistency
     let mut place_counts: HashMap<Place, usize> = HashMap::new();
     for place in refinement.moved_places.keys() {
         *place_counts.entry(place.clone()).or_default() += 1;
     }
-    
+
     for (place, count) in place_counts {
         if count > 1 {
             // This should never happen with the current design
@@ -1933,19 +2125,21 @@ pub fn validate_data_structure_consistency(
                      Each place should appear at most once.",
                     place, count
                 ),
-                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                location:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
                 metadata,
             };
             errors.push(error);
         }
     }
-    
+
     // Validate move_decisions consistency
     // Each node should appear at most once (this is guaranteed by HashMap, but we document it)
     let decision_count = refinement.move_decisions.len();
     let unique_nodes: std::collections::HashSet<_> = refinement.move_decisions.keys().collect();
-    
+
     if decision_count != unique_nodes.len() {
         // This should never happen with HashMap, but we check for completeness
         let mut metadata = std::collections::HashMap::new();
@@ -1962,7 +2156,8 @@ pub fn validate_data_structure_consistency(
             msg: format!(
                 "Data structure inconsistency: move_decisions has {} entries but {} unique nodes. \
                  This should be impossible with HashMap.",
-                decision_count, unique_nodes.len()
+                decision_count,
+                unique_nodes.len()
             ),
             location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
             error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
@@ -1970,7 +2165,7 @@ pub fn validate_data_structure_consistency(
         };
         errors.push(error);
     }
-    
+
     // Validate consistency between moved_places and move_decisions
     for (place, move_node) in &refinement.moved_places {
         if let Some(decision) = refinement.move_decisions.get(move_node) {
@@ -2044,14 +2239,16 @@ pub fn validate_data_structure_consistency(
                      but no decision exists for that node.",
                     place, move_node
                 ),
-                location: crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
-                error_type: crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
+                location:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorLocation::default(),
+                error_type:
+                    crate::compiler::compiler_messages::compiler_errors::ErrorType::Compiler,
                 metadata,
             };
             errors.push(error);
         }
     }
-    
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -2100,7 +2297,7 @@ pub fn validate_borrow_id_mapping_effectiveness(
     // If we have a significant number of fallbacks, warn about it
     if fallback_count > 0 && total_decisions > 0 {
         let fallback_percentage = (fallback_count as f64 / total_decisions as f64) * 100.0;
-        
+
         // Only warn if fallback usage is significant (>10%)
         if fallback_percentage > 10.0 {
             #[cfg(debug_assertions)]

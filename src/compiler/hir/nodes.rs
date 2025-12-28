@@ -28,17 +28,20 @@ pub struct HirNode {
 }
 
 pub type HirNodeId = usize;
+pub type ControlFlowId = usize;
 
 #[derive(Debug, Clone)]
 pub enum HirKind {
     // === Variable Bindings ===
     /// Assignment to a place (local variable, field, etc.)
     /// This covers both initial bindings and mutations
-    Assign { place: Place, value: HirExpr },
+    Assign {
+        place: Place,
+        value: HirExpr,
+    },
 
     /// Explicit borrow creation (shared or mutable)
     /// Records where borrow access is requested
-    #[allow(dead_code)]
     Borrow {
         place: Place,
         kind: BorrowKind,
@@ -62,17 +65,20 @@ pub enum HirKind {
 
     /// Structured loop with explicit binding
     Loop {
+        label: ControlFlowId, // ID label for breaks and continues to reference this loop
         binding: Option<(InternedString, DataType)>, // Loop variable binding
-        iterator: Place,                             // Iterator must be stored in a place first
+        iterator: Place,   // Iterator must be stored in a place first
         body: Vec<HirNode>,
         index_binding: Option<InternedString>, // Optional index binding
     },
 
     /// Loop control flow
-    #[allow(dead_code)]
-    Break,
-    #[allow(dead_code)]
-    Continue,
+    Break {
+        target: ControlFlowId,
+    },
+    Continue {
+        target: ControlFlowId,
+    },
 
     // === Function Calls ===
     /// Regular function call with explicit argument places and return destinations
@@ -92,7 +98,6 @@ pub enum HirKind {
     },
 
     // === Error Handling (Desugared) ===
-    #[allow(dead_code)]
     TryCall {
         call: Box<HirNode>,
         error_binding: Option<InternedString>,
@@ -100,7 +105,6 @@ pub enum HirKind {
         default_values: Option<Vec<HirExpr>>,
     },
 
-    #[allow(dead_code)]
     OptionUnwrap {
         expr: HirExpr,
         default_value: Option<HirExpr>,
@@ -111,23 +115,19 @@ pub enum HirKind {
     Return(Vec<Place>),
 
     /// Error return for `return!` syntax
-    #[allow(dead_code)]
     ReturnError(Place),
 
     // === Resource Management ===
     /// Drop operation (inserted by borrow checker after analysis)
-    #[allow(dead_code)]
     Drop(Place),
 
     // === Templates ===
-    #[allow(dead_code)]
     RuntimeTemplateCall {
         template_fn: InternedString,
         captures: Vec<HirExpr>,
         id: Option<InternedString>,
     },
 
-    #[allow(dead_code)]
     TemplateFn {
         name: InternedString,
         params: Vec<(InternedString, DataType)>,
@@ -167,7 +167,7 @@ pub enum HirExprKind {
     Float(f64),
     Bool(bool),
     StringLiteral(InternedString), // Includes compile-time folded templates (stack-allocated)
-    HeapString(InternedString), // Runtime template strings (heap-allocated)
+    HeapString(InternedString),    // Runtime template strings (heap-allocated)
     Char(char),
 
     // === Place Operations ===
@@ -184,7 +184,10 @@ pub enum HirExprKind {
 
     /// Candidate move (potential ownership transfer, refined by the borrow checker)
     /// The BorrowId is attached during HIR generation for direct O(1) refinement
-    CandidateMove(Place, Option<crate::compiler::borrow_checker::types::BorrowId>),
+    CandidateMove(
+        Place,
+        Option<crate::compiler::borrow_checker::types::BorrowId>,
+    ),
 
     // === Binary Operations ===
     /// Binary operation between two places (no nested expressions)

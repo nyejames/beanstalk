@@ -138,6 +138,7 @@ use std::path::PathBuf;
 
 // Re-export types for the build system
 use crate::compiler::borrow_checker::checker::check_borrows;
+use crate::compiler::codegen::wasm::encode::encode_wasm;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::builder::HirBuilder;
@@ -151,7 +152,6 @@ use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build::*;
-use crate::compiler::codegen::wasm::encode::encode_wasm;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -301,7 +301,7 @@ impl<'a> Compiler<'a> {
     /// Generate LIR from HIR nodes.
     /// LIR is a representation designed for lowering to Was
     pub fn generate_lir(&mut self, hir_nodes: &[HirNode]) -> Result<LirModule, CompilerError> {
-        lower_to_lir(hir_nodes)
+        lower_to_lir(hir_nodes, &self.string_table)
     }
 
     /// -----------------------------

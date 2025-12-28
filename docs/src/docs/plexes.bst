@@ -14,10 +14,9 @@ You define the shape of a Plex using the || parameter brackets syntax.
 
 They can implement methods by defining a function that takes an instance of the Plex as its first argument with the name 'this'.
 
+Plexes can be assigned with default arguments, these can be any constant expression.
+
 ```beanstalk
-    -- Define a new object
-    -- To create a new instance of this object, it must have 2 parameters passed in,
-    -- a string and an integer
     Person = |
         name String,
         age Int,
@@ -30,11 +29,11 @@ They can implement methods by defining a function that takes an instance of the 
     io(person.name) -- "Alice"
     io(person.age)  -- 30
 
-    -- Defining a struct, then defining a method for it
-    Vector2:
-        x Float,
-        y Float,
-    ;
+    -- Defining a plex, then defining a method for it
+    Vector2 = |
+        x Float = 0,
+        y Float = 0,
+    |
 
     reset |this ~Vector2|:
         this.x = 0
@@ -45,20 +44,20 @@ They can implement methods by defining a function that takes an instance of the 
     vec.reset()
 ```
 
-## Constructor methods
+## Methods
 Methods in Beanstalk are created using the special 'this' keyword.
 
 You define a reciever (The type this method will belong to)
 by defining a parameter with the special name 'this'.
 
 ```beanstalk
-    -- Define a struct
-    Rectangle:
+    -- Define a plex
+    Rectangle = |
         width Float,
         height Float,
-    ;
+    |
 
-    -- Define a method for the Rectangle struct
+    -- Define a method for the Rectangle plex
     area |this ~Rectangle|:
         return this.width * this.height
     ;

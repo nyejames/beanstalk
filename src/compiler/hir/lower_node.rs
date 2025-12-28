@@ -117,6 +117,7 @@ impl<'a> HirBuilder<'a> {
                 let mut nodes = collection_nodes;
                 nodes.push(HirNode {
                     kind: HirKind::Loop {
+                        label: self.next_control_flow_id(),
                         binding,
                         iterator: collection_place,
                         body,
@@ -281,7 +282,8 @@ impl<'a> HirBuilder<'a> {
                 let mut nodes = cond_nodes;
                 nodes.push(HirNode {
                     kind: HirKind::Loop {
-                        binding: None,        // While loops don't have iterator bindings
+                        label: self.next_control_flow_id(),
+                        binding: None, // While loops don't have iterator bindings
                         iterator: cond_place, // Use condition as an iterator (will be checked each iteration)
                         body,
                         index_binding: None,

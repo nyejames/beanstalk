@@ -15,14 +15,14 @@ Any function that can return an error must have its error handled.
 The bang symbol ! is used for creating Result types and handling errors.
 
 ```beanstalk
-    func_call_that_can_return_an_error() !:
+    func_call_that_can_return_an_error() Int!:
         -- Error handling code
     ;
 
     -- Here, we define a type called 'BadStuff' that we will use as our error value.
-    BadStuff:
+    BadStuff = |
         msg String
-    ;
+    |
 
     -- This function can return a String and an Int or a BadStuff error
     -- The ! indicates that instead of the normal return values, the error value could be returned instead of the other two
@@ -43,15 +43,14 @@ The bang symbol ! is used for creating Result types and handling errors.
         return
     ;
 
-    -- Handling an error with default values in case of an error
+    -- Handling an error with default values
     string_returned, number_returned = parent_func() !("", 0)
 
     -- Bubbling up errors without handling them
     another_parent_func || -> String, Int, BadStuff!:
         -- Since this function has the same return signature, 
         -- it can be directly returned without handling the error here
-        -- The ! represents that the value is a Result type
-        return parent_func()!
+        return parent_func()
     ;
 
     -- By default, accessing items in a collection by their index using .get() returns an error if the index is out of bounds
@@ -78,6 +77,7 @@ The bang symbol ! is used for creating Result types and handling errors.
 
         if response is None:
             return None
+        ;
 
         return response.body
     ;
@@ -111,6 +111,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     if error is not None:
         io("Error from parent_func_no_sugar: ", error.msg)
         return
+    ;
 ```
 
 ## Panics

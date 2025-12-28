@@ -32,6 +32,7 @@ pub fn handle_structured_control_flow(
             }
 
             HirKind::Loop {
+                label: _,
                 binding: _,
                 iterator: _,
                 body,
@@ -69,21 +70,12 @@ fn handle_if_statement(
     };
 
     // Process then branch with separate state tracking (read-only)
-    let then_end_state = process_branch_with_separate_tracking(
-        checker,
-        then_block,
-        &pre_if_state,
-        "then branch",
-    )?;
+    let then_end_state =
+        process_branch_with_separate_tracking(checker, then_block, &pre_if_state, "then branch")?;
 
     // Process else branch with separate state tracking (read-only)
     let else_end_state = if let Some(else_nodes) = else_block {
-        process_branch_with_separate_tracking(
-            checker,
-            else_nodes,
-            &pre_if_state,
-            "else branch",
-        )?
+        process_branch_with_separate_tracking(checker, else_nodes, &pre_if_state, "else branch")?
     } else {
         // If no else branch, the pre-if state continues unchanged
         pre_if_state.clone()
@@ -168,12 +160,8 @@ fn handle_loop_statement(
     };
 
     // Process loop body with boundary crossing analysis (read-only)
-    let loop_body_state = process_loop_body_with_boundary_tracking(
-        checker,
-        body,
-        &pre_loop_state,
-        loop_node_id,
-    )?;
+    let loop_body_state =
+        process_loop_body_with_boundary_tracking(checker, body, &pre_loop_state, loop_node_id)?;
 
     // Analyze loop iteration boundary (read-only)
     analyze_loop_iteration_boundary(checker, loop_node_id, &pre_loop_state, &loop_body_state);
@@ -221,7 +209,12 @@ fn process_branch_with_separate_tracking(
                 else_block,
             } => {
                 // Read-only analysis of nested if statements
-                let _ = analyze_if_statement_readonly(checker, node.id, then_block, else_block.as_deref())?;
+                let _ = analyze_if_statement_readonly(
+                    checker,
+                    node.id,
+                    then_block,
+                    else_block.as_deref(),
+                )?;
             }
 
             HirKind::Match {
@@ -230,10 +223,12 @@ fn process_branch_with_separate_tracking(
                 default,
             } => {
                 // Read-only analysis of nested match statements
-                let _ = analyze_match_statement_readonly(checker, node.id, arms, default.as_deref())?;
+                let _ =
+                    analyze_match_statement_readonly(checker, node.id, arms, default.as_deref())?;
             }
 
             HirKind::Loop {
+                label: _,
                 binding: _,
                 iterator: _,
                 body,
@@ -283,7 +278,12 @@ fn process_loop_body_with_boundary_tracking(
                 else_block,
             } => {
                 // Read-only analysis of nested if statements
-                let _ = analyze_if_statement_readonly(checker, node.id, then_block, else_block.as_deref())?;
+                let _ = analyze_if_statement_readonly(
+                    checker,
+                    node.id,
+                    then_block,
+                    else_block.as_deref(),
+                )?;
             }
 
             HirKind::Match {
@@ -292,11 +292,13 @@ fn process_loop_body_with_boundary_tracking(
                 default,
             } => {
                 // Read-only analysis of nested match statements
-                let _ = analyze_match_statement_readonly(checker, node.id, arms, default.as_deref())?;
+                let _ =
+                    analyze_match_statement_readonly(checker, node.id, arms, default.as_deref())?;
             }
 
             // Nested loops require special handling
             HirKind::Loop {
+                label: _,
                 binding: _,
                 iterator: _,
                 body: nested_body,
@@ -329,7 +331,7 @@ fn analyze_loop_iteration_boundary(
     // At the loop iteration boundary, we would analyze:
     // 1. Borrows that existed before the loop (persist across iterations)
     // 2. Borrows created in the loop body that might persist to next iteration
-    
+
     // In a full implementation, this would perform analysis without state modification
 }
 
@@ -343,7 +345,7 @@ fn analyze_loop_back_edge(
     // This function is now analysis-only and doesn't modify existing states
     // The back-edge represents the flow from the end of the loop body
     // back to the loop header for the next iteration
-    
+
     // In a full implementation, this would analyze the back-edge without state modification
 }
 
@@ -355,13 +357,13 @@ fn conservative_merge_at_join_point(
 ) {
     // This function is now analysis-only and doesn't modify existing states
     // The actual merging logic would be used for analysis purposes only
-    
+
     // In a full implementation, this would:
     // 1. Analyze the incoming states for consistency
     // 2. Compute what the merged state would be
     // 3. Record analysis results for later use
     // 4. NOT modify the existing CFG node states
-    
+
     // For now, we'll just perform the analysis without state modification
     // to ensure compatibility with the existing pipeline
 }
@@ -544,21 +546,12 @@ fn analyze_if_statement_readonly(
     };
 
     // Analyze then branch with separate state tracking (read-only)
-    let _then_end_state = process_branch_with_separate_tracking(
-        checker,
-        then_block,
-        &pre_if_state,
-        "then branch",
-    )?;
+    let _then_end_state =
+        process_branch_with_separate_tracking(checker, then_block, &pre_if_state, "then branch")?;
 
     // Analyze else branch with separate state tracking (read-only)
     let _else_end_state = if let Some(else_nodes) = else_block {
-        process_branch_with_separate_tracking(
-            checker,
-            else_nodes,
-            &pre_if_state,
-            "else branch",
-        )?
+        process_branch_with_separate_tracking(checker, else_nodes, &pre_if_state, "else branch")?
     } else {
         pre_if_state.clone()
     };
@@ -628,12 +621,8 @@ fn analyze_loop_statement_readonly(
     };
 
     // Analyze loop body with boundary crossing analysis (read-only)
-    let _loop_body_state = process_loop_body_with_boundary_tracking(
-        checker,
-        body,
-        &pre_loop_state,
-        loop_node_id,
-    )?;
+    let _loop_body_state =
+        process_loop_body_with_boundary_tracking(checker, body, &pre_loop_state, loop_node_id)?;
 
     // Note: We don't perform any merging or state updates in read-only analysis
     Ok(())

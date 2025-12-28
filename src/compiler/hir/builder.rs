@@ -11,7 +11,7 @@
 
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::datatypes::DataType;
-use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirNodeId};
+use crate::compiler::hir::nodes::{ControlFlowId, HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirNodeId};
 use crate::compiler::hir::place::Place;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
@@ -20,6 +20,7 @@ use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
+use crate::compiler::borrow_checker::types::BorrowId;
 
 /// Build a HIR module from the AST
 ///
@@ -35,6 +36,8 @@ pub struct HirBuilder<'a> {
     /// Sequential ID generator for borrow IDs (for direct O(1) candidate move refinement)
     next_borrow_id: usize,
 
+    pub(crate) next_control_flow_id: usize,
+
     /// Track local variable bindings and their types
     pub(crate) local_bindings: HashMap<InternedString, DataType>,
 
@@ -42,7 +45,6 @@ pub struct HirBuilder<'a> {
     pub(crate) temp_counter: usize,
 
     /// Counter for generating unique runtime template function names
-    #[allow(dead_code)]
     template_counter: usize,
 
     /// Accumulated errors and warnings during lowering
@@ -58,32 +60,13 @@ impl<'a> HirBuilder<'a> {
             current_scope: scope,
             next_node_id: 0,
             next_borrow_id: 0,
+            next_control_flow_id: 0,
             local_bindings: HashMap::new(),
             temp_counter: 0,
             template_counter: 0,
             messages: CompilerMessages::new(),
             string_table,
         }
-    }
-
-    pub(crate) fn next_id(&mut self) -> HirNodeId {
-        let id = self.next_node_id;
-        self.next_node_id += 1;
-        id
-    }
-
-    /// Generate a new unique borrow ID for direct O(1) candidate move refinement
-    pub(crate) fn next_borrow_id(&mut self) -> crate::compiler::borrow_checker::types::BorrowId {
-        let id = self.next_borrow_id;
-        self.next_borrow_id += 1;
-        id
-    }
-
-    /// Generate a unique temporary variable name
-    pub(crate) fn next_temp(&mut self) -> InternedString {
-        let name = format!("_temp_{}", self.temp_counter);
-        self.temp_counter += 1;
-        self.string_table.intern(&name)
     }
 
     /// Main entry point: lower the entire AST to HIR
@@ -110,6 +93,33 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(hir_nodes)
+    }
+
+    pub(crate) fn next_id(&mut self) -> HirNodeId {
+        let id = self.next_node_id;
+        self.next_node_id += 1;
+        id
+    }
+
+    /// Generate a new unique borrow ID for direct O(1) candidate move refinement
+    pub(crate) fn next_borrow_id(&mut self) -> BorrowId {
+        let id = self.next_borrow_id;
+        self.next_borrow_id += 1;
+        id
+    }
+    
+    /// Generate a new unique control flow ID, for labeling control flow
+    pub(crate) fn next_control_flow_id(&mut self) -> ControlFlowId {
+        let id = self.next_control_flow_id;
+        self.next_control_flow_id += 1;
+        id
+    }
+
+    /// Generate a unique temporary variable name
+    pub(crate) fn next_temp(&mut self) -> InternedString {
+        let name = format!("_temp_{}", self.temp_counter);
+        self.temp_counter += 1;
+        self.string_table.intern(&name)
     }
 
     /// Helper: create a literal expression assignment to a temporary place

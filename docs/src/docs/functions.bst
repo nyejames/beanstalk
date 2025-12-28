@@ -70,7 +70,7 @@ it must use a type signature or the name of one of the arguments if it's returni
             return err
         ;
 
-        [: Did not error!]
+        io([: Did not error!])
     ;
 
     panics ||:

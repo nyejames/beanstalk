@@ -8,8 +8,6 @@ import @./components
 [Page:
 
 ## Ongoing task list
-- Runtime stuff needs to be outputted fully
-
 - Scenes will parse blocks and look for style properties and insert successive scenes passed into it into a 'slot' scene if it has one.
 If multiple scenes with slots are added to a scene, they need to be parsed correctly so each successive scene is passed into the slot of the previous scene.
 If that slot has any styles, the styles need to be applied each time a new scene is added into that slot. 

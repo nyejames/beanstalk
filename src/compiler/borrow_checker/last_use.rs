@@ -790,11 +790,11 @@ fn linearize_node_with_cfg_id(node: &HirNode, statements: &mut Vec<LinearStateme
             linearize_template_fn_node(node, body, statements);
         }
 
-        HirKind::Break => {
+        HirKind::Break { .. } => {
             linearize_break_node(node, statements);
         }
 
-        HirKind::Continue => {
+        HirKind::Continue { .. } => {
             linearize_continue_node(node, statements);
         }
 
