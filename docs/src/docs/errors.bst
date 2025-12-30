@@ -125,7 +125,7 @@ Such as if there is a high risk of undefined behaviour in a critical and complex
 Effectively creating a runtime assertion.
 
 ```beanstalk
-    #panic("Message about the panic")
+    #panic "Message about the panic"
 ```
 
 ]

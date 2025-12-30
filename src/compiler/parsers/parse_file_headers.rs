@@ -416,8 +416,7 @@ fn create_header(
                     }
 
                     // Colons used in templates parse into a different token (EndTemplateHead),
-                    // so there isn't any issue with templates creating a colon imbalance
-                    // (also double colons are their own separate token).
+                    // so there isn't any issue with templates creating a colon imbalance.
                     // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
                     // The only violations of this rule have to be parsed differently in the tokenizer,
                     // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
@@ -425,6 +424,13 @@ fn create_header(
                         scopes_opened += 1;
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
+
+                    // Double colons need to be closed with semicolons also
+                    TokenKind::DoubleColon => {
+                        scopes_opened += 1;
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+
                     TokenKind::Symbol(name_id) => {
                         if let Some(path) = file_imports.get(name_id) {
                             dependencies.insert(path.to_owned());
@@ -458,7 +464,10 @@ fn create_header(
 
         // Should be a choice declaration
         // Choice :: Option1, Option2, Option3;
-        TokenKind::DoubleColon => {}
+        TokenKind::DoubleColon => {
+            // Make sure to skip the semicolon at the end of the choice declaration
+            token_stream.advance();
+        }
 
         // Ignored, going into the start function
         _ => {}

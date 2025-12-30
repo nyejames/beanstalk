@@ -1,7 +1,7 @@
 # Beanstalk Language Design Guide
 Beanstalk is a programming language and build system with minimal syntax and a simple type system. It uses Wasm as its target bytecode.
 
-You can think of the language at a high level as being like a blend of Go and Rust. Fast compile times, very minimal and simple like Go, but with a Rust style memory management (instead of a GC) and a unique modern syntax with very powerful string templates.
+You can think of the language at a high level as being like a blend of Go and Rust. Fast compile times, very minimal and simple like Go, but with a unique style of automatic memory management, and a unique modern syntax with very powerful string templates.
 
 ## Syntax Summary
 For developers coming from most other languages, 
@@ -44,15 +44,25 @@ This comes before the type if there is an explicit type declaration.
     mutable_collection ~= {}
     immutable_collection = {}
 
-    Struct:
+    Struct = |
         value Float,
         another_value String,
-    ;
+    |
     
     instance ~= Struct(
         value = 1.2, 
         another_value = "hey"
     )
+
+    -- Notice the double colon
+    Choice :: 
+        Option1,
+        Option2 String,
+        Option3 |
+            inner_value String,
+            another_value Float,
+        |,
+    ;
 ```
 
 **Function definitions:**
@@ -74,14 +84,14 @@ Any function that can return an error must have its error handled.
 The bang symbol ! is used for creating Result types and handling errors.
 
 ```beanstalk
-    func_call_that_can_return_an_error() !:
+    func_call_that_can_return_an_error() Int!:
         -- Error handling code
     ;
 
     -- Here, we define a type called 'BadStuff' that we will use as our error value.
-    BadStuff:
+    BadStuff = |
         msg String
-    ;
+    |
 
     -- This function can return a String and an Int or a BadStuff error
     -- The ! indicates that instead of the normal return values, the error value could be returned instead of the other two
@@ -102,15 +112,14 @@ The bang symbol ! is used for creating Result types and handling errors.
         return
     ;
 
-    -- Handling an error with default values in case of an error
+    -- Handling an error with default values
     string_returned, number_returned = parent_func() !("", 0)
 
     -- Bubbling up errors without handling them
     another_parent_func || -> String, Int, BadStuff!:
         -- Since this function has the same return signature, 
         -- it can be directly returned without handling the error here
-        -- The ! represents that the value is a Result type
-        return parent_func()!
+        return parent_func()
     ;
 
     -- By default, accessing items in a collection by their index using .get() returns an error if the index is out of bounds
@@ -127,7 +136,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     ;
 ```
 
-### Using the ? operator
+## Using the ? operator
 ```beanstalk
 
     -- Using the Option type (?) we can represent that a value might not exist
@@ -137,6 +146,7 @@ The bang symbol ! is used for creating Result types and handling errors.
 
         if response is None:
             return None
+        ;
 
         return response.body
     ;
@@ -170,6 +180,7 @@ The bang symbol ! is used for creating Result types and handling errors.
     if error is not None:
         io("Error from parent_func_no_sugar: ", error.msg)
         return
+    ;
 ```
 
 ### Panics
@@ -264,15 +275,14 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 
 **Structs**
 ```beanstalk
-    -- Define a new object
-    -- To create a new instance of this object, it must have 2 parameters passed in,
+    -- To create a new instance of this struct, it must have 2 parameters passed in,
     -- a string and an integer
-    Person:
+    Person = |
         name String,
         age Int,
-    ;
+    |
 
-    -- Create a new instance of the type
+    -- Create a new instance of the struct
     person ~= Person("Alice", 30)
 
     -- Access fields using dot notation
@@ -280,10 +290,11 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     io(person.age)  -- 30
 
     -- Defining a struct, then defining a method for it
-    Vector2:
+    -- This will be dynamically dispatched
+    Vector2 = |
         x Float,
         y Float,
-    ;
+    |
 
     reset |vec ~Vector2|:
         vec.x = 0
@@ -293,19 +304,6 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
     vec = Vector2(12, 87)
     vec.reset()
 ```
-
-## Memory Model Overview
-Beanstalk uses a Rust style memory management system.
-For a more detailed breakdown, see the Beanstalk Compiler Development Guide.
-
-**Memory management:**
-- Borrow checker without explicit lifetimes. No unsafe.
-- Reference passing by default, `~` for mutable
-- Move semantics determined by compiler analysis
-
-**Module memory semantics:**
-- Each file's variables are scoped to that file
-- Memory safety maintained across module boundaries
 
 ## Module System and Imports
 
@@ -318,8 +316,6 @@ Everything at the top level of a file is visible to the rest of the module by de
 Currently imports can't yet be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
 
 **Import syntax:**
-
-Imports use a compiler directve (a hash keyword with a string afterwards)
 ```beanstalk
 -- Import another file in the same module
 import @path/to/file

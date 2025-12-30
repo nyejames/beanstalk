@@ -3,18 +3,24 @@
 # Beanstalk
 
 <p><em>
-  A modern, Wasm powered programming language
+  A refreshing Wasm-first language that prioritises safety, simplicity, and fast builds.
 </em></p>
 
 # 🌱
 
-<p>⚠️ This is currently a work in progress compiler. The IR is currently being developed. See CONTRIBUTING.md if you're inspired to help out</p>
+<p>⚠️ This is a work in progress compiler. ⚠️ The compiler backend (HIR, LIR, borrow checking, and codegen) is still under active development and evolving rapidly. See CONTRIBUTING.md if you're inspired to help out ⚠️</p>
 </div>
 
-## HTML project Snippets
+<div align="center">
+
+## First Class Template Syntax
+
+</div>
+
+Beanstalk is designed for UI generation, templated content, and embedded Wasm applications, with a powerful compile-time and runtime template system at its core.
 
 ```haskell
-#import "html/Basic"
+import @html/Basic
 
 -- Create a new blog post
 create_post |title String, date Int, content String| -> String:
@@ -39,7 +45,7 @@ create_post |title String, date Int, content String| -> String:
 
 This file now compiles to HTML + Wasm:
 ```haskell
-#import "PostGenerator"
+import @PostGenerator
 
 date = 2025
 post = PostGenerator.create_post(date, [:
@@ -49,12 +55,23 @@ post = PostGenerator.create_post(date, [:
 [post]
 ```
 
-<br>
+<div align="center">
+
+## Unique Memory Model 
+
+</div>
+
+Memory safety is enforced through static analysis and a unified runtime ownership model, allowing the compiler to guarantee correctness while keeping binaries small and compilation predictable.
+
+<div align="center">
 
 ## Goals 
+
+</div>
+
 - Wasm focused backend designed around producing high-quality Wasm
-- The syntax minimalism and fast compile speed of Go
-- The memory safety of Rust, with no 'unsafe' mode
+- Syntax minimalism and fast compile speed
+- The memory safety of Rust, with no 'unsafe' mode and no explicit lifetime syntax
 - **The King of Strings**: String templates that can double up as a tiny HTML/markup engine or anything else you want
 - A complete build system for web projects and beyond
 - Simple, static and strong type system
@@ -72,18 +89,61 @@ post = PostGenerator.create_post(date, [:
 
 [//]: # (  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>)
 
-See `docs/Beanstalk Language Overview.md` and `docs/Beanstalk Compiler Development Guide.md` for more in depth details.
+<div align="center">
 
-<h2>Tools</h2>
+## Documentation
+
+</div>
+<strong>
+<li>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Language%20Overview.md">The language overview</a>
+</li>
+<br>
+<li>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Design%20Overview.md">An Oveview of the Compiler</a>
+</li>
+<br>
+<li>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Compiler%20Codebase%20Style%20Guide.md">Codebase Style Guide</a>
+</li>
+<br>
+<li>
+<a href="https://github.com/nyejames/beanstalk/blob/main/docs/Beanstalk%20Memory%20Management.md">A breakdown of the memory management strategy</a>
+</li>
+</strong>
+
+<div align="center">
+
+## Tools
+
+</div>
+
 <a href="https://github.com/nyejames/beanstalk-plugin">Language support / syntax highlighting for Visual Studio / VSCode can be found here</a>
 
-# Development Progress
+<div align="center">
+
+## Development Progress
+
+</div>
+
 A full backend refactor of the compiler is underway.
-The IR and borrow checker is being developed, currently this is some rough scaffold.
 
-This is V2 of the backend, the original tried to do too much in a single IR pass.
-This new refactor will use 2 IR stages, details are inside `docs/Beanstalk Compiler Development Guide.md`
+### Complete
+- Header parsing 
+- AST creation
+- Expression folding
 
+### Underway
+- IR construction
+- Last use analysis
+- Borrow Validation
+- Codegen
+- Build system
 
 <br>
+
+---
+
+More details are inside `docs/Beanstalk Compiler Development Guide.md`
+
 <br>
