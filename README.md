@@ -61,7 +61,7 @@ post = PostGenerator.create_post(date, [:
 
 </div>
 
-Memory safety is enforced through static analysis and a unified runtime ownership model, allowing the compiler to guarantee correctness while keeping binaries small and compilation predictable.
+Memory safety is enforced through static analysis and a unified runtime ownership model, allowing the compiler to guarantee correctness while keeping binaries small and compilation predictable. All without a GC or reference counting.
 
 <div align="center">
 
@@ -139,11 +139,5 @@ A full backend refactor of the compiler is underway.
 - Borrow Validation
 - Codegen
 - Build system
-
-<br>
-
----
-
-More details are inside `docs/Beanstalk Compiler Development Guide.md`
 
 <br>
