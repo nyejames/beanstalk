@@ -86,13 +86,9 @@ Mutable access must always be explicit.
 Which of these occurs is determined by static last-use analysis and finalized at runtime.
 
 ### Ownership Transfer (Moves)
-
-A move transfers full responsibility for a value.
-
-* The original binding becomes unusable until reassigned.
-* Moves cannot occur while any borrows exist.
-* Moves are inferred automatically by the compiler.
-* The programmer does not annotate ownership explicitly.
+A move transfers full responsibility for a value. 
+Moves are inferred automatically by the compiler,
+the programmer does not annotate ownership explicitly.
 
 Moves are identified statically as *possible ownership consumption points* and resolved dynamically using the ownership flag.
 
@@ -164,17 +160,14 @@ The compiler enforces memory safety through the following steps:
 
 1. **Type checking and eager folding** in the AST.
 2. **HIR lowering**, where:
-
    * control flow is linearized,
    * possible drop points are inserted,
    * ownership boundaries are identified.
 3. **Borrow validation**, which:
-
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
    * validates move soundness.
 4. **Lowering to LIR**, where:
-
    * ownership flags are generated,
    * possible drops become conditional frees,
    * runtime checks are emitted.
