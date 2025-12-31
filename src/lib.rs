@@ -5,12 +5,6 @@ mod dev_server;
 pub mod settings;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod borrow_checker_property_tests;
-    pub(crate) mod lifetime_inference_comprehensive_tests;
-    pub(crate) mod lifetime_inference_full_integration_tests;
-    pub(crate) mod lifetime_inference_integration_tests;
-    pub(crate) mod lifetime_inference_performance_tests;
-    pub(crate) mod lifetime_inference_property_tests;
     pub(crate) mod test_runner;
 }
 
@@ -98,28 +92,11 @@ mod compiler {
     }
 
     pub(crate) mod hir {
-        pub(crate) mod builder;
         pub(crate) mod display_hir;
-        pub(crate) mod lower_expression;
-        pub(crate) mod lower_node;
         pub(crate) mod nodes;
-        pub(crate) mod place;
-    }
-    pub(crate) mod borrow_checker {
-        pub(crate) mod borrow_tracking;
-        pub(crate) mod candidate_move_refinement;
-        pub(crate) mod cfg;
-        pub(crate) mod checker;
-        pub(crate) mod conflict_detection;
-        pub(crate) mod drop_insertion;
-        pub(crate) mod last_use;
-        pub(crate) mod lifetime_inference;
-        pub(crate) mod structured_control_flow;
-        pub(crate) mod types;
     }
 
     pub(crate) mod lir {
-        pub(crate) mod lowering;
         pub(crate) mod nodes;
     }
 
@@ -137,14 +114,11 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 // Re-export types for the build system
-use crate::compiler::borrow_checker::checker::check_borrows;
 use crate::compiler::codegen::wasm::encode::encode_wasm;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
-use crate::compiler::hir::builder::HirBuilder;
 use crate::compiler::hir::nodes::HirNode;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::lir::lowering::lower_to_lir;
 use crate::compiler::lir::nodes::LirModule;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;

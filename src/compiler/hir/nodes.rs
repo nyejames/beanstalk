@@ -12,8 +12,6 @@
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;
-use crate::compiler::hir::place::Place;
-use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -23,122 +21,118 @@ use crate::compiler::string_interning::InternedString;
 pub struct HirNode {
     pub kind: HirKind,
     pub location: TextLocation,
-    pub scope: InternedPath,
-    pub id: HirNodeId, // Unique ID for CFG construction and borrow checking
+    pub id: HirNodeId, // Unique ID for last-use analysis and borrow checking
 }
 
 pub type HirNodeId = usize;
-pub type ControlFlowId = usize;
+pub type BlockId = usize;
 
 #[derive(Debug, Clone)]
 pub enum HirKind {
-    // === Variable Bindings ===
-    /// Assignment to a place (local variable, field, etc.)
-    /// This covers both initial bindings and mutations
+    // === Variable Operations ===
+    /// Assign expression result to a variable
+    /// The `is_mutable` flag indicates if this was a `~=` assignment
     Assign {
-        place: Place,
+        name: InternedString,
         value: HirExpr,
+        is_mutable: bool, // true for `~=`, false for `=`
     },
 
-    /// Explicit borrow creation (shared or mutable)
-    /// Records where borrow access is requested
-    Borrow {
-        place: Place,
-        kind: BorrowKind,
-        target: Place, // Where the borrow is stored
-    },
-
-    // === Control Flow ===
-    /// Structured conditional with explicit blocks
+    // === Control Flow Blocks ===
+    /// Conditional branch with explicit blocks
     If {
-        condition: Place, // Condition must be stored in a place first
-        then_block: Vec<HirNode>,
-        else_block: Option<Vec<HirNode>>,
+        condition: HirExpr,
+        then_block: BlockId,
+        else_block: Option<BlockId>,
     },
 
-    /// Pattern matching with structured arms
+    /// Pattern matching
     Match {
-        scrutinee: Place, // Subject must be stored in a place first
+        scrutinee: HirExpr,
         arms: Vec<HirMatchArm>,
-        default: Option<Vec<HirNode>>,
+        default_block: Option<BlockId>,
     },
 
-    /// Structured loop with explicit binding
+    /// Loop with optional iteration binding
     Loop {
-        label: ControlFlowId, // ID label for breaks and continues to reference this loop
-        binding: Option<(InternedString, DataType)>, // Loop variable binding
-        iterator: Place,   // Iterator must be stored in a place first
-        body: Vec<HirNode>,
-        index_binding: Option<InternedString>, // Optional index binding
+        label: BlockId, // Used by break/continue to reference this loop
+        binding: Option<(InternedString, DataType)>, // Loop variable
+        iterator: Option<HirExpr>, // None for infinite loops
+        body: BlockId,
+        index_binding: Option<InternedString>, // Optional index variable
     },
 
-    /// Loop control flow
     Break {
-        target: ControlFlowId,
+        target: BlockId,
     },
+
     Continue {
-        target: ControlFlowId,
+        target: BlockId,
     },
 
     // === Function Calls ===
-    /// Regular function call with explicit argument places and return destinations
+    /// Regular function call
+    /// Results can be assigned via separate Assign nodes
     Call {
         target: InternedString,
-        args: Vec<Place>,    // Arguments must be stored in places first
-        returns: Vec<Place>, // Return values stored to places
+        args: Vec<HirExpr>,
     },
 
-    /// Host function call (builtin functions like io)
+    /// Host/builtin function call
     HostCall {
         target: InternedString,
         module: InternedString,
         import: InternedString,
-        args: Vec<Place>,    // Arguments must be stored in places first
-        returns: Vec<Place>, // Return values stored to places
+        args: Vec<HirExpr>,
     },
 
-    // === Error Handling (Desugared) ===
+    // === Error Handling ===
+    /// Desugared error handling
     TryCall {
         call: Box<HirNode>,
         error_binding: Option<InternedString>,
-        error_handler: Vec<HirNode>,
+        error_handler: BlockId,
         default_values: Option<Vec<HirExpr>>,
     },
 
+    /// Option unwrapping with default
     OptionUnwrap {
         expr: HirExpr,
         default_value: Option<HirExpr>,
     },
 
     // === Returns ===
-    /// Return statement with values from places
-    Return(Vec<Place>),
+    /// Return with values (terminates block)
+    Return(Vec<HirExpr>),
 
-    /// Error return for `return!` syntax
-    ReturnError(Place),
+    /// Error return (terminates block)
+    ReturnError(HirExpr),
 
     // === Resource Management ===
-    /// Drop operation (inserted by borrow checker after analysis)
-    Drop(Place),
+    /// Conditional drop inserted by HIR generation
+    /// Will only drop if the value is owned at runtime
+    PossibleDrop(InternedString),
 
     // === Templates ===
+    /// Runtime template that becomes a function call
     RuntimeTemplateCall {
         template_fn: InternedString,
         captures: Vec<HirExpr>,
         id: Option<InternedString>,
     },
 
+    /// Template function definition
     TemplateFn {
         name: InternedString,
         params: Vec<(InternedString, DataType)>,
-        body: Vec<HirNode>,
+        body: BlockId,
     },
 
     // === Function Definitions ===
     FunctionDef {
         name: InternedString,
         signature: FunctionSignature,
-        body: Vec<HirNode>,
+        body: BlockId,
     },
 
     // === Struct Definitions ===
@@ -147,16 +141,24 @@ pub enum HirKind {
         fields: Vec<Arg>,
     },
 
-    // === Expressions as Statements ===
-    /// Expression evaluated for side effects (result discarded)
-    ExprStmt(Place), // Expression result must be stored in a place first
+    // === Expression as Statement ===
+    /// Expression evaluated for side effects only
+    ExprStmt(HirExpr),
+}
+
+/// A basic block containing a sequence of HIR nodes
+/// All blocks except the entry block are terminated by
+/// a control flow node (Return, Break, Continue, or implicit fall-through)
+#[derive(Debug, Clone)]
+pub struct HirBlock {
+    pub id: BlockId,
+    pub nodes: Vec<HirNode>,
 }
 
 #[derive(Debug, Clone)]
 pub struct HirExpr {
     pub kind: HirExprKind,
     pub data_type: DataType,
-    #[allow(dead_code)]
     pub location: TextLocation,
 }
 
@@ -166,103 +168,87 @@ pub enum HirExprKind {
     Int(i64),
     Float(f64),
     Bool(bool),
-    StringLiteral(InternedString), // Includes compile-time folded templates (stack-allocated)
-    HeapString(InternedString),    // Runtime template strings (heap-allocated)
+    StringLiteral(InternedString), // Stack-allocated string slice
+    HeapString(InternedString),    // Heap-allocated string (from runtime templates)
     Char(char),
 
-    // === Place Operations ===
-    /// Load value from a place (immutable access)
-    Load(Place),
+    // === Variable Access ===
+    /// Load variable value (creates shared reference by default)
+    Var(InternedString),
 
-    /// Create shared borrow of a place
-    #[allow(dead_code)]
-    SharedBorrow(Place),
-
-    /// Create a mutable borrow of a place (exclusive access)
-    #[allow(dead_code)]
-    MutableBorrow(Place),
-
-    /// Candidate move (potential ownership transfer, refined by the borrow checker)
-    /// The BorrowId is attached during HIR generation for direct O(1) refinement
-    CandidateMove(
-        Place,
-        Option<crate::compiler::borrow_checker::types::BorrowId>,
-    ),
-
-    // === Binary Operations ===
-    /// Binary operation between two places (no nested expressions)
-    BinOp {
-        left: Place,
-        op: BinOp,
-        right: Place,
+    /// Field access on a variable
+    Field {
+        base: InternedString,
+        field: InternedString,
     },
 
-    /// Unary operation on a place
-    #[allow(dead_code)]
+    /// Collection/array element access
+    Index {
+        base: InternedString,
+        index: Box<HirExpr>,
+    },
+
+    /// Potential ownership transfer
+    /// Marked during HIR generation based on last-use analysis hints
+    /// Final ownership decision happens during borrow validation
+    Move(InternedString),
+
+    // === Binary Operations ===
+    BinOp {
+        left: Box<HirExpr>,
+        op: BinOp,
+        right: Box<HirExpr>,
+    },
+
+    /// Unary operation
     UnaryOp {
         op: UnaryOp,
-        operand: Place,
+        operand: Box<HirExpr>,
     },
 
     // === Function Calls ===
-    /// Function call with arguments from places
     Call {
         target: InternedString,
-        args: Vec<Place>,
+        args: Vec<HirExpr>,
     },
 
-    /// Method call with receiver and arguments from places
-    #[allow(dead_code)]
+    /// Method call
     MethodCall {
-        receiver: Place,
+        receiver: Box<HirExpr>,
         method: InternedString,
-        args: Vec<Place>,
+        args: Vec<HirExpr>,
     },
 
     // === Constructors ===
-    /// Struct construction with field values from places
     StructConstruct {
         type_name: InternedString,
-        fields: Vec<(InternedString, Place)>,
+        fields: Vec<(InternedString, HirExpr)>,
     },
 
-    /// Collection construction with elements from places
-    Collection(Vec<Place>),
+    Collection(Vec<HirExpr>),
 
-    /// Range construction with start and end from places
     Range {
-        start: Place,
-        end: Place,
+        start: Box<HirExpr>,
+        end: Box<HirExpr>,
     },
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum BorrowKind {
-    #[allow(dead_code)]
-    Shared, // Default: `x = y`
-    #[allow(dead_code)]
-    Mutable, // Explicit: `x ~= y` before move analysis
 }
 
 #[derive(Debug, Clone)]
 pub struct HirMatchArm {
     pub pattern: HirPattern,
     pub guard: Option<HirExpr>,
-    pub body: Vec<HirNode>,
+    pub body: BlockId,
 }
 
 #[derive(Debug, Clone)]
 pub enum HirPattern {
-    #[allow(dead_code)]
     Literal(HirExpr),
-    #[allow(dead_code)]
     Range {
         start: HirExpr,
         end: HirExpr,
     },
     Wildcard,
-    // Future: Binding(InternedString) for pattern matching with bindings
-    // The AST has not yet implemented this
+    // Future: variable bindings in patterns
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -273,7 +259,6 @@ pub enum BinOp {
     Div,
     Mod,
     Eq,
-    #[allow(dead_code)]
     Ne,
     Lt,
     Le,
@@ -287,8 +272,15 @@ pub enum BinOp {
 
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryOp {
-    #[allow(dead_code)]
     Neg,
-    #[allow(dead_code)]
     Not,
+}
+
+/// The complete HIR module containing all blocks and metadata
+#[derive(Debug, Clone)]
+pub struct HirModule {
+    pub blocks: Vec<HirBlock>,
+    pub entry_block: BlockId,
+    pub functions: Vec<HirNode>, // FunctionDef nodes
+    pub structs: Vec<HirNode>,   // StructDef nodes
 }
