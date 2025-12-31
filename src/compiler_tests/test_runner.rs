@@ -7,27 +7,6 @@ use crate::compiler::compiler_messages::compiler_errors::{
 use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
 use crate::settings::Config;
 
-#[cfg(test)]
-use crate::compiler_tests::lifetime_inference_performance_tests;
-
-/// Run performance tests for lifetime inference optimizations
-#[cfg(test)]
-pub fn run_performance_tests() {
-    println!("Running lifetime inference performance tests...\n");
-
-    lifetime_inference_performance_tests::benchmark_dataflow_performance();
-    println!();
-
-    lifetime_inference_performance_tests::test_efficient_data_structures();
-    println!();
-
-    lifetime_inference_performance_tests::test_minimal_cloning();
-    println!();
-
-    println!("Performance tests completed.");
-}
-
-///
 /// This module provides a focused test suite that validates the essential
 /// compiler operations without getting bogged down in implementation details.
 ///
@@ -211,10 +190,6 @@ where
 pub fn run_performance_benchmarks() -> Result<(), String> {
     println!("Running performance benchmarks...\n");
 
-    // Run lifetime inference performance tests
-    println!("1. Lifetime inference performance tests...");
-    run_lifetime_inference_benchmarks()?;
-
     // Benchmark 2: Small function compilation
     println!("2. Small function compilation benchmark...");
     benchmark_compilation_speed("Small", 20, 5)?;
@@ -232,23 +207,6 @@ pub fn run_performance_benchmarks() -> Result<(), String> {
     benchmark_memory_usage()?;
 
     println!("\n✓ All benchmarks completed!");
-    Ok(())
-}
-
-/// Run lifetime inference performance benchmarks
-fn run_lifetime_inference_benchmarks() -> Result<(), String> {
-    use crate::compiler_tests::lifetime_inference_performance_tests;
-
-    println!("  Running dataflow performance benchmark...");
-    lifetime_inference_performance_tests::benchmark_dataflow_performance();
-
-    println!("  Testing efficient data structures...");
-    lifetime_inference_performance_tests::test_efficient_data_structures();
-
-    println!("  Testing minimal cloning optimizations...");
-    lifetime_inference_performance_tests::test_minimal_cloning();
-
-    println!("  ✓ Lifetime inference benchmarks completed");
     Ok(())
 }
 

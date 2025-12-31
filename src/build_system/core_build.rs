@@ -206,14 +206,14 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
 
-    let mut hir_nodes = match compiler.generate_hir(module_ast) {
-        Ok(nodes) => nodes,
-        Err(e) => {
-            compiler_messages.errors.extend(e.errors);
-            compiler_messages.warnings.extend(e.warnings);
-            return Err(compiler_messages);
-        }
-    };
+    // let mut hir_nodes = match compiler.generate_hir(module_ast) {
+    //     Ok(nodes) => nodes,
+    //     Err(e) => {
+    //         compiler_messages.errors.extend(e.errors);
+    //         compiler_messages.warnings.extend(e.warnings);
+    //         return Err(compiler_messages);
+    //     }
+    // };
 
     timer_log!(time, "HIR generated in: ");
 
@@ -232,13 +232,13 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
 
-    match compiler.check_borrows(&mut hir_nodes) {
-        Ok(..) => {}
-        Err(e) => {
-            compiler_messages.errors.push(e);
-            return Err(compiler_messages);
-        }
-    };
+    // match compiler.check_borrows(&mut hir_nodes) {
+    //     Ok(..) => {}
+    //     Err(e) => {
+    //         compiler_messages.errors.push(e);
+    //         return Err(compiler_messages);
+    //     }
+    // };
 
     timer_log!(time, "Borrow checking completed in: ");
 
@@ -254,25 +254,25 @@ pub fn compile_modules(
     //          LIR generation
     // ----------------------------------
     // NOT IMPLEMENTED YET - RETURNS AN EMPTY MODULE
-    let lir = match compiler.generate_lir(&hir_nodes) {
-        Ok(nodes) => nodes,
-        Err(e) => {
-            compiler_messages.errors.push(e);
-            return Err(compiler_messages);
-        }
-    };
+    // let lir = match compiler.generate_lir(&hir_nodes) {
+    //     Ok(nodes) => nodes,
+    //     Err(e) => {
+    //         compiler_messages.errors.push(e);
+    //         return Err(compiler_messages);
+    //     }
+    // };
 
     // ----------------------------------
     //          WASM generation
     // ----------------------------------
     // NOT IMPLEMENTED YET - RETURNS EMPTY BYTES
-    let wasm_bytes = match compiler.generate_wasm(&lir) {
-        Ok(wasm) => wasm,
-        Err(e) => {
-            compiler_messages.errors.push(e);
-            return Err(compiler_messages);
-        }
-    };
+    // let wasm_bytes = match compiler.generate_wasm(&lir) {
+    //     Ok(wasm) => wasm,
+    //     Err(e) => {
+    //         compiler_messages.errors.push(e);
+    //         return Err(compiler_messages);
+    //     }
+    // };
 
     if !flags.contains(&Flag::DisableTimers) {
         print!("WASM generated in: ");
@@ -283,6 +283,10 @@ pub fn compile_modules(
     //      Extract required imports
     // -----------------------------------
     // let exported_functions = extract_exported_functions(&exported_declarations);
+
+
+    // Temporary nothing for wasm_bytes
+    let wasm_bytes = Vec::new();
 
     Ok(CompilationResult {
         wasm_bytes,

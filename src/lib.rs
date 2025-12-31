@@ -92,7 +92,7 @@ mod compiler {
     }
 
     pub(crate) mod hir {
-        pub(crate) mod display_hir;
+        // pub(crate) mod display_hir;
         pub(crate) mod nodes;
     }
 
@@ -250,34 +250,38 @@ impl<'a> Compiler<'a> {
         )
     }
 
+    // TODO
     /// -----------------------------
     ///         HIR GENERATION
     /// -----------------------------
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
-    pub fn generate_hir(&mut self, ast: Ast) -> Result<Vec<HirNode>, CompilerMessages> {
-        HirBuilder::lower_ast(ast.nodes, ast.entry_path, &mut self.string_table)
-    }
+    // pub fn generate_hir(&mut self, ast: Ast) -> Result<Vec<HirNode>, CompilerMessages> {
+    //     HirBuilder::lower_ast(ast.nodes, ast.entry_path, &mut self.string_table)
+    // }
 
+    // TODO
     /// -----------------------------
     ///        BORROW CHECKING
     /// -----------------------------
     /// Perform borrow checking on HIR nodes to validate memory safety
     /// and ownership rules according to Beanstalk's reference semantics.
-    pub fn check_borrows(&mut self, hir_nodes: &mut Vec<HirNode>) -> Result<(), CompilerError> {
-        // Perform borrow checking analysis
-        check_borrows(hir_nodes, &mut self.string_table)
-    }
+    // pub fn check_borrows(&mut self, hir_nodes: &mut Vec<HirNode>) -> Result<(), CompilerError> {
+    //     // Perform borrow checking analysis
+    //     check_borrows(hir_nodes, &mut self.string_table)
+    // }
 
+    // TODO
     /// -----------------------------
     ///         LIR GENERATION
     /// -----------------------------
     /// Generate LIR from HIR nodes.
     /// LIR is a representation designed for lowering to Was
-    pub fn generate_lir(&mut self, hir_nodes: &[HirNode]) -> Result<LirModule, CompilerError> {
-        lower_to_lir(hir_nodes, &self.string_table)
-    }
+    // pub fn generate_lir(&mut self, hir_nodes: &[HirNode]) -> Result<LirModule, CompilerError> {
+    //     lower_to_lir(hir_nodes, &self.string_table)
+    // }
 
+    // TODO
     /// -----------------------------
     ///         Wasm Codegen
     /// -----------------------------
