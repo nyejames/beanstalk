@@ -21,7 +21,7 @@ pub struct LirFunction {
     pub is_main: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum LirType {
     I32,
     I64,
@@ -138,6 +138,52 @@ pub enum LirInst {
     // Stack management
     Drop,
     Nop,
+
+    // =========================================================================
+    // Ownership Operations
+    // These instructions implement Beanstalk's tagged pointer ownership system
+    // =========================================================================
+    /// Tag a local as owned (set ownership bit)
+    /// Stack: [] -> []
+    /// Local effect: local = local | 1
+    TagAsOwned(u32),
+
+    /// Tag a local as borrowed (clear ownership bit)
+    /// Stack: [] -> []
+    /// Local effect: local = local & ~1
+    TagAsBorrowed(u32),
+
+    /// Extract real pointer from tagged pointer (mask out ownership bit)
+    /// Stack: [tagged_ptr] -> [real_ptr]
+    MaskPointer,
+
+    /// Test ownership bit, result on stack (1 = owned, 0 = borrowed)
+    /// Stack: [tagged_ptr] -> [ownership_bit]
+    TestOwnership,
+
+    /// Conditional drop based on ownership flag
+    /// Stack: [] -> []
+    /// If local is owned, calls free function
+    PossibleDrop(u32),
+
+    /// Prepare argument as owned for function call
+    /// Stack: [] -> [tagged_ptr]
+    /// Loads local and sets ownership bit
+    PrepareOwnedArg(u32),
+
+    /// Prepare argument as borrowed for function call
+    /// Stack: [] -> [tagged_ptr]
+    /// Loads local and clears ownership bit
+    PrepareBorrowedArg(u32),
+
+    /// Handle potentially owned parameter in function prologue
+    /// Extracts real pointer and stores in a separate local
+    /// param_local: the parameter local index
+    /// real_ptr_local: where to store the untagged pointer
+    HandleOwnedParam {
+        param_local: u32,
+        real_ptr_local: u32,
+    },
 }
 
 impl Default for LirInst {

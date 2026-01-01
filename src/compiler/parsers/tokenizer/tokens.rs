@@ -402,9 +402,9 @@ pub enum TokenKind {
     // Basic Grammar
     Comma,
     Dot,
-    Colon,  // :
+    Colon,       // :
     DoubleColon, // ::
-    Assign, // =
+    Assign,      // =
 
     // Scope
     OpenParenthesis,  // (

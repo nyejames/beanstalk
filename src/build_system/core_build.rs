@@ -284,7 +284,6 @@ pub fn compile_modules(
     // -----------------------------------
     // let exported_functions = extract_exported_functions(&exported_declarations);
 
-
     // Temporary nothing for wasm_bytes
     let wasm_bytes = Vec::new();
 

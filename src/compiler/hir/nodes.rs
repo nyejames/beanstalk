@@ -243,10 +243,7 @@ pub struct HirMatchArm {
 #[derive(Debug, Clone)]
 pub enum HirPattern {
     Literal(HirExpr),
-    Range {
-        start: HirExpr,
-        end: HirExpr,
-    },
+    Range { start: HirExpr, end: HirExpr },
     Wildcard,
     // Future: variable bindings in patterns
 }

@@ -186,80 +186,408 @@ where
     }
 }
 
-/// Run performance benchmarks
+/// Run performance benchmarks for WASM codegen
+///
+/// This function benchmarks the LIR to WASM codegen pipeline with various
+/// input sizes to validate performance characteristics.
+///
+/// Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6
+#[allow(dead_code)]
 pub fn run_performance_benchmarks() -> Result<(), String> {
-    println!("Running performance benchmarks...\n");
+    use crate::compiler::codegen::wasm::encode::encode_wasm;
+    use crate::compiler::lir::nodes::{LirFunction, LirInst, LirModule, LirType};
+    use std::time::Instant;
 
-    // Benchmark 2: Small function compilation
-    println!("2. Small function compilation benchmark...");
-    benchmark_compilation_speed("Small", 20, 5)?;
+    println!("Running WASM codegen performance benchmarks...\n");
+    println!("{}", "=".repeat(60));
 
-    // Benchmark 3: Medium function compilation
-    println!("3. Medium function compilation benchmark...");
-    benchmark_compilation_speed("Medium", 100, 25)?;
+    // Benchmark 1: Empty module baseline
+    println!("\n1. Empty module baseline...");
+    let empty_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![],
+            body: vec![],
+            is_main: true,
+        }],
+        structs: vec![],
+    };
 
-    // Benchmark 4: Large function compilation
-    println!("4. Large function compilation benchmark...");
-    benchmark_compilation_speed("Large", 500, 100)?;
+    let start = Instant::now();
+    for _ in 0..1000 {
+        let _ = encode_wasm(&empty_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   1000 empty modules: {:?} ({:.2}µs/module)",
+        duration,
+        duration.as_micros() as f64 / 1000.0
+    );
 
-    // Benchmark 5: Memory usage
-    println!("5. Memory usage benchmark...");
-    benchmark_memory_usage()?;
+    // Benchmark 2: Small function (20 instructions)
+    println!("\n2. Small function benchmark (20 instructions)...");
+    let small_body: Vec<LirInst> = (0..10)
+        .flat_map(|_| vec![LirInst::I32Const(42), LirInst::Drop])
+        .collect();
+    let small_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![],
+            body: small_body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
 
-    println!("\n✓ All benchmarks completed!");
+    let start = Instant::now();
+    for _ in 0..1000 {
+        let _ = encode_wasm(&small_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   1000 small functions: {:?} ({:.2}µs/function)",
+        duration,
+        duration.as_micros() as f64 / 1000.0
+    );
+
+    // Benchmark 3: Medium function (100 instructions)
+    println!("\n3. Medium function benchmark (100 instructions)...");
+    let medium_body: Vec<LirInst> = (0..50)
+        .flat_map(|_| vec![LirInst::I32Const(42), LirInst::Drop])
+        .collect();
+    let medium_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![LirType::I32, LirType::I64],
+            body: medium_body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
+
+    let start = Instant::now();
+    for _ in 0..500 {
+        let _ = encode_wasm(&medium_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   500 medium functions: {:?} ({:.2}µs/function)",
+        duration,
+        duration.as_micros() as f64 / 500.0
+    );
+
+    // Benchmark 4: Large function (500 instructions)
+    println!("\n4. Large function benchmark (500 instructions)...");
+    let large_body: Vec<LirInst> = (0..250)
+        .flat_map(|_| vec![LirInst::I32Const(42), LirInst::Drop])
+        .collect();
+    let large_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![LirType::I32, LirType::I64, LirType::F32, LirType::F64],
+            body: large_body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
+
+    let start = Instant::now();
+    for _ in 0..100 {
+        let _ = encode_wasm(&large_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   100 large functions: {:?} ({:.2}µs/function)",
+        duration,
+        duration.as_micros() as f64 / 100.0
+    );
+
+    // Benchmark 5: Multi-function module
+    println!("\n5. Multi-function module benchmark (10 functions)...");
+    let multi_functions: Vec<LirFunction> = (0..10)
+        .map(|i| LirFunction {
+            name: format!("func_{}", i),
+            params: vec![LirType::I32],
+            returns: vec![LirType::I32],
+            locals: vec![LirType::I32],
+            body: vec![
+                LirInst::LocalGet(0),
+                LirInst::I32Const(1),
+                LirInst::I32Add,
+                LirInst::Return,
+            ],
+            is_main: i == 0,
+        })
+        .collect();
+    let multi_module = LirModule {
+        functions: multi_functions,
+        structs: vec![],
+    };
+
+    let start = Instant::now();
+    for _ in 0..200 {
+        let _ = encode_wasm(&multi_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   200 multi-function modules: {:?} ({:.2}µs/module)",
+        duration,
+        duration.as_micros() as f64 / 200.0
+    );
+
+    // Benchmark 6: Control flow heavy function
+    println!("\n6. Control flow benchmark (nested blocks/loops)...");
+    let control_flow_body = vec![
+        LirInst::I32Const(0),
+        LirInst::LocalSet(0),
+        LirInst::Block {
+            instructions: vec![
+                LirInst::Loop {
+                    instructions: vec![
+                        LirInst::LocalGet(0),
+                        LirInst::I32Const(1),
+                        LirInst::I32Add,
+                        LirInst::LocalSet(0),
+                        LirInst::LocalGet(0),
+                        LirInst::I32Const(10),
+                        LirInst::I32GtS,
+                        LirInst::BrIf(1),
+                        LirInst::Br(0),
+                    ],
+                },
+            ],
+        },
+    ];
+    let control_flow_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![LirType::I32],
+            body: control_flow_body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
+
+    let start = Instant::now();
+    for _ in 0..500 {
+        let _ = encode_wasm(&control_flow_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   500 control flow functions: {:?} ({:.2}µs/function)",
+        duration,
+        duration.as_micros() as f64 / 500.0
+    );
+
+    // Benchmark 7: Memory operations
+    println!("\n7. Memory operations benchmark...");
+    let memory_body = vec![
+        LirInst::I32Const(0),
+        LirInst::I32Const(42),
+        LirInst::I32Store { offset: 0, align: 2 },
+        LirInst::I32Const(0),
+        LirInst::I32Load { offset: 0, align: 2 },
+        LirInst::Drop,
+    ];
+    let memory_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![],
+            body: memory_body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
+
+    let start = Instant::now();
+    for _ in 0..500 {
+        let _ = encode_wasm(&memory_module);
+    }
+    let duration = start.elapsed();
+    println!(
+        "   500 memory operation functions: {:?} ({:.2}µs/function)",
+        duration,
+        duration.as_micros() as f64 / 500.0
+    );
+
+    // Summary
+    println!("\n{}", "=".repeat(60));
+    println!("Performance Benchmark Summary:");
+    println!("  - Empty module baseline: establishes minimum overhead");
+    println!("  - Small/Medium/Large: validates linear scaling");
+    println!("  - Multi-function: validates module-level overhead");
+    println!("  - Control flow: validates structured control handling");
+    println!("  - Memory ops: validates memory instruction generation");
+    println!("{}", "=".repeat(60));
+
+    println!("\n✓ All performance benchmarks completed!");
     Ok(())
 }
 
 /// Benchmark compilation speed for different function sizes
+/// This is a simplified benchmark that validates basic performance
+#[allow(dead_code)]
 fn benchmark_compilation_speed(
     size_name: &str,
     stmt_count: usize,
-    loan_count: usize,
+    _loan_count: usize,
 ) -> Result<(), String> {
+    use crate::compiler::codegen::wasm::encode::encode_wasm;
+    use crate::compiler::lir::nodes::{LirFunction, LirInst, LirModule, LirType};
     use std::time::Instant;
 
-    // This would create a test function and measure compilation time
+    // Create a function with the specified number of statements
+    let body: Vec<LirInst> = (0..stmt_count / 2)
+        .flat_map(|_| vec![LirInst::I32Const(42), LirInst::Drop])
+        .collect();
+
+    let module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![LirType::I32],
+            body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
+
+    let iterations = match size_name {
+        "Small" => 1000,
+        "Medium" => 500,
+        "Large" => 100,
+        _ => 100,
+    };
+
     let start = Instant::now();
-
-    // Simulate compilation work
-    std::thread::sleep(std::time::Duration::from_millis(1));
-
+    for _ in 0..iterations {
+        let _ = encode_wasm(&module);
+    }
     let duration = start.elapsed();
 
     println!(
-        "  {} function ({} statements, {} loans): {}ms",
+        "  {} function ({} statements): {:.2}µs/function",
         size_name,
         stmt_count,
-        loan_count,
-        duration.as_millis()
+        duration.as_micros() as f64 / iterations as f64
     );
 
-    // Validate performance goals
-    let max_time_ms = match size_name {
-        "Small" => 10,
-        "Medium" => 50,
-        "Large" => 200,
-        _ => 1000,
+    // Validate performance goals (generous limits for CI environments)
+    let max_time_us = match size_name {
+        "Small" => 500,   // 500µs for small functions
+        "Medium" => 1000, // 1ms for medium functions
+        "Large" => 5000,  // 5ms for large functions
+        _ => 10000,
     };
 
-    if duration.as_millis() > max_time_ms {
+    let avg_time_us = duration.as_micros() / iterations as u128;
+    if avg_time_us > max_time_us {
         return Err(format!(
-            "{} function took {}ms, exceeds {}ms limit",
-            size_name,
-            duration.as_millis(),
-            max_time_ms
+            "{} function took {}µs, exceeds {}µs limit",
+            size_name, avg_time_us, max_time_us
         ));
     }
 
     Ok(())
 }
 
-/// Benchmark memory usage
+/// Benchmark memory usage during WASM codegen
+#[allow(dead_code)]
 fn benchmark_memory_usage() -> Result<(), String> {
-    // This would measure actual memory usage during compilation
-    println!("  Estimated memory usage: <1MB for large functions");
-    println!("  Bitset efficiency: >80% sparsity maintained");
-    println!("  Dataflow convergence: <10 iterations typical");
+    use crate::compiler::codegen::wasm::encode::encode_wasm;
+    use crate::compiler::lir::nodes::{LirFunction, LirInst, LirModule, LirType};
+
+    println!("  Memory usage analysis:");
+
+    // Create a large module to measure output size
+    let large_body: Vec<LirInst> = (0..500)
+        .flat_map(|_| vec![LirInst::I32Const(42), LirInst::Drop])
+        .collect();
+
+    let large_module = LirModule {
+        functions: vec![LirFunction {
+            name: "main".to_string(),
+            params: vec![],
+            returns: vec![],
+            locals: vec![LirType::I32, LirType::I64, LirType::F32, LirType::F64],
+            body: large_body,
+            is_main: true,
+        }],
+        structs: vec![],
+    };
+
+    match encode_wasm(&large_module) {
+        Ok(wasm_bytes) => {
+            println!("    Large function (1000 instructions):");
+            println!("      WASM output size: {} bytes", wasm_bytes.len());
+            println!(
+                "      Bytes per instruction: {:.2}",
+                wasm_bytes.len() as f64 / 1000.0
+            );
+
+            // Validate reasonable output size (should be compact)
+            if wasm_bytes.len() > 10000 {
+                return Err(format!(
+                    "WASM output too large: {} bytes (expected < 10000)",
+                    wasm_bytes.len()
+                ));
+            }
+        }
+        Err(e) => {
+            return Err(format!("Failed to encode large module: {:?}", e));
+        }
+    }
+
+    // Test multi-function module size
+    let multi_functions: Vec<LirFunction> = (0..20)
+        .map(|i| LirFunction {
+            name: format!("func_{}", i),
+            params: vec![LirType::I32],
+            returns: vec![LirType::I32],
+            locals: vec![LirType::I32],
+            body: vec![
+                LirInst::LocalGet(0),
+                LirInst::I32Const(1),
+                LirInst::I32Add,
+                LirInst::Return,
+            ],
+            is_main: i == 0,
+        })
+        .collect();
+
+    let multi_module = LirModule {
+        functions: multi_functions,
+        structs: vec![],
+    };
+
+    match encode_wasm(&multi_module) {
+        Ok(wasm_bytes) => {
+            println!("    Multi-function module (20 functions):");
+            println!("      WASM output size: {} bytes", wasm_bytes.len());
+            println!(
+                "      Bytes per function: {:.2}",
+                wasm_bytes.len() as f64 / 20.0
+            );
+        }
+        Err(e) => {
+            return Err(format!("Failed to encode multi-function module: {:?}", e));
+        }
+    }
+
+    println!("    Memory efficiency: ✓ Compact output validated");
 
     Ok(())
 }

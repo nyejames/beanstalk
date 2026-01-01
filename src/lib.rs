@@ -6,6 +6,10 @@ pub mod settings;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod test_runner;
+    #[cfg(test)]
+    pub(crate) mod wasm_codegen_tests;
+    #[cfg(test)]
+    pub(crate) mod wasm_integration_tests;
 }
 
 // New runtime and build system modules
@@ -101,9 +105,7 @@ mod compiler {
     }
 
     pub(crate) mod codegen {
-        pub(crate) mod wasm {
-            pub(crate) mod encode;
-        }
+        pub(crate) mod wasm;
     }
 }
 

@@ -1137,6 +1137,125 @@ macro_rules! return_hir_transformation_error {
     };
 }
 
+/// Returns a new CompileError for LIR transformation failures.
+///
+/// LIR transformation errors indicate failures during HIR to LIR conversion.
+/// These are typically compiler bugs where the LIR infrastructure is missing
+/// or incomplete for a particular language feature.
+///
+/// Usage: `return_lir_transformation_error!("Cannot lower expression type {:?}", expr_type, location, {})`;
+#[macro_export]
+macro_rules! return_lir_transformation_error {
+    // With format string, arguments, and metadata (with semicolon separator)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::LirTransformation,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // With format string and arguments (no metadata)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::LirTransformation,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+    // With metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::LirTransformation,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // Simple variant
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::LirTransformation,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for WASM generation failures.
+///
+/// WASM generation errors indicate failures during LIR to WASM conversion.
+/// These are typically compiler bugs where the WASM codegen infrastructure is missing
+/// or incomplete for a particular language feature, or when WASM validation fails.
+///
+/// Usage: `return_wasm_generation_error!("Cannot encode instruction {:?}", inst, location, {})`;
+#[macro_export]
+macro_rules! return_wasm_generation_error {
+    // With format string, arguments, and metadata (with semicolon separator)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // With format string and arguments (no metadata)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+    // With metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // Simple variant
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+    // No location variant (for internal WASM generation bugs)
+    ($msg:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $crate::compiler::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
 #[macro_export]
 macro_rules! return_thread_err {
     ($process:expr) => {

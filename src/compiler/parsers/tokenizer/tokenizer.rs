@@ -211,7 +211,7 @@ pub fn get_token_kind(
         if let Some(&next_char) = stream.peek() {
             if next_char == ':' {
                 stream.next();
-        
+
                 return_token!(TokenKind::DoubleColon, stream);
             }
         }
@@ -579,13 +579,12 @@ fn keyword_or_variable(
         match token_value.as_str() {
             // Control Flow
             // END_KEYWORD => return_token!(TokenKind::End, stream),
-            
-            
+
             // Import Statement
             "import" => {
                 return_token!(TokenKind::Import, stream)
             }
-            
+
             "if" => return_token!(TokenKind::If, stream),
             "return" => return_token!(TokenKind::Return, stream),
             "yield" => return_token!(TokenKind::Yield, stream),
