@@ -24,14 +24,9 @@
 // All methods will be used when ownership system is integrated
 #![allow(dead_code)]
 
+use crate::compiler::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
 use crate::compiler::compiler_errors::CompilerError;
 use wasm_encoder::{Function, Instruction};
-
-/// The ownership bit value (1 = owned, 0 = borrowed)
-pub const OWNERSHIP_BIT: i32 = 1;
-
-/// The mask for clearing the ownership bit (0xFFFFFFFE)
-pub const ALIGNMENT_MASK: i32 = !1;
 
 /// Manages Beanstalk's ownership system with tagged pointers.
 ///
@@ -920,7 +915,7 @@ impl OwnershipManager {
     /// Stack effect: [] -> [tagged_ptr]
     pub fn generate_copy_value(
         &self,
-        src_local: u32,
+        _src_local: u32,
         size: u32,
         function: &mut Function,
     ) -> Result<(), CompilerError> {

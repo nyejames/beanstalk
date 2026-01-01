@@ -523,11 +523,7 @@ impl WasmModuleBuilder {
         // Validate that imports come before definitions
         if self.has_imports && self.has_functions {
             // This is automatically enforced by our API, but good to verify
-            if self.import_function_count == 0 && self.function_count > 0 {
-                // This is fine - no imports, only definitions
-            } else if self.import_function_count > 0 && self.function_count >= 0 {
-                // This is fine - imports followed by definitions
-            }
+            // No imports with definitions is fine, imports followed by definitions is fine
         }
 
         Ok(())
@@ -575,7 +571,6 @@ impl WasmModuleBuilder {
         if self.import_function_count > 0 && self.function_count > 0 {
             // This is the expected pattern - imports first, then definitions
             let first_defined_function_index = self.import_function_count;
-            let last_defined_function_index = self.import_function_count + self.function_count - 1;
 
             // Ensure indices are in the expected range
             if first_defined_function_index >= self.total_function_count() {

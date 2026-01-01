@@ -15,6 +15,7 @@
 #![allow(dead_code)]
 
 use crate::compiler::codegen::wasm::analyzer::LocalMap;
+use crate::compiler::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
 use crate::compiler::codegen::wasm::error::WasmGenerationError;
 use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler::lir::nodes::LirInst;
@@ -352,7 +353,7 @@ impl InstructionLowerer {
             // Control Flow Blocks - Delegated to ControlFlowManager
             // These instructions require the ControlFlowManager for proper handling
             // =========================================================================
-            LirInst::Block { instructions } => {
+            LirInst::Block { instructions: _ } => {
                 // Block instructions should be handled via lower_block method
                 // which has access to ControlFlowManager
                 return Err(WasmGenerationError::instruction_lowering(
@@ -362,7 +363,7 @@ impl InstructionLowerer {
                 .to_compiler_error(ErrorLocation::default()));
             }
 
-            LirInst::Loop { instructions } => {
+            LirInst::Loop { instructions: _ } => {
                 // Loop instructions should be handled via lower_loop method
                 return Err(WasmGenerationError::instruction_lowering(
                     "Loop",
@@ -372,8 +373,8 @@ impl InstructionLowerer {
             }
 
             LirInst::If {
-                then_branch,
-                else_branch,
+                then_branch: _,
+                else_branch: _,
             } => {
                 // If instructions should be handled via lower_if method
                 return Err(WasmGenerationError::instruction_lowering(
@@ -406,36 +407,36 @@ impl InstructionLowerer {
             // These instructions implement Beanstalk's tagged pointer ownership system
             // =========================================================================
             LirInst::TagAsOwned(local) => {
-                // Tag a local as owned: local = local | 1
+                // Tag a local as owned: local = local | OWNERSHIP_BIT
                 let wasm_local = self
                     .get_wasm_local(*local)
                     .map_err(|e| e.to_compiler_error(ErrorLocation::default()))?;
                 function.instruction(&Instruction::LocalGet(wasm_local));
-                function.instruction(&Instruction::I32Const(1)); // OWNERSHIP_BIT
+                function.instruction(&Instruction::I32Const(OWNERSHIP_BIT));
                 function.instruction(&Instruction::I32Or);
                 function.instruction(&Instruction::LocalSet(wasm_local));
             }
 
             LirInst::TagAsBorrowed(local) => {
-                // Tag a local as borrowed: local = local & ~1
+                // Tag a local as borrowed: local = local & ALIGNMENT_MASK
                 let wasm_local = self
                     .get_wasm_local(*local)
                     .map_err(|e| e.to_compiler_error(ErrorLocation::default()))?;
                 function.instruction(&Instruction::LocalGet(wasm_local));
-                function.instruction(&Instruction::I32Const(-2)); // ALIGNMENT_MASK (~1)
+                function.instruction(&Instruction::I32Const(ALIGNMENT_MASK));
                 function.instruction(&Instruction::I32And);
                 function.instruction(&Instruction::LocalSet(wasm_local));
             }
 
             LirInst::MaskPointer => {
-                // Extract real pointer from tagged pointer: stack_top & ~1
-                function.instruction(&Instruction::I32Const(-2)); // ALIGNMENT_MASK (~1)
+                // Extract real pointer from tagged pointer: stack_top & ALIGNMENT_MASK
+                function.instruction(&Instruction::I32Const(ALIGNMENT_MASK));
                 function.instruction(&Instruction::I32And);
             }
 
             LirInst::TestOwnership => {
-                // Test ownership bit: stack_top & 1
-                function.instruction(&Instruction::I32Const(1)); // OWNERSHIP_BIT
+                // Test ownership bit: stack_top & OWNERSHIP_BIT
+                function.instruction(&Instruction::I32Const(OWNERSHIP_BIT));
                 function.instruction(&Instruction::I32And);
             }
 
@@ -450,22 +451,22 @@ impl InstructionLowerer {
             }
 
             LirInst::PrepareOwnedArg(local) => {
-                // Load local and set ownership bit: local | 1
+                // Load local and set ownership bit: local | OWNERSHIP_BIT
                 let wasm_local = self
                     .get_wasm_local(*local)
                     .map_err(|e| e.to_compiler_error(ErrorLocation::default()))?;
                 function.instruction(&Instruction::LocalGet(wasm_local));
-                function.instruction(&Instruction::I32Const(1)); // OWNERSHIP_BIT
+                function.instruction(&Instruction::I32Const(OWNERSHIP_BIT));
                 function.instruction(&Instruction::I32Or);
             }
 
             LirInst::PrepareBorrowedArg(local) => {
-                // Load local and clear ownership bit: local & ~1
+                // Load local and clear ownership bit: local & ALIGNMENT_MASK
                 let wasm_local = self
                     .get_wasm_local(*local)
                     .map_err(|e| e.to_compiler_error(ErrorLocation::default()))?;
                 function.instruction(&Instruction::LocalGet(wasm_local));
-                function.instruction(&Instruction::I32Const(-2)); // ALIGNMENT_MASK (~1)
+                function.instruction(&Instruction::I32Const(ALIGNMENT_MASK));
                 function.instruction(&Instruction::I32And);
             }
 
@@ -481,7 +482,7 @@ impl InstructionLowerer {
                     .get_wasm_local(*real_ptr_local)
                     .map_err(|e| e.to_compiler_error(ErrorLocation::default()))?;
                 function.instruction(&Instruction::LocalGet(wasm_param));
-                function.instruction(&Instruction::I32Const(-2)); // ALIGNMENT_MASK (~1)
+                function.instruction(&Instruction::I32Const(ALIGNMENT_MASK));
                 function.instruction(&Instruction::I32And);
                 function.instruction(&Instruction::LocalSet(wasm_real_ptr));
             }

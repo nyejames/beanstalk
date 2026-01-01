@@ -23,6 +23,7 @@ use std::collections::HashMap;
 /// with appropriate context and suggestions.
 pub struct WasmValidator {
     /// Mapping from function indices to their names for better error reporting
+    #[allow(dead_code)]
     function_names: HashMap<u32, String>,
     /// Current validation context for error reporting
     current_context: String,
@@ -41,6 +42,7 @@ impl WasmValidator {
     ///
     /// This allows the validator to provide function names in error messages
     /// instead of just function indices.
+    #[allow(dead_code)]
     pub fn set_function_names(&mut self, names: HashMap<u32, String>) {
         self.function_names = names;
     }
@@ -74,6 +76,7 @@ impl WasmValidator {
     ///
     /// This method checks that the operand stack maintains proper type
     /// consistency throughout a sequence of operations.
+    #[allow(dead_code)]
     pub fn validate_stack_consistency(
         &self,
         operations: &[String],
@@ -141,10 +144,11 @@ impl WasmValidator {
     ///
     /// This method performs a simplified check by parsing the WASM module
     /// and looking for call instructions with out-of-bounds indices.
+    #[allow(dead_code)]
     pub fn validate_function_calls(
         &self,
-        wasm_bytes: &[u8],
-        total_function_count: u32,
+        _wasm_bytes: &[u8],
+        _total_function_count: u32,
     ) -> Result<(), WasmGenerationError> {
         // For now, we rely on wasmparser's built-in validation
         // which will catch invalid function indices
@@ -156,6 +160,7 @@ impl WasmValidator {
     ///
     /// This method performs thorough validation of all indices in the module
     /// by relying on wasmparser's comprehensive validation.
+    #[allow(dead_code)]
     pub fn validate_comprehensive_index_consistency(
         &self,
         wasm_bytes: &[u8],
@@ -198,6 +203,7 @@ pub fn validate_wasm_module_comprehensive(
 /// Validate a WASM module and return a CompilerError if validation fails.
 ///
 /// This is a convenience function that combines validation and error conversion.
+#[allow(dead_code)]
 pub fn validate_wasm_module_with_location(
     wasm_bytes: &[u8],
     context: &str,

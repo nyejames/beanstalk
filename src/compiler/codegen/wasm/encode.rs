@@ -127,6 +127,7 @@ pub fn encode_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
 /// 4. Process each function with full instruction lowering
 /// 5. Add exports (main, memory)
 /// 6. Validate and finalize
+#[allow(dead_code)]
 pub fn encode_wasm_with_host_functions(
     lir: &LirModule,
     host_registry: &HostFunctionRegistry,
@@ -382,6 +383,7 @@ fn ensure_function_return(
 /// Get the WASM function index for a host function by name.
 ///
 /// This is useful for generating call instructions to host functions.
+#[allow(dead_code)]
 pub fn get_host_function_index(
     host_manager: &HostFunctionManager,
     function_name: &str,

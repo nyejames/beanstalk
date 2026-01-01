@@ -189,6 +189,7 @@
 //! Run tests with: `cargo test --lib wasm_codegen_tests`
 
 pub mod analyzer;
+pub mod constants;
 pub mod control_flow;
 pub mod encode;
 pub mod error;

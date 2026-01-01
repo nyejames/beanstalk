@@ -32,26 +32,17 @@
 
 #![allow(dead_code)]
 
+// Re-export constants for backward compatibility
+pub use crate::compiler::codegen::wasm::constants::{
+    DEFAULT_MAX_PAGES, DEFAULT_MIN_PAGES, HEAP_START_OFFSET, MIN_ALLOCATION_ALIGNMENT,
+};
+
+use crate::compiler::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
 use crate::compiler::codegen::wasm::error::WasmGenerationError;
 use crate::compiler::codegen::wasm::module_builder::WasmModuleBuilder;
-use crate::compiler::codegen::wasm::ownership_manager::{
-    ALIGNMENT_MASK, OWNERSHIP_BIT, OwnershipManager,
-};
+use crate::compiler::codegen::wasm::ownership_manager::OwnershipManager;
 use crate::compiler::compiler_errors::CompilerError;
 use wasm_encoder::{Function, Instruction, ValType};
-
-/// Default minimum memory pages (64KB each)
-pub const DEFAULT_MIN_PAGES: u32 = 1;
-
-/// Default maximum memory pages (4GB max for 32-bit WASM)
-pub const DEFAULT_MAX_PAGES: u32 = 65536;
-
-/// Initial heap start offset (after reserved space)
-/// We reserve the first 64KB (1 page) for safety and static data
-pub const HEAP_START_OFFSET: i32 = 65536;
-
-/// Minimum allocation alignment for tagged pointers
-pub const MIN_ALLOCATION_ALIGNMENT: u32 = 2;
 
 /// Configuration for WASM memory setup
 #[derive(Debug, Clone)]
