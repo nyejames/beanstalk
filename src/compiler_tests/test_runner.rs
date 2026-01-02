@@ -349,21 +349,19 @@ pub fn run_performance_benchmarks() -> Result<(), String> {
         LirInst::I32Const(0),
         LirInst::LocalSet(0),
         LirInst::Block {
-            instructions: vec![
-                LirInst::Loop {
-                    instructions: vec![
-                        LirInst::LocalGet(0),
-                        LirInst::I32Const(1),
-                        LirInst::I32Add,
-                        LirInst::LocalSet(0),
-                        LirInst::LocalGet(0),
-                        LirInst::I32Const(10),
-                        LirInst::I32GtS,
-                        LirInst::BrIf(1),
-                        LirInst::Br(0),
-                    ],
-                },
-            ],
+            instructions: vec![LirInst::Loop {
+                instructions: vec![
+                    LirInst::LocalGet(0),
+                    LirInst::I32Const(1),
+                    LirInst::I32Add,
+                    LirInst::LocalSet(0),
+                    LirInst::LocalGet(0),
+                    LirInst::I32Const(10),
+                    LirInst::I32GtS,
+                    LirInst::BrIf(1),
+                    LirInst::Br(0),
+                ],
+            }],
         },
     ];
     let control_flow_module = LirModule {
@@ -394,9 +392,15 @@ pub fn run_performance_benchmarks() -> Result<(), String> {
     let memory_body = vec![
         LirInst::I32Const(0),
         LirInst::I32Const(42),
-        LirInst::I32Store { offset: 0, align: 2 },
+        LirInst::I32Store {
+            offset: 0,
+            align: 2,
+        },
         LirInst::I32Const(0),
-        LirInst::I32Load { offset: 0, align: 2 },
+        LirInst::I32Load {
+            offset: 0,
+            align: 2,
+        },
         LirInst::Drop,
     ];
     let memory_module = LirModule {

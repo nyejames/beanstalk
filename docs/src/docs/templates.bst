@@ -60,6 +60,12 @@ Inside the body of a template, you can nest more templates using square brackets
     ]
 
     [ another_template_insert ]
+    
+    -- A template with a slot for content injection
+    [:
+        Content will be inserted here: [..]
+    ]
+    
 ```
 
 ### Errors

@@ -21,9 +21,9 @@ Web projects have their own directory based structure and config file also.
 For developers coming from most other languages, 
 here are some key idiosyncrasies from other C-like languages to note:
 
-- Colon opens a scope, semicolon closes it. Semicolon does not end statements!
+- Colon opens a scope, semicolon closes it. Semicolon does not end statements.
 - Square brackets are NOT used for arrays, curly braces are used instead. 
-Square brackets are only used for string templates.
+Square brackets are only used for string templates. Items in collections are accessed via methods.
 - Equality and other logical operators use keywords like "is" and "not" 
 (you can't use == or ! for example)
 - ~ tilde symbol to indicate mutability (mutability must be explicit). 

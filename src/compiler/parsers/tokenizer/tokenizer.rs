@@ -275,6 +275,12 @@ pub fn get_token_kind(
             && peeked_char == '.'
         {
             stream.next();
+
+            // This represents a slot in the template head
+            if stream.mode == TokenizeMode::TemplateHead {
+                return_token!(TokenKind::Slot, stream);
+            }
+
             return_token!(TokenKind::Variadic, stream);
         }
 

@@ -26,8 +26,8 @@ while the user only has to write a single Beanstalk file per page.
 Beanstalk files can still import additional HTML, CSS, JS or Beanstalk files to help structure larger projects.
 
 ```beanstalk
-    #import "html/Basic"
-    #import "some_module/CONSTANT"
+    import @html/Basic
+    import @some_module/CONSTANT
 
     -- This template is just a the top level of the file
     -- It's also not assigned to any variabels or functions

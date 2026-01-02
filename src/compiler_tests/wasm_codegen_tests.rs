@@ -3570,7 +3570,6 @@ mod memory_manager_tests {
     }
 }
 
-
 #[cfg(test)]
 mod module_validation_tests {
     //! Property-based tests for WASM module validation
@@ -3922,11 +3921,9 @@ mod module_validation_tests {
             }
         }
 
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(
-                property as fn(ArbitraryParams, ArbitraryReturns, ArbitraryLocals) -> TestResult,
-            );
+        QuickCheck::new().tests(100).quickcheck(
+            property as fn(ArbitraryParams, ArbitraryReturns, ArbitraryLocals) -> TestResult,
+        );
     }
 
     /// Property: WasmValidator correctly validates generated modules
@@ -4050,11 +4047,9 @@ mod module_validation_tests {
             }
         }
 
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(
-                property as fn(ArbitraryParams, ArbitraryReturns, ArbitraryLocals) -> TestResult,
-            );
+        QuickCheck::new().tests(100).quickcheck(
+            property as fn(ArbitraryParams, ArbitraryReturns, ArbitraryLocals) -> TestResult,
+        );
     }
 
     /// Property: Empty modules (with just memory setup) are valid
@@ -4102,11 +4097,8 @@ mod module_validation_tests {
 
     #[test]
     fn test_module_with_i32_params_validates() {
-        let lir_module = create_lir_module_with_signature(
-            vec![LirType::I32, LirType::I32],
-            vec![],
-            vec![],
-        );
+        let lir_module =
+            create_lir_module_with_signature(vec![LirType::I32, LirType::I32], vec![], vec![]);
         let wasm_bytes = encode_wasm(&lir_module).expect("Encoding should succeed");
         let validation_result = wasmparser::validate(&wasm_bytes);
         assert!(
@@ -4118,11 +4110,7 @@ mod module_validation_tests {
 
     #[test]
     fn test_module_with_i64_params_validates() {
-        let lir_module = create_lir_module_with_signature(
-            vec![LirType::I64],
-            vec![],
-            vec![],
-        );
+        let lir_module = create_lir_module_with_signature(vec![LirType::I64], vec![], vec![]);
         let wasm_bytes = encode_wasm(&lir_module).expect("Encoding should succeed");
         let validation_result = wasmparser::validate(&wasm_bytes);
         assert!(
@@ -4134,11 +4122,8 @@ mod module_validation_tests {
 
     #[test]
     fn test_module_with_float_params_validates() {
-        let lir_module = create_lir_module_with_signature(
-            vec![LirType::F32, LirType::F64],
-            vec![],
-            vec![],
-        );
+        let lir_module =
+            create_lir_module_with_signature(vec![LirType::F32, LirType::F64], vec![], vec![]);
         let wasm_bytes = encode_wasm(&lir_module).expect("Encoding should succeed");
         let validation_result = wasmparser::validate(&wasm_bytes);
         assert!(
@@ -4150,11 +4135,7 @@ mod module_validation_tests {
 
     #[test]
     fn test_module_with_return_value_validates() {
-        let lir_module = create_lir_module_with_signature(
-            vec![],
-            vec![LirType::I32],
-            vec![],
-        );
+        let lir_module = create_lir_module_with_signature(vec![], vec![LirType::I32], vec![]);
         let wasm_bytes = encode_wasm(&lir_module).expect("Encoding should succeed");
         let validation_result = wasmparser::validate(&wasm_bytes);
         assert!(

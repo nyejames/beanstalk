@@ -51,7 +51,6 @@ mod pipeline_integration_tests {
         }
     }
 
-
     // =========================================================================
     // Basic Pipeline Tests - End-to-End LIR to WASM Transformation
     // =========================================================================
@@ -63,7 +62,10 @@ mod pipeline_integration_tests {
         let module = create_minimal_module("main", vec![], true);
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Empty main function should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Empty main function should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         assert!(!wasm_bytes.is_empty(), "Generated WASM should not be empty");
 
@@ -76,17 +78,14 @@ mod pipeline_integration_tests {
     /// Validates: Requirements 1.3, 7.1
     #[test]
     fn test_constant_function_generates_valid_wasm() {
-        let module = create_minimal_module(
-            "main",
-            vec![
-                LirInst::I32Const(42),
-                LirInst::Drop,
-            ],
-            true,
-        );
+        let module =
+            create_minimal_module("main", vec![LirInst::I32Const(42), LirInst::Drop], true);
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Constant function should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Constant function should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -108,12 +107,14 @@ mod pipeline_integration_tests {
         );
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Arithmetic function should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Arithmetic function should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
-
 
     /// Test: Function with local variables generates valid WASM
     /// Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5
@@ -139,7 +140,10 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Function with locals should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Function with locals should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -167,12 +171,14 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Function with parameters should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Function with parameters should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
-
 
     /// Test: Function with return value generates valid WASM
     /// Validates: Requirements 4.4
@@ -184,17 +190,17 @@ mod pipeline_integration_tests {
                 vec![],
                 vec![LirType::I32],
                 vec![],
-                vec![
-                    LirInst::I32Const(42),
-                    LirInst::Return,
-                ],
+                vec![LirInst::I32Const(42), LirInst::Return],
                 true,
             )],
             structs: vec![],
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Function with return should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Function with return should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -213,14 +219,8 @@ mod pipeline_integration_tests {
             vec![
                 LirInst::I32Const(1), // condition
                 LirInst::If {
-                    then_branch: vec![
-                        LirInst::I32Const(10),
-                        LirInst::Drop,
-                    ],
-                    else_branch: Some(vec![
-                        LirInst::I32Const(20),
-                        LirInst::Drop,
-                    ]),
+                    then_branch: vec![LirInst::I32Const(10), LirInst::Drop],
+                    else_branch: Some(vec![LirInst::I32Const(20), LirInst::Drop]),
                 },
             ],
             true,
@@ -242,10 +242,7 @@ mod pipeline_integration_tests {
             vec![
                 LirInst::I32Const(1), // condition
                 LirInst::If {
-                    then_branch: vec![
-                        LirInst::I32Const(10),
-                        LirInst::Drop,
-                    ],
+                    then_branch: vec![LirInst::I32Const(10), LirInst::Drop],
                     else_branch: None,
                 },
             ],
@@ -259,25 +256,20 @@ mod pipeline_integration_tests {
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
 
-
     /// Test: Loop with break generates valid WASM
     /// Validates: Requirements 4.2, 4.6
     #[test]
     fn test_loop_with_break_generates_valid_wasm() {
         let module = create_minimal_module(
             "main",
-            vec![
-                LirInst::Block {
+            vec![LirInst::Block {
+                instructions: vec![LirInst::Loop {
                     instructions: vec![
-                        LirInst::Loop {
-                            instructions: vec![
-                                LirInst::I32Const(1),
-                                LirInst::BrIf(1), // break out of block
-                            ],
-                        },
+                        LirInst::I32Const(1),
+                        LirInst::BrIf(1), // break out of block
                     ],
-                },
-            ],
+                }],
+            }],
             true,
         );
         let result = encode_wasm(&module);
@@ -294,18 +286,11 @@ mod pipeline_integration_tests {
     fn test_nested_blocks_generate_valid_wasm() {
         let module = create_minimal_module(
             "main",
-            vec![
-                LirInst::Block {
-                    instructions: vec![
-                        LirInst::Block {
-                            instructions: vec![
-                                LirInst::I32Const(1),
-                                LirInst::Drop,
-                            ],
-                        },
-                    ],
-                },
-            ],
+            vec![LirInst::Block {
+                instructions: vec![LirInst::Block {
+                    instructions: vec![LirInst::I32Const(1), LirInst::Drop],
+                }],
+            }],
             true,
         );
         let result = encode_wasm(&module);
@@ -357,12 +342,14 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Multiple functions should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Multiple functions should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
-
 
     // =========================================================================
     // Type System Integration Tests
@@ -398,7 +385,10 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "All numeric types should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "All numeric types should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -450,7 +440,6 @@ mod pipeline_integration_tests {
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
 
-
     // =========================================================================
     // Memory Operations Integration Tests
     // =========================================================================
@@ -467,12 +456,18 @@ mod pipeline_integration_tests {
                 vec![LirType::I32],
                 vec![
                     // Store a value at address 0
-                    LirInst::I32Const(0),      // address
-                    LirInst::I32Const(42),     // value
-                    LirInst::I32Store { offset: 0, align: 2 },
+                    LirInst::I32Const(0),  // address
+                    LirInst::I32Const(42), // value
+                    LirInst::I32Store {
+                        offset: 0,
+                        align: 2,
+                    },
                     // Load the value back
-                    LirInst::I32Const(0),      // address
-                    LirInst::I32Load { offset: 0, align: 2 },
+                    LirInst::I32Const(0), // address
+                    LirInst::I32Load {
+                        offset: 0,
+                        align: 2,
+                    },
                     LirInst::LocalSet(0),
                 ],
                 true,
@@ -481,7 +476,10 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Memory operations should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Memory operations should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -498,11 +496,17 @@ mod pipeline_integration_tests {
                 vec![],
                 vec![LirType::I64],
                 vec![
-                    LirInst::I32Const(0),      // address
+                    LirInst::I32Const(0), // address
                     LirInst::I64Const(12345678901234),
-                    LirInst::I64Store { offset: 0, align: 3 },
+                    LirInst::I64Store {
+                        offset: 0,
+                        align: 3,
+                    },
                     LirInst::I32Const(0),
-                    LirInst::I64Load { offset: 0, align: 3 },
+                    LirInst::I64Load {
+                        offset: 0,
+                        align: 3,
+                    },
                     LirInst::LocalSet(0),
                 ],
                 true,
@@ -511,7 +515,10 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "I64 memory operations should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "I64 memory operations should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -530,7 +537,7 @@ mod pipeline_integration_tests {
         let module = create_minimal_module(
             "main",
             vec![
-                LirInst::GlobalGet(0),  // Get heap pointer
+                LirInst::GlobalGet(0), // Get heap pointer
                 LirInst::Drop,
             ],
             true,
@@ -542,7 +549,6 @@ mod pipeline_integration_tests {
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
-
 
     // =========================================================================
     // Comparison Operations Integration Tests
@@ -575,7 +581,10 @@ mod pipeline_integration_tests {
         );
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Comparison operations should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Comparison operations should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -607,7 +616,6 @@ mod pipeline_integration_tests {
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
 
-
     // =========================================================================
     // Complex Integration Tests
     // =========================================================================
@@ -625,34 +633,32 @@ mod pipeline_integration_tests {
                 vec![
                     // Initialize locals
                     LirInst::I32Const(0),
-                    LirInst::LocalSet(0),  // counter = 0
+                    LirInst::LocalSet(0), // counter = 0
                     LirInst::I32Const(0),
-                    LirInst::LocalSet(1),  // sum = 0
+                    LirInst::LocalSet(1), // sum = 0
                     // Loop to sum numbers
                     LirInst::Block {
-                        instructions: vec![
-                            LirInst::Loop {
-                                instructions: vec![
-                                    // sum += counter
-                                    LirInst::LocalGet(1),
-                                    LirInst::LocalGet(0),
-                                    LirInst::I32Add,
-                                    LirInst::LocalSet(1),
-                                    // counter++
-                                    LirInst::LocalGet(0),
-                                    LirInst::I32Const(1),
-                                    LirInst::I32Add,
-                                    LirInst::LocalSet(0),
-                                    // if counter >= 10, break
-                                    LirInst::LocalGet(0),
-                                    LirInst::I32Const(10),
-                                    LirInst::I32GtS,
-                                    LirInst::BrIf(1),
-                                    // continue loop
-                                    LirInst::Br(0),
-                                ],
-                            },
-                        ],
+                        instructions: vec![LirInst::Loop {
+                            instructions: vec![
+                                // sum += counter
+                                LirInst::LocalGet(1),
+                                LirInst::LocalGet(0),
+                                LirInst::I32Add,
+                                LirInst::LocalSet(1),
+                                // counter++
+                                LirInst::LocalGet(0),
+                                LirInst::I32Const(1),
+                                LirInst::I32Add,
+                                LirInst::LocalSet(0),
+                                // if counter >= 10, break
+                                LirInst::LocalGet(0),
+                                LirInst::I32Const(10),
+                                LirInst::I32GtS,
+                                LirInst::BrIf(1),
+                                // continue loop
+                                LirInst::Br(0),
+                            ],
+                        }],
                     },
                     // Return sum
                     LirInst::LocalGet(1),
@@ -664,7 +670,10 @@ mod pipeline_integration_tests {
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Complex function should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Complex function should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
@@ -679,39 +688,34 @@ mod pipeline_integration_tests {
             vec![
                 LirInst::I32Const(1),
                 LirInst::If {
-                    then_branch: vec![
-                        LirInst::Block {
-                            instructions: vec![
-                                LirInst::I32Const(1),
-                                LirInst::If {
-                                    then_branch: vec![
-                                        LirInst::I32Const(42),
-                                        LirInst::Drop,
-                                    ],
-                                    else_branch: None,
-                                },
-                            ],
-                        },
-                    ],
-                    else_branch: Some(vec![
-                        LirInst::Loop {
-                            instructions: vec![
-                                LirInst::Br(0), // infinite loop (but we break immediately)
-                            ],
-                        },
-                    ]),
+                    then_branch: vec![LirInst::Block {
+                        instructions: vec![
+                            LirInst::I32Const(1),
+                            LirInst::If {
+                                then_branch: vec![LirInst::I32Const(42), LirInst::Drop],
+                                else_branch: None,
+                            },
+                        ],
+                    }],
+                    else_branch: Some(vec![LirInst::Loop {
+                        instructions: vec![
+                            LirInst::Br(0), // infinite loop (but we break immediately)
+                        ],
+                    }]),
                 },
             ],
             true,
         );
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Nested control flow should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Nested control flow should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");
     }
-
 
     // =========================================================================
     // Error Handling Integration Tests
@@ -749,17 +753,17 @@ mod pipeline_integration_tests {
                 vec![LirType::I32],
                 vec![LirType::I32],
                 vec![],
-                vec![
-                    LirInst::LocalGet(0),
-                    LirInst::Return,
-                ],
+                vec![LirInst::LocalGet(0), LirInst::Return],
                 false, // Not main
             )],
             structs: vec![],
         };
         let result = encode_wasm(&module);
 
-        assert!(result.is_ok(), "Module without main should generate valid WASM");
+        assert!(
+            result.is_ok(),
+            "Module without main should generate valid WASM"
+        );
         let wasm_bytes = result.unwrap();
         let validation = wasmparser::validate(&wasm_bytes);
         assert!(validation.is_ok(), "Generated WASM should pass validation");

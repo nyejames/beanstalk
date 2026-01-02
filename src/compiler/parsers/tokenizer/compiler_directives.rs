@@ -30,9 +30,6 @@ pub fn compiler_directive(
             // But likely not.
             // "WAT" => return_token!(TokenKind::Wat(string_block(stream, string_table)?), stream),
 
-            // Special template tokens
-            "slot" => return_token!(TokenKind::Slot, stream),
-
             _ => {
                 return_syntax_error!(
                     format!("Invalid compiler directive: #{}", token_value),

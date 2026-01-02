@@ -8,8 +8,11 @@
 
 # 🌱
 
-<p>⚠️ This is a work in progress compiler. ⚠️ The compiler backend (HIR, LIR, borrow checking, and codegen) is still under active development and evolving rapidly. See CONTRIBUTING.md if you're inspired to help out ⚠️</p>
+<p>⚠️ This is a work in progress compiler ⚠️</p> 
+<p>The compiler backend (HIR, LIR, borrow checking, and codegen) is still under active development and evolving rapidly. See CONTRIBUTING.md and get in touch if you're inspired to help out</p>
 </div>
+<br>
+<br>
 
 <div align="center">
 
