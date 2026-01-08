@@ -14,7 +14,7 @@ Beanstalk aims to be:
 ## High-Level Goals
 - Memory safety is ensured.
 - No explicit lifetime annotations. All lifetimes are inferred.
-- Possible moves are determined by the compiler.
+- No explicit moves.
 
 ## Core Design Philosophy
 
@@ -25,10 +25,6 @@ Beanstalk’s memory model is built around a **hybrid strategy**:
 
 Ownership in Beanstalk is therefore **not a purely static property**, but a runtime state constrained by compile-time guarantees.
 This allows Beanstalk to remain memory-safe while avoiding the complexity, rigidity, and binary growth associated with fully static borrow checking.
-
-The compiler’s job is to ensure that *any possible runtime ownership outcome is safe*.
-
-Beanstalk simply chooses to let the runtime flip the final cleanup switch *after* the compiler has made sure it’s impossible to blow anything up.
 
 ## What “Memory Safety” Means in Beanstalk
 
@@ -62,6 +58,7 @@ The runtime flag merely selects which *already-safe* behavior to execute.
 ## Borrowing Rules
 
 Beanstalk enforces a small, strict set of rules that apply uniformly across the language.
+These are similar to Rust.
 
 ### Shared Access (Default)
 
@@ -111,11 +108,7 @@ If a path exits a scope without a last use:
 * A `possible_drop` is inserted.
 * The drop executes only if the value is owned at runtime.
 
-This approach is:
-
-* conservative (never unsound),
-* path-aware,
-* and significantly simpler than full lifetime inference.
+This approach is significantly simpler than full lifetime inference.
 
 ## Control Flow and Drops
 
@@ -159,15 +152,16 @@ This design:
 The compiler enforces memory safety through the following steps:
 
 1. **Type checking and eager folding** in the AST.
-2. **HIR lowering**, where:
+2. **Last use analysis** over the AST.
+3. **HIR lowering**, where:
    * control flow is linearized,
    * possible drop points are inserted,
    * ownership boundaries are identified.
-3. **Borrow validation**, which:
+4. **Borrow validation**, which:
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
    * validates move soundness.
-4. **Lowering to LIR**, where:
+5. **Lowering to LIR**, where:
    * ownership flags are generated,
    * possible drops become conditional frees,
    * runtime checks are emitted.
@@ -180,12 +174,13 @@ This model intentionally trades:
 
 * maximal static precision
   for
-* simplicity, predictability, and extensibility
+* simplicity and extensibility
 
 Compared to a fully static borrow checker:
 
 * Some ownership decisions are deferred to runtime.
 * Some errors are detected later than theoretically possible.
+* Small runtime cost from possible drop checks.
 
 In exchange:
 
@@ -208,10 +203,6 @@ Possible future enhancements include:
 
 All of these can be added **without breaking the existing ABI or semantics**, because the current design already treats ownership as a constrained runtime property.
 
-Excellent instinct. This section does important social work: it sets expectations, defuses “why didn’t you just…” conversations, and clarifies that Beanstalk is making *intentional* tradeoffs rather than falling short of Rust.
-
-Below is a clean drop-in section, followed by a comparison table you can include near the end of the document.
-
 ## Why This Is Not Rust
 Rust’s borrow checker is designed to prove *exact ownership and lifetime behavior at compile time*.
 Beanstalk’s memory model is designed to **guarantee safety while remaining flexible, predictable, and lightweight**, especially in a Wasm environment.
@@ -220,12 +211,11 @@ This design helps to reduce the binary code size, compile speeds and the languag
 
 The key philosophical difference is this:
 - Rust statically proves exactly what happens.
-- Beanstalk statically proves that whatever happens will be safe.
+- Beanstalk statically proves that whatever happens will be safe and defers a small amount of work to runtime.
 
 ### No Explicit Lifetimes
 Rust exposes lifetimes as part of the language.
 Beanstalk does not. There is no syntax for lifetimes and no lifetime parameters.
-Control-flow boundaries determine where ownership *may* end, not where it *must* end.
 
 ### Ownership Is a Runtime State, Not a Static Type
 In Rust:
