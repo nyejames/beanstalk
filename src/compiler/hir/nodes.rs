@@ -5,9 +5,8 @@
 //! and preparing code for reliable lowering to WebAssembly.
 //!
 //! Key design principles:
-//! - Structured control flow for CFG-based analysis
 //! - Place-based memory model for precise borrow tracking
-//! - No nested expressions - all computation linearized into statements
+//! - No nested control flow; expressions may nest, but evaluation order is explicit
 //! - Borrow intent, not ownership outcome (determined by the borrow checker)
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
@@ -16,6 +15,24 @@ use crate::compiler::parsers::ast_nodes::Arg;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
+
+/// The complete HIR module containing all blocks and metadata
+#[derive(Debug, Clone)]
+pub struct HirModule {
+    pub blocks: Vec<HirBlock>,
+    pub entry_block: BlockId,
+    pub functions: Vec<HirNode>, // FunctionDef nodes
+    pub structs: Vec<HirNode>,   // StructDef nodes
+}
+
+/// A basic block containing a sequence of HIR nodes
+/// All blocks except the entry block are terminated by a HirTerminator
+#[derive(Debug, Clone)]
+pub struct HirBlock {
+    pub id: BlockId,
+    pub params: Vec<InternedString>,
+    pub nodes: Vec<HirNode>,
+}
 
 #[derive(Debug, Clone)]
 pub struct HirNode {
@@ -28,46 +45,33 @@ pub type HirNodeId = usize;
 pub type BlockId = usize;
 
 #[derive(Debug, Clone)]
+pub enum HirPlace {
+    Var(InternedString),
+    Field {
+        base: Box<HirPlace>,
+        field: InternedString,
+    },
+    Index {
+        base: Box<HirPlace>,
+        index: Box<HirExpr>,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub enum HirKind {
+    Stmt(HirStmt),
+    Terminator(HirTerminator),
+}
+
+#[derive(Debug, Clone)]
+pub enum HirStmt {
     // === Variable Operations ===
     /// Assign expression result to a variable
     /// The `is_mutable` flag indicates if this was a `~=` assignment
     Assign {
-        name: InternedString,
+        target: HirPlace,
         value: HirExpr,
-        is_mutable: bool, // true for `~=`, false for `=`
-    },
-
-    // === Control Flow Blocks ===
-    /// Conditional branch with explicit blocks
-    If {
-        condition: HirExpr,
-        then_block: BlockId,
-        else_block: Option<BlockId>,
-    },
-
-    /// Pattern matching
-    Match {
-        scrutinee: HirExpr,
-        arms: Vec<HirMatchArm>,
-        default_block: Option<BlockId>,
-    },
-
-    /// Loop with optional iteration binding
-    Loop {
-        label: BlockId, // Used by break/continue to reference this loop
-        binding: Option<(InternedString, DataType)>, // Loop variable
-        iterator: Option<HirExpr>, // None for infinite loops
-        body: BlockId,
-        index_binding: Option<InternedString>, // Optional index variable
-    },
-
-    Break {
-        target: BlockId,
-    },
-
-    Continue {
-        target: BlockId,
+        is_mutable: bool,
     },
 
     // === Function Calls ===
@@ -86,32 +90,10 @@ pub enum HirKind {
         args: Vec<HirExpr>,
     },
 
-    // === Error Handling ===
-    /// Desugared error handling
-    TryCall {
-        call: Box<HirNode>,
-        error_binding: Option<InternedString>,
-        error_handler: BlockId,
-        default_values: Option<Vec<HirExpr>>,
-    },
-
-    /// Option unwrapping with default
-    OptionUnwrap {
-        expr: HirExpr,
-        default_value: Option<HirExpr>,
-    },
-
-    // === Returns ===
-    /// Return with values (terminates block)
-    Return(Vec<HirExpr>),
-
-    /// Error return (terminates block)
-    ReturnError(HirExpr),
-
     // === Resource Management ===
     /// Conditional drop inserted by HIR generation
     /// Will only drop if the value is owned at runtime
-    PossibleDrop(InternedString),
+    PossibleDrop(HirPlace),
 
     // === Templates ===
     /// Runtime template that becomes a function call
@@ -146,13 +128,51 @@ pub enum HirKind {
     ExprStmt(HirExpr),
 }
 
-/// A basic block containing a sequence of HIR nodes
-/// All blocks except the entry block are terminated by
-/// a control flow node (Return, Break, Continue, or implicit fall-through)
 #[derive(Debug, Clone)]
-pub struct HirBlock {
-    pub id: BlockId,
-    pub nodes: Vec<HirNode>,
+pub enum HirTerminator {
+    // === Control Flow Blocks ===
+    /// Conditional branch with explicit blocks
+    If {
+        condition: HirExpr,
+        then_block: BlockId,
+        else_block: Option<BlockId>,
+    },
+
+    /// Pattern matching
+    Match {
+        scrutinee: HirExpr,
+        arms: Vec<HirMatchArm>,
+        default_block: Option<BlockId>,
+    },
+
+    /// Loop with optional iteration binding
+    Loop {
+        label: BlockId, // Used by break/continue to reference this loop
+        binding: Option<(InternedString, DataType)>, // Loop variable
+        iterator: Option<HirExpr>, // None for infinite loops
+        body: BlockId,
+        index_binding: Option<InternedString>, // Optional index variable
+    },
+
+    Break {
+        target: BlockId,
+    },
+
+    Continue {
+        target: BlockId,
+    },
+
+    // === Returns ===
+    /// Return with values (terminates block)
+    Return(Vec<HirExpr>),
+
+    /// Error return (terminates block)
+    ReturnError(HirExpr),
+
+    /// Hard break
+    Panic {
+        message: Option<HirExpr>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -174,7 +194,7 @@ pub enum HirExprKind {
 
     // === Variable Access ===
     /// Load variable value (creates shared reference by default)
-    Var(InternedString),
+    Load(HirPlace),
 
     /// Field access on a variable
     Field {
@@ -182,16 +202,10 @@ pub enum HirExprKind {
         field: InternedString,
     },
 
-    /// Collection/array element access
-    Index {
-        base: InternedString,
-        index: Box<HirExpr>,
-    },
-
     /// Potential ownership transfer
     /// Marked during HIR generation based on last-use analysis hints
     /// Final ownership decision happens during borrow validation
-    Move(InternedString),
+    Move(HirPlace),
 
     // === Binary Operations ===
     BinOp {
@@ -271,13 +285,4 @@ pub enum BinOp {
 pub enum UnaryOp {
     Neg,
     Not,
-}
-
-/// The complete HIR module containing all blocks and metadata
-#[derive(Debug, Clone)]
-pub struct HirModule {
-    pub blocks: Vec<HirBlock>,
-    pub entry_block: BlockId,
-    pub functions: Vec<HirNode>, // FunctionDef nodes
-    pub structs: Vec<HirNode>,   // StructDef nodes
 }

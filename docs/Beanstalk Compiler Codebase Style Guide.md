@@ -35,6 +35,16 @@ Beanstalk makes deliberate tradeoffs for compilation speed:
 - Each module has ONE clear responsibility—don't mix concerns
 - Prefer using a context struct for state—don't pass individual state pieces between functions
 
+**Types in a file (structs / enums) should be ordered from the highest abstraction to the lowest**
+```rust
+// Define the most abstract types earlier in the file
+// And define the types they depend on later
+pub struct HirModule { ... }
+pub struct HirBlock { ... }
+pub struct HirNode { ...}
+pub struct HirExpression { ...}
+```
+
 #### Iterator vs Loop Preference
 - Simple operations: Use iterators
 - Complex multi-stage operations: Use explicit loops for clarity
@@ -87,7 +97,7 @@ Avoid over commenting code. Stick to concise and brief descriptions.
 
 Good places to add comments: 
 - Short summaries before important / complex functions 
-- Labelling parts of the control flow (branches) to make it clearer what each branch is doing
+- Labelling parts of the control flow (branches) to clarify what each branch is doing
 - TODOs for unimplemented features
 - Comments referencing an unusual or unclear bit of code and why it is written the way it is. Particularly when something has been changed to fix a subtle bug.
 
@@ -339,10 +349,3 @@ for item in items:
 
 io("Loop complete")
 ```
-
-### Still in the design phase
-The implementation of the compiler, particularly the backend, is being rapidly iterated on beyond the core design choices of the language.
-
-Here are some notes about the direction of future features:
-- **Interfaces instead of traits** avoid complex trait resolution. Dynamic dispatch as the default for smaller binary sizes and faster compile times.
-- **Simplified generics** reduce monomorphization overhead

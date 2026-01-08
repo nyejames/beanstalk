@@ -5,7 +5,7 @@ The compiler statically enforces exclusivity rules (no simultaneous mutable acce
 
 At runtime, ownership is resolved via tagged pointers, allowing a single calling convention for borrowed and owned values.
 
-This style of memory management can be incrementally strengthened with region analysis, stricter static lifetimes, or place-based tracking in future iterations of the compiler without having to change the language semantics.
+This style of memory management can be incrementally strengthened with region analysis, stricter static lifetimes or place-based tracking in future iterations of the compiler without having to change the language semantics.
 
 ## Overview
 The build system will determine which files are associated with a single Wasm module.
@@ -22,14 +22,14 @@ this is the `HeaderKind::Main` and is implicit start function of the entry file
 
 ## Pipeline Stages
 The Beanstalk compiler processes modules through these stages:
-1. **Tokenization** - Convert source text to tokens
-2. **Header Parsing** - Extract headers and identify the entry point. Separates function definitions, structs, constants from top-level code
-3. **Dependency Sorting** - Order headers by dependencies
-4. **AST Construction** - Build an abstract syntax tree - includes name resolution and constant folding
-5. **HIR Generation** - Create a high-level IR with possible drop points inserted
-6. **Borrow Validation** - Verify memory safety
-7. **LIR Generation** - Create an IR close to Wasm that can be lowered directly
-8. **Codegen** - Produce final Wasm bytecode
+1. **Tokenization** – Convert source text to tokens
+2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs, constants from top-level code
+3. **Dependency Sorting** – Order headers by dependencies
+4. **AST Construction** – Build an abstract syntax tree - includes name resolution and constant folding
+5. **HIR Generation** – Create a high-level IR with possible drop points inserted
+6. **Borrow Validation** – Verify memory safety
+7. **LIR Generation** – Create an IR close to Wasm that can be lowered directly
+8. **Codegen** – Produce final Wasm bytecode
 
 **Key Pipeline Principles**:
 - **Import Resolution**: Processes `#import "path"` statements at the header stage so dependencies can be sorted after
@@ -56,7 +56,7 @@ This stage of the compiler is stable and currently can represent almost all the 
 **Key Features**:
 - **Header Extraction**: Separates declarations from top-level code
 - **Implicit Start Function**: Top level code that does not fit into the other header catagories is placed into a  `HeaderKind::StartFunction` header that becomes a public "start" function.
-- **Entry Point Detection**: Identifies entry file and converts its start function to `HeaderKind::Main`
+- **Entry Point Detection**: Identifies the entry file and converts its start function to `HeaderKind::Main`
 - **Import Resolution**: Processes `#import "path/function_name"` directives
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
 
@@ -90,7 +90,7 @@ pub enum HeaderKind {
 ---
 
 ### Stage 3: Dependency Sorting (`src/lib.rs::sort_headers`)
-**Purpose**: Order headers topologically to ensure proper compilation sequence so the AST for the whole module can be created in one pass. This enables the AST to perform full type checking.
+**Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. This enables the AST to perform full type checking.
 
 **Key Features**:
 - Topological sort of import dependencies
@@ -114,7 +114,7 @@ pub enum HeaderKind {
 - Results in `ExpressionKind::Int(5)` rather than runtime operations
 - Expressions are converted to **Reverse Polish Notation (RPN)** for evaluation
 #### Templates
-- Templates fully resolved at AST stage become string literals before HIR.
+- Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
@@ -134,7 +134,7 @@ pub enum HeaderKind {
 
 ## Stage 5: HIR Generation (`src/compiler/hir/`)
 HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
-It converts the fully-typed AST into a linear, control-flow–explicit representation suitable for last-use analysis and ownership reasoning. HIR never performs template parsing or folding.
+It converts the fully typed AST into a linear, control-flow-explicit representation suitable for last-use analysis and ownership reasoning. HIR never performs template parsing or folding.
 
 HIR is the first stage where resource lifetime semantics are made explicit, but ownership is not fully resolved yet.
 
@@ -150,7 +150,7 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 ### Key Features
 **Linear Control Flow**
 - HIR contains no nested expressions or implicit scopes
-- All control flow is explicit via blocks, jumps, and terminators
+- All control-flow is explicit via blocks, jumps and terminators
 
 **Last-Use–Oriented Semantics**
 - HIR does not model exact lifetimes
@@ -171,7 +171,7 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 - Final ownership resolution happens during lowering
 
 **Desugared Semantics**
-- Assignment forms, mutation syntax, and control-flow sugar are normalized
+- Assignment forms, mutation syntax and control-flow sugar are normalized
 - All effects are explicit statements
 - Calls to runtime templates appear as normal HIR call nodes
 
@@ -224,7 +224,7 @@ This avoids complex CFG reasoning and keeps compilation fast and predictable.
 Ensures no two mutable accesses overlap and mutable access excludes shared access.
 
 **Move Safety**
-Ensures statically-determined moves are not followed by uses.
+Ensures uses do not follow statically determined moves.
 Runtime-resolved moves rely on inserted drop points.
 
 **Control-Flow Awareness**
