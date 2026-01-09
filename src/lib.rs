@@ -7,6 +7,14 @@ pub mod settings;
 pub(crate) mod compiler_tests {
     pub(crate) mod test_runner;
     #[cfg(test)]
+    pub(crate) mod control_flow_linearizer_tests;
+    #[cfg(test)]
+    pub(crate) mod expression_linearizer_tests;
+    #[cfg(test)]
+    pub(crate) mod hir_builder_tests;
+    #[cfg(test)]
+    pub(crate) mod variable_manager_tests;
+    #[cfg(test)]
     pub(crate) mod wasm_codegen_tests;
     #[cfg(test)]
     pub(crate) mod wasm_integration_tests;
@@ -98,7 +106,10 @@ mod compiler {
     pub(crate) mod hir {
         // pub(crate) mod display_hir;
         pub(crate) mod build_hir;
+        pub(crate) mod control_flow_linearizer;
+        pub(crate) mod expression_linearizer;
         pub(crate) mod nodes;
+        pub(crate) mod variable_manager;
     }
 
     pub(crate) mod lir {

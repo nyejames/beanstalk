@@ -76,6 +76,17 @@ impl TextLocation {
             end_pos: self.end_pos,
         }
     }
+
+    /// Converts to ErrorLocation without resolving the scope path.
+    /// Uses an empty path - useful for HIR validation errors where
+    /// the string table may not be available.
+    pub fn to_error_location_without_table(&self) -> ErrorLocation {
+        ErrorLocation {
+            scope: std::path::PathBuf::new(),
+            start_pos: self.start_pos,
+            end_pos: self.end_pos,
+        }
+    }
 }
 
 impl PartialOrd for TextLocation {

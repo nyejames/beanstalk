@@ -140,6 +140,7 @@ pub enum HirKind {
 #[derive(Debug, Clone)]
 pub struct HirBlock {
     pub id: BlockId,
+    pub params: Vec<InternedString>,
     pub nodes: Vec<HirNode>,
 }
 
