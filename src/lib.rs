@@ -97,6 +97,7 @@ mod compiler {
 
     pub(crate) mod hir {
         // pub(crate) mod display_hir;
+        pub(crate) mod build_hir;
         pub(crate) mod nodes;
     }
 

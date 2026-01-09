@@ -12,6 +12,7 @@ import @./components
 
 - AST -> HIR figure out
 - Borrow validation stage
+- HIR -> LIR lowering
 
 - Scenes will parse blocks and look for style properties and insert successive scenes passed into it into a 'slot' scene if it has one.
 If multiple scenes with slots are added to a scene, they need to be parsed correctly so each successive scene is passed into the slot of the previous scene.

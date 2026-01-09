@@ -20,15 +20,15 @@ Beanstalk aims to be:
 
 Beanstalk’s memory model is built around a **hybrid strategy**:
 
-* **Static analysis** is used to enforce exclusivity, prevent obvious misuse, and identify *potential* ownership transfer points.
+* **Static analysis** is used to enforce exclusivity, prevent obvious misuse and identify *potential* ownership transfer points.
 * **Runtime ownership checks** are used to resolve whether a value is borrowed or owned at specific boundaries.
 
 Ownership in Beanstalk is therefore **not a purely static property**, but a runtime state constrained by compile-time guarantees.
-This allows Beanstalk to remain memory-safe while avoiding the complexity, rigidity, and binary growth associated with fully static borrow checking.
+This allows Beanstalk to remain memory-safe while avoiding the complexity, rigidity and binary growth associated with fully static borrow checking.
 
 ## What “Memory Safety” Means in Beanstalk
 
-A Beanstalk program is memory safe if all of the following are true:
+A Beanstalk program is memory safe if all the following are true:
 
 * No value is accessed after it has been dropped.
 * No value is dropped more than once.
@@ -44,7 +44,7 @@ In Beanstalk, ownership is represented as a **runtime flag**, not a distinct sta
 
 Values that live in linear memory are passed around as pointers with an **embedded ownership bit**:
 
-* `borrowed` → the value must not be dropped by the callee
+* `borrowed` → the callee must not drop the value
 * `owned` → the callee is responsible for dropping the value
 
 The compiler statically guarantees that:
@@ -53,7 +53,7 @@ The compiler statically guarantees that:
 * Borrowed values are not used after a potential ownership transfer.
 * All control-flow paths that might own a value lead to a drop point.
 
-The runtime flag merely selects which *already-safe* behavior to execute.
+The runtime flag merely selects which *already-safe* behaviour to execute.
 
 ## Borrowing Rules
 
@@ -80,7 +80,7 @@ Mutable access must always be explicit.
   * a mutable borrow, or
   * an ownership transfer
 
-Which of these occurs is determined by static last-use analysis and finalized at runtime.
+Which of these occurs is determined by static last-use analysis and finalised at runtime.
 
 ### Ownership Transfer (Moves)
 A move transfers full responsibility for a value. 
@@ -115,7 +115,7 @@ This approach is significantly simpler than full lifetime inference.
 Control flow constructs (`if`, `loop`, `break`, `return`) interact with ownership explicitly.
 
 * Every control-flow exit that leaves a scope capable of owning a value has an associated `possible_drop`.
-* Branches are analyzed independently.
+* Branches are analysed independently.
 * Merges are conservative: if *any* path may own a value, a drop point must exist.
 
 This ensures that:
@@ -151,22 +151,25 @@ This design:
 
 The compiler enforces memory safety through the following steps:
 
-1. **Type checking and eager folding** in the AST.
-2. **Last use analysis** over the AST.
-3. **HIR lowering**, where:
+1. **AST lowering**, where:
+   * types are checked, 
+   * name resolution happens, 
+   * eager folding of expressions takes place.
+2. **HIR lowering**, where:
+   * possible drop points are inserted for all blocks that can own values,
    * control flow is linearized,
-   * possible drop points are inserted,
    * ownership boundaries are identified.
-4. **Borrow validation**, which:
+3. **Borrow validation**, which:
+   * performs last-use analysis,
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
    * validates move soundness.
-5. **Lowering to LIR**, where:
+4. **Lowering to LIR**, where:
    * ownership flags are generated,
    * possible drops become conditional frees,
    * runtime checks are emitted.
 
-At no point does the compiler rely on undefined behavior or unchecked aliasing.
+At no point does the compiler rely on undefined behaviour or unchecked aliasing.
 
 ## Design Tradeoffs
 
@@ -199,13 +202,13 @@ Possible future enhancements include:
 * Stronger static lifetime inference
 * Place-based alias tracking
 * Drop elision via region scopes
-* Compile-time ownership specialization
+* Compile-time ownership specialisation
 
 All of these can be added **without breaking the existing ABI or semantics**, because the current design already treats ownership as a constrained runtime property.
 
 ## Why This Is Not Rust
-Rust’s borrow checker is designed to prove *exact ownership and lifetime behavior at compile time*.
-Beanstalk’s memory model is designed to **guarantee safety while remaining flexible, predictable, and lightweight**, especially in a Wasm environment.
+Rust’s borrow checker is designed to prove *exact ownership and lifetime behaviour at compile time*.
+Beanstalk’s memory model is designed to **guarantee safety while remaining flexible, predictable and lightweight**, especially in a Wasm environment.
 
 This design helps to reduce the binary code size, compile speeds and the language complexity.
 
@@ -220,7 +223,7 @@ Beanstalk does not. There is no syntax for lifetimes and no lifetime parameters.
 ### Ownership Is a Runtime State, Not a Static Type
 In Rust:
 - Ownership is a compile-time property.
-- Functions must be monomorphized or specialized for owned vs borrowed arguments.
+- Functions must be monomorphized or specialised for owned vs borrowed arguments.
 - The compiler must know *exactly* when moves occur.
 
 In Beanstalk:
