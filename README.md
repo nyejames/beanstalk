@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A refreshing Wasm-first language that prioritises safety, simplicity, and fast builds.
+  A refreshing Wasm-first language that prioritises safety, simplicity, and a fast compiler.
 </em></p>
 
 # 🌱
@@ -60,11 +60,16 @@ post = PostGenerator.create_post(date, [:
 
 <div align="center">
 
-## Unique Memory Model 
+## Unique Memory Model
 
 </div>
 
-Memory safety is enforced through static analysis and a unified runtime ownership model, allowing the compiler to guarantee correctness while keeping binaries small and compilation predictable. All without a GC or reference counting.
+Memory safety is enforced through static analysis and a unified runtime ownership model, which keeps binaries small and compilation predictable. All without a GC or reference counting.
+
+This is a fairly unique idea based off of taking ideas from Rust and creating a tradeoff that allows for faster compile times and a simpler, friendlier language. There are no lifetime annotations or complex ownership or move semantics to worry about.
+The cost is a small amount of runtime overhead and keeping the single mutable reference rule from Rust.
+
+Beanstalk isn't trying to be a zero cost abstraction language, but is still trying to be faster and more predictable than a GC or RC language and safer than manual memory mangaement.
 
 <div align="center">
 
@@ -72,11 +77,12 @@ Memory safety is enforced through static analysis and a unified runtime ownershi
 
 </div>
 
-- Wasm focused backend designed around producing high-quality Wasm
-- Syntax minimalism and fast compile speed
-- The memory safety of Rust, with no 'unsafe' mode and no explicit lifetime syntax
-- **The King of Strings**: String templates that can double up as a tiny HTML/markup engine or anything else you want
-- A complete build system for web projects and beyond
+- String templates that can double up as a tiny compile time HTML/markup engine or anything else you want
+- Wasm focused backend designed around producing high-quality Wasm for portability and web integration
+- Minimal and coherent syntax for maximum readbility
+- A modular compiler with Fast compile times for snappy tooling and fast development builds
+- Memory safety, with no 'unsafe' mode and no explicit lifetime syntax
+- An integrated build system for web projects and beyond
 - Simple, static and strong type system
 - Clean and deterministic error handling
 
@@ -135,6 +141,8 @@ A full backend refactor of the compiler is underway.
 - Header parsing 
 - AST creation
 - Expression folding
+- Name resolution
+- Type checking
 
 ### Underway
 - IR construction
