@@ -132,6 +132,18 @@ impl StringTable {
             debug_info: HashMap::new(),
         }
     }
+    
+    /// Create a new string table with a specified initial capacity
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            strings: Vec::with_capacity(capacity),
+            string_to_id: HashMap::with_capacity(capacity),
+            next_id: 0,
+            stats: InterningStats::default(),
+            #[cfg(debug_assertions)]
+            debug_info: HashMap::new(),
+        }
+    }
 
     /// Intern a string slice, returning its unique ID.
     /// If the string already exists, returns the existing ID.

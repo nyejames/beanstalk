@@ -87,11 +87,11 @@ This can be used in between the first if condition and an optional else keyword.
     ;
     
     -- Matching choices
-    if Catagory is Category::A:
+    if Catagory is A:
         io("Category A")
-    case Category::B
+    case B
         io("Category B")
-    case Catagory::C |message| 
+    case C |message| 
         io([:Category C with message: [message]])
     ;
 
