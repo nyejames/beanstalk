@@ -5,13 +5,13 @@ mod dev_server;
 pub mod settings;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod test_runner;
     #[cfg(test)]
     pub(crate) mod control_flow_linearizer_tests;
     #[cfg(test)]
     pub(crate) mod expression_linearizer_tests;
     #[cfg(test)]
     pub(crate) mod hir_builder_tests;
+    pub(crate) mod test_runner;
     #[cfg(test)]
     pub(crate) mod variable_manager_tests;
     #[cfg(test)]
@@ -104,9 +104,9 @@ mod compiler {
     }
 
     pub(crate) mod hir {
-        // pub(crate) mod display_hir;
         pub(crate) mod build_hir;
         pub(crate) mod control_flow_linearizer;
+        pub(crate) mod display_hir;
         pub(crate) mod expression_linearizer;
         pub(crate) mod nodes;
         pub(crate) mod variable_manager;
@@ -131,7 +131,8 @@ use std::path::PathBuf;
 use crate::compiler::codegen::wasm::encode::encode_wasm;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
-use crate::compiler::hir::nodes::HirNode;
+use crate::compiler::hir::build_hir::HirBuilderContext;
+use crate::compiler::hir::nodes::{HirModule, HirNode};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::lir::nodes::LirModule;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
@@ -264,15 +265,15 @@ impl<'a> Compiler<'a> {
         )
     }
 
-    // TODO
     /// -----------------------------
     ///         HIR GENERATION
     /// -----------------------------
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
-    // pub fn generate_hir(&mut self, ast: Ast) -> Result<Vec<HirNode>, CompilerMessages> {
-    //     HirBuilder::lower_ast(ast.nodes, ast.entry_path, &mut self.string_table)
-    // }
+    pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
+        let ctx = HirBuilderContext::new(&mut self.string_table);
+        ctx.build_hir_module(ast)
+    }
 
     // TODO
     /// -----------------------------

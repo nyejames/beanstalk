@@ -26,7 +26,7 @@ pub struct HirModule {
 }
 
 /// A basic block containing a sequence of HIR nodes
-/// All blocks except the entry block are terminated by a HirTerminator
+/// All blocks except the entry block are terminated by an HirTerminator
 #[derive(Debug, Clone)]
 pub struct HirBlock {
     pub id: BlockId,

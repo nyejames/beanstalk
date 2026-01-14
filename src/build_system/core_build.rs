@@ -206,14 +206,14 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
 
-    // let mut hir_nodes = match compiler.generate_hir(module_ast) {
-    //     Ok(nodes) => nodes,
-    //     Err(e) => {
-    //         compiler_messages.errors.extend(e.errors);
-    //         compiler_messages.warnings.extend(e.warnings);
-    //         return Err(compiler_messages);
-    //     }
-    // };
+    let hir_module = match compiler.generate_hir(module_ast) {
+        Ok(nodes) => nodes,
+        Err(e) => {
+            compiler_messages.errors.extend(e.errors);
+            compiler_messages.warnings.extend(e.warnings);
+            return Err(compiler_messages);
+        }
+    };
 
     timer_log!(time, "HIR generated in: ");
 
@@ -221,9 +221,7 @@ pub fn compile_modules(
     #[cfg(feature = "show_hir")]
     {
         println!("=== HIR OUTPUT ===");
-        for node in &hir_nodes {
-            println!("{}", node.display_with_table(&compiler.string_table));
-        }
+        println!("{}", hir_module.debug_string(&compiler.string_table));
         println!("=== END HIR OUTPUT ===");
     }
 
@@ -242,7 +240,7 @@ pub fn compile_modules(
 
     timer_log!(time, "Borrow checking completed in: ");
 
-    // Debug output for borrow checker if enabled
+    // Debug output for the borrow checker if enabled
     #[cfg(feature = "show_borrow_checker")]
     {
         println!("=== BORROW CHECKER OUTPUT ===");

@@ -198,7 +198,7 @@ pub struct DropInsertionPoint {
 // ============================================================================
 
 /// Conservative hints for ownership during HIR generation.
-/// 
+///
 /// IMPORTANT: These are NOT authoritative - the borrow checker is the authority.
 /// This data may be incomplete, conservative, and wrong. It exists to help
 /// with drop point insertion and to provide hints for later analysis stages.
@@ -517,6 +517,53 @@ impl<'a> HirBuilderContext<'a> {
     }
 
     // ========================================================================
+    // Main Build Method
+    // ========================================================================
+    /// Builds an HIR module from an AST.
+    /// This is the main entry point for HIR generation.
+    pub fn build_hir_module(mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
+        // Create the entry block
+        let entry_block_id = self.create_block();
+        self.set_entry_block(entry_block_id);
+
+        // Enter the module scope
+        self.enter_scope_with_block(ScopeType::Function, entry_block_id);
+
+        // Process each AST node
+        for node in &ast.nodes {
+            match self.process_ast_node(node) {
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(CompilerMessages {
+                        errors: vec![e],
+                        warnings: ast.warnings,
+                    });
+                }
+            }
+        }
+
+        // Exit the module scope
+        let _dropped_vars = self.exit_scope();
+
+        // Validate the generated HIR
+        let hir_module = HirModule {
+            blocks: self.blocks,
+            entry_block: entry_block_id,
+            functions: self.functions,
+            structs: self.structs,
+        };
+
+        // Run validation
+        match HirValidator::validate_module(&hir_module) {
+            Ok(_) => Ok(hir_module),
+            Err(validation_error) => Err(CompilerMessages {
+                errors: vec![validation_error.into()],
+                warnings: ast.warnings,
+            }),
+        }
+    }
+
+    // ========================================================================
     // ID Allocation
     // ========================================================================
 
@@ -707,12 +754,7 @@ impl<'a> HirBuilderContext<'a> {
 
     /// Creates a HirBuildContext for the current state
     pub fn create_build_context(&self, location: TextLocation) -> HirBuildContext {
-        HirBuildContext::with_details(
-            location,
-            None,
-            self.current_scope_depth(),
-            false,
-        )
+        HirBuildContext::with_details(location, None, self.current_scope_depth(), false)
     }
 
     /// Creates a HirBuildContext with AST node reference
@@ -735,12 +777,7 @@ impl<'a> HirBuilderContext<'a> {
         location: TextLocation,
         ast_node_id: Option<AstNodeId>,
     ) -> HirBuildContext {
-        HirBuildContext::with_details(
-            location,
-            ast_node_id,
-            self.current_scope_depth(),
-            true,
-        )
+        HirBuildContext::with_details(location, ast_node_id, self.current_scope_depth(), true)
     }
 
     /// Records a HIR node with its build context
@@ -776,7 +813,9 @@ impl<'a> HirBuilderContext<'a> {
 
     /// Records a potential last use for a variable
     pub fn record_potential_last_use(&mut self, var: InternedString, location: TextLocation) {
-        self.metadata.ownership_hints.record_potential_last_use(var, location);
+        self.metadata
+            .ownership_hints
+            .record_potential_last_use(var, location);
     }
 
     /// Marks a variable as potentially consumed (moved)
@@ -789,54 +828,6 @@ impl<'a> HirBuilderContext<'a> {
         self.metadata.ownership_hints.is_potentially_owned(var)
     }
 
-    // ========================================================================
-    // Main Build Method
-    // ========================================================================
-
-    /// Builds an HIR module from an AST.
-    /// This is the main entry point for HIR generation.
-    pub fn build_hir_module(mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        // Create the entry block
-        let entry_block_id = self.create_block();
-        self.set_entry_block(entry_block_id);
-
-        // Enter the module scope
-        self.enter_scope_with_block(ScopeType::Function, entry_block_id);
-
-        // Process each AST node
-        for node in &ast.nodes {
-            match self.process_ast_node(node) {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(CompilerMessages {
-                        errors: vec![e],
-                        warnings: ast.warnings,
-                    });
-                }
-            }
-        }
-
-        // Exit the module scope
-        let _dropped_vars = self.exit_scope();
-
-        // Validate the generated HIR
-        let hir_module = HirModule {
-            blocks: self.blocks,
-            entry_block: entry_block_id,
-            functions: self.functions,
-            structs: self.structs,
-        };
-
-        // Run validation
-        match HirValidator::validate_module(&hir_module) {
-            Ok(_) => Ok(hir_module),
-            Err(validation_error) => Err(CompilerMessages {
-                errors: vec![validation_error.into()],
-                warnings: ast.warnings,
-            }),
-        }
-    }
-
     /// Processes a single AST node and generates corresponding HIR
     fn process_ast_node(&mut self, _node: &AstNode) -> Result<Vec<HirNode>, CompilerError> {
         // TODO: Implement AST node processing in subsequent tasks
@@ -845,8 +836,6 @@ impl<'a> HirBuilderContext<'a> {
         Ok(Vec::new())
     }
 }
-
-
 
 // ============================================================================
 // HIR Validation Framework
@@ -911,10 +900,7 @@ pub enum HirValidationError {
         location: Option<TextLocation>,
     },
     /// Block has multiple terminators
-    MultipleTerminators {
-        block_id: BlockId,
-        count: usize,
-    },
+    MultipleTerminators { block_id: BlockId, count: usize },
     /// Variable used before declaration
     UndeclaredVariable {
         variable: String,
@@ -927,9 +913,7 @@ pub enum HirValidationError {
         location: TextLocation,
     },
     /// Block is unreachable from entry
-    UnreachableBlock {
-        block_id: BlockId,
-    },
+    UnreachableBlock { block_id: BlockId },
     /// Branch target references invalid block
     InvalidBranchTarget {
         source_block: BlockId,
@@ -1058,7 +1042,9 @@ impl HirValidator {
         let mut report = ValidationReport::new();
 
         // Invariant 1: No nested expressions
-        report.invariants_checked.push("no_nested_expressions".to_string());
+        report
+            .invariants_checked
+            .push("no_nested_expressions".to_string());
         if let Err(e) = Self::check_no_nested_expressions(hir_module) {
             report.violations_found.push(InvariantViolation {
                 invariant: "no_nested_expressions".to_string(),
@@ -1070,47 +1056,63 @@ impl HirValidator {
         }
 
         // Invariant 2: Explicit terminators
-        report.invariants_checked.push("explicit_terminators".to_string());
+        report
+            .invariants_checked
+            .push("explicit_terminators".to_string());
         if let Err(e) = Self::check_explicit_terminators(hir_module) {
             report.violations_found.push(InvariantViolation {
                 invariant: "explicit_terminators".to_string(),
                 location: None,
                 description: format!("{:?}", e),
-                suggested_fix: Some("Ensure every block ends with exactly one terminator".to_string()),
+                suggested_fix: Some(
+                    "Ensure every block ends with exactly one terminator".to_string(),
+                ),
             });
             return Err(e);
         }
 
         // Invariant 5: Block connectivity
-        report.invariants_checked.push("block_connectivity".to_string());
+        report
+            .invariants_checked
+            .push("block_connectivity".to_string());
         if let Err(e) = Self::check_block_connectivity(hir_module) {
             report.violations_found.push(InvariantViolation {
                 invariant: "block_connectivity".to_string(),
                 location: None,
                 description: format!("{:?}", e),
-                suggested_fix: Some("Remove unreachable blocks or add control flow paths".to_string()),
+                suggested_fix: Some(
+                    "Remove unreachable blocks or add control flow paths".to_string(),
+                ),
             });
             return Err(e);
         }
 
         // Invariant 6: Terminator target validity
-        report.invariants_checked.push("terminator_targets".to_string());
+        report
+            .invariants_checked
+            .push("terminator_targets".to_string());
         if let Err(e) = Self::check_terminator_targets(hir_module) {
             report.violations_found.push(InvariantViolation {
                 invariant: "terminator_targets".to_string(),
                 location: None,
                 description: format!("{:?}", e),
-                suggested_fix: Some("Ensure all branch targets reference valid block IDs".to_string()),
+                suggested_fix: Some(
+                    "Ensure all branch targets reference valid block IDs".to_string(),
+                ),
             });
             return Err(e);
         }
 
         // Invariant 3: Variable declaration order
-        report.invariants_checked.push("variable_declaration_order".to_string());
+        report
+            .invariants_checked
+            .push("variable_declaration_order".to_string());
         Self::check_variable_declaration_order(hir_module)?;
 
         // Invariant 7: Assignment discipline
-        report.invariants_checked.push("assignment_discipline".to_string());
+        report
+            .invariants_checked
+            .push("assignment_discipline".to_string());
         Self::check_assignment_discipline(hir_module)?;
 
         // Invariant 4: Drop coverage
@@ -1152,9 +1154,7 @@ impl HirValidator {
 
     /// Checks that no expressions contain deeply nested expressions.
     /// All expressions in HIR should be mostly flat.
-    pub fn check_no_nested_expressions(
-        hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
+    pub fn check_no_nested_expressions(hir_module: &HirModule) -> Result<(), HirValidationError> {
         for block in &hir_module.blocks {
             for node in &block.nodes {
                 Self::check_node_expressions_flat(node)?;
@@ -1186,7 +1186,7 @@ impl HirValidator {
         location: &TextLocation,
     ) -> Result<(), HirValidationError> {
         use crate::compiler::hir::nodes::HirStmt;
-        
+
         match stmt {
             HirStmt::Assign { value, .. } => {
                 Self::check_expr_nesting_depth(value, 0, location)?;
@@ -1209,8 +1209,10 @@ impl HirValidator {
             HirStmt::ExprStmt(expr) => {
                 Self::check_expr_nesting_depth(expr, 0, location)?;
             }
-            HirStmt::PossibleDrop(_) | HirStmt::TemplateFn { .. } 
-            | HirStmt::FunctionDef { .. } | HirStmt::StructDef { .. } => {}
+            HirStmt::PossibleDrop(_)
+            | HirStmt::TemplateFn { .. }
+            | HirStmt::FunctionDef { .. }
+            | HirStmt::StructDef { .. } => {}
         }
         Ok(())
     }
@@ -1221,7 +1223,7 @@ impl HirValidator {
         location: &TextLocation,
     ) -> Result<(), HirValidationError> {
         use crate::compiler::hir::nodes::HirTerminator;
-        
+
         match term {
             HirTerminator::If { condition, .. } => {
                 Self::check_expr_nesting_depth(condition, 0, location)?;
@@ -1269,10 +1271,15 @@ impl HirValidator {
 
         match &expr.kind {
             // Simple expressions - no nesting
-            HirExprKind::Int(_) | HirExprKind::Float(_) | HirExprKind::Bool(_)
-            | HirExprKind::StringLiteral(_) | HirExprKind::HeapString(_)
-            | HirExprKind::Char(_) | HirExprKind::Load(_)
-            | HirExprKind::Field { .. } | HirExprKind::Move(_) => Ok(()),
+            HirExprKind::Int(_)
+            | HirExprKind::Float(_)
+            | HirExprKind::Bool(_)
+            | HirExprKind::StringLiteral(_)
+            | HirExprKind::HeapString(_)
+            | HirExprKind::Char(_)
+            | HirExprKind::Load(_)
+            | HirExprKind::Field { .. }
+            | HirExprKind::Move(_) => Ok(()),
 
             HirExprKind::BinOp { left, right, .. } => {
                 Self::check_expr_nesting_depth(left, current_depth + 1, location)?;
@@ -1314,9 +1321,7 @@ impl HirValidator {
     }
 
     /// Checks that every block ends in exactly one terminator.
-    pub fn check_explicit_terminators(
-        hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
+    pub fn check_explicit_terminators(hir_module: &HirModule) -> Result<(), HirValidationError> {
         for block in &hir_module.blocks {
             let terminator_count = Self::count_terminators_in_block(block);
 
@@ -1345,12 +1350,19 @@ impl HirValidator {
 
     /// Counts the number of terminator nodes in a block
     fn count_terminators_in_block(block: &HirBlock) -> usize {
-        block.nodes.iter().filter(|n| Self::is_terminator(n)).count()
+        block
+            .nodes
+            .iter()
+            .filter(|n| Self::is_terminator(n))
+            .count()
     }
 
     /// Checks if a node is a terminator
     pub fn is_terminator(node: &HirNode) -> bool {
-        matches!(node.kind, crate::compiler::hir::nodes::HirKind::Terminator(_))
+        matches!(
+            node.kind,
+            crate::compiler::hir::nodes::HirKind::Terminator(_)
+        )
     }
 
     /// Checks if a node is a statement
@@ -1359,9 +1371,7 @@ impl HirValidator {
     }
 
     /// Checks that all blocks are reachable from the entry block.
-    pub fn check_block_connectivity(
-        hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
+    pub fn check_block_connectivity(hir_module: &HirModule) -> Result<(), HirValidationError> {
         if hir_module.blocks.is_empty() {
             return Ok(());
         }
@@ -1400,13 +1410,21 @@ impl HirValidator {
         for node in &block.nodes {
             if let crate::compiler::hir::nodes::HirKind::Terminator(term) = &node.kind {
                 match term {
-                    crate::compiler::hir::nodes::HirTerminator::If { then_block, else_block, .. } => {
+                    crate::compiler::hir::nodes::HirTerminator::If {
+                        then_block,
+                        else_block,
+                        ..
+                    } => {
                         successors.push(*then_block);
                         if let Some(else_id) = else_block {
                             successors.push(*else_id);
                         }
                     }
-                    crate::compiler::hir::nodes::HirTerminator::Match { arms, default_block, .. } => {
+                    crate::compiler::hir::nodes::HirTerminator::Match {
+                        arms,
+                        default_block,
+                        ..
+                    } => {
                         for arm in arms {
                             successors.push(arm.body);
                         }
@@ -1417,7 +1435,7 @@ impl HirValidator {
                     crate::compiler::hir::nodes::HirTerminator::Loop { body, .. } => {
                         successors.push(*body);
                     }
-                    crate::compiler::hir::nodes::HirTerminator::Break { target } 
+                    crate::compiler::hir::nodes::HirTerminator::Break { target }
                     | crate::compiler::hir::nodes::HirTerminator::Continue { target } => {
                         successors.push(*target);
                     }
@@ -1432,9 +1450,7 @@ impl HirValidator {
     }
 
     /// Checks that all branch targets reference valid block IDs.
-    pub fn check_terminator_targets(
-        hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
+    pub fn check_terminator_targets(hir_module: &HirModule) -> Result<(), HirValidationError> {
         let valid_block_ids: HashSet<BlockId> = hir_module.blocks.iter().map(|b| b.id).collect();
 
         for block in &hir_module.blocks {
@@ -1460,22 +1476,21 @@ impl HirValidator {
     }
 
     /// Checks that all ownership-capable variables have possible_drop on every exit path.
-    pub fn check_drop_coverage(
-        _hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
+    pub fn check_drop_coverage(_hir_module: &HirModule) -> Result<(), HirValidationError> {
         // Placeholder - full implementation requires control flow analysis
         Ok(())
     }
 
     /// Checks that assignments follow proper discipline.
-    pub fn check_assignment_discipline(
-        hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
+    pub fn check_assignment_discipline(hir_module: &HirModule) -> Result<(), HirValidationError> {
         for block in &hir_module.blocks {
             for node in &block.nodes {
                 if let crate::compiler::hir::nodes::HirKind::Stmt(
-                    crate::compiler::hir::nodes::HirStmt::Assign { target, is_mutable, .. }
-                ) = &node.kind {
+                    crate::compiler::hir::nodes::HirStmt::Assign {
+                        target, is_mutable, ..
+                    },
+                ) = &node.kind
+                {
                     Self::check_assignment_target_valid(target, *is_mutable, &node.location)?;
                 }
             }

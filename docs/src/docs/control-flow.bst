@@ -66,31 +66,37 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 ```
 
 # Pattern matching
+Pattern matching is done by extending an if statement with a new keyword "case".
+
+This can be used in between the first if condition and an optional else keyword.
 
 ```beanstalk
     -- Pattern matching
-    -- Must be exhaustive
     thing = 69
-    if thing is:
-        0: io("zero");
-        < 0: io("negative");
-        > 1: io("big number");
-        not 5: io("not 5");
-        else: io("only one");
-    ;
 
+    if thing is 0:
+        io("zero")
+    case < 0
+        io("negative")
+    case > 1
+        io("big number")
+    case not 5
+        io("not 5")
+    else
+        io("only one")
+    ;
+    
     -- Matching choices
-    if Catagory is:
-        Category::A: io("Category A");
-        Category::B: io("Category B");
-        Catagory::C |message|: 
-            io([:Category C with message: [message]])
-        ;
-        else: io("Other Category");
+    if Catagory is Category::A:
+        io("Category A")
+    case Category::B
+        io("Category B")
+    case Catagory::C |message| 
+        io([:Category C with message: [message]])
     ;
 
     loop c in collection_of_choices:
-        if c is Thing::cool: 
+        if c is Thing::cool:
             io(..)
         else
             io(..)
