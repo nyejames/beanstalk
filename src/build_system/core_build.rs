@@ -90,8 +90,12 @@ pub fn compile_modules(
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
 
+    // Module capacity heuristic
+    // Just a guess of how many strings we might need to intern per module
+    const MODULES_CAPACITY: usize = 16;
+
     // Create a new string table for interning strings
-    let mut string_table = StringTable::new();
+    let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
 
     let runtime_backend = RuntimeBackend::default();
 
@@ -116,7 +120,7 @@ pub fn compile_modules(
         .collect();
 
     // Check for any errors first
-    let mut project_tokens = Vec::new();
+    let mut project_tokens = Vec::with_capacity(tokenizer_result.len());
     let mut errors: Vec<CompilerError> = Vec::new();
     for file in tokenizer_result {
         match file {
