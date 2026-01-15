@@ -132,6 +132,7 @@ mod compiler {
     }
 
     pub(crate) mod lir {
+        pub(crate) mod lower_to_lir;
         pub(crate) mod nodes;
     }
 
@@ -151,8 +152,9 @@ use crate::compiler::codegen::wasm::encode::encode_wasm;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::build_hir::HirBuilderContext;
-use crate::compiler::hir::nodes::{HirModule, HirNode};
+use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::interned_path::InternedPath;
+use crate::compiler::lir::lower_to_lir::lower_hir_to_lir;
 use crate::compiler::lir::nodes::LirModule;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
@@ -313,21 +315,40 @@ impl<'a> Compiler<'a> {
     //     check_borrows(hir_nodes, &mut self.string_table)
     // }
 
-    // TODO
     /// -----------------------------
     ///         LIR GENERATION
     /// -----------------------------
-    /// Generate LIR from HIR nodes.
-    /// LIR is a representation designed for lowering to Was
-    // pub fn generate_lir(&mut self, hir_nodes: &[HirNode]) -> Result<LirModule, CompilerError> {
-    //     lower_to_lir(hir_nodes, &self.string_table)
-    // }
+    /// Generate LIR from a validated HIR module.
+    /// 
+    /// This stage transforms the high-level, language-shaped HIR into the
+    /// low-level, WASM-shaped LIR. The transformation:
+    /// - Resolves ownership decisions using runtime tagged pointers
+    /// - Lowers control flow structures to WASM-compatible blocks
+    /// - Converts RPN-ordered expressions into stack-based LIR instructions
+    /// - Lowers struct field access and collection operations to concrete memory offsets
+    /// - Allocates and tracks WASM locals for variables and temporaries
+    ///
+    /// **Validates: Requirements 8.1, 8.2, 8.4**
+    pub fn generate_lir(&self, hir_module: HirModule) -> Result<LirModule, CompilerMessages> {
+        let lir_module = lower_hir_to_lir(hir_module)?;
+        
+        // Display LIR if the show_lir feature is enabled
+        #[cfg(feature = "show_lir")]
+        {
+            use crate::compiler::lir::lower_to_lir::display_lir;
+            println!("{}", display_lir(&lir_module));
+        }
+        
+        Ok(lir_module)
+    }
 
-    // TODO
     /// -----------------------------
     ///         Wasm Codegen
     /// -----------------------------
-    /// Lower to wasm bytes from the lir
+    /// Lower to wasm bytes from the LIR.
+    /// 
+    /// This is the final stage of the compilation pipeline that produces
+    /// the actual WebAssembly bytecode from the LIR module.
     pub fn generate_wasm(&self, lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
         encode_wasm(lir)
     }

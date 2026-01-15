@@ -6,6 +6,7 @@ show_ast = []
 show_eval = []
 show_codegen = []
 show_hir = []
+show_lir = []
 show_borrow_checker = []
 
 [package]

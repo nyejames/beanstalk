@@ -251,39 +251,42 @@ pub fn compile_modules(
     // ----------------------------------
     //          LIR generation
     // ----------------------------------
-    // NOT IMPLEMENTED YET - RETURNS AN EMPTY MODULE
-    // let lir = match compiler.generate_lir(&hir_nodes) {
-    //     Ok(nodes) => nodes,
-    //     Err(e) => {
-    //         compiler_messages.errors.push(e);
-    //         return Err(compiler_messages);
-    //     }
-    // };
+    let time = Instant::now();
+
+    let lir_module = match compiler.generate_lir(hir_module) {
+        Ok(lir) => lir,
+        Err(e) => {
+            compiler_messages.errors.extend(e.errors);
+            compiler_messages.warnings.extend(e.warnings);
+            return Err(compiler_messages);
+        }
+    };
+
+    timer_log!(time, "LIR generated in: ");
+
+    // Debug output for LIR if enabled
+    #[cfg(feature = "show_lir")]
+    {
+        use crate::compiler::lir::lower_to_lir::display_lir;
+        println!("=== LIR OUTPUT ===");
+        println!("{}", display_lir(&lir_module));
+        println!("=== END LIR OUTPUT ===");
+    }
 
     // ----------------------------------
     //          WASM generation
     // ----------------------------------
-    // NOT IMPLEMENTED YET - RETURNS EMPTY BYTES
-    // let wasm_bytes = match compiler.generate_wasm(&lir) {
-    //     Ok(wasm) => wasm,
-    //     Err(e) => {
-    //         compiler_messages.errors.push(e);
-    //         return Err(compiler_messages);
-    //     }
-    // };
+    let time = Instant::now();
 
-    if !flags.contains(&Flag::DisableTimers) {
-        print!("WASM generated in: ");
-        green_ln!("{:?}", time.elapsed());
-    }
+    let wasm_bytes = match compiler.generate_wasm(&lir_module) {
+        Ok(wasm) => wasm,
+        Err(e) => {
+            compiler_messages.errors.push(e);
+            return Err(compiler_messages);
+        }
+    };
 
-    // -----------------------------------
-    //      Extract required imports
-    // -----------------------------------
-    // let exported_functions = extract_exported_functions(&exported_declarations);
-
-    // Temporary nothing for wasm_bytes
-    let wasm_bytes = Vec::new();
+    timer_log!(time, "WASM generated in: ");
 
     Ok(CompilationResult {
         wasm_bytes,

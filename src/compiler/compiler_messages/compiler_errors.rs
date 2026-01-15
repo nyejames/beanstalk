@@ -328,6 +328,16 @@ impl CompilerError {
         }
     }
 
+    /// Create an LIR transformation error (for HIR to LIR lowering failures)
+    pub fn lir_transformation(msg: impl Into<String>) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location: ErrorLocation::default(),
+            error_type: ErrorType::LirTransformation,
+            metadata: HashMap::new(),
+        }
+    }
+
     /// Create a new borrow checker error with metadata
     pub fn new_borrow_checker_error(
         msg: impl Into<String>,
