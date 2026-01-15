@@ -4238,3 +4238,52 @@ mod module_validation_tests {
         );
     }
 }
+
+// ============================================================================
+// Memory Layout Tests (moved from src/compiler/codegen/wasm/memory_layout.rs)
+// ============================================================================
+
+#[cfg(test)]
+mod memory_layout_tests {
+    use crate::compiler::codegen::wasm::memory_layout::{
+        align_to, alignment_for_lir_type, size_for_lir_type, MemoryLayoutCalculator,
+    };
+    use crate::compiler::lir::nodes::LirType;
+
+    #[test]
+    fn test_align_to() {
+        assert_eq!(align_to(0, 4), 0);
+        assert_eq!(align_to(1, 4), 4);
+        assert_eq!(align_to(4, 4), 4);
+        assert_eq!(align_to(5, 4), 8);
+        assert_eq!(align_to(7, 8), 8);
+        assert_eq!(align_to(8, 8), 8);
+        assert_eq!(align_to(9, 8), 16);
+    }
+
+    #[test]
+    fn test_alignment_for_lir_type() {
+        assert_eq!(alignment_for_lir_type(LirType::I32), 4);
+        assert_eq!(alignment_for_lir_type(LirType::I64), 8);
+        assert_eq!(alignment_for_lir_type(LirType::F32), 4);
+        assert_eq!(alignment_for_lir_type(LirType::F64), 8);
+    }
+
+    #[test]
+    fn test_size_for_lir_type() {
+        assert_eq!(size_for_lir_type(LirType::I32), 4);
+        assert_eq!(size_for_lir_type(LirType::I64), 8);
+        assert_eq!(size_for_lir_type(LirType::F32), 4);
+        assert_eq!(size_for_lir_type(LirType::F64), 8);
+    }
+
+    #[test]
+    fn test_calculate_aligned_size() {
+        let calc = MemoryLayoutCalculator::new();
+        assert_eq!(calc.calculate_aligned_size(0), 0);
+        assert_eq!(calc.calculate_aligned_size(1), 2);
+        assert_eq!(calc.calculate_aligned_size(2), 2);
+        assert_eq!(calc.calculate_aligned_size(3), 4);
+        assert_eq!(calc.calculate_aligned_size(4), 4);
+    }
+}

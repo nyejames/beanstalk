@@ -8,10 +8,20 @@ pub(crate) mod compiler_tests {
     #[cfg(test)]
     pub(crate) mod control_flow_linearizer_tests;
     #[cfg(test)]
+    pub(crate) mod drop_point_inserter_tests;
+    #[cfg(test)]
     pub(crate) mod expression_linearizer_tests;
     #[cfg(test)]
+    pub(crate) mod function_transformer_tests;
+    #[cfg(test)]
     pub(crate) mod hir_builder_tests;
+    #[cfg(test)]
+    pub(crate) mod hir_errors_tests;
+    #[cfg(test)]
+    pub(crate) mod struct_handler_tests;
     pub(crate) mod test_runner;
+    #[cfg(test)]
+    pub(crate) mod template_processor_tests;
     #[cfg(test)]
     pub(crate) mod variable_manager_tests;
     #[cfg(test)]
@@ -107,9 +117,18 @@ mod compiler {
         pub(crate) mod build_hir;
         pub(crate) mod control_flow_linearizer;
         pub(crate) mod display_hir;
+        pub(crate) mod errors;
         pub(crate) mod expression_linearizer;
+        pub(crate) mod function_transformer;
         pub(crate) mod nodes;
+        pub(crate) mod struct_handler;
+        pub(crate) mod template_processor;
+        pub(crate) mod validator;
         pub(crate) mod variable_manager;
+        
+        pub(crate) mod memory_management {
+            pub(crate) mod drop_point_inserter;
+        }
     }
 
     pub(crate) mod lir {
@@ -272,7 +291,15 @@ impl<'a> Compiler<'a> {
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
         let ctx = HirBuilderContext::new(&mut self.string_table);
-        ctx.build_hir_module(ast)
+        let hir_module = ctx.build_hir_module(ast)?;
+        
+        // Display HIR if the show_hir feature is enabled
+        #[cfg(feature = "show_hir")]
+        {
+            println!("{}", hir_module.debug_string(&self.string_table));
+        }
+        
+        Ok(hir_module)
     }
 
     // TODO

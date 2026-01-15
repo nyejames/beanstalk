@@ -116,13 +116,11 @@ impl ExpressionLinearizer {
                 self.linearize_range(start, end, &expr.data_type, &expr.location, ctx)
             }
 
-            // Templates - handled separately by template processor
-            ExpressionKind::Template(_) => {
-                // Templates should be processed by the TemplateProcessor component
-                // For now, return a placeholder
-                return_compiler_error!(
-                    "Templates should be processed by TemplateProcessor, not ExpressionLinearizer"
-                )
+            // Templates - handled by template processor
+            ExpressionKind::Template(template) => {
+                // Use the TemplateProcessor to handle templates
+                let mut template_processor = crate::compiler::hir::template_processor::TemplateProcessor::new();
+                template_processor.process_template(template, ctx)
             }
 
             // Functions as values
@@ -518,7 +516,7 @@ impl ExpressionLinearizer {
     }
 
     /// Linearizes an AST node into HIR.
-    fn linearize_ast_node(
+    pub fn linearize_ast_node(
         &mut self,
         node: &AstNode,
         ctx: &mut HirBuilderContext,

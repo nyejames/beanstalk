@@ -15,19 +15,30 @@
 //! - `AstHirMapping`: Maps between AST and HIR nodes for error reporting
 //! - `OwnershipHints`: Conservative hints for ownership (not authoritative)
 
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, ErrorLocation};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::datatypes::DataType;
-use crate::compiler::hir::nodes::{BlockId, HirBlock, HirModule, HirNode, HirNodeId};
+use crate::compiler::hir::control_flow_linearizer::ControlFlowLinearizer;
+use crate::compiler::hir::expression_linearizer::ExpressionLinearizer;
+use crate::compiler::hir::function_transformer::FunctionTransformer;
+use crate::compiler::hir::memory_management::drop_point_inserter::DropPointInserter;
+use crate::compiler::hir::nodes::{BlockId, HirBlock, HirKind, HirModule, HirNode, HirNodeId, HirStmt, HirExpr, HirExprKind, HirPlace};
+use crate::compiler::hir::struct_handler::StructHandler;
+use crate::compiler::hir::template_processor::TemplateProcessor;
+use crate::compiler::hir::variable_manager::VariableManager;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::ast_nodes::AstNode;
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::{InternedString, StringTable};
 use std::collections::{HashMap, HashSet};
 
+// Re-export validator types for backward compatibility
+pub use crate::compiler::hir::validator::{HirValidator, HirValidationError};
+
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
 // ============================================================================
+
 
 /// Extended context information attached to HIR nodes for debugging and error reporting.
 /// This structure preserves the connection between HIR nodes and their source AST.
@@ -493,6 +504,27 @@ pub struct HirBuilderContext<'a> {
 
     /// Entry block ID
     entry_block: Option<BlockId>,
+
+    /// Expression linearizer component
+    expression_linearizer: ExpressionLinearizer,
+
+    /// Control flow linearizer component
+    control_flow_linearizer: ControlFlowLinearizer,
+
+    /// Variable manager component
+    variable_manager: VariableManager,
+
+    /// Drop point inserter component
+    drop_inserter: DropPointInserter,
+
+    /// Function transformer component
+    function_transformer: FunctionTransformer,
+
+    /// Struct handler component
+    struct_handler: StructHandler,
+
+    /// Template processor component
+    template_processor: TemplateProcessor,
 }
 
 impl<'a> HirBuilderContext<'a> {
@@ -513,6 +545,13 @@ impl<'a> HirBuilderContext<'a> {
             metadata: HirGenerationMetadata::new(),
             ast_hir_mapping: AstHirMapping::new(),
             entry_block: None,
+            expression_linearizer: ExpressionLinearizer::new(),
+            control_flow_linearizer: ControlFlowLinearizer::new(),
+            variable_manager: VariableManager::new(),
+            drop_inserter: DropPointInserter::new(),
+            function_transformer: FunctionTransformer::new(),
+            struct_handler: StructHandler::new(),
+            template_processor: TemplateProcessor::new(),
         }
     }
 
@@ -828,690 +867,470 @@ impl<'a> HirBuilderContext<'a> {
         self.metadata.ownership_hints.is_potentially_owned(var)
     }
 
+    /// Gets a mutable reference to the function transformer
+    pub fn function_transformer_mut(
+        &mut self,
+    ) -> &mut crate::compiler::hir::function_transformer::FunctionTransformer {
+        &mut self.function_transformer
+    }
+
+    /// Gets a reference to the function transformer
+    pub fn function_transformer(
+        &self,
+    ) -> &crate::compiler::hir::function_transformer::FunctionTransformer {
+        &self.function_transformer
+    }
+
+    /// Gets a mutable reference to the struct handler
+    pub fn struct_handler_mut(&mut self) -> &mut StructHandler {
+        &mut self.struct_handler
+    }
+
+    /// Gets a reference to the struct handler
+    pub fn struct_handler(&self) -> &StructHandler {
+        &self.struct_handler
+    }
+
     /// Processes a single AST node and generates corresponding HIR
-    fn process_ast_node(&mut self, _node: &AstNode) -> Result<Vec<HirNode>, CompilerError> {
-        // TODO: Implement AST node processing in subsequent tasks
-        // This is a placeholder that will be filled in by Task 3 (expression linearization)
-        // and Task 4 (control flow linearization)
-        Ok(Vec::new())
-    }
-}
-
-// ============================================================================
-// HIR Validation Framework
-// ============================================================================
-
-/// Report from HIR validation
-#[derive(Debug, Clone)]
-pub struct ValidationReport {
-    /// List of invariants that were checked
-    pub invariants_checked: Vec<String>,
-    /// Any violations found
-    pub violations_found: Vec<InvariantViolation>,
-    /// Warnings (non-fatal issues)
-    pub warnings: Vec<String>,
-}
-
-impl ValidationReport {
-    pub fn new() -> Self {
-        ValidationReport {
-            invariants_checked: Vec::new(),
-            violations_found: Vec::new(),
-            warnings: Vec::new(),
-        }
-    }
-
-    /// Returns true if validation passed (no violations)
-    pub fn is_valid(&self) -> bool {
-        self.violations_found.is_empty()
-    }
-}
-
-impl Default for ValidationReport {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// A specific invariant violation found during validation
-#[derive(Debug, Clone)]
-pub struct InvariantViolation {
-    /// Name of the invariant that was violated
-    pub invariant: String,
-    /// Location in source code (if available)
-    pub location: Option<TextLocation>,
-    /// Description of the violation
-    pub description: String,
-    /// Suggested fix (if any)
-    pub suggested_fix: Option<String>,
-}
-
-/// Errors that can occur during HIR validation
-#[derive(Debug, Clone)]
-pub enum HirValidationError {
-    /// Found a nested expression where flat expression was expected
-    NestedExpression {
-        location: TextLocation,
-        expression: String,
-    },
-    /// Block is missing a terminator
-    MissingTerminator {
-        block_id: BlockId,
-        location: Option<TextLocation>,
-    },
-    /// Block has multiple terminators
-    MultipleTerminators { block_id: BlockId, count: usize },
-    /// Variable used before declaration
-    UndeclaredVariable {
-        variable: String,
-        location: TextLocation,
-    },
-    /// Missing drop for a variable on an exit path
-    MissingDrop {
-        variable: String,
-        exit_path: String,
-        location: TextLocation,
-    },
-    /// Block is unreachable from entry
-    UnreachableBlock { block_id: BlockId },
-    /// Branch target references invalid block
-    InvalidBranchTarget {
-        source_block: BlockId,
-        target_block: BlockId,
-    },
-    /// Invalid assignment
-    InvalidAssignment {
-        variable: String,
-        location: TextLocation,
-        reason: String,
-    },
-}
-
-impl From<HirValidationError> for CompilerError {
-    fn from(error: HirValidationError) -> Self {
-        match error {
-            HirValidationError::NestedExpression {
-                location,
-                expression,
-            } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: nested expression found: {}",
-                    expression
-                ),
-                location.to_error_location_without_table(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::MissingTerminator { block_id, location } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: block {} is missing a terminator",
-                    block_id
-                ),
-                location
-                    .map(|l| l.to_error_location_without_table())
-                    .unwrap_or_else(ErrorLocation::default),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::MultipleTerminators { block_id, count } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: block {} has {} terminators (expected 1)",
-                    block_id, count
-                ),
-                ErrorLocation::default(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::UndeclaredVariable { variable, location } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: variable '{}' used before declaration",
-                    variable
-                ),
-                location.to_error_location_without_table(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::MissingDrop {
-                variable,
-                exit_path,
-                location,
-            } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: missing drop for '{}' on exit path '{}'",
-                    variable, exit_path
-                ),
-                location.to_error_location_without_table(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::UnreachableBlock { block_id } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: block {} is unreachable from entry",
-                    block_id
-                ),
-                ErrorLocation::default(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::InvalidBranchTarget {
-                source_block,
-                target_block,
-            } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: block {} branches to invalid block {}",
-                    source_block, target_block
-                ),
-                ErrorLocation::default(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-            HirValidationError::InvalidAssignment {
-                variable,
-                location,
-                reason,
-            } => CompilerError::new(
-                format!(
-                    "HIR invariant violation: invalid assignment to '{}': {}",
-                    variable, reason
-                ),
-                location.to_error_location_without_table(),
-                crate::compiler::compiler_errors::ErrorType::HirTransformation,
-            ),
-        }
-    }
-}
-
-/// HIR Validator - validates HIR invariants
-///
-/// The validator checks that the generated HIR conforms to all required invariants.
-/// These invariants turn the design document into an executable contract.
-///
-/// ## Core HIR Invariants
-///
-/// 1. **No Nested Expressions**: All expressions in HIR are flat
-/// 2. **Explicit Terminators**: Every HIR block ends in exactly one terminator
-/// 3. **Variable Declaration Before Use**: All variables are declared before any use
-/// 4. **Drop Coverage**: All ownership-capable variables have possible_drop on exit paths
-/// 5. **Block Connectivity**: All HIR blocks are reachable from the entry block
-/// 6. **Terminator Target Validity**: All branch targets reference valid block IDs
-/// 7. **Assignment Discipline**: Assignments must be explicit and properly ordered
-pub struct HirValidator;
-
-impl HirValidator {
-    /// Maximum allowed expression nesting depth.
-    /// HIR expressions should be mostly flat. We allow limited nesting
-    /// for binary operations, but operands should be simple.
-    const MAX_EXPRESSION_DEPTH: usize = 2;
-
-    /// Validates all HIR invariants on a module.
-    /// Returns a validation report with all checked invariants and any violations.
-    pub fn validate_module(hir_module: &HirModule) -> Result<ValidationReport, HirValidationError> {
-        let mut report = ValidationReport::new();
-
-        // Invariant 1: No nested expressions
-        report
-            .invariants_checked
-            .push("no_nested_expressions".to_string());
-        if let Err(e) = Self::check_no_nested_expressions(hir_module) {
-            report.violations_found.push(InvariantViolation {
-                invariant: "no_nested_expressions".to_string(),
-                location: None,
-                description: format!("{:?}", e),
-                suggested_fix: Some("Flatten nested expressions into temporaries".to_string()),
-            });
-            return Err(e);
-        }
-
-        // Invariant 2: Explicit terminators
-        report
-            .invariants_checked
-            .push("explicit_terminators".to_string());
-        if let Err(e) = Self::check_explicit_terminators(hir_module) {
-            report.violations_found.push(InvariantViolation {
-                invariant: "explicit_terminators".to_string(),
-                location: None,
-                description: format!("{:?}", e),
-                suggested_fix: Some(
-                    "Ensure every block ends with exactly one terminator".to_string(),
-                ),
-            });
-            return Err(e);
-        }
-
-        // Invariant 5: Block connectivity
-        report
-            .invariants_checked
-            .push("block_connectivity".to_string());
-        if let Err(e) = Self::check_block_connectivity(hir_module) {
-            report.violations_found.push(InvariantViolation {
-                invariant: "block_connectivity".to_string(),
-                location: None,
-                description: format!("{:?}", e),
-                suggested_fix: Some(
-                    "Remove unreachable blocks or add control flow paths".to_string(),
-                ),
-            });
-            return Err(e);
-        }
-
-        // Invariant 6: Terminator target validity
-        report
-            .invariants_checked
-            .push("terminator_targets".to_string());
-        if let Err(e) = Self::check_terminator_targets(hir_module) {
-            report.violations_found.push(InvariantViolation {
-                invariant: "terminator_targets".to_string(),
-                location: None,
-                description: format!("{:?}", e),
-                suggested_fix: Some(
-                    "Ensure all branch targets reference valid block IDs".to_string(),
-                ),
-            });
-            return Err(e);
-        }
-
-        // Invariant 3: Variable declaration order
-        report
-            .invariants_checked
-            .push("variable_declaration_order".to_string());
-        Self::check_variable_declaration_order(hir_module)?;
-
-        // Invariant 7: Assignment discipline
-        report
-            .invariants_checked
-            .push("assignment_discipline".to_string());
-        Self::check_assignment_discipline(hir_module)?;
-
-        // Invariant 4: Drop coverage
-        report.invariants_checked.push("drop_coverage".to_string());
-        Self::check_drop_coverage(hir_module)?;
-
-        Ok(report)
-    }
-
-    /// Validates a single block's invariants
-    pub fn validate_block(block: &HirBlock) -> Result<(), HirValidationError> {
-        // Check expression flatness
-        for node in &block.nodes {
-            Self::check_node_expressions_flat(node)?;
-        }
-
-        // Check terminator presence (non-empty blocks must have exactly one terminator)
-        if !block.nodes.is_empty() {
-            let terminator_count = Self::count_terminators_in_block(block);
-            if terminator_count == 0 {
-                if let Some(last_node) = block.nodes.last() {
-                    if !Self::is_terminator(last_node) {
-                        return Err(HirValidationError::MissingTerminator {
-                            block_id: block.id,
-                            location: Some(last_node.location.clone()),
-                        });
-                    }
-                }
-            } else if terminator_count > 1 {
-                return Err(HirValidationError::MultipleTerminators {
-                    block_id: block.id,
-                    count: terminator_count,
-                });
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Checks that no expressions contain deeply nested expressions.
-    /// All expressions in HIR should be mostly flat.
-    pub fn check_no_nested_expressions(hir_module: &HirModule) -> Result<(), HirValidationError> {
-        for block in &hir_module.blocks {
-            for node in &block.nodes {
-                Self::check_node_expressions_flat(node)?;
-            }
-        }
-        // Also check function definitions
-        for func in &hir_module.functions {
-            Self::check_node_expressions_flat(func)?;
-        }
-        Ok(())
-    }
-
-    /// Helper to check that expressions in a node are flat
-    fn check_node_expressions_flat(node: &HirNode) -> Result<(), HirValidationError> {
+    fn process_ast_node(&mut self, node: &AstNode) -> Result<Vec<HirNode>, CompilerError> {
         match &node.kind {
-            crate::compiler::hir::nodes::HirKind::Stmt(stmt) => {
-                Self::check_stmt_expressions_flat(stmt, &node.location)?;
+            NodeKind::Function(name, signature, body) => {
+                // We need to work around the borrow checker here
+                // Take the transformer temporarily
+                let mut transformer = std::mem::replace(
+                    &mut self.function_transformer,
+                    FunctionTransformer::new(),
+                );
+                
+                let result = transformer.transform_function_definition(
+                    *name,
+                    signature.clone(),
+                    body,
+                    self,
+                    node.location.clone(),
+                );
+                
+                // Put it back
+                self.function_transformer = transformer;
+                
+                let func_node = result?;
+                self.functions.push(func_node.clone());
+                Ok(vec![func_node])
             }
-            crate::compiler::hir::nodes::HirKind::Terminator(term) => {
-                Self::check_terminator_expressions_flat(term, &node.location)?;
+            NodeKind::FunctionCall(name, args, returns, location) => {
+                let mut transformer = std::mem::replace(
+                    &mut self.function_transformer,
+                    FunctionTransformer::new(),
+                );
+                
+                let result = transformer.transform_function_call_as_stmt(
+                    *name,
+                    args,
+                    returns,
+                    self,
+                    location,
+                );
+                
+                self.function_transformer = transformer;
+                result
             }
-        }
-        Ok(())
-    }
-
-    /// Checks that expressions in a statement are flat
-    fn check_stmt_expressions_flat(
-        stmt: &crate::compiler::hir::nodes::HirStmt,
-        location: &TextLocation,
-    ) -> Result<(), HirValidationError> {
-        use crate::compiler::hir::nodes::HirStmt;
-
-        match stmt {
-            HirStmt::Assign { value, .. } => {
-                Self::check_expr_nesting_depth(value, 0, location)?;
+            NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => {
+                let mut transformer = std::mem::replace(
+                    &mut self.function_transformer,
+                    FunctionTransformer::new(),
+                );
+                
+                let result = transformer.transform_host_function_call_as_stmt(
+                    *name,
+                    args,
+                    return_types,
+                    *module,
+                    *import,
+                    self,
+                    location,
+                );
+                
+                self.function_transformer = transformer;
+                result
             }
-            HirStmt::Call { args, .. } => {
-                for arg in args {
-                    Self::check_expr_nesting_depth(arg, 0, location)?;
+            NodeKind::Return(exprs) => {
+                let mut transformer = std::mem::replace(
+                    &mut self.function_transformer,
+                    FunctionTransformer::new(),
+                );
+                
+                let result = transformer.transform_return(exprs, self, &node.location);
+                
+                self.function_transformer = transformer;
+                result
+            }
+            NodeKind::StructDefinition(name, fields) => {
+                // Take the struct handler temporarily to work around borrow checker
+                let mut handler = std::mem::replace(
+                    &mut self.struct_handler,
+                    StructHandler::new(),
+                );
+                
+                let result = handler.transform_struct_definition(
+                    *name,
+                    fields,
+                    self,
+                    node.location.clone(),
+                );
+                
+                // Put it back
+                self.struct_handler = handler;
+                
+                let struct_node = result?;
+                self.structs.push(struct_node.clone());
+                Ok(vec![struct_node])
+            }
+            
+            // Variable declarations
+            NodeKind::VariableDeclaration(arg) => {
+                // Use expression linearizer to process the value
+                let mut linearizer = std::mem::replace(
+                    &mut self.expression_linearizer,
+                    ExpressionLinearizer::new(),
+                );
+                
+                let (value_nodes, value_expr) = linearizer.linearize_expression(&arg.value, self)?;
+                self.expression_linearizer = linearizer;
+                
+                let mut nodes = value_nodes;
+                
+                // Create the assignment node for the declaration
+                let is_mutable = arg.value.ownership.is_mutable();
+                let node_id = self.allocate_node_id();
+                let build_context = self.create_build_context(node.location.clone());
+                self.record_node_context(node_id, build_context);
+                
+                let assign_node = HirNode {
+                    kind: HirKind::Stmt(HirStmt::Assign {
+                        target: HirPlace::Var(arg.id),
+                        value: value_expr,
+                        is_mutable,
+                    }),
+                    location: node.location.clone(),
+                    id: node_id,
+                };
+                
+                // Track the variable in variable manager
+                self.variable_manager.enter_scope();
+                
+                // Mark as potentially owned if applicable
+                if self.is_type_ownership_capable(&arg.value.data_type) {
+                    self.mark_potentially_owned(arg.id);
+                    self.add_drop_candidate(arg.id, node.location.clone());
                 }
+                
+                nodes.push(assign_node);
+                Ok(nodes)
             }
-            HirStmt::HostCall { args, .. } => {
-                for arg in args {
-                    Self::check_expr_nesting_depth(arg, 0, location)?;
-                }
+            
+            // Assignments
+            NodeKind::Assignment { target, value } => {
+                // Use expression linearizer to process the value
+                let mut linearizer = std::mem::replace(
+                    &mut self.expression_linearizer,
+                    ExpressionLinearizer::new(),
+                );
+                
+                let (value_nodes, value_expr) = linearizer.linearize_expression(value, self)?;
+                self.expression_linearizer = linearizer;
+                
+                let mut nodes = value_nodes;
+                
+                // Convert target to HirPlace
+                let hir_place = self.convert_target_to_place(target)?;
+                
+                let node_id = self.allocate_node_id();
+                let build_context = self.create_build_context(node.location.clone());
+                self.record_node_context(node_id, build_context);
+                
+                let assign_node = HirNode {
+                    kind: HirKind::Stmt(HirStmt::Assign {
+                        target: hir_place,
+                        value: value_expr,
+                        is_mutable: true,
+                    }),
+                    location: node.location.clone(),
+                    id: node_id,
+                };
+                
+                nodes.push(assign_node);
+                Ok(nodes)
             }
-            HirStmt::RuntimeTemplateCall { captures, .. } => {
-                for capture in captures {
-                    Self::check_expr_nesting_depth(capture, 0, location)?;
-                }
+            
+            // If statements
+            NodeKind::If(condition, then_body, else_body) => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.control_flow_linearizer,
+                    ControlFlowLinearizer::new(),
+                );
+                
+                let result = linearizer.linearize_if_statement(
+                    condition,
+                    then_body,
+                    else_body.as_deref(),
+                    &node.location,
+                    self,
+                );
+                
+                self.control_flow_linearizer = linearizer;
+                result
             }
-            HirStmt::ExprStmt(expr) => {
-                Self::check_expr_nesting_depth(expr, 0, location)?;
+            
+            // For loops
+            NodeKind::ForLoop(binding, iterator, body) => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.control_flow_linearizer,
+                    ControlFlowLinearizer::new(),
+                );
+                
+                let result = linearizer.linearize_for_loop(
+                    binding,
+                    iterator,
+                    body,
+                    &node.location,
+                    self,
+                );
+                
+                self.control_flow_linearizer = linearizer;
+                result
             }
-            HirStmt::PossibleDrop(_)
-            | HirStmt::TemplateFn { .. }
-            | HirStmt::FunctionDef { .. }
-            | HirStmt::StructDef { .. } => {}
-        }
-        Ok(())
-    }
-
-    /// Checks that expressions in a terminator are flat
-    fn check_terminator_expressions_flat(
-        term: &crate::compiler::hir::nodes::HirTerminator,
-        location: &TextLocation,
-    ) -> Result<(), HirValidationError> {
-        use crate::compiler::hir::nodes::HirTerminator;
-
-        match term {
-            HirTerminator::If { condition, .. } => {
-                Self::check_expr_nesting_depth(condition, 0, location)?;
+            
+            // While loops
+            NodeKind::WhileLoop(condition, body) => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.control_flow_linearizer,
+                    ControlFlowLinearizer::new(),
+                );
+                
+                let result = linearizer.linearize_while_loop(
+                    condition,
+                    body,
+                    &node.location,
+                    self,
+                );
+                
+                self.control_flow_linearizer = linearizer;
+                result
             }
-            HirTerminator::Match { scrutinee, .. } => {
-                Self::check_expr_nesting_depth(scrutinee, 0, location)?;
+            
+            // Match expressions
+            NodeKind::Match(scrutinee, arms, default) => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.control_flow_linearizer,
+                    ControlFlowLinearizer::new(),
+                );
+                
+                let result = linearizer.linearize_match(
+                    scrutinee,
+                    arms,
+                    default.as_deref(),
+                    &node.location,
+                    self,
+                );
+                
+                self.control_flow_linearizer = linearizer;
+                result
             }
-            HirTerminator::Loop { iterator, .. } => {
-                if let Some(iter) = iterator {
-                    Self::check_expr_nesting_depth(iter, 0, location)?;
-                }
+            
+            // R-values (expressions as statements)
+            NodeKind::Rvalue(expr) => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.expression_linearizer,
+                    ExpressionLinearizer::new(),
+                );
+                
+                let (mut nodes, result_expr) = linearizer.linearize_expression(expr, self)?;
+                self.expression_linearizer = linearizer;
+                
+                // Create an expression statement for the result
+                let node_id = self.allocate_node_id();
+                let build_context = self.create_build_context(node.location.clone());
+                self.record_node_context(node_id, build_context);
+                
+                let expr_stmt = HirNode {
+                    kind: HirKind::Stmt(HirStmt::ExprStmt(result_expr)),
+                    location: node.location.clone(),
+                    id: node_id,
+                };
+                
+                nodes.push(expr_stmt);
+                Ok(nodes)
             }
-            HirTerminator::Return(exprs) => {
-                for expr in exprs {
-                    Self::check_expr_nesting_depth(expr, 0, location)?;
-                }
+            
+            // Print statements (legacy support)
+            NodeKind::Print(expr) => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.expression_linearizer,
+                    ExpressionLinearizer::new(),
+                );
+                
+                let (mut nodes, result_expr) = linearizer.linearize_expression(expr, self)?;
+                self.expression_linearizer = linearizer;
+                
+                // Create a call to the io host function
+                let io_name = self.string_table.intern("io");
+                let node_id = self.allocate_node_id();
+                let build_context = self.create_build_context(node.location.clone());
+                self.record_node_context(node_id, build_context);
+                
+                let call_node = HirNode {
+                    kind: HirKind::Stmt(HirStmt::Call {
+                        target: io_name,
+                        args: vec![result_expr],
+                    }),
+                    location: node.location.clone(),
+                    id: node_id,
+                };
+                
+                nodes.push(call_node);
+                Ok(nodes)
             }
-            HirTerminator::ReturnError(expr) => {
-                Self::check_expr_nesting_depth(expr, 0, location)?;
+            
+            // Empty nodes - no HIR generated
+            NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => {
+                Ok(Vec::new())
             }
-            HirTerminator::Panic { message } => {
-                if let Some(msg) = message {
-                    Self::check_expr_nesting_depth(msg, 0, location)?;
-                }
+            
+            // Warnings are passed through (no HIR generated)
+            NodeKind::Warning(_) => {
+                Ok(Vec::new())
             }
-            HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {}
-        }
-        Ok(())
-    }
-
-    /// Checks expression nesting depth
-    fn check_expr_nesting_depth(
-        expr: &crate::compiler::hir::nodes::HirExpr,
-        current_depth: usize,
-        location: &TextLocation,
-    ) -> Result<(), HirValidationError> {
-        use crate::compiler::hir::nodes::HirExprKind;
-
-        if current_depth > Self::MAX_EXPRESSION_DEPTH {
-            return Err(HirValidationError::NestedExpression {
-                location: location.clone(),
-                expression: format!("{:?}", expr.kind),
-            });
-        }
-
-        match &expr.kind {
-            // Simple expressions - no nesting
-            HirExprKind::Int(_)
-            | HirExprKind::Float(_)
-            | HirExprKind::Bool(_)
-            | HirExprKind::StringLiteral(_)
-            | HirExprKind::HeapString(_)
-            | HirExprKind::Char(_)
-            | HirExprKind::Load(_)
-            | HirExprKind::Field { .. }
-            | HirExprKind::Move(_) => Ok(()),
-
-            HirExprKind::BinOp { left, right, .. } => {
-                Self::check_expr_nesting_depth(left, current_depth + 1, location)?;
-                Self::check_expr_nesting_depth(right, current_depth + 1, location)
+            
+            // Operators should be handled within expressions
+            NodeKind::Operator(_) => {
+                Ok(Vec::new())
             }
-            HirExprKind::UnaryOp { operand, .. } => {
-                Self::check_expr_nesting_depth(operand, current_depth + 1, location)
-            }
-            HirExprKind::Call { args, .. } => {
-                for arg in args {
-                    Self::check_expr_nesting_depth(arg, current_depth + 1, location)?;
-                }
-                Ok(())
-            }
-            HirExprKind::MethodCall { receiver, args, .. } => {
-                Self::check_expr_nesting_depth(receiver, current_depth + 1, location)?;
-                for arg in args {
-                    Self::check_expr_nesting_depth(arg, current_depth + 1, location)?;
-                }
-                Ok(())
-            }
-            HirExprKind::StructConstruct { fields, .. } => {
-                for (_, field_expr) in fields {
-                    Self::check_expr_nesting_depth(field_expr, current_depth + 1, location)?;
-                }
-                Ok(())
-            }
-            HirExprKind::Collection(exprs) => {
-                for e in exprs {
-                    Self::check_expr_nesting_depth(e, current_depth + 1, location)?;
-                }
-                Ok(())
-            }
-            HirExprKind::Range { start, end } => {
-                Self::check_expr_nesting_depth(start, current_depth + 1, location)?;
-                Self::check_expr_nesting_depth(end, current_depth + 1, location)
-            }
-        }
-    }
-
-    /// Checks that every block ends in exactly one terminator.
-    pub fn check_explicit_terminators(hir_module: &HirModule) -> Result<(), HirValidationError> {
-        for block in &hir_module.blocks {
-            let terminator_count = Self::count_terminators_in_block(block);
-
-            if block.nodes.is_empty() {
-                continue; // Allow empty blocks during construction
-            }
-
-            if terminator_count == 0 {
-                if let Some(last_node) = block.nodes.last() {
-                    if !Self::is_terminator(last_node) {
-                        return Err(HirValidationError::MissingTerminator {
-                            block_id: block.id,
-                            location: Some(last_node.location.clone()),
-                        });
-                    }
-                }
-            } else if terminator_count > 1 {
-                return Err(HirValidationError::MultipleTerminators {
-                    block_id: block.id,
-                    count: terminator_count,
-                });
-            }
-        }
-        Ok(())
-    }
-
-    /// Counts the number of terminator nodes in a block
-    fn count_terminators_in_block(block: &HirBlock) -> usize {
-        block
-            .nodes
-            .iter()
-            .filter(|n| Self::is_terminator(n))
-            .count()
-    }
-
-    /// Checks if a node is a terminator
-    pub fn is_terminator(node: &HirNode) -> bool {
-        matches!(
-            node.kind,
-            crate::compiler::hir::nodes::HirKind::Terminator(_)
-        )
-    }
-
-    /// Checks if a node is a statement
-    pub fn is_statement(node: &HirNode) -> bool {
-        matches!(node.kind, crate::compiler::hir::nodes::HirKind::Stmt(_))
-    }
-
-    /// Checks that all blocks are reachable from the entry block.
-    pub fn check_block_connectivity(hir_module: &HirModule) -> Result<(), HirValidationError> {
-        if hir_module.blocks.is_empty() {
-            return Ok(());
-        }
-
-        let mut reachable: HashSet<BlockId> = HashSet::new();
-        let mut to_visit: Vec<BlockId> = vec![hir_module.entry_block];
-
-        while let Some(block_id) = to_visit.pop() {
-            if reachable.contains(&block_id) {
-                continue;
-            }
-            reachable.insert(block_id);
-
-            if let Some(block) = hir_module.blocks.iter().find(|b| b.id == block_id) {
-                for succ in Self::get_block_successors(block) {
-                    if !reachable.contains(&succ) {
-                        to_visit.push(succ);
-                    }
-                }
-            }
-        }
-
-        for block in &hir_module.blocks {
-            if !reachable.contains(&block.id) {
-                return Err(HirValidationError::UnreachableBlock { block_id: block.id });
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Gets the successor block IDs from a block's terminator
-    pub fn get_block_successors(block: &HirBlock) -> Vec<BlockId> {
-        let mut successors = Vec::new();
-
-        for node in &block.nodes {
-            if let crate::compiler::hir::nodes::HirKind::Terminator(term) = &node.kind {
-                match term {
-                    crate::compiler::hir::nodes::HirTerminator::If {
-                        then_block,
-                        else_block,
-                        ..
-                    } => {
-                        successors.push(*then_block);
-                        if let Some(else_id) = else_block {
-                            successors.push(*else_id);
-                        }
-                    }
-                    crate::compiler::hir::nodes::HirTerminator::Match {
-                        arms,
-                        default_block,
-                        ..
-                    } => {
-                        for arm in arms {
-                            successors.push(arm.body);
-                        }
-                        if let Some(default_id) = default_block {
-                            successors.push(*default_id);
-                        }
-                    }
-                    crate::compiler::hir::nodes::HirTerminator::Loop { body, .. } => {
-                        successors.push(*body);
-                    }
-                    crate::compiler::hir::nodes::HirTerminator::Break { target }
-                    | crate::compiler::hir::nodes::HirTerminator::Continue { target } => {
-                        successors.push(*target);
-                    }
-                    crate::compiler::hir::nodes::HirTerminator::Return(_)
-                    | crate::compiler::hir::nodes::HirTerminator::ReturnError(_)
-                    | crate::compiler::hir::nodes::HirTerminator::Panic { .. } => {}
-                }
-            }
-        }
-
-        successors
-    }
-
-    /// Checks that all branch targets reference valid block IDs.
-    pub fn check_terminator_targets(hir_module: &HirModule) -> Result<(), HirValidationError> {
-        let valid_block_ids: HashSet<BlockId> = hir_module.blocks.iter().map(|b| b.id).collect();
-
-        for block in &hir_module.blocks {
-            for succ in Self::get_block_successors(block) {
-                if !valid_block_ids.contains(&succ) {
-                    return Err(HirValidationError::InvalidBranchTarget {
-                        source_block: block.id,
-                        target_block: succ,
-                    });
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Checks that all variables are declared before use.
-    pub fn check_variable_declaration_order(
-        _hir_module: &HirModule,
-    ) -> Result<(), HirValidationError> {
-        // Placeholder - full implementation requires tracking declarations through control flow
-        Ok(())
-    }
-
-    /// Checks that all ownership-capable variables have possible_drop on every exit path.
-    pub fn check_drop_coverage(_hir_module: &HirModule) -> Result<(), HirValidationError> {
-        // Placeholder - full implementation requires control flow analysis
-        Ok(())
-    }
-
-    /// Checks that assignments follow proper discipline.
-    pub fn check_assignment_discipline(hir_module: &HirModule) -> Result<(), HirValidationError> {
-        for block in &hir_module.blocks {
-            for node in &block.nodes {
-                if let crate::compiler::hir::nodes::HirKind::Stmt(
-                    crate::compiler::hir::nodes::HirStmt::Assign {
-                        target, is_mutable, ..
+            
+            // Field access as statement
+            NodeKind::FieldAccess { base, field, data_type, .. } => {
+                let mut linearizer = std::mem::replace(
+                    &mut self.expression_linearizer,
+                    ExpressionLinearizer::new(),
+                );
+                
+                // Linearize the base expression
+                let (mut nodes, base_expr) = linearizer.linearize_ast_node(base, self)?;
+                self.expression_linearizer = linearizer;
+                
+                // Extract base variable name
+                let base_var = self.extract_base_var_from_expr(&base_expr)?;
+                
+                let field_expr = HirExpr {
+                    kind: HirExprKind::Field {
+                        base: base_var,
+                        field: *field,
                     },
-                ) = &node.kind
-                {
-                    Self::check_assignment_target_valid(target, *is_mutable, &node.location)?;
-                }
+                    data_type: data_type.clone(),
+                    location: node.location.clone(),
+                };
+                
+                let node_id = self.allocate_node_id();
+                let build_context = self.create_build_context(node.location.clone());
+                self.record_node_context(node_id, build_context);
+                
+                let expr_stmt = HirNode {
+                    kind: HirKind::Stmt(HirStmt::ExprStmt(field_expr)),
+                    location: node.location.clone(),
+                    id: node_id,
+                };
+                
+                nodes.push(expr_stmt);
+                Ok(nodes)
+            }
+            
+            // Other node kinds - return empty for now
+            _ => {
+                // For unsupported nodes, return empty
+                // This allows gradual implementation
+                Ok(Vec::new())
             }
         }
-        Ok(())
     }
-
-    /// Checks that an assignment target is valid
-    fn check_assignment_target_valid(
-        target: &crate::compiler::hir::nodes::HirPlace,
-        is_mutable: bool,
-        location: &TextLocation,
-    ) -> Result<(), HirValidationError> {
-        match target {
-            crate::compiler::hir::nodes::HirPlace::Var(_) => Ok(()),
-            crate::compiler::hir::nodes::HirPlace::Field { base, .. } => {
-                Self::check_assignment_target_valid(base, is_mutable, location)
+    
+    // ========================================================================
+    // Helper Methods for AST Processing
+    // ========================================================================
+    
+    /// Converts an AST target node to an HirPlace
+    fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
+        match &target.kind {
+            NodeKind::Rvalue(expr) => {
+                match &expr.kind {
+                    crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(name) => {
+                        Ok(HirPlace::Var(*name))
+                    }
+                    _ => {
+                        crate::return_compiler_error!(
+                            "Unsupported assignment target expression"
+                        )
+                    }
+                }
             }
-            crate::compiler::hir::nodes::HirPlace::Index { base, .. } => {
-                Self::check_assignment_target_valid(base, is_mutable, location)
+            NodeKind::FieldAccess { base, field, .. } => {
+                let base_place = self.convert_target_to_place(base)?;
+                Ok(HirPlace::Field {
+                    base: Box::new(base_place),
+                    field: *field,
+                })
             }
+            _ => {
+                crate::return_compiler_error!(
+                    "Unsupported assignment target node kind"
+                )
+            }
+        }
+    }
+    
+    /// Extracts the base variable name from an HIR expression
+    fn extract_base_var_from_expr(&self, expr: &HirExpr) -> Result<InternedString, CompilerError> {
+        match &expr.kind {
+            HirExprKind::Load(place) => self.extract_var_from_place(place),
+            HirExprKind::Field { base, .. } => Ok(*base),
+            _ => {
+                crate::return_compiler_error!(
+                    "Cannot extract base variable from expression"
+                )
+            }
+        }
+    }
+    
+    /// Extracts the variable name from an HIR place
+    fn extract_var_from_place(&self, place: &HirPlace) -> Result<InternedString, CompilerError> {
+        match place {
+            HirPlace::Var(name) => Ok(*name),
+            HirPlace::Field { base, .. } => self.extract_var_from_place(base),
+            HirPlace::Index { base, .. } => self.extract_var_from_place(base),
+        }
+    }
+    
+    /// Determines if a type is ownership capable
+    fn is_type_ownership_capable(&self, data_type: &DataType) -> bool {
+        match data_type {
+            // Primitive types are typically not ownership capable (copy semantics)
+            DataType::Int | DataType::Float | DataType::Bool | DataType::Char => false,
+            // String slices are borrowed, not owned
+            DataType::String => false,
+            // None type is not ownership capable
+            DataType::None => false,
+            // Collections and structs are ownership capable
+            DataType::Collection(_, _) => true,
+            DataType::Struct(_, _) => true,
+            DataType::Parameters(_) => true,
+            // Templates can be ownership capable
+            DataType::Template => true,
+            // Functions are typically not ownership capable
+            DataType::Function(_, _) => false,
+            // References depend on what they reference
+            DataType::Reference(inner, _) => self.is_type_ownership_capable(inner),
+            // Inferred types are conservatively ownership capable
+            DataType::Inferred => true,
+            // Other types are conservatively ownership capable
+            _ => true,
         }
     }
 }
