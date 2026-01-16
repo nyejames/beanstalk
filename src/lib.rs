@@ -131,10 +131,7 @@ mod compiler {
         }
     }
 
-    pub(crate) mod lir {
-        pub(crate) mod lower_to_lir;
-        pub(crate) mod nodes;
-    }
+    pub(crate) mod lir;
 
     pub(crate) mod codegen {
         pub(crate) mod wasm;
@@ -154,7 +151,7 @@ use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::lir::lower_to_lir::lower_hir_to_lir;
+use crate::compiler::lir::lower_hir_to_lir;
 use crate::compiler::lir::nodes::LirModule;
 use crate::compiler::module_dependencies::resolve_module_dependencies;
 use crate::compiler::parsers::ast::Ast;
@@ -335,7 +332,7 @@ impl<'a> Compiler<'a> {
         // Display LIR if the show_lir feature is enabled
         #[cfg(feature = "show_lir")]
         {
-            use crate::compiler::lir::lower_to_lir::display_lir;
+            use crate::compiler::lir::display_lir;
             println!("{}", display_lir(&lir_module));
         }
         

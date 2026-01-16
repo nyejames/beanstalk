@@ -271,7 +271,7 @@ pub fn compile_modules(
     // Debug output for LIR if enabled
     #[cfg(feature = "show_lir")]
     {
-        use crate::compiler::lir::lower_to_lir::display_lir;
+        use crate::compiler::lir::display_lir;
         println!("=== LIR OUTPUT ===");
         println!("{}", display_lir(&lir_module));
         println!("=== END LIR OUTPUT ===");
