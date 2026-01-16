@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A refreshing Wasm-first language that prioritises safety, simplicity, and a fast compiler.
+  A high level language that prioritises safety, simplicity, and a fast compiler.
 </em></p>
 
 # 🌱
