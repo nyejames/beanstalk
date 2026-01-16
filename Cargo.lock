@@ -72,11 +72,10 @@ dependencies = [
  "colour",
  "fs_extra",
  "quickcheck",
- "quickcheck_macros",
- "wasm-encoder",
+ "wasm-encoder 0.244.0",
  "wasmer",
  "wasmer-types",
- "wasmparser 0.242.0",
+ "wasmparser 0.244.0",
 ]
 
 [[package]]
@@ -1068,17 +1067,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "quickcheck_macros"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f71ee38b42f8459a88d3362be6f9b841ad2d5421844f61eb1c59c11bff3ac14a"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.111",
-]
-
-[[package]]
 name = "quote"
 version = "1.0.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1652,6 +1640,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.244.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "990065f2fe63003fe337b932cfb5e3b80e0b4d0f5ff650e6985b1048f62c8319"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.244.0",
+]
+
+[[package]]
 name = "wasmer"
 version = "6.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1807,19 +1805,6 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.242.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed3c6e611f4cd748d85c767815823b777dc56afca793fcda27beae4e85028849"
-dependencies = [
- "bitflags 2.10.0",
- "hashbrown 0.15.5",
- "indexmap",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wasmparser"
 version = "0.243.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6d8db401b0528ec316dfbe579e6ab4152d61739cfe076706d2009127970159d"
@@ -1827,6 +1812,19 @@ dependencies = [
  "bitflags 2.10.0",
  "indexmap",
  "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.244.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
+dependencies = [
+ "bitflags 2.10.0",
+ "hashbrown 0.15.5",
+ "indexmap",
+ "semver",
+ "serde",
 ]
 
 [[package]]
@@ -1839,7 +1837,7 @@ dependencies = [
  "leb128fmt",
  "memchr",
  "unicode-width",
- "wasm-encoder",
+ "wasm-encoder 0.243.0",
 ]
 
 [[package]]

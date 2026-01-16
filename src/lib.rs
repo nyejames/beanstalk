@@ -5,6 +5,8 @@ mod dev_server;
 pub mod settings;
 
 pub(crate) mod compiler_tests {
+    pub(crate) mod test_runner;
+    
     #[cfg(test)]
     pub(crate) mod control_flow_linearizer_tests;
     #[cfg(test)]
@@ -19,7 +21,6 @@ pub(crate) mod compiler_tests {
     pub(crate) mod hir_errors_tests;
     #[cfg(test)]
     pub(crate) mod struct_handler_tests;
-    pub(crate) mod test_runner;
     #[cfg(test)]
     pub(crate) mod template_processor_tests;
     #[cfg(test)]
@@ -113,23 +114,7 @@ mod compiler {
         pub(crate) mod registry;
     }
 
-    pub(crate) mod hir {
-        pub(crate) mod build_hir;
-        pub(crate) mod control_flow_linearizer;
-        pub(crate) mod display_hir;
-        pub(crate) mod errors;
-        pub(crate) mod expression_linearizer;
-        pub(crate) mod function_transformer;
-        pub(crate) mod nodes;
-        pub(crate) mod struct_handler;
-        pub(crate) mod template_processor;
-        pub(crate) mod validator;
-        pub(crate) mod variable_manager;
-        
-        pub(crate) mod memory_management {
-            pub(crate) mod drop_point_inserter;
-        }
-    }
+    pub(crate) mod hir;
 
     pub(crate) mod lir;
 
@@ -291,13 +276,13 @@ impl<'a> Compiler<'a> {
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
         let ctx = HirBuilderContext::new(&mut self.string_table);
         let hir_module = ctx.build_hir_module(ast)?;
-        
+
         // Display HIR if the show_hir feature is enabled
         #[cfg(feature = "show_hir")]
         {
             println!("{}", hir_module.debug_string(&self.string_table));
         }
-        
+
         Ok(hir_module)
     }
 
@@ -316,7 +301,7 @@ impl<'a> Compiler<'a> {
     ///         LIR GENERATION
     /// -----------------------------
     /// Generate LIR from a validated HIR module.
-    /// 
+    ///
     /// This stage transforms the high-level, language-shaped HIR into the
     /// low-level, WASM-shaped LIR. The transformation:
     /// - Resolves ownership decisions using runtime tagged pointers
@@ -328,14 +313,14 @@ impl<'a> Compiler<'a> {
     /// **Validates: Requirements 8.1, 8.2, 8.4**
     pub fn generate_lir(&self, hir_module: HirModule) -> Result<LirModule, CompilerMessages> {
         let lir_module = lower_hir_to_lir(hir_module)?;
-        
+
         // Display LIR if the show_lir feature is enabled
         #[cfg(feature = "show_lir")]
         {
             use crate::compiler::lir::display_lir;
             println!("{}", display_lir(&lir_module));
         }
-        
+
         Ok(lir_module)
     }
 
@@ -343,7 +328,7 @@ impl<'a> Compiler<'a> {
     ///         Wasm Codegen
     /// -----------------------------
     /// Lower to wasm bytes from the LIR.
-    /// 
+    ///
     /// This is the final stage of the compilation pipeline that produces
     /// the actual WebAssembly bytecode from the LIR module.
     pub fn generate_wasm(&self, lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
