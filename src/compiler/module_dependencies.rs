@@ -6,7 +6,7 @@ use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::parse_file_headers::Header;
 use crate::compiler::string_interning::StringTable;
-use crate::return_rule_error;
+use crate::{header_log, return_rule_error};
 use std::collections::{HashMap, HashSet};
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
@@ -36,6 +36,7 @@ pub fn resolve_module_dependencies(
 
     // Build graph or collect errors
     for header in headers {
+        header_log!(header);
         graph.insert(header.path.to_owned(), header);
     }
 

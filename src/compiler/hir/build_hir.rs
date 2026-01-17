@@ -21,24 +21,26 @@ use crate::compiler::hir::control_flow_linearizer::ControlFlowLinearizer;
 use crate::compiler::hir::expression_linearizer::ExpressionLinearizer;
 use crate::compiler::hir::function_transformer::FunctionTransformer;
 use crate::compiler::hir::memory_management::drop_point_inserter::DropPointInserter;
-use crate::compiler::hir::nodes::{BlockId, HirBlock, HirKind, HirModule, HirNode, HirNodeId, HirStmt, HirExpr, HirExprKind, HirPlace};
+use crate::compiler::hir::nodes::{
+    BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirNodeId, HirPlace,
+    HirStmt,
+};
 use crate::compiler::hir::struct_handler::StructHandler;
 use crate::compiler::hir::template_processor::TemplateProcessor;
 use crate::compiler::hir::variable_manager::VariableManager;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::{InternedString, StringTable};
 use std::collections::{HashMap, HashSet};
 
 // Re-export validator types for backward compatibility
-pub use crate::compiler::hir::validator::{HirValidator, HirValidationError};
+pub use crate::compiler::hir::validator::{HirValidationError, HirValidator};
 
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
 // ============================================================================
-
 
 /// Extended context information attached to HIR nodes for debugging and error reporting.
 /// This structure preserves the connection between HIR nodes and their source AST.
@@ -482,7 +484,7 @@ pub struct HirBuilderContext<'a> {
     function_signatures: HashMap<InternedString, FunctionSignature>,
 
     /// Registered struct definitions (name -> fields)
-    struct_definitions: HashMap<InternedString, Vec<crate::compiler::parsers::ast_nodes::Arg>>,
+    struct_definitions: HashMap<InternedString, Vec<crate::compiler::parsers::ast_nodes::Var>>,
 
     /// Candidates for possible drop insertion
     drop_candidates: Vec<DropCandidate>,
@@ -686,7 +688,7 @@ impl<'a> HirBuilderContext<'a> {
     pub fn register_struct(
         &mut self,
         name: InternedString,
-        fields: Vec<crate::compiler::parsers::ast_nodes::Arg>,
+        fields: Vec<crate::compiler::parsers::ast_nodes::Var>,
     ) {
         self.struct_definitions.insert(name, fields);
     }
@@ -695,7 +697,7 @@ impl<'a> HirBuilderContext<'a> {
     pub fn get_struct_definition(
         &self,
         name: &InternedString,
-    ) -> Option<&Vec<crate::compiler::parsers::ast_nodes::Arg>> {
+    ) -> Option<&Vec<crate::compiler::parsers::ast_nodes::Var>> {
         self.struct_definitions.get(name)
     }
 
@@ -897,11 +899,9 @@ impl<'a> HirBuilderContext<'a> {
             NodeKind::Function(name, signature, body) => {
                 // We need to work around the borrow checker here
                 // Take the transformer temporarily
-                let mut transformer = std::mem::replace(
-                    &mut self.function_transformer,
-                    FunctionTransformer::new(),
-                );
-                
+                let mut transformer =
+                    std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
+
                 let result = transformer.transform_function_definition(
                     *name,
                     signature.clone(),
@@ -909,37 +909,28 @@ impl<'a> HirBuilderContext<'a> {
                     self,
                     node.location.clone(),
                 );
-                
+
                 // Put it back
                 self.function_transformer = transformer;
-                
+
                 let func_node = result?;
                 self.functions.push(func_node.clone());
                 Ok(vec![func_node])
             }
             NodeKind::FunctionCall(name, args, returns, location) => {
-                let mut transformer = std::mem::replace(
-                    &mut self.function_transformer,
-                    FunctionTransformer::new(),
-                );
-                
-                let result = transformer.transform_function_call_as_stmt(
-                    *name,
-                    args,
-                    returns,
-                    self,
-                    location,
-                );
-                
+                let mut transformer =
+                    std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
+
+                let result = transformer
+                    .transform_function_call_as_stmt(*name, args, returns, self, location);
+
                 self.function_transformer = transformer;
                 result
             }
             NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => {
-                let mut transformer = std::mem::replace(
-                    &mut self.function_transformer,
-                    FunctionTransformer::new(),
-                );
-                
+                let mut transformer =
+                    std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
+
                 let result = transformer.transform_host_function_call_as_stmt(
                     *name,
                     args,
@@ -949,62 +940,52 @@ impl<'a> HirBuilderContext<'a> {
                     self,
                     location,
                 );
-                
+
                 self.function_transformer = transformer;
                 result
             }
             NodeKind::Return(exprs) => {
-                let mut transformer = std::mem::replace(
-                    &mut self.function_transformer,
-                    FunctionTransformer::new(),
-                );
-                
+                let mut transformer =
+                    std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
+
                 let result = transformer.transform_return(exprs, self, &node.location);
-                
+
                 self.function_transformer = transformer;
                 result
             }
             NodeKind::StructDefinition(name, fields) => {
                 // Take the struct handler temporarily to work around borrow checker
-                let mut handler = std::mem::replace(
-                    &mut self.struct_handler,
-                    StructHandler::new(),
-                );
-                
-                let result = handler.transform_struct_definition(
-                    *name,
-                    fields,
-                    self,
-                    node.location.clone(),
-                );
-                
+                let mut handler = std::mem::replace(&mut self.struct_handler, StructHandler::new());
+
+                let result =
+                    handler.transform_struct_definition(*name, fields, self, node.location.clone());
+
                 // Put it back
                 self.struct_handler = handler;
-                
+
                 let struct_node = result?;
                 self.structs.push(struct_node.clone());
                 Ok(vec![struct_node])
             }
-            
+
             // Variable declarations
             NodeKind::VariableDeclaration(arg) => {
                 // Use expression linearizer to process the value
-                let mut linearizer = std::mem::replace(
-                    &mut self.expression_linearizer,
-                    ExpressionLinearizer::new(),
-                );
-                
-                let (value_nodes, value_expr) = linearizer.linearize_expression(&arg.value, self)?;
+                let mut linearizer =
+                    std::mem::replace(&mut self.expression_linearizer, ExpressionLinearizer::new());
+
+                let (value_nodes, value_expr) =
+                    linearizer.linearize_expression(&arg.value, self)?;
                 self.expression_linearizer = linearizer;
-                
+
                 let mut nodes = value_nodes;
-                
+
                 // Create the assignment node for the declaration
                 let is_mutable = arg.value.ownership.is_mutable();
                 let node_id = self.allocate_node_id();
                 let build_context = self.create_build_context(node.location.clone());
                 self.record_node_context(node_id, build_context);
-                
+
                 let assign_node = HirNode {
                     kind: HirKind::Stmt(HirStmt::Assign {
                         target: HirPlace::Var(arg.id),
@@ -1014,40 +995,38 @@ impl<'a> HirBuilderContext<'a> {
                     location: node.location.clone(),
                     id: node_id,
                 };
-                
+
                 // Track the variable in variable manager
                 self.variable_manager.enter_scope();
-                
+
                 // Mark as potentially owned if applicable
                 if self.is_type_ownership_capable(&arg.value.data_type) {
                     self.mark_potentially_owned(arg.id);
                     self.add_drop_candidate(arg.id, node.location.clone());
                 }
-                
+
                 nodes.push(assign_node);
                 Ok(nodes)
             }
-            
+
             // Assignments
             NodeKind::Assignment { target, value } => {
                 // Use expression linearizer to process the value
-                let mut linearizer = std::mem::replace(
-                    &mut self.expression_linearizer,
-                    ExpressionLinearizer::new(),
-                );
-                
+                let mut linearizer =
+                    std::mem::replace(&mut self.expression_linearizer, ExpressionLinearizer::new());
+
                 let (value_nodes, value_expr) = linearizer.linearize_expression(value, self)?;
                 self.expression_linearizer = linearizer;
-                
+
                 let mut nodes = value_nodes;
-                
+
                 // Convert target to HirPlace
                 let hir_place = self.convert_target_to_place(target)?;
-                
+
                 let node_id = self.allocate_node_id();
                 let build_context = self.create_build_context(node.location.clone());
                 self.record_node_context(node_id, build_context);
-                
+
                 let assign_node = HirNode {
                     kind: HirKind::Stmt(HirStmt::Assign {
                         target: hir_place,
@@ -1057,18 +1036,18 @@ impl<'a> HirBuilderContext<'a> {
                     location: node.location.clone(),
                     id: node_id,
                 };
-                
+
                 nodes.push(assign_node);
                 Ok(nodes)
             }
-            
+
             // If statements
             NodeKind::If(condition, then_body, else_body) => {
                 let mut linearizer = std::mem::replace(
                     &mut self.control_flow_linearizer,
                     ControlFlowLinearizer::new(),
                 );
-                
+
                 let result = linearizer.linearize_if_statement(
                     condition,
                     then_body,
@@ -1076,55 +1055,45 @@ impl<'a> HirBuilderContext<'a> {
                     &node.location,
                     self,
                 );
-                
+
                 self.control_flow_linearizer = linearizer;
                 result
             }
-            
+
             // For loops
             NodeKind::ForLoop(binding, iterator, body) => {
                 let mut linearizer = std::mem::replace(
                     &mut self.control_flow_linearizer,
                     ControlFlowLinearizer::new(),
                 );
-                
-                let result = linearizer.linearize_for_loop(
-                    binding,
-                    iterator,
-                    body,
-                    &node.location,
-                    self,
-                );
-                
+
+                let result =
+                    linearizer.linearize_for_loop(binding, iterator, body, &node.location, self);
+
                 self.control_flow_linearizer = linearizer;
                 result
             }
-            
+
             // While loops
             NodeKind::WhileLoop(condition, body) => {
                 let mut linearizer = std::mem::replace(
                     &mut self.control_flow_linearizer,
                     ControlFlowLinearizer::new(),
                 );
-                
-                let result = linearizer.linearize_while_loop(
-                    condition,
-                    body,
-                    &node.location,
-                    self,
-                );
-                
+
+                let result = linearizer.linearize_while_loop(condition, body, &node.location, self);
+
                 self.control_flow_linearizer = linearizer;
                 result
             }
-            
+
             // Match expressions
             NodeKind::Match(scrutinee, arms, default) => {
                 let mut linearizer = std::mem::replace(
                     &mut self.control_flow_linearizer,
                     ControlFlowLinearizer::new(),
                 );
-                
+
                 let result = linearizer.linearize_match(
                     scrutinee,
                     arms,
@@ -1132,52 +1101,48 @@ impl<'a> HirBuilderContext<'a> {
                     &node.location,
                     self,
                 );
-                
+
                 self.control_flow_linearizer = linearizer;
                 result
             }
-            
+
             // R-values (expressions as statements)
             NodeKind::Rvalue(expr) => {
-                let mut linearizer = std::mem::replace(
-                    &mut self.expression_linearizer,
-                    ExpressionLinearizer::new(),
-                );
-                
+                let mut linearizer =
+                    std::mem::replace(&mut self.expression_linearizer, ExpressionLinearizer::new());
+
                 let (mut nodes, result_expr) = linearizer.linearize_expression(expr, self)?;
                 self.expression_linearizer = linearizer;
-                
+
                 // Create an expression statement for the result
                 let node_id = self.allocate_node_id();
                 let build_context = self.create_build_context(node.location.clone());
                 self.record_node_context(node_id, build_context);
-                
+
                 let expr_stmt = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(result_expr)),
                     location: node.location.clone(),
                     id: node_id,
                 };
-                
+
                 nodes.push(expr_stmt);
                 Ok(nodes)
             }
-            
+
             // Print statements (legacy support)
             NodeKind::Print(expr) => {
-                let mut linearizer = std::mem::replace(
-                    &mut self.expression_linearizer,
-                    ExpressionLinearizer::new(),
-                );
-                
+                let mut linearizer =
+                    std::mem::replace(&mut self.expression_linearizer, ExpressionLinearizer::new());
+
                 let (mut nodes, result_expr) = linearizer.linearize_expression(expr, self)?;
                 self.expression_linearizer = linearizer;
-                
+
                 // Create a call to the io host function
                 let io_name = self.string_table.intern("io");
                 let node_id = self.allocate_node_id();
                 let build_context = self.create_build_context(node.location.clone());
                 self.record_node_context(node_id, build_context);
-                
+
                 let call_node = HirNode {
                     kind: HirKind::Stmt(HirStmt::Call {
                         target: io_name,
@@ -1186,40 +1151,37 @@ impl<'a> HirBuilderContext<'a> {
                     location: node.location.clone(),
                     id: node_id,
                 };
-                
+
                 nodes.push(call_node);
                 Ok(nodes)
             }
-            
+
             // Empty nodes - no HIR generated
-            NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => {
-                Ok(Vec::new())
-            }
-            
+            NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => Ok(Vec::new()),
+
             // Warnings are passed through (no HIR generated)
-            NodeKind::Warning(_) => {
-                Ok(Vec::new())
-            }
-            
+            NodeKind::Warning(_) => Ok(Vec::new()),
+
             // Operators should be handled within expressions
-            NodeKind::Operator(_) => {
-                Ok(Vec::new())
-            }
-            
+            NodeKind::Operator(_) => Ok(Vec::new()),
+
             // Field access as statement
-            NodeKind::FieldAccess { base, field, data_type, .. } => {
-                let mut linearizer = std::mem::replace(
-                    &mut self.expression_linearizer,
-                    ExpressionLinearizer::new(),
-                );
-                
+            NodeKind::FieldAccess {
+                base,
+                field,
+                data_type,
+                ..
+            } => {
+                let mut linearizer =
+                    std::mem::replace(&mut self.expression_linearizer, ExpressionLinearizer::new());
+
                 // Linearize the base expression
                 let (mut nodes, base_expr) = linearizer.linearize_ast_node(base, self)?;
                 self.expression_linearizer = linearizer;
-                
+
                 // Extract base variable name
                 let base_var = self.extract_base_var_from_expr(&base_expr)?;
-                
+
                 let field_expr = HirExpr {
                     kind: HirExprKind::Field {
                         base: base_var,
@@ -1228,21 +1190,21 @@ impl<'a> HirBuilderContext<'a> {
                     data_type: data_type.clone(),
                     location: node.location.clone(),
                 };
-                
+
                 let node_id = self.allocate_node_id();
                 let build_context = self.create_build_context(node.location.clone());
                 self.record_node_context(node_id, build_context);
-                
+
                 let expr_stmt = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(field_expr)),
                     location: node.location.clone(),
                     id: node_id,
                 };
-                
+
                 nodes.push(expr_stmt);
                 Ok(nodes)
             }
-            
+
             // Other node kinds - return empty for now
             _ => {
                 // For unsupported nodes, return empty
@@ -1251,26 +1213,22 @@ impl<'a> HirBuilderContext<'a> {
             }
         }
     }
-    
+
     // ========================================================================
     // Helper Methods for AST Processing
     // ========================================================================
-    
+
     /// Converts an AST target node to an HirPlace
     fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
         match &target.kind {
-            NodeKind::Rvalue(expr) => {
-                match &expr.kind {
-                    crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(name) => {
-                        Ok(HirPlace::Var(*name))
-                    }
-                    _ => {
-                        crate::return_compiler_error!(
-                            "Unsupported assignment target expression"
-                        )
-                    }
+            NodeKind::Rvalue(expr) => match &expr.kind {
+                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
+                    name,
+                ) => Ok(HirPlace::Var(*name)),
+                _ => {
+                    crate::return_compiler_error!("Unsupported assignment target expression")
                 }
-            }
+            },
             NodeKind::FieldAccess { base, field, .. } => {
                 let base_place = self.convert_target_to_place(base)?;
                 Ok(HirPlace::Field {
@@ -1279,26 +1237,22 @@ impl<'a> HirBuilderContext<'a> {
                 })
             }
             _ => {
-                crate::return_compiler_error!(
-                    "Unsupported assignment target node kind"
-                )
+                crate::return_compiler_error!("Unsupported assignment target node kind")
             }
         }
     }
-    
+
     /// Extracts the base variable name from an HIR expression
     fn extract_base_var_from_expr(&self, expr: &HirExpr) -> Result<InternedString, CompilerError> {
         match &expr.kind {
             HirExprKind::Load(place) => self.extract_var_from_place(place),
             HirExprKind::Field { base, .. } => Ok(*base),
             _ => {
-                crate::return_compiler_error!(
-                    "Cannot extract base variable from expression"
-                )
+                crate::return_compiler_error!("Cannot extract base variable from expression")
             }
         }
     }
-    
+
     /// Extracts the variable name from an HIR place
     fn extract_var_from_place(&self, place: &HirPlace) -> Result<InternedString, CompilerError> {
         match place {
@@ -1307,9 +1261,9 @@ impl<'a> HirBuilderContext<'a> {
             HirPlace::Index { base, .. } => self.extract_var_from_place(base),
         }
     }
-    
+
     /// Determines if a type is ownership capable
-    fn is_type_ownership_capable(&self, data_type: &DataType) -> bool {
+    pub fn is_type_ownership_capable(&self, data_type: &DataType) -> bool {
         match data_type {
             // Primitive types are typically not ownership capable (copy semantics)
             DataType::Int | DataType::Float | DataType::Bool | DataType::Char => false,
@@ -1332,5 +1286,50 @@ impl<'a> HirBuilderContext<'a> {
             // Other types are conservatively ownership capable
             _ => true,
         }
+    }
+
+    /// Processes a variable declaration and returns the corresponding HIR nodes.
+    /// This is a helper method that can be called from function transformers or other components.
+    pub fn process_variable_declaration(
+        &mut self,
+        arg: &Var,
+        location: &TextLocation,
+    ) -> Result<Vec<HirNode>, CompilerError> {
+        // Use expression linearizer to process the value
+        let mut linearizer =
+            std::mem::replace(&mut self.expression_linearizer, ExpressionLinearizer::new());
+
+        let (value_nodes, value_expr) = linearizer.linearize_expression(&arg.value, self)?;
+        self.expression_linearizer = linearizer;
+
+        let mut nodes = value_nodes;
+
+        // Create the assignment node for the declaration
+        let is_mutable = arg.value.ownership.is_mutable();
+        let node_id = self.allocate_node_id();
+        let build_context = self.create_build_context(location.clone());
+        self.record_node_context(node_id, build_context);
+
+        let assign_node = HirNode {
+            kind: HirKind::Stmt(HirStmt::Assign {
+                target: HirPlace::Var(arg.id),
+                value: value_expr,
+                is_mutable,
+            }),
+            location: location.clone(),
+            id: node_id,
+        };
+
+        // Track the variable in variable manager
+        self.variable_manager.enter_scope();
+
+        // Mark as potentially owned if applicable
+        if self.is_type_ownership_capable(&arg.value.data_type) {
+            self.mark_potentially_owned(arg.id);
+            self.add_drop_candidate(arg.id, location.clone());
+        }
+
+        nodes.push(assign_node);
+        Ok(nodes)
     }
 }

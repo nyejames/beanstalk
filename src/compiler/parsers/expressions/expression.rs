@@ -1,5 +1,5 @@
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::parsers::ast_nodes::{AstNode, Var};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -139,7 +139,7 @@ impl Expression {
         }
     }
 
-    pub fn reference(arg: &Arg) -> Self {
+    pub fn reference(arg: &Var) -> Self {
         Self {
             data_type: arg.value.data_type.clone(),
             kind: ExpressionKind::Reference(arg.id),
@@ -178,7 +178,7 @@ impl Expression {
         }
     }
     pub fn function_without_return(
-        args: Vec<Arg>,
+        args: Vec<Var>,
         body: Vec<AstNode>,
         location: TextLocation,
     ) -> Self {
@@ -195,7 +195,7 @@ impl Expression {
     }
     pub fn function_without_args(
         body: Vec<AstNode>,
-        returns: Vec<Arg>,
+        returns: Vec<Var>,
         location: TextLocation,
     ) -> Self {
         let signature = FunctionSignature {
@@ -214,7 +214,7 @@ impl Expression {
     pub fn function_call(
         name: InternedString,
         args: Vec<Expression>,
-        returns: Vec<Arg>,
+        returns: Vec<Var>,
         location: TextLocation,
     ) -> Self {
         let data_type = if returns.len() == 1 {
@@ -244,7 +244,7 @@ impl Expression {
             ownership,
         }
     }
-    pub fn struct_instance(args: Vec<Arg>, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn struct_instance(args: Vec<Var>, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::Inferred,
             kind: ExpressionKind::StructInstance(args),
@@ -252,7 +252,7 @@ impl Expression {
             ownership,
         }
     }
-    pub fn struct_definition(args: Vec<Arg>, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn struct_definition(args: Vec<Var>, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::Inferred,
             kind: ExpressionKind::StructDefinition(args),
@@ -332,8 +332,8 @@ pub enum ExpressionKind {
 
     Collection(Vec<Expression>),
 
-    StructDefinition(Vec<Arg>),
-    StructInstance(Vec<Arg>),
+    StructDefinition(Vec<Var>),
+    StructInstance(Vec<Var>),
 
     // This is a special case for the range operator
     // This implementation will probably change in the future to be a more general operator

@@ -559,6 +559,7 @@ impl HirValidator {
     }
 
     /// Checks that all blocks are reachable from the entry block.
+    /// Function body blocks are considered reachable through their function definitions.
     pub fn check_block_connectivity(hir_module: &HirModule) -> Result<(), HirValidationError> {
         if hir_module.blocks.is_empty() {
             return Ok(());
@@ -566,6 +567,17 @@ impl HirValidator {
 
         let mut reachable: HashSet<BlockId> = HashSet::new();
         let mut to_visit: Vec<BlockId> = vec![hir_module.entry_block];
+
+        // Collect function body blocks from function definitions
+        let mut function_body_blocks: HashSet<BlockId> = HashSet::new();
+        for func_node in &hir_module.functions {
+            if let HirKind::Stmt(HirStmt::FunctionDef { body, .. }) = &func_node.kind {
+                function_body_blocks.insert(*body);
+            }
+            if let HirKind::Stmt(HirStmt::TemplateFn { body, .. }) = &func_node.kind {
+                function_body_blocks.insert(*body);
+            }
+        }
 
         while let Some(block_id) = to_visit.pop() {
             if reachable.contains(&block_id) {
@@ -582,8 +594,11 @@ impl HirValidator {
             }
         }
 
+        // Check that all non-function-body blocks are reachable
+        // Function body blocks are only reachable when their functions are called,
+        // so we exclude them from the strict connectivity check
         for block in &hir_module.blocks {
-            if !reachable.contains(&block.id) {
+            if !reachable.contains(&block.id) && !function_body_blocks.contains(&block.id) {
                 return Err(HirValidationError::UnreachableBlock { block_id: block.id });
             }
         }

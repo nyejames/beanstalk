@@ -8,6 +8,7 @@ use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::datatypes::Ownership;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::StringTable;
+use crate::return_type_error;
 use crate::{
     compiler::datatypes::DataType, compiler::parsers::ast_nodes::NodeKind, eval_log,
     return_compiler_error, return_syntax_error,
@@ -89,8 +90,6 @@ pub fn evaluate_expression(
 ) -> Result<Expression, CompilerError> {
     let mut simplified_expression: Vec<AstNode> = Vec::with_capacity(2);
 
-    eval_log!("Evaluating expression: {:#?}", nodes);
-
     if nodes.is_empty() {
         return_compiler_error!("No nodes found in expression. This should never happen.");
     }
@@ -103,11 +102,21 @@ pub fn evaluate_expression(
     let location = extract_location(&nodes)?;
 
     'outer: for node in nodes {
+        eval_log!("Evaluating node in expression: {:?}", node);
         match &node.kind {
             // Values
             NodeKind::Rvalue(expr, ..) => {
                 if let DataType::Inferred = current_type {
                     *current_type = expr.data_type.to_owned();
+                } else if !expr.data_type.is_valid_type_in_expression(current_type) {
+                    // Type mismatch
+                    return_type_error!(
+                        format!("Type mismatch in expression. Expected type '{:?}', but found type '{:?}'", current_type, expr.data_type),
+                        node.location.to_error_location(string_table), {
+                            CompilationStage => "Expression Evaluation",
+                            PrimarySuggestion => "Ensure all operands in the expression are of compatible types",
+                        }
+                    );
                 }
 
                 if let DataType::CoerceToString | DataType::String = current_type {
@@ -136,7 +145,7 @@ pub fn evaluate_expression(
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FunctionCall(_, _, returns, ..) => {
+            NodeKind::FunctionCall(_, _, _returns, ..) => {
                 // Check the return type
                 simplified_expression.push(node.to_owned());
             }
@@ -151,7 +160,7 @@ pub fn evaluate_expression(
                         };
                         return_syntax_error!(
                             format!("You can't use the '{:?}' operator with strings or templates", op),
-                            node.location.to_error_location(&string_table),
+                            node.location.to_error_location(string_table),
                             {
                                 FoundType => found_type_static,
                                 CompilationStage => "Expression Evaluation",

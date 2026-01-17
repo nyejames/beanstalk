@@ -6,7 +6,7 @@ use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Compiler, Flag, InputModule, timer_log};
@@ -301,7 +301,7 @@ pub fn compile_modules(
 }
 
 /// Extract required external imports from the compilation
-fn extract_required_imports(exported_declarations: &[Arg]) -> Vec<ExternalImport> {
+fn extract_required_imports(exported_declarations: &[Var]) -> Vec<ExternalImport> {
     let mut imports = Vec::new();
 
     // Add standard IO imports that are always required

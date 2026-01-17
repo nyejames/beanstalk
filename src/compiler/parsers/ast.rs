@@ -2,7 +2,7 @@ use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
@@ -41,7 +41,7 @@ impl Ast {
         let mut entry_path = None;
 
         // Collect all function signatures and struct definitions to register them in scope
-        let mut declarations: Vec<Arg> = Vec::new();
+        let mut declarations: Vec<Var> = Vec::new();
         for header in sorted_headers {
             match header.kind {
                 HeaderKind::Function(signature, tokens) => {
@@ -248,8 +248,8 @@ impl Ast {
 pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope: InternedPath,
-    pub declarations: Vec<Arg>,
-    pub returns: Vec<Arg>,
+    pub declarations: Vec<Var>,
+    pub returns: Vec<Var>,
     pub host_registry: HostFunctionRegistry,
 }
 #[derive(PartialEq, Clone)]
@@ -267,9 +267,9 @@ impl ScopeContext {
     pub fn new(
         kind: ContextKind,
         scope: InternedPath,
-        declarations: &[Arg],
+        declarations: &[Var],
         host_registry: HostFunctionRegistry,
-        returns: Vec<Arg>,
+        returns: Vec<Var>,
     ) -> ScopeContext {
         ScopeContext {
             kind,
@@ -306,14 +306,14 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_expression(&self, returns: Vec<Arg>) -> ScopeContext {
+    pub fn new_child_expression(&self, returns: Vec<Var>) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
         new_context
     }
 
-    pub fn add_var(&mut self, arg: Arg) {
+    pub fn add_var(&mut self, arg: Var) {
         self.declarations.push(arg);
     }
 }

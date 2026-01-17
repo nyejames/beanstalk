@@ -2,6 +2,7 @@
 detailed_timers = []
 show_char_stream = []
 show_tokens = []
+show_headers = []
 show_ast = []
 show_eval = []
 show_codegen = []

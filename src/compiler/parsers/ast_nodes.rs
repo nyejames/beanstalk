@@ -10,7 +10,7 @@ use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
-pub struct Arg {
+pub struct Var {
     pub id: InternedString,
     pub value: Expression,
 }
@@ -29,7 +29,7 @@ pub enum NodeKind {
     Warning(String), // Message, Start pos, End pos
 
     // Config settings
-    Config(Vec<Arg>), // Settings,
+    Config(Vec<Var>), // Settings,
 
     // Imports a function from the host environment
     // This could be another Wasm file or a native function provided by the runtime
@@ -49,11 +49,11 @@ pub enum NodeKind {
         Option<Vec<AstNode>>, // for the wildcard/else case
     ),
 
-    ForLoop(Box<Arg>, Expression, Vec<AstNode>), // Item, Collection, Body,
+    ForLoop(Box<Var>, Expression, Vec<AstNode>), // Item, Collection, Body,
     WhileLoop(Expression, Vec<AstNode>),         // Condition, Body,
 
     // Basics
-    VariableDeclaration(Arg), // Variable name, Value, Visibility,
+    VariableDeclaration(Var), // Variable name, Value, Visibility,
 
     // For simple field access: obj.field
     FieldAccess {
@@ -74,7 +74,7 @@ pub enum NodeKind {
     FunctionCall(
         InternedString,
         Vec<Expression>, // Arguments passed in (eventually will have a syntax for named arguments)
-        Vec<Arg>,        // Returns (can be named so using an Arg rather than just the data type)
+        Vec<Var>,        // Returns (can be named so using an Arg rather than just the data type)
         TextLocation,
         // bool, // Function is pure
     ),
@@ -94,7 +94,7 @@ pub enum NodeKind {
     //          new_struct_instance(arg) -- Calls the main function of the struct
     StructDefinition(
         InternedString, // Name
-        Vec<Arg>,       // Fields
+        Vec<Var>,       // Fields
     ),
 
     Function(InternedString, FunctionSignature, Vec<AstNode>),
@@ -149,7 +149,7 @@ impl AstNode {
                     // This is a temporary solution - we'll need to pass string_table here
                     // when updating AST construction methods
                     let placeholder_name = InternedString::from_u32(idx as u32);
-                    return_types_from_expr.push(Arg {
+                    return_types_from_expr.push(Var {
                         id: placeholder_name,
                         value: Expression::int(0, location.to_owned(), Ownership::default()),
                     })
@@ -173,9 +173,12 @@ impl AstNode {
                 ownership.to_owned(),
             )),
             // Compiler tried to get the expression of a node that cannot contain expressions
-            _ => return_compiler_error!(
-                "Compiler tried to get the expression of a node that cannot contain expressions in src/compiler/parsers/ast_nodes.rs"
-            ),
+            _ => {
+                println!("{:?}", self.kind);
+                return_compiler_error!(
+                    "Compiler tried to get the expression of a node that cannot contain expressions in src/compiler/parsers/ast_nodes.rs"
+                );
+            }
         }
     }
 

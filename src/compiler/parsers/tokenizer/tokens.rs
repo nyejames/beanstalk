@@ -1,8 +1,9 @@
 use crate::compiler::datatypes::DataType;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::string_interning::{InternedString, StringId, StringTable};
+use crate::compiler::string_interning::{InternedString, StringTable};
 
 use crate::compiler::compiler_errors::ErrorLocation;
+use crate::compiler::parsers::tokenizer::compiler_directives::CompilerDirective;
 use colour::red_ln;
 use std::cmp::Ordering;
 use std::iter::Peekable;
@@ -13,24 +14,6 @@ pub enum TokenizeMode {
     Normal,
     TemplateBody,
     TemplateHead,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum VarVisibility {
-    // Default for anything not at the top level of a file
-    Private,
-
-    // Exported out of the Wasm module
-    Exported,
-}
-
-impl VarVisibility {
-    pub fn is_private(&self) -> bool {
-        matches!(self, VarVisibility::Private)
-    }
-    pub fn is_exported(&self) -> bool {
-        matches!(self, VarVisibility::Exported)
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -250,6 +233,7 @@ impl FileTokens {
             | &TokenKind::TypeParameterBracket
             | &TokenKind::Comma
             | &TokenKind::End
+            | &TokenKind::Directive(_)
             | &TokenKind::Assign
             | &TokenKind::AddAssign
             | &TokenKind::SubtractAssign
@@ -371,7 +355,7 @@ pub enum TokenKind {
     ModuleStart(String), // Contains module name space
     Eof,                 // End of the file
 
-    // Module Import/Export
+    // Module Import
     /// For Wasm files or host environment - importing from a different module or the host
     Import,
     Export,
@@ -381,8 +365,7 @@ pub enum TokenKind {
 
     // Special compiler directives
     /// The only way to manually force a panic in the compiler in release mode
-    Panic,
-    Ignore,
+    Directive(CompilerDirective),
 
     /// Function Signatures
     Arrow,
@@ -497,7 +480,7 @@ pub enum TokenKind {
     Copy,
 
     // Templates
-    ParentTemplate,
+    TopLevelTemplate,
     EmptyTemplate(usize), // MIGHT REMOVE THIS
     Slot,
     TemplateClose,

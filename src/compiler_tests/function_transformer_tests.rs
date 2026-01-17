@@ -10,7 +10,7 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::function_transformer::FunctionTransformer;
 use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirStmt, HirTerminator};
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -29,7 +29,7 @@ fn create_test_signature(
     let mut parameters = Vec::new();
     for i in 0..param_count {
         let param_name = string_table.intern(&format!("param_{}", i));
-        parameters.push(Arg {
+        parameters.push(Var {
             id: param_name,
             value: Expression::int(0, TextLocation::default(), Ownership::ImmutableReference),
         });
@@ -38,7 +38,7 @@ fn create_test_signature(
     let mut returns = Vec::new();
     for i in 0..return_count {
         let return_name = string_table.intern(&format!("return_{}", i));
-        returns.push(Arg {
+        returns.push(Var {
             id: return_name,
             value: Expression::int(0, TextLocation::default(), Ownership::ImmutableReference),
         });
@@ -52,7 +52,11 @@ fn create_test_signature(
 
 /// Creates a simple return expression for testing
 fn create_test_return_expr(value: i64) -> Expression {
-    Expression::int(value, TextLocation::default(), Ownership::ImmutableReference)
+    Expression::int(
+        value,
+        TextLocation::default(),
+        Ownership::ImmutableReference,
+    )
 }
 
 // ============================================================================
@@ -70,11 +74,7 @@ fn test_transform_simple_arguments() {
     let mut transformer = FunctionTransformer::new();
 
     // Create a simple integer argument
-    let int_expr = Expression::int(
-        42,
-        TextLocation::default(),
-        Ownership::ImmutableReference,
-    );
+    let int_expr = Expression::int(42, TextLocation::default(), Ownership::ImmutableReference);
 
     let result = transformer.transform_argument(&int_expr);
     assert!(result.is_ok());
@@ -108,7 +108,7 @@ fn test_transform_simple_function_definition() {
     let mut string_table = StringTable::new();
     let func_name = string_table.intern("test_func");
     let signature = create_test_signature(&mut string_table, 2, 1);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut transformer = FunctionTransformer::new();
     let body = vec![]; // Empty body for simplicity
@@ -126,7 +126,11 @@ fn test_transform_simple_function_definition() {
 
     // Verify it's a function definition
     match &func_node.kind {
-        HirKind::Stmt(HirStmt::FunctionDef { name, signature: sig, body: _ }) => {
+        HirKind::Stmt(HirStmt::FunctionDef {
+            name,
+            signature: sig,
+            body: _,
+        }) => {
             assert_eq!(*name, func_name);
             assert_eq!(sig.parameters.len(), 2);
             assert_eq!(sig.returns.len(), 1);
@@ -140,7 +144,7 @@ fn test_transform_function_with_parameters() {
     let mut string_table = StringTable::new();
     let func_name = string_table.intern("func_with_params");
     let signature = create_test_signature(&mut string_table, 3, 0);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut transformer = FunctionTransformer::new();
     let body = vec![];
@@ -192,7 +196,7 @@ fn test_transform_return_statement() {
 fn test_transform_function_call_as_statement() {
     let mut string_table = StringTable::new();
     let func_name = string_table.intern("test_call");
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut transformer = FunctionTransformer::new();
     let args = vec![create_test_return_expr(10), create_test_return_expr(20)];
@@ -206,13 +210,19 @@ fn test_transform_function_call_as_statement() {
         &TextLocation::default(),
     );
 
-    assert!(result.is_ok(), "Function call transformation should succeed");
+    assert!(
+        result.is_ok(),
+        "Function call transformation should succeed"
+    );
     let nodes = result.unwrap();
 
     assert_eq!(nodes.len(), 1, "Should produce one call node");
 
     match &nodes[0].kind {
-        HirKind::Stmt(HirStmt::Call { target, args: call_args }) => {
+        HirKind::Stmt(HirStmt::Call {
+            target,
+            args: call_args,
+        }) => {
             assert_eq!(*target, func_name);
             assert_eq!(call_args.len(), 2);
         }
@@ -226,7 +236,7 @@ fn test_transform_host_function_call() {
     let func_name = string_table.intern("io");
     let module = string_table.intern("beanstalk_io");
     let import = string_table.intern("print");
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut transformer = FunctionTransformer::new();
     let args = vec![create_test_return_expr(42)];
@@ -242,7 +252,10 @@ fn test_transform_host_function_call() {
         &TextLocation::default(),
     );
 
-    assert!(result.is_ok(), "Host function call transformation should succeed");
+    assert!(
+        result.is_ok(),
+        "Host function call transformation should succeed"
+    );
     let nodes = result.unwrap();
 
     assert_eq!(nodes.len(), 1, "Should produce one host call node");
@@ -276,7 +289,7 @@ fn property_function_preserves_parameter_count() {
         let mut string_table = StringTable::new();
         let func_name = string_table.intern(&format!("func_{}", param_count));
         let signature = create_test_signature(&mut string_table, param_count, 1);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut transformer = FunctionTransformer::new();
         let body = vec![];
@@ -289,7 +302,11 @@ fn property_function_preserves_parameter_count() {
             TextLocation::default(),
         );
 
-        assert!(result.is_ok(), "Function with {} parameters should transform successfully", param_count);
+        assert!(
+            result.is_ok(),
+            "Function with {} parameters should transform successfully",
+            param_count
+        );
 
         let func_node = result.unwrap();
         match &func_node.kind {
@@ -315,7 +332,7 @@ fn property_function_preserves_return_count() {
         let mut string_table = StringTable::new();
         let func_name = string_table.intern(&format!("func_ret_{}", return_count));
         let signature = create_test_signature(&mut string_table, 1, return_count);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut transformer = FunctionTransformer::new();
         let body = vec![];
@@ -328,7 +345,11 @@ fn property_function_preserves_return_count() {
             TextLocation::default(),
         );
 
-        assert!(result.is_ok(), "Function with {} returns should transform successfully", return_count);
+        assert!(
+            result.is_ok(),
+            "Function with {} returns should transform successfully",
+            return_count
+        );
 
         let func_node = result.unwrap();
         match &func_node.kind {
@@ -361,9 +382,14 @@ fn property_return_preserves_expression_count() {
             return_exprs.push(create_test_return_expr(i as i64));
         }
 
-        let result = transformer.transform_return(&return_exprs, &mut ctx, &TextLocation::default());
+        let result =
+            transformer.transform_return(&return_exprs, &mut ctx, &TextLocation::default());
 
-        assert!(result.is_ok(), "Return with {} expressions should transform successfully", expr_count);
+        assert!(
+            result.is_ok(),
+            "Return with {} expressions should transform successfully",
+            expr_count
+        );
 
         let nodes = result.unwrap();
         assert_eq!(nodes.len(), 1, "Should produce exactly one return node");
@@ -390,7 +416,7 @@ fn property_function_call_preserves_argument_count() {
     for arg_count in 0..=5 {
         let mut string_table = StringTable::new();
         let func_name = string_table.intern(&format!("call_{}", arg_count));
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut transformer = FunctionTransformer::new();
         let mut args = Vec::new();
@@ -407,11 +433,17 @@ fn property_function_call_preserves_argument_count() {
             &TextLocation::default(),
         );
 
-        assert!(result.is_ok(), "Function call with {} arguments should transform successfully", arg_count);
+        assert!(
+            result.is_ok(),
+            "Function call with {} arguments should transform successfully",
+            arg_count
+        );
 
         let nodes = result.unwrap();
         match &nodes[0].kind {
-            HirKind::Stmt(HirStmt::Call { args: call_args, .. }) => {
+            HirKind::Stmt(HirStmt::Call {
+                args: call_args, ..
+            }) => {
                 assert_eq!(
                     call_args.len(),
                     arg_count,
@@ -434,7 +466,7 @@ fn property_host_call_preserves_argument_count() {
         let func_name = string_table.intern(&format!("host_call_{}", arg_count));
         let module = string_table.intern("test_module");
         let import = string_table.intern("test_import");
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut transformer = FunctionTransformer::new();
         let mut args = Vec::new();
@@ -453,11 +485,17 @@ fn property_host_call_preserves_argument_count() {
             &TextLocation::default(),
         );
 
-        assert!(result.is_ok(), "Host call with {} arguments should transform successfully", arg_count);
+        assert!(
+            result.is_ok(),
+            "Host call with {} arguments should transform successfully",
+            arg_count
+        );
 
         let nodes = result.unwrap();
         match &nodes[0].kind {
-            HirKind::Stmt(HirStmt::HostCall { args: call_args, .. }) => {
+            HirKind::Stmt(HirStmt::HostCall {
+                args: call_args, ..
+            }) => {
                 assert_eq!(
                     call_args.len(),
                     arg_count,
@@ -477,7 +515,7 @@ fn property_function_registration_idempotent() {
     let mut string_table = StringTable::new();
     let func_name = string_table.intern("test_func");
     let signature = create_test_signature(&mut string_table, 2, 1);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
 
     // Register the function multiple times
@@ -499,7 +537,7 @@ fn property_empty_function_bodies_valid() {
         let mut string_table = StringTable::new();
         let func_name = string_table.intern(&format!("empty_func_{}", param_count));
         let signature = create_test_signature(&mut string_table, param_count, 0);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut transformer = FunctionTransformer::new();
         let body = vec![]; // Empty body
@@ -512,7 +550,10 @@ fn property_empty_function_bodies_valid() {
             TextLocation::default(),
         );
 
-        assert!(result.is_ok(), "Empty function should transform successfully");
+        assert!(
+            result.is_ok(),
+            "Empty function should transform successfully"
+        );
 
         // Verify the function has a body block with a terminator
         let func_node = result.unwrap();
@@ -526,7 +567,10 @@ fn property_empty_function_bodies_valid() {
                 if !block.nodes.is_empty() {
                     let last_node = &block.nodes[block.nodes.len() - 1];
                     assert!(
-                        matches!(last_node.kind, HirKind::Terminator(HirTerminator::Return(_))),
+                        matches!(
+                            last_node.kind,
+                            HirKind::Terminator(HirTerminator::Return(_))
+                        ),
                         "Empty function should have implicit return terminator"
                     );
                 }
@@ -543,7 +587,7 @@ fn property_parameters_marked_potentially_owned() {
     let mut string_table = StringTable::new();
     let func_name = string_table.intern("test_func");
     let signature = create_test_signature(&mut string_table, 3, 0);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut transformer = FunctionTransformer::new();
     let body = vec![];

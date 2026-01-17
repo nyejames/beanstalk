@@ -7,7 +7,7 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{BlockId, HirBlock, HirKind, HirNode, HirStmt, HirTerminator};
 use crate::compiler::lir::nodes::{LirField, LirFunction, LirInst, LirStruct, LirType};
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::string_interning::InternedString;
 
@@ -218,7 +218,7 @@ impl LoweringContext {
     pub fn lower_struct_def(
         &mut self,
         name: InternedString,
-        fields: &[Arg],
+        fields: &[Var],
     ) -> Result<LirStruct, CompilerError> {
         // Register the struct layout
         self.register_struct_layout(name, fields);

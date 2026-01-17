@@ -9,10 +9,10 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::BlockId;
 use crate::compiler::lir::nodes::{LirInst, LirType};
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::InternedString;
 
-use super::types::{build_struct_layout, FieldLayout, StructLayout};
+use super::types::{FieldLayout, StructLayout, build_struct_layout};
 
 // ============================================================================
 // Lowering Context
@@ -141,7 +141,7 @@ impl LoweringContext {
     }
 
     /// Registers a struct layout computed from a HIR struct definition.
-    pub fn register_struct_layout(&mut self, name: InternedString, fields: &[Arg]) {
+    pub fn register_struct_layout(&mut self, name: InternedString, fields: &[Var]) {
         let layout = build_struct_layout(name, fields);
         self.struct_layouts.insert(name, layout);
     }

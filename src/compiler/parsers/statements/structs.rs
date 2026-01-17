@@ -1,6 +1,6 @@
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
@@ -14,7 +14,7 @@ pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<Vec<Arg>, CompilerError> {
+) -> Result<Vec<Var>, CompilerError> {
     // Should start at the Colon
     // Need to skip it,
     token_stream.advance();
@@ -35,8 +35,8 @@ pub fn parse_parameters(
 
     // False for function definitions, true for struct definitions
     is_struct: bool,
-) -> Result<Vec<Arg>, CompilerError> {
-    let mut args: Vec<Arg> = Vec::with_capacity(1);
+) -> Result<Vec<Var>, CompilerError> {
+    let mut args: Vec<Var> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
 
     while token_stream.index < token_stream.tokens.len() {
@@ -151,7 +151,7 @@ pub fn new_parameter(
     name: InternedString,
     context: &ScopeContext,
     string_table: &mut StringTable,
-) -> Result<Arg, CompilerError> {
+) -> Result<Var, CompilerError> {
     // Move past the name
     token_stream.advance();
 
@@ -237,7 +237,7 @@ pub fn new_parameter(
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
             ast_log!("Created new parameter of type: {}", data_type);
-            return Ok(Arg {
+            return Ok(Var {
                 id: name,
                 value: Expression::none(),
             });
@@ -290,7 +290,7 @@ pub fn new_parameter(
         data_type
     );
 
-    Ok(Arg {
+    Ok(Var {
         id: name,
         value: parsed_expr,
     })

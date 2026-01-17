@@ -2,7 +2,7 @@ use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode};
+use crate::compiler::parsers::ast_nodes::{AstNode, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
@@ -329,7 +329,7 @@ pub fn function_body_to_ast(
             // String template as an expression without being assigned.
             // NOTE: For output, use the io() function instead of top-level templates.
             // The io() function is the standard way to print to stdout with automatic newlines.
-            TokenKind::TemplateHead | TokenKind::ParentTemplate => {
+            TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 

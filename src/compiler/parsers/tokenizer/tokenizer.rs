@@ -145,19 +145,13 @@ pub fn get_token_kind(
                 return_syntax_error!(
                     "Cannot have nested templates inside of a template head, must be inside the template body. \
                     Use a colon to start the template body.",
-                    stream.new_location().to_error_location(&string_table),
+                    stream.new_location().to_error_location(string_table),
                     {
                         CompilationStage => "Tokenization",
                         PrimarySuggestion => "Add ':' after the template head to start the template body",
                         SuggestedInsertion => ":",
                     }
                 )
-            }
-
-            TokenizeMode::Normal => {
-                // Going into the template head
-                stream.mode = TokenizeMode::TemplateHead;
-                return_token!(TokenKind::ParentTemplate, stream);
             }
 
             _ => {

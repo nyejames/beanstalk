@@ -18,10 +18,8 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
-use crate::compiler::hir::nodes::{
-    HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
-};
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt};
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
@@ -96,7 +94,7 @@ impl StructLayoutCalculator {
     pub fn calculate_layout(
         &mut self,
         struct_name: InternedString,
-        fields: &[Arg],
+        fields: &[Var],
     ) -> StructLayout {
         // Check if we already have this layout cached
         if let Some(layout) = self.layouts.get(&struct_name) {
@@ -116,7 +114,9 @@ impl StructLayoutCalculator {
 
             // Record the field offset and type
             layout.field_offsets.insert(field.id, current_offset);
-            layout.field_types.insert(field.id, field.value.data_type.clone());
+            layout
+                .field_types
+                .insert(field.id, field.value.data_type.clone());
             layout.field_order.push(field.id);
 
             // Move to the next position
@@ -147,9 +147,9 @@ impl StructLayoutCalculator {
     fn get_type_size(&self, data_type: &DataType) -> u32 {
         match data_type {
             DataType::Bool | DataType::True | DataType::False => 1,
-            DataType::Char => 4, // UTF-8 char can be up to 4 bytes
-            DataType::Int => 8,  // i64
-            DataType::Float => 8, // f64
+            DataType::Char => 4,     // UTF-8 char can be up to 4 bytes
+            DataType::Int => 8,      // i64
+            DataType::Float => 8,    // f64
             DataType::Decimal => 16, // 128-bit decimal
             DataType::String | DataType::CoerceToString => 8, // Pointer to string data
             DataType::Struct(fields, _) => {
@@ -161,15 +161,15 @@ impl StructLayoutCalculator {
                 size
             }
             DataType::Collection(_, _) => 12, // Pointer + length + capacity
-            DataType::Parameters(_) => 8, // Pointer to tuple
-            DataType::Option(_) => 9, // Tag + value
+            DataType::Parameters(_) => 8,     // Pointer to tuple
+            DataType::Option(_) => 9,         // Tag + value
             DataType::None => 0,
-            DataType::Inferred => 8, // Default to pointer size
-            DataType::Template => 8, // Pointer
-            DataType::Choices(_) => 16, // Tag + largest variant
-            DataType::Range => 16, // Start + end
+            DataType::Inferred => 8,        // Default to pointer size
+            DataType::Template => 8,        // Pointer
+            DataType::Choices(_) => 16,     // Tag + largest variant
+            DataType::Range => 16,          // Start + end
             DataType::Reference(_, _) => 8, // Pointer
-            DataType::Function(_, _) => 8, // Function pointer
+            DataType::Function(_, _) => 8,  // Function pointer
         }
     }
 
@@ -220,7 +220,6 @@ impl StructLayoutCalculator {
     }
 }
 
-
 /// The StructHandler component handles transformation of structs from AST to HIR.
 ///
 /// This component operates on borrowed HirBuilderContext and does not maintain
@@ -256,7 +255,7 @@ impl StructHandler {
     pub fn transform_struct_definition(
         &mut self,
         name: InternedString,
-        fields: &[Arg],
+        fields: &[Var],
         ctx: &mut HirBuilderContext,
         location: TextLocation,
     ) -> Result<HirNode, CompilerError> {
@@ -482,7 +481,7 @@ impl StructHandler {
     }
 
     /// Registers a struct layout (used when processing struct definitions)
-    pub fn register_struct_layout(&mut self, name: InternedString, fields: &[Arg]) -> StructLayout {
+    pub fn register_struct_layout(&mut self, name: InternedString, fields: &[Var]) -> StructLayout {
         self.layout_calculator.calculate_layout(name, fields)
     }
 
@@ -502,9 +501,7 @@ impl StructHandler {
             ExpressionKind::Bool(val) => HirExprKind::Bool(*val),
             ExpressionKind::StringSlice(s) => HirExprKind::StringLiteral(*s),
             ExpressionKind::Char(c) => HirExprKind::Char(*c),
-            ExpressionKind::Reference(name) => {
-                HirExprKind::Load(HirPlace::Var(*name))
-            }
+            ExpressionKind::Reference(name) => HirExprKind::Load(HirPlace::Var(*name)),
             ExpressionKind::None => HirExprKind::Int(0), // Placeholder for None
             _ => {
                 // For complex expressions, we would need to use the expression linearizer
@@ -547,7 +544,6 @@ impl StructHandler {
         }
     }
 }
-
 
 // ============================================================================
 // Heap Allocation and Memory Management
@@ -652,7 +648,7 @@ impl StructHandler {
 
         // Start with the base variable
         let base_var = self.extract_base_variable(base_expr)?;
-        
+
         // Build the nested field access
         let mut current_place = HirPlace::Var(base_var);
         let mut current_type = base_expr.data_type.clone();
@@ -660,13 +656,13 @@ impl StructHandler {
         for field_name in field_path {
             // Get the field type from the current struct type
             let field_type = self.get_field_type_from_struct(&current_type, *field_name)?;
-            
+
             // Create nested field place
             current_place = HirPlace::Field {
                 base: Box::new(current_place),
                 field: *field_name,
             };
-            
+
             current_type = field_type;
         }
 
@@ -794,7 +790,8 @@ impl StructHandler {
 
         for (field_name, target_var) in bindings {
             // Get the field type
-            let field_type = self.get_field_type_from_struct(&struct_expr.data_type, *field_name)?;
+            let field_type =
+                self.get_field_type_from_struct(&struct_expr.data_type, *field_name)?;
 
             // Create the field access expression
             let field_expr = HirExpr {
@@ -829,13 +826,13 @@ impl StructHandler {
     }
 
     /// Gets the size of a struct type.
-    pub fn get_struct_size(&mut self, struct_name: InternedString, fields: &[Arg]) -> u32 {
+    pub fn get_struct_size(&mut self, struct_name: InternedString, fields: &[Var]) -> u32 {
         let layout = self.layout_calculator.calculate_layout(struct_name, fields);
         layout.total_size
     }
 
     /// Gets the alignment of a struct type.
-    pub fn get_struct_alignment(&mut self, struct_name: InternedString, fields: &[Arg]) -> u32 {
+    pub fn get_struct_alignment(&mut self, struct_name: InternedString, fields: &[Var]) -> u32 {
         let layout = self.layout_calculator.calculate_layout(struct_name, fields);
         layout.alignment
     }

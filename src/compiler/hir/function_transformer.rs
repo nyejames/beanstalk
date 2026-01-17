@@ -16,7 +16,7 @@ use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::nodes::{
     BlockId, HirExpr, HirExprKind, HirKind, HirNode, HirStmt, HirTerminator,
 };
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -144,7 +144,7 @@ impl FunctionTransformer {
     /// Parameters are treated as local variables that are initialized with the argument values.
     fn handle_function_parameters(
         &mut self,
-        params: &[Arg],
+        params: &[Var],
         ctx: &mut HirBuilderContext,
         body_block_id: BlockId,
     ) -> Result<(), CompilerError> {
@@ -174,8 +174,8 @@ impl FunctionTransformer {
             NodeKind::FunctionCall(name, args, returns, location) => {
                 self.transform_function_call_as_stmt(*name, args, returns, ctx, location)
             }
-            NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => {
-                self.transform_host_function_call_as_stmt(
+            NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => self
+                .transform_host_function_call_as_stmt(
                     *name,
                     args,
                     return_types,
@@ -183,7 +183,10 @@ impl FunctionTransformer {
                     *import,
                     ctx,
                     location,
-                )
+                ),
+            NodeKind::VariableDeclaration(arg) => {
+                // Use the context's helper method to process variable declarations
+                ctx.process_variable_declaration(arg, &node.location)
             }
             _ => {
                 // For other node types, delegate to the main context processing
@@ -278,7 +281,7 @@ impl FunctionTransformer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        _returns: &[Arg],
+        _returns: &[Var],
         ctx: &mut HirBuilderContext,
         location: &TextLocation,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -501,9 +504,8 @@ impl FunctionTransformer {
             if let ExpressionKind::Reference(name) = &arg.kind {
                 if ctx.is_potentially_owned(name) {
                     // Mark this as a potential move
-                    hir_arg.kind = HirExprKind::Move(crate::compiler::hir::nodes::HirPlace::Var(
-                        *name,
-                    ));
+                    hir_arg.kind =
+                        HirExprKind::Move(crate::compiler::hir::nodes::HirPlace::Var(*name));
                     ctx.mark_potentially_consumed(*name);
                 }
             }

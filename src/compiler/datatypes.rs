@@ -1,4 +1,4 @@
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -110,8 +110,8 @@ pub enum DataType {
     Collection(Box<DataType>, Ownership),
 
     // Structs
-    Parameters(Vec<Arg>),        // Struct definitions and parameters
-    Struct(Vec<Arg>, Ownership), // Struct instance
+    Parameters(Vec<Var>),        // Struct definitions and parameters
+    Struct(Vec<Var>, Ownership), // Struct instance
 
     // Special Beanstalk Types
     // Template types may have more static structure to them in the future
@@ -125,20 +125,20 @@ pub enum DataType {
 
     // TODO: IS THIS JUST MULTIPLE TYPES FOR FUNCTION RETURNS?
     // Choices should actually just be enums for now
-    Choices(Vec<Arg>),     // Union of types
+    Choices(Vec<Var>),     // Union of types
     Option(Box<DataType>), // Shorthand for a choice of a type or None
 }
 
 impl DataType {
     // IGNORES MUTABILITY
-    pub fn is_valid_type(&self, accepted_type: &mut DataType) -> bool {
+    pub fn is_valid_type_in_expression(&self, expression_type: &DataType) -> bool {
         // Has to make sure if either type is a union, that the other type is also a member of the union
         // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
 
         match self {
             DataType::Bool => {
                 matches!(
-                    accepted_type,
+                    expression_type,
                     DataType::Bool | DataType::Int | DataType::Float
                 )
             }
@@ -153,7 +153,7 @@ impl DataType {
             // }
             DataType::Range => {
                 matches!(
-                    accepted_type,
+                    expression_type,
                     DataType::Collection(..)
                         | DataType::Parameters(_)
                         | DataType::Float
@@ -163,13 +163,15 @@ impl DataType {
                 )
             }
 
+            DataType::Int => expression_type.is_numerical(),
+
             _ => {
                 // For other 'self' types, check the accepted_type
-                match accepted_type {
-                    // Might be needed here later?
-                    // DataType::Pointer => true,
+                match expression_type {
                     DataType::Inferred => {
-                        *accepted_type = self.to_owned();
+                        // Used to automatically set the expression type to the inferred type
+                        // But this is doing too much in one function
+                        // *expression_type = self.to_owned();
                         true
                     }
                     DataType::CoerceToString => true,
@@ -186,10 +188,14 @@ impl DataType {
                         matches!(self, &DataType::Bool | &DataType::Int | &DataType::Float)
                     }
 
-                    _ => false,
+                    _ => self == expression_type,
                 }
             }
         }
+    }
+
+    pub fn is_numerical(&self) -> bool {
+        matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
     }
 
     // Special Types that might change (basically the same as rust with more syntax sugar)
@@ -252,8 +258,8 @@ impl DataType {
         }
     }
 
-    pub fn to_arg(&self, string_table: &mut StringTable) -> Arg {
-        Arg {
+    pub fn to_arg(&self, string_table: &mut StringTable) -> Var {
+        Var {
             id: string_table.get_or_intern(self.to_string()),
             value: Expression::new(
                 ExpressionKind::None,

@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::parsers::ast::ScopeContext;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
 use crate::compiler::parsers::field_access::parse_field_access;
@@ -12,7 +12,7 @@ use crate::{ast_log, return_rule_error, return_syntax_error};
 /// Called when we encounter a variable reference followed by an assignment operator
 pub fn handle_mutation(
     token_stream: &mut FileTokens,
-    variable_arg: &Arg,
+    variable_arg: &Var,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {

@@ -3,7 +3,7 @@
 #[cfg(feature = "show_tokens")]
 macro_rules! token_log {
     ($token:expr) => {
-        eprintln!("{}", $token.to_string())
+        eprintln!("{}\n", $token.to_string())
     };
 }
 
@@ -29,6 +29,23 @@ macro_rules! timer_log {
 #[cfg(not(feature = "detailed_timers"))]
 macro_rules! timer_log {
     ($time:expr, $msg:expr) => {
+        // Nothing
+    };
+}
+
+// Headers Logging
+#[macro_export]
+#[cfg(feature = "show_headers")]
+macro_rules! header_log {
+    ($header:expr) => {
+        eprintln!("{}\n", $header.to_string())
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "show_headers"))]
+macro_rules! header_log {
+    ($header:expr) => {
         // Nothing
     };
 }

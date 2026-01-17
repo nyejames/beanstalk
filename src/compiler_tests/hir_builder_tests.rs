@@ -25,18 +25,18 @@
 
 #[cfg(test)]
 mod hir_builder_context_tests {
+    use crate::compiler::datatypes::DataType;
     use crate::compiler::hir::build_hir::{
-        AstHirMapping, HirBuildContext, HirBuilderContext,
-        HirValidator, HirValidationError, OwnershipHints, ScopeType,
+        AstHirMapping, HirBuildContext, HirBuilderContext, HirValidationError, HirValidator,
+        OwnershipHints, ScopeType,
     };
     use crate::compiler::hir::nodes::{
-        HirBlock, HirModule, HirNode, HirKind, HirStmt, HirTerminator, HirExpr, HirExprKind,
-        HirPlace, BinOp,
+        BinOp, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirPlace, HirStmt,
+        HirTerminator,
     };
-    use crate::compiler::datatypes::DataType;
-    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
-    use crate::compiler::string_interning::{StringTable, InternedString};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::{InternedString, StringTable};
     use quickcheck::{Arbitrary, Gen, QuickCheck, TestResult};
 
     // =========================================================================
@@ -582,12 +582,10 @@ mod hir_builder_context_tests {
             TestResult::passed()
         }
 
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(
-                property
-                    as fn(ArbitraryAstNodeId, ArbitraryHirNodeId, ArbitraryTextLocation) -> TestResult,
-            );
+        QuickCheck::new().tests(100).quickcheck(
+            property
+                as fn(ArbitraryAstNodeId, ArbitraryHirNodeId, ArbitraryTextLocation) -> TestResult,
+        );
     }
 
     /// Property: Multiple HIR nodes can map to same AST node
@@ -717,12 +715,10 @@ mod hir_builder_context_tests {
             TestResult::passed()
         }
 
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(
-                property
-                    as fn(ArbitraryHirNodeId, ArbitraryTextLocation, ArbitraryBlockCount) -> TestResult,
-            );
+        QuickCheck::new().tests(100).quickcheck(
+            property
+                as fn(ArbitraryHirNodeId, ArbitraryTextLocation, ArbitraryBlockCount) -> TestResult,
+        );
     }
 
     /// Property: HirBuilderContext creates build contexts with correct scope depth
@@ -753,9 +749,9 @@ mod hir_builder_context_tests {
             TestResult::passed()
         }
 
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(property as fn(ArbitraryScopeSequence, ArbitraryTextLocation) -> TestResult);
+        QuickCheck::new().tests(100).quickcheck(
+            property as fn(ArbitraryScopeSequence, ArbitraryTextLocation) -> TestResult,
+        );
     }
 
     // =========================================================================
@@ -844,9 +840,9 @@ mod hir_builder_context_tests {
         fn property(depth: ArbitraryBlockCount) -> TestResult {
             // Create a module with a deeply nested expression
             let nesting_depth = depth.0.min(10); // Cap at 10 to avoid stack overflow
-            
+
             let nested_expr = nested_binop_expr(nesting_depth);
-            
+
             let assign_stmt = HirStmt::Assign {
                 target: HirPlace::Var(InternedString::from_u32(1)),
                 value: nested_expr,
@@ -1334,10 +1330,7 @@ mod hir_builder_context_tests {
                 HirBlock {
                     id: 1,
                     params: vec![],
-                    nodes: vec![terminator_node(
-                        HirTerminator::Break { target: 2 },
-                        1,
-                    )],
+                    nodes: vec![terminator_node(HirTerminator::Break { target: 2 }, 1)],
                 },
                 HirBlock {
                     id: 2,
@@ -1351,10 +1344,12 @@ mod hir_builder_context_tests {
         };
 
         let result = HirValidator::validate_module(&module);
-        assert!(result.is_ok() || !matches!(result, Err(HirValidationError::InvalidBranchTarget { .. })));
+        assert!(
+            result.is_ok()
+                || !matches!(result, Err(HirValidationError::InvalidBranchTarget { .. }))
+        );
     }
 }
-
 
 // ============================================================================
 // Property Tests for Expression Linearization
@@ -1365,10 +1360,10 @@ mod hir_builder_context_tests {
 
 #[cfg(test)]
 mod expression_linearizer_property_tests {
-    use crate::compiler::hir::expression_linearizer::ExpressionLinearizer;
-    use crate::compiler::hir::build_hir::HirBuilderContext;
-    use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirStmt, HirPlace};
     use crate::compiler::datatypes::{DataType, Ownership};
+    use crate::compiler::hir::build_hir::HirBuilderContext;
+    use crate::compiler::hir::expression_linearizer::ExpressionLinearizer;
+    use crate::compiler::hir::nodes::{HirExprKind, HirKind, HirPlace, HirStmt};
     use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
     use crate::compiler::string_interning::StringTable;
@@ -1523,7 +1518,8 @@ mod expression_linearizer_property_tests {
                             }
                         }
                         (ArbitraryLiteralExpr::Float(v), HirExprKind::Float(hir_v)) => {
-                            if (*v - *hir_v).abs() < f64::EPSILON || (v.is_nan() && hir_v.is_nan()) {
+                            if (*v - *hir_v).abs() < f64::EPSILON || (v.is_nan() && hir_v.is_nan())
+                            {
                                 TestResult::passed()
                             } else {
                                 TestResult::failed()
@@ -1595,7 +1591,7 @@ mod expression_linearizer_property_tests {
     fn prop_compiler_temporaries_are_unique() {
         fn property(count: usize) -> TestResult {
             let count = count % 100 + 1; // 1-100 temporaries
-            
+
             let mut string_table = StringTable::new();
             let mut ctx = HirBuilderContext::new(&mut string_table);
             let mut linearizer = ExpressionLinearizer::new();
@@ -1631,7 +1627,7 @@ mod expression_linearizer_property_tests {
     fn prop_compiler_temporaries_are_tracked() {
         fn property(count: usize) -> TestResult {
             let count = count % 50 + 1; // 1-50 temporaries
-            
+
             let mut string_table = StringTable::new();
             let mut ctx = HirBuilderContext::new(&mut string_table);
             let mut linearizer = ExpressionLinearizer::new();
@@ -1686,7 +1682,9 @@ mod expression_linearizer_property_tests {
 
             // The node should be an assignment
             match &nodes[0].kind {
-                HirKind::Stmt(HirStmt::Assign { target, is_mutable, .. }) => {
+                HirKind::Stmt(HirStmt::Assign {
+                    target, is_mutable, ..
+                }) => {
                     // Target should be a variable
                     if !matches!(target, HirPlace::Var(_)) {
                         return TestResult::failed();
@@ -1731,14 +1729,12 @@ mod expression_linearizer_property_tests {
 
             // Check the type is preserved
             match linearizer.get_compiler_local_type(&temp) {
-                Some(stored_type) => {
-                    match (&data_type, stored_type) {
-                        (DataType::Int, DataType::Int) => TestResult::passed(),
-                        (DataType::Float, DataType::Float) => TestResult::passed(),
-                        (DataType::Bool, DataType::Bool) => TestResult::passed(),
-                        _ => TestResult::failed(),
-                    }
-                }
+                Some(stored_type) => match (&data_type, stored_type) {
+                    (DataType::Int, DataType::Int) => TestResult::passed(),
+                    (DataType::Float, DataType::Float) => TestResult::passed(),
+                    (DataType::Bool, DataType::Bool) => TestResult::passed(),
+                    _ => TestResult::failed(),
+                },
                 None => TestResult::failed(),
             }
         }
@@ -1749,7 +1745,6 @@ mod expression_linearizer_property_tests {
     }
 }
 
-
 // ============================================================================
 // Property Tests for Variable Management
 // Feature: hir-builder, Property 3: Variable and Assignment Handling
@@ -1758,10 +1753,10 @@ mod expression_linearizer_property_tests {
 
 #[cfg(test)]
 mod variable_manager_property_tests {
-    use crate::compiler::hir::variable_manager::VariableManager;
+    use crate::compiler::datatypes::{DataType, Ownership};
     use crate::compiler::hir::build_hir::HirBuilderContext;
     use crate::compiler::hir::nodes::{HirExprKind, HirPlace};
-    use crate::compiler::datatypes::{DataType, Ownership};
+    use crate::compiler::hir::variable_manager::VariableManager;
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
     use crate::compiler::string_interning::StringTable;
     use quickcheck::{Arbitrary, Gen, QuickCheck, TestResult};
@@ -1828,7 +1823,9 @@ mod variable_manager_property_tests {
 
         fn is_ownership_capable(&self) -> bool {
             match self {
-                ArbitraryDataType::Int | ArbitraryDataType::Float | ArbitraryDataType::Bool => false,
+                ArbitraryDataType::Int | ArbitraryDataType::Float | ArbitraryDataType::Bool => {
+                    false
+                }
                 ArbitraryDataType::Struct | ArbitraryDataType::Collection => true,
             }
         }
@@ -2028,7 +2025,9 @@ mod variable_manager_property_tests {
                         (DataType::Float, DataType::Float) => TestResult::passed(),
                         (DataType::Bool, DataType::Bool) => TestResult::passed(),
                         (DataType::Struct(_, _), DataType::Struct(_, _)) => TestResult::passed(),
-                        (DataType::Collection(_, _), DataType::Collection(_, _)) => TestResult::passed(),
+                        (DataType::Collection(_, _), DataType::Collection(_, _)) => {
+                            TestResult::passed()
+                        }
                         _ => TestResult::failed(),
                     }
                 }
@@ -2117,7 +2116,7 @@ mod variable_manager_property_tests {
     fn prop_nested_scopes_preserve_outer_variables() {
         fn property(depth: ArbitraryScopeDepth) -> TestResult {
             let depth = depth.0.min(10); // Cap at 10 for performance
-            
+
             let mut string_table = StringTable::new();
             let mut ctx = HirBuilderContext::new(&mut string_table);
             let mut manager = VariableManager::new();
@@ -2147,7 +2146,7 @@ mod variable_manager_property_tests {
             // Exit scopes one by one
             for i in (0..depth).rev() {
                 manager.exit_scope();
-                
+
                 // Variables from outer scopes should still exist
                 for j in 0..=i {
                     if !manager.variable_exists(var_names[j]) {
@@ -2174,14 +2173,14 @@ mod variable_manager_property_tests {
 
 #[cfg(test)]
 mod control_flow_linearization_tests {
+    use crate::compiler::datatypes::{DataType, Ownership};
     use crate::compiler::hir::build_hir::{HirBuilderContext, ScopeType};
     use crate::compiler::hir::control_flow_linearizer::ControlFlowLinearizer;
     use crate::compiler::hir::nodes::{
-        BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode,
-        HirPlace, HirStmt, HirTerminator,
+        BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirPlace, HirStmt,
+        HirTerminator,
     };
-    use crate::compiler::datatypes::{DataType, Ownership};
-    use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Arg};
+    use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
     use crate::compiler::parsers::expressions::expression::Expression;
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
     use crate::compiler::string_interning::StringTable;
@@ -2292,7 +2291,10 @@ mod control_flow_linearization_tests {
 
             // Last node should be an If terminator
             let last_node = nodes.last().unwrap();
-            if !matches!(last_node.kind, HirKind::Terminator(HirTerminator::If { .. })) {
+            if !matches!(
+                last_node.kind,
+                HirKind::Terminator(HirTerminator::If { .. })
+            ) {
                 return TestResult::failed();
             }
 
@@ -2367,11 +2369,7 @@ mod control_flow_linearization_tests {
                 .map(|i| create_int_expr(i as i64))
                 .collect();
 
-            let result = linearizer.linearize_return(
-                &values,
-                &TextLocation::default(),
-                &mut ctx,
-            );
+            let result = linearizer.linearize_return(&values, &TextLocation::default(), &mut ctx);
 
             if result.is_err() {
                 return TestResult::failed();
@@ -2549,7 +2547,7 @@ mod control_flow_linearization_tests {
     fn prop_nested_loops_have_correct_targets() {
         fn property(nesting: ArbitraryNestingDepth) -> TestResult {
             let depth = nesting.0.max(1).min(5); // At least 1, at most 5
-            
+
             let mut string_table = StringTable::new();
             let mut ctx = HirBuilderContext::new(&mut string_table);
             let mut linearizer = ControlFlowLinearizer::new();
@@ -2664,7 +2662,6 @@ mod control_flow_linearization_tests {
     }
 }
 
-
 // ============================================================================
 // Property Tests for Return and Jump Handling (Task 4.4)
 // ============================================================================
@@ -2674,12 +2671,12 @@ mod control_flow_linearization_tests {
 /// Validates: Requirements 3.5, 5.3
 #[cfg(test)]
 mod return_and_jump_handling_tests {
+    use crate::compiler::datatypes::{DataType, Ownership};
     use crate::compiler::hir::build_hir::{HirBuilderContext, ScopeType};
     use crate::compiler::hir::control_flow_linearizer::ControlFlowLinearizer;
     use crate::compiler::hir::nodes::{
         HirExpr, HirExprKind, HirKind, HirNode, HirStmt, HirTerminator,
     };
-    use crate::compiler::datatypes::{DataType, Ownership};
     use crate::compiler::parsers::expressions::expression::Expression;
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
     use crate::compiler::string_interning::StringTable;
@@ -2747,15 +2744,9 @@ mod return_and_jump_handling_tests {
             let mut linearizer = ControlFlowLinearizer::new();
 
             // Create return values
-            let values: Vec<Expression> = (0..count.0)
-                .map(|i| create_int_expr(i as i64))
-                .collect();
+            let values: Vec<Expression> = (0..count.0).map(|i| create_int_expr(i as i64)).collect();
 
-            let result = linearizer.linearize_return(
-                &values,
-                &TextLocation::default(),
-                &mut ctx,
-            );
+            let result = linearizer.linearize_return(&values, &TextLocation::default(), &mut ctx);
 
             if result.is_err() {
                 return TestResult::failed();
@@ -2764,15 +2755,17 @@ mod return_and_jump_handling_tests {
             let nodes = result.unwrap();
 
             // Find the Return terminator
-            let return_node = nodes.iter().find(|n| {
-                matches!(n.kind, HirKind::Terminator(HirTerminator::Return(_)))
-            });
+            let return_node = nodes
+                .iter()
+                .find(|n| matches!(n.kind, HirKind::Terminator(HirTerminator::Return(_))));
 
             if return_node.is_none() {
                 return TestResult::failed();
             }
 
-            if let HirKind::Terminator(HirTerminator::Return(return_values)) = &return_node.unwrap().kind {
+            if let HirKind::Terminator(HirTerminator::Return(return_values)) =
+                &return_node.unwrap().kind
+            {
                 // Should have the same number of values
                 if return_values.len() != count.0 {
                     return TestResult::failed();
@@ -2799,11 +2792,7 @@ mod return_and_jump_handling_tests {
 
             let values = vec![create_int_expr(value.0)];
 
-            let result = linearizer.linearize_return(
-                &values,
-                &TextLocation::default(),
-                &mut ctx,
-            );
+            let result = linearizer.linearize_return(&values, &TextLocation::default(), &mut ctx);
 
             if result.is_err() {
                 return TestResult::failed();
@@ -2812,15 +2801,17 @@ mod return_and_jump_handling_tests {
             let nodes = result.unwrap();
 
             // Find the Return terminator
-            let return_node = nodes.iter().find(|n| {
-                matches!(n.kind, HirKind::Terminator(HirTerminator::Return(_)))
-            });
+            let return_node = nodes
+                .iter()
+                .find(|n| matches!(n.kind, HirKind::Terminator(HirTerminator::Return(_))));
 
             if return_node.is_none() {
                 return TestResult::failed();
             }
 
-            if let HirKind::Terminator(HirTerminator::Return(return_values)) = &return_node.unwrap().kind {
+            if let HirKind::Terminator(HirTerminator::Return(return_values)) =
+                &return_node.unwrap().kind
+            {
                 if return_values.len() != 1 {
                     return TestResult::failed();
                 }
@@ -3062,15 +3053,9 @@ mod return_and_jump_handling_tests {
             let mut ctx = HirBuilderContext::new(&mut string_table);
             let mut linearizer = ControlFlowLinearizer::new();
 
-            let values: Vec<Expression> = (0..count.0)
-                .map(|i| create_int_expr(i as i64))
-                .collect();
+            let values: Vec<Expression> = (0..count.0).map(|i| create_int_expr(i as i64)).collect();
 
-            let result = linearizer.linearize_return(
-                &values,
-                &TextLocation::default(),
-                &mut ctx,
-            );
+            let result = linearizer.linearize_return(&values, &TextLocation::default(), &mut ctx);
 
             if result.is_err() {
                 return TestResult::failed();
@@ -3079,7 +3064,8 @@ mod return_and_jump_handling_tests {
             let nodes = result.unwrap();
 
             // Count terminators
-            let terminator_count = nodes.iter()
+            let terminator_count = nodes
+                .iter()
                 .filter(|n| matches!(n.kind, HirKind::Terminator(_)))
                 .count();
 
@@ -3183,15 +3169,9 @@ mod return_and_jump_handling_tests {
             let mut ctx = HirBuilderContext::new(&mut string_table);
             let mut linearizer = ControlFlowLinearizer::new();
 
-            let values: Vec<Expression> = (0..count.0)
-                .map(|i| create_int_expr(i as i64))
-                .collect();
+            let values: Vec<Expression> = (0..count.0).map(|i| create_int_expr(i as i64)).collect();
 
-            let result = linearizer.linearize_return(
-                &values,
-                &TextLocation::default(),
-                &mut ctx,
-            );
+            let result = linearizer.linearize_return(&values, &TextLocation::default(), &mut ctx);
 
             if result.is_err() {
                 return TestResult::failed();
@@ -3634,11 +3614,7 @@ mod ownership_capability_tracking_property_tests {
 
             // Verify: All variables are marked as potentially consumed
             for var in &variables {
-                if !ctx
-                    .metadata()
-                    .ownership_hints
-                    .is_potentially_consumed(var)
-                {
+                if !ctx.metadata().ownership_hints.is_potentially_consumed(var) {
                     return TestResult::failed();
                 }
             }
@@ -3785,8 +3761,8 @@ mod hir_error_handling_property_tests {
         HirError, HirErrorContext, HirErrorKind, HirTransformationStage,
     };
     use crate::compiler::hir::nodes::BlockId;
-    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
     use quickcheck::{Arbitrary, Gen, QuickCheck, TestResult};
 
     // =========================================================================
@@ -3801,7 +3777,10 @@ mod hir_error_handling_property_tests {
         fn arbitrary(g: &mut Gen) -> Self {
             let choice = usize::arbitrary(g) % 15;
             let kind = match choice {
-                0 => HirErrorKind::UnsupportedConstruct(format!("construct_{}", usize::arbitrary(g) % 100)),
+                0 => HirErrorKind::UnsupportedConstruct(format!(
+                    "construct_{}",
+                    usize::arbitrary(g) % 100
+                )),
                 1 => HirErrorKind::TransformationFailed {
                     node_type: format!("node_{}", usize::arbitrary(g) % 100),
                     reason: format!("reason_{}", usize::arbitrary(g) % 100),
@@ -3820,7 +3799,9 @@ mod hir_error_handling_property_tests {
                     count: 2 + usize::arbitrary(g) % 5,
                 },
                 9 => HirErrorKind::UndefinedFunction(format!("func_{}", usize::arbitrary(g) % 100)),
-                10 => HirErrorKind::UndefinedStruct(format!("struct_{}", usize::arbitrary(g) % 100)),
+                10 => {
+                    HirErrorKind::UndefinedStruct(format!("struct_{}", usize::arbitrary(g) % 100))
+                }
                 11 => HirErrorKind::UndefinedField {
                     struct_name: format!("struct_{}", usize::arbitrary(g) % 100),
                     field_name: format!("field_{}", usize::arbitrary(g) % 100),
@@ -3893,15 +3874,11 @@ mod hir_error_handling_property_tests {
     #[test]
     fn prop_hir_error_preserves_kind() {
         fn property(kind: ArbitraryHirErrorKind, loc: ArbitraryTextLocation) -> TestResult {
-            let error = HirError::transformation(
-                kind.0.clone(),
-                loc.0,
-                HirErrorContext::default(),
-            );
+            let error = HirError::transformation(kind.0.clone(), loc.0, HirErrorContext::default());
 
             // The error message should contain information from the kind
             let message = error.message();
-            
+
             // Verify the message is not empty
             if message.is_empty() {
                 return TestResult::failed();
@@ -3934,22 +3911,21 @@ mod hir_error_handling_property_tests {
             TestResult::passed()
         }
 
-        QuickCheck::new()
-            .tests(100)
-            .quickcheck(
-                property as fn(ArbitraryHirErrorKind, ArbitraryTransformationStage, ArbitraryTextLocation) -> TestResult,
-            );
+        QuickCheck::new().tests(100).quickcheck(
+            property
+                as fn(
+                    ArbitraryHirErrorKind,
+                    ArbitraryTransformationStage,
+                    ArbitraryTextLocation,
+                ) -> TestResult,
+        );
     }
 
     /// Property: HirError preserves source location
     #[test]
     fn prop_hir_error_preserves_location() {
         fn property(kind: ArbitraryHirErrorKind, loc: ArbitraryTextLocation) -> TestResult {
-            let error = HirError::transformation(
-                kind.0,
-                loc.0.clone(),
-                HirErrorContext::default(),
-            );
+            let error = HirError::transformation(kind.0, loc.0.clone(), HirErrorContext::default());
 
             // Verify location is preserved (line numbers should match)
             if error.location.start_pos.line_number != loc.0.start_pos.line_number {
@@ -3977,11 +3953,7 @@ mod hir_error_handling_property_tests {
     #[test]
     fn prop_hir_error_converts_to_compiler_error() {
         fn property(kind: ArbitraryHirErrorKind, loc: ArbitraryTextLocation) -> TestResult {
-            let error = HirError::transformation(
-                kind.0.clone(),
-                loc.0,
-                HirErrorContext::default(),
-            );
+            let error = HirError::transformation(kind.0.clone(), loc.0, HirErrorContext::default());
 
             let is_compiler_bug = error.is_compiler_bug();
             let compiler_error: CompilerError = error.into();
@@ -4045,7 +4017,10 @@ mod hir_error_handling_property_tests {
             }
 
             let error = HirError::new(
-                HirErrorKind::ValidationFailure { invariant, description },
+                HirErrorKind::ValidationFailure {
+                    invariant,
+                    description,
+                },
                 ErrorLocation::default(),
                 HirErrorContext::validation(),
             );
@@ -4119,12 +4094,8 @@ mod hir_error_handling_property_tests {
                 return TestResult::discard();
             }
 
-            let error = HirError::new(
-                kind.0,
-                ErrorLocation::default(),
-                HirErrorContext::default(),
-            )
-            .with_suggestion(&suggestion);
+            let error = HirError::new(kind.0, ErrorLocation::default(), HirErrorContext::default())
+                .with_suggestion(&suggestion);
 
             if error.suggestion != Some(suggestion) {
                 return TestResult::failed();
@@ -4189,7 +4160,10 @@ mod hir_error_handling_property_tests {
             let hir_error: HirError = validation_error.into();
 
             match hir_error.kind {
-                HirErrorKind::MultipleTerminators { block_id: id, count: c } => {
+                HirErrorKind::MultipleTerminators {
+                    block_id: id,
+                    count: c,
+                } => {
                     if id != block_id || c != count {
                         return TestResult::failed();
                     }
@@ -4242,7 +4216,10 @@ mod hir_error_handling_property_tests {
             let hir_error: HirError = validation_error.into();
 
             match hir_error.kind {
-                HirErrorKind::InvalidBranchTarget { source_block: s, target_block: t } => {
+                HirErrorKind::InvalidBranchTarget {
+                    source_block: s,
+                    target_block: t,
+                } => {
                     if s != source_block || t != target_block {
                         return TestResult::failed();
                     }
@@ -4290,12 +4267,8 @@ mod hir_error_handling_property_tests {
                 return TestResult::discard();
             }
 
-            let error = HirError::new(
-                kind.0,
-                ErrorLocation::default(),
-                HirErrorContext::default(),
-            )
-            .with_suggestion(&suggestion);
+            let error = HirError::new(kind.0, ErrorLocation::default(), HirErrorContext::default())
+                .with_suggestion(&suggestion);
 
             let display = format!("{}", error);
 
@@ -4330,7 +4303,6 @@ mod hir_error_handling_property_tests {
     }
 }
 
-
 // =============================================================================
 // Property Tests for Validation Error Handling (Task 11.4)
 // Feature: hir-builder, Validation Error Handling
@@ -4341,9 +4313,7 @@ mod hir_error_handling_property_tests {
 mod hir_validation_error_handling_property_tests {
     use crate::compiler::compiler_errors::{CompilerError, ErrorType};
     use crate::compiler::hir::build_hir::HirValidationError;
-    use crate::compiler::hir::errors::{
-        HirError, HirErrorKind, ValidationErrorContext,
-    };
+    use crate::compiler::hir::errors::{HirError, HirErrorKind, ValidationErrorContext};
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
     use quickcheck::{Arbitrary, Gen, QuickCheck, TestResult};
 
@@ -4841,7 +4811,10 @@ mod hir_validation_error_handling_property_tests {
             let hir_error: HirError = validation_error.into();
 
             match &hir_error.kind {
-                HirErrorKind::MissingDrop { variable: v, exit_path: p } => {
+                HirErrorKind::MissingDrop {
+                    variable: v,
+                    exit_path: p,
+                } => {
                     if *v != variable || *p != exit_path {
                         return TestResult::failed();
                     }
@@ -4898,7 +4871,6 @@ mod hir_validation_error_handling_property_tests {
     }
 }
 
-
 // ============================================================================
 // Integration Tests for Complete Pipeline (Task 12.2)
 // ============================================================================
@@ -4908,10 +4880,10 @@ mod hir_validation_error_handling_property_tests {
 
 #[cfg(test)]
 mod pipeline_integration_tests {
+    use crate::Compiler;
     use crate::compiler::host_functions::registry::HostFunctionRegistry;
     use crate::compiler::string_interning::StringTable;
     use crate::settings::{Config, ProjectType};
-    use crate::Compiler;
     use std::path::PathBuf;
 
     /// Helper to create a test compiler with default settings
@@ -4949,7 +4921,10 @@ mod pipeline_integration_tests {
 
         // Tokenize
         let tokens = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens.is_ok(), "Tokenization should succeed for empty source");
+        assert!(
+            tokens.is_ok(),
+            "Tokenization should succeed for empty source"
+        );
     }
 
     /// Test: Simple variable declaration produces valid HIR
@@ -4984,7 +4959,10 @@ z = 3
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for multiple declarations");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for multiple declarations"
+        );
     }
 
     // =========================================================================
@@ -5003,7 +4981,10 @@ z = 3
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for binary expression");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for binary expression"
+        );
     }
 
     /// Test: Complex nested expression produces flat HIR
@@ -5018,7 +4999,10 @@ z = 3
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for complex expression");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for complex expression"
+        );
     }
 
     // =========================================================================
@@ -5042,7 +5026,10 @@ if x is 1:
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for if statement");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for if statement"
+        );
     }
 
     /// Test: If-else statement produces proper HIR blocks
@@ -5064,7 +5051,10 @@ else
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for if-else");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for if-else"
+        );
     }
 
     /// Test: Loop statement produces proper HIR blocks
@@ -5083,7 +5073,10 @@ loop i in 0 to 10:
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for loop");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for loop"
+        );
     }
 
     // =========================================================================
@@ -5106,7 +5099,10 @@ add |a Int, b Int| -> Int:
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for function definition");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for function definition"
+        );
     }
 
     /// Test: Function with multiple parameters
@@ -5126,7 +5122,10 @@ calculate |x Int, y Int, z Int| -> Int:
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for multi-param function");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for multi-param function"
+        );
     }
 
     // =========================================================================
@@ -5150,7 +5149,10 @@ Point = |
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for struct definition");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for struct definition"
+        );
     }
 
     // =========================================================================
@@ -5205,7 +5207,10 @@ result = add(x, y)
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for combined features");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for combined features"
+        );
     }
 
     /// Test: Nested control flow produces valid HIR
@@ -5227,7 +5232,10 @@ loop i in 0 to 5:
         let module_path = PathBuf::from("test.bst");
 
         let tokens_result = compiler.source_to_tokens(source, &module_path);
-        assert!(tokens_result.is_ok(), "Tokenization should succeed for nested control flow");
+        assert!(
+            tokens_result.is_ok(),
+            "Tokenization should succeed for nested control flow"
+        );
     }
 
     // =========================================================================
@@ -5279,17 +5287,20 @@ loop i in 0 to 5:
         };
 
         let result = HirValidator::validate_module(&module);
-        assert!(result.is_ok(), "HIR with return terminator should pass validation");
+        assert!(
+            result.is_ok(),
+            "HIR with return terminator should pass validation"
+        );
     }
 
     /// Test: HIR with connected blocks passes validation
     #[test]
     fn test_hir_connected_blocks_pass_validation() {
+        use crate::compiler::datatypes::DataType;
         use crate::compiler::hir::build_hir::HirValidator;
         use crate::compiler::hir::nodes::{
             HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirTerminator,
         };
-        use crate::compiler::datatypes::DataType;
         use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 
         let module = HirModule {
@@ -5327,10 +5338,12 @@ loop i in 0 to 5:
         };
 
         let result = HirValidator::validate_module(&module);
-        assert!(result.is_ok(), "HIR with connected blocks should pass validation");
+        assert!(
+            result.is_ok(),
+            "HIR with connected blocks should pass validation"
+        );
     }
 }
-
 
 // ============================================================================
 // Property Test for Pipeline Integration (Task 12.4)
@@ -5341,12 +5354,12 @@ loop i in 0 to 5:
 #[cfg(test)]
 mod compiler_integration_property_tests {
     use crate::compiler::hir::build_hir::{
-        HirBuilderContext, HirValidator, HirBuildContext, AstHirMapping,
-        OwnershipHints, ScopeType, HirGenerationMetadata,
+        AstHirMapping, HirBuildContext, HirBuilderContext, HirGenerationMetadata, HirValidator,
+        OwnershipHints, ScopeType,
     };
-    use crate::compiler::hir::nodes::{HirModule, HirBlock, HirNode, HirKind, HirTerminator};
-    use crate::compiler::string_interning::StringTable;
+    use crate::compiler::hir::nodes::{HirBlock, HirKind, HirModule, HirNode, HirTerminator};
     use crate::compiler::parsers::tokenizer::tokens::TextLocation;
+    use crate::compiler::string_interning::StringTable;
     use quickcheck::{Arbitrary, Gen, QuickCheck, TestResult};
 
     // =========================================================================
@@ -5401,20 +5414,20 @@ mod compiler_integration_property_tests {
     fn prop_builder_context_accepts_any_string_table() {
         fn property(intern_count: usize) -> TestResult {
             let mut string_table = StringTable::new();
-            
+
             // Intern some strings to simulate a used string table
             for i in 0..intern_count.min(100) {
                 string_table.intern(&format!("test_string_{}", i));
             }
-            
+
             // Should be able to create a builder context
             let ctx = HirBuilderContext::new(&mut string_table);
-            
+
             // Context should be in a valid initial state
             if ctx.current_scope_depth() != 0 {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5429,7 +5442,7 @@ mod compiler_integration_property_tests {
         fn property(_seed: usize) -> TestResult {
             let mut string_table = StringTable::new();
             let ctx = HirBuilderContext::new(&mut string_table);
-            
+
             // All counters should start at 0
             // Block counter starts at 0
             // Node counter starts at 0
@@ -5437,12 +5450,12 @@ mod compiler_integration_property_tests {
             if ctx.current_scope_depth() != 0 {
                 return TestResult::failed();
             }
-            
+
             // No current function
             if ctx.current_function.is_some() {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5523,7 +5536,7 @@ mod compiler_integration_property_tests {
         fn property(line_seed: u32, column_seed: u32) -> TestResult {
             let line = ((line_seed % 10000) + 1) as i32;
             let column = ((column_seed % 1000) + 1) as i32;
-            
+
             let location = TextLocation {
                 scope: crate::compiler::interned_path::InternedPath::default(),
                 start_pos: crate::compiler::parsers::tokenizer::tokens::CharPosition {
@@ -5535,16 +5548,16 @@ mod compiler_integration_property_tests {
                     char_column: column + 10,
                 },
             };
-            
+
             let context = HirBuildContext::new(location.clone());
-            
+
             if context.source_location.start_pos.line_number != line {
                 return TestResult::failed();
             }
             if context.source_location.start_pos.char_column != column {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5559,15 +5572,15 @@ mod compiler_integration_property_tests {
         fn property(ast_id: usize, hir_id: usize) -> TestResult {
             let ast_id = ast_id % 10000;
             let hir_id = hir_id % 10000;
-            
+
             let mut mapping = AstHirMapping::new();
             mapping.add_single_mapping(ast_id, hir_id);
-            
+
             // Should be able to get AST from HIR
             if mapping.get_original_ast(hir_id) != Some(ast_id) {
                 return TestResult::failed();
             }
-            
+
             // Should be able to get HIR from AST
             if let Some(hir_nodes) = mapping.get_hir_nodes(ast_id) {
                 if !hir_nodes.contains(&hir_id) {
@@ -5576,7 +5589,7 @@ mod compiler_integration_property_tests {
             } else {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5597,25 +5610,25 @@ mod compiler_integration_property_tests {
             let depth = depth % 50 + 1; // Limit depth to avoid stack issues
             let mut string_table = StringTable::new();
             let mut ctx = HirBuilderContext::new(&mut string_table);
-            
+
             // Enter scopes
             for _ in 0..depth {
                 ctx.enter_scope(ScopeType::Block);
             }
-            
+
             if ctx.current_scope_depth() != depth {
                 return TestResult::failed();
             }
-            
+
             // Exit scopes
             for _ in 0..depth {
                 let _ = ctx.exit_scope();
             }
-            
+
             if ctx.current_scope_depth() != 0 {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5631,19 +5644,19 @@ mod compiler_integration_property_tests {
             let count = count % 100 + 1;
             let mut string_table = StringTable::new();
             let mut ctx = HirBuilderContext::new(&mut string_table);
-            
+
             let mut ids = Vec::new();
             for _ in 0..count {
                 ids.push(ctx.allocate_block_id());
             }
-            
+
             // IDs should be sequential starting from 0
             for (expected, actual) in ids.iter().enumerate() {
                 if *actual != expected {
                     return TestResult::failed();
                 }
             }
-            
+
             TestResult::passed()
         }
 
@@ -5662,7 +5675,7 @@ mod compiler_integration_property_tests {
     fn prop_hir_module_generates_debug_string() {
         fn property(_seed: usize) -> TestResult {
             let string_table = StringTable::new();
-            
+
             let module = HirModule {
                 blocks: vec![HirBlock {
                     id: 0,
@@ -5679,22 +5692,22 @@ mod compiler_integration_property_tests {
             };
 
             let debug_str = module.debug_string(&string_table);
-            
+
             // Debug string should not be empty
             if debug_str.is_empty() {
                 return TestResult::failed();
             }
-            
+
             // Debug string should contain module information
             if !debug_str.contains("HIR Module") {
                 return TestResult::failed();
             }
-            
+
             // Debug string should contain entry block info
             if !debug_str.contains("Entry Block") {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5708,7 +5721,7 @@ mod compiler_integration_property_tests {
     fn prop_hir_module_display_valid() {
         fn property(_seed: usize) -> TestResult {
             let string_table = StringTable::new();
-            
+
             let module = HirModule {
                 blocks: vec![HirBlock {
                     id: 0,
@@ -5721,17 +5734,17 @@ mod compiler_integration_property_tests {
             };
 
             let display_str = module.display_with_table(&string_table);
-            
+
             // Display string should not be empty
             if display_str.is_empty() {
                 return TestResult::failed();
             }
-            
+
             // Display string should contain block information
             if !display_str.contains("Block") {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5750,20 +5763,18 @@ mod compiler_integration_property_tests {
     fn prop_string_table_interning_consistent() {
         fn property(count: usize) -> TestResult {
             let count = (count % 20) + 1; // Limit to 1-20 strings
-            
+
             let mut string_table = StringTable::new();
-            
+
             // Create simple test strings
-            let strings: Vec<String> = (0..count)
-                .map(|i| format!("test_str_{}", i))
-                .collect();
-            
+            let strings: Vec<String> = (0..count).map(|i| format!("test_str_{}", i)).collect();
+
             // Intern strings and store their IDs
             let mut ids = Vec::new();
             for s in &strings {
                 ids.push(string_table.intern(s));
             }
-            
+
             // Re-interning the same strings should return the same IDs
             for (i, s) in strings.iter().enumerate() {
                 let new_id = string_table.intern(s);
@@ -5771,7 +5782,7 @@ mod compiler_integration_property_tests {
                     return TestResult::failed();
                 }
             }
-            
+
             // Resolving IDs should return the original strings
             for (i, s) in strings.iter().enumerate() {
                 let resolved = string_table.resolve(ids[i]);
@@ -5779,7 +5790,7 @@ mod compiler_integration_property_tests {
                     return TestResult::failed();
                 }
             }
-            
+
             TestResult::passed()
         }
 
@@ -5795,7 +5806,7 @@ mod compiler_integration_property_tests {
             let count = count % 50 + 1;
             let mut metadata = HirGenerationMetadata::new();
             let mut string_table = StringTable::new();
-            
+
             // Generate temporary names
             let mut temp_names = Vec::new();
             for _ in 0..count {
@@ -5803,13 +5814,16 @@ mod compiler_integration_property_tests {
                 let interned = string_table.intern(&name);
                 temp_names.push(interned);
             }
-            
+
             // All temporary names should be unique
-            let unique_count = temp_names.iter().collect::<std::collections::HashSet<_>>().len();
+            let unique_count = temp_names
+                .iter()
+                .collect::<std::collections::HashSet<_>>()
+                .len();
             if unique_count != count {
                 return TestResult::failed();
             }
-            
+
             TestResult::passed()
         }
 
@@ -5825,7 +5839,7 @@ mod compiler_integration_property_tests {
             let var_count = var_count % 50 + 1;
             let mut hints = OwnershipHints::new();
             let mut string_table = StringTable::new();
-            
+
             // Create variables and mark them as potentially owned
             let mut vars = Vec::new();
             for i in 0..var_count {
@@ -5833,21 +5847,21 @@ mod compiler_integration_property_tests {
                 vars.push(var);
                 hints.mark_potentially_owned(var);
             }
-            
+
             // All variables should be potentially owned
             for var in &vars {
                 if !hints.is_potentially_owned(var) {
                     return TestResult::failed();
                 }
             }
-            
+
             // Mark some as consumed
             for (i, var) in vars.iter().enumerate() {
                 if i % 2 == 0 {
                     hints.mark_potentially_consumed(*var);
                 }
             }
-            
+
             // Check consumed state
             for (i, var) in vars.iter().enumerate() {
                 let should_be_consumed = i % 2 == 0;
@@ -5855,7 +5869,7 @@ mod compiler_integration_property_tests {
                     return TestResult::failed();
                 }
             }
-            
+
             TestResult::passed()
         }
 

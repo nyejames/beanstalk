@@ -2,7 +2,7 @@ use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast::ScopeContext;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
 use crate::compiler::parsers::expressions::expression::Expression;
 use crate::compiler::parsers::expressions::parse_expression::create_expression;
@@ -168,7 +168,7 @@ pub fn create_loop(
             token_stream.advance();
 
             // The thing being iterated over
-            let loop_arg = Arg {
+            let loop_arg = Var {
                 id: name.to_owned(),
                 value: Expression::new(
                     iterated_item.kind.to_owned(),

@@ -1,24 +1,24 @@
-use crate::ast_log;
 use crate::compiler::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::host_functions::registry::HostFunctionRegistry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::statements::imports::parse_import;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::compiler::string_interning::{StringId, StringTable};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::path::Path;
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function(FunctionSignature, Vec<Token>),
     Template(Vec<Token>), // Top level templates are used for HTML page generation
-    Struct(Vec<Arg>),
-    Choice(Vec<Arg>), // Tagged unions. Not yet implemented in the language
-    Constant(Arg),
+    Struct(Vec<Var>),
+    Choice(Vec<Var>), // Tagged unions. Not yet implemented in the language
+    Constant(Var),
 
     // The top-level scope of regular files.
     // Any other logic in the top level scope implicitly becomes a "start" function.
@@ -46,6 +46,12 @@ pub struct Header {
     // And what does this header name this import? (last part of the path)
     pub dependencies: HashSet<InternedPath>,
     pub name_location: TextLocation,
+}
+
+impl Display for Header {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Header kind: {:#?}", self.kind)
+    }
 }
 
 // This takes all the files in the module
@@ -163,14 +169,14 @@ pub fn parse_headers_in_file(
 
     loop {
         let current_token = token_stream.current_token();
-        ast_log!("Parsing Header Token: {:?}", current_token);
+        // ast_log!("Parsing Header Token: {:?}", current_token);
         let current_location = token_stream.current_location();
         token_stream.advance();
 
         match current_token.kind.to_owned() {
             // Template declaration at Top level
             // This becomes an HTML page if this file is a Page in an HTML project
-            TokenKind::ParentTemplate => {
+            TokenKind::TopLevelTemplate => {
                 let mut dependencies: HashSet<InternedPath> = HashSet::new();
                 let mut templates_opened = 1;
                 let mut templates_closed = 0;
@@ -267,7 +273,7 @@ pub fn parse_headers_in_file(
                         )?;
 
                         match header.kind {
-                            HeaderKind::StartFunction(_) => {
+                            HeaderKind::StartFunction(_) | HeaderKind::Main(_) => {
                                 main_function_body.push(current_token);
                                 if let Some(path) = file_imports.get(&name_id) {
                                     main_function_dependencies.insert(path.to_owned());
@@ -387,8 +393,8 @@ fn create_header(
     // Starts at the first token after the declaration symbol
     let current_token = token_stream.current_token_kind().to_owned();
 
-    // FUNCTIONS
     match current_token {
+        // FUNCTIONS
         TokenKind::TypeParameterBracket => {
             let empty_context = ScopeContext::new(
                 ContextKind::Module,
@@ -448,10 +454,18 @@ fn create_header(
         }
 
         // Could be a struct or immutable variable
+        // Current issues with this way of doing it:
+        // - Compiler directives can interrupt simple parsing here
+        // - What about explicit type declarations?
+        // This naively assumes a very rigid declaration.
+        // What probably needs to happen is a "shallow parse" of the whole assignment,
+        // Since statements don't have a single explicit terminator like scopes do.
+        // This will need to be a lightweight version of new_arg
         TokenKind::Assign => {
             // Type parameter bracket is a new struct
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 // TODO: Struct headers
+                // This needs to skip until the end of the type parameter bracket
             } else if exported {
                 // This is a global constant (exported immutable variable)
                 // TODO: Constant headers

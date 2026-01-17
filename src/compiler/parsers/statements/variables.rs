@@ -10,7 +10,7 @@ use crate::compiler::parsers::statements::functions::{FunctionSignature, parse_f
 use crate::compiler::parsers::statements::structs::create_struct_definition;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::parsers::{
-    ast_nodes::{Arg, NodeKind},
+    ast_nodes::{NodeKind, Var},
     expressions::parse_expression::create_expression,
 };
 use crate::compiler::string_interning::{StringId, StringTable};
@@ -18,7 +18,7 @@ use crate::{ast_log, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
-    reference_arg: &Arg,
+    reference_arg: &Var,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
@@ -51,7 +51,7 @@ pub fn new_arg(
     context: &ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<Arg, CompilerError> {
+) -> Result<Var, CompilerError> {
     // Move past the name
     token_stream.advance();
 
@@ -75,7 +75,7 @@ pub fn new_arg(
         }
 
         TokenKind::TypeParameterBracket => {
-            let func_sig = FunctionSignature::new(token_stream, &context, string_table)?;
+            let func_sig = FunctionSignature::new(token_stream, context, string_table)?;
             let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
             // TODO: fast check for function without signature
@@ -95,7 +95,7 @@ pub fn new_arg(
                 string_table,
             )?;
 
-            return Ok(Arg {
+            return Ok(Var {
                 id,
                 value: Expression::function(
                     None,
@@ -143,7 +143,7 @@ pub fn new_arg(
         TokenKind::Colon => {
             let struct_def = create_struct_definition(token_stream, context, string_table)?;
 
-            return Ok(Arg {
+            return Ok(Var {
                 id,
                 value: Expression::struct_definition(
                     struct_def,
@@ -237,7 +237,7 @@ pub fn new_arg(
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
     let parsed_expr = match token_stream.current_token_kind() {
-        // Is this a hashset or something?
+        // Struct Definition
         // TokenKind::TypeParameterBracket => {
         //     // TODO
         // }
@@ -265,7 +265,7 @@ pub fn new_arg(
 
     ast_log!("Created new variable of type: {}", data_type);
 
-    Ok(Arg {
+    Ok(Var {
         id: id,
         value: parsed_expr,
     })

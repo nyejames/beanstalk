@@ -5,7 +5,7 @@
 
 use crate::compiler::datatypes::DataType;
 use crate::compiler::lir::nodes::LirType;
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::InternedString;
 
 // ============================================================================
@@ -117,7 +117,7 @@ fn align_to(offset: u32, alignment: u32) -> u32 {
 }
 
 /// Computes field offsets with proper alignment for a list of struct fields.
-pub fn compute_field_offsets(fields: &[Arg]) -> Vec<FieldLayout> {
+pub fn compute_field_offsets(fields: &[Var]) -> Vec<FieldLayout> {
     let mut field_layouts = Vec::with_capacity(fields.len());
     let mut current_offset: u32 = 0;
 
@@ -159,7 +159,7 @@ pub fn calculate_struct_size(field_layouts: &[FieldLayout]) -> u32 {
 }
 
 /// Builds a complete StructLayout from a HIR struct definition.
-pub fn build_struct_layout(name: InternedString, fields: &[Arg]) -> StructLayout {
+pub fn build_struct_layout(name: InternedString, fields: &[Var]) -> StructLayout {
     let field_layouts = compute_field_offsets(fields);
     let total_size = calculate_struct_size(&field_layouts);
 

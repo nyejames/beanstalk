@@ -22,8 +22,8 @@ use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::{HirBuilderContext, ScopeType};
 use crate::compiler::hir::expression_linearizer::ExpressionLinearizer;
 use crate::compiler::hir::nodes::{
-    BlockId, HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirPattern,
-    HirPlace, HirStmt, HirTerminator,
+    BlockId, HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirPattern, HirPlace, HirStmt,
+    HirTerminator,
 };
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -125,7 +125,8 @@ impl ControlFlowLinearizer {
             }
             // Add jump to merge block if else block doesn't end with a terminator
             if !self.block_has_terminator(ctx, else_id) {
-                let jump_to_merge = self.create_jump_to_block(merge_block_id, location.clone(), ctx);
+                let jump_to_merge =
+                    self.create_jump_to_block(merge_block_id, location.clone(), ctx);
                 ctx.add_node_to_block(else_id, jump_to_merge);
             }
             let _else_dropped = ctx.exit_scope();
@@ -180,7 +181,7 @@ impl ControlFlowLinearizer {
     /// - Break/continue targets are set up for nested control flow
     pub fn linearize_for_loop(
         &mut self,
-        binding: &crate::compiler::parsers::ast_nodes::Arg,
+        binding: &crate::compiler::parsers::ast_nodes::Var,
         iterator: &Expression,
         body: &[AstNode],
         location: &TextLocation,
@@ -261,7 +262,8 @@ impl ControlFlowLinearizer {
         let exit_block_id = ctx.create_block();
 
         // Jump to condition block
-        let jump_to_condition = self.create_jump_to_block(condition_block_id, location.clone(), ctx);
+        let jump_to_condition =
+            self.create_jump_to_block(condition_block_id, location.clone(), ctx);
         nodes.push(jump_to_condition);
 
         // Linearize condition in the condition block
@@ -394,7 +396,8 @@ impl ControlFlowLinearizer {
             }
             // Add jump to merge block if arm doesn't end with terminator
             if !self.block_has_terminator(ctx, arm_block_id) {
-                let jump_to_merge = self.create_jump_to_block(merge_block_id, location.clone(), ctx);
+                let jump_to_merge =
+                    self.create_jump_to_block(merge_block_id, location.clone(), ctx);
                 ctx.add_node_to_block(arm_block_id, jump_to_merge);
             }
             let _ = ctx.exit_scope();
@@ -409,7 +412,8 @@ impl ControlFlowLinearizer {
                 ctx.add_node_to_block(default_id, node);
             }
             if !self.block_has_terminator(ctx, default_id) {
-                let jump_to_merge = self.create_jump_to_block(merge_block_id, location.clone(), ctx);
+                let jump_to_merge =
+                    self.create_jump_to_block(merge_block_id, location.clone(), ctx);
                 ctx.add_node_to_block(default_id, jump_to_merge);
             }
             let _ = ctx.exit_scope();
@@ -461,7 +465,10 @@ impl ControlFlowLinearizer {
                 }))
             }
             // Range patterns
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Range(start, end) => {
+            crate::compiler::parsers::expressions::expression::ExpressionKind::Range(
+                start,
+                end,
+            ) => {
                 let (_, start_expr) = self.expr_linearizer.linearize_expression(start, ctx)?;
                 let (_, end_expr) = self.expr_linearizer.linearize_expression(end, ctx)?;
                 Ok(HirPattern::Range {
@@ -524,7 +531,8 @@ impl ControlFlowLinearizer {
         // Linearize return values
         let mut hir_values = Vec::new();
         for value in values {
-            let (value_nodes, value_expr) = self.expr_linearizer.linearize_expression(value, ctx)?;
+            let (value_nodes, value_expr) =
+                self.expr_linearizer.linearize_expression(value, ctx)?;
             nodes.extend(value_nodes);
             hir_values.push(value_expr);
         }
@@ -575,9 +583,7 @@ impl ControlFlowLinearizer {
                 }
             }
             None => {
-                return_compiler_error!(
-                    "Break statement outside of loop"
-                );
+                return_compiler_error!("Break statement outside of loop");
             }
         };
 
@@ -614,7 +620,10 @@ impl ControlFlowLinearizer {
         // Find the enclosing loop to get the continue target
         let continue_target = match ctx.find_enclosing_loop() {
             Some(scope_info) => {
-                if let ScopeType::Loop { continue_target, .. } = &scope_info.scope_type {
+                if let ScopeType::Loop {
+                    continue_target, ..
+                } = &scope_info.scope_type
+                {
                     *continue_target
                 } else {
                     return_compiler_error!(
@@ -623,9 +632,7 @@ impl ControlFlowLinearizer {
                 }
             }
             None => {
-                return_compiler_error!(
-                    "Continue statement outside of loop"
-                );
+                return_compiler_error!("Continue statement outside of loop");
             }
         };
 
@@ -703,15 +710,13 @@ impl ControlFlowLinearizer {
     ) -> Result<Vec<HirNode>, CompilerError> {
         match &node.kind {
             // Control flow constructs
-            NodeKind::If(condition, then_body, else_body) => {
-                self.linearize_if_statement(
-                    condition,
-                    then_body,
-                    else_body.as_deref(),
-                    &node.location,
-                    ctx,
-                )
-            }
+            NodeKind::If(condition, then_body, else_body) => self.linearize_if_statement(
+                condition,
+                then_body,
+                else_body.as_deref(),
+                &node.location,
+                ctx,
+            ),
 
             NodeKind::ForLoop(binding, iterator, body) => {
                 self.linearize_for_loop(binding, iterator, body, &node.location, ctx)
@@ -722,18 +727,10 @@ impl ControlFlowLinearizer {
             }
 
             NodeKind::Match(scrutinee, arms, default) => {
-                self.linearize_match(
-                    scrutinee,
-                    arms,
-                    default.as_deref(),
-                    &node.location,
-                    ctx,
-                )
+                self.linearize_match(scrutinee, arms, default.as_deref(), &node.location, ctx)
             }
 
-            NodeKind::Return(values) => {
-                self.linearize_return(values, &node.location, ctx)
-            }
+            NodeKind::Return(values) => self.linearize_return(values, &node.location, ctx),
 
             // Variable declarations
             NodeKind::VariableDeclaration(arg) => {
@@ -752,7 +749,13 @@ impl ControlFlowLinearizer {
 
             NodeKind::HostFunctionCall(name, args, return_types, module, import, call_location) => {
                 self.linearize_host_function_call(
-                    *name, args, return_types, *module, *import, call_location, ctx,
+                    *name,
+                    args,
+                    return_types,
+                    *module,
+                    *import,
+                    call_location,
+                    ctx,
                 )
             }
 
@@ -762,19 +765,13 @@ impl ControlFlowLinearizer {
             }
 
             // Print statements (deprecated but still supported)
-            NodeKind::Print(expr) => {
-                self.linearize_print_statement(expr, &node.location, ctx)
-            }
+            NodeKind::Print(expr) => self.linearize_print_statement(expr, &node.location, ctx),
 
             // Empty nodes
-            NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => {
-                Ok(Vec::new())
-            }
+            NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => Ok(Vec::new()),
 
             // Warnings are passed through
-            NodeKind::Warning(_) => {
-                Ok(Vec::new())
-            }
+            NodeKind::Warning(_) => Ok(Vec::new()),
 
             // Function and struct definitions are handled at module level
             NodeKind::Function(_, _, _) | NodeKind::StructDefinition(_, _) => {
@@ -794,14 +791,15 @@ impl ControlFlowLinearizer {
     /// Linearizes a variable declaration
     fn linearize_variable_declaration(
         &mut self,
-        arg: &crate::compiler::parsers::ast_nodes::Arg,
+        arg: &crate::compiler::parsers::ast_nodes::Var,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<Vec<HirNode>, CompilerError> {
         let mut nodes = Vec::new();
 
         // Linearize the value expression
-        let (value_nodes, value_expr) = self.expr_linearizer.linearize_expression(&arg.value, ctx)?;
+        let (value_nodes, value_expr) =
+            self.expr_linearizer.linearize_expression(&arg.value, ctx)?;
         nodes.extend(value_nodes);
 
         // Create the assignment node
@@ -849,21 +847,14 @@ impl ControlFlowLinearizer {
     }
 
     /// Converts an AST target node to an HirPlace
-    fn convert_target_to_place(
-        &self,
-        target: &AstNode,
-    ) -> Result<HirPlace, CompilerError> {
+    fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
         match &target.kind {
-            NodeKind::Rvalue(expr) => {
-                match &expr.kind {
-                    crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(name) => {
-                        Ok(HirPlace::Var(*name))
-                    }
-                    _ => return_compiler_error!(
-                        "Invalid assignment target expression"
-                    ),
-                }
-            }
+            NodeKind::Rvalue(expr) => match &expr.kind {
+                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
+                    name,
+                ) => Ok(HirPlace::Var(*name)),
+                _ => return_compiler_error!("Invalid assignment target expression"),
+            },
             NodeKind::FieldAccess { base, field, .. } => {
                 let base_place = self.convert_target_to_place(base)?;
                 Ok(HirPlace::Field {
@@ -871,10 +862,7 @@ impl ControlFlowLinearizer {
                     field: *field,
                 })
             }
-            _ => return_compiler_error!(
-                "Invalid assignment target node kind: {:?}",
-                target.kind
-            ),
+            _ => return_compiler_error!("Invalid assignment target node kind: {:?}", target.kind),
         }
     }
 
@@ -907,7 +895,7 @@ impl ControlFlowLinearizer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        _returns: &[crate::compiler::parsers::ast_nodes::Arg],
+        _returns: &[crate::compiler::parsers::ast_nodes::Var],
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -950,9 +938,8 @@ impl ControlFlowLinearizer {
         }
 
         // Create the host call statement
-        let call_node = self.create_host_call_statement(
-            name, module, import, hir_args, location.clone(), ctx,
-        );
+        let call_node =
+            self.create_host_call_statement(name, module, import, hir_args, location.clone(), ctx);
         nodes.push(call_node);
 
         Ok(nodes)
@@ -1104,10 +1091,7 @@ impl ControlFlowLinearizer {
                 .count();
 
             if terminator_count == 0 {
-                return_compiler_error!(
-                    "HIR block {} is missing a terminator",
-                    block_id
-                );
+                return_compiler_error!("HIR block {} is missing a terminator", block_id);
             } else if terminator_count > 1 {
                 return_compiler_error!(
                     "HIR block {} has {} terminators (expected 1)",

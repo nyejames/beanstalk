@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -150,11 +150,11 @@ impl HostFunctionDef {
 
     pub fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {
         // Convert return_types Vec<DataType> to Vec<Arg>
-        let return_args: Vec<Arg> = self
+        let return_args: Vec<Var> = self
             .return_types
             .iter()
             .enumerate()
-            .map(|(i, data_type)| Arg {
+            .map(|(i, data_type)| Var {
                 id: string_table.get_or_intern(i.to_string()),
                 value: Expression::new(
                     ExpressionKind::None,
@@ -169,7 +169,7 @@ impl HostFunctionDef {
         let parameters = self
             .parameters
             .iter()
-            .map(|param| Arg {
+            .map(|param| Var {
                 id: param.name,
                 value: Expression::new(
                     ExpressionKind::None,

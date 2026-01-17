@@ -1,8 +1,8 @@
 use super::eval_expression::evaluate_expression;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast::ContextKind;
 use crate::compiler::parsers::ast::ScopeContext;
+use crate::compiler::parsers::ast::{self, ContextKind};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, Operator};
 use crate::compiler::parsers::statements::collections::new_collection;
@@ -384,7 +384,7 @@ pub fn create_expression(
                 });
             }
 
-            TokenKind::TemplateHead | TokenKind::ParentTemplate => {
+            TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
                 let mut template =
                     Template::new(token_stream, new_template_context!(context), None, string_table)?;
 
@@ -647,6 +647,8 @@ pub fn create_expression(
 
         token_stream.advance();
     }
+
+    ast_log!("Finished parsing expression : {:#?}", expression);
 
     evaluate_expression(
         &context.scope,

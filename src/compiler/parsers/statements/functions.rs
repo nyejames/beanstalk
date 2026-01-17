@@ -3,7 +3,7 @@ use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
-use crate::compiler::parsers::ast_nodes::{Arg, AstNode, NodeKind};
+use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::structs::{create_struct_definition, parse_parameters};
 use crate::compiler::string_interning::{StringId, StringTable};
@@ -17,8 +17,8 @@ use crate::{ast_log, return_syntax_error, return_type_error};
 // Can have default values
 #[derive(Clone, Debug)]
 pub struct FunctionSignature {
-    pub parameters: Vec<Arg>,
-    pub returns: Vec<Arg>,
+    pub parameters: Vec<Var>,
+    pub returns: Vec<Var>,
 }
 
 impl FunctionSignature {
@@ -63,7 +63,7 @@ impl FunctionSignature {
         }
 
         // Parse return types
-        let mut returns: Vec<Arg> = Vec::new();
+        let mut returns: Vec<Var> = Vec::new();
         let mut next_in_list: bool = true;
         let mut mutable: bool = false;
 
@@ -100,7 +100,7 @@ impl FunctionSignature {
                         )
                     }
                     let return_name = format!("return_{}", returns.len());
-                    returns.push(Arg {
+                    returns.push(Var {
                         id: string_table.intern(&return_name),
                         value: Expression::int(
                             0,
@@ -126,7 +126,7 @@ impl FunctionSignature {
                         )
                     }
                     let return_name = format!("return_{}", returns.len());
-                    returns.push(Arg {
+                    returns.push(Var {
                         id: string_table.intern(&return_name),
                         value: Expression::float(
                             0.0,
@@ -152,7 +152,7 @@ impl FunctionSignature {
                         )
                     }
                     let return_name = format!("return_{}", returns.len());
-                    returns.push(Arg {
+                    returns.push(Var {
                         id: string_table.intern(&return_name),
                         value: Expression::bool(
                             false,
@@ -178,7 +178,7 @@ impl FunctionSignature {
                         )
                     }
                     let return_name = format!("return_{}", returns.len());
-                    returns.push(Arg {
+                    returns.push(Var {
                         id: string_table.intern(&return_name),
                         value: Expression::string_slice(
                             string_table.intern(""), // Empty string
@@ -572,7 +572,7 @@ pub fn parse_function_call(
 
 pub fn create_function_call_arguments(
     token_stream: &mut FileTokens,
-    required_arguments: &[Arg],
+    required_arguments: &[Var],
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {

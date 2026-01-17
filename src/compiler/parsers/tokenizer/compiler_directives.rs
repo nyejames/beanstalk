@@ -5,8 +5,16 @@ use crate::compiler::parsers::tokenizer::tokens::{Token, TokenKind, TokenStream}
 use crate::compiler::string_interning::StringTable;
 use crate::{return_syntax_error, return_token};
 
-// This used by the tokenizer stage
-// Also used by the config file to set compiler settings
+// Compiler directives are special keywords that start with a hash.
+// These can be thought of as communicating with the build system, compiler or host environment.
+// They are a flexible way to extend complex behaviours in the compiler or for build systems to be able to provide special commands.
+// They are the only part of the Beanstalk syntax that can be inserted anywhere without disrupting the normal parsing.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CompilerDirective {
+    Panic,
+    Export
+}
+
 pub fn compiler_directive(
     token_value: &mut String,
     stream: &mut TokenStream,
@@ -22,13 +30,8 @@ pub fn compiler_directive(
         }
 
         match token_value.as_str() {
-            "panic" => return_token!(TokenKind::Panic, stream),
-
-            // External language blocks
-            // PROBABLY WONT DO THIS
-            // Will possibly allow wat files that can be imported into Beanstalk modules in the future,
-            // But likely not.
-            // "WAT" => return_token!(TokenKind::Wat(string_block(stream, string_table)?), stream),
+            "panic" => return_token!(TokenKind::Directive(CompilerDirective::Panic), stream),
+            "export" => return_token!(TokenKind::Directive(CompilerDirective::Export), stream),
 
             _ => {
                 return_syntax_error!(

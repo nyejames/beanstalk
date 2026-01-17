@@ -5,7 +5,7 @@ use crate::{
         datatypes::DataType,
         parsers::{
             ast::ScopeContext,
-            ast_nodes::{Arg, AstNode, NodeKind},
+            ast_nodes::{AstNode, NodeKind, Var},
             statements::functions::parse_function_call,
             tokenizer::tokens::{FileTokens, TokenKind},
         },
@@ -17,7 +17,7 @@ use crate::{
 
 pub fn parse_field_access(
     token_stream: &mut FileTokens,
-    base_arg: &Arg,
+    base_arg: &Var,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {

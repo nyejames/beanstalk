@@ -11,7 +11,7 @@
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;
-use crate::compiler::parsers::ast_nodes::Arg;
+use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
@@ -120,7 +120,7 @@ pub enum HirStmt {
     // === Struct Definitions ===
     StructDef {
         name: InternedString,
-        fields: Vec<Arg>,
+        fields: Vec<Var>,
     },
 
     // === Expression as Statement ===
