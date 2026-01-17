@@ -46,23 +46,16 @@ pub fn create_reference(
 }
 
 // The standard declaration syntax.
-// Parses any new variable, function or parameter.
+// Parses any new variable
+// A check should already be performed before this that makes sure this isn't a function declaration.
+// Function declarations will be parsed separately.
 // [name] [optional mutability '~'] [optional type] [assignment operator '='] [value]
-enum DeclarationKind {
-    Var {
-        mutable: bool,
-        type_declaration: Vec<Token>,
-    },
-    Function {
-        receiver: Option<DataType>,
-        signature: FunctionSignature,
-    },
-}
 struct Declaration {
     name: StringId,
     directives: Vec<Token>,
     body: Vec<Token>,
-    kind: DeclarationKind,
+    mutable: bool,
+    type_declaration: Vec<Token>,
 }
 
 // Declarations vs Vars
@@ -75,7 +68,7 @@ struct Declaration {
 // Var is used during AST creating when types and names must be known
 
 impl Declaration {
-    pub fn new_var(
+    pub fn new(
         name: StringId,
         mutable: bool,
         type_declaration: Vec<Token>,
@@ -85,46 +78,9 @@ impl Declaration {
         Self {
             name,
             directives,
-            kind: DeclarationKind::Var {
-                mutable,
-                type_declaration,
-            },
+            mutable,
+            type_declaration,
             body: rvalue,
-        }
-    }
-
-    pub fn new_function(
-        name: StringId,
-        directives: Vec<Token>,
-        signature: FunctionSignature,
-        body: Vec<Token>,
-    ) -> Self {
-        Self {
-            name,
-            directives,
-            kind: DeclarationKind::Function {
-                receiver: None,
-                signature,
-            },
-            body,
-        }
-    }
-
-    pub fn new_method(
-        receiver: DataType,
-        name: StringId,
-        directives: Vec<Token>,
-        signature: FunctionSignature,
-        body: Vec<Token>,
-    ) -> Self {
-        Self {
-            name,
-            directives,
-            kind: DeclarationKind::Function {
-                receiver: Some(receiver),
-                signature,
-            },
-            body,
         }
     }
 }
@@ -150,151 +106,11 @@ pub fn new_declaration(
 
     let mut data_type = Vec::new();
 
+
+    // TODO Loop through all the type def tokens until hitting an assign or similar break point.
     match token_stream.current_token_kind() {
         // Go straight to the assignment
         TokenKind::Assign => {}
-
-        TokenKind::TypeParameterBracket => {
-            let empty_context = ScopeContext::new(
-                ContextKind::Module,
-                token_stream.src_path,
-                &[],
-                host_registry.to_owned(),
-                Vec::new(),
-            );
-
-            let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
-
-            let mut scopes_opened = 1;
-            let mut scopes_closed = 0;
-            let mut function_body = Vec::new();
-
-            // FunctionSignature::new leaves us at the first token of the function body
-            // Don't advance before the first iteration
-            while scopes_opened > scopes_closed {
-                match token_stream.current_token_kind() {
-                    TokenKind::End => {
-                        scopes_closed += 1;
-                        if scopes_opened > scopes_closed {
-                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                        }
-                    }
-
-                    // Colons used in templates parse into a different token (EndTemplateHead),
-                    // so there isn't any issue with templates creating a colon imbalance.
-                    // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
-                    // The only violations of this rule have to be parsed differently in the tokenizer,
-                    // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
-                    TokenKind::Colon => {
-                        scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-
-                    // Double colons need to be closed with semicolons also
-                    TokenKind::DoubleColon => {
-                        scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-
-                    // Will now parse each symbol into a possible declaration at the header stage
-                    // This is to avoid duplicating the logic for parsing declarations
-                    // and do some parsing work ahead of the AST stage.
-                    TokenKind::Symbol(name_id) => {
-                        if let Some(path) = file_imports.get(name_id) {
-                            dependencies.insert(path);
-                        }
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-                    _ => {
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-                }
-                token_stream.advance();
-            }
-
-            return Ok(Declaration {});
-        }
-
-        // Has a type declaration
-        TokenKind::DatatypeInt => data_type = DataType::Int,
-        TokenKind::DatatypeFloat => data_type = DataType::Float,
-        TokenKind::DatatypeBool => data_type = DataType::Bool,
-        TokenKind::DatatypeString => data_type = DataType::String,
-
-        // Collection Type Declaration
-        TokenKind::OpenCurly => {
-            token_stream.advance();
-
-            // Check if there is a type inside the curly braces
-            data_type = match token_stream.current_token_kind().to_datatype() {
-                Some(data_type) => DataType::Collection(Box::new(data_type), ownership.to_owned()),
-                _ => DataType::Collection(Box::new(DataType::Inferred), Ownership::MutableOwned),
-            };
-
-            // Make sure there is a closing curly brace
-            if token_stream.current_token_kind() != &TokenKind::CloseCurly {
-                return_syntax_error!(
-                    "Missing closing curly brace for collection type declaration",
-                    token_stream.current_location().to_error_location(string_table), {
-                        CompilationStage => "Variable Declaration",
-                        PrimarySuggestion => "Add '}' to close the collection type declaration",
-                        SuggestedInsertion => "}",
-                    }
-                )
-            }
-        }
-
-        TokenKind::Newline => {
-            data_type = DataType::Inferred;
-            // Ignore
-        }
-
-        TokenKind::Colon => {
-            let struct_def = create_struct_definition(token_stream, context, string_table)?;
-
-            return Ok(Var {
-                id,
-                value: Expression::struct_definition(
-                    struct_def,
-                    token_stream.current_location(),
-                    ownership,
-                ),
-            });
-        }
-
-        // SYNTAX ERRORS
-        // Probably a missing reference or import
-        TokenKind::Dot
-        | TokenKind::AddAssign
-        | TokenKind::SubtractAssign
-        | TokenKind::DivideAssign
-        | TokenKind::MultiplyAssign => {
-            return_syntax_error!(
-                format!(
-                    "{} is undefined. Can't use {:?} after an undefined variable. Either define this variable first, import it or make sure its in scope.",
-                    string_table.resolve(id),
-                    token_stream.tokens[token_stream.index].kind
-                ),
-                token_stream.current_location().to_error_location(string_table), {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Make sure to import or define this variable before using it.",
-                }
-            )
-        }
-
-        // Other kinds of syntax errors
-        _ => {
-            return_syntax_error!(
-                format!(
-                    "Invalid token: {:?} after new variable declaration. Expect a type or assignment operator.",
-                    token_stream.tokens[token_stream.index].kind
-                ),
-                token_stream.current_location().to_error_location(string_table), {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Use a type declaration (Int, String, etc.) or assignment operator '='",
-                }
-            )
-        }
     };
 
     // Check for the assignment operator next

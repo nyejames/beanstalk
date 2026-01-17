@@ -24,14 +24,13 @@ pub struct FunctionSignature {
 impl FunctionSignature {
     pub fn new(
         token_stream: &mut FileTokens,
-        context: &ScopeContext,
         string_table: &mut StringTable,
     ) -> Result<Self, CompilerError> {
         // Should start at the Colon
         // Need to skip it,
         token_stream.advance();
 
-        let parameters = parse_parameters(token_stream, context, &mut true, string_table, false)?;
+        let parameters = parse_parameters(token_stream, &mut true, string_table, false)?;
 
         // create_struct_definition already advances past the closing |,
         // So we're now at the Arrow or Colon token
