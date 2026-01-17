@@ -14,7 +14,10 @@ use std::path::Path;
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
-    Function(FunctionSignature, Vec<Token>),
+    Function {
+        signature: FunctionSignature,
+        body: Vec<Token>,
+    },
     Template(Vec<Token>), // Top level templates are used for HTML page generation
     Struct(Vec<Var>),
     Choice(Vec<Var>), // Tagged unions. Not yet implemented in the language
@@ -396,61 +399,10 @@ fn create_header(
     match current_token {
         // FUNCTIONS
         TokenKind::TypeParameterBracket => {
-            let empty_context = ScopeContext::new(
-                ContextKind::Module,
-                path.to_owned(),
-                &[],
-                host_registry.to_owned(),
-                Vec::new(),
-            );
-
-            let signature = FunctionSignature::new(token_stream, &empty_context, string_table)?;
-
-            let mut scopes_opened = 1;
-            let mut scopes_closed = 0;
-            let mut function_body = Vec::new();
-
-            // FunctionSignature::new leaves us at the first token of the function body
-            // Don't advance before the first iteration
-            while scopes_opened > scopes_closed {
-                match token_stream.current_token_kind() {
-                    TokenKind::End => {
-                        scopes_closed += 1;
-                        if scopes_opened > scopes_closed {
-                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                        }
-                    }
-
-                    // Colons used in templates parse into a different token (EndTemplateHead),
-                    // so there isn't any issue with templates creating a colon imbalance.
-                    // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
-                    // The only violations of this rule have to be parsed differently in the tokenizer,
-                    // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
-                    TokenKind::Colon => {
-                        scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-
-                    // Double colons need to be closed with semicolons also
-                    TokenKind::DoubleColon => {
-                        scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-
-                    TokenKind::Symbol(name_id) => {
-                        if let Some(path) = file_imports.get(name_id) {
-                            dependencies.insert(path.to_owned());
-                        }
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-                    _ => {
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
-                    }
-                }
-                token_stream.advance();
-            }
-
-            kind = HeaderKind::Function(signature, function_body)
+            kind = HeaderKind::Function {
+                signature,
+                body: function_body,
+            };
         }
 
         // Could be a struct or immutable variable

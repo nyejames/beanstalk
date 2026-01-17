@@ -13,7 +13,7 @@ use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::parse_function_call;
 use crate::compiler::parsers::statements::loops::create_loop;
-use crate::compiler::parsers::statements::variables::new_arg;
+use crate::compiler::parsers::statements::variables::new_var;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::StringTable;
 use crate::compiler::traits::ContainsReferences;
@@ -169,7 +169,7 @@ pub fn function_body_to_ast(
                 //   New Function or Variable declaration
                 // -----------------------------------------
                 } else {
-                    let arg = new_arg(token_stream, id, &context, warnings, string_table)?;
+                    let arg = new_var(token_stream, id, &context, warnings, string_table)?;
 
                     // -----------------------------
                     //    NEW STRUCT DECLARATIONS

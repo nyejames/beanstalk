@@ -44,7 +44,7 @@ impl Ast {
         let mut declarations: Vec<Var> = Vec::new();
         for header in sorted_headers {
             match header.kind {
-                HeaderKind::Function(signature, tokens) => {
+                HeaderKind::Function {signature, body: tokens} => {
                     // Function parameters should be available in the function body scope
                     let context = ScopeContext::new(
                         ContextKind::Function,

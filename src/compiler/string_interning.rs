@@ -1,3 +1,4 @@
+use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use std::collections::HashMap;
 
 /// A unique identifier for an interned string, represented as a u32 for memory efficiency.
@@ -46,44 +47,6 @@ impl std::fmt::Display for StringId {
     }
 }
 
-/// Statistics about memory usage and performance of the string table
-#[derive(Debug, Clone, Default)]
-pub struct InterningStats {
-    /// Total number of unique strings stored
-    pub unique_strings: usize,
-    /// Total number of intern() calls made
-    pub total_intern_calls: usize,
-    /// Number of times an existing string was found (cache hits)
-    pub cache_hits: usize,
-    /// Estimated memory saved by deduplication (in bytes)
-    pub memory_saved: usize,
-    /// Total memory used by the string table (in bytes)
-    pub total_memory_used: usize,
-}
-
-impl InterningStats {
-    /// Calculate the cache hit rate as a percentage
-    pub fn cache_hit_rate(&self) -> f64 {
-        if self.total_intern_calls == 0 {
-            0.0
-        } else {
-            (self.cache_hits as f64 / self.total_intern_calls as f64) * 100.0
-        }
-    }
-}
-
-/// Debug information for tracking string usage patterns (only available in debug builds)
-#[cfg(debug_assertions)]
-#[derive(Debug, Clone)]
-pub struct DebugInfo {
-    /// When this string was first interned
-    pub first_interned_at: std::time::Instant,
-    /// How many times this string has been interned
-    pub intern_count: usize,
-    /// Source locations where this string was interned (for debugging)
-    pub source_locations: Vec<String>,
-}
-
 /// A centralized string interning system that stores unique strings only once in memory.
 ///
 /// The StringTable uses a dual-mapping approach for optimal performance:
@@ -106,12 +69,8 @@ pub struct StringTable {
     /// Next available string ID
     next_id: u32,
 
-    /// Statistics for memory usage and performance tracking
-    stats: InterningStats,
-
-    /// Debug information for development and analysis (debug builds only)
-    #[cfg(debug_assertions)]
-    debug_info: HashMap<StringId, DebugInfo>,
+    /// Stored source text locations for each interned string
+    location: Vec<TextLocation>,
 }
 
 impl Default for StringTable {
@@ -127,21 +86,17 @@ impl StringTable {
             strings: Vec::new(),
             string_to_id: HashMap::new(),
             next_id: 0,
-            stats: InterningStats::default(),
-            #[cfg(debug_assertions)]
-            debug_info: HashMap::new(),
+            location: Vec::new(),
         }
     }
-    
+
     /// Create a new string table with a specified initial capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             strings: Vec::with_capacity(capacity),
             string_to_id: HashMap::with_capacity(capacity),
             next_id: 0,
-            stats: InterningStats::default(),
-            #[cfg(debug_assertions)]
-            debug_info: HashMap::new(),
+            location: Vec::with_capacity(capacity),
         }
     }
 
@@ -151,55 +106,18 @@ impl StringTable {
     ///
     /// Time complexity: O(1) average case
     pub fn intern(&mut self, s: &str) -> InternedString {
-        self.stats.total_intern_calls += 1;
-
         // Check if we already have this string
         if let Some(&existing_id) = self.string_to_id.get(s) {
-            self.stats.cache_hits += 1;
-
-            // Update debug info for cache hit
-            #[cfg(debug_assertions)]
-            {
-                if let Some(debug_info) = self.debug_info.get_mut(&existing_id) {
-                    debug_info.intern_count += 1;
-                }
-            }
-
             return existing_id;
         }
 
         // String is new, so we need to store it
         let new_id = StringId(self.next_id);
         self.next_id += 1;
-        // Calculate memory savings (estimate)
-
-        // Each duplicate string would have cost: String struct (24 bytes) + content
-        // Now it costs: StringId (4 bytes)
-        // So we save: 20 bytes + content length for each future duplicate
-        let string_len = s.len();
 
         // Store the string and create the mapping
         self.strings.push(s.to_owned());
         self.string_to_id.insert(s.to_owned(), new_id);
-
-        // Update statistics
-        self.stats.unique_strings += 1;
-
-        // Update memory usage calculation
-        self.update_memory_stats();
-
-        // Add debug information
-        #[cfg(debug_assertions)]
-        {
-            self.debug_info.insert(
-                new_id,
-                DebugInfo {
-                    first_interned_at: std::time::Instant::now(),
-                    intern_count: 1,
-                    source_locations: Vec::new(),
-                },
-            );
-        }
 
         new_id
     }
@@ -223,20 +141,8 @@ impl StringTable {
     ///
     /// Time complexity: O(1) average case
     pub fn get_or_intern(&mut self, s: String) -> InternedString {
-        self.stats.total_intern_calls += 1;
-
         // Check if we already have this string
         if let Some(&existing_id) = self.string_to_id.get(&s) {
-            self.stats.cache_hits += 1;
-
-            // Update debug info for cache hit
-            #[cfg(debug_assertions)]
-            {
-                if let Some(debug_info) = self.debug_info.get_mut(&existing_id) {
-                    debug_info.intern_count += 1;
-                }
-            }
-
             return existing_id;
         }
 
@@ -249,23 +155,6 @@ impl StringTable {
 
         // Then move the owned String into our storage
         self.strings.push(s);
-
-        // Update statistics
-        self.stats.unique_strings += 1;
-        self.update_memory_stats();
-
-        // Add debug information
-        #[cfg(debug_assertions)]
-        {
-            self.debug_info.insert(
-                new_id,
-                DebugInfo {
-                    first_interned_at: std::time::Instant::now(),
-                    intern_count: 1,
-                    source_locations: Vec::new(),
-                },
-            );
-        }
 
         new_id
     }
@@ -284,40 +173,6 @@ impl StringTable {
     /// Time complexity: O(1) average case
     pub fn get_existing(&self, s: &str) -> Option<InternedString> {
         self.string_to_id.get(s).copied()
-    }
-
-    /// Update memory usage statistics based on the current state
-    fn update_memory_stats(&mut self) {
-        // Calculate estimated memory saved
-        // For each cache hit beyond the first, we saved approximately:
-        // - String struct overhead (24 bytes on 64-bit systems)
-        // - String content length
-        let estimated_string_overhead = 24; // Size of String struct
-
-        if self.stats.cache_hits > 0 {
-            // Rough estimate: each cache hit saved the overhead plus average string length
-            let avg_string_len = if self.strings.is_empty() {
-                0
-            } else {
-                self.strings.iter().map(|s| s.len()).sum::<usize>() / self.strings.len()
-            };
-
-            self.stats.memory_saved =
-                self.stats.cache_hits * (estimated_string_overhead + avg_string_len);
-        }
-
-        // Calculate total memory used
-        let string_content: usize = self.strings.iter().map(|s| s.len()).sum();
-        let vec_capacity = self.strings.capacity() * std::mem::size_of::<String>();
-        let hashmap_capacity = self.string_to_id.capacity()
-            * (std::mem::size_of::<String>() + std::mem::size_of::<StringId>());
-
-        self.stats.total_memory_used = string_content + vec_capacity + hashmap_capacity;
-    }
-
-    /// Get the current statistics for this string table
-    pub fn stats(&self) -> &InterningStats {
-        &self.stats
     }
 
     /// Get the number of unique strings stored in the table
@@ -348,14 +203,7 @@ impl StringTable {
             string_content_bytes,
             overhead_bytes: total_bytes - string_content_bytes,
             unique_strings: self.len(),
-            estimated_savings: self.stats.memory_saved,
         }
-    }
-
-    /// Get debug information for a specific string (debug builds only)
-    #[cfg(debug_assertions)]
-    pub fn debug_info(&self, id: StringId) -> Option<&DebugInfo> {
-        self.debug_info.get(&id)
     }
 
     /// Dump all strings in the table for debugging purposes
@@ -366,29 +214,6 @@ impl StringTable {
             .enumerate()
             .map(|(idx, s)| (StringId(idx as u32), s.as_str()))
             .collect()
-    }
-
-    /// Get the most frequently interned strings (debug builds only)
-    #[cfg(debug_assertions)]
-    pub fn most_frequent_strings(&self, limit: usize) -> Vec<(StringId, &str, usize)> {
-        let mut strings_with_counts: Vec<_> = self
-            .strings
-            .iter()
-            .enumerate()
-            .map(|(idx, s)| {
-                let id = StringId(idx as u32);
-                let count = self
-                    .debug_info
-                    .get(&id)
-                    .map(|info| info.intern_count)
-                    .unwrap_or(1);
-                (id, s.as_str(), count)
-            })
-            .collect();
-
-        strings_with_counts.sort_by(|a, b| b.2.cmp(&a.2));
-        strings_with_counts.truncate(limit);
-        strings_with_counts
     }
 }
 
@@ -403,8 +228,6 @@ pub struct MemoryStats {
     pub overhead_bytes: usize,
     /// Number of unique strings stored
     pub unique_strings: usize,
-    /// Estimated memory saved through deduplication in bytes
-    pub estimated_savings: usize,
 }
 
 impl MemoryStats {

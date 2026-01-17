@@ -29,12 +29,9 @@ pub fn create_struct_definition(
 
 pub fn parse_parameters(
     token_stream: &mut FileTokens,
-    context: &ScopeContext,
     pure: &mut bool,
     string_table: &mut StringTable,
-
-    // False for function definitions, true for struct definitions
-    is_struct: bool,
+    is_struct: bool, // False for function definitions, true for struct definitions
 ) -> Result<Vec<Var>, CompilerError> {
     let mut args: Vec<Var> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
@@ -93,8 +90,7 @@ pub fn parse_parameters(
                 }
 
                 // Create a new variable
-                // TODO: This needs to be updated to use string table when available
-                let argument = new_parameter(token_stream, arg_name, context, string_table)?;
+                let argument = new_parameter(token_stream, arg_name, string_table)?;
 
                 if argument.value.ownership.is_mutable() {
                     *pure = false;
@@ -149,7 +145,6 @@ pub fn parse_parameters(
 pub fn new_parameter(
     token_stream: &mut FileTokens,
     name: InternedString,
-    context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Var, CompilerError> {
     // Move past the name
@@ -262,12 +257,16 @@ pub fn new_parameter(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
+    let parameter_context = ScopeContext::new(
+        
+    );
+    
     let parsed_expr = match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {
             token_stream.advance();
             create_expression(
                 token_stream,
-                context,
+                &parameter_context,
                 &mut data_type,
                 &ownership,
                 true,
@@ -276,7 +275,7 @@ pub fn new_parameter(
         }
         _ => create_expression(
             token_stream,
-            context,
+            &parameter_context,
             &mut data_type,
             &ownership,
             false,
