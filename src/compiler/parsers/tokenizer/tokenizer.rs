@@ -115,16 +115,37 @@ pub fn get_token_kind(
     // Whitespace
     while current_char.is_whitespace() {
         if current_char == '\n' {
+            // Skip any whitespace after this before returning it to save on tokens.
+            // There is no semantic reason that the parser needs to distinguish multiple newlines.
+            // Scene Bodies are already parsed separately above this.
+            while let Some(next_char) = stream.peek() {
+                if next_char.is_whitespace() {
+                    stream.next();
+                } else {
+                    break;
+                }
+            }
+
             return_token!(TokenKind::Newline, stream);
         } else if current_char == '\r' {
             if stream.peek() == Some(&'\n') {
                 stream.next();
+
+                while let Some(next_char) = stream.peek() {
+                    if next_char.is_whitespace() {
+                        stream.next();
+                    } else {
+                        break;
+                    }
+                }
+
                 return_token!(TokenKind::Newline, stream);
             } else {
-                // Ignore naked CR (throw warning in future?)
+                // Count as a newline?
+                // This should maybe be a warning or something in the future as this is weird
                 current_char = match stream.next() {
                     Some(ch) => ch,
-                    None => return_token!(TokenKind::Eof, stream),
+                    None => return_token!(TokenKind::Newline, stream),
                 };
             }
         } else {

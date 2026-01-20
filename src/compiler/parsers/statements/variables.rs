@@ -1,7 +1,7 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::AstNode;
@@ -45,157 +45,6 @@ pub fn create_reference(
     }
 }
 
-// The standard declaration syntax.
-// Parses any new variable
-// A check should already be performed before this that makes sure this isn't a function declaration.
-// Function declarations will be parsed separately.
-// [name] [optional mutability '~'] [optional type] [assignment operator '='] [value]
-struct Declaration {
-    name: StringId,
-    directives: Vec<Token>,
-    body: Vec<Token>,
-    mutable: bool,
-    type_declaration: Vec<Token>,
-}
-
-// Declarations vs Vars
-
-// Declarations are not type-checked or folded, they just parse the structure of a declaration before lowering to an AST node.
-// New Var takes a declaration and converts it into a fully parsed AstNode,
-// it performs all the folding and type checking of the containing expression also.
-
-// Declarations are used at the Header parsing stage,
-// Var is used during AST creating when types and names must be known
-
-impl Declaration {
-    pub fn new(
-        name: StringId,
-        mutable: bool,
-        type_declaration: Vec<Token>,
-        rvalue: Vec<Token>,
-        directives: Vec<Token>,
-    ) -> Self {
-        Self {
-            name,
-            directives,
-            mutable,
-            type_declaration,
-            body: rvalue,
-        }
-    }
-}
-
-pub fn new_declaration(
-    token_stream: &mut FileTokens,
-    file_imports: &HashMap<StringId, InternedPath>,
-    id: StringId,
-    context: &ScopeContext,
-    warnings: &mut Vec<CompilerWarning>,
-    string_table: &mut StringTable,
-    host_registry: &HostFunctionRegistry,
-) -> Result<Declaration, CompilerError> {
-    // Move past the name
-    token_stream.advance();
-
-    let mut mutable = false;
-
-    if token_stream.current_token_kind() == &TokenKind::Mutable {
-        token_stream.advance();
-        mutable = true;
-    };
-
-    let mut data_type = Vec::new();
-
-
-    // TODO Loop through all the type def tokens until hitting an assign or similar break point.
-    match token_stream.current_token_kind() {
-        // Go straight to the assignment
-        TokenKind::Assign => {}
-    };
-
-    // Check for the assignment operator next
-    // If this is parameters or a struct, then we can instead break out with a comma or struct close bracket
-    token_stream.advance();
-
-    match token_stream.current_token_kind() {
-        TokenKind::Assign => {
-            token_stream.advance();
-        }
-
-        // If end of statement, then it's unassigned.
-        // For the time being, this is a syntax error.
-        // When the compiler becomes more sophisticated,
-        // it will be possible to statically ensure there is an assignment on all future branches.
-
-        // Struct bracket should only be hit here in the context of the end of some parameters
-        TokenKind::Comma
-        | TokenKind::Eof
-        | TokenKind::Newline
-        | TokenKind::TypeParameterBracket => {
-            let var_name = string_table.resolve(id);
-            return_rule_error!(
-                format!("Variable '{}' must be initialized with a value", var_name),
-                token_stream.current_location().to_error_location(string_table), {
-                    // VariableName => var_name,
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Add '= value' after the variable declaration",
-                }
-            )
-        }
-
-        _ => {
-            return_syntax_error!(
-                format!(
-                    "Unexpected Token: {:?}. Are you trying to reference a variable that doesn't exist yet?",
-                    token_stream.current_token_kind()
-                ),
-                token_stream.current_location().to_error_location(string_table), {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Check that all referenced variables are declared before use",
-                }
-            )
-        }
-    }
-
-    // The current token should be whatever is after the assignment operator
-
-    // Check if this whole expression is nested in brackets.
-    // This is just so we don't wastefully call create_expression recursively right away
-    let parsed_expr = match token_stream.current_token_kind() {
-        // Struct Definition
-        // TokenKind::TypeParameterBracket => {
-        //     // TODO
-        // }
-        TokenKind::OpenParenthesis => {
-            token_stream.advance();
-            create_expression(
-                token_stream,
-                context,
-                &mut data_type,
-                &ownership,
-                true,
-                string_table,
-            )?
-        }
-
-        _ => create_expression(
-            token_stream,
-            context,
-            &mut data_type,
-            &ownership,
-            false,
-            string_table,
-        )?,
-    };
-
-    ast_log!("Created new variable of type: {}", data_type);
-
-    Ok(Var {
-        id: id,
-        value: parsed_expr,
-    })
-}
-
 pub fn new_var(
     token_stream: &mut FileTokens,
     id: StringId,
@@ -226,7 +75,7 @@ pub fn new_var(
         }
 
         TokenKind::TypeParameterBracket => {
-            let func_sig = FunctionSignature::new(token_stream, context, string_table)?;
+            let func_sig = FunctionSignature::new(token_stream, string_table)?;
             let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
             // TODO: fast check for function without signature
@@ -292,7 +141,7 @@ pub fn new_var(
         }
 
         TokenKind::Colon => {
-            let struct_def = create_struct_definition(token_stream, context, string_table)?;
+            let struct_def = create_struct_definition(token_stream, string_table)?;
 
             return Ok(Var {
                 id,

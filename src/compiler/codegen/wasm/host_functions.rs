@@ -18,9 +18,7 @@ use crate::compiler::codegen::wasm::analyzer::{FunctionSignature, WasmType};
 use crate::compiler::codegen::wasm::error::WasmGenerationError;
 use crate::compiler::codegen::wasm::module_builder::WasmModuleBuilder;
 use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler::host_functions::registry::{
-    HostFunctionDef, HostFunctionRegistry, JsFunctionDef,
-};
+use crate::compiler::host_functions::registry::{HostFunctionDef, HostRegistry, JsFunctionDef};
 use crate::compiler::string_interning::StringTable;
 use std::collections::HashMap;
 use wasm_encoder::{ExportKind, ValType};
@@ -209,7 +207,7 @@ impl HostFunctionManager {
     /// Register host functions from a registry
     pub fn register_from_registry(
         &mut self,
-        registry: &HostFunctionRegistry,
+        registry: &HostRegistry,
         string_table: &StringTable,
     ) -> Result<(), CompilerError> {
         // Get all JavaScript mappings (these have the actual WASM types)

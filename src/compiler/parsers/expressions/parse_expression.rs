@@ -212,8 +212,9 @@ pub fn create_expression(
 
             TokenKind::Newline => {
                 // Fine if inside parenthesis (not closed yet)
+                // Or the previous token continues the expression
                 // Otherwise break out of the expression
-                if consume_closing_parenthesis {
+                if consume_closing_parenthesis || token_stream.previous_token().continues_expression() {
                     token_stream.skip_newlines();
                     continue;
                 }

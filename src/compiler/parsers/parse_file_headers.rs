@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::Var;
@@ -61,7 +61,7 @@ impl Display for Header {
 // and parses them into headers, with entry file detection.
 pub fn parse_headers(
     tokenized_files: Vec<FileTokens>,
-    host_registry: &HostFunctionRegistry,
+    host_registry: &HostRegistry,
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
     string_table: &mut StringTable,
@@ -149,7 +149,7 @@ pub fn parse_headers(
 // Each header is a function, struct, choice, constant declaration or part of the implicit main function (anything else in the top level scope).
 pub fn parse_headers_in_file(
     token_stream: &mut FileTokens,
-    host_function_registry: &HostFunctionRegistry,
+    host_function_registry: &HostRegistry,
     warnings: &mut Vec<CompilerWarning>,
     is_entry_file: bool,
     string_table: &mut StringTable,
@@ -385,7 +385,7 @@ fn create_header(
     token_stream: &mut FileTokens,
     name_location: TextLocation,
     file_imports: &HashMap<StringId, InternedPath>,
-    host_registry: &HostFunctionRegistry,
+    host_registry: &HostRegistry,
     string_table: &mut StringTable,
 ) -> Result<Header, CompilerError> {
     // We only need to know what imports this header is actually using.
@@ -399,6 +399,52 @@ fn create_header(
     match current_token {
         // FUNCTIONS
         TokenKind::TypeParameterBracket => {
+            let signature = FunctionSignature::new(token_stream, string_table)?;
+
+            let mut scopes_opened = 1;
+            let mut scopes_closed = 0;
+            let mut function_body = Vec::new();
+
+            // FunctionSignature::new leaves us at the first token of the function body
+            // Don't advance before the first iteration
+            while scopes_opened > scopes_closed {
+                match token_stream.current_token_kind() {
+                    TokenKind::End => {
+                        scopes_closed += 1;
+                        if scopes_opened > scopes_closed {
+                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        }
+                    }
+
+                    // Colons used in templates parse into a different token (EndTemplateHead),
+                    // so there isn't any issue with templates creating a colon imbalance.
+                    // But all features in the language MUST otherwise follow the rule that all colons are closed with semicolons.
+                    // The only violations of this rule have to be parsed differently in the tokenizer,
+                    // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
+                    TokenKind::Colon => {
+                        scopes_opened += 1;
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+
+                    // Double colons need to be closed with semicolons also
+                    TokenKind::DoubleColon => {
+                        scopes_opened += 1;
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+
+                    TokenKind::Symbol(name_id) => {
+                        if let Some(path) = file_imports.get(name_id) {
+                            dependencies.insert(path.to_owned());
+                        }
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+                    _ => {
+                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                    }
+                }
+                token_stream.advance();
+            }
+
             kind = HeaderKind::Function {
                 signature,
                 body: function_body,

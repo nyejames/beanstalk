@@ -189,20 +189,27 @@ impl HostFunctionDef {
 
 /// Registry for managing host function definitions with runtime-specific mappings
 #[derive(Clone)]
-pub struct HostFunctionRegistry {
+pub struct HostRegistry {
     /// Map from function name to function definition
     functions: HashMap<InternedString, HostFunctionDef>,
+
     /// Map from Beanstalk function name to JavaScript function definition
     js_mappings: HashMap<InternedString, JsFunctionDef>,
+
+    /// Host provided constants list
+    /// This is an ExpressionKind as data type info is not needed
+    constants: HashMap<InternedString, ExpressionKind>,
+
     /// Current runtime backend
     current_backend: RuntimeBackend,
 }
 
-impl HostFunctionRegistry {
+impl HostRegistry {
     /// Create a new empty registry
     pub fn new() -> Self {
-        HostFunctionRegistry {
+        HostRegistry {
             functions: HashMap::new(),
+            constants: HashMap::new(),
             js_mappings: HashMap::new(),
             current_backend: RuntimeBackend::default(),
         }
@@ -210,8 +217,9 @@ impl HostFunctionRegistry {
 
     /// Create a new registry with a specific runtime backend
     pub fn new_with_backend(backend: RuntimeBackend) -> Self {
-        HostFunctionRegistry {
+        HostRegistry {
             functions: HashMap::new(),
+            constants: HashMap::new(),
             js_mappings: HashMap::new(),
             current_backend: backend,
         }
@@ -363,7 +371,7 @@ pub enum RuntimeFunctionMapping<'a> {
     JavaScript(&'a JsFunctionDef),
 }
 
-impl Default for HostFunctionRegistry {
+impl Default for HostRegistry {
     fn default() -> Self {
         Self::new()
     }
@@ -373,8 +381,8 @@ impl Default for HostFunctionRegistry {
 pub fn create_builtin_registry(
     backend: RuntimeBackend,
     string_table: &mut StringTable,
-) -> Result<HostFunctionRegistry, CompilerError> {
-    let mut registry = HostFunctionRegistry::new_with_backend(backend);
+) -> Result<HostRegistry, CompilerError> {
+    let mut registry = HostRegistry::new_with_backend(backend);
 
     // Register the io() function with CoerceToString parameter
     // This function outputs content to stdout with automatic newline
@@ -411,7 +419,7 @@ pub fn create_builtin_registry(
 
 /// Validate that all host function definitions in the registry are correct
 fn validate_registry(
-    registry: &HostFunctionRegistry,
+    registry: &HostRegistry,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     // Validate core host functions
@@ -433,7 +441,7 @@ fn validate_registry(
 /// Validate that the mandatory io() function is available in the registry
 /// This is a build system contract requirement - every build system must provide io()
 fn validate_io_function_availability(
-    registry: &HostFunctionRegistry,
+    registry: &HostRegistry,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
     // Check if io() function exists by looking through all registered functions

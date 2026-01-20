@@ -39,7 +39,7 @@ use crate::compiler::codegen::wasm::{
     validator::{WasmValidator, validate_wasm_module_comprehensive},
 };
 use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::lir::nodes::{LirFunction, LirModule};
 use crate::compiler::string_interning::StringTable;
 use std::collections::HashMap;
@@ -130,7 +130,7 @@ pub fn encode_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
 #[allow(dead_code)]
 pub fn encode_wasm_with_host_functions(
     lir: &LirModule,
-    host_registry: &HostFunctionRegistry,
+    host_registry: &HostRegistry,
     string_table: &StringTable,
 ) -> Result<Vec<u8>, CompilerError> {
     // Phase 1: Analyze the LIR module

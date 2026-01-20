@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::build_ast::function_body_to_ast;
@@ -30,7 +30,7 @@ pub struct Ast {
 impl Ast {
     pub fn new(
         sorted_headers: Vec<Header>,
-        host_registry: &HostFunctionRegistry,
+        host_registry: &HostRegistry,
         string_table: &mut StringTable,
     ) -> Result<Ast, CompilerMessages> {
         // Each file will be combined into a single AST.
@@ -44,7 +44,10 @@ impl Ast {
         let mut declarations: Vec<Var> = Vec::new();
         for header in sorted_headers {
             match header.kind {
-                HeaderKind::Function {signature, body: tokens} => {
+                HeaderKind::Function {
+                    signature,
+                    body: tokens,
+                } => {
                     // Function parameters should be available in the function body scope
                     let context = ScopeContext::new(
                         ContextKind::Function,
@@ -223,7 +226,7 @@ impl Ast {
                 }
             }
 
-            // TODO: create an function definition for these exported headers
+            // TODO: create a function definition for these exported headers
             if header.exported {}
         }
 
@@ -250,12 +253,13 @@ pub struct ScopeContext {
     pub scope: InternedPath,
     pub declarations: Vec<Var>,
     pub returns: Vec<Var>,
-    pub host_registry: HostFunctionRegistry,
+    pub host_registry: HostRegistry,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
     Module, // The top-level scope of each file in the module
     Expression,
+    Constant, // An expression that is enforced to be evaluated at compile time and can't contain non constant reference s
     Function,
     Condition, // For loops and if statements
     Loop,
@@ -268,7 +272,7 @@ impl ScopeContext {
         kind: ContextKind,
         scope: InternedPath,
         declarations: &[Var],
-        host_registry: HostFunctionRegistry,
+        host_registry: HostRegistry,
         returns: Vec<Var>,
     ) -> ScopeContext {
         ScopeContext {
@@ -311,6 +315,16 @@ impl ScopeContext {
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;
         new_context
+    }
+
+    pub fn new_constant(scope: InternedPath) -> ScopeContext {
+        ScopeContext {
+            kind: ContextKind::Constant,
+            scope,
+            declarations: Vec::new(),
+            returns: Vec::new(),
+            host_registry: HostRegistry::default(),
+        }
     }
 
     pub fn add_var(&mut self, arg: Var) {

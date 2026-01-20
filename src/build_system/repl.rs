@@ -6,7 +6,7 @@
 // Function templates are not yet supported
 
 use crate::compiler::compiler_errors::CompilerError;
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
@@ -101,7 +101,7 @@ fn compile_beanstalk_to_string(
         ContextKind::Template,
         interned_path,
         &[],
-        HostFunctionRegistry::new(),
+        HostRegistry::new(),
         Vec::new(),
     );
 

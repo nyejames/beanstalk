@@ -226,37 +226,6 @@ impl FileTokens {
 
     pub fn advance(&mut self) {
         match &self.current_token_kind() {
-            // Some tokens allow any number of newlines after them,
-            // without breaking a statement or expression
-            &TokenKind::Colon
-            | &TokenKind::OpenParenthesis
-            | &TokenKind::TypeParameterBracket
-            | &TokenKind::Comma
-            | &TokenKind::End
-            | &TokenKind::Directive(_)
-            | &TokenKind::Assign
-            | &TokenKind::AddAssign
-            | &TokenKind::SubtractAssign
-            | &TokenKind::MultiplyAssign
-            | &TokenKind::DivideAssign
-            | &TokenKind::ExponentAssign
-            | &TokenKind::RootAssign
-            | &TokenKind::Add
-            | &TokenKind::Subtract
-            | &TokenKind::Multiply
-            | &TokenKind::Divide
-            | &TokenKind::Modulus
-            | &TokenKind::Root
-            | &TokenKind::Arrow
-            | &TokenKind::Is
-            | &TokenKind::LessThan
-            | &TokenKind::LessThanOrEqual
-            | &TokenKind::GreaterThan
-            | &TokenKind::GreaterThanOrEqual => {
-                self.index += 1;
-                self.skip_newlines();
-            }
-
             // Can't advance past End of File
             &TokenKind::Eof => {
                 // Show a warning for compiler development purposes
@@ -516,6 +485,39 @@ impl TokenKind {
             TokenKind::DatatypeString => Some(DataType::String),
             _ => None,
         }
+    }
+
+    // For figuring out when to break out of or continue expressions and statements
+    pub fn continues_expression(&self) -> bool {
+        matches!(
+            self,
+            // Tokens that allow any number of newlines after or before them without breaking a statement or expression,
+            TokenKind::Colon
+                | TokenKind::OpenParenthesis
+                | TokenKind::TypeParameterBracket
+                | TokenKind::Comma
+                | TokenKind::End
+                | TokenKind::Directive(_)
+                | TokenKind::Assign
+                | TokenKind::AddAssign
+                | TokenKind::SubtractAssign
+                | TokenKind::MultiplyAssign
+                | TokenKind::DivideAssign
+                | TokenKind::ExponentAssign
+                | TokenKind::RootAssign
+                | TokenKind::Add
+                | TokenKind::Subtract
+                | TokenKind::Multiply
+                | TokenKind::Divide
+                | TokenKind::Modulus
+                | TokenKind::Root
+                | TokenKind::Arrow
+                | TokenKind::Is
+                | TokenKind::LessThan
+                | TokenKind::LessThanOrEqual
+                | TokenKind::GreaterThan
+                | TokenKind::GreaterThanOrEqual
+        )
     }
 }
 

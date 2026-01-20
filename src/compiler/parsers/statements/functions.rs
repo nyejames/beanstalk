@@ -1,11 +1,10 @@
-// use crate::parsers::expressions::function_call_inline::inline_function_call;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler::parsers::statements::structs::{create_struct_definition, parse_parameters};
+use crate::compiler::parsers::statements::structs::parse_parameters;
 use crate::compiler::string_interning::{StringId, StringTable};
 
 use crate::compiler::parsers::ast::ScopeContext;

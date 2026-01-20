@@ -4881,7 +4881,7 @@ mod hir_validation_error_handling_property_tests {
 #[cfg(test)]
 mod pipeline_integration_tests {
     use crate::Compiler;
-    use crate::compiler::host_functions::registry::HostFunctionRegistry;
+    use crate::compiler::host_functions::registry::HostRegistry;
     use crate::compiler::string_interning::StringTable;
     use crate::settings::{Config, ProjectType};
     use std::path::PathBuf;
@@ -4889,7 +4889,7 @@ mod pipeline_integration_tests {
     /// Helper to create a test compiler with default settings
     fn create_test_compiler<'a>(
         config: &'a Config,
-        host_registry: &HostFunctionRegistry,
+        host_registry: &HostRegistry,
         string_table: &'a mut StringTable,
     ) -> Compiler<'a> {
         Compiler::new(config, host_registry.clone(), std::mem::take(string_table))
@@ -4912,7 +4912,7 @@ mod pipeline_integration_tests {
     #[test]
     fn test_empty_source_produces_valid_hir() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -4931,7 +4931,7 @@ mod pipeline_integration_tests {
     #[test]
     fn test_simple_variable_declaration_to_hir() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -4947,7 +4947,7 @@ mod pipeline_integration_tests {
     #[test]
     fn test_multiple_variable_declarations() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -4973,7 +4973,7 @@ z = 3
     #[test]
     fn test_binary_expression_linearization() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -4991,7 +4991,7 @@ z = 3
     #[test]
     fn test_complex_expression_flattening() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5013,7 +5013,7 @@ z = 3
     #[test]
     fn test_if_statement_to_hir_blocks() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5036,7 +5036,7 @@ if x is 1:
     #[test]
     fn test_if_else_to_hir_blocks() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5061,7 +5061,7 @@ else
     #[test]
     fn test_loop_to_hir_blocks() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5087,7 +5087,7 @@ loop i in 0 to 10:
     #[test]
     fn test_function_definition_to_hir() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5109,7 +5109,7 @@ add |a Int, b Int| -> Int:
     #[test]
     fn test_function_multiple_params() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5136,7 +5136,7 @@ calculate |x Int, y Int, z Int| -> Int:
     #[test]
     fn test_struct_definition_to_hir() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5163,7 +5163,7 @@ Point = |
     #[test]
     fn test_syntax_error_handling() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5187,7 +5187,7 @@ if x is 1:
     #[test]
     fn test_combined_features_to_hir() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 
@@ -5217,7 +5217,7 @@ result = add(x, y)
     #[test]
     fn test_nested_control_flow() {
         let config = default_test_config();
-        let host_registry = HostFunctionRegistry::new();
+        let host_registry = HostRegistry::new();
         let mut string_table = StringTable::new();
         let mut compiler = create_test_compiler(&config, &host_registry, &mut string_table);
 

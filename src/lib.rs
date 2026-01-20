@@ -6,7 +6,7 @@ pub mod settings;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod test_runner;
-    
+
     #[cfg(test)]
     pub(crate) mod control_flow_linearizer_tests;
     #[cfg(test)]
@@ -123,7 +123,7 @@ mod compiler {
     }
 }
 
-use crate::compiler::host_functions::registry::HostFunctionRegistry;
+use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::string_interning::StringTable;
 use crate::settings::{Config, ProjectType};
 use std::collections::HashSet;
@@ -170,14 +170,14 @@ pub enum Flag {
 
 pub struct Compiler<'a> {
     project_config: &'a Config,
-    host_function_registry: HostFunctionRegistry,
+    host_function_registry: HostRegistry,
     string_table: StringTable,
 }
 
 impl<'a> Compiler<'a> {
     pub fn new(
         project_config: &'a Config,
-        host_function_registry: HostFunctionRegistry,
+        host_function_registry: HostRegistry,
         string_table: StringTable,
     ) -> Self {
         Self {
