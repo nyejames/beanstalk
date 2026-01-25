@@ -17,6 +17,7 @@ use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
     return_type_error,
 };
+use colour::red_ln;
 
 // For multiple returns or function calls
 // MUST know all the types
@@ -94,7 +95,7 @@ pub fn create_expression(
     let mut expression: Vec<AstNode> = Vec::new();
     // let mut number_union = get_any_number_datatype(false);
 
-    ast_log!("Parsing {} Expression", data_type.to_string());
+    ast_log!("Parsing {:?} {} Expression", ownership, data_type.to_string());
 
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
@@ -281,7 +282,7 @@ pub fn create_expression(
                         _ => {
                             // If this is a constant,
                             // just copy the value even if its a reference
-                            // TODO: is_constant currently does word size types, but may be extended to everthing in the future
+                            // TODO: is_constant currently does word size types, but may be extended to everything in the future
                             // This means a check needs to be done for whether this should be copied or not (to avoid bloated binary size)
                             // The copy should only happen in those cases if this is a coerse to string expression or word sized type
                             if arg.value.is_constant() {

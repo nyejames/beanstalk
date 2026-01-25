@@ -263,10 +263,10 @@ pub fn new_var(
         )?,
     };
 
-    ast_log!("Created new variable of type: {}", data_type);
+    ast_log!("Created new {:?} {} variable", ownership, data_type);
 
     Ok(Var {
-        id: id,
+        id,
         value: parsed_expr,
     })
 }
