@@ -172,7 +172,7 @@ impl LoweringContext {
             | DataType::Parameters(_)
             | DataType::Option(_)
             | DataType::Choices(_) => true,
-            DataType::Reference(inner, _) => self.is_heap_allocated_type(inner),
+            DataType::Reference(inner) => self.is_heap_allocated_type(inner),
             _ => false,
         }
     }

@@ -18,18 +18,13 @@ impl Ownership {
         Ownership::ImmutableOwned
     }
     pub fn is_mutable(&self) -> bool {
-        match &self {
-            Ownership::MutableOwned => true,
-            Ownership::MutableReference => true,
-            _ => false,
-        }
+        matches!(self, Ownership::MutableOwned | Ownership::MutableReference)
     }
     pub fn is_reference(&self) -> bool {
-        match &self {
-            Ownership::MutableReference => true,
-            Ownership::ImmutableReference => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Ownership::MutableReference | Ownership::ImmutableReference
+        )
     }
 
     pub fn to_reference(&mut self) {
@@ -80,7 +75,7 @@ pub enum DataType {
     // At the header parsing stage, 'inferred' is used where a symbol type is not yet known (as the type might be another header).
     Inferred,
 
-    Reference(Box<DataType>, Ownership),
+    Reference(Box<DataType>),
 
     Bool,
     Range, // Iterable that must always be owned.
@@ -118,7 +113,7 @@ pub enum DataType {
     // They are basically functions that accept a style and return a string
     Template, // is_mutable
 
-    Function(Box<Option<DataType>>, FunctionSignature), // Reciever, signature
+    Function(Box<Option<DataType>>, FunctionSignature), // Receiver, signature
 
     // Type Types
     // Unions allow types such as option and result
@@ -134,6 +129,9 @@ impl DataType {
     pub fn is_valid_type_in_expression(&self, expression_type: &DataType) -> bool {
         // Has to make sure if either type is a union, that the other type is also a member of the union
         // red_ln!("checking if: {:?} is accepted by: {:?}", data_type, accepted_type);
+        if matches!(expression_type, DataType::CoerceToString) {
+            return true;
+        }
 
         match self {
             DataType::Bool => {
@@ -163,34 +161,13 @@ impl DataType {
                 )
             }
 
-            DataType::Int => expression_type.is_numerical(),
+            DataType::Int => expression_type.is_numerical() || expression_type == &DataType::Bool,
 
-            _ => {
-                // For other 'self' types, check the accepted_type
-                match expression_type {
-                    DataType::Inferred => {
-                        // Used to automatically set the expression type to the inferred type
-                        // But this is doing too much in one function
-                        // *expression_type = self.to_owned();
-                        true
-                    }
-                    DataType::CoerceToString => true,
-
-                    // DataType::Choices(types) => {
-                    //     for t in types {
-                    //         if !self.is_valid_type(t.value.data_type) {
-                    //             return false;
-                    //         }
-                    //     }
-                    //     true
-                    // }
-                    DataType::Bool => {
-                        matches!(self, &DataType::Bool | &DataType::Int | &DataType::Float)
-                    }
-
-                    _ => self == expression_type,
-                }
+            DataType::Float => {
+                matches!(expression_type, &DataType::Float | &DataType::Bool)
             }
+
+            _ => self == expression_type,
         }
     }
 
@@ -226,8 +203,8 @@ impl DataType {
                 DataType::Option(Box::new(DataType::Choices(inner_types)))
             }
 
-            DataType::Reference(inner_type, ownership) => {
-                DataType::Option(Box::new(DataType::Reference(inner_type, ownership)))
+            DataType::Reference(inner_type) => {
+                DataType::Option(Box::new(DataType::Reference(inner_type)))
             }
 
             // TODO: Probably should error for these
@@ -274,13 +251,8 @@ impl DataType {
     /// This method should be used instead of Display when a StringTable is available.
     pub fn display_with_table(&self, string_table: &StringTable) -> String {
         match self {
-            DataType::Reference(inner_type, ownership) => {
-                let ownership = ownership.as_string();
-                format!(
-                    "{} {} Reference",
-                    inner_type.display_with_table(string_table),
-                    ownership
-                )
+            DataType::Reference(inner_type) => {
+                format!("{} Reference", inner_type.display_with_table(string_table),)
             }
             DataType::Inferred => "Inferred".to_string(),
             DataType::CoerceToString => "CoerceToString".to_string(),
@@ -361,7 +333,7 @@ impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (DataType::Inferred, DataType::Inferred) => true,
-            (DataType::Reference(a, oa), DataType::Reference(b, ob)) => a == b && oa == ob,
+            (DataType::Reference(a), DataType::Reference(b)) => a == b,
             (DataType::Bool, DataType::Bool) => true,
             (DataType::Range, DataType::Range) => true,
             (DataType::None, DataType::None) => true,
@@ -418,9 +390,8 @@ impl Display for DataType {
         // Note: This Display implementation cannot resolve interned strings without a StringTable.
         // For debugging with actual string content, use DataType::display_with_table() instead.
         match self {
-            DataType::Reference(inner_type, ownership) => {
-                let ownership = ownership.as_string();
-                write!(f, "{inner_type} {ownership} Reference")
+            DataType::Reference(inner_type) => {
+                write!(f, "{inner_type} Reference")
             }
             DataType::Inferred => {
                 write!(f, "Inferred")

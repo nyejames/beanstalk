@@ -99,7 +99,7 @@ impl Template {
                 }
 
                 TokenKind::TemplateHead => {
-                    let mut nested_template = Self::new(
+                    let nested_template = Self::new(
                         token_stream,
                         context,
                         template.style.child_default.to_owned(),
@@ -434,7 +434,7 @@ pub fn parse_template_head(
         // Returning without a scene body
         // EOF is in here for template repl atm and for the convenience
         // of not having to explicitly close the template head from a repl session.
-        // This MIGHT lead to some overly forgiving behavior (not warning about an unclosed template head)
+        // This MIGHT lead to some overly forgiving behaviour (not warning about an unclosed template head)
         if token == TokenKind::TemplateClose || token == TokenKind::Eof {
             return Ok(());
         }
@@ -483,7 +483,7 @@ pub fn parse_template_head(
                         template.insert_template_into_head(
                             inserted_template,
                             foldable,
-                            &string_table,
+                            string_table,
                         )?;
                     }
 
@@ -506,9 +506,9 @@ pub fn parse_template_head(
                         // Reference to another string template
                         ExpressionKind::Template(inserted_template) => {
                             template.insert_template_into_head(
-                                &*inserted_template,
+                                inserted_template,
                                 foldable,
-                                &string_table,
+                                string_table,
                             )?;
                         }
 
@@ -530,6 +530,7 @@ pub fn parse_template_head(
 
                             // Any non-constant expression can't be folded
                             if !expr.kind.is_foldable() {
+                                ast_log!("Template is no longer foldable due to reference");
                                 *foldable = false;
                             }
 
@@ -555,15 +556,11 @@ pub fn parse_template_head(
                 let expr = create_expression(
                     token_stream,
                     context,
-                    &mut DataType::Inferred,
+                    &mut DataType::CoerceToString,
                     &Ownership::ImmutableOwned,
                     false,
                     string_table,
                 )?;
-
-                if !expr.kind.is_foldable() {
-                    *foldable = false;
-                }
 
                 template.content.before.push(expr);
             }
@@ -579,6 +576,7 @@ pub fn parse_template_head(
                 )?;
 
                 if !expr.kind.is_foldable() {
+                    ast_log!("Template is no longer foldable");
                     *foldable = false;
                 }
 

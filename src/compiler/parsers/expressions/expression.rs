@@ -300,6 +300,10 @@ impl Expression {
     pub fn is_none(&self) -> bool {
         matches!(self.kind, ExpressionKind::None)
     }
+
+    pub fn is_constant(&self) -> bool {
+        !self.ownership.is_mutable() && self.kind.is_foldable()
+    }
 }
 #[derive(Clone, Debug)]
 pub enum ExpressionKind {

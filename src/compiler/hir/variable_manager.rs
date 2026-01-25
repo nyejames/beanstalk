@@ -19,9 +19,7 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
-use crate::compiler::hir::nodes::{
-    HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
-};
+use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt};
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 use crate::return_compiler_error;
@@ -54,20 +52,20 @@ pub struct VariableInfo {
 pub struct VariableManager {
     /// Maps variable names to their scope levels
     variable_scopes: HashMap<InternedString, ScopeLevel>,
-    
+
     /// Maps variable names to their mutability
     mutability_tracking: HashMap<InternedString, bool>,
-    
+
     /// Maps variable names to whether they can be owned
     /// CONSERVATIVE: This may be incomplete or wrong - borrow checker is authority
     ownership_capability: HashMap<InternedString, bool>,
-    
+
     /// Maps variable names to their full info
     variable_info: HashMap<InternedString, VariableInfo>,
-    
+
     /// Current scope level
     current_scope: ScopeLevel,
-    
+
     /// Stack of variables declared at each scope level
     scope_variables: Vec<Vec<InternedString>>,
 }
@@ -102,7 +100,7 @@ impl VariableManager {
         }
 
         let exited_vars = self.scope_variables.pop().unwrap_or_default();
-        
+
         // Clean up tracking for exited variables
         for var in &exited_vars {
             self.variable_scopes.remove(var);
@@ -138,9 +136,7 @@ impl VariableManager {
         // Check if variable already exists in current scope
         if let Some(&existing_scope) = self.variable_scopes.get(&name) {
             if existing_scope == self.current_scope {
-                return_compiler_error!(
-                    "Variable already declared in current scope"
-                );
+                return_compiler_error!("Variable already declared in current scope");
             }
         }
 
@@ -213,9 +209,7 @@ impl VariableManager {
         let info = match self.variable_info.get(&name) {
             Some(info) => info.clone(),
             None => {
-                return_compiler_error!(
-                    "Variable not found in scope"
-                );
+                return_compiler_error!("Variable not found in scope");
             }
         };
 
@@ -247,18 +241,14 @@ impl VariableManager {
 
         // Check if variable exists
         if !self.variable_scopes.contains_key(&var_name) {
-            return_compiler_error!(
-                "Cannot assign to undeclared variable"
-            );
+            return_compiler_error!("Cannot assign to undeclared variable");
         }
 
         // Check mutability for reassignment
         if let Some(&existing_mutable) = self.mutability_tracking.get(&var_name) {
             if !existing_mutable && !is_mutable {
                 // Reassigning to an immutable variable
-                return_compiler_error!(
-                    "Cannot reassign to immutable variable"
-                );
+                return_compiler_error!("Cannot reassign to immutable variable");
             }
         }
 
@@ -296,9 +286,7 @@ impl VariableManager {
         let info = match self.variable_info.get(&name) {
             Some(info) => info.clone(),
             None => {
-                return_compiler_error!(
-                    "Variable not found for potential move"
-                );
+                return_compiler_error!("Variable not found for potential move");
             }
         };
 
@@ -330,12 +318,18 @@ impl VariableManager {
 
     /// Checks if a variable is mutable
     pub fn is_variable_mutable(&self, name: InternedString) -> bool {
-        self.mutability_tracking.get(&name).copied().unwrap_or(false)
+        self.mutability_tracking
+            .get(&name)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Checks if a variable is ownership capable
     pub fn is_ownership_capable(&self, name: InternedString) -> bool {
-        self.ownership_capability.get(&name).copied().unwrap_or(false)
+        self.ownership_capability
+            .get(&name)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Gets the variable info for a variable
@@ -355,7 +349,10 @@ impl VariableManager {
 
     /// Gets all variables in the current scope
     pub fn get_current_scope_variables(&self) -> &[InternedString] {
-        self.scope_variables.last().map(|v| v.as_slice()).unwrap_or(&[])
+        self.scope_variables
+            .last()
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
     }
 
     /// Gets all ownership-capable variables in the current scope
@@ -378,30 +375,30 @@ impl VariableManager {
         match data_type {
             // Primitive types are typically not ownership capable (copy semantics)
             DataType::Int | DataType::Float | DataType::Bool | DataType::Char => false,
-            
+
             // String slices are borrowed, not owned
             DataType::String => false,
-            
+
             // None type is not ownership capable
             DataType::None => false,
-            
+
             // Collections and structs are ownership capable
             DataType::Collection(_, _) => true,
             DataType::Struct(_, _) => true,
             DataType::Parameters(_) => true,
-            
+
             // Templates can be ownership capable
             DataType::Template => true,
-            
+
             // Functions are typically not ownership capable
             DataType::Function(_, _) => false,
-            
+
             // References depend on what they reference
-            DataType::Reference(inner, _) => self.is_type_ownership_capable(inner),
-            
+            DataType::Reference(inner) => self.is_type_ownership_capable(inner),
+
             // Inferred types are conservatively ownership capable
             DataType::Inferred => true,
-            
+
             // Other types are conservatively ownership capable
             _ => true,
         }

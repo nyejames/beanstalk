@@ -164,12 +164,12 @@ impl StructLayoutCalculator {
             DataType::Parameters(_) => 8,     // Pointer to tuple
             DataType::Option(_) => 9,         // Tag + value
             DataType::None => 0,
-            DataType::Inferred => 8,        // Default to pointer size
-            DataType::Template => 8,        // Pointer
-            DataType::Choices(_) => 16,     // Tag + largest variant
-            DataType::Range => 16,          // Start + end
-            DataType::Reference(_, _) => 8, // Pointer
-            DataType::Function(_, _) => 8,  // Function pointer
+            DataType::Inferred => 8,       // Default to pointer size
+            DataType::Template => 8,       // Pointer
+            DataType::Choices(_) => 16,    // Tag + largest variant
+            DataType::Range => 16,         // Start + end
+            DataType::Reference(_) => 8,   // Pointer
+            DataType::Function(_, _) => 8, // Function pointer
         }
     }
 
@@ -201,7 +201,7 @@ impl StructLayoutCalculator {
             DataType::Template => 8,
             DataType::Choices(_) => 8,
             DataType::Range => 8,
-            DataType::Reference(_, _) => 8,
+            DataType::Reference(_) => 8,
             DataType::Function(_, _) => 8,
         }
     }

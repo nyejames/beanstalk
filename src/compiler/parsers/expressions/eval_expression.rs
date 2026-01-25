@@ -208,10 +208,7 @@ pub fn evaluate_expression(
 
         if let ExpressionKind::Reference(..) = only_expression.kind {
             // The current type now becomes a reference (basically a safe pointer rather than a value)
-            *current_type = DataType::Reference(
-                Box::from(only_expression.data_type.to_owned()),
-                ownership.to_owned(),
-            );
+            *current_type = DataType::Reference(Box::from(only_expression.data_type.to_owned()));
         }
 
         return Ok(only_expression);

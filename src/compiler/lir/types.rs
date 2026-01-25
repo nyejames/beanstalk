@@ -99,7 +99,7 @@ pub fn data_type_to_lir_type(data_type: &DataType) -> LirType {
         DataType::Option(_) => LirType::I32,
         DataType::Choices(_) => LirType::I32,
         DataType::Range => LirType::I32,
-        DataType::Reference(inner, _) => data_type_to_lir_type(inner),
+        DataType::Reference(inner) => data_type_to_lir_type(inner),
         DataType::CoerceToString => LirType::I32,
         DataType::None => LirType::I32,
         DataType::Inferred => LirType::I32,

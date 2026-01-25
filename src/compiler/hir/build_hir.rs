@@ -1280,7 +1280,7 @@ impl<'a> HirBuilderContext<'a> {
             // Functions are typically not ownership capable
             DataType::Function(_, _) => false,
             // References depend on what they reference
-            DataType::Reference(inner, _) => self.is_type_ownership_capable(inner),
+            DataType::Reference(inner) => self.is_type_ownership_capable(inner),
             // Inferred types are conservatively ownership capable
             DataType::Inferred => true,
             // Other types are conservatively ownership capable

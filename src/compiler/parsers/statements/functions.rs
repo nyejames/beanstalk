@@ -6,6 +6,7 @@ use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::structs::parse_parameters;
 use crate::compiler::string_interning::{StringId, StringTable};
+use colour::red_ln;
 
 use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
@@ -448,11 +449,10 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Collection(inner, _) => format!("Collection<{}>", format_type_for_error(inner)),
         DataType::Struct(..) => "Struct".to_string(),
         DataType::Option(inner) => format!("Option<{}>", format_type_for_error(inner)),
-        DataType::Reference(data_type, ownership) => {
+        DataType::Reference(data_type) => {
             format!(
-                "{} {} Reference",
+                "{} Reference",
                 format_type_for_error(data_type),
-                ownership.as_string()
             )
         }
     }
@@ -584,7 +584,7 @@ pub fn create_function_call_arguments(
                 "Expected a parenthesis after function call. Found '{:?}' instead.",
                 token_stream.current_token_kind()
             ),
-            token_stream.current_location().to_error_location(&string_table),
+            token_stream.current_location().to_error_location(string_table),
             {
                 CompilationStage => "Function Call Parsing",
                 PrimarySuggestion => "Add '(' after the function name",

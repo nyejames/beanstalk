@@ -113,7 +113,7 @@ pub fn create_expression(
                 if expression.is_empty() {
                     return_syntax_error!(
                         "Empty expression found. Expected a value, variable, or expression.",
-                        token_stream.current_location().to_error_location(&string_table),
+                        token_stream.current_location().to_error_location(string_table),
                         {
                             CompilationStage => "Expression Parsing",
                             PrimarySuggestion => "Add a value, variable reference, or expression inside the parentheses",
@@ -219,6 +219,18 @@ pub fn create_expression(
                     continue;
                 }
 
+                // No need to skip additional newlines, as the tokenizer removed duplicates?
+                // If the next token also continues this expression after newlines
+                // then don't break out of the expression yet
+                while let Some(token) = token_stream.peek_next_token() {
+                    if token.continues_expression() {
+                        // Skip this newline
+                        token_stream.skip_newlines();
+                        continue;
+                    }
+                    break;
+                }
+
                 ast_log!("Breaking out of expression with newline");
                 break;
             }
@@ -267,12 +279,34 @@ pub fn create_expression(
                         // VARIABLE INSIDE EXPRESSION
                         // --------------------------
                         _ => {
-                            expression.push(create_reference(
-                                token_stream,
-                                arg,
-                                context,
-                                string_table,
-                            )?);
+                            // If this is a constant,
+                            // just copy the value even if its a reference
+                            // TODO: is_constant currently does word size types, but may be extended to everthing in the future
+                            // This means a check needs to be done for whether this should be copied or not (to avoid bloated binary size)
+                            // The copy should only happen in those cases if this is a coerse to string expression or word sized type
+                            if arg.value.is_constant() {
+                                let copied_value = Expression::new(
+                                    arg.value.kind.clone(),
+                                    token_stream.current_location(),
+                                    arg.value.data_type.clone(),
+                                    Ownership::ImmutableOwned,
+                                );
+
+                                expression.push(AstNode {
+                                    kind: NodeKind::Rvalue(copied_value),
+                                    location: token_stream.current_location(),
+                                    scope: context.scope.clone(),
+                                });
+                            } else {
+                                // Otherwise we are referencing the value
+                                // This means that this expression can't be folded anymore
+                                expression.push(create_reference(
+                                    token_stream,
+                                    arg,
+                                    context,
+                                    string_table,
+                                )?);
+                            }
 
                             continue; // Will have moved onto the next token already
                         }
@@ -386,7 +420,7 @@ pub fn create_expression(
             }
 
             TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
-                let mut template =
+                let template =
                     Template::new(token_stream, new_template_context!(context), None, string_table)?;
 
                 match template.kind {
@@ -399,6 +433,8 @@ pub fn create_expression(
                     }
 
                     TemplateType::String => {
+                        ast_log!("Template is foldable. Folding...");
+
                         let folded_string = template.fold(&None, string_table)?;
                         let interned = folded_string;
 
@@ -649,7 +685,7 @@ pub fn create_expression(
         token_stream.advance();
     }
 
-    ast_log!("Finished parsing expression : {:#?}", expression);
+    // ast_log!("Finished parsing expression : {:#?}", expression);
 
     evaluate_expression(
         &context.scope,
