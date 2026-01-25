@@ -175,7 +175,7 @@ impl HostFunctionDef {
                     ExpressionKind::None,
                     TextLocation::default(),
                     param.data_type.to_owned(),
-                    Ownership::default(),
+                    param.ownership.to_owned(),
                 ),
             })
             .collect();

@@ -272,11 +272,17 @@ impl Expression {
             _ => return Ok(None),
         };
 
+        let ownership = if self.ownership.is_mutable() || rhs.ownership.is_mutable() {
+            Ownership::MutableOwned
+        } else {
+            Ownership::ImmutableOwned
+        };
+
         Ok(Some(Expression::new(
             kind,
             self.location.to_owned(),
             self.data_type.to_owned(),
-            Ownership::MutableOwned,
+            ownership,
         )))
     }
 }

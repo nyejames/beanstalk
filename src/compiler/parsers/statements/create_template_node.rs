@@ -11,6 +11,7 @@ use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::compiler::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
+use colour::red_ln;
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 
@@ -134,7 +135,7 @@ impl Template {
                             foldable = false;
                             // Insert it into the template
                             let expr =
-                                Expression::template(nested_template, Ownership::MutableOwned);
+                                Expression::template(nested_template, Ownership::ImmutableOwned);
                             template.content.add(expr, is_after_slot);
                         }
 
@@ -519,6 +520,7 @@ pub fn parse_template_head(
                         // Otherwise this is a reference to some other variable
                         // String, Number, Bool, etc. References
                         _ => {
+                            // red_ln!("reference in template head ownership: {:#?}", arg.value.ownership);
                             let expr = create_expression(
                                 token_stream,
                                 context,
@@ -570,7 +572,7 @@ pub fn parse_template_head(
                     token_stream,
                     context,
                     &mut DataType::CoerceToString,
-                    &Ownership::MutableOwned,
+                    &Ownership::ImmutableOwned,
                     true,
                     string_table,
                 )?;

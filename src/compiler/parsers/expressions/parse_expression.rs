@@ -298,6 +298,8 @@ pub fn create_expression(
                                     location: token_stream.current_location(),
                                     scope: context.scope.clone(),
                                 });
+                                
+                                token_stream.advance();
                             } else {
                                 // Otherwise we are referencing the value
                                 // This means that this expression can't be folded anymore
