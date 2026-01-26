@@ -64,13 +64,6 @@ post = PostGenerator.create_post(date, [:
 
 </div>
 
-Memory safety is enforced through static analysis and a unified runtime ownership model, which keeps binaries small and compilation predictable. All without a GC or reference counting.
-
-This is a fairly unique idea based off of taking ideas from Rust and creating a tradeoff that allows for faster compile times and a simpler, friendlier language. There are no lifetime annotations or complex ownership or move semantics to worry about.
-The cost is a small amount of runtime overhead and keeping the single mutable reference rule from Rust.
-
-Beanstalk isn't trying to be a zero cost abstraction language, but is still trying to be faster and more predictable than a GC or RC language and safer than manual memory mangaement.
-
 <div align="center">
 
 ## Goals 
@@ -81,22 +74,9 @@ Beanstalk isn't trying to be a zero cost abstraction language, but is still tryi
 - Wasm focused backend designed around producing high-quality Wasm for portability and web integration
 - Minimal and coherent syntax for maximum readbility
 - A modular compiler with Fast compile times for snappy tooling and fast development builds
-- Memory safety, with no 'unsafe' mode and no explicit lifetime syntax
 - An integrated build system for web projects and beyond
 - Simple, static and strong type system
 - Clean and deterministic error handling
-
-[//]: # (  <h1>)
-
-[//]: # (    <a href="https://nyejames.github.io/beanstalk">)
-
-[//]: # (      Plans and Documentation)
-
-[//]: # (    </a>)
-
-[//]: # (  </h1>)
-
-[//]: # (  <p>The docs were created using this language. The output of the compiler is directly pushed to GitHub pages. Not everything in the documentation has been implemented fully, it's mostly full of design plans.</p>)
 
 <div align="center">
 
