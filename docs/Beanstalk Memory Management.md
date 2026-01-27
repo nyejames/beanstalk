@@ -32,6 +32,9 @@ This model is used by:
 - Early Wasm backends using Wasm GC
 - Debug and development builds
 
+Values begin as GC-managed.
+Analysis may remove the requirement for GC, but no backend may assume deterministic destruction unless eligibility is proven.
+
 ## Ownership as an Optional Runtime State
 When enabled by the backend, ownership is represented as runtime metadata, not a static type distinction.
 

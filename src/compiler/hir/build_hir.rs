@@ -103,17 +103,6 @@ impl HirBuildContext {
     }
 }
 
-impl Default for HirBuildContext {
-    fn default() -> Self {
-        HirBuildContext {
-            source_location: TextLocation::default(),
-            original_ast_node: None,
-            scope_depth: 0,
-            ownership_potential: false,
-        }
-    }
-}
-
 // ============================================================================
 // Core Types and Enums
 // ============================================================================

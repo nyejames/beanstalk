@@ -2,12 +2,26 @@
 //!
 //! This module defines the High-Level Intermediate Representation (HIR) for Beanstalk.
 //! HIR is a structured, semantically rich IR designed for borrow checking, move analysis,
-//! and preparing code for reliable lowering to WebAssembly.
+//! and preparing code for reliable lowering to multiple backends.
+//!
+//! ## Memory Model Strategy
+//!
+//! Beanstalk uses a **fallback GC approach**:
+//! - **Baseline semantics**: All heap values are GC-managed (correct by default)
+//! - **Progressive optimization**: Static analysis identifies values eligible for deterministic management
+//! - **Backend flexibility**: 
+//!   - JS backend: Pure GC semantics (ignore ownership annotations)
+//!   - Wasm backend: Hybrid GC + ownership (initially GC-heavy, progressively optimized)
+//!
+//! HIR is designed to support both models:
+//! - Ownership annotations are **advisory hints** for optimization, not semantic requirements
+//! - All programs are correct under pure GC interpretation
+//! - Static analysis strengthens guarantees incrementally without changing HIR structure
 //!
 //! Key design principles:
-//! - Place-based memory model for precise borrow tracking
+//! - Place-based memory model for precise borrow tracking (when enabled)
 //! - No nested control flow; expressions may nest, but evaluation order is explicit
-//! - Borrow intent, not ownership outcome (determined by the borrow checker)
+//! - Borrow intent recorded, ownership outcome determined later (or ignored entirely in GC-only backends)
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;
@@ -63,11 +77,34 @@ pub enum HirKind {
     Terminator(HirTerminator),
 }
 
+/// Memory management classification for values
+///
+/// This is purely for optimization - it does not affect correctness.
+/// All values work correctly under GC regardless of classification.
+#[derive(Debug, Clone)]
+enum MemoryClass {
+    /// Default: Always GC-managed
+    /// - JS backend: All values start and remain here
+    /// - Wasm backend (early): All values start here
+    Unknown,
+
+    /// Optimization hint: May be eligible for deterministic management
+    /// - JS backend: Ignored (remains GC-managed)
+    /// - Wasm backend (later): Can use ownership elision if borrow checker validates
+    ///
+    /// This classification does not guarantee deterministic management - it's a hint
+    /// that static analysis *might* be able to prove safety for non-GC lowering.
+    Eligible,
+}
+
 #[derive(Debug, Clone)]
 pub enum HirStmt {
     // === Variable Operations ===
     /// Assign expression result to a variable
     /// The `is_mutable` flag indicates if this was a `~=` assignment
+    ///
+    /// **GC semantics**: Creates/updates a GC-managed binding
+    /// **Ownership semantics** (when enabled): May transfer ownership based on last-use
     Assign {
         target: HirPlace,
         value: HirExpr,
@@ -92,7 +129,14 @@ pub enum HirStmt {
 
     // === Resource Management ===
     /// Conditional drop inserted by HIR generation
-    /// Will only drop if the value is owned at runtime
+    ///
+    /// **Semantics by backend**:
+    /// - JS backend: No-op (GC handles cleanup)
+    /// - Wasm GC backend (early): No-op (GC handles cleanup)
+    /// - Wasm ownership backend (later): Conditional free based on runtime ownership flag
+    ///
+    /// This node is always safe to insert - it's an optimization hint that may become
+    /// executable code in backends with ownership elision.
     PossibleDrop(HirPlace),
 
     // === Templates ===
@@ -169,7 +213,7 @@ pub enum HirTerminator {
     /// Error return (terminates block)
     ReturnError(HirExpr),
 
-    /// Hard break
+    /// Hard break - always terminates program
     Panic {
         message: Option<HirExpr>,
     },
@@ -185,15 +229,21 @@ pub struct HirExpr {
 #[derive(Debug, Clone)]
 pub enum HirExprKind {
     // === Literals ===
+    /// All literal values are GC-managed by default
+    /// Optimization: Small literals (word-sized types) may be stack-allocated in Wasm backend
     Int(i64),
     Float(f64),
     Bool(bool),
-    StringLiteral(InternedString), // Stack-allocated string slice
-    HeapString(InternedString),    // Heap-allocated string (from runtime templates)
+    StringLiteral(InternedString), // Stack-allocated string slice (immutable, from source)
+    HeapString(InternedString),    // Heap-allocated string (mutable, from runtime templates)
     Char(char),
 
     // === Variable Access ===
-    /// Load variable value (creates shared reference by default)
+    /// Load variable value
+    ///
+    /// **GC semantics**: Always creates a shared reference to GC-managed data
+    /// **Ownership semantics** (when enabled): Creates shared reference; exclusive access
+    /// rules enforced by borrow checker
     Load(HirPlace),
 
     /// Field access on a variable
@@ -202,9 +252,16 @@ pub enum HirExprKind {
         field: InternedString,
     },
 
-    /// Potential ownership transfer
-    /// Marked during HIR generation based on last-use analysis hints
-    /// Final ownership decision happens during borrow validation
+    /// Potential ownership transfer (marked by last-use analysis)
+    ///
+    /// **GC semantics**: Same as Load (GC handles aliasing)
+    /// **Ownership semantics** (when enabled): May consume ownership if:
+    ///   - Borrow checker validates exclusive access
+    ///   - This is the last use in control flow
+    ///   - Runtime ownership flag permits it
+    ///
+    /// This is an **advisory annotation** - the distinction between Move and Load
+    /// is purely for optimization and does not affect program correctness under GC.
     Move(HirPlace),
 
     // === Binary Operations ===
@@ -234,6 +291,8 @@ pub enum HirExprKind {
     },
 
     // === Constructors ===
+    /// All composite types are GC-managed by default
+    /// Ownership semantics (when enabled) may optimize allocation patterns
     StructConstruct {
         type_name: InternedString,
         fields: Vec<(InternedString, HirExpr)>,
