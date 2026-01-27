@@ -4,7 +4,7 @@
 //! their types, and move states. This module provides the core data structures for
 //! dataflow analysis and conflict detection.
 
-use super::control_flow::ProgramPoint;
+pub(crate) use super::control_flow::ProgramPoint;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 use std::collections::{HashMap, HashSet};
@@ -28,7 +28,7 @@ pub enum BorrowKind {
 }
 
 /// A borrow with its context information
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Borrow {
     /// The place being borrowed
     pub place: PlaceId,
@@ -93,7 +93,7 @@ pub enum AccessKind {
 }
 
 /// The complete borrow state at a program point
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BorrowState {
     /// Active borrows by place
     active_borrows: HashMap<PlaceId, Vec<Borrow>>,

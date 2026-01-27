@@ -12,7 +12,7 @@ use crate::compiler::hir::nodes::{
     HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirStmt, HirTerminator,
 };
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Default)]
 pub struct AnalysisResults {
@@ -47,14 +47,7 @@ impl DataflowEngine {
     pub fn analyze(&mut self, hir_module: &HirModule) -> AnalysisResults {
         let mut results = AnalysisResults::default();
         let mut block_out_states: HashMap<BlockId, BorrowState> = HashMap::new();
-
-        // Reverse post-order gives a good first approximation without requiring a full fixpoint.
-        let mut block_order = Vec::new();
-        self.cfg
-            .traverse_reverse_postorder(|block| block_order.push(block));
-        if block_order.is_empty() {
-            block_order.push(hir_module.entry_block);
-        }
+        let mut worklist = VecDeque::new();
 
         results.last_uses = self.compute_last_uses(hir_module);
         let block_map: HashMap<BlockId, &Vec<HirNode>> = hir_module
@@ -63,11 +56,17 @@ impl DataflowEngine {
             .map(|block| (block.id, &block.nodes))
             .collect();
 
-        for block_id in block_order {
+        if let Some(entry) = self.cfg.get_entry_block() {
+            worklist.push_back(entry);
+        }
+
+        while let Some(block_id) = worklist.pop_front() {
             let mut in_state = self.merge_predecessor_states(block_id, &block_out_states);
             let Some(nodes) = block_map.get(&block_id) else {
                 continue;
             };
+
+            results.states.retain(|point, _| point.block != block_id);
 
             for (statement_idx, node) in nodes.iter().enumerate() {
                 let point = ProgramPoint {
@@ -87,7 +86,19 @@ impl DataflowEngine {
                 }
             }
 
-            block_out_states.insert(block_id, in_state);
+            let out_state = in_state.clone();
+            let previous_out = block_out_states.get(&block_id);
+            let changed = previous_out
+                .map(|existing| existing != &out_state)
+                .unwrap_or(true);
+
+            block_out_states.insert(block_id, out_state);
+
+            if changed {
+                for successor in self.cfg.get_successors(block_id) {
+                    worklist.push_back(*successor);
+                }
+            }
         }
 
         results
@@ -106,13 +117,12 @@ impl DataflowEngine {
             }
         }
 
-        if merged_states.is_empty() {
+        let mut merged_iter = merged_states.into_iter();
+        let Some(mut merged) = merged_iter.next() else {
             return BorrowState::new();
-        }
+        };
 
-        let mut iter = merged_states.into_iter();
-        let mut merged = iter.next().unwrap();
-        for state in iter {
+        for state in merged_iter {
             merged = merged.merge(&state);
         }
 
@@ -136,14 +146,53 @@ impl DataflowEngine {
 
     fn compute_last_uses(&mut self, hir_module: &HirModule) -> HashMap<PlaceId, ProgramPoint> {
         let mut last_uses = HashMap::new();
+        let mut live_in: HashMap<BlockId, HashSet<PlaceId>> = HashMap::new();
+        let mut live_out: HashMap<BlockId, HashSet<PlaceId>> = HashMap::new();
+        let block_map: HashMap<BlockId, &Vec<HirNode>> = hir_module
+            .blocks
+            .iter()
+            .map(|block| (block.id, &block.nodes))
+            .collect();
 
-        for block in &hir_module.blocks {
-            for (statement_idx, node) in block.nodes.iter().enumerate().rev() {
-                for access in self.collect_accesses(node) {
-                    last_uses.entry(access.place).or_insert(ProgramPoint {
-                        block: block.id,
-                        statement: statement_idx,
-                    });
+        let mut changed = true;
+        while changed {
+            changed = false;
+
+            for block in &hir_module.blocks {
+                let mut successors_live = HashSet::new();
+                for successor in self.cfg.get_successors(block.id) {
+                    if let Some(set) = live_in.get(successor) {
+                        successors_live.extend(set.iter().copied());
+                    }
+                }
+
+                let mut live: HashSet<PlaceId> = successors_live.clone();
+                let Some(nodes) = block_map.get(&block.id) else {
+                    continue;
+                };
+
+                for (statement_idx, node) in nodes.iter().enumerate().rev() {
+                    for access in self.collect_accesses(node) {
+                        if !live.contains(&access.place) {
+                            last_uses.entry(access.place).or_insert(ProgramPoint {
+                                block: block.id,
+                                statement: statement_idx,
+                            });
+                        }
+                        live.insert(access.place);
+                    }
+                }
+
+                let live_in_entry = live_in.entry(block.id).or_default();
+                if live_in_entry != &live {
+                    *live_in_entry = live.clone();
+                    changed = true;
+                }
+
+                let live_out_entry = live_out.entry(block.id).or_default();
+                if live_out_entry != &successors_live {
+                    *live_out_entry = successors_live;
+                    changed = true;
                 }
             }
         }
@@ -176,7 +225,7 @@ impl DataflowEngine {
                 accesses.push(Access {
                     place,
                     kind,
-                    location: value.location,
+                    location: value.location.clone(),
                 });
 
                 accesses
@@ -197,7 +246,10 @@ impl DataflowEngine {
                 .iter()
                 .flat_map(|expr| self.collect_expr_accesses(expr))
                 .collect(),
-            HirStmt::TemplateFn { .. } | HirStmt::FunctionDef { .. } => Vec::new(),
+            HirStmt::TemplateFn { .. }
+            | HirStmt::FunctionDef { .. }
+            | HirStmt::StructDef { .. } => Vec::new(),
+            HirStmt::ExprStmt(expr) => self.collect_expr_accesses(expr),
         }
     }
 
@@ -240,7 +292,7 @@ impl DataflowEngine {
                 accesses.push(Access {
                     place,
                     kind: AccessKind::Read,
-                    location: expr.location,
+                    location: expr.location.clone(),
                 });
             }
             HirExprKind::Move(place) => {
@@ -248,22 +300,23 @@ impl DataflowEngine {
                 accesses.push(Access {
                     place,
                     kind: AccessKind::Move,
-                    location: expr.location,
+                    location: expr.location.clone(),
                 });
             }
             HirExprKind::Field { base, field } => {
+                let base_place = self
+                    .place_registry
+                    .register_place(super::place_registry::Place::Variable(*base));
                 let place =
                     self.place_registry
                         .register_place(super::place_registry::Place::Field {
-                            base: self
-                                .place_registry
-                                .register_place(super::place_registry::Place::Variable(*base)),
+                            base: base_place,
                             field: *field,
                         });
                 accesses.push(Access {
                     place,
                     kind: AccessKind::Read,
-                    location: expr.location,
+                    location: expr.location.clone(),
                 });
             }
             HirExprKind::BinOp { left, right, .. } => {

@@ -196,9 +196,10 @@ impl PlaceRegistry {
             }
             HirExpressionPlace::Index { base, .. } => {
                 let base_id = self.hir_place_to_place(base);
+                let unknown_index = self.register_place(Place::Unknown);
                 self.register_place(Place::Index {
                     base: base_id,
-                    index: self.register_place(Place::Unknown),
+                    index: unknown_index,
                 })
             }
         }

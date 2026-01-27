@@ -90,10 +90,25 @@ impl ControlFlowGraph {
                 })
                 .collect();
 
-            let terminator = statements.last().copied().unwrap_or(ProgramPoint {
-                block: block.id,
-                statement: 0,
-            });
+            let terminator = block
+                .nodes
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(statement, node)| {
+                    if matches!(node.kind, HirKind::Terminator(_)) {
+                        Some(ProgramPoint {
+                            block: block.id,
+                            statement,
+                        })
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| ProgramPoint {
+                    block: block.id,
+                    statement: 0,
+                });
 
             cfg.add_block(BasicBlock {
                 id: block.id,
@@ -105,11 +120,12 @@ impl ControlFlowGraph {
         cfg.set_entry_block(hir_module.entry_block);
 
         for block in &hir_module.blocks {
-            let Some(last_node) = block.nodes.last() else {
-                continue;
-            };
+            let terminator_node = block.nodes.iter().rev().find_map(|node| match &node.kind {
+                HirKind::Terminator(term) => Some(term),
+                _ => None,
+            });
 
-            if let HirKind::Terminator(terminator) = &last_node.kind {
+            if let Some(terminator) = terminator_node {
                 match terminator {
                     HirTerminator::If {
                         then_block,
