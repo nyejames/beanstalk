@@ -13,14 +13,14 @@ use crate::compiler::string_interning::StringTable;
 use std::collections::HashMap;
 
 /// Error reporter for borrow checking violations
-pub struct BorrowErrorReporter {
+pub struct BorrowErrorReporter<'a> {
     place_registry: PlaceRegistry,
-    string_table: std::sync::Arc<StringTable>,
+    string_table: &'a StringTable,
 }
 
-impl BorrowErrorReporter {
+impl<'a> BorrowErrorReporter<'a> {
     /// Create a new error reporter
-    pub fn new(place_registry: PlaceRegistry, string_table: std::sync::Arc<StringTable>) -> Self {
+    pub fn new(place_registry: PlaceRegistry, string_table: &'a StringTable) -> Self {
         Self {
             place_registry,
             string_table,

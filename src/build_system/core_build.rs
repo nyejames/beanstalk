@@ -1,19 +1,17 @@
 // Core build functionality shared across all project types
 //
 // Contains the common compilation pipeline steps that are used by all project builders
+// This now only compiles the HIR and runs the borrow checker.
+// This is because both a Wasm and JS backend must be supported so it is agnostic about what happens after that.
 
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::Var;
-use crate::compiler::string_interning::StringTable;
-use crate::settings::Config;
-use crate::{Compiler, Flag, InputModule, timer_log};
-use colour::green_ln;
-// use rayon::prelude::*;
-use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
+use crate::{Compiler, Flag, InputModule, timer_log};
 use std::time::Instant;
 
 /// External function import required by the compiled WASM
@@ -76,7 +74,7 @@ pub enum WasmType {
 
 /// Core compilation result containing WASM and required imports
 pub struct CompilationResult {
-    pub wasm_bytes: Vec<u8>,
+    pub hir_module: HirModule,
     pub required_module_imports: Vec<ExternalImport>,
     pub exported_functions: Vec<String>,
     pub warnings: Vec<CompilerWarning>,
@@ -84,32 +82,11 @@ pub struct CompilationResult {
 
 /// Perform the core compilation pipeline shared by all project types
 pub fn compile_modules(
+    compiler: &mut Compiler,
     modules: Vec<InputModule>,
-    config: &Config,
     flags: &[Flag],
 ) -> Result<CompilationResult, CompilerMessages> {
     let time = Instant::now();
-
-    // Module capacity heuristic
-    // Just a guess of how many strings we might need to intern per module
-    const MODULES_CAPACITY: usize = 16;
-
-    // Create a new string table for interning strings
-    let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
-
-    let runtime_backend = RuntimeBackend::default();
-
-    // Create a builtin host function registry with print and other host functions
-    let host_registry =
-        create_builtin_registry(runtime_backend, &mut string_table).map_err(|e| {
-            CompilerMessages {
-                errors: vec![e],
-                warnings: Vec::new(),
-            }
-        })?;
-
-    // Create the compiler instance
-    let mut compiler = Compiler::new(config, host_registry, string_table);
 
     // ----------------------------------
     //         Token generation
@@ -182,7 +159,10 @@ pub fn compile_modules(
     //let mut exported_declarations: Vec<Arg> = Vec::with_capacity(EXPORTS_CAPACITY);
     let mut module_ast = Ast {
         nodes: Vec::with_capacity(sorted_modules.len()),
-        entry_path: InternedPath::from_path_buf(&config.entry_point, &mut compiler.string_table),
+        entry_path: InternedPath::from_path_buf(
+            &compiler.project_config.entry_point,
+            &mut compiler.string_table,
+        ),
         external_exports: Vec::new(),
         warnings: Vec::new(),
     };
@@ -234,31 +214,8 @@ pub fn compile_modules(
     // ----------------------------------
     let time = Instant::now();
 
-    // match compiler.check_borrows(&mut hir_nodes) {
-    //     Ok(..) => {}
-    //     Err(e) => {
-    //         compiler_messages.errors.push(e);
-    //         return Err(compiler_messages);
-    //     }
-    // };
-
-    timer_log!(time, "Borrow checking completed in: ");
-
-    // Debug output for the borrow checker if enabled
-    #[cfg(feature = "show_borrow_checker")]
-    {
-        println!("=== BORROW CHECKER OUTPUT ===");
-        println!("Borrow checking completed successfully");
-        println!("=== END BORROW CHECKER OUTPUT ===");
-    }
-
-    // ----------------------------------
-    //          LIR generation
-    // ----------------------------------
-    let time = Instant::now();
-
-    let lir_module = match compiler.generate_lir(hir_module) {
-        Ok(lir) => lir,
+    let borrow_analysis = match compiler.check_borrows(&hir_module) {
+        Ok(outcome) => outcome,
         Err(e) => {
             compiler_messages.errors.extend(e.errors);
             compiler_messages.warnings.extend(e.warnings);
@@ -266,34 +223,21 @@ pub fn compile_modules(
         }
     };
 
-    timer_log!(time, "LIR generated in: ");
+    timer_log!(time, "Borrow checking completed in: ");
 
-    // Debug output for LIR if enabled
-    #[cfg(feature = "show_lir")]
+    // Debug output for the borrow checker if enabled
+    #[cfg(feature = "show_borrow_checker")]
     {
-        use crate::compiler::lir::display_lir;
-        println!("=== LIR OUTPUT ===");
-        println!("{}", display_lir(&lir_module));
-        println!("=== END LIR OUTPUT ===");
+        println!("=== BORROW CHECKER OUTPUT ===");
+        println!(
+            "Borrow checking completed successfully ({} program points analysed)",
+            borrow_analysis.analysis.states.len()
+        );
+        println!("=== END BORROW CHECKER OUTPUT ===");
     }
 
-    // ----------------------------------
-    //          WASM generation
-    // ----------------------------------
-    let time = Instant::now();
-
-    let wasm_bytes = match compiler.generate_wasm(&lir_module) {
-        Ok(wasm) => wasm,
-        Err(e) => {
-            compiler_messages.errors.push(e);
-            return Err(compiler_messages);
-        }
-    };
-
-    timer_log!(time, "WASM generated in: ");
-
     Ok(CompilationResult {
-        wasm_bytes,
+        hir_module,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
         exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: compiler_messages.warnings,
@@ -380,13 +324,4 @@ fn get_standard_io_imports() -> Vec<ExternalImport> {
             import_type: ImportType::BuiltIn(BuiltInFunction::Exit),
         },
     ]
-}
-
-/// Compile a single module (for simple cases)
-pub fn compile_single_module(
-    module: InputModule,
-    config: &Config,
-    flags: &[Flag],
-) -> Result<CompilationResult, CompilerMessages> {
-    compile_modules(vec![module], config, flags)
 }

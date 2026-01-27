@@ -6,8 +6,10 @@
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
+use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
-use crate::{Flag, InputModule, OutputFile, Project, return_config_error};
+use crate::{Compiler, Flag, InputModule, OutputFile, Project, return_config_error};
 
 pub struct EmbeddedProjectBuilder {
     target: BuildTarget,
@@ -138,11 +140,34 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
             });
         }
 
-        // Create a string table for compilation
-        let mut string_table = crate::compiler::string_interning::StringTable::new();
-        let compilation_result = core_build::compile_modules(modules, config, flags)?;
+        // Module capacity heuristic
+        // Just a guess of how many strings we might need to intern per module
+        const MODULES_CAPACITY: usize = 16;
 
-        let mut output_files = vec![OutputFile::Wasm(compilation_result.wasm_bytes.clone())];
+        // Create a new string table for interning strings
+        let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
+
+        let runtime_backend = RuntimeBackend::default();
+
+        // Create a builtin host function registry with print and other host functions
+        let host_registry =
+            create_builtin_registry(runtime_backend, &mut string_table).map_err(|e| {
+                CompilerMessages {
+                    errors: vec![e],
+                    warnings: Vec::new(),
+                }
+            })?;
+
+        // Create the compiler instance
+        let mut compiler = Compiler::new(config, host_registry, string_table);
+
+        // Use the core build pipeline to compile to HIR
+        let compilation_result = core_build::compile_modules(&mut compiler, modules, flags)?;
+
+        // TODO: Write a Rust interpreter for Beanstalk modules
+        // Or in the future if this is never done, just compile to Wasm and run the Wasm inside Wasmer
+        // with some nice bindings back to Rust
+        let mut output_files = vec![];
 
         if let BuildTarget::Embedded { hot_reload, .. } = &self.target {
             let module_name = &config.name;

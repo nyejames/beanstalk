@@ -44,17 +44,18 @@ use self::place_registry::PlaceRegistry;
 use crate::compiler::compiler_errors::CompilerMessages;
 use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::string_interning::StringTable;
-use std::sync::Arc;
+
+pub struct BorrowCheckOutcome {
+    pub analysis: dataflow::AnalysisResults,
+}
 
 /// Main borrow checker that orchestrates all analysis phases
-pub struct BorrowChecker {
-    string_table: Arc<StringTable>,
-}
+pub struct BorrowChecker;
 
 impl BorrowChecker {
     /// Create a new borrow checker instance
-    pub fn new(string_table: Arc<StringTable>) -> Self {
-        Self { string_table }
+    pub fn new() -> Self {
+        Self
     }
 
     /// Check a HIR module for borrow safety violations
@@ -62,17 +63,20 @@ impl BorrowChecker {
     /// Returns Ok(()) if the module passes borrow checking, or Err with detailed error messages
     /// if violations are found. The HIR module is annotated with ownership eligibility information
     /// when checking succeeds.
-    pub fn check_module(&mut self, hir_module: &HirModule) -> Result<(), CompilerMessages> {
+    pub fn check_module(
+        &mut self,
+        hir_module: &HirModule,
+        string_table: &StringTable,
+    ) -> Result<BorrowCheckOutcome, CompilerMessages> {
         let control_flow = ControlFlowGraph::from_hir_module(hir_module);
         let mut dataflow = DataflowEngine::new(control_flow, PlaceRegistry::new());
         let analysis = dataflow.analyze(hir_module);
 
         if analysis.conflicts.is_empty() {
-            return Ok(());
+            return Ok(BorrowCheckOutcome { analysis });
         }
 
-        let reporter =
-            BorrowErrorReporter::new(dataflow.place_registry().clone(), self.string_table.clone());
+        let reporter = BorrowErrorReporter::new(dataflow.place_registry().clone(), string_table);
 
         let errors = analysis
             .conflicts

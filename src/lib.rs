@@ -38,7 +38,6 @@ pub(crate) mod build_system {
     pub(crate) mod embedded_project;
     pub(crate) mod html_project;
     pub(crate) mod jit;
-    pub(crate) mod native_project;
     pub(crate) mod repl;
 }
 
@@ -288,16 +287,18 @@ impl<'a> Compiler<'a> {
         Ok(hir_module)
     }
 
-    // TODO
     /// -----------------------------
     ///        BORROW CHECKING
     /// -----------------------------
     /// Perform borrow checking on HIR nodes to validate memory safety
     /// and ownership rules according to Beanstalk's reference semantics.
-    // pub fn check_borrows(&mut self, hir_nodes: &mut Vec<HirNode>) -> Result<(), CompilerError> {
-    //     // Perform borrow checking analysis
-    //     check_borrows(hir_nodes, &mut self.string_table)
-    // }
+    pub fn check_borrows(
+        &self,
+        hir_module: &HirModule,
+    ) -> Result<compiler::borrow_checker::BorrowCheckOutcome, CompilerMessages> {
+        let mut checker = compiler::borrow_checker::BorrowChecker::new();
+        checker.check_module(hir_module, &self.string_table)
+    }
 
     /// -----------------------------
     ///         LIR GENERATION

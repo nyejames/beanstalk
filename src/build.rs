@@ -1,4 +1,4 @@
-use crate::build_system::{embedded_project, html_project, jit, native_project};
+use crate::build_system::{embedded_project, html_project, jit};
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, ProjectType};
@@ -16,6 +16,7 @@ pub struct InputModule {
 
 pub enum OutputFile {
     Wasm(Vec<u8>),
+    Js(String), // Either just glue code for web or pure JS backend
     Html(String),
 }
 
@@ -29,19 +30,15 @@ pub struct Project {
 #[derive(Debug, Clone)]
 pub enum BuildTarget {
     /// HTML/JS project - generates separate WASM files for different HTML imports
+    /// First implementation will just generate JS,
+    /// then eventually core parts will move to Wasm when that part of the backend as that part of the compiler is developed
     HtmlProject,
 
-    /// Just runs the wasm and doesn't generate any output files
+    // TODO: Separate JS jit and Wasm jit backends for this?
+    /// Just runs as wasm and doesn't generate any output files
     Jit,
 
-    /// Native project - single optimised WASM file
-    Native {
-        /// Target architecture (if applicable)
-        target_arch: Option<Target>,
-        /// Whether to enable native system calls
-        enable_syscalls: bool,
-    },
-    /// Embedded project - WASM for embedding in other applications
+    /// Embedded project - Beanstalk embedding in Rust applications
     Embedded {
         /// Whether to enable hot reloading support
         hot_reload: bool,
@@ -72,7 +69,6 @@ pub trait ProjectBuilder {
 pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
     match target {
         BuildTarget::HtmlProject => Box::new(html_project::HtmlProjectBuilder::new(target)),
-        BuildTarget::Native { .. } => Box::new(native_project::NativeProjectBuilder::new(target)),
         BuildTarget::Embedded { .. } => {
             Box::new(embedded_project::EmbeddedProjectBuilder::new(target))
         }
@@ -90,14 +86,12 @@ pub fn determine_build_target(config: &Config) -> BuildTarget {
         // Project directory - check config for the target type
         match &config.project_type {
             ProjectType::HTML => BuildTarget::HtmlProject,
-            ProjectType::Native(target_arch) => BuildTarget::Native {
-                target_arch: Some(target_arch.clone()),
-                enable_syscalls: true,
-            },
+
             ProjectType::Embedded => BuildTarget::Embedded {
                 hot_reload: false, // Default to false for embedded
                 io_config: None,
             },
+
             ProjectType::Jit => BuildTarget::Jit,
 
             // Currently not using JIT, just parsing a string template

@@ -106,7 +106,7 @@ fn compile_beanstalk_to_string(
     );
 
     // Build Template
-    let mut template = Template::new(&mut tokenizer_output, &ast_context, None, &mut string_table)?;
+    let template = Template::new(&mut tokenizer_output, &ast_context, None, &mut string_table)?;
 
     // TODO: put all this into an AST block, then lower it to wasm and run it
     // There is currently no codegen for templates.

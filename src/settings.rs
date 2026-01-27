@@ -25,7 +25,6 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 #[derive(Clone)]
 pub enum ProjectType {
     HTML,
-    Native(Target),
     Embedded,
     Jit,  // Don't create output files, just run the code
     Repl, // Start in a string template head
