@@ -118,7 +118,7 @@ impl HirError {
     /// Checks if this is a compiler bug (internal error)
     /// Validation errors are compiler bugs because they indicate the HIR builder
     /// produced invalid HIR, which is a bug in the compiler, not user code.
-    /// 
+    ///
     /// An error is considered a compiler bug if:
     /// 1. It's an InternalError or ValidationFailure kind
     /// 2. It's a validation-specific error kind (NestedExpression, MissingTerminator, etc.)
@@ -128,7 +128,7 @@ impl HirError {
         if self.has_validation_context() {
             return true;
         }
-        
+
         // Check for error kinds that are always compiler bugs
         matches!(
             self.kind,
@@ -141,7 +141,7 @@ impl HirError {
                 | HirErrorKind::InvalidBranchTarget { .. }
         )
     }
-    
+
     /// Checks if this error has validation context
     pub fn has_validation_context(&self) -> bool {
         self.context.additional_info.contains_key("invariant")
@@ -172,10 +172,7 @@ pub enum HirErrorKind {
     UnsupportedConstruct(String),
 
     /// Failed to transform a specific AST node type
-    TransformationFailed {
-        node_type: String,
-        reason: String,
-    },
+    TransformationFailed { node_type: String, reason: String },
 
     /// Expression linearization failed
     ExpressionLinearizationFailed {
@@ -184,10 +181,7 @@ pub enum HirErrorKind {
     },
 
     /// Control flow linearization failed
-    ControlFlowLinearizationFailed {
-        construct: String,
-        reason: String,
-    },
+    ControlFlowLinearizationFailed { construct: String, reason: String },
 
     // === Variable and Scope Errors ===
     /// Variable not found in current scope
@@ -197,10 +191,7 @@ pub enum HirErrorKind {
     DuplicateVariable(String),
 
     /// Invalid variable access (e.g., mutable access to immutable variable)
-    InvalidVariableAccess {
-        variable: String,
-        reason: String,
-    },
+    InvalidVariableAccess { variable: String, reason: String },
 
     /// Scope management error
     ScopeError(String),
@@ -222,26 +213,17 @@ pub enum HirErrorKind {
     MissingTerminator(BlockId),
 
     /// Multiple terminators in block
-    MultipleTerminators {
-        block_id: BlockId,
-        count: usize,
-    },
+    MultipleTerminators { block_id: BlockId, count: usize },
 
     // === Function Errors ===
     /// Function not found
     UndefinedFunction(String),
 
     /// Invalid function signature
-    InvalidFunctionSignature {
-        function: String,
-        reason: String,
-    },
+    InvalidFunctionSignature { function: String, reason: String },
 
     /// Function parameter error
-    FunctionParameterError {
-        function: String,
-        reason: String,
-    },
+    FunctionParameterError { function: String, reason: String },
 
     // === Struct Errors ===
     /// Struct not found
@@ -268,26 +250,17 @@ pub enum HirErrorKind {
     },
 
     /// Nested expression found where flat expression expected
-    NestedExpression {
-        expression: String,
-        depth: usize,
-    },
+    NestedExpression { expression: String, depth: usize },
 
     /// Unreachable block detected
     UnreachableBlock(BlockId),
 
     // === Drop and Ownership Errors ===
     /// Missing drop for variable
-    MissingDrop {
-        variable: String,
-        exit_path: String,
-    },
+    MissingDrop { variable: String, exit_path: String },
 
     /// Invalid drop insertion
-    InvalidDropInsertion {
-        variable: String,
-        reason: String,
-    },
+    InvalidDropInsertion { variable: String, reason: String },
 
     // === Template Errors ===
     /// Template processing failed
@@ -306,16 +279,31 @@ impl fmt::Display for HirErrorKind {
         match self {
             // Transformation errors
             HirErrorKind::UnsupportedConstruct(construct) => {
-                write!(f, "Unsupported AST construct in HIR generation: {}", construct)
+                write!(
+                    f,
+                    "Unsupported AST construct in HIR generation: {}",
+                    construct
+                )
             }
             HirErrorKind::TransformationFailed { node_type, reason } => {
                 write!(f, "Failed to transform {}: {}", node_type, reason)
             }
-            HirErrorKind::ExpressionLinearizationFailed { expression_type, reason } => {
-                write!(f, "Failed to linearize expression '{}': {}", expression_type, reason)
+            HirErrorKind::ExpressionLinearizationFailed {
+                expression_type,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Failed to linearize expression '{}': {}",
+                    expression_type, reason
+                )
             }
             HirErrorKind::ControlFlowLinearizationFailed { construct, reason } => {
-                write!(f, "Failed to linearize control flow '{}': {}", construct, reason)
+                write!(
+                    f,
+                    "Failed to linearize control flow '{}': {}",
+                    construct, reason
+                )
             }
 
             // Variable and scope errors
@@ -339,14 +327,25 @@ impl fmt::Display for HirErrorKind {
             HirErrorKind::ContinueOutsideLoop => {
                 write!(f, "Continue statement outside of loop")
             }
-            HirErrorKind::InvalidBranchTarget { source_block, target_block } => {
-                write!(f, "Block {} branches to invalid block {}", source_block, target_block)
+            HirErrorKind::InvalidBranchTarget {
+                source_block,
+                target_block,
+            } => {
+                write!(
+                    f,
+                    "Block {} branches to invalid block {}",
+                    source_block, target_block
+                )
             }
             HirErrorKind::MissingTerminator(block_id) => {
                 write!(f, "Block {} is missing a terminator", block_id)
             }
             HirErrorKind::MultipleTerminators { block_id, count } => {
-                write!(f, "Block {} has {} terminators (expected 1)", block_id, count)
+                write!(
+                    f,
+                    "Block {} has {} terminators (expected 1)",
+                    block_id, count
+                )
             }
 
             // Function errors
@@ -354,7 +353,11 @@ impl fmt::Display for HirErrorKind {
                 write!(f, "Undefined function: '{}'", func)
             }
             HirErrorKind::InvalidFunctionSignature { function, reason } => {
-                write!(f, "Invalid signature for function '{}': {}", function, reason)
+                write!(
+                    f,
+                    "Invalid signature for function '{}': {}",
+                    function, reason
+                )
             }
             HirErrorKind::FunctionParameterError { function, reason } => {
                 write!(f, "Parameter error in function '{}': {}", function, reason)
@@ -364,34 +367,66 @@ impl fmt::Display for HirErrorKind {
             HirErrorKind::UndefinedStruct(name) => {
                 write!(f, "Undefined struct: '{}'", name)
             }
-            HirErrorKind::UndefinedField { struct_name, field_name } => {
-                write!(f, "Field '{}' not found in struct '{}'", field_name, struct_name)
+            HirErrorKind::UndefinedField {
+                struct_name,
+                field_name,
+            } => {
+                write!(
+                    f,
+                    "Field '{}' not found in struct '{}'",
+                    field_name, struct_name
+                )
             }
-            HirErrorKind::InvalidFieldAccess { struct_name, field_name, reason } => {
-                write!(f, "Invalid access to field '{}' in struct '{}': {}", field_name, struct_name, reason)
+            HirErrorKind::InvalidFieldAccess {
+                struct_name,
+                field_name,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Invalid access to field '{}' in struct '{}': {}",
+                    field_name, struct_name, reason
+                )
             }
 
             // Validation errors
-            HirErrorKind::ValidationFailure { invariant, description } => {
+            HirErrorKind::ValidationFailure {
+                invariant,
+                description,
+            } => {
                 write!(f, "HIR invariant '{}' violated: {}", invariant, description)
             }
             HirErrorKind::NestedExpression { expression, depth } => {
-                write!(f, "Nested expression found at depth {}: {}", depth, expression)
+                write!(
+                    f,
+                    "Nested expression found at depth {}: {}",
+                    depth, expression
+                )
             }
             HirErrorKind::UnreachableBlock(block_id) => {
                 write!(f, "Block {} is unreachable from entry", block_id)
             }
 
             // Drop and ownership errors
-            HirErrorKind::MissingDrop { variable, exit_path } => {
-                write!(f, "Missing drop for '{}' on exit path '{}'", variable, exit_path)
+            HirErrorKind::MissingDrop {
+                variable,
+                exit_path,
+            } => {
+                write!(
+                    f,
+                    "Missing drop for '{}' on exit path '{}'",
+                    variable, exit_path
+                )
             }
             HirErrorKind::InvalidDropInsertion { variable, reason } => {
                 write!(f, "Invalid drop insertion for '{}': {}", variable, reason)
             }
 
             // Template errors
-            HirErrorKind::TemplateProcessingFailed { template_id, reason } => {
+            HirErrorKind::TemplateProcessingFailed {
+                template_id,
+                reason,
+            } => {
                 if let Some(id) = template_id {
                     write!(f, "Template '{}' processing failed: {}", id, reason)
                 } else {
@@ -523,8 +558,12 @@ impl fmt::Display for HirTransformationStage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HirTransformationStage::Unknown => write!(f, "Unknown"),
-            HirTransformationStage::ExpressionLinearization => write!(f, "Expression Linearization"),
-            HirTransformationStage::ControlFlowLinearization => write!(f, "Control Flow Linearization"),
+            HirTransformationStage::ExpressionLinearization => {
+                write!(f, "Expression Linearization")
+            }
+            HirTransformationStage::ControlFlowLinearization => {
+                write!(f, "Control Flow Linearization")
+            }
             HirTransformationStage::VariableDeclaration => write!(f, "Variable Declaration"),
             HirTransformationStage::DropInsertion => write!(f, "Drop Insertion"),
             HirTransformationStage::FunctionTransformation => write!(f, "Function Transformation"),
@@ -542,13 +581,15 @@ impl fmt::Display for HirTransformationStage {
 impl From<HirError> for CompilerError {
     fn from(error: HirError) -> Self {
         let mut metadata = HashMap::new();
-        
+
         // Add compilation stage
         metadata.insert(
             ErrorMetaDataKey::CompilationStage,
             match error.context.stage {
                 HirTransformationStage::ExpressionLinearization => "HIR Expression Linearization",
-                HirTransformationStage::ControlFlowLinearization => "HIR Control Flow Linearization",
+                HirTransformationStage::ControlFlowLinearization => {
+                    "HIR Control Flow Linearization"
+                }
                 HirTransformationStage::VariableDeclaration => "HIR Variable Declaration",
                 HirTransformationStage::DropInsertion => "HIR Drop Insertion",
                 HirTransformationStage::FunctionTransformation => "HIR Function Transformation",
@@ -586,86 +627,86 @@ impl From<HirError> for CompilerError {
 impl From<HirValidationError> for HirError {
     fn from(error: HirValidationError) -> Self {
         match error {
-            HirValidationError::NestedExpression { location, expression } => {
-                HirError::validation(
-                    HirErrorKind::NestedExpression {
-                        expression,
-                        depth: 0,
-                    },
-                    Some(location),
-                )
-                .with_validation_context("no_nested_expressions", "HIR expressions must be flat")
-            }
+            HirValidationError::NestedExpression {
+                location,
+                expression,
+            } => HirError::validation(
+                HirErrorKind::NestedExpression {
+                    expression,
+                    depth: 0,
+                },
+                Some(location),
+            )
+            .with_validation_context("no_nested_expressions", "HIR expressions must be flat"),
             HirValidationError::MissingTerminator { block_id, location } => {
-                HirError::validation(
-                    HirErrorKind::MissingTerminator(block_id),
-                    location,
-                )
-                .with_validation_context(
-                    "explicit_terminators",
-                    "Every HIR block must end with exactly one terminator",
-                )
+                HirError::validation(HirErrorKind::MissingTerminator(block_id), location)
+                    .with_validation_context(
+                        "explicit_terminators",
+                        "Every HIR block must end with exactly one terminator",
+                    )
             }
             HirValidationError::MultipleTerminators { block_id, count } => {
-                HirError::validation(
-                    HirErrorKind::MultipleTerminators { block_id, count },
-                    None,
-                )
-                .with_validation_context(
-                    "explicit_terminators",
-                    "Every HIR block must end with exactly one terminator",
-                )
+                HirError::validation(HirErrorKind::MultipleTerminators { block_id, count }, None)
+                    .with_validation_context(
+                        "explicit_terminators",
+                        "Every HIR block must end with exactly one terminator",
+                    )
             }
             HirValidationError::UndeclaredVariable { variable, location } => {
-                HirError::validation(
-                    HirErrorKind::UndefinedVariable(variable),
-                    Some(location),
-                )
-                .with_validation_context(
-                    "variable_declaration_order",
-                    "All variables must be declared before use",
-                )
+                HirError::validation(HirErrorKind::UndefinedVariable(variable), Some(location))
+                    .with_validation_context(
+                        "variable_declaration_order",
+                        "All variables must be declared before use",
+                    )
             }
-            HirValidationError::MissingDrop { variable, exit_path, location } => {
-                HirError::validation(
-                    HirErrorKind::MissingDrop { variable, exit_path },
-                    Some(location),
-                )
-                .with_validation_context(
-                    "drop_coverage",
-                    "All ownership-capable variables must have possible_drop on exit paths",
-                )
-            }
+            HirValidationError::MissingDrop {
+                variable,
+                exit_path,
+                location,
+            } => HirError::validation(
+                HirErrorKind::MissingDrop {
+                    variable,
+                    exit_path,
+                },
+                Some(location),
+            )
+            .with_validation_context(
+                "drop_coverage",
+                "All ownership-capable variables must have possible_drop on exit paths",
+            ),
             HirValidationError::UnreachableBlock { block_id } => {
-                HirError::validation(
-                    HirErrorKind::UnreachableBlock(block_id),
-                    None,
-                )
-                .with_validation_context(
-                    "block_connectivity",
-                    "All HIR blocks must be reachable from the entry block",
-                )
+                HirError::validation(HirErrorKind::UnreachableBlock(block_id), None)
+                    .with_validation_context(
+                        "block_connectivity",
+                        "All HIR blocks must be reachable from the entry block",
+                    )
             }
-            HirValidationError::InvalidBranchTarget { source_block, target_block } => {
-                HirError::validation(
-                    HirErrorKind::InvalidBranchTarget { source_block, target_block },
-                    None,
-                )
-                .with_validation_context(
-                    "terminator_targets",
-                    "All branch targets must reference valid block IDs",
-                )
-            }
-            HirValidationError::InvalidAssignment { variable, location, reason } => {
-                HirError::validation(
-                    HirErrorKind::InvalidVariableAccess { variable, reason },
-                    Some(location),
-                )
-                .with_validation_context(
-                    "assignment_discipline",
-                    "Assignments must follow proper discipline",
-                )
-            }
+            HirValidationError::InvalidBranchTarget {
+                source_block,
+                target_block,
+            } => HirError::validation(
+                HirErrorKind::InvalidBranchTarget {
+                    source_block,
+                    target_block,
+                },
+                None,
+            )
+            .with_validation_context(
+                "terminator_targets",
+                "All branch targets must reference valid block IDs",
+            ),
+            HirValidationError::InvalidAssignment {
+                variable,
+                location,
+                reason,
+            } => HirError::validation(
+                HirErrorKind::InvalidVariableAccess { variable, reason },
+                Some(location),
+            )
+            .with_validation_context(
+                "assignment_discipline",
+                "Assignments must follow proper discipline",
+            ),
         }
     }
 }
@@ -724,26 +765,27 @@ impl ValidationErrorContext {
     /// Formats the context for error display
     pub fn format_for_display(&self) -> String {
         let mut parts = Vec::new();
-        
+
         parts.push(format!("Invariant '{}' violated", self.invariant_name));
         parts.push(format!("Expected: {}", self.invariant_description));
-        
+
         if let Some(block_id) = self.block_id {
             parts.push(format!("Block: {}", block_id));
         }
-        
+
         if let Some(ref func) = self.function_name {
             parts.push(format!("Function: {}", func));
         }
-        
+
         if !self.debug_info.is_empty() {
-            let debug_str: Vec<String> = self.debug_info
+            let debug_str: Vec<String> = self
+                .debug_info
                 .iter()
                 .map(|(k, v)| format!("{}={}", k, v))
                 .collect();
             parts.push(format!("Debug: {}", debug_str.join(", ")));
         }
-        
+
         parts.join("; ")
     }
 }
@@ -757,17 +799,21 @@ impl HirError {
     ) -> Self {
         let invariant = invariant_name.into();
         let desc = description.into();
-        
+
         // Add to additional_info in context
-        self.context.additional_info.insert("invariant".to_string(), invariant.clone());
-        self.context.additional_info.insert("invariant_description".to_string(), desc.clone());
-        
+        self.context
+            .additional_info
+            .insert("invariant".to_string(), invariant.clone());
+        self.context
+            .additional_info
+            .insert("invariant_description".to_string(), desc.clone());
+
         // Update suggestion to be more helpful
         self.suggestion = Some(format!(
             "This is a compiler bug - the HIR builder violated the '{}' invariant. Please report this issue.",
             invariant
         ));
-        
+
         self
     }
 
@@ -778,7 +824,7 @@ impl HirError {
         validation_context: ValidationErrorContext,
     ) -> Self {
         let mut error = HirError::validation(kind, location);
-        
+
         // Transfer validation context to error context
         error.context.additional_info.insert(
             "invariant".to_string(),
@@ -788,35 +834,41 @@ impl HirError {
             "invariant_description".to_string(),
             validation_context.invariant_description.clone(),
         );
-        
+
         if let Some(block_id) = validation_context.block_id {
             error.context.current_block = Some(block_id);
         }
-        
+
         if let Some(func) = validation_context.function_name {
             error.context.current_function = Some(func);
         }
-        
+
         for (key, value) in validation_context.debug_info {
             error.context.additional_info.insert(key, value);
         }
-        
+
         error.suggestion = Some(format!(
             "This is a compiler bug - the HIR builder violated the '{}' invariant. Please report this issue.",
             validation_context.invariant_name
         ));
-        
+
         error
     }
 
     /// Gets the invariant name if this is a validation error
     pub fn get_invariant_name(&self) -> Option<&str> {
-        self.context.additional_info.get("invariant").map(|s| s.as_str())
+        self.context
+            .additional_info
+            .get("invariant")
+            .map(|s| s.as_str())
     }
 
     /// Gets the invariant description if this is a validation error
     pub fn get_invariant_description(&self) -> Option<&str> {
-        self.context.additional_info.get("invariant_description").map(|s| s.as_str())
+        self.context
+            .additional_info
+            .get("invariant_description")
+            .map(|s| s.as_str())
     }
 }
 
@@ -829,14 +881,18 @@ impl HirError {
 macro_rules! hir_unsupported {
     ($construct:expr, $location:expr) => {
         $crate::compiler::hir::errors::HirError::transformation(
-            $crate::compiler::hir::errors::HirErrorKind::UnsupportedConstruct($construct.to_string()),
+            $crate::compiler::hir::errors::HirErrorKind::UnsupportedConstruct(
+                $construct.to_string(),
+            ),
             $location,
             $crate::compiler::hir::errors::HirErrorContext::default(),
         )
     };
     ($construct:expr, $location:expr, $context:expr) => {
         $crate::compiler::hir::errors::HirError::transformation(
-            $crate::compiler::hir::errors::HirErrorKind::UnsupportedConstruct($construct.to_string()),
+            $crate::compiler::hir::errors::HirErrorKind::UnsupportedConstruct(
+                $construct.to_string(),
+            ),
             $location,
             $context,
         )

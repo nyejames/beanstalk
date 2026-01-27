@@ -368,10 +368,7 @@ impl HirTerminator {
                 arms,
                 default_block,
             } => {
-                let mut result = format!(
-                    "Match: {}\n",
-                    scrutinee.display_with_table(string_table)
-                );
+                let mut result = format!("Match: {}\n", scrutinee.display_with_table(string_table));
                 for (i, arm) in arms.iter().enumerate() {
                     result.push_str(&format!(
                         "    Arm {}: {}\n",

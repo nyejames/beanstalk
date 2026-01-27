@@ -95,7 +95,11 @@ pub fn create_expression(
     let mut expression: Vec<AstNode> = Vec::new();
     // let mut number_union = get_any_number_datatype(false);
 
-    ast_log!("Parsing {:?} {} Expression", ownership, data_type.to_string());
+    ast_log!(
+        "Parsing {:?} {} Expression",
+        ownership,
+        data_type.to_string()
+    );
 
     // Loop through the expression and create the AST nodes
     // Figure out the type it should be from the data
@@ -298,7 +302,7 @@ pub fn create_expression(
                                     location: token_stream.current_location(),
                                     scope: context.scope.clone(),
                                 });
-                                
+
                                 token_stream.advance();
                             } else {
                                 // Otherwise we are referencing the value

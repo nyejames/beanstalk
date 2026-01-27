@@ -35,11 +35,9 @@ impl LoweringContext {
             }
 
             // String literals
-            HirExprKind::StringLiteral(_) | HirExprKind::HeapString(_) => {
-                Err(CompilerError::lir_transformation(
-                    "String literal lowering not yet implemented",
-                ))
-            }
+            HirExprKind::StringLiteral(_) | HirExprKind::HeapString(_) => Err(
+                CompilerError::lir_transformation("String literal lowering not yet implemented"),
+            ),
 
             // Field access
             HirExprKind::Field { base, field } => {
@@ -174,11 +172,9 @@ impl LoweringContext {
             (BinOp::Le, _) | (BinOp::Ge, _) => Err(CompilerError::lir_transformation(
                 "Less/greater than or equal operations not yet supported",
             )),
-            (BinOp::Lt, LirType::F64) | (BinOp::Gt, LirType::F64) => {
-                Err(CompilerError::lir_transformation(
-                    "Float comparison not yet supported",
-                ))
-            }
+            (BinOp::Lt, LirType::F64) | (BinOp::Gt, LirType::F64) => Err(
+                CompilerError::lir_transformation("Float comparison not yet supported"),
+            ),
             (BinOp::Exponent, _) | (BinOp::Root, _) => Err(CompilerError::lir_transformation(
                 "Exponent/root operations not yet supported",
             )),
@@ -232,9 +228,9 @@ impl LoweringContext {
                 "Logical NOT only supported for boolean (I32) types, got {:?}",
                 operand_type
             ))),
-            (UnaryOp::Neg, LirType::F32) => {
-                Err(CompilerError::lir_transformation("F32 negation not yet supported"))
-            }
+            (UnaryOp::Neg, LirType::F32) => Err(CompilerError::lir_transformation(
+                "F32 negation not yet supported",
+            )),
         }
     }
 }

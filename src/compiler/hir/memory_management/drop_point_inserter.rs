@@ -339,10 +339,7 @@ impl DropPointInserter {
     /// 1. All ownership-capable variables have drops on exit paths
     /// 2. Drops are inserted at appropriate control flow boundaries
     /// 3. No redundant drops are inserted
-    pub fn validate_drop_insertion(
-        &self,
-        _ctx: &HirBuilderContext,
-    ) -> Result<(), CompilerError> {
+    pub fn validate_drop_insertion(&self, _ctx: &HirBuilderContext) -> Result<(), CompilerError> {
         // Placeholder for validation logic
         // Full implementation would check drop coverage across control flow
         Ok(())

@@ -16,7 +16,7 @@ mod drop_point_inserter_unit_tests {
         let var_name = string_table.intern("test_var");
         let ctx = HirBuilderContext::new(&mut string_table);
         let inserter = DropPointInserter::new();
-        
+
         assert!(!inserter.is_ownership_capable(&HirPlace::Var(var_name), &ctx));
     }
 

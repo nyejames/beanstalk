@@ -17,9 +17,7 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
-use crate::compiler::hir::nodes::{
-    HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
-};
+use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::template::TemplateType;

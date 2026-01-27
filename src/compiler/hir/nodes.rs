@@ -9,7 +9,7 @@
 //! Beanstalk uses a **fallback GC approach**:
 //! - **Baseline semantics**: All heap values are GC-managed (correct by default)
 //! - **Progressive optimization**: Static analysis identifies values eligible for deterministic management
-//! - **Backend flexibility**: 
+//! - **Backend flexibility**:
 //!   - JS backend: Pure GC semantics (ignore ownership annotations)
 //!   - Wasm backend: Hybrid GC + ownership (initially GC-heavy, progressively optimized)
 //!

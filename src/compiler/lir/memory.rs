@@ -244,7 +244,10 @@ impl LoweringContext {
         insts.push(LirInst::I64Add);
         insts.push(LirInst::I32Const(0)); // Placeholder for i64 to i32 conversion
         insts.push(LirInst::I32Add);
-        insts.push(LirInst::I64Load { offset: 0, align: 8 });
+        insts.push(LirInst::I64Load {
+            offset: 0,
+            align: 8,
+        });
 
         // Free temporary locals
         self.local_allocator.free(base_ptr_local);
@@ -312,7 +315,10 @@ impl LoweringContext {
         insts.push(LirInst::LocalGet(value_local));
 
         // Emit store instruction
-        insts.push(LirInst::I64Store { offset: 0, align: 8 });
+        insts.push(LirInst::I64Store {
+            offset: 0,
+            align: 8,
+        });
 
         // Free temporary locals
         self.local_allocator.free(base_ptr_local);
@@ -344,25 +350,21 @@ impl LoweringContext {
                     Ok(local_idx)
                 }
             }
-            HirPlace::Field { .. } | HirPlace::Index { .. } => {
-                Err(CompilerError::lir_transformation(
-                    "Cannot allocate local for field or index place",
-                ))
-            }
+            HirPlace::Field { .. } | HirPlace::Index { .. } => Err(
+                CompilerError::lir_transformation("Cannot allocate local for field or index place"),
+            ),
         }
     }
 
     /// Gets the local index for a HirPlace.
     pub fn get_local_for_place(&self, place: &HirPlace) -> Result<u32, CompilerError> {
         match place {
-            HirPlace::Var(name) => {
-                self.var_to_local.get(name).copied().ok_or_else(|| {
-                    CompilerError::lir_transformation(format!(
-                        "Cannot get local for undefined variable: {}",
-                        name
-                    ))
-                })
-            }
+            HirPlace::Var(name) => self.var_to_local.get(name).copied().ok_or_else(|| {
+                CompilerError::lir_transformation(format!(
+                    "Cannot get local for undefined variable: {}",
+                    name
+                ))
+            }),
             HirPlace::Field { base, field } => Err(CompilerError::lir_transformation(format!(
                 "Cannot get local for field access: {}.{} - use base pointer instead",
                 self.place_to_string(base),

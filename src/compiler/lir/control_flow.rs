@@ -168,7 +168,7 @@ impl LoweringContext {
                     LirType::F32 => {
                         return Err(CompilerError::lir_transformation(
                             "F32 pattern matching not yet supported",
-                        ))
+                        ));
                     }
                 };
                 insts.push(eq_inst);
@@ -214,7 +214,7 @@ impl LoweringContext {
             LirType::F64 | LirType::F32 => {
                 return Err(CompilerError::lir_transformation(
                     "Float comparison >= not yet supported",
-                ))
+                ));
             }
         };
 
@@ -229,7 +229,7 @@ impl LoweringContext {
             LirType::F64 | LirType::F32 => {
                 return Err(CompilerError::lir_transformation(
                     "Float comparison <= not yet supported",
-                ))
+                ));
             }
         };
 
@@ -244,7 +244,10 @@ impl LoweringContext {
     pub fn lower_loop(
         &mut self,
         label: BlockId,
-        binding: Option<(crate::compiler::string_interning::InternedString, crate::compiler::datatypes::DataType)>,
+        binding: Option<(
+            crate::compiler::string_interning::InternedString,
+            crate::compiler::datatypes::DataType,
+        )>,
         iterator: Option<&HirExpr>,
         body: BlockId,
         index_binding: Option<crate::compiler::string_interning::InternedString>,
@@ -280,7 +283,10 @@ impl LoweringContext {
     /// Lowers iterator setup for for-in loops.
     fn lower_iterator_setup(
         &mut self,
-        binding: &Option<(crate::compiler::string_interning::InternedString, crate::compiler::datatypes::DataType)>,
+        binding: &Option<(
+            crate::compiler::string_interning::InternedString,
+            crate::compiler::datatypes::DataType,
+        )>,
         index_binding: &Option<crate::compiler::string_interning::InternedString>,
         iterator: &HirExpr,
     ) -> Result<Vec<LirInst>, CompilerError> {
@@ -403,7 +409,10 @@ impl LoweringContext {
     }
 
     /// Lowers a HIR panic statement to LIR instructions.
-    pub fn lower_panic(&mut self, message: Option<&HirExpr>) -> Result<Vec<LirInst>, CompilerError> {
+    pub fn lower_panic(
+        &mut self,
+        message: Option<&HirExpr>,
+    ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
 
         if let Some(msg) = message {

@@ -11,8 +11,12 @@ pub fn unsupported_node_error(node_type: &str) -> CompilerError {
 }
 
 /// Creates an unsupported node error with location.
-pub fn unsupported_node_error_with_location(node_type: &str, location: ErrorLocation) -> CompilerError {
-    let mut err = CompilerError::lir_transformation(format!("Unsupported HIR node type: {}", node_type));
+pub fn unsupported_node_error_with_location(
+    node_type: &str,
+    location: ErrorLocation,
+) -> CompilerError {
+    let mut err =
+        CompilerError::lir_transformation(format!("Unsupported HIR node type: {}", node_type));
     err.location = location;
     err
 }
@@ -57,7 +61,10 @@ pub fn memory_operation_error(message: &str) -> CompilerError {
 }
 
 /// Creates a memory operation error with location.
-pub fn memory_operation_error_with_location(message: &str, location: ErrorLocation) -> CompilerError {
+pub fn memory_operation_error_with_location(
+    message: &str,
+    location: ErrorLocation,
+) -> CompilerError {
     let mut err = CompilerError::lir_transformation(format!("Memory operation error: {}", message));
     err.location = location;
     err
@@ -69,7 +76,10 @@ pub fn undefined_variable_error(var_name: &str) -> CompilerError {
 }
 
 /// Creates an undefined variable error with location.
-pub fn undefined_variable_error_with_location(var_name: &str, location: ErrorLocation) -> CompilerError {
+pub fn undefined_variable_error_with_location(
+    var_name: &str,
+    location: ErrorLocation,
+) -> CompilerError {
     let mut err = CompilerError::lir_transformation(format!("Undefined variable: {}", var_name));
     err.location = location;
     err
@@ -81,8 +91,12 @@ pub fn unknown_struct_error(struct_name: &str) -> CompilerError {
 }
 
 /// Creates an unknown struct error with location.
-pub fn unknown_struct_error_with_location(struct_name: &str, location: ErrorLocation) -> CompilerError {
-    let mut err = CompilerError::lir_transformation(format!("Unknown struct type: {}", struct_name));
+pub fn unknown_struct_error_with_location(
+    struct_name: &str,
+    location: ErrorLocation,
+) -> CompilerError {
+    let mut err =
+        CompilerError::lir_transformation(format!("Unknown struct type: {}", struct_name));
     err.location = location;
     err
 }
@@ -115,7 +129,10 @@ pub fn unknown_function_error(func_name: &str) -> CompilerError {
 }
 
 /// Creates an unknown function error with location.
-pub fn unknown_function_error_with_location(func_name: &str, location: ErrorLocation) -> CompilerError {
+pub fn unknown_function_error_with_location(
+    func_name: &str,
+    location: ErrorLocation,
+) -> CompilerError {
     let mut err = CompilerError::lir_transformation(format!("Unknown function: {}", func_name));
     err.location = location;
     err
@@ -128,7 +145,8 @@ pub fn internal_error(message: &str) -> CompilerError {
 
 /// Creates an internal error with location.
 pub fn internal_error_with_location(message: &str, location: ErrorLocation) -> CompilerError {
-    let mut err = CompilerError::compiler_error(format!("Internal LIR lowering error: {}", message));
+    let mut err =
+        CompilerError::compiler_error(format!("Internal LIR lowering error: {}", message));
     err.location = location;
     err
 }

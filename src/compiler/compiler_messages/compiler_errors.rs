@@ -137,6 +137,7 @@
 //! CompilerMessages (aggregated errors and warnings)
 //! ```
 
+use crate::compiler::borrow_checker::borrow_state::BorrowKind;
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
 use crate::compiler::parsers::tokenizer::tokens::CharPosition;
 use colour::{
@@ -1022,10 +1023,11 @@ macro_rules! return_move_while_borrowed_error {
 #[macro_export]
 macro_rules! create_whole_object_borrow_error {
     ($whole_place:expr, $part_place:expr, $part_location:expr, $whole_location:expr) => {{
-        let whole_place_str: &'static str = Box::leak(format!("{}", $whole_place).into_boxed_str());
-        let part_place_str: &'static str = Box::leak(format!("{}", $part_place).into_boxed_str());
+        let whole_place_str: &'static str =
+            Box::leak(format!("{:?}", $whole_place).into_boxed_str());
+        let part_place_str: &'static str = Box::leak(format!("{:?}", $part_place).into_boxed_str());
 
-        $crate::compiler::compiler_messages::compiler_errors::CompilerError::new_borrow_checker_error(
+        $crate::compiler::compiler_errors::CompilerError::new_borrow_checker_error(
             format!(
                 "Cannot borrow whole object '{}' while part '{}' is already borrowed",
                 $whole_place, $part_place
@@ -1034,23 +1036,23 @@ macro_rules! create_whole_object_borrow_error {
             {
                 let mut map = std::collections::HashMap::new();
                 map.insert(
-                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::ConflictingPlace,
-                    whole_place_str
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictingPlace,
+                    whole_place_str,
                 );
                 map.insert(
-                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::ExistingBorrowPlace,
-                    part_place_str
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::ExistingBorrowPlace,
+                    part_place_str,
                 );
                 map.insert(
-                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::ConflictType,
-                    "WholeObjectBorrowingViolation"
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::ConflictType,
+                    "WholeObjectBorrowingViolation",
                 );
                 map.insert(
-                    $crate::compiler::compiler_messages::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                    "Consider using the existing borrow of the part, or end the part borrow first"
+                    $crate::compiler::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Consider using the existing borrow of the part, or end the part borrow first",
                 );
                 map
-            }
+            },
         )
     }};
 }

@@ -37,7 +37,10 @@ pub fn display_lir(module: &LirModule) -> String {
 pub fn display_lir_struct(lir_struct: &LirStruct) -> String {
     let mut output = String::new();
 
-    output.push_str(&format!("struct {} (size: {} bytes) {{\n", lir_struct.name, lir_struct.total_size));
+    output.push_str(&format!(
+        "struct {} (size: {} bytes) {{\n",
+        lir_struct.name, lir_struct.total_size
+    ));
 
     for field in &lir_struct.fields {
         output.push_str(&format!(
@@ -151,30 +154,38 @@ pub fn display_lir_inst(inst: &LirInst, indent: usize) -> String {
         LirInst::F64Ne => output.push_str(&format!("{}f64.ne\n", indent_str)),
 
         // Memory operations
-        LirInst::I32Load { offset, align } => {
-            output.push_str(&format!("{}i32.load offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::I64Load { offset, align } => {
-            output.push_str(&format!("{}i64.load offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::F32Load { offset, align } => {
-            output.push_str(&format!("{}f32.load offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::F64Load { offset, align } => {
-            output.push_str(&format!("{}f64.load offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::I32Store { offset, align } => {
-            output.push_str(&format!("{}i32.store offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::I64Store { offset, align } => {
-            output.push_str(&format!("{}i64.store offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::F32Store { offset, align } => {
-            output.push_str(&format!("{}f32.store offset={} align={}\n", indent_str, offset, align))
-        }
-        LirInst::F64Store { offset, align } => {
-            output.push_str(&format!("{}f64.store offset={} align={}\n", indent_str, offset, align))
-        }
+        LirInst::I32Load { offset, align } => output.push_str(&format!(
+            "{}i32.load offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::I64Load { offset, align } => output.push_str(&format!(
+            "{}i64.load offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::F32Load { offset, align } => output.push_str(&format!(
+            "{}f32.load offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::F64Load { offset, align } => output.push_str(&format!(
+            "{}f64.load offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::I32Store { offset, align } => output.push_str(&format!(
+            "{}i32.store offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::I64Store { offset, align } => output.push_str(&format!(
+            "{}i64.store offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::F32Store { offset, align } => output.push_str(&format!(
+            "{}f32.store offset={} align={}\n",
+            indent_str, offset, align
+        )),
+        LirInst::F64Store { offset, align } => output.push_str(&format!(
+            "{}f64.store offset={} align={}\n",
+            indent_str, offset, align
+        )),
 
         // Control flow
         LirInst::Call(idx) => output.push_str(&format!("{}call {}\n", indent_str, idx)),
@@ -238,12 +249,10 @@ pub fn display_lir_inst(inst: &LirInst, indent: usize) -> String {
         LirInst::HandleOwnedParam {
             param_local,
             real_ptr_local,
-        } => {
-            output.push_str(&format!(
-                "{}handle_owned_param {} -> {}\n",
-                indent_str, param_local, real_ptr_local
-            ))
-        }
+        } => output.push_str(&format!(
+            "{}handle_owned_param {} -> {}\n",
+            indent_str, param_local, real_ptr_local
+        )),
     }
 
     output

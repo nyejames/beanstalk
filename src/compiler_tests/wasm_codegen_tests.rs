@@ -4246,7 +4246,7 @@ mod module_validation_tests {
 #[cfg(test)]
 mod memory_layout_tests {
     use crate::compiler::codegen::wasm::memory_layout::{
-        align_to, alignment_for_lir_type, size_for_lir_type, MemoryLayoutCalculator,
+        MemoryLayoutCalculator, align_to, alignment_for_lir_type, size_for_lir_type,
     };
     use crate::compiler::lir::nodes::LirType;
 

@@ -1,5 +1,6 @@
-use std::collections::HashSet;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::host_functions::registry::HostRegistry;
+use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::Expression;
@@ -8,8 +9,7 @@ use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::return_syntax_error;
 use crate::{CompilerError, ast_log};
-use crate::compiler::host_functions::registry::HostRegistry;
-use crate::compiler::interned_path::InternedPath;
+use std::collections::HashSet;
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as
@@ -257,9 +257,7 @@ pub fn new_parameter(
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away
-    let parameter_context = ScopeContext::new_constant(
-        token_stream.src_path.to_owned(),
-    );
+    let parameter_context = ScopeContext::new_constant(token_stream.src_path.to_owned());
 
     let parsed_expr = match token_stream.current_token_kind() {
         TokenKind::OpenParenthesis => {

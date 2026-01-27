@@ -450,10 +450,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Struct(..) => "Struct".to_string(),
         DataType::Option(inner) => format!("Option<{}>", format_type_for_error(inner)),
         DataType::Reference(data_type) => {
-            format!(
-                "{} Reference",
-                format_type_for_error(data_type),
-            )
+            format!("{} Reference", format_type_for_error(data_type),)
         }
     }
 }

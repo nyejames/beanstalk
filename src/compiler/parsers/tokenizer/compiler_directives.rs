@@ -12,7 +12,7 @@ use crate::{return_syntax_error, return_token};
 #[derive(Clone, Debug, PartialEq)]
 pub enum CompilerDirective {
     Panic,
-    Export
+    Export,
 }
 
 pub fn compiler_directive(

@@ -121,13 +121,14 @@ fn test_hir_validation_error_conversion() {
 
 #[test]
 fn test_validation_error_context_creation() {
-    let context = ValidationErrorContext::new(
-        "no_nested_expressions",
-        "HIR expressions must be flat",
-    );
+    let context =
+        ValidationErrorContext::new("no_nested_expressions", "HIR expressions must be flat");
 
     assert_eq!(context.invariant_name, "no_nested_expressions");
-    assert_eq!(context.invariant_description, "HIR expressions must be flat");
+    assert_eq!(
+        context.invariant_description,
+        "HIR expressions must be flat"
+    );
     assert!(context.block_id.is_none());
     assert!(context.function_name.is_none());
 }
@@ -197,13 +198,11 @@ fn test_hir_error_with_validation_context() {
 
 #[test]
 fn test_validation_with_context_full() {
-    let validation_context = ValidationErrorContext::new(
-        "block_connectivity",
-        "All blocks must be reachable",
-    )
-    .with_block(10)
-    .with_function("main")
-    .with_debug_info("unreachable_count", "3");
+    let validation_context =
+        ValidationErrorContext::new("block_connectivity", "All blocks must be reachable")
+            .with_block(10)
+            .with_function("main")
+            .with_debug_info("unreachable_count", "3");
 
     let error = HirError::validation_with_context(
         HirErrorKind::UnreachableBlock(10),
@@ -277,7 +276,10 @@ fn test_invalid_branch_target_validation_error_has_context() {
 #[test]
 fn test_validation_error_is_compiler_bug_with_context() {
     let error = HirError::validation(HirErrorKind::MissingTerminator(5), None)
-        .with_validation_context("explicit_terminators", "Every block must end with a terminator");
+        .with_validation_context(
+            "explicit_terminators",
+            "Every block must end with a terminator",
+        );
 
     // Validation errors with context should be compiler bugs
     assert!(error.is_compiler_bug());

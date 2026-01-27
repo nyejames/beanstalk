@@ -49,7 +49,14 @@ pub fn lower_hir_to_lir(hir_module: HirModule) -> Result<LirModule, CompilerMess
                     } => {
                         // Determine if this is the main function
                         let is_main = name.to_string() == "main";
-                        match lower_function(&mut ctx, *name, signature, *body, &hir_module.blocks, is_main) {
+                        match lower_function(
+                            &mut ctx,
+                            *name,
+                            signature,
+                            *body,
+                            &hir_module.blocks,
+                            is_main,
+                        ) {
                             Ok(func) => functions.push(func),
                             Err(e) => errors.push(e),
                         }

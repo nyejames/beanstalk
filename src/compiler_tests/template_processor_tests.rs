@@ -24,10 +24,7 @@ use crate::compiler::string_interning::StringTable;
 // ============================================================================
 
 /// Creates a simple compile-time template for testing
-fn create_compile_time_template(
-    content: &str,
-    string_table: &mut StringTable,
-) -> Template {
+fn create_compile_time_template(content: &str, string_table: &mut StringTable) -> Template {
     let interned_content = string_table.intern(content);
     let mut template_content = TemplateContent::default();
     template_content.before.push(Expression::string_slice(
@@ -47,10 +44,7 @@ fn create_compile_time_template(
 }
 
 /// Creates a runtime template with a variable reference for testing
-fn create_runtime_template_with_var(
-    var_name: &str,
-    string_table: &mut StringTable,
-) -> Template {
+fn create_runtime_template_with_var(var_name: &str, string_table: &mut StringTable) -> Template {
     let interned_var = string_table.intern(var_name);
     let mut template_content = TemplateContent::default();
     template_content.before.push(Expression::parameter(
@@ -71,11 +65,7 @@ fn create_runtime_template_with_var(
 }
 
 /// Creates a template with a specific ID for testing
-fn create_template_with_id(
-    content: &str,
-    id: &str,
-    string_table: &mut StringTable,
-) -> Template {
+fn create_template_with_id(content: &str, id: &str, string_table: &mut StringTable) -> Template {
     let interned_content = string_table.intern(content);
     let mut template_content = TemplateContent::default();
     template_content.before.push(Expression::string_slice(
@@ -161,18 +151,24 @@ fn test_template_processor_creation() {
 fn test_process_compile_time_template() {
     let mut string_table = StringTable::new();
     let template = create_compile_time_template("Hello, World!", &mut string_table);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
     let result = processor.process_template(&template, &mut ctx);
-    assert!(result.is_ok(), "Compile-time template should process successfully");
+    assert!(
+        result.is_ok(),
+        "Compile-time template should process successfully"
+    );
 
     let (nodes, expr) = result.unwrap();
-    
+
     // Compile-time templates should produce no setup nodes
-    assert!(nodes.is_empty(), "Compile-time template should produce no setup nodes");
-    
+    assert!(
+        nodes.is_empty(),
+        "Compile-time template should produce no setup nodes"
+    );
+
     // The result should be a string literal
     assert!(
         matches!(expr.kind, HirExprKind::StringLiteral(_)),
@@ -184,18 +180,24 @@ fn test_process_compile_time_template() {
 fn test_process_runtime_template() {
     let mut string_table = StringTable::new();
     let template = create_runtime_template_with_var("my_var", &mut string_table);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
     let result = processor.process_template(&template, &mut ctx);
-    assert!(result.is_ok(), "Runtime template should process successfully");
+    assert!(
+        result.is_ok(),
+        "Runtime template should process successfully"
+    );
 
     let (nodes, _expr) = result.unwrap();
-    
+
     // Runtime templates should produce setup nodes
-    assert!(!nodes.is_empty(), "Runtime template should produce setup nodes");
-    
+    assert!(
+        !nodes.is_empty(),
+        "Runtime template should produce setup nodes"
+    );
+
     // Check that a RuntimeTemplateCall was created
     let has_template_call = nodes.iter().any(|node| {
         matches!(
@@ -203,30 +205,42 @@ fn test_process_runtime_template() {
             HirKind::Stmt(HirStmt::RuntimeTemplateCall { .. })
         )
     });
-    assert!(has_template_call, "Runtime template should produce a RuntimeTemplateCall");
+    assert!(
+        has_template_call,
+        "Runtime template should produce a RuntimeTemplateCall"
+    );
 }
 
 #[test]
 fn test_process_comment_template() {
     let mut string_table = StringTable::new();
     let template = create_comment_template();
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
     let result = processor.process_template(&template, &mut ctx);
-    assert!(result.is_ok(), "Comment template should process successfully");
+    assert!(
+        result.is_ok(),
+        "Comment template should process successfully"
+    );
 
     let (nodes, expr) = result.unwrap();
-    
+
     // Comment templates should produce no setup nodes
-    assert!(nodes.is_empty(), "Comment template should produce no setup nodes");
-    
+    assert!(
+        nodes.is_empty(),
+        "Comment template should produce no setup nodes"
+    );
+
     // The result should be an empty string literal
     match &expr.kind {
         HirExprKind::StringLiteral(s) => {
             let resolved = ctx.string_table.resolve(*s);
-            assert!(resolved.is_empty(), "Comment template should produce empty string");
+            assert!(
+                resolved.is_empty(),
+                "Comment template should produce empty string"
+            );
         }
         _ => panic!("Comment template should produce a string literal"),
     }
@@ -236,14 +250,14 @@ fn test_process_comment_template() {
 fn test_template_with_id_preserves_id() {
     let mut string_table = StringTable::new();
     let template = create_template_with_id("Content", "my_template_id", &mut string_table);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let processor = TemplateProcessor::new();
 
     // Check that the ID is parsed correctly
     let id = processor.parse_template_id(&template, &mut ctx);
     assert!(id.is_some(), "Template ID should be preserved");
-    
+
     let id_str = ctx.string_table.resolve(id.unwrap());
     assert_eq!(id_str, "my_template_id", "Template ID should match");
 }
@@ -252,7 +266,7 @@ fn test_template_with_id_preserves_id() {
 fn test_template_without_id() {
     let mut string_table = StringTable::new();
     let template = create_compile_time_template("No ID", &mut string_table);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let processor = TemplateProcessor::new();
 
@@ -282,7 +296,7 @@ fn property_compile_time_templates_become_string_literals() {
     for content in test_strings {
         let mut string_table = StringTable::new();
         let template = create_compile_time_template(content, &mut string_table);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut processor = TemplateProcessor::new();
 
@@ -294,13 +308,13 @@ fn property_compile_time_templates_become_string_literals() {
         );
 
         let (nodes, expr) = result.unwrap();
-        
+
         assert!(
             nodes.is_empty(),
             "Compile-time template should produce no setup nodes for '{}'",
             content
         );
-        
+
         assert!(
             matches!(expr.kind, HirExprKind::StringLiteral(_)),
             "Compile-time template should produce string literal for '{}'",
@@ -314,18 +328,12 @@ fn property_compile_time_templates_become_string_literals() {
 /// Validates: Requirements 10.2
 #[test]
 fn property_runtime_templates_become_function_calls() {
-    let test_vars = vec![
-        "x",
-        "my_variable",
-        "user_name",
-        "count",
-        "data",
-    ];
+    let test_vars = vec!["x", "my_variable", "user_name", "count", "data"];
 
     for var_name in test_vars {
         let mut string_table = StringTable::new();
         let template = create_runtime_template_with_var(var_name, &mut string_table);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut processor = TemplateProcessor::new();
 
@@ -337,14 +345,14 @@ fn property_runtime_templates_become_function_calls() {
         );
 
         let (nodes, _expr) = result.unwrap();
-        
+
         let has_template_call = nodes.iter().any(|node| {
             matches!(
                 &node.kind,
                 HirKind::Stmt(HirStmt::RuntimeTemplateCall { .. })
             )
         });
-        
+
         assert!(
             has_template_call,
             "Runtime template with var '{}' should produce RuntimeTemplateCall",
@@ -360,7 +368,7 @@ fn property_runtime_templates_become_function_calls() {
 fn property_template_variables_are_captured() {
     let mut string_table = StringTable::new();
     let template = create_runtime_template_with_var("test_var", &mut string_table);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
@@ -369,7 +377,7 @@ fn property_template_variables_are_captured() {
 
     let captures = captures.unwrap();
     assert_eq!(captures.len(), 1, "Should capture exactly one variable");
-    
+
     // The capture should be a Load expression
     assert!(
         matches!(captures[0].kind, HirExprKind::Load(_)),
@@ -393,13 +401,17 @@ fn property_template_ids_are_preserved() {
     for id in test_ids {
         let mut string_table = StringTable::new();
         let template = create_template_with_id("Content", id, &mut string_table);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let processor = TemplateProcessor::new();
 
         let parsed_id = processor.parse_template_id(&template, &mut ctx);
-        assert!(parsed_id.is_some(), "Template ID '{}' should be preserved", id);
-        
+        assert!(
+            parsed_id.is_some(),
+            "Template ID '{}' should be preserved",
+            id
+        );
+
         let id_str = ctx.string_table.resolve(parsed_id.unwrap());
         assert_eq!(id_str, id, "Template ID should match original");
     }
@@ -412,21 +424,30 @@ fn property_template_ids_are_preserved() {
 fn property_comment_templates_produce_empty_output() {
     let mut string_table = StringTable::new();
     let template = create_comment_template();
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
     let result = processor.process_template(&template, &mut ctx);
-    assert!(result.is_ok(), "Comment template should process successfully");
+    assert!(
+        result.is_ok(),
+        "Comment template should process successfully"
+    );
 
     let (nodes, expr) = result.unwrap();
-    
-    assert!(nodes.is_empty(), "Comment template should produce no setup nodes");
-    
+
+    assert!(
+        nodes.is_empty(),
+        "Comment template should produce no setup nodes"
+    );
+
     match &expr.kind {
         HirExprKind::StringLiteral(s) => {
             let resolved = ctx.string_table.resolve(*s);
-            assert!(resolved.is_empty(), "Comment template should produce empty string");
+            assert!(
+                resolved.is_empty(),
+                "Comment template should produce empty string"
+            );
         }
         _ => panic!("Comment template should produce a string literal"),
     }
@@ -447,7 +468,7 @@ fn property_multiple_content_items_handled() {
     for items in test_cases {
         let mut string_table = StringTable::new();
         let template = create_template_with_multiple_items(items.clone(), &mut string_table);
-        
+
         let mut ctx = HirBuilderContext::new(&mut string_table);
         let mut processor = TemplateProcessor::new();
 
@@ -459,7 +480,7 @@ fn property_multiple_content_items_handled() {
 
         // Count expected captures (variables only)
         let expected_captures: usize = items.iter().filter(|(_, is_var)| *is_var).count();
-        
+
         if expected_captures > 0 {
             let captures = processor.collect_template_captures(&template, &mut ctx);
             assert!(captures.is_ok(), "Capture collection should succeed");
@@ -478,15 +499,15 @@ fn property_multiple_content_items_handled() {
 #[test]
 fn property_template_type_determines_processing() {
     let mut string_table = StringTable::new();
-    
+
     // Test compile-time template
     let compile_time = create_compile_time_template("Static", &mut string_table);
     assert_eq!(compile_time.kind, TemplateType::String);
-    
+
     // Test runtime template
     let runtime = create_runtime_template_with_var("var", &mut string_table);
     assert_eq!(runtime.kind, TemplateType::StringFunction);
-    
+
     // Test comment template
     let comment = create_comment_template();
     assert_eq!(comment.kind, TemplateType::Comment);
@@ -499,7 +520,7 @@ fn property_template_type_determines_processing() {
 fn property_empty_templates_handled() {
     let mut string_table = StringTable::new();
     let template = create_compile_time_template("", &mut string_table);
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
@@ -507,12 +528,18 @@ fn property_empty_templates_handled() {
     assert!(result.is_ok(), "Empty template should process successfully");
 
     let (nodes, expr) = result.unwrap();
-    assert!(nodes.is_empty(), "Empty template should produce no setup nodes");
-    
+    assert!(
+        nodes.is_empty(),
+        "Empty template should produce no setup nodes"
+    );
+
     match &expr.kind {
         HirExprKind::StringLiteral(s) => {
             let resolved = ctx.string_table.resolve(*s);
-            assert!(resolved.is_empty(), "Empty template should produce empty string");
+            assert!(
+                resolved.is_empty(),
+                "Empty template should produce empty string"
+            );
         }
         _ => panic!("Empty template should produce a string literal"),
     }
@@ -532,7 +559,7 @@ fn property_template_function_names_unique() {
     for i in 0..10 {
         // Create a fresh context for each iteration to avoid borrow issues
         let mut ctx = HirBuilderContext::new(&mut string_table);
-        
+
         // Create template with unique ID to ensure unique names
         let template = Template {
             content: TemplateContent::default(),
@@ -542,10 +569,10 @@ fn property_template_function_names_unique() {
             id: format!("unique_id_{}", i),
             location: TextLocation::default(),
         };
-        
+
         let name = processor.generate_template_fn_name(&template, &mut ctx);
         let name_str = ctx.string_table.resolve(name).to_string();
-        
+
         assert!(
             generated_names.insert(name_str.clone()),
             "Template function name '{}' should be unique",
@@ -560,7 +587,7 @@ fn property_template_function_names_unique() {
 #[test]
 fn property_capture_data_types_preserved() {
     let mut string_table = StringTable::new();
-    
+
     // Create a template with a typed variable
     let var_name = string_table.intern("typed_var");
     let mut template_content = TemplateContent::default();
@@ -579,7 +606,7 @@ fn property_capture_data_types_preserved() {
         id: String::new(),
         location: TextLocation::default(),
     };
-    
+
     let mut ctx = HirBuilderContext::new(&mut string_table);
     let mut processor = TemplateProcessor::new();
 
@@ -588,5 +615,9 @@ fn property_capture_data_types_preserved() {
 
     let captures = captures.unwrap();
     assert_eq!(captures.len(), 1, "Should capture one variable");
-    assert_eq!(captures[0].data_type, DataType::Int, "Data type should be preserved");
+    assert_eq!(
+        captures[0].data_type,
+        DataType::Int,
+        "Data type should be preserved"
+    );
 }

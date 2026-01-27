@@ -116,6 +116,8 @@ mod compiler {
 
     pub(crate) mod hir;
 
+    pub(crate) mod borrow_checker;
+
     pub(crate) mod lir;
 
     pub(crate) mod codegen {
