@@ -6,11 +6,9 @@
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
-use crate::compiler::string_interning::StringTable;
 use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
-use crate::{Compiler, Flag, InputModule, Project, timer_log};
+use crate::{Flag, InputModule, Project, generate_lir, generate_wasm, timer_log};
 use std::time::Instant;
 
 pub struct JitProjectBuilder {
@@ -28,7 +26,7 @@ impl ProjectBuilder for JitProjectBuilder {
         &self,
         modules: Vec<InputModule>,
         config: &Config,
-        _release_build: bool,
+        release_build: bool,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
         // Validate configuration
@@ -39,41 +37,21 @@ impl ProjectBuilder for JitProjectBuilder {
             });
         }
 
-        // Module capacity heuristic
-        // Just a guess of how many strings we might need to intern per module
-        const MODULES_CAPACITY: usize = 16;
-
-        // Create a new string table for interning strings
-        let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
-
-        let runtime_backend = RuntimeBackend::default();
-
-        // Create a builtin host function registry with print and other host functions
-        let host_registry =
-            create_builtin_registry(runtime_backend, &mut string_table).map_err(|e| {
-                CompilerMessages {
-                    errors: vec![e],
-                    warnings: Vec::new(),
-                }
-            })?;
-
-        // Create the compiler instance
-        let mut compiler = Compiler::new(config, host_registry, string_table);
-
         // Use the core build pipeline to compile to HIR
-        let compilation_result = core_build::compile_modules(&mut compiler, modules, flags)?;
+        let compilation_result =
+            core_build::compile_modules(modules, &config, release_build, flags)?;
 
         let mut compiler_messages = CompilerMessages {
             errors: Vec::new(),
             warnings: compilation_result.warnings,
         };
-        
+
         // ----------------------------------
         //          LIR generation
         // ----------------------------------
         let time = Instant::now();
 
-        let lir_module = match compiler.generate_lir(compilation_result.hir_module) {
+        let lir_module = match generate_lir(compilation_result.hir_module) {
             Ok(lir) => lir,
             Err(e) => {
                 compiler_messages.errors.extend(e.errors);
@@ -98,7 +76,7 @@ impl ProjectBuilder for JitProjectBuilder {
         // ----------------------------------
         let time = Instant::now();
 
-        let wasm_bytes = match compiler.generate_wasm(&lir_module) {
+        let wasm_bytes = match generate_wasm(&lir_module) {
             Ok(wasm) => wasm,
             Err(e) => {
                 compiler_messages.errors.push(e);
@@ -109,7 +87,7 @@ impl ProjectBuilder for JitProjectBuilder {
         timer_log!(time, "WASM generated in: ");
 
         // Execute the WASM directly using JIT
-        match execute_direct_jit(&wasm_bytes, &config.runtime) {
+        match execute_direct_jit(&wasm_bytes, &config.runtime_backend()) {
             Ok(_) => {
                 // For JIT mode, we don't create any output files
                 // Return an empty project to satisfy the interface

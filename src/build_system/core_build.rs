@@ -2,16 +2,19 @@
 //
 // Contains the common compilation pipeline steps that are used by all project builders
 // This now only compiles the HIR and runs the borrow checker.
-// This is because both a Wasm and JS backend must be supported so it is agnostic about what happens after that.
+// This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
+use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
-use crate::{Compiler, Flag, InputModule, timer_log};
+use crate::compiler::string_interning::StringTable;
+use crate::settings::Config;
+use crate::{CompilerFrontend, Flag, InputModule, timer_log};
 use std::time::Instant;
 
 /// External function import required by the compiled WASM
@@ -82,10 +85,30 @@ pub struct CompilationResult {
 
 /// Perform the core compilation pipeline shared by all project types
 pub fn compile_modules(
-    compiler: &mut Compiler,
     modules: Vec<InputModule>,
-    flags: &[Flag],
+    config: &Config,
+    _release_build: bool,
+    _flags: &[Flag],
 ) -> Result<CompilationResult, CompilerMessages> {
+    // Module capacity heuristic
+    // Just a guess of how many strings we might need to intern per module
+    const MODULES_CAPACITY: usize = 16;
+
+    // Create a new string table for interning strings
+    let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
+
+    // Create a builtin host function registry with print and other host functions
+    let host_function_registry =
+        create_builtin_registry(config.runtime_backend(), &mut string_table).map_err(|e| {
+            CompilerMessages {
+                errors: vec![e],
+                warnings: Vec::new(),
+            }
+        })?;
+
+    // Create the compiler instance
+    let mut compiler = CompilerFrontend::new(config, host_function_registry, string_table);
+
     let time = Instant::now();
 
     // ----------------------------------
@@ -245,7 +268,7 @@ pub fn compile_modules(
 }
 
 /// Extract required external imports from the compilation
-fn extract_required_imports(exported_declarations: &[Var]) -> Vec<ExternalImport> {
+fn extract_required_imports(_exported_declarations: &[Var]) -> Vec<ExternalImport> {
     let mut imports = Vec::new();
 
     // Add standard IO imports that are always required

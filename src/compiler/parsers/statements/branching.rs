@@ -14,17 +14,17 @@ use crate::{ast_log, return_rule_error};
 // Example:
 
 // if x < 5:
-//     io("x is less than 5")
+//     host_io_functions("x is less than 5")
 // else
-//     io("x is greater than 5")
+//     host_io_functions("x is greater than 5")
 // ;
 //
 // Match statements example:
 //
 // if choice is:
-//     0: io("Choice is 0");
-//     1: io("Choice is 1");
-//     else: io("Choice is 2");
+//     0: host_io_functions("Choice is 0");
+//     1: host_io_functions("Choice is 1");
+//     else: host_io_functions("Choice is 2");
 // ;
 
 #[derive(Debug, Clone)]
@@ -151,9 +151,9 @@ fn create_match_node(
     // Each branch MUST have an open and closed block
     // This is because every
     // if subject is:
-    //     0: io("Choice is 0");
-    //     1: io("Choice is 1");
-    //     else: io("Choice is 2");
+    //     0: host_io_functions("Choice is 0");
+    //     1: host_io_functions("Choice is 1");
+    //     else: host_io_functions("Choice is 2");
     // ;
 
     // Parse each arm

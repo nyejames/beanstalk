@@ -4,7 +4,7 @@
 // This will probably use Wasi to generate the correct glue code for Wasmer
 
 use crate::compiler::compiler_errors::CompilerError;
-use crate::runtime::io::io::{IoConfig, IoInterface};
+use crate::runtime::host_io_functions::io::{IoConfig, IoInterface};
 
 pub struct NativeIoBackend {
     _config: IoConfig,

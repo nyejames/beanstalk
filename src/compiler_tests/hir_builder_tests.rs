@@ -4880,7 +4880,7 @@ mod hir_validation_error_handling_property_tests {
 
 #[cfg(test)]
 mod pipeline_integration_tests {
-    use crate::Compiler;
+    use crate::CompilerFrontend;
     use crate::compiler::host_functions::registry::HostRegistry;
     use crate::compiler::string_interning::StringTable;
     use crate::settings::{Config, ProjectType};
@@ -4891,8 +4891,8 @@ mod pipeline_integration_tests {
         config: &'a Config,
         host_registry: &HostRegistry,
         string_table: &'a mut StringTable,
-    ) -> Compiler<'a> {
-        Compiler::new(config, host_registry.clone(), std::mem::take(string_table))
+    ) -> CompilerFrontend<'a> {
+        CompilerFrontend::new(config, host_registry.clone(), std::mem::take(string_table))
     }
 
     /// Helper to create a default test config

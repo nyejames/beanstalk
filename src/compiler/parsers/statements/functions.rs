@@ -489,7 +489,7 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
     // This is a simplified version - in a full implementation, this would handle
     // more complex type relationships, ownership, mutability, etc.
     match (arg_type, param_type) {
-        // CoerceToString accepts any type - this is the key for io() function
+        // CoerceToString accepts any type - this is the key for host_io_functions() function
         (_, DataType::CoerceToString) => true,
 
         // Exact type matches

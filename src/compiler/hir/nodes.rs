@@ -21,7 +21,7 @@
 //! Key design principles:
 //! - Place-based memory model for precise borrow tracking (when enabled)
 //! - No nested control flow; expressions may nest, but evaluation order is explicit
-//! - Borrow intent recorded, ownership outcome determined later (or ignored entirely in GC-only backends)
+//! - Borrow intent recorded, an ownership outcome determined later (or ignored entirely in GC-only backends)
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;

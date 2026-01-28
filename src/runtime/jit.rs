@@ -4,20 +4,14 @@
 // for rapid development iteration without additional compilation steps.
 
 use crate::compiler::compiler_errors::CompilerError;
-use crate::runtime::{IoBackend, RuntimeConfig};
+use crate::compiler::host_functions::registry::RuntimeBackend;
 use std::cell::RefCell;
-use wasmer::{Function, Instance, Memory, Module, Store, imports};
+use wasmer::{Function, Instance, Module, Store, imports};
 
 /// Execute WASM bytecode directly using JIT compilation
-pub fn execute_direct_jit(wasm_bytes: &[u8], config: &RuntimeConfig) -> Result<(), CompilerError> {
-    execute_direct_jit_with_capture(wasm_bytes, config, false)
-}
-
-/// Execute WASM bytecode with optional output capture for testing
-pub fn execute_direct_jit_with_capture(
+pub fn execute_direct_jit(
     wasm_bytes: &[u8],
-    config: &RuntimeConfig,
-    capture_output: bool,
+    io_backend: &RuntimeBackend,
 ) -> Result<(), CompilerError> {
     // Note: Tokio runtime is no longer required since we removed WASIX dependencies
 
@@ -45,13 +39,7 @@ pub fn execute_direct_jit_with_capture(
     })?;
 
     // Set up imports based on IO backend
-    let import_object = create_import_object_with_capture(
-        &mut store,
-        &module,
-        wasm_bytes,
-        &config.io_backend,
-        capture_output,
-    )?;
+    let import_object = create_import_object(&mut store, &io_backend)?;
 
     // Instantiate the module
     let instance = Instance::new(&mut store, &module, &import_object).map_err(|e| {
@@ -59,7 +47,7 @@ pub fn execute_direct_jit_with_capture(
     })?;
 
     // Set up memory access for Native backend
-    if matches!(config.io_backend, IoBackend::Native) {
+    if matches!(io_backend, RuntimeBackend::Rust) {
         // Try different memory export names in order of preference
         let memory_result = instance
             .exports
@@ -73,7 +61,7 @@ pub fn execute_direct_jit_with_capture(
                 let memory_view = memory.view(&store);
                 let memory_size = memory_view.data_size();
 
-                #[cfg(feature = "verbose_codegen_logging")]
+                #[cfg(feature = "show_codegen")]
                 println!("Native backend memory found: {} bytes", memory_size);
 
                 // Ensure minimum memory size for native operations
@@ -85,11 +73,11 @@ pub fn execute_direct_jit_with_capture(
 
                 set_native_memory_and_store(memory.clone(), &mut store as *mut Store);
 
-                #[cfg(feature = "verbose_codegen_logging")]
+                #[cfg(feature = "show_codegen")]
                 println!("Native backend memory access configured successfully");
             }
             Err(_) => {
-                #[cfg(feature = "verbose_codegen_logging")]
+                #[cfg(feature = "show_codegen")]
                 {
                     println!("Warning: No memory export found for Native backend");
                     println!("Available exports:");
@@ -108,16 +96,16 @@ pub fn execute_direct_jit_with_capture(
     // Wasmer automatically runs the start section (if present) when instantiating the module above.
     // So if instantiation succeeded, the start section has already run.
     // Now, optionally call 'main' or '_start' if present.
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!("JIT: Looking for main function...");
     if let Ok(main_func) = instance.exports.get_function("main") {
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         println!("JIT: Found main function");
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         println!("JIT: About to call main function");
         match main_func.call(&mut store, &[]) {
             Ok(values) => {
-                #[cfg(feature = "verbose_codegen_logging")]
+                #[cfg(feature = "show_codegen")]
                 println!(
                     "JIT: Main function completed successfully with values: {:?}",
                     values
@@ -128,7 +116,7 @@ pub fn execute_direct_jit_with_capture(
                 Ok(())
             }
             Err(e) => {
-                #[cfg(feature = "verbose_codegen_logging")]
+                #[cfg(feature = "show_codegen")]
                 println!("JIT: Main function failed with error: {}", e);
                 Err(CompilerError::compiler_error(&format!(
                     "Runtime error: {}",
@@ -154,37 +142,19 @@ pub fn execute_direct_jit_with_capture(
 /// Create an import object based on the configured IO backend
 pub fn create_import_object(
     store: &mut Store,
-    module: &Module,
-    wasm_bytes: &[u8],
-    io_backend: &IoBackend,
-) -> Result<wasmer::Imports, CompilerError> {
-    create_import_object_with_capture(store, module, wasm_bytes, io_backend, false)
-}
-
-/// Create an import object with optional output capture
-pub fn create_import_object_with_capture(
-    store: &mut Store,
-    module: &Module,
-    wasm_bytes: &[u8],
-    io_backend: &IoBackend,
-    capture_output: bool,
+    io_backend: &RuntimeBackend,
 ) -> Result<wasmer::Imports, CompilerError> {
     match io_backend {
-        IoBackend::Native => {
-            let mut imports = imports! {};
-            setup_native_io_functions(store, &mut imports, capture_output)?;
-            Ok(imports)
-        }
-        IoBackend::Custom(_config_path) => {
-            // Set up custom IO hooks
-            let mut imports = imports! {};
-            setup_custom_io_imports(store, &mut imports)?;
-            Ok(imports)
-        }
-        IoBackend::JsBindings => {
+        RuntimeBackend::JavaScript => {
             // Set up JS/DOM bindings (for web targets)
             let mut imports = imports! {};
             setup_js_imports(store, &mut imports)?;
+            Ok(imports)
+        }
+        RuntimeBackend::Rust => {
+            // Set up custom IO hooks
+            let mut imports = imports! {};
+            setup_custom_io_imports(store, &mut imports)?;
             Ok(imports)
         }
     }
@@ -331,7 +301,7 @@ fn read_bytes_from_memory(
     let memory_view = memory.view(store);
     let memory_size = memory_view.data_size() as u32;
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!(
         "Memory bounds check - ptr: 0x{:x}, len: {}, end_ptr: 0x{:x}, memory_size: {}",
         ptr, len, end_ptr, memory_size
@@ -358,7 +328,7 @@ fn read_bytes_from_memory(
         .read(ptr as u64, &mut bytes)
         .map_err(|e| format!("Failed to read from memory at 0x{:x}: {}", ptr, e))?;
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!(
         "Successfully read {} bytes from memory at 0x{:x}",
         bytes.len(),
@@ -392,7 +362,7 @@ fn read_string_from_memory(
     // Read raw bytes from memory
     let bytes = read_bytes_from_memory(memory, store, ptr, len)?;
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     {
         let preview_len = std::cmp::min(bytes.len(), 50);
         println!(
@@ -406,7 +376,7 @@ fn read_string_from_memory(
     // Validate UTF-8 with detailed error information
     match String::from_utf8(bytes) {
         Ok(string) => {
-            #[cfg(feature = "verbose_codegen_logging")]
+            #[cfg(feature = "show_codegen")]
             {
                 let preview_len = std::cmp::min(string.len(), 50);
                 println!(
@@ -467,7 +437,7 @@ fn write_u32_to_memory(
         .write(ptr as u64, &bytes)
         .map_err(|e| format!("Failed to write u32 to memory at 0x{:x}: {}", ptr, e))?;
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!(
         "Successfully wrote u32 value {} to memory at 0x{:x}",
         value, ptr
@@ -524,7 +494,7 @@ fn write_bytes_to_memory(
         )
     })?;
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!("Successfully wrote {} bytes to memory at 0x{:x}", len, ptr);
 
     Ok(())
@@ -564,7 +534,7 @@ impl Drop for MemoryCleanup {
     fn drop(&mut self) {
         // In a full implementation, this would free the tracked memory regions
         // For now, we just log the cleanup for debugging
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         if !self.allocated_regions.is_empty() {
             println!(
                 "Memory cleanup: {} regions tracked for cleanup",
@@ -585,7 +555,7 @@ struct IOVec {
 
 // Global state to hold memory and store references for WASIX functions
 thread_local! {
-    static WASIX_MEMORY: RefCell<Option<Memory>> = RefCell::new(None);
+    static WASIX_MEMORY: RefCell<Option<wasmer::Memory>> = RefCell::new(None);
     static WASIX_STORE: RefCell<Option<*mut Store>> = RefCell::new(None);
     static CAPTURED_OUTPUT: RefCell<Option<CapturedOutput>> = RefCell::new(None);
 }
@@ -618,7 +588,7 @@ impl CapturedOutput {
 }
 
 /// Set memory and store for native IO functions to use
-fn set_native_memory_and_store(memory: Memory, store: *mut Store) {
+fn set_native_memory_and_store(memory: wasmer::Memory, store: *mut Store) {
     WASIX_MEMORY.with(|m| {
         *m.borrow_mut() = Some(memory);
     });
@@ -628,7 +598,7 @@ fn set_native_memory_and_store(memory: Memory, store: *mut Store) {
 }
 
 /// Get memory for native IO functions
-fn get_native_memory() -> Option<Memory> {
+fn get_native_memory() -> Option<wasmer::Memory> {
     WASIX_MEMORY.with(|m| m.borrow().clone())
 }
 
@@ -656,20 +626,17 @@ pub fn clear_captured_output() {
 fn setup_native_io_functions(
     store: &mut Store,
     imports: &mut wasmer::Imports,
-    capture_output: bool,
 ) -> Result<(), CompilerError> {
     // Initialize captured output if needed
-    if capture_output {
-        let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-        let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured_stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let captured_stderr = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
 
-        CAPTURED_OUTPUT.with(|output| {
-            *output.borrow_mut() = Some(CapturedOutput {
-                stdout: captured_stdout,
-                stderr: captured_stderr,
-            });
+    CAPTURED_OUTPUT.with(|output| {
+        *output.borrow_mut() = Some(CapturedOutput {
+            stdout: captured_stdout,
+            stderr: captured_stderr,
         });
-    }
+    });
 
     // Create fd_write function for backward compatibility
     let fd_write_func = Function::new_typed(
@@ -721,11 +688,11 @@ fn setup_native_io_functions(
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
-    // Create io function that prints with automatic newline
+    // Create host_io_functions function that prints with automatic newline
     let io_func = Function::new_typed(store, move |text_ptr: i32, text_len: i32| {
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         println!(
-            "WASIX io called with text_ptr=0x{:x}, text_len={}",
+            "WASIX host_io_functions called with text_ptr=0x{:x}, text_len={}",
             text_ptr, text_len
         );
 
@@ -733,7 +700,7 @@ fn setup_native_io_functions(
         let memory = match get_native_memory() {
             Some(mem) => mem,
             None => {
-                eprintln!("WASIX io error: Memory not available");
+                eprintln!("WASIX host_io_functions error: Memory not available");
                 return;
             }
         };
@@ -741,7 +708,7 @@ fn setup_native_io_functions(
         let store_ptr = match get_native_store() {
             Some(ptr) => ptr,
             None => {
-                eprintln!("WASIX io error: Store not available");
+                eprintln!("WASIX host_io_functions error: Store not available");
                 return;
             }
         };
@@ -750,34 +717,19 @@ fn setup_native_io_functions(
         let store_ref = unsafe { &*store_ptr };
         match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
             Ok(text) => {
-                // Check if we should capture output or print normally
-                let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
-
-                if should_capture {
-                    // Capture output for testing (with newline)
-                    CAPTURED_OUTPUT.with(|output| {
-                        if let Some(ref captured) = *output.borrow() {
-                            let mut stdout = captured.stdout.lock().unwrap();
-                            stdout.extend_from_slice(text.as_bytes());
-                            stdout.push(b'\n'); // Add newline
-                        }
-                    });
-                } else {
-                    // Normal output to stdout with newline
-                    println!("{}", text);
-                }
+                println!("{}", text);
             }
             Err(e) => {
-                eprintln!("WASIX io error: {}", e);
+                eprintln!("WASIX host_io_functions error: {}", e);
             }
         }
     });
 
-    // Add io function to beanstalk_io module
-    imports.define("beanstalk_io", "io", io_func);
+    // Add host_io_functions function to beanstalk_io module
+    imports.define("beanstalk_io", "host_io_functions", io_func);
 
-    #[cfg(feature = "verbose_codegen_logging")]
-    println!("Native IO functions configured (fd_write, template_output, and io)");
+    #[cfg(feature = "show_codegen")]
+    println!("Native IO functions configured (fd_write, template_output, and host_io_functions)");
 
     Ok(())
 }
@@ -794,7 +746,7 @@ fn setup_custom_io_imports(
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!("Custom IO backend configured with template_output");
 
     Ok(())
@@ -809,7 +761,7 @@ fn setup_js_imports(store: &mut Store, imports: &mut wasmer::Imports) -> Result<
     // Add template_output function to beanstalk_io module
     imports.define("beanstalk_io", "template_output", template_output_func);
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     println!("JavaScript backend configured with template_output");
 
     Ok(())
@@ -819,7 +771,7 @@ fn setup_js_imports(store: &mut Store, imports: &mut wasmer::Imports) -> Result<
 /// This function reads a string from WASM memory and outputs it to stdout
 fn create_template_output_import(store: &mut Store) -> Function {
     Function::new_typed(store, move |text_ptr: i32, text_len: i32| {
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         println!(
             "template_output called with text_ptr=0x{:x}, text_len={}",
             text_ptr, text_len
@@ -846,23 +798,10 @@ fn create_template_output_import(store: &mut Store) -> Function {
         let store_ref = unsafe { &*store_ptr };
         match read_string_from_memory(&memory, store_ref, text_ptr as u32, text_len as u32) {
             Ok(text) => {
-                // Check if we should capture output or print normally
-                let should_capture = CAPTURED_OUTPUT.with(|output| output.borrow().is_some());
-
-                if should_capture {
-                    // Capture output for testing
-                    CAPTURED_OUTPUT.with(|output| {
-                        if let Some(ref captured) = *output.borrow() {
-                            let mut stdout = captured.stdout.lock().unwrap();
-                            stdout.extend_from_slice(text.as_bytes());
-                        }
-                    });
-                } else {
-                    // Normal output to stdout
-                    print!("{}", text);
-                    if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
-                        eprintln!("template_output error: Failed to flush stdout: {}", e);
-                    }
+                // Normal output to stdout
+                print!("{}", text);
+                if let Err(e) = std::io::Write::flush(&mut std::io::stdout()) {
+                    eprintln!("template_output error: Failed to flush stdout: {}", e);
                 }
             }
             Err(e) => {
@@ -907,7 +846,7 @@ fn setup_native_imports_with_capture(
 
     // Create native print function that directly outputs to stdout or captures
     let print_func = Function::new_typed(store, move |text_ptr: i32, text_len: i32| -> i32 {
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         println!(
             "Native print called with text_ptr=0x{:x}, text_len={}",
             text_ptr, text_len
@@ -966,11 +905,11 @@ fn setup_native_imports_with_capture(
     // Add print function to beanstalk_io module
     imports.define("beanstalk_io", "print", print_func);
 
-    // Create io function that prints with automatic newline
+    // Create host_io_functions function that prints with automatic newline
     let io_func = Function::new_typed(store, move |text_ptr: i32, text_len: i32| {
-        #[cfg(feature = "verbose_codegen_logging")]
+        #[cfg(feature = "show_codegen")]
         println!(
-            "Native io called with text_ptr=0x{:x}, text_len={}",
+            "Native host_io_functions called with text_ptr=0x{:x}, text_len={}",
             text_ptr, text_len
         );
 
@@ -978,7 +917,7 @@ fn setup_native_imports_with_capture(
         let memory = match get_native_memory() {
             Some(mem) => mem,
             None => {
-                eprintln!("Native io error: Memory not available");
+                eprintln!("Native host_io_functions error: Memory not available");
                 return;
             }
         };
@@ -986,7 +925,7 @@ fn setup_native_imports_with_capture(
         let store_ptr = match get_native_store() {
             Some(ptr) => ptr,
             None => {
-                eprintln!("Native io error: Store not available");
+                eprintln!("Native host_io_functions error: Store not available");
                 return;
             }
         };
@@ -1013,15 +952,15 @@ fn setup_native_imports_with_capture(
                 }
             }
             Err(e) => {
-                eprintln!("Native io error: {}", e);
+                eprintln!("Native host_io_functions error: {}", e);
             }
         }
     });
 
-    // Add io function to beanstalk_io module
-    imports.define("beanstalk_io", "io", io_func);
+    // Add host_io_functions function to beanstalk_io module
+    imports.define("beanstalk_io", "host_io_functions", io_func);
 
-    #[cfg(feature = "verbose_codegen_logging")]
+    #[cfg(feature = "show_codegen")]
     if capture_output {
         println!("Native backend host functions configured with output capture");
     } else {

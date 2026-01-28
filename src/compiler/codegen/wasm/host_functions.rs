@@ -28,7 +28,7 @@ use wasm_encoder::{ExportKind, ValType};
 pub struct HostImport {
     /// WASM import module name (e.g., "beanstalk_io")
     pub module_name: String,
-    /// WASM import function name (e.g., "io")
+    /// WASM import function name (e.g., "host_io_functions")
     pub function_name: String,
     /// Beanstalk function name (for lookup)
     pub beanstalk_name: String,
@@ -452,11 +452,11 @@ impl Default for HostFunctionManager {
 /// Helper function to create standard Beanstalk host imports
 pub fn create_standard_host_imports() -> Vec<HostImport> {
     vec![
-        // io() function - outputs to stdout
+        // host_io_functions() function - outputs to stdout
         HostImport {
             module_name: "beanstalk_io".to_string(),
-            function_name: "io".to_string(),
-            beanstalk_name: "io".to_string(),
+            function_name: "host_io_functions".to_string(),
+            beanstalk_name: "host_io_functions".to_string(),
             params: vec![ValType::I32, ValType::I32], // ptr, len for string
             returns: vec![],
             wasm_index: None,
@@ -468,10 +468,10 @@ pub fn create_standard_host_imports() -> Vec<HostImport> {
 pub fn validate_required_host_functions(
     manager: &HostFunctionManager,
 ) -> Result<(), WasmGenerationError> {
-    // The io() function is mandatory
-    if !manager.is_host_import("io") {
+    // The host_io_functions() function is mandatory
+    if !manager.is_host_import("host_io_functions") {
         return Err(WasmGenerationError::lir_analysis(
-            "Required host function 'io' is not registered. Every Beanstalk module requires the io() function.",
+            "Required host function 'host_io_functions' is not registered. Every Beanstalk module requires the host_io_functions() function.",
             "validate_required_host_functions",
         ));
     }

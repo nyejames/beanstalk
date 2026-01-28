@@ -9,7 +9,7 @@ use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
 use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
-use crate::{Compiler, Flag, InputModule, OutputFile, Project, return_config_error};
+use crate::{CompilerFrontend, Flag, InputModule, OutputFile, Project, return_config_error};
 
 pub struct EmbeddedProjectBuilder {
     target: BuildTarget,
@@ -129,7 +129,7 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
         &self,
         modules: Vec<InputModule>,
         config: &Config,
-        _release_build: bool,
+        release_build: bool,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
         // Validate configuration
@@ -159,10 +159,11 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
             })?;
 
         // Create the compiler instance
-        let mut compiler = Compiler::new(config, host_registry, string_table);
+        let mut compiler = CompilerFrontend::new(config, host_registry, string_table);
 
         // Use the core build pipeline to compile to HIR
-        let compilation_result = core_build::compile_modules(&mut compiler, modules, flags)?;
+        let compilation_result =
+            core_build::compile_modules(modules, &config, release_build, flags)?;
 
         // TODO: Write a Rust interpreter for Beanstalk modules
         // Or in the future if this is never done, just compile to Wasm and run the Wasm inside Wasmer

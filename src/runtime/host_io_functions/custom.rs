@@ -4,7 +4,7 @@
 // This might use Wasi for native and custom bindings for web during the build process
 
 use crate::compiler::compiler_errors::CompilerError;
-use crate::runtime::io::io::{IoConfig, IoInterface};
+use crate::runtime::host_io_functions::io::{IoConfig, IoInterface};
 
 pub struct CustomIoBackend {
     _config: IoConfig,

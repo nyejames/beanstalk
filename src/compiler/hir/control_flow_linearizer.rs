@@ -1035,15 +1035,15 @@ impl ControlFlowLinearizer {
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<Vec<HirNode>, CompilerError> {
-        // Print is converted to a host function call to io
+        // Print is converted to a host function call to host_io_functions
         let mut nodes = Vec::new();
 
         // Linearize the expression
         let (expr_nodes, hir_expr) = self.expr_linearizer.linearize_expression(expr, ctx)?;
         nodes.extend(expr_nodes);
 
-        // Create a host call to io
-        let io_name = ctx.string_table.intern("io");
+        // Create a host call to host_io_functions
+        let io_name = ctx.string_table.intern("host_io_functions");
         let module_name = ctx.string_table.intern("beanstalk_io");
         let import_name = ctx.string_table.intern("print");
 

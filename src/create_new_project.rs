@@ -30,7 +30,7 @@ pub fn create_project(
     let new_dev_folder = &full_path
         .join("html_project_template")
         .join(dev_folder_name);
-    // Copy the dist folder to the dev folder
+    // Copy the release folder to the dev folder
     copy(
         full_path
             .join("html_project_template")

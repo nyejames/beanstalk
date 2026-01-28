@@ -328,8 +328,8 @@ pub fn function_body_to_ast(
             }
 
             // String template as an expression without being assigned.
-            // NOTE: For output, use the io() function instead of top-level templates.
-            // The io() function is the standard way to print to stdout with automatic newlines.
+            // NOTE: For output, use the host_io_functions() function instead of top-level templates.
+            // The host_io_functions() function is the standard way to print to stdout with automatic newlines.
             TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);

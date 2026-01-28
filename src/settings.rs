@@ -1,6 +1,5 @@
-use crate::runtime::RuntimeConfig;
+use crate::compiler::host_functions::registry::RuntimeBackend;
 use std::path::PathBuf;
-use wasmer::sys::Target;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";
@@ -24,10 +23,10 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 
 #[derive(Clone)]
 pub enum ProjectType {
-    HTML,
-    Embedded,
-    Jit,  // Don't create output files, just run the code
-    Repl, // Start in a string template head
+    HTML,     // Will start off as pure JS, then become JS + Wasm as the compiler matures
+    Embedded, // Using Wasmer/Rust to embed Beanstalk into projects
+    Jit,      // Don't create output files, just run the code
+    Repl,     // Start in a string template head
 }
 
 impl Default for ProjectType {
@@ -48,9 +47,7 @@ pub struct Config {
     pub author: String,
     pub license: String,
     pub html_meta: HTMLMeta,
-
-    // New runtime and build system configuration
-    pub runtime: RuntimeConfig,
+    pub hot_reload: bool,
 }
 
 impl Config {
@@ -66,9 +63,14 @@ impl Config {
             author: String::new(),
             license: String::from("MIT"),
             html_meta: HTMLMeta::default(),
+            hot_reload: false,
+        }
+    }
 
-            // New configuration defaults
-            runtime: RuntimeConfig::for_development(),
+    pub fn runtime_backend(&self) -> RuntimeBackend {
+        match self.project_type {
+            ProjectType::HTML | ProjectType::Jit | ProjectType::Repl => RuntimeBackend::JavaScript,
+            ProjectType::Embedded => RuntimeBackend::Rust,
         }
     }
 }
@@ -86,9 +88,7 @@ impl Default for Config {
             author: String::new(),
             license: String::from("MIT"),
             html_meta: HTMLMeta::default(),
-
-            // New configuration defaults
-            runtime: RuntimeConfig::for_development(),
+            hot_reload: false,
         }
     }
 }

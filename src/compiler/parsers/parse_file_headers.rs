@@ -2,10 +2,8 @@ use crate::compiler::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::parsers::statements::imports::parse_import;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use crate::compiler::string_interning::{StringId, StringTable};
 use std::collections::{HashMap, HashSet};
@@ -55,6 +53,11 @@ impl Display for Header {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Header kind: {:#?}", self.kind)
     }
+}
+
+pub struct FileImport {
+    pub alias: Option<StringId>,
+    pub header_path: InternedPath,
 }
 
 // This takes all the files in the module
@@ -311,19 +314,15 @@ pub fn parse_headers_in_file(
             }
 
             // Nameless import,
-            // import @libraries/math/sqrt
+            // @(libraries/math/sqrt)
             // Just uses the end of the path as the name of the header being imported.
             // Named imports not yet supported, will need to be added through create_header.
-            TokenKind::Import => {
-                let import = parse_import(token_stream, string_table)?;
-                let import_symbol = if let Some(renamed_path) = import.alias {
-                    renamed_path
-                } else {
-                    import.header_path.to_interned_string(string_table)
-                };
-
-                file_imports.insert(import_symbol, import.header_path);
-                encountered_symbols.insert(import_symbol);
+            TokenKind::PathLiteral(interned_path) => {
+                encountered_symbols.insert(interned_path.to_interned_string(string_table));
+                file_imports.insert(
+                    interned_path.to_interned_string(string_table),
+                    interned_path,
+                );
             }
 
             TokenKind::Export => {
@@ -385,7 +384,7 @@ fn create_header(
     token_stream: &mut FileTokens,
     name_location: TextLocation,
     file_imports: &HashMap<StringId, InternedPath>,
-    host_registry: &HostRegistry,
+    _host_registry: &HostRegistry,
     string_table: &mut StringTable,
 ) -> Result<Header, CompilerError> {
     // We only need to know what imports this header is actually using.

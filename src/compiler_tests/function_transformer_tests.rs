@@ -233,7 +233,7 @@ fn test_transform_function_call_as_statement() {
 #[test]
 fn test_transform_host_function_call() {
     let mut string_table = StringTable::new();
-    let func_name = string_table.intern("io");
+    let func_name = string_table.intern("host_io_functions");
     let module = string_table.intern("beanstalk_io");
     let import = string_table.intern("print");
 

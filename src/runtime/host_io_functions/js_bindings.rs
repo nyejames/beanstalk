@@ -4,7 +4,7 @@
 // DOM manipulation, and web-specific functionality.
 
 use crate::compiler::compiler_errors::CompilerError;
-use crate::runtime::io::io::{IoConfig, IoInterface};
+use crate::runtime::host_io_functions::io::{IoConfig, IoInterface};
 
 pub struct JsBindingsIoBackend {
     _config: IoConfig,

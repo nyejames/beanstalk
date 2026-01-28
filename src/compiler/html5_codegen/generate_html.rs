@@ -1,5 +1,5 @@
 use crate::compiler::compiler_errors::CompilerError;
-use crate::runtime::io::js_bindings::JsBindingsGenerator;
+use crate::runtime::host_io_functions::js_bindings::JsBindingsGenerator;
 use crate::settings::HTMLMeta;
 use std::fs;
 
@@ -28,7 +28,7 @@ pub fn create_html_boilerplate(
                 "page-twitter-large-image",
                 &meta_tags.page_twitter_large_image,
             )
-            .replace("page-dist-url/", &meta_tags.page_root_url)
+            .replace("page-release-url/", &meta_tags.page_root_url)
             .replace("page-canonical-url", &meta_tags.page_canonical_url)
             .replace("site-favicons-folder-url", &meta_tags.favicons_folder_url)
             .replace("theme-color-light", &meta_tags.theme_color_light)

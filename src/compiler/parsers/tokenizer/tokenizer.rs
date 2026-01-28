@@ -1,3 +1,4 @@
+use crate::compiler::basic_utility_functions::NumericalParsing;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive;
@@ -477,7 +478,7 @@ pub fn get_token_kind(
         return compiler_directive(&mut token_value, stream, &string_table);
     }
 
-    // Used for paths outside of template heads
+    // Used for imports outside of template heads
     if current_char == '@' {
         if stream.mode == TokenizeMode::TemplateHead {
             while let Some(&next_char) = stream.peek() {
@@ -491,11 +492,9 @@ pub fn get_token_kind(
             return_token!(TokenKind::Id(interned), stream);
         }
 
-        // The @ should always be followed by a path
-        // Todo: allow spaces after the '@'?
         stream.next();
 
-        let path = tokenize_path(stream, &string_table)?;
+        let path = tokenize_path(stream, string_table)?;
         let interned_path = InternedPath::from_path_buf(&path, string_table);
         return_token!(TokenKind::PathLiteral(interned_path), stream);
     }
@@ -600,12 +599,6 @@ fn keyword_or_variable(
         match token_value.as_str() {
             // Control Flow
             // END_KEYWORD => return_token!(TokenKind::End, stream),
-
-            // Import Statement
-            "import" => {
-                return_token!(TokenKind::Import, stream)
-            }
-
             "if" => return_token!(TokenKind::If, stream),
             "return" => return_token!(TokenKind::Return, stream),
             "yield" => return_token!(TokenKind::Yield, stream),
@@ -771,7 +764,7 @@ fn tokenize_string(
     // If we reach here, the string was not terminated
     return_syntax_error!(
         "Unterminated string literal - missing closing quote",
-        stream.new_location().to_error_location(&string_table),
+        stream.new_location().to_error_location(string_table),
         {
             CompilationStage => "Tokenization",
             PrimarySuggestion => "Add closing double quote at the end of the string",
@@ -815,16 +808,33 @@ fn tokenize_path(
     string_table: &StringTable,
 ) -> Result<PathBuf, CompilerError> {
     let mut import_path = String::new();
-    let mut break_on_whitespace = true;
 
-    // If the path has to have whitespaces, it can be optionally surrounded by quotes
-    if stream.peek() == Some(&'"') {
-        break_on_whitespace = false;
+    // Skip initial non-newline whitespace
+    while let Some(c) = stream.peek() {
+        // Breakout on the first-detected whitespace or the end of the string
+        if c.is_non_newline_whitespace() && c != &'\n' {
+            continue;
+        }
+
+        break;
+    }
+
+    if stream.peek() == Some(&'(') {
+        stream.next();
+    } else {
+        return_syntax_error!(
+            "Path must start with an open parenthesis after '@'",
+            stream.new_location().to_error_location(string_table), {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Use an open parenthesis after '@' to start a path",
+            }
+        )
     }
 
     while let Some(c) = stream.peek() {
-        // Breakout on the first-detected whitespace or the end of the string
-        if (c.is_whitespace() && break_on_whitespace) || (*c == '"' && !break_on_whitespace) {
+        // Breakout on the first parenthesis that isn't escaped
+        if c == &')' {
+            stream.next();
             break;
         }
 
@@ -836,9 +846,9 @@ fn tokenize_path(
     if import_path.is_empty() {
         return_syntax_error!(
             "Import path cannot be empty",
-            stream.new_location().to_error_location(&string_table), {
+            stream.new_location().to_error_location(string_table), {
                 CompilationStage => "Tokenization",
-                PrimarySuggestion => "Provide a valid file path after '@'",
+                PrimarySuggestion => "Provide a valid file path",
             }
         )
     }

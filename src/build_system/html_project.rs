@@ -4,12 +4,10 @@
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 
 use crate::build::{BuildTarget, ProjectBuilder};
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
-use crate::compiler::string_interning::StringTable;
-use crate::settings::Config;
-use crate::{Compiler, Flag, InputModule, Project, return_config_error};
 use crate::build_system::core_build;
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
+use crate::settings::Config;
+use crate::{Flag, InputModule, Project, return_config_error};
 
 pub struct HtmlProjectBuilder {
     target: BuildTarget,
@@ -26,7 +24,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
         &self,
         modules: Vec<InputModule>,
         config: &Config,
-        _release_build: bool,
+        release_build: bool,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
         // Validate configuration
@@ -37,29 +35,9 @@ impl ProjectBuilder for HtmlProjectBuilder {
             });
         }
 
-        // Module capacity heuristic
-        // Just a guess of how many strings we might need to intern per module
-        const MODULES_CAPACITY: usize = 16;
-
-        // Create a new string table for interning strings
-        let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
-
-        let runtime_backend = RuntimeBackend::default();
-
-        // Create a builtin host function registry with print and other host functions
-        let host_registry =
-            create_builtin_registry(runtime_backend, &mut string_table).map_err(|e| {
-                CompilerMessages {
-                    errors: vec![e],
-                    warnings: Vec::new(),
-                }
-            })?;
-
-        // Create the compiler instance
-        let mut compiler = Compiler::new(config, host_registry, string_table);
-
         // Use the core build pipeline to compile to HIR
-        let compilation_result = core_build::compile_modules(&mut compiler, modules, flags)?;
+        let compilation_result =
+            core_build::compile_modules(modules, config, release_build, flags)?;
 
         // TODO
         // An HTML project has a directory-as-namespace structure.

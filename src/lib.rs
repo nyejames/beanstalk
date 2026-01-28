@@ -61,7 +61,6 @@ mod compiler {
             pub(crate) mod collections;
             pub(crate) mod create_template_node;
             pub(crate) mod functions;
-            pub(crate) mod imports;
             pub(crate) mod loops;
             pub(crate) mod structs;
             pub(crate) mod template;
@@ -99,9 +98,6 @@ mod compiler {
         pub(crate) mod compiler_errors;
         pub(crate) mod compiler_warnings;
     }
-    // Temporary re-exports to preserve old import paths after moving modules
-    // into `compiler_messages`. This minimizes churn across the codebase.
-    pub(crate) use compiler_messages::compiler_dev_logging;
     pub(crate) use compiler_messages::compiler_errors;
     pub(crate) use compiler_messages::compiler_warnings;
     pub(crate) mod datatypes;
@@ -169,13 +165,13 @@ pub enum Flag {
     Verbose, // TODO: Prints out absolutely everything
 }
 
-pub struct Compiler<'a> {
+pub struct CompilerFrontend<'a> {
     project_config: &'a Config,
     host_function_registry: HostRegistry,
     string_table: StringTable,
 }
 
-impl<'a> Compiler<'a> {
+impl<'a> CompilerFrontend<'a> {
     pub fn new(
         project_config: &'a Config,
         host_function_registry: HostRegistry,
@@ -299,42 +295,42 @@ impl<'a> Compiler<'a> {
         let mut checker = compiler::borrow_checker::BorrowChecker::new();
         checker.check_module(hir_module, &self.string_table)
     }
+}
 
-    /// -----------------------------
-    ///         LIR GENERATION
-    /// -----------------------------
-    /// Generate LIR from a validated HIR module.
-    ///
-    /// This stage transforms the high-level, language-shaped HIR into the
-    /// low-level, WASM-shaped LIR. The transformation:
-    /// - Resolves ownership decisions using runtime tagged pointers
-    /// - Lowers control flow structures to WASM-compatible blocks
-    /// - Converts RPN-ordered expressions into stack-based LIR instructions
-    /// - Lowers struct field access and collection operations to concrete memory offsets
-    /// - Allocates and tracks WASM locals for variables and temporaries
-    ///
-    /// **Validates: Requirements 8.1, 8.2, 8.4**
-    pub fn generate_lir(&self, hir_module: HirModule) -> Result<LirModule, CompilerMessages> {
-        let lir_module = lower_hir_to_lir(hir_module)?;
+/// -----------------------------
+///         LIR GENERATION
+/// -----------------------------
+/// Generate LIR from a validated HIR module.
+///
+/// This stage transforms the high-level, language-shaped HIR into the
+/// low-level, WASM-shaped LIR. The transformation:
+/// - Resolves ownership decisions using runtime tagged pointers
+/// - Lowers control flow structures to WASM-compatible blocks
+/// - Converts RPN-ordered expressions into stack-based LIR instructions
+/// - Lowers struct field access and collection operations to concrete memory offsets
+/// - Allocates and tracks WASM locals for variables and temporaries
+///
+/// **Validates: Requirements 8.1, 8.2, 8.4**
+pub fn generate_lir(hir_module: HirModule) -> Result<LirModule, CompilerMessages> {
+    let lir_module = lower_hir_to_lir(hir_module)?;
 
-        // Display LIR if the show_lir feature is enabled
-        #[cfg(feature = "show_lir")]
-        {
-            use crate::compiler::lir::display_lir;
-            println!("{}", display_lir(&lir_module));
-        }
-
-        Ok(lir_module)
+    // Display LIR if the show_lir feature is enabled
+    #[cfg(feature = "show_lir")]
+    {
+        use crate::compiler::lir::display_lir;
+        println!("{}", display_lir(&lir_module));
     }
 
-    /// -----------------------------
-    ///         Wasm Codegen
-    /// -----------------------------
-    /// Lower to wasm bytes from the LIR.
-    ///
-    /// This is the final stage of the compilation pipeline that produces
-    /// the actual WebAssembly bytecode from the LIR module.
-    pub fn generate_wasm(&self, lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
-        encode_wasm(lir)
-    }
+    Ok(lir_module)
+}
+
+/// -----------------------------
+///         Wasm Codegen
+/// -----------------------------
+/// Lower to wasm bytes from the LIR.
+///
+/// This is the final stage of the compilation pipeline that produces
+/// the actual WebAssembly bytecode from the LIR module.
+pub fn generate_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
+    encode_wasm(lir)
 }

@@ -117,7 +117,7 @@ pub fn encode_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
 /// Encode a LIR module into WASM bytes with host function support.
 ///
 /// This version accepts a host function registry to properly generate
-/// WASM imports for host functions like io().
+/// WASM imports for host functions like host_io_functions().
 ///
 /// ## Pipeline
 ///

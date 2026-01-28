@@ -109,8 +109,8 @@ pub enum NodeKind {
     Rvalue(Expression),
 
     // Built-in, always expected host Functions.
-    // Print node - deprecated in favor of io() host function
-    // The io() function is now the standard way to output to stdout
+    // Print node - deprecated in favor of host_io_functions() host function
+    // The host_io_functions() function is now the standard way to output to stdout
     // It accepts any type through CoerceToString and automatically adds newlines
     Print(Expression),
 

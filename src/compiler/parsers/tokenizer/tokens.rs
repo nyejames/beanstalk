@@ -52,7 +52,7 @@ impl TextLocation {
         }
     }
 
-    pub fn to_error_location(self, string_table: &StringTable) -> ErrorLocation {
+    pub fn to_error_location(&self, string_table: &StringTable) -> ErrorLocation {
         ErrorLocation {
             scope: self.scope.to_path_buf(string_table),
             start_pos: self.start_pos,
@@ -178,7 +178,7 @@ impl Token {
             TokenKind::Symbol(id) => string_table.resolve(*id) == other,
             TokenKind::StringSliceLiteral(id) => string_table.resolve(*id) == other,
             TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
-            TokenKind::PathLiteral(id) => &id.to_string(string_table) == other,
+            TokenKind::PathLiteral(id) => id.to_string(string_table) == other,
             TokenKind::ModuleStart(name) => name == other,
             _ => false,
         }

@@ -1126,8 +1126,8 @@ impl<'a> HirBuilderContext<'a> {
                 let (mut nodes, result_expr) = linearizer.linearize_expression(expr, self)?;
                 self.expression_linearizer = linearizer;
 
-                // Create a call to the io host function
-                let io_name = self.string_table.intern("io");
+                // Create a call to the host_io_functions host function
+                let io_name = self.string_table.intern("host_io_functions");
                 let node_id = self.allocate_node_id();
                 let build_context = self.create_build_context(node.location.clone());
                 self.record_node_context(node_id, build_context);
