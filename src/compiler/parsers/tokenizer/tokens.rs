@@ -326,7 +326,6 @@ pub enum TokenKind {
 
     // Module Import
     /// For Wasm files or host environment - importing from a different module or the host
-    Import,
     Export,
 
     /// For other Beanstalk files - indicates using public items from another file

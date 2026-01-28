@@ -116,6 +116,7 @@ mod compiler {
     pub(crate) mod lir;
 
     pub(crate) mod codegen {
+        pub(crate) mod js;
         pub(crate) mod wasm;
     }
 }
