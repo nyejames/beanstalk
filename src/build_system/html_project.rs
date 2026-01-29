@@ -3,8 +3,9 @@
 // Builds Beanstalk projects for web deployment, generating separate WASM files
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 
-use crate::build::{BuildTarget, ProjectBuilder};
+use crate::build::{BuildTarget, OutputFile, ProjectBuilder};
 use crate::build_system::core_build;
+use crate::compiler::codegen::js::lower_hir_to_js;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project, return_config_error};
@@ -39,6 +40,22 @@ impl ProjectBuilder for HtmlProjectBuilder {
         let compilation_result =
             core_build::compile_modules(modules, config, release_build, flags)?;
 
+        let mut compiler_messages = CompilerMessages {
+            errors: Vec::new(),
+            warnings: compilation_result.warnings,
+        };
+
+        let js_module = match lower_hir_to_js(
+            &compilation_result.hir_module,
+            &compilation_result.string_table,
+        ) {
+            Ok(module) => module,
+            Err(error) => {
+                compiler_messages.errors.push(error);
+                return Err(compiler_messages);
+            }
+        };
+
         // TODO
         // An HTML project has a directory-as-namespace structure.
         // So each directory becomes a separate HTML page.
@@ -47,12 +64,12 @@ impl ProjectBuilder for HtmlProjectBuilder {
         // Each directory becomes a separate Wasm module and has a specified index page.
         // Any other files (JS / CSS / HTML) would be copied over and have to be referenced from the index page for use.
 
-        let output_files = Vec::new();
+        let output_files = vec![OutputFile::Js(js_module.source)];
 
         Ok(Project {
             config: config.clone(),
             output_files,
-            warnings: Vec::new(),
+            warnings: compiler_messages.warnings,
         })
     }
 

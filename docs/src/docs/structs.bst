@@ -5,22 +5,19 @@
 
 [Docs.Navbar]
 
-[Docs.header, Basic.center: [Basic.title(): PLEXES]]
+[Docs.header, Basic.center: [Basic.title(): STRUCTS]]
 
-# The Plex
-A plex is a collection of named fields, similar to a struct in other languages.
+# The Struct
+A struct is a collection of named fields, similar to a struct in other languages.
 
-You define the shape of a Plex using the || parameter brackets syntax.
+They can implement methods by defining a function that takes an instance of the Struct as its first argument with the name 'this'.
 
-They can implement methods by defining a function that takes an instance of the Plex as its first argument with the name 'this'.
-
-Plexes can be assigned with default arguments, these can be any constant expression.
-
+Structs can be assigned with default arguments, these can be any constant expression.
 ```beanstalk
-    Person = |
+    Person:
         name String,
         age Int,
-    |
+    ;
 
     -- Create a new instance of the type
     person ~= Person("Alice", 30)
@@ -30,10 +27,10 @@ Plexes can be assigned with default arguments, these can be any constant express
     io(person.age)  -- 30
 
     -- Defining a plex, then defining a method for it
-    Vector2 = |
+    Vector2:
         x Float = 0,
         y Float = 0,
-    |
+    ;
 
     reset |this ~Vector2|:
         this.x = 0
@@ -52,10 +49,10 @@ by defining a parameter with the special name 'this'.
 
 ```beanstalk
     -- Define a plex
-    Rectangle = |
+    Rectangle:
         width Float,
         height Float,
-    |
+    ;
 
     -- Define a method for the Rectangle plex
     area |this ~Rectangle|:

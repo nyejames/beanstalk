@@ -3,13 +3,13 @@
 # Beanstalk
 
 <p><em>
-  A high level language that prioritises safety, simplicity, and a fast compiler.
+  A high level language that prioritises safety, simplicity and string building.
 </em></p>
 
 # 🌱
 
 <p>⚠️ This is a work in progress compiler ⚠️</p> 
-<p>The compiler backend (HIR, LIR, borrow checking, and codegen) is still under active development and evolving rapidly. See CONTRIBUTING.md and get in touch if you're inspired to help out</p>
+<p>The compiler backend is still under active development and evolving rapidly. See CONTRIBUTING.md and get in touch if you're inspired to help out</p>
 </div>
 <br>
 <br>
@@ -20,17 +20,17 @@
 
 </div>
 
-Beanstalk is designed for UI generation, templated content, and embedded Wasm applications, with a powerful compile-time and runtime template system at its core.
+Beanstalk is designed for UI and static site generation and embedding.
 
 ```haskell
-import @html/Basic
+@(html/Basic)
 
 -- Create a new blog post
 create_post |title String, date Int, content String| -> String:
     
     io("Creating a blog post!")
 
-    formatted_blog = [Basic.page:
+    formatted_blog = [Basic.section:
         [Basic.small, date]
         [Basic.center: 
             # [title]
@@ -46,16 +46,19 @@ create_post |title String, date Int, content String| -> String:
 ;
 ```
 
-This file now compiles to HTML + Wasm:
+The HTML build system will generate an HTML page from this code:
 ```haskell
-import @PostGenerator
+@(PostGenerator)
+@(html/Basic)
 
 date = 2025
 post = PostGenerator.create_post(date, [:
     I have absolutely nothing interesting to say, and never will.
 ])
 
-[post]
+[Basic.page:
+    [Basic.pad(3), post]
+]
 ```
 
 <div align="center">
@@ -72,7 +75,7 @@ post = PostGenerator.create_post(date, [:
 
 - String templates that can double up as a tiny compile time HTML/markup engine or anything else you want
 - Wasm focused backend designed around producing high-quality Wasm for portability and web integration
-- Minimal and coherent syntax for maximum readbility
+- Minimal and coherent syntax for maximum readability
 - A modular compiler with Fast compile times for snappy tooling and fast development builds
 - An integrated build system for web projects and beyond
 - Simple, static and strong type system

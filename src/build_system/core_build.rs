@@ -81,6 +81,7 @@ pub struct CompilationResult {
     pub required_module_imports: Vec<ExternalImport>,
     pub exported_functions: Vec<String>,
     pub warnings: Vec<CompilerWarning>,
+    pub string_table: StringTable,
 }
 
 /// Perform the core compilation pipeline shared by all project types
@@ -264,6 +265,7 @@ pub fn compile_modules(
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
         exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: compiler_messages.warnings,
+        string_table: compiler.string_table,
     })
 }
 

@@ -79,6 +79,62 @@ it must use a type signature or the name of one of the arguments if it's returni
             #panic "Panicking due to error"
         ;
     ;
-]
+```
+
+## Closures
+Closures in Beanstalk are nameless functions used as values.
+They use the same syntax as functions, but do not have a name and therefore cannot be declared at the top level.
+
+Closures may only appear inside a function or method body and are always expressions (rvalues).
+
+```beanstalk
+    update_total |values {Int}| -> Int:
+        total ~= 0
+
+        apply = |value Int|:
+            total += value
+        ;
+
+        loop v in values:
+            apply(v)
+        ;
+
+        return total
+    ;
+```
+
+### Capturing Variables
+A closure may reference values from its surrounding scope.
+This is called capture.
+
+Captures are implicit, references by default and subject to the same mutability and exclusivity rules as normal variables.
+
+### Returnning closures from functions
+Functions may return closures as values.
+
+To represent a closure type, Beanstalk uses the `Fn` keyword followed by the parameter and return type signatures inside of brackets.
+
+```beanstalk
+    -- Defining the type of a closure that takes an Int and returns a String
+    Fn(Int -> String)
+```
+
+```beanstalk
+    map |items {Int}, f Fn(Int -> Int)| -> {Int}:
+        result ~= {}
+        loop item in items:
+            result.push(f(item))
+        ;
+        return result
+    ;
+
+    each |items {Int}, f Fn(Int)|:
+        loop item in items:
+            f(item)
+        ;
+    ;
+```
+
+
 
 [Docs.Footer]

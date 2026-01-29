@@ -112,7 +112,7 @@ yield
 
 This is a cooperative pause point. It does not block the program; it simply tells the scheduler:
 
-> “I’m done for now — let something else run.”
+> “I'm done for now — let something else run.”
 
 More complex example:
 
@@ -193,11 +193,11 @@ For newcomers, this means async code looks like ordinary code — just with arro
 
 ⚠️ **This design is not yet implemented.**
 
-Beanstalk’s coroutine and async model is still in the design phase and depends on several external factors:
+Beanstalk's coroutine and async model is still in the design phase and depends on several external factors:
 
-* The evolution of **WebAssembly’s async and stack-switching support**
+* The evolution of **WebAssembly's async and stack-switching support**
 * How Wasm hosts (browsers, runtimes, engines) expose scheduling and suspension
-* How Beanstalk’s build system configures and integrates the Wasm environment with the host platform
+* How Beanstalk's build system configures and integrates the Wasm environment with the host platform
 
 In the future, the Beanstalk compiler and build system are expected to:
 

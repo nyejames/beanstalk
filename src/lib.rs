@@ -20,6 +20,8 @@ pub(crate) mod compiler_tests {
     #[cfg(test)]
     pub(crate) mod hir_errors_tests;
     #[cfg(test)]
+    pub(crate) mod js_codegen_tests;
+    #[cfg(test)]
     pub(crate) mod struct_handler_tests;
     #[cfg(test)]
     pub(crate) mod template_processor_tests;
@@ -66,7 +68,6 @@ mod compiler {
             pub(crate) mod template;
             pub(crate) mod variables;
         }
-        pub(crate) mod builtin_methods;
         pub(crate) mod field_access;
 
         pub(crate) mod tokenizer {
