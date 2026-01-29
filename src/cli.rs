@@ -1,9 +1,10 @@
 use crate::build::BuildTarget;
+use crate::build_system::html_project::new_html_project;
 use crate::build_system::repl;
 use crate::compiler::compiler_errors::print_compiler_messages;
 use crate::compiler_tests::test_runner::run_all_test_cases;
 use crate::settings::Config;
-use crate::{Flag, build, create_new_project, dev_server};
+use crate::{Flag, build, dev_server};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
 use std::path::PathBuf;
 use std::{
@@ -66,7 +67,7 @@ pub fn start_cli() {
                 None => "test_output".to_string(),
             };
 
-            match create_new_project::create_project(path, &project_name) {
+            match new_html_project::create_project(path, &project_name) {
                 Ok(_) => {
                     println!("Creating new HTML project...");
                 }
@@ -77,8 +78,7 @@ pub fn start_cli() {
         }
 
         Command::Build(path) => {
-            let mut starting_config = Config::new(path);
-            let messages = build::build_project_files(&mut starting_config, false, &flags, None);
+            let messages = build::build_project_files(&path, false, &flags, None);
             print_compiler_messages(messages);
         }
 

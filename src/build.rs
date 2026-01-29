@@ -7,7 +7,6 @@ use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use wasmer_types::target::Target;
 
 pub struct InputModule {
     pub source_code: String,
@@ -68,7 +67,9 @@ pub trait ProjectBuilder {
 /// Create the appropriate project builder based on configuration
 pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
     match target {
-        BuildTarget::HtmlProject => Box::new(html_project::HtmlProjectBuilder::new(target)),
+        BuildTarget::HtmlProject => Box::new(
+            html_project::html_project_builder::HtmlProjectBuilder::new(target),
+        ),
         BuildTarget::Embedded { .. } => {
             Box::new(embedded_project::EmbeddedProjectBuilder::new(target))
         }
@@ -122,7 +123,7 @@ pub fn determine_build_target(config: &Config) -> BuildTarget {
 /// - `Some(BuildTarget::Native { .. })`: Force native WASM output
 /// - `None`: Use automatic target detection based on project structure
 pub fn build_project_files(
-    project_config: &Config,
+    entry_dir: &Path,
     release_build: bool,
     flags: &[Flag],
     target_override: Option<BuildTarget>,
@@ -143,7 +144,7 @@ pub fn build_project_files(
         }
     };
 
-    let entry_dir = current_dir.join(project_config.entry_point.to_owned());
+    let mut project_config = Config::new(current_dir.join(entry_dir));
 
     //println!("Project Directory: ");
     //dark_yellow_ln!("{:?}", &entry_dir);
@@ -154,8 +155,6 @@ pub fn build_project_files(
     enum CompileType {
         SingleBeanstalkFile(String), // Source Code
         MultiFile(String),           // Config Source Code
-        #[allow(dead_code)]
-        SingleMarkthroughFile(String), // Source Code - for future use
     }
 
     let project_config_type = if entry_dir.extension() == Some(BEANSTALK_FILE_EXTENSION.as_ref()) {
@@ -194,17 +193,8 @@ pub fn build_project_files(
         CompileType::SingleBeanstalkFile(code) => {
             beanstalk_modules_to_parse.push(InputModule {
                 source_code: code,
-                source_path: project_config.entry_point.to_owned(),
+                source_path: entry_dir.to_owned(),
             });
-        }
-
-        CompileType::SingleMarkthroughFile(_code) => {
-            // TODO: Handle Markthrough files in the future
-            messages.errors.push(CompilerError::file_error(
-                &PathBuf::new(),
-                "Markthrough files are not yet supported",
-            ));
-            return messages;
         }
 
         // TODO: No longer have config files working,
@@ -255,14 +245,8 @@ pub fn build_project_files(
             // }
             //
             // Just use default for now
-            // TODO: custom config parser, as a mark through file?
-            let src_dir = entry_dir.join(&project_config.src);
-            let _output_dir = match release_build {
-                true => entry_dir.join(&project_config.release_folder),
-                false => entry_dir.join(&project_config.dev_folder),
-            };
 
-            match add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &src_dir) {
+            match add_bst_files_to_parse(&mut beanstalk_modules_to_parse, &entry_dir) {
                 // Currently doesn't emit warnings
                 Ok(_) => {}
                 Err(e) => {
@@ -298,8 +282,8 @@ pub fn build_project_files(
             let duration = start.elapsed();
 
             // Show build results
-            print!("\nBuild completed successfully in: ");
-            // println!("Generated {} output file(s)", project.output_files.len());
+            print!("\nBuilt {} files successfully in: ", project.output_files.len());
+            // println!("Generated {} output file(s)", );
 
             // grey_ln!("------------------------------------");
             // print!("\nProject built in: ");

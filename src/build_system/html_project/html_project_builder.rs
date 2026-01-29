@@ -59,10 +59,8 @@ impl ProjectBuilder for HtmlProjectBuilder {
         // TODO
         // An HTML project has a directory-as-namespace structure.
         // So each directory becomes a separate HTML page.
-        // Any .bst files in that directory are combined into a single WASM module.
-
-        // Each directory becomes a separate Wasm module and has a specified index page.
-        // Any other files (JS / CSS / HTML) would be copied over and have to be referenced from the index page for use.
+        // The entry point of that page is always called #page.bst.
+        // It can import other resources from that directory.
 
         let output_files = vec![OutputFile::Js(js_module.source)];
 

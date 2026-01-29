@@ -1,6 +1,5 @@
 pub(crate) mod build;
 pub mod cli;
-mod create_new_project;
 mod dev_server;
 pub mod settings;
 
@@ -38,7 +37,11 @@ pub(crate) mod runtime;
 pub(crate) mod build_system {
     pub(crate) mod core_build;
     pub(crate) mod embedded_project;
-    pub(crate) mod html_project;
+    pub(crate) mod html_project {
+        pub(crate) mod code_block_highlighting;
+        pub(crate) mod html_project_builder;
+        pub(crate) mod new_html_project;
+    }
     pub(crate) mod jit;
     pub(crate) mod repl;
 }
@@ -81,15 +84,6 @@ mod compiler {
     }
 
     pub(crate) mod module_dependencies;
-
-    mod html5_codegen {
-        pub(crate) mod code_block_highlighting;
-        pub(crate) mod dom_hooks;
-        pub(crate) mod generate_html;
-        pub(crate) mod html_styles;
-        // pub(crate) mod js_parser;
-        // pub(crate) mod web_parser;
-    }
 
     #[allow(dead_code)]
     pub(crate) mod basic_utility_functions;

@@ -313,10 +313,7 @@ pub fn parse_headers_in_file(
                 }
             }
 
-            // Nameless import,
-            // @(libraries/math/sqrt)
-            // Just uses the end of the path as the name of the header being imported.
-            // Named imports not yet supported, will need to be added through create_header.
+            // @(libraries/math: round, sqrt)
             TokenKind::PathLiteral(interned_path) => {
                 encountered_symbols.insert(interned_path.to_interned_string(string_table));
                 file_imports.insert(

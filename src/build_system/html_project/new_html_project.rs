@@ -19,24 +19,11 @@ pub fn create_project(
 
     // Copy project directory from /html_project_template folder to user specified path
     copy(
-        PathBuf::from("starting_project_templates/html_project_template"),
+        PathBuf::from("build_system/html_project/html_project_template")
+            .canonicalize()
+            .unwrap_or_else(|_| panic!("Failed to canonicalize html_project_template/index.html path!")),
         &full_path,
         &options,
-    )?;
-
-    // Create new dev folder
-    let dev_folder_name = Config::default().dev_folder;
-    let release_folder_name = Config::default().release_folder;
-    let new_dev_folder = &full_path
-        .join("html_project_template")
-        .join(dev_folder_name);
-    // Copy the release folder to the dev folder
-    copy(
-        full_path
-            .join("html_project_template")
-            .join(release_folder_name),
-        new_dev_folder,
-        &options.content_only(true),
     )?;
 
     fs::rename(full_path.join("html_project_template"), project_name)?;
