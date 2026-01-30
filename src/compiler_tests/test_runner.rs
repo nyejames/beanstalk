@@ -5,7 +5,6 @@ use crate::compiler::compiler_messages::compiler_errors::{
     error_type_to_str, print_formatted_error,
 };
 use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
-use crate::settings::Config;
 
 /// This module provides a focused test suite that validates the essential
 /// compiler operations without getting bogged down in implementation details.
@@ -46,13 +45,8 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     println!("  {}", file_name);
 
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    let mut default_config = Config::new(path);
-                    let messages = build_project_files(
-                        &mut default_config,
-                        false,
-                        &flags,
-                        Some(BuildTarget::Jit),
-                    );
+                    let messages =
+                        build_project_files(&path, false, &flags, Some(BuildTarget::Jit));
 
                     if messages.errors.is_empty() {
                         green_ln!("✓ PASS");
@@ -94,14 +88,9 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
                     // println!("\n------------------------------------------");
                     println!("  {}", file_name);
-                    let mut default_config = Config::new(path);
                     let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    let messages = build_project_files(
-                        &mut default_config,
-                        false,
-                        &flags,
-                        Some(BuildTarget::Jit),
-                    );
+                    let messages =
+                        build_project_files(&path, false, &flags, Some(BuildTarget::Jit));
 
                     if messages.errors.is_empty() {
                         yellow_ln!("✗ UNEXPECTED SUCCESS");

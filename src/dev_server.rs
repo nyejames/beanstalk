@@ -37,12 +37,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
     };
 
     let mut project_config = Config::new(path.to_owned());
-    let messages = build::build_project_files(
-        &mut project_config,
-        false,
-        flags,
-        Some(BuildTarget::HtmlProject),
-    );
+    let messages = build::build_project_files(&path, false, flags, Some(BuildTarget::HtmlProject));
 
     if messages.errors.is_empty() {
         print_bold!("Dev Server created on: ");
@@ -180,7 +175,7 @@ fn handle_connection(
                 if has_been_modified || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
                     let build_messages = build::build_project_files(
-                        project_config,
+                        path,
                         false,
                         flags,
                         Some(BuildTarget::HtmlProject),

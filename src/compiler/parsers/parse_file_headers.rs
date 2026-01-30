@@ -180,60 +180,6 @@ pub fn parse_headers_in_file(
         token_stream.advance();
 
         match current_token.kind.to_owned() {
-            // Template declaration at Top level
-            // This becomes an HTML page if this file is a Page in an HTML project
-            TokenKind::TopLevelTemplate => {
-                let mut dependencies: HashSet<InternedPath> = HashSet::new();
-                let mut templates_opened = 1;
-                let mut templates_closed = 0;
-                let mut template_content = Vec::new();
-
-                // Skip to the end of the template
-                while templates_opened > templates_closed {
-                    match token_stream.current_token_kind() {
-                        TokenKind::TemplateClose => {
-                            templates_closed += 1;
-                            if templates_opened > templates_closed {
-                                template_content
-                                    .push(token_stream.tokens[token_stream.index].to_owned());
-                            }
-                        }
-                        TokenKind::TemplateHead => {
-                            templates_opened += 1;
-                            template_content
-                                .push(token_stream.tokens[token_stream.index].to_owned());
-                        }
-                        TokenKind::Symbol(name_id) => {
-                            if let Some(path) = file_imports.get(name_id) {
-                                dependencies.insert(path.to_owned());
-                            }
-                            template_content
-                                .push(token_stream.tokens[token_stream.index].to_owned());
-                        }
-                        // Prevents the infinite loop if there is a missing closing tag
-                        TokenKind::Eof => {
-                            template_content
-                                .push(token_stream.tokens[token_stream.index].to_owned());
-
-                            break;
-                        }
-                        _ => {
-                            template_content
-                                .push(token_stream.tokens[token_stream.index].to_owned());
-                        }
-                    }
-                    token_stream.advance();
-                }
-
-                headers.push(Header {
-                    path: token_stream.src_path.to_owned(),
-                    kind: HeaderKind::Template(template_content),
-                    exported: true,
-                    dependencies,
-                    name_location: current_location,
-                });
-            }
-
             // New Function, Struct, Choice, or Constant declaration
             TokenKind::Symbol(name_id) => {
                 if host_function_registry.get_function(&name_id).is_none() {
@@ -314,12 +260,11 @@ pub fn parse_headers_in_file(
             }
 
             // @(libraries/math: round, sqrt)
-            TokenKind::PathLiteral(interned_path) => {
-                encountered_symbols.insert(interned_path.to_interned_string(string_table));
-                file_imports.insert(
-                    interned_path.to_interned_string(string_table),
-                    interned_path,
-                );
+            TokenKind::Import(interned_path, imports) => {
+                encountered_symbols.extend(imports.clone());
+                for import in imports {
+                    file_imports.insert(import, interned_path.clone());
+                }
             }
 
             TokenKind::Export => {

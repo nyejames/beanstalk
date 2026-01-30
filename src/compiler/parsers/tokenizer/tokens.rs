@@ -1,6 +1,6 @@
 use crate::compiler::datatypes::DataType;
 use crate::compiler::interned_path::InternedPath;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 
 use crate::compiler::compiler_errors::ErrorLocation;
 use crate::compiler::parsers::tokenizer::compiler_directives::CompilerDirective;
@@ -164,7 +164,7 @@ impl Token {
             TokenKind::Symbol(id) => string_table.resolve(*id).to_string(),
             TokenKind::StringSliceLiteral(id) => string_table.resolve(*id).to_string(),
             TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
-            TokenKind::PathLiteral(id) => id.to_string(string_table),
+            TokenKind::Import(path, imports) => format!("{}: {:?}", path.to_string(string_table), imports),
             TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }
@@ -178,7 +178,6 @@ impl Token {
             TokenKind::Symbol(id) => string_table.resolve(*id) == other,
             TokenKind::StringSliceLiteral(id) => string_table.resolve(*id) == other,
             TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
-            TokenKind::PathLiteral(id) => id.to_string(string_table) == other,
             TokenKind::ModuleStart(name) => name == other,
             _ => false,
         }
@@ -341,9 +340,9 @@ pub enum TokenKind {
     /// Variable name
     Symbol(InternedString),
 
-    // Literals
+    // Values
     StringSliceLiteral(InternedString),
-    PathLiteral(InternedPath),
+    Import(InternedPath, Vec<StringId>), // Compile time imports from a file
     FloatLiteral(f64),
     IntLiteral(i64),
     CharLiteral(char),

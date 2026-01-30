@@ -5,11 +5,9 @@ use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive
 use crate::compiler::parsers::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::compiler::string_interning::StringTable;
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::{return_syntax_error, settings, token_log};
 use colour::green_ln;
-use std::collections::HashSet;
-use std::path::PathBuf;
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -28,7 +26,6 @@ pub fn tokenize(
 ) -> Result<FileTokens, CompilerError> {
     // About 1/6 of the source code seems to be tokens roughly from some very small preliminary tests
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
-    let type_declarations_initial_capacity = settings::IMPORTS_CAPACITY;
 
     let mut template_nesting_level: i64 = if mode == TokenizeMode::Normal {
         0
@@ -39,7 +36,6 @@ pub fn tokenize(
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode);
-    let mut type_declarations = HashSet::with_capacity(type_declarations_initial_capacity);
 
     let mut token: Token = Token::new(
         TokenKind::ModuleStart(String::new()),
@@ -54,12 +50,7 @@ pub fn tokenize(
         }
 
         tokens.push(token);
-        token = get_token_kind(
-            &mut stream,
-            &mut template_nesting_level,
-            &mut type_declarations,
-            string_table,
-        )?;
+        token = get_token_kind(&mut stream, &mut template_nesting_level, string_table)?;
     }
 
     tokens.push(token);
@@ -71,7 +62,6 @@ pub fn tokenize(
 pub fn get_token_kind(
     stream: &mut TokenStream,
     template_nesting_level: &mut i64,
-    type_declarations: &mut HashSet<String>,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut current_char = match stream.next() {
@@ -343,12 +333,7 @@ pub fn get_token_kind(
                 }
 
                 // Do not add any token to the stream, call this function again
-                return get_token_kind(
-                    stream,
-                    template_nesting_level,
-                    type_declarations,
-                    string_table,
-                );
+                return get_token_kind(stream, template_nesting_level, string_table);
 
             // Subtraction / Negative / Return / Subtract Assign
             } else {
@@ -478,25 +463,23 @@ pub fn get_token_kind(
         return compiler_directive(&mut token_value, stream, &string_table);
     }
 
-    // Used for imports outside of template heads
+    // Used for imports at the top level
     if current_char == '@' {
-        if stream.mode == TokenizeMode::TemplateHead {
-            while let Some(&next_char) = stream.peek() {
-                if next_char.is_alphanumeric() || next_char == '_' {
-                    token_value.push(stream.next().unwrap());
-                    continue;
-                }
-                break;
-            }
-            let interned = string_table.intern(&token_value);
-            return_token!(TokenKind::Id(interned), stream);
-        }
+        // if stream.mode == TokenizeMode::TemplateHead {
+        //     while let Some(&next_char) = stream.peek() {
+        //         if next_char.is_alphanumeric() || next_char == '_' {
+        //             token_value.push(stream.next().unwrap());
+        //             continue;
+        //         }
+        //         break;
+        //     }
+        //     let interned = string_table.intern(&token_value);
+        //     return_token!(TokenKind::Id(interned), stream);
+        // }
 
         stream.next();
 
-        let path = tokenize_path(stream, string_table)?;
-        let interned_path = InternedPath::from_path_buf(&path, string_table);
-        return_token!(TokenKind::PathLiteral(interned_path), stream);
+        return parse_imports(stream, string_table);
     }
 
     // Wildcard for pattern matching
@@ -558,7 +541,7 @@ pub fn get_token_kind(
 
     if current_char.is_alphabetic() {
         token_value.push(current_char);
-        return keyword_or_variable(&mut token_value, stream, type_declarations, string_table);
+        return keyword_or_variable(&mut token_value, stream, string_table);
     }
 
     return_syntax_error!(
@@ -574,7 +557,6 @@ pub fn get_token_kind(
 fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream,
-    type_declarations: &mut HashSet<String>,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     // Match variables or keywords
@@ -636,11 +618,6 @@ fn keyword_or_variable(
 
         // VARIABLE
         if is_valid_identifier(token_value) {
-            // If this has a capital letter at the start of it, it's a type declaration
-            if token_value.chars().next().unwrap().is_uppercase() {
-                type_declarations.insert(token_value.clone());
-            }
-
             let interned_symbol = string_table.intern(token_value);
             return_token!(TokenKind::Symbol(interned_symbol), stream);
         } else {
@@ -803,11 +780,15 @@ fn tokenize_template_body(
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
 }
 
-fn tokenize_path(
+fn parse_imports(
     stream: &mut TokenStream,
-    string_table: &StringTable,
-) -> Result<PathBuf, CompilerError> {
-    let mut import_path = String::new();
+    string_table: &mut StringTable,
+) -> Result<Token, CompilerError> {
+    // Path Syntax
+    // @(path/to/file)
+    // Path to multiple items within the same directory (used for imports)
+    // @(path/to/file: import1, import2, import3)
+    let mut file_path = String::new();
 
     // Skip initial non-newline whitespace
     while let Some(c) = stream.peek() {
@@ -831,6 +812,7 @@ fn tokenize_path(
         )
     }
 
+    let mut imports: Vec<StringId> = Vec::new();
     while let Some(c) = stream.peek() {
         // Breakout on the first parenthesis that isn't escaped
         if c == &')' {
@@ -838,12 +820,57 @@ fn tokenize_path(
             break;
         }
 
-        import_path.push(c.to_owned());
+        if c == &':' {
+            stream.next();
+
+            // Collect the list of import symbols
+            let mut token_value = String::new();
+
+            while let Some(c) = stream.peek() {
+                if c.is_alphabetic() {
+                    token_value.push(*c);
+                    let symbol = match keyword_or_variable(&mut token_value, stream, string_table) {
+                        Ok(TokenKind::Symbol(symbol)) => symbol,
+                        Err(e) => return Err(e),
+                        _ => unreachable!(),
+                    };
+                    imports.push(symbol);
+
+                    // If the next non-whitespace token is a comma,
+                    // then another symbol is possible.
+                    // Otherwise, it must be whitespace or a final closing parenthesis
+                    stream.next();
+                    if let Some(c) = stream.peek() {
+                        match c {
+                            &',' => {
+                                stream.next();
+                                continue;
+                            }
+                            c if c.is_whitespace() => {
+                                stream.next();
+                                continue;
+                            }
+                            &')' => break,
+                            _ => return_syntax_error!(
+                                "Expected a comma or closing parenthesis after an import symbol",
+                                stream.new_location().to_error_location(string_table), {
+                                    CompilationStage => "Tokenization",
+                                    PrimarySuggestion => "Add a comma or closing parenthesis after the import symbol",
+                                }
+                            ),
+                        }
+                    }
+                }
+
+                stream.next();
+            }
+        }
+
+        file_path.push(c.to_owned());
         stream.next();
-        continue;
     }
 
-    if import_path.is_empty() {
+    if file_path.is_empty() {
         return_syntax_error!(
             "Import path cannot be empty",
             stream.new_location().to_error_location(string_table), {
@@ -853,5 +880,6 @@ fn tokenize_path(
         )
     }
 
-    Ok(PathBuf::from(import_path))
+    let interned_path = InternedPath::from_components(vec![string_table.intern(&file_path)]);
+    return_token!(TokenKind::Import(interned_path, imports), stream)
 }
