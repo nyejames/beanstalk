@@ -3,7 +3,7 @@
 // Builds Beanstalk projects for web deployment, generating separate WASM files
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 
-use crate::build::{BuildTarget, OutputFile, ProjectBuilder};
+use crate::build::{BuildTarget, FileKind, OutputFile, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::codegen::js::lower_hir_to_js;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
@@ -62,7 +62,10 @@ impl ProjectBuilder for HtmlProjectBuilder {
         // The entry point of that page is always called #page.bst.
         // It can import other resources from that directory.
 
-        let output_files = vec![OutputFile::Js(js_module.source)];
+        let output_files = vec![OutputFile::new(
+            config.dev_folder.join("index.html").to_string_lossy().to_string(),
+            FileKind::Js(js_module.source)
+        )];
 
         Ok(Project {
             config: config.clone(),

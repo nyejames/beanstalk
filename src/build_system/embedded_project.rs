@@ -3,7 +3,7 @@
 // Builds Beanstalk projects for embedding in other applications,
 // with support for hot reloading and custom IO interfaces.
 
-use crate::build::{BuildTarget, ProjectBuilder};
+use crate::build::{BuildTarget, FileKind, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
@@ -175,11 +175,10 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
 
             // Generate Rust embedding code
             let rust_code = self.generate_rust_embedding_code(module_name);
-            output_files.push(OutputFile::Html(rust_code)); // Using HTML variant for code content
-
-            // Generate C header for future C/C++ support
-            let c_header = self.generate_c_header(module_name);
-            output_files.push(OutputFile::Html(c_header)); // Using HTML variant for header content
+            output_files.push(OutputFile::new(
+                config.release_folder.join(format!("{}.rs", module_name)).to_string_lossy().to_string(),
+                FileKind::Html(rust_code),
+            ));
 
             if *hot_reload {
                 // Add hot reload configuration
@@ -192,7 +191,10 @@ auto_reload = true
 "#,
                     module_name
                 );
-                output_files.push(OutputFile::Html(hot_reload_config));
+                output_files.push(OutputFile::new(
+                    config.release_folder.join("hot_reload.toml").to_string_lossy().to_string(),
+                    FileKind::Html(hot_reload_config)),
+                );
             }
         }
 

@@ -1,10 +1,11 @@
-use crate::build_system::{embedded_project, html_project, jit};
+use crate::build_system::{embedded_project, html_project, jit_wasm};
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, ProjectType};
 use crate::{Flag, return_file_error, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
 use std::fs;
+use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -13,12 +14,22 @@ pub struct InputModule {
     pub source_path: PathBuf,
 }
 
-pub enum OutputFile {
+pub struct OutputFile {
+    pub full_file_path: String,
+    file_kind: FileKind,
+}
+
+pub enum FileKind {
     Wasm(Vec<u8>),
     Js(String), // Either just glue code for web or pure JS backend
     Html(String),
 }
 
+impl OutputFile {
+    pub fn new(full_file_path: String, file_kind: FileKind) -> Self {
+        Self { full_file_path, file_kind }
+    }
+}
 pub struct Project {
     pub config: Config,
     pub output_files: Vec<OutputFile>,
@@ -73,7 +84,7 @@ pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
         BuildTarget::Embedded { .. } => {
             Box::new(embedded_project::EmbeddedProjectBuilder::new(target))
         }
-        BuildTarget::Jit => Box::new(jit::JitProjectBuilder::new(target)),
+        BuildTarget::Jit => Box::new(jit_wasm::JitProjectBuilder::new(target)),
     }
 }
 
@@ -280,6 +291,12 @@ pub fn build_project_files(
     ) {
         Ok(project) => {
             let duration = start.elapsed();
+
+            // TODO: Now write the output files returned from the builder
+            for output_file in &project.output_files {
+                // A safety check to make sure the file name as been set
+                // This is to avoid accidently overwriting things by mistake
+            }
 
             // Show build results
             print!("\nBuilt {} files successfully in: ", project.output_files.len());

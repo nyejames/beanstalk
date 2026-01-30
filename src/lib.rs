@@ -42,7 +42,7 @@ pub(crate) mod build_system {
         pub(crate) mod html_project_builder;
         pub(crate) mod new_html_project;
     }
-    pub(crate) mod jit;
+    pub(crate) mod jit_wasm;
     pub(crate) mod repl;
 }
 
