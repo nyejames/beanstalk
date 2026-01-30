@@ -24,7 +24,6 @@ mod build_lir;
 mod context;
 mod control_flow;
 mod display;
-mod errors;
 mod expressions;
 mod functions;
 mod memory;

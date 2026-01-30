@@ -8,6 +8,7 @@ use crate::compiler::parsers::tokenizer::tokens::{
 use crate::compiler::string_interning::{StringId, StringTable};
 use crate::{return_syntax_error, settings, token_log};
 use colour::green_ln;
+use crate::compiler::parsers::imports::parse_imports;
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -778,108 +779,4 @@ fn tokenize_template_body(
 
     let interned_string = string_table.intern(&token_value);
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
-}
-
-fn parse_imports(
-    stream: &mut TokenStream,
-    string_table: &mut StringTable,
-) -> Result<Token, CompilerError> {
-    // Path Syntax
-    // @(path/to/file)
-    // Path to multiple items within the same directory (used for imports)
-    // @(path/to/file: import1, import2, import3)
-    let mut file_path = String::new();
-
-    // Skip initial non-newline whitespace
-    while let Some(c) = stream.peek() {
-        // Breakout on the first-detected whitespace or the end of the string
-        if c.is_non_newline_whitespace() && c != &'\n' {
-            continue;
-        }
-
-        break;
-    }
-
-    if stream.peek() == Some(&'(') {
-        stream.next();
-    } else {
-        return_syntax_error!(
-            "Path must start with an open parenthesis after '@'",
-            stream.new_location().to_error_location(string_table), {
-                CompilationStage => "Tokenization",
-                PrimarySuggestion => "Use an open parenthesis after '@' to start a path",
-            }
-        )
-    }
-
-    let mut imports: Vec<StringId> = Vec::new();
-    while let Some(c) = stream.peek() {
-        // Breakout on the first parenthesis that isn't escaped
-        if c == &')' {
-            stream.next();
-            break;
-        }
-
-        if c == &':' {
-            stream.next();
-
-            // Collect the list of import symbols
-            let mut token_value = String::new();
-
-            while let Some(c) = stream.peek() {
-                if c.is_alphabetic() {
-                    token_value.push(*c);
-                    let symbol = match keyword_or_variable(&mut token_value, stream, string_table) {
-                        Ok(TokenKind::Symbol(symbol)) => symbol,
-                        Err(e) => return Err(e),
-                        _ => unreachable!(),
-                    };
-                    imports.push(symbol);
-
-                    // If the next non-whitespace token is a comma,
-                    // then another symbol is possible.
-                    // Otherwise, it must be whitespace or a final closing parenthesis
-                    stream.next();
-                    if let Some(c) = stream.peek() {
-                        match c {
-                            &',' => {
-                                stream.next();
-                                continue;
-                            }
-                            c if c.is_whitespace() => {
-                                stream.next();
-                                continue;
-                            }
-                            &')' => break,
-                            _ => return_syntax_error!(
-                                "Expected a comma or closing parenthesis after an import symbol",
-                                stream.new_location().to_error_location(string_table), {
-                                    CompilationStage => "Tokenization",
-                                    PrimarySuggestion => "Add a comma or closing parenthesis after the import symbol",
-                                }
-                            ),
-                        }
-                    }
-                }
-
-                stream.next();
-            }
-        }
-
-        file_path.push(c.to_owned());
-        stream.next();
-    }
-
-    if file_path.is_empty() {
-        return_syntax_error!(
-            "Import path cannot be empty",
-            stream.new_location().to_error_location(string_table), {
-                CompilationStage => "Tokenization",
-                PrimarySuggestion => "Provide a valid file path",
-            }
-        )
-    }
-
-    let interned_path = InternedPath::from_components(vec![string_table.intern(&file_path)]);
-    return_token!(TokenKind::Import(interned_path, imports), stream)
 }

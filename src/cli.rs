@@ -83,9 +83,8 @@ pub fn start_cli() {
         }
 
         Command::Run(path) => {
-            let mut starting_config = Config::new(path);
             let messages = build::build_project_files(
-                &mut starting_config,
+                &path,
                 false,
                 &flags,
                 Some(BuildTarget::Jit),
@@ -94,8 +93,7 @@ pub fn start_cli() {
         }
 
         Command::Release(path) => {
-            let mut starting_config = Config::new(path);
-            let messages = build::build_project_files(&mut starting_config, true, &flags, None);
+            let messages = build::build_project_files(&path, true, &flags, None);
             print_compiler_messages(messages);
         }
 
