@@ -2,12 +2,13 @@ use crate::build_system::{embedded_project, html_project, jit_wasm};
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, ProjectType};
-use crate::{Flag, return_file_error, settings};
+use crate::{Flag, return_file_error, settings, return_compiler_error};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
-use std::fs;
+use std::{fs, path};
 use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
 
 pub struct InputModule {
     pub source_code: String,
@@ -23,6 +24,7 @@ pub enum FileKind {
     Wasm(Vec<u8>),
     Js(String), // Either just glue code for web or pure JS backend
     Html(String),
+    Directory, // So the build system can create empty folders if needed
 }
 
 impl OutputFile {
@@ -283,7 +285,7 @@ pub fn build_project_files(
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // -------------------------------------------
     let start = Instant::now();
-    match project_builder.build_project(
+    let output_files = match project_builder.build_project(
         beanstalk_modules_to_parse,
         &project_config,
         release_build,
@@ -292,26 +294,45 @@ pub fn build_project_files(
         Ok(project) => {
             let duration = start.elapsed();
 
-            // TODO: Now write the output files returned from the builder
-            for output_file in &project.output_files {
-                // A safety check to make sure the file name as been set
-                // This is to avoid accidently overwriting things by mistake
-            }
-
             // Show build results
             print!("\nBuilt {} files successfully in: ", project.output_files.len());
-            // println!("Generated {} output file(s)", );
-
-            // grey_ln!("------------------------------------");
-            // print!("\nProject built in: ");
             green_ln_bold!("{:?}", duration);
 
             messages.warnings.extend(project.warnings);
-            messages
+            project.output_files
         }
 
-        Err(compiler_messages) => compiler_messages,
+        Err(compiler_messages) => {
+            return compiler_messages
+        },
+    };
+
+    // TODO: Now write the output files returned from the builder
+    for output_file in output_files {
+        // A safety check to make sure the file name as been set
+        // This is to avoid accidentally overwriting things by mistake
+        if output_file.full_file_path.is_empty() {
+            messages.errors.push(CompilerError::file_error(
+                &current_dir,
+                "File did not have a name or path set",
+            ));
+
+            return messages
+        }
+
+        // Otherwise create the file and fill it with the code
+        let _ = match output_file.file_kind {
+            FileKind::Js(content) => {
+                fs::write(output_file.full_file_path, content)
+            }
+            FileKind::Wasm(content) => {
+                fs::write(output_file.full_file_path, content)
+            }
+            _ => {}
+        };
     }
+
+    messages
 }
 
 // Look for every subdirectory inside the dir and add all .bst files to the source_code_to_parse

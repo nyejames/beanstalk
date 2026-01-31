@@ -56,14 +56,14 @@ impl ProjectBuilder for HtmlProjectBuilder {
             }
         };
 
-        // TODO
-        // An HTML project has a directory-as-namespace structure.
-        // So each directory becomes a separate HTML page.
-        // The entry point of that page is always called #page.bst.
-        // It can import other resources from that directory.
+        // The project builder determines where the output files need to go
+        // by provided the full path from source for each file and its content
 
+        // TODO
+        // Create the full structure of the builder output
+        // Currently just outputs a single HTML file for testing
         let output_files = vec![OutputFile::new(
-            config.dev_folder.join("index.html").to_string_lossy().to_string(),
+            config.dev_folder.join("test.js").to_string_lossy().to_string(),
             FileKind::Js(js_module.source)
         )];
 

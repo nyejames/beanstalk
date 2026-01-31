@@ -5,31 +5,6 @@ pub mod settings;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod test_runner;
-
-//    #[cfg(test)]
-//    pub(crate) mod control_flow_linearizer_tests;
-//    #[cfg(test)]
-//    pub(crate) mod drop_point_inserter_tests;
-//    #[cfg(test)]
-//    pub(crate) mod expression_linearizer_tests;
-//    #[cfg(test)]
-//    pub(crate) mod function_transformer_tests;
-//    #[cfg(test)]
-//    pub(crate) mod hir_builder_tests;
-//    #[cfg(test)]
-//    pub(crate) mod hir_errors_tests;
-//    #[cfg(test)]
-//    pub(crate) mod js_codegen_tests;
-//    #[cfg(test)]
-//    pub(crate) mod struct_handler_tests;
-//    #[cfg(test)]
-//    pub(crate) mod template_processor_tests;
-//    #[cfg(test)]
-//    pub(crate) mod variable_manager_tests;
-//    #[cfg(test)]
-//    pub(crate) mod wasm_codegen_tests;
-//    #[cfg(test)]
-//    pub(crate) mod wasm_integration_tests;
 }
 
 // New runtime and build system modules
