@@ -43,7 +43,7 @@ pub fn lower_hir_to_js(
     hir_module: &HirModule,
     string_table: &StringTable,
 ) -> Result<JsModule, CompilerError> {
-    let mut context = JsCodegenContext::new(string_table);
+    let context = JsCodegenContext::new(string_table);
     context.emit_module(hir_module)
 }
 

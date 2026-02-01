@@ -1381,6 +1381,7 @@ pub fn print_formatted_error(e: CompilerError) {
 
         ErrorType::File => {
             e_yellow_ln!("🏚 Can't find/read file or directory: {:?}", relative_dir);
+            e_yellow_ln!("{}", e.msg);
             return;
         }
 

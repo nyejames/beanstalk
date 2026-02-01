@@ -1,14 +1,14 @@
 use crate::build_system::{embedded_project, html_project, jit_wasm};
+use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config, ProjectType};
-use crate::{Flag, return_file_error, settings, return_compiler_error};
+use crate::{Flag, return_compiler_error, return_file_error, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
-use std::{fs, path};
 use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
+use std::{fs, path};
 
 pub struct InputModule {
     pub source_code: String,
@@ -16,7 +16,7 @@ pub struct InputModule {
 }
 
 pub struct OutputFile {
-    pub full_file_path: String,
+    pub full_file_path: PathBuf,
     file_kind: FileKind,
 }
 
@@ -28,8 +28,11 @@ pub enum FileKind {
 }
 
 impl OutputFile {
-    pub fn new(full_file_path: String, file_kind: FileKind) -> Self {
-        Self { full_file_path, file_kind }
+    pub fn new(full_file_path: PathBuf, file_kind: FileKind) -> Self {
+        Self {
+            full_file_path,
+            file_kind,
+        }
     }
 }
 pub struct Project {
@@ -94,8 +97,8 @@ pub fn create_project_builder(target: BuildTarget) -> Box<dyn ProjectBuilder> {
 pub fn determine_build_target(config: &Config) -> BuildTarget {
     // Check if this is a single file or project
     if config.entry_point.extension().is_some() {
-        // Single file - default to JIT
-        BuildTarget::Jit
+        // Single file - default to HTML project
+        BuildTarget::HtmlProject
     } else {
         // Project directory - check config for the target type
         match &config.project_type {
@@ -295,40 +298,61 @@ pub fn build_project_files(
             let duration = start.elapsed();
 
             // Show build results
-            print!("\nBuilt {} files successfully in: ", project.output_files.len());
+            print!(
+                "\nBuilt {} files successfully in: ",
+                project.output_files.len()
+            );
             green_ln_bold!("{:?}", duration);
 
             messages.warnings.extend(project.warnings);
             project.output_files
         }
 
-        Err(compiler_messages) => {
-            return compiler_messages
-        },
+        Err(compiler_messages) => return compiler_messages,
     };
 
     // TODO: Now write the output files returned from the builder
     for output_file in output_files {
         // A safety check to make sure the file name as been set
         // This is to avoid accidentally overwriting things by mistake
-        if output_file.full_file_path.is_empty() {
+        if output_file.full_file_path == PathBuf::new() {
             messages.errors.push(CompilerError::file_error(
                 &current_dir,
                 "File did not have a name or path set",
             ));
 
-            return messages
+            return messages;
         }
 
         // Otherwise create the file and fill it with the code
-        let _ = match output_file.file_kind {
+        if let Err(e) = match output_file.file_kind {
             FileKind::Js(content) => {
-                fs::write(output_file.full_file_path, content)
-            }
+                let file = current_dir
+                    .join(output_file.full_file_path)
+                    .with_extension("js");
+                fs::write(file, content)
+            },
             FileKind::Wasm(content) => {
-                fs::write(output_file.full_file_path, content)
-            }
-            _ => {}
+                let file = current_dir
+                    .join(output_file.full_file_path)
+                    .with_extension("wasm");
+                fs::write(file, content)
+            },
+            FileKind::Directory => fs::create_dir_all(
+                current_dir.join(output_file.full_file_path
+            )),
+            FileKind::Html(content) => {
+                let file = current_dir
+                    .join(output_file.full_file_path)
+                    .with_extension("html");
+                fs::write(file, content)
+            },
+        } {
+            messages.errors.push(CompilerError::file_error(
+                &current_dir,
+                format!("Error writing file: {:?}", e),
+            ));
+            return messages;
         };
     }
 

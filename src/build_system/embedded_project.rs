@@ -9,7 +9,12 @@ use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
 use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
-use crate::{CompilerFrontend, Flag, InputModule, OutputFile, Project, return_config_error};
+use crate::{
+    CompilerFrontend, Flag, InputModule, OutputFile, Project, return_compiler_error,
+    return_config_error,
+};
+use std::env::current_dir;
+use std::path::PathBuf;
 
 pub struct EmbeddedProjectBuilder {
     target: BuildTarget,
@@ -158,17 +163,28 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
                 }
             })?;
 
-        // Create the compiler instance
-        let mut compiler = CompilerFrontend::new(config, host_registry, string_table);
-
         // Use the core build pipeline to compile to HIR
         let compilation_result =
-            core_build::compile_modules(modules, &config, release_build, flags)?;
+            core_build::compile_modules(modules, config, release_build, flags)?;
 
         // TODO: Write a Rust interpreter for Beanstalk modules
         // Or in the future if this is never done, just compile to Wasm and run the Wasm inside Wasmer
         // with some nice bindings back to Rust
         let mut output_files = vec![];
+
+        let current_dir = match current_dir() {
+            Ok(c) => c,
+            Err(e) => {
+                let err = CompilerError::file_error(
+                    &PathBuf::new(),
+                    format!("Failed to get current directory: {}", e),
+                );
+                return Err(CompilerMessages {
+                    errors: vec![err],
+                    warnings: compilation_result.warnings,
+                });
+            }
+        };
 
         if let BuildTarget::Embedded { hot_reload, .. } = &self.target {
             let module_name = &config.name;
@@ -176,7 +192,7 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
             // Generate Rust embedding code
             let rust_code = self.generate_rust_embedding_code(module_name);
             output_files.push(OutputFile::new(
-                config.release_folder.join(format!("{}.rs", module_name)).to_string_lossy().to_string(),
+                current_dir.join(format!("{}.rs", module_name)),
                 FileKind::Html(rust_code),
             ));
 
@@ -192,9 +208,9 @@ auto_reload = true
                     module_name
                 );
                 output_files.push(OutputFile::new(
-                    config.release_folder.join("hot_reload.toml").to_string_lossy().to_string(),
-                    FileKind::Html(hot_reload_config)),
-                );
+                    config.release_folder.join("hot_reload.toml"),
+                    FileKind::Html(hot_reload_config),
+                ));
             }
         }
 

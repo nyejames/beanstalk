@@ -5,10 +5,12 @@
 
 use crate::build::{BuildTarget, FileKind, OutputFile, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::codegen::js::lower_hir_to_js;
+use crate::compiler::codegen::js::{JsModule, lower_hir_to_js};
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project, return_config_error};
+use std::env;
+use std::path::PathBuf;
 
 pub struct HtmlProjectBuilder {
     target: BuildTarget,
@@ -63,8 +65,8 @@ impl ProjectBuilder for HtmlProjectBuilder {
         // Create the full structure of the builder output
         // Currently just outputs a single HTML file for testing
         let output_files = vec![OutputFile::new(
-            config.dev_folder.join("test.js").to_string_lossy().to_string(),
-            FileKind::Js(js_module.source)
+            PathBuf::from("test".to_string()),
+            FileKind::Js(js_module.source),
         )];
 
         Ok(Project {
