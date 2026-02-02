@@ -5,10 +5,10 @@
 
 use crate::build::{BuildTarget, FileKind, OutputFile, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::compiler::codegen::js::{JsModule, lower_hir_to_js};
+use crate::compiler::codegen::js::{JsLoweringConfig, JsModule};
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::settings::Config;
-use crate::{Flag, InputModule, Project, return_config_error};
+use crate::{Flag, InputModule, Project, lower_hir_to_js, return_config_error};
 use std::env;
 use std::path::PathBuf;
 
@@ -46,17 +46,13 @@ impl ProjectBuilder for HtmlProjectBuilder {
             errors: Vec::new(),
             warnings: compilation_result.warnings,
         };
-
-        let js_module = match lower_hir_to_js(
-            &compilation_result.hir_module,
-            &compilation_result.string_table,
-        ) {
-            Ok(module) => module,
-            Err(error) => {
-                compiler_messages.errors.push(error);
-                return Err(compiler_messages);
-            }
+        
+        let js_lowering_config = JsLoweringConfig {
+            pretty: !release_build,
+            emit_locations: !release_build,
         };
+
+        let js_module = lower_hir_to_js(&compilation_result.hir_module, js_lowering_config);
 
         // The project builder determines where the output files need to go
         // by provided the full path from source for each file and its content

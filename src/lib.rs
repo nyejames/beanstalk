@@ -99,6 +99,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 // Re-export types for the build system
+use crate::compiler::codegen::js::{JsLoweringConfig, JsModule};
 use crate::compiler::codegen::wasm::encode::encode_wasm;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
@@ -305,4 +306,16 @@ pub fn generate_lir(hir_module: HirModule) -> Result<LirModule, CompilerMessages
 /// the actual WebAssembly bytecode from the LIR module.
 pub fn generate_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
     encode_wasm(lir)
+}
+
+/// -----------------------------
+///          JS Codegen
+/// -----------------------------
+/// Lower a complete HIR module to JavaScript
+///
+/// Can be used instead of the Wasm backend.
+/// Aims to be the initial backend implementation for Beanstalk.
+pub fn lower_hir_to_js(hir: &HirModule, config: JsLoweringConfig) -> JsModule {
+    // implementation lives in js codegen module
+    todo!()
 }
