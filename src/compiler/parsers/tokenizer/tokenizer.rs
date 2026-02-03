@@ -1,6 +1,7 @@
 use crate::compiler::basic_utility_functions::NumericalParsing;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::InternedPath;
+use crate::compiler::parsers::imports::parse_imports;
 use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive;
 use crate::compiler::parsers::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
@@ -8,7 +9,6 @@ use crate::compiler::parsers::tokenizer::tokens::{
 use crate::compiler::string_interning::{StringId, StringTable};
 use crate::{return_syntax_error, settings, token_log};
 use colour::green_ln;
-use crate::compiler::parsers::imports::parse_imports;
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -606,6 +606,7 @@ fn keyword_or_variable(
             "True" => return_token!(TokenKind::DatatypeTrue, stream),
             "false" => return_token!(TokenKind::BoolLiteral(false), stream),
             "False" => return_token!(TokenKind::DatatypeFalse, stream),
+            "Fn" => return_token!(TokenKind::DatatypeFalse, stream),
 
             "Float" => return_token!(TokenKind::DatatypeFloat, stream),
             "Int" => return_token!(TokenKind::DatatypeInt, stream),

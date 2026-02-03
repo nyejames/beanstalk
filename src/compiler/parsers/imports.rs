@@ -79,19 +79,19 @@ pub fn parse_imports(
     // Get the first import between the last slash index and first comma OR last char
     if comma_indexes.len() == 1 {
         // If there is at least one comma, get the first item
-        let range_between = last_slash_index + 1 ..comma_indexes[0];
+        let range_between = last_slash_index + 1..comma_indexes[0];
         let interned_string = string_table.intern(&full_import_string[range_between]);
         imports.push(interned_string);
 
         // TODO: Support multiple imports separated with a coma
-
     } else {
         // If no commas, just get the only item
-        let range_between = last_slash_index + 1 .. full_import_string.len() - 1;
+        let range_between = last_slash_index + 1..full_import_string.len() - 1;
         let interned_string = string_table.intern(&full_import_string[range_between]);
         imports.push(interned_string);
     }
 
-    let interned_path = InternedPath::from_components(vec![string_table.intern(&full_import_string)]);
+    let interned_path =
+        InternedPath::from_components(vec![string_table.intern(&full_import_string)]);
     return_token!(TokenKind::Import(interned_path, imports), stream)
 }

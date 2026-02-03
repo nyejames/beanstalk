@@ -1,6 +1,7 @@
-use crate::compiler::codegen::js::js_statement::JsStmt;
 use crate::compiler::codegen::js::JsEmitter;
-use crate::compiler::hir::nodes::{HirExpr, HirExprKind, BinOp, UnaryOp};
+use crate::compiler::codegen::js::js_statement::JsStmt;
+use crate::compiler::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, UnaryOp};
 use crate::compiler::string_interning::InternedString;
 
 /// Result of lowering a HIR expression to JS
@@ -75,10 +76,10 @@ impl JsExpr {
     {
         // Merge preludes: self's statements first, then other's
         self.prelude.extend(other.prelude);
-        
+
         // Combine the values using the provided function
         let combined_value = combiner(&self.value, &other.value);
-        
+
         JsExpr {
             prelude: self.prelude,
             value: combined_value,
@@ -157,92 +158,85 @@ impl<'hir> JsEmitter<'hir> {
     /// Lowers a HIR expression to JavaScript
     ///
     /// Returns a JsExpr containing any necessary prelude statements
-    /// and the final expression value.
-    pub fn lower_expr(&mut self, expr: &HirExpr) -> JsExpr {
+    /// and the final expression value, or an error if lowering fails.
+    pub fn lower_expr(&mut self, expr: &HirExpr) -> Result<JsExpr, CompilerError> {
         match &expr.kind {
             // === Literals ===
-            HirExprKind::Int(value) => {
-                JsExpr::simple(value.to_string())
-            }
+            HirExprKind::Int(value) => Ok(JsExpr::simple(value.to_string())),
 
             HirExprKind::Float(value) => {
                 // Handle special float values
                 if value.is_nan() {
-                    JsExpr::simple("NaN".to_string())
+                    Ok(JsExpr::simple("NaN".to_string()))
                 } else if value.is_infinite() {
                     if value.is_sign_positive() {
-                        JsExpr::simple("Infinity".to_string())
+                        Ok(JsExpr::simple("Infinity".to_string()))
                     } else {
-                        JsExpr::simple("-Infinity".to_string())
+                        Ok(JsExpr::simple("-Infinity".to_string()))
                     }
                 } else {
-                    JsExpr::simple(value.to_string())
+                    Ok(JsExpr::simple(value.to_string()))
                 }
             }
 
-            HirExprKind::Bool(value) => {
-                JsExpr::simple(value.to_string())
-            }
+            HirExprKind::Bool(value) => Ok(JsExpr::simple(value.to_string())),
 
             HirExprKind::StringLiteral(s) | HirExprKind::HeapString(s) => {
                 // Both string types become JavaScript strings in GC semantics
                 let string_value = self.string_table.resolve(*s);
-                JsExpr::simple(escape_js_string(string_value))
+                Ok(JsExpr::simple(escape_js_string(string_value)))
             }
 
             HirExprKind::Char(c) => {
                 // Characters become single-character JavaScript strings
-                JsExpr::simple(escape_js_char(*c))
+                Ok(JsExpr::simple(escape_js_char(*c)))
             }
 
             // === Binary Operations ===
-            HirExprKind::BinOp { left, op, right } => {
-                self.lower_binop(left, *op, right)
-            }
+            HirExprKind::BinOp { left, op, right } => self.lower_binop(left, *op, right),
 
             // === Unary Operations ===
-            HirExprKind::UnaryOp { op, operand } => {
-                self.lower_unary_op(*op, operand)
-            }
+            HirExprKind::UnaryOp { op, operand } => self.lower_unary_op(*op, operand),
 
             // === Variable Access ===
             // In GC semantics, Load and Move are identical - both create references
             // to GC-managed data. The distinction is purely for optimization in
             // ownership-aware backends.
             HirExprKind::Load(place) | HirExprKind::Move(place) => {
-                let js_ref = self.lower_place(place);
-                JsExpr::simple(js_ref)
+                let js_ref = self.lower_place(place)?;
+                Ok(JsExpr::simple(js_ref))
             }
 
             // === Function Calls ===
-            HirExprKind::Call { target, args } => {
-                self.lower_call(*target, args)
-            }
+            HirExprKind::Call { target, args } => self.lower_call(*target, args),
 
-            HirExprKind::MethodCall { receiver, method, args } => {
-                self.lower_method_call(receiver, *method, args)
-            }
+            HirExprKind::MethodCall {
+                receiver,
+                method,
+                args,
+            } => self.lower_method_call(receiver, *method, args),
 
             // === Constructors ===
-            HirExprKind::StructConstruct { type_name: _, fields } => {
-                self.lower_struct_construct(fields)
-            }
+            HirExprKind::StructConstruct {
+                type_name: _,
+                fields,
+            } => self.lower_struct_construct(fields),
 
-            HirExprKind::Collection(elements) => {
-                self.lower_collection(elements)
-            }
+            HirExprKind::Collection(elements) => self.lower_collection(elements),
 
             // === Field Access ===
             HirExprKind::Field { base, field } => {
                 let base_name = self.string_table.resolve(*base);
                 let field_name = self.string_table.resolve(*field);
-                JsExpr::simple(format!("{}.{}", base_name, field_name))
+                Ok(JsExpr::simple(format!("{}.{}", base_name, field_name)))
             }
 
-            // TODO: Implement other expression types in subsequent tasks
-            _ => {
-                // For now, return a placeholder for unimplemented expressions
-                JsExpr::simple("/* TODO: unimplemented expression */".to_string())
+            // Unsupported expression types - return descriptive errors
+            unsupported => {
+                Err(CompilerError::compiler_error(format!(
+                    "JavaScript backend: Unsupported HIR expression type: {:?}. This indicates missing implementation in the JavaScript backend.",
+                    unsupported
+                )))
             }
         }
     }
@@ -251,32 +245,34 @@ impl<'hir> JsEmitter<'hir> {
     ///
     /// Places represent memory locations that can be read from or written to.
     /// In GC semantics, all places are references to GC-managed data.
-    pub(crate) fn lower_place(&mut self, place: &crate::compiler::hir::nodes::HirPlace) -> String {
+    ///
+    /// Returns an error if the place contains unsupported constructs.
+    pub(crate) fn lower_place(&mut self, place: &crate::compiler::hir::nodes::HirPlace) -> Result<String, CompilerError> {
         use crate::compiler::hir::nodes::HirPlace;
 
         match place {
             // Simple variable reference
             HirPlace::Var(name) => {
                 let js_ident = self.make_js_ident(*name);
-                js_ident.0
+                Ok(js_ident.0)
             }
 
             // Field access: base.field
             HirPlace::Field { base, field } => {
-                let base_js = self.lower_place(base);
+                let base_js = self.lower_place(base)?;
                 let field_name = self.string_table.resolve(*field);
-                format!("{}.{}", base_js, field_name)
+                Ok(format!("{}.{}", base_js, field_name))
             }
 
             // Index access: base[index]
             HirPlace::Index { base, index } => {
-                let base_js = self.lower_place(base);
-                let index_expr = self.lower_expr(index);
-                
+                let base_js = self.lower_place(base)?;
+                let index_expr = self.lower_expr(index)?;
+
                 // If the index expression has a prelude, we need to handle it
                 // For now, we'll just use the value directly
                 // TODO: Handle preludes properly when we implement statement emission
-                format!("{}[{}]", base_js, index_expr.value)
+                Ok(format!("{}[{}]", base_js, index_expr.value))
             }
         }
     }
@@ -285,15 +281,10 @@ impl<'hir> JsEmitter<'hir> {
     ///
     /// Handles operator precedence by wrapping operands in parentheses when necessary.
     /// Combines preludes from both operands to ensure proper evaluation order.
-    fn lower_binop(
-        &mut self,
-        left: &HirExpr,
-        op: BinOp,
-        right: &HirExpr,
-    ) -> JsExpr {
+    fn lower_binop(&mut self, left: &HirExpr, op: BinOp, right: &HirExpr) -> Result<JsExpr, CompilerError> {
         // Lower both operands
-        let left_expr = self.lower_expr(left);
-        let right_expr = self.lower_expr(right);
+        let left_expr = self.lower_expr(left)?;
+        let right_expr = self.lower_expr(right)?;
 
         // Map Beanstalk operators to JavaScript operators
         let js_op = match op {
@@ -314,29 +305,21 @@ impl<'hir> JsEmitter<'hir> {
             BinOp::Root => {
                 // Root operation: a root b = b^(1/a)
                 // In JavaScript: Math.pow(b, 1/a)
-                return left_expr.combine(right_expr, |l, r| {
-                    format!("Math.pow({}, 1 / {})", r, l)
-                });
+                return Ok(left_expr.combine(right_expr, |l, r| format!("Math.pow({}, 1 / {})", r, l)));
             }
         };
 
         // Combine the expressions with proper operator precedence
         // Wrap operands in parentheses to ensure correct evaluation order
-        left_expr.combine(right_expr, |l, r| {
-            format!("({} {} {})", l, js_op, r)
-        })
+        Ok(left_expr.combine(right_expr, |l, r| format!("({} {} {})", l, js_op, r)))
     }
 
     /// Lowers a unary operation to JavaScript
     ///
     /// Handles negation and logical not operations.
-    fn lower_unary_op(
-        &mut self,
-        op: UnaryOp,
-        operand: &HirExpr,
-    ) -> JsExpr {
+    fn lower_unary_op(&mut self, op: UnaryOp, operand: &HirExpr) -> Result<JsExpr, CompilerError> {
         // Lower the operand
-        let operand_expr = self.lower_expr(operand);
+        let operand_expr = self.lower_expr(operand)?;
 
         // Map Beanstalk unary operators to JavaScript operators
         let js_op = match op {
@@ -345,18 +328,14 @@ impl<'hir> JsEmitter<'hir> {
         };
 
         // Apply the operator with parentheses for clarity
-        operand_expr.map_value(|v| format!("({}{})", js_op, v))
+        Ok(operand_expr.map_value(|v| format!("({}{})", js_op, v)))
     }
 
     /// Lowers a function call to JavaScript
     ///
     /// Handles regular function calls with proper argument handling.
     /// All arguments are evaluated in order, with their preludes combined.
-    pub(crate) fn lower_call(
-        &mut self,
-        target: InternedString,
-        args: &[HirExpr],
-    ) -> JsExpr {
+    pub(crate) fn lower_call(&mut self, target: InternedString, args: &[HirExpr]) -> Result<JsExpr, CompilerError> {
         // Get the function name
         let func_name = self.make_js_ident(target);
 
@@ -365,11 +344,11 @@ impl<'hir> JsEmitter<'hir> {
         let mut arg_values = Vec::new();
 
         for arg in args {
-            let arg_expr = self.lower_expr(arg);
-            
+            let arg_expr = self.lower_expr(arg)?;
+
             // Collect preludes from all arguments
             all_preludes.extend(arg_expr.prelude);
-            
+
             // Collect the argument value
             arg_values.push(arg_expr.value);
         }
@@ -377,7 +356,7 @@ impl<'hir> JsEmitter<'hir> {
         // Build the function call expression
         let call_expr = format!("{}({})", func_name.0, arg_values.join(", "));
 
-        JsExpr::with_prelude(all_preludes, call_expr)
+        Ok(JsExpr::with_prelude(all_preludes, call_expr))
     }
 
     /// Lowers a method call to JavaScript
@@ -389,10 +368,10 @@ impl<'hir> JsEmitter<'hir> {
         receiver: &HirExpr,
         method: InternedString,
         args: &[HirExpr],
-    ) -> JsExpr {
+    ) -> Result<JsExpr, CompilerError> {
         // Lower the receiver
-        let receiver_expr = self.lower_expr(receiver);
-        
+        let receiver_expr = self.lower_expr(receiver)?;
+
         // Get the method name
         let method_name = self.string_table.resolve(method);
 
@@ -401,19 +380,24 @@ impl<'hir> JsEmitter<'hir> {
         let mut arg_values = Vec::new();
 
         for arg in args {
-            let arg_expr = self.lower_expr(arg);
-            
+            let arg_expr = self.lower_expr(arg)?;
+
             // Collect preludes from all arguments
             all_preludes.extend(arg_expr.prelude);
-            
+
             // Collect the argument value
             arg_values.push(arg_expr.value);
         }
 
         // Build the method call expression
-        let call_expr = format!("{}.{}({})", receiver_expr.value, method_name, arg_values.join(", "));
+        let call_expr = format!(
+            "{}.{}({})",
+            receiver_expr.value,
+            method_name,
+            arg_values.join(", ")
+        );
 
-        JsExpr::with_prelude(all_preludes, call_expr)
+        Ok(JsExpr::with_prelude(all_preludes, call_expr))
     }
 
     /// Lowers a struct construction to a JavaScript object literal
@@ -429,23 +413,20 @@ impl<'hir> JsEmitter<'hir> {
     /// ```javascript
     /// { name: "Alice", age: 30 }
     /// ```
-    fn lower_struct_construct(
-        &mut self,
-        fields: &[(InternedString, HirExpr)],
-    ) -> JsExpr {
+    fn lower_struct_construct(&mut self, fields: &[(InternedString, HirExpr)]) -> Result<JsExpr, CompilerError> {
         // Lower all field values
         let mut all_preludes = Vec::new();
         let mut field_pairs = Vec::new();
 
         for (field_name, field_value) in fields {
-            let field_expr = self.lower_expr(field_value);
-            
+            let field_expr = self.lower_expr(field_value)?;
+
             // Collect preludes from all field values
             all_preludes.extend(field_expr.prelude);
-            
+
             // Get the field name as a string
             let name = self.string_table.resolve(*field_name);
-            
+
             // Build the field pair: name: value
             field_pairs.push(format!("{}: {}", name, field_expr.value));
         }
@@ -457,7 +438,7 @@ impl<'hir> JsEmitter<'hir> {
             format!("{{ {} }}", field_pairs.join(", "))
         };
 
-        JsExpr::with_prelude(all_preludes, object_literal)
+        Ok(JsExpr::with_prelude(all_preludes, object_literal))
     }
 
     /// Lowers a collection construction to a JavaScript array literal
@@ -473,20 +454,17 @@ impl<'hir> JsEmitter<'hir> {
     /// ```javascript
     /// [1, 2, 3]
     /// ```
-    fn lower_collection(
-        &mut self,
-        elements: &[HirExpr],
-    ) -> JsExpr {
+    fn lower_collection(&mut self, elements: &[HirExpr]) -> Result<JsExpr, CompilerError> {
         // Lower all elements
         let mut all_preludes = Vec::new();
         let mut element_values = Vec::new();
 
         for element in elements {
-            let element_expr = self.lower_expr(element);
-            
+            let element_expr = self.lower_expr(element)?;
+
             // Collect preludes from all elements
             all_preludes.extend(element_expr.prelude);
-            
+
             // Collect the element value
             element_values.push(element_expr.value);
         }
@@ -498,7 +476,7 @@ impl<'hir> JsEmitter<'hir> {
             format!("[{}]", element_values.join(", "))
         };
 
-        JsExpr::with_prelude(all_preludes, array_literal)
+        Ok(JsExpr::with_prelude(all_preludes, array_literal))
     }
 }
 
@@ -515,7 +493,7 @@ impl<'hir> JsEmitter<'hir> {
 /// - Unicode characters
 fn escape_js_string(s: &str) -> String {
     let mut result = String::from("\"");
-    
+
     for ch in s.chars() {
         match ch {
             '\\' => result.push_str("\\\\"),
@@ -532,7 +510,7 @@ fn escape_js_string(s: &str) -> String {
             c => result.push(c),
         }
     }
-    
+
     result.push('"');
     result
 }
@@ -542,7 +520,7 @@ fn escape_js_string(s: &str) -> String {
 /// Characters in Beanstalk become single-character JavaScript strings.
 fn escape_js_char(c: char) -> String {
     let mut result = String::from("\"");
-    
+
     match c {
         '\\' => result.push_str("\\\\"),
         '"' => result.push_str("\\\""),
@@ -557,7 +535,7 @@ fn escape_js_char(c: char) -> String {
         // Regular characters
         ch => result.push(ch),
     }
-    
+
     result.push('"');
     result
 }

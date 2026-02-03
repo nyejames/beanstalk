@@ -331,22 +331,20 @@ pub fn build_project_files(
                     .join(output_file.full_file_path)
                     .with_extension("js");
                 fs::write(file, content)
-            },
+            }
             FileKind::Wasm(content) => {
                 let file = current_dir
                     .join(output_file.full_file_path)
                     .with_extension("wasm");
                 fs::write(file, content)
-            },
-            FileKind::Directory => fs::create_dir_all(
-                current_dir.join(output_file.full_file_path
-            )),
+            }
+            FileKind::Directory => fs::create_dir_all(current_dir.join(output_file.full_file_path)),
             FileKind::Html(content) => {
                 let file = current_dir
                     .join(output_file.full_file_path)
                     .with_extension("html");
                 fs::write(file, content)
-            },
+            }
         } {
             messages.errors.push(CompilerError::file_error(
                 &current_dir,

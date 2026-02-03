@@ -1,6 +1,6 @@
+use colour::red_ln;
 use fs_extra::dir::{CopyOptions, copy};
 use std::{env, fs, path::PathBuf};
-use colour::red_ln;
 
 pub fn create_project(
     user_project_path: PathBuf,
@@ -28,11 +28,7 @@ pub fn create_project(
     red_ln!("OS safe path: {:?}", os_safe_path);
 
     // Copy project directory from /html_project_template folder to user specified path
-    copy(
-        os_safe_path,
-        &full_path,
-        &options,
-    )?;
+    copy(os_safe_path, &full_path, &options)?;
 
     fs::rename(full_path.join("html_project_template"), project_name)?;
 

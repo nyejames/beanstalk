@@ -83,12 +83,7 @@ pub fn start_cli() {
         }
 
         Command::Run(path) => {
-            let messages = build::build_project_files(
-                &path,
-                false,
-                &flags,
-                Some(BuildTarget::Jit),
-            );
+            let messages = build::build_project_files(&path, false, &flags, Some(BuildTarget::Jit));
             print_compiler_messages(messages);
         }
 

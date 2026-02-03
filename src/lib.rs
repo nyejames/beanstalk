@@ -4,9 +4,12 @@ mod dev_server;
 pub mod settings;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod test_runner;
+    pub(crate) mod test_runner; // For running all integration tests and report back results
+
     #[cfg(test)]
     mod js_backend_tests;
+    #[cfg(test)]
+    mod name_hygiene_tests;
 }
 
 // New runtime and build system modules
@@ -317,6 +320,10 @@ pub fn generate_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
 ///
 /// Can be used instead of the Wasm backend.
 /// Aims to be the initial backend implementation for Beanstalk.
-pub fn lower_hir_to_js(hir: &HirModule, string_table: &StringTable, config: JsLoweringConfig) -> JsModule {
+pub fn lower_hir_to_js(
+    hir: &HirModule,
+    string_table: &StringTable,
+    config: JsLoweringConfig,
+) -> Result<JsModule, CompilerError> {
     js::lower_hir_to_js(hir, string_table, config)
 }

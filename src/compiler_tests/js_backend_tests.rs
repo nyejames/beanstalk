@@ -121,7 +121,7 @@ fn test_js_emitter_config() {
 
 #[cfg(test)]
 mod js_expr_tests {
-    use crate::compiler::codegen::js::{JsExpr, JsStmt, JsIdent};
+    use crate::compiler::codegen::js::{JsExpr, JsIdent, JsStmt};
 
     #[test]
     fn test_simple_expression() {
@@ -138,7 +138,7 @@ mod js_expr_tests {
             value: "compute()".to_string(),
         }];
         let expr = JsExpr::with_prelude(prelude, "_t0".to_string());
-        
+
         assert_eq!(expr.prelude.len(), 1);
         assert_eq!(expr.value, "_t0");
         assert!(!expr.is_pure());
@@ -148,9 +148,9 @@ mod js_expr_tests {
     fn test_combine_simple_expressions() {
         let left = JsExpr::simple("a".to_string());
         let right = JsExpr::simple("b".to_string());
-        
+
         let combined = left.combine(right, |l, r| format!("{} + {}", l, r));
-        
+
         assert!(combined.prelude.is_empty());
         assert_eq!(combined.value, "a + b");
         assert!(combined.is_pure());
@@ -181,10 +181,10 @@ mod js_expr_tests {
     #[test]
     fn test_prepend_prelude() {
         let mut expr = JsExpr::simple("x".to_string());
-        
+
         let new_statements = vec![JsStmt::Expr("setup()".to_string())];
         expr.prepend_prelude(new_statements);
-        
+
         assert_eq!(expr.prelude.len(), 1);
         assert_eq!(expr.value, "x");
     }
@@ -192,10 +192,10 @@ mod js_expr_tests {
     #[test]
     fn test_append_prelude() {
         let mut expr = JsExpr::simple("x".to_string());
-        
+
         let new_statements = vec![JsStmt::Expr("validate()".to_string())];
         expr.append_prelude(new_statements);
-        
+
         assert_eq!(expr.prelude.len(), 1);
         assert_eq!(expr.value, "x");
     }
@@ -204,12 +204,12 @@ mod js_expr_tests {
     fn test_prepend_and_append_order() {
         let initial_prelude = vec![JsStmt::Expr("middle()".to_string())];
         let mut expr = JsExpr::with_prelude(initial_prelude, "result".to_string());
-        
+
         expr.prepend_prelude(vec![JsStmt::Expr("first()".to_string())]);
         expr.append_prelude(vec![JsStmt::Expr("last()".to_string())]);
-        
+
         assert_eq!(expr.prelude.len(), 3);
-        
+
         // Verify order: first, middle, last
         match &expr.prelude[0] {
             JsStmt::Expr(s) => assert_eq!(s, "first()"),
@@ -229,7 +229,7 @@ mod js_expr_tests {
     fn test_map_value() {
         let expr = JsExpr::simple("x".to_string());
         let wrapped = expr.map_value(|v| format!("({})", v));
-        
+
         assert_eq!(wrapped.value, "(x)");
         assert!(wrapped.is_pure());
     }
@@ -242,7 +242,7 @@ mod js_expr_tests {
         }];
         let expr = JsExpr::with_prelude(prelude, "_t0".to_string());
         let wrapped = expr.map_value(|v| format!("Math.abs({})", v));
-        
+
         assert_eq!(wrapped.prelude.len(), 1);
         assert_eq!(wrapped.value, "Math.abs(_t0)");
     }
@@ -260,9 +260,9 @@ mod js_expr_tests {
             },
         ];
         let expr = JsExpr::with_prelude(prelude, "_t0 + _t1".to_string());
-        
+
         let (statements, value) = expr.into_parts();
-        
+
         assert_eq!(statements.len(), 2);
         assert_eq!(value, "_t0 + _t1");
     }
@@ -283,11 +283,11 @@ mod js_expr_tests {
 #[cfg(test)]
 mod literal_lowering_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule};
     use crate::compiler::datatypes::DataType;
-    use crate::compiler::string_interning::StringTable;
-    use crate::compiler::parsers::tokenizer::tokens::{TextLocation, CharPosition};
+    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::StringTable;
 
     /// Helper to create a test emitter
     fn create_test_emitter() -> (JsEmitter<'static>, Box<HirModule>, Box<StringTable>) {
@@ -321,8 +321,14 @@ mod literal_lowering_tests {
     fn dummy_location() -> TextLocation {
         TextLocation::new(
             InternedPath::new(),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         )
     }
 
@@ -336,7 +342,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "42");
     }
@@ -351,7 +357,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "-123");
     }
@@ -366,7 +372,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "3.14");
     }
@@ -381,7 +387,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "NaN");
     }
@@ -396,7 +402,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "Infinity");
     }
@@ -411,7 +417,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "-Infinity");
     }
@@ -426,7 +432,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "true");
     }
@@ -441,7 +447,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "false");
     }
@@ -457,7 +463,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "\"hello world\"");
     }
@@ -473,7 +479,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "\"hello\\nworld\\t\\\"quoted\\\"\"");
     }
@@ -489,7 +495,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "\"path\\\\to\\\\file\"");
     }
@@ -505,7 +511,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         // HeapString and StringLiteral should produce identical JS in GC semantics
         assert_eq!(result.value, "\"heap string\"");
@@ -521,7 +527,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "\"a\"");
     }
@@ -536,7 +542,7 @@ mod literal_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "\"😊\"");
     }
@@ -551,7 +557,7 @@ mod literal_lowering_tests {
             data_type: DataType::Char,
             location: dummy_location(),
         };
-        let result = emitter.lower_expr(&expr_newline);
+        let result = emitter.lower_expr(&expr_newline).unwrap();
         assert_eq!(result.value, "\"\\n\"");
 
         // Test tab
@@ -560,7 +566,7 @@ mod literal_lowering_tests {
             data_type: DataType::Char,
             location: dummy_location(),
         };
-        let result = emitter.lower_expr(&expr_tab);
+        let result = emitter.lower_expr(&expr_tab).unwrap();
         assert_eq!(result.value, "\"\\t\"");
 
         // Test quote
@@ -569,7 +575,7 @@ mod literal_lowering_tests {
             data_type: DataType::Char,
             location: dummy_location(),
         };
-        let result = emitter.lower_expr(&expr_quote);
+        let result = emitter.lower_expr(&expr_quote).unwrap();
         assert_eq!(result.value, "\"\\\"\"");
 
         // Test backslash
@@ -578,20 +584,19 @@ mod literal_lowering_tests {
             data_type: DataType::Char,
             location: dummy_location(),
         };
-        let result = emitter.lower_expr(&expr_backslash);
+        let result = emitter.lower_expr(&expr_backslash).unwrap();
         assert_eq!(result.value, "\"\\\\\"");
     }
 }
 
-
 #[cfg(test)]
 mod binary_and_unary_op_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::{BinOp, HirBlock, HirExpr, HirExprKind, HirModule, UnaryOp};
     use crate::compiler::datatypes::DataType;
-    use crate::compiler::string_interning::StringTable;
-    use crate::compiler::parsers::tokenizer::tokens::{TextLocation, CharPosition};
+    use crate::compiler::hir::nodes::{BinOp, HirBlock, HirExpr, HirExprKind, HirModule, UnaryOp};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::StringTable;
 
     /// Helper to create a test emitter
     fn create_test_emitter() -> (JsEmitter<'static>, Box<HirModule>, Box<StringTable>) {
@@ -625,8 +630,14 @@ mod binary_and_unary_op_tests {
     fn dummy_location() -> TextLocation {
         TextLocation::new(
             InternedPath::new(),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         )
     }
 
@@ -673,7 +684,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(5 + 3)");
     }
@@ -692,7 +703,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(10 - 4)");
     }
@@ -711,7 +722,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(6 * 7)");
     }
@@ -730,7 +741,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(20 / 5)");
     }
@@ -749,7 +760,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(17 % 5)");
     }
@@ -768,7 +779,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(2 ** 8)");
     }
@@ -787,7 +798,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         // Root operation: 3 root 27 = 27^(1/3)
         assert_eq!(result.value, "Math.pow(27, 1 / 3)");
@@ -809,7 +820,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(5 === 5)");
     }
@@ -828,7 +839,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(5 !== 3)");
     }
@@ -847,7 +858,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(3 < 5)");
     }
@@ -866,7 +877,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(5 <= 5)");
     }
@@ -885,7 +896,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(7 > 3)");
     }
@@ -904,7 +915,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(5 >= 5)");
     }
@@ -925,7 +936,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(true && false)");
     }
@@ -944,7 +955,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(true || false)");
     }
@@ -964,7 +975,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(-42)");
     }
@@ -982,7 +993,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(!true)");
     }
@@ -1014,7 +1025,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "((5 + 3) * 2)");
     }
@@ -1042,7 +1053,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(-(-5))");
     }
@@ -1071,7 +1082,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(-(5 + 3))");
     }
@@ -1090,7 +1101,7 @@ mod binary_and_unary_op_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "(3.14 * 2)");
     }
@@ -1099,11 +1110,11 @@ mod binary_and_unary_op_tests {
 #[cfg(test)]
 mod variable_access_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule, HirPlace};
     use crate::compiler::datatypes::DataType;
-    use crate::compiler::string_interning::StringTable;
-    use crate::compiler::parsers::tokenizer::tokens::{TextLocation, CharPosition};
+    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule, HirPlace};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::StringTable;
 
     /// Helper to create a test emitter
     fn create_test_emitter() -> (JsEmitter<'static>, Box<HirModule>, Box<StringTable>) {
@@ -1136,8 +1147,14 @@ mod variable_access_tests {
     fn dummy_location() -> TextLocation {
         TextLocation::new(
             InternedPath::new(),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         )
     }
 
@@ -1153,7 +1170,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "my_var");
     }
@@ -1169,7 +1186,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "my_var");
     }
@@ -1179,7 +1196,7 @@ mod variable_access_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let var_name = string_table.intern("test_var");
-        
+
         // Create Load expression
         let load_expr = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
@@ -1194,8 +1211,8 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let load_result = emitter.lower_expr(&load_expr);
-        let move_result = emitter.lower_expr(&move_expr);
+        let load_result = emitter.lower_expr(&load_expr).unwrap();
+        let move_result = emitter.lower_expr(&move_expr).unwrap();
 
         // In GC semantics, Load and Move should generate identical JavaScript
         assert_eq!(load_result.value, move_result.value);
@@ -1208,7 +1225,7 @@ mod variable_access_tests {
 
         let base_name = string_table.intern("person");
         let field_name = string_table.intern("name");
-        
+
         let place = HirPlace::Field {
             base: Box::new(HirPlace::Var(base_name)),
             field: field_name,
@@ -1220,7 +1237,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "person.name");
     }
@@ -1232,7 +1249,7 @@ mod variable_access_tests {
         let obj_name = string_table.intern("obj");
         let field1_name = string_table.intern("inner");
         let field2_name = string_table.intern("value");
-        
+
         let place = HirPlace::Field {
             base: Box::new(HirPlace::Field {
                 base: Box::new(HirPlace::Var(obj_name)),
@@ -1247,7 +1264,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "obj.inner.value");
     }
@@ -1257,7 +1274,7 @@ mod variable_access_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let array_name = string_table.intern("arr");
-        
+
         let place = HirPlace::Index {
             base: Box::new(HirPlace::Var(array_name)),
             index: Box::new(HirExpr {
@@ -1273,7 +1290,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "arr[0]");
     }
@@ -1284,7 +1301,7 @@ mod variable_access_tests {
 
         let array_name = string_table.intern("matrix");
         let i_name = string_table.intern("i");
-        
+
         let place = HirPlace::Index {
             base: Box::new(HirPlace::Var(array_name)),
             index: Box::new(HirExpr {
@@ -1300,7 +1317,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "matrix[i]");
     }
@@ -1317,7 +1334,7 @@ mod variable_access_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         // Reserved words should be prefixed with underscore
         assert_eq!(result.value, "_function");
@@ -1327,8 +1344,10 @@ mod variable_access_tests {
     fn test_lower_multiple_reserved_words() {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
-        let reserved_words = vec!["if", "else", "while", "for", "return", "const", "let", "var"];
-        
+        let reserved_words = vec![
+            "if", "else", "while", "for", "return", "const", "let", "var",
+        ];
+
         for word in reserved_words {
             let var_name = string_table.intern(word);
             let expr = HirExpr {
@@ -1337,7 +1356,7 @@ mod variable_access_tests {
                 location: dummy_location(),
             };
 
-            let result = emitter.lower_expr(&expr);
+            let result = emitter.lower_expr(&expr).unwrap();
             assert!(result.is_pure());
             assert_eq!(result.value, format!("_{}", word));
         }
@@ -1347,11 +1366,11 @@ mod variable_access_tests {
 #[cfg(test)]
 mod function_call_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule, HirPlace};
     use crate::compiler::datatypes::DataType;
-    use crate::compiler::string_interning::StringTable;
-    use crate::compiler::parsers::tokenizer::tokens::{TextLocation, CharPosition};
+    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule, HirPlace};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::StringTable;
 
     /// Helper to create a test emitter
     fn create_test_emitter() -> (JsEmitter<'static>, Box<HirModule>, Box<StringTable>) {
@@ -1384,8 +1403,14 @@ mod function_call_tests {
     fn dummy_location() -> TextLocation {
         TextLocation::new(
             InternedPath::new(),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         )
     }
 
@@ -1411,7 +1436,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "my_function()");
     }
@@ -1430,7 +1455,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "square(5)");
     }
@@ -1449,7 +1474,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "add(3, 7)");
     }
@@ -1460,23 +1485,21 @@ mod function_call_tests {
 
         let func_name = string_table.intern("process");
         let var_name = string_table.intern("data");
-        
+
         let expr = HirExpr {
             kind: HirExprKind::Call {
                 target: func_name,
-                args: vec![
-                    HirExpr {
-                        kind: HirExprKind::Load(HirPlace::Var(var_name)),
-                        data_type: DataType::String,
-                        location: dummy_location(),
-                    },
-                ],
+                args: vec![HirExpr {
+                    kind: HirExprKind::Load(HirPlace::Var(var_name)),
+                    data_type: DataType::String,
+                    location: dummy_location(),
+                }],
             },
             data_type: DataType::String,
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "process(data)");
     }
@@ -1486,7 +1509,7 @@ mod function_call_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let func_name = string_table.intern("calculate");
-        
+
         // Call calculate(5 + 3, 10 - 2)
         let arg1 = HirExpr {
             kind: HirExprKind::BinOp {
@@ -1517,7 +1540,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "calculate((5 + 3), (10 - 2))");
     }
@@ -1528,7 +1551,7 @@ mod function_call_tests {
 
         let outer_func = string_table.intern("outer");
         let inner_func = string_table.intern("inner");
-        
+
         // Call outer(inner(5))
         let inner_call = HirExpr {
             kind: HirExprKind::Call {
@@ -1548,7 +1571,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "outer(inner(5))");
     }
@@ -1568,7 +1591,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "_eval()");
     }
@@ -1579,7 +1602,7 @@ mod function_call_tests {
 
         let var_name = string_table.intern("obj");
         let method_name = string_table.intern("toString");
-        
+
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
             data_type: DataType::String,
@@ -1596,7 +1619,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "obj.toString()");
     }
@@ -1607,7 +1630,7 @@ mod function_call_tests {
 
         let var_name = string_table.intern("arr");
         let method_name = string_table.intern("push");
-        
+
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
             data_type: DataType::String,
@@ -1624,7 +1647,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "arr.push(42)");
     }
@@ -1635,7 +1658,7 @@ mod function_call_tests {
 
         let var_name = string_table.intern("str");
         let method_name = string_table.intern("substring");
-        
+
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
             data_type: DataType::String,
@@ -1652,7 +1675,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "str.substring(0, 5)");
     }
@@ -1664,7 +1687,7 @@ mod function_call_tests {
         let var_name = string_table.intern("str");
         let method1_name = string_table.intern("trim");
         let method2_name = string_table.intern("toLowerCase");
-        
+
         // str.trim()
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
@@ -1693,7 +1716,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "str.trim().toLowerCase()");
     }
@@ -1705,7 +1728,7 @@ mod function_call_tests {
         let obj_name = string_table.intern("person");
         let field_name = string_table.intern("name");
         let method_name = string_table.intern("toUpperCase");
-        
+
         // person.name
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Field {
@@ -1727,7 +1750,7 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "person.name.toUpperCase()");
     }
@@ -1738,7 +1761,7 @@ mod function_call_tests {
 
         let func_name = string_table.intern("getString");
         let method_name = string_table.intern("length");
-        
+
         // getString()
         let receiver = HirExpr {
             kind: HirExprKind::Call {
@@ -1760,21 +1783,20 @@ mod function_call_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "getString().length()");
     }
 }
 
-
 #[cfg(test)]
 mod constructor_lowering_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule};
     use crate::compiler::datatypes::DataType;
-    use crate::compiler::string_interning::StringTable;
-    use crate::compiler::parsers::tokenizer::tokens::{TextLocation, CharPosition};
+    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule};
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::StringTable;
 
     /// Helper to create a test emitter
     fn create_test_emitter() -> (JsEmitter<'static>, Box<HirModule>, Box<StringTable>) {
@@ -1808,8 +1830,14 @@ mod constructor_lowering_tests {
     fn dummy_location() -> TextLocation {
         TextLocation::new(
             InternedPath::new(),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         )
     }
 
@@ -1838,7 +1866,7 @@ mod constructor_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "{}");
     }
@@ -1849,7 +1877,7 @@ mod constructor_lowering_tests {
 
         let type_name = string_table.intern("Person");
         let field_name = string_table.intern("age");
-        
+
         let expr = HirExpr {
             kind: HirExprKind::StructConstruct {
                 type_name,
@@ -1859,7 +1887,7 @@ mod constructor_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "{ age: 30 }");
     }
@@ -1871,7 +1899,7 @@ mod constructor_lowering_tests {
         let type_name = string_table.intern("Person");
         let name_field = string_table.intern("name");
         let age_field = string_table.intern("age");
-        
+
         let name_str = string_table.intern("Alice");
         let name_expr = HirExpr {
             kind: HirExprKind::StringLiteral(name_str),
@@ -1882,16 +1910,13 @@ mod constructor_lowering_tests {
         let expr = HirExpr {
             kind: HirExprKind::StructConstruct {
                 type_name,
-                fields: vec![
-                    (name_field, name_expr),
-                    (age_field, int_expr(30)),
-                ],
+                fields: vec![(name_field, name_expr), (age_field, int_expr(30))],
             },
             data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "{ name: \"Alice\", age: 30 }");
     }
@@ -1904,7 +1929,7 @@ mod constructor_lowering_tests {
         let person_type = string_table.intern("Person");
         let street_field = string_table.intern("street");
         let address_field = string_table.intern("address");
-        
+
         let street_str = string_table.intern("Main St");
         let street_expr = HirExpr {
             kind: HirExprKind::StringLiteral(street_str),
@@ -1932,7 +1957,7 @@ mod constructor_lowering_tests {
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "{ address: { street: \"Main St\" } }");
     }
@@ -1945,11 +1970,14 @@ mod constructor_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![]),
-            data_type: DataType::Collection(Box::new(DataType::Int), crate::compiler::datatypes::Ownership::default()),
+            data_type: DataType::Collection(
+                Box::new(DataType::Int),
+                crate::compiler::datatypes::Ownership::default(),
+            ),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "[]");
     }
@@ -1960,11 +1988,14 @@ mod constructor_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![int_expr(42)]),
-            data_type: DataType::Collection(Box::new(DataType::Int), crate::compiler::datatypes::Ownership::default()),
+            data_type: DataType::Collection(
+                Box::new(DataType::Int),
+                crate::compiler::datatypes::Ownership::default(),
+            ),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "[42]");
     }
@@ -1981,11 +2012,14 @@ mod constructor_lowering_tests {
                 int_expr(4),
                 int_expr(5),
             ]),
-            data_type: DataType::Collection(Box::new(DataType::Int), crate::compiler::datatypes::Ownership::default()),
+            data_type: DataType::Collection(
+                Box::new(DataType::Int),
+                crate::compiler::datatypes::Ownership::default(),
+            ),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "[1, 2, 3, 4, 5]");
     }
@@ -1996,13 +2030,13 @@ mod constructor_lowering_tests {
 
         let hello = string_table.intern("hello");
         let world = string_table.intern("world");
-        
+
         let hello_expr = HirExpr {
             kind: HirExprKind::StringLiteral(hello),
             data_type: DataType::String,
             location: dummy_location(),
         };
-        
+
         let world_expr = HirExpr {
             kind: HirExprKind::StringLiteral(world),
             data_type: DataType::String,
@@ -2011,11 +2045,14 @@ mod constructor_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![hello_expr, world_expr]),
-            data_type: DataType::Collection(Box::new(DataType::String), crate::compiler::datatypes::Ownership::default()),
+            data_type: DataType::Collection(
+                Box::new(DataType::String),
+                crate::compiler::datatypes::Ownership::default(),
+            ),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "[\"hello\", \"world\"]");
     }
@@ -2027,13 +2064,19 @@ mod constructor_lowering_tests {
         // Create inner collections
         let inner1 = HirExpr {
             kind: HirExprKind::Collection(vec![int_expr(1), int_expr(2)]),
-            data_type: DataType::Collection(Box::new(DataType::Int), crate::compiler::datatypes::Ownership::default()),
+            data_type: DataType::Collection(
+                Box::new(DataType::Int),
+                crate::compiler::datatypes::Ownership::default(),
+            ),
             location: dummy_location(),
         };
 
         let inner2 = HirExpr {
             kind: HirExprKind::Collection(vec![int_expr(3), int_expr(4)]),
-            data_type: DataType::Collection(Box::new(DataType::Int), crate::compiler::datatypes::Ownership::default()),
+            data_type: DataType::Collection(
+                Box::new(DataType::Int),
+                crate::compiler::datatypes::Ownership::default(),
+            ),
             location: dummy_location(),
         };
 
@@ -2041,13 +2084,16 @@ mod constructor_lowering_tests {
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![inner1, inner2]),
             data_type: DataType::Collection(
-                Box::new(DataType::Collection(Box::new(DataType::Int), crate::compiler::datatypes::Ownership::default())),
+                Box::new(DataType::Collection(
+                    Box::new(DataType::Int),
+                    crate::compiler::datatypes::Ownership::default(),
+                )),
                 crate::compiler::datatypes::Ownership::default(),
             ),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "[[1, 2], [3, 4]]");
     }
@@ -2064,10 +2110,7 @@ mod constructor_lowering_tests {
         let point1 = HirExpr {
             kind: HirExprKind::StructConstruct {
                 type_name: point_type,
-                fields: vec![
-                    (x_field, int_expr(0)),
-                    (y_field, int_expr(0)),
-                ],
+                fields: vec![(x_field, int_expr(0)), (y_field, int_expr(0))],
             },
             data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
@@ -2077,10 +2120,7 @@ mod constructor_lowering_tests {
         let point2 = HirExpr {
             kind: HirExprKind::StructConstruct {
                 type_name: point_type,
-                fields: vec![
-                    (x_field, int_expr(10)),
-                    (y_field, int_expr(20)),
-                ],
+                fields: vec![(x_field, int_expr(10)), (y_field, int_expr(20))],
             },
             data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
@@ -2090,13 +2130,16 @@ mod constructor_lowering_tests {
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![point1, point2]),
             data_type: DataType::Collection(
-                Box::new(DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default())),
+                Box::new(DataType::Struct(
+                    vec![],
+                    crate::compiler::datatypes::Ownership::default(),
+                )),
                 crate::compiler::datatypes::Ownership::default(),
             ),
             location: dummy_location(),
         };
 
-        let result = emitter.lower_expr(&expr);
+        let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
         assert_eq!(result.value, "[{ x: 0, y: 0 }, { x: 10, y: 20 }]");
     }
@@ -2311,20 +2354,22 @@ mod statement_emission_tests {
 
         emitter.emit_stmts(&stmts);
 
-        let expected = "\nlet obj = { x: 10, y: 20 };\nlet arr = [1, 2, 3];\nconsole.log(obj.x + arr[0]);";
+        let expected =
+            "\nlet obj = { x: 10, y: 20 };\nlet arr = [1, 2, 3];\nconsole.log(obj.x + arr[0]);";
         assert_eq!(emitter.out, expected);
     }
 }
 
-
 #[cfg(test)]
 mod assignment_statement_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule, HirPlace, HirStmt};
     use crate::compiler::datatypes::DataType;
-    use crate::compiler::string_interning::StringTable;
-    use crate::compiler::parsers::tokenizer::tokens::{TextLocation, CharPosition};
+    use crate::compiler::hir::nodes::{
+        HirBlock, HirExpr, HirExprKind, HirModule, HirPlace, HirStmt,
+    };
     use crate::compiler::interned_path::InternedPath;
+    use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
+    use crate::compiler::string_interning::StringTable;
 
     /// Helper to create a test emitter
     fn create_test_emitter() -> (JsEmitter<'static>, Box<HirModule>, Box<StringTable>) {
@@ -2358,8 +2403,14 @@ mod assignment_statement_tests {
     fn dummy_location() -> TextLocation {
         TextLocation::new(
             InternedPath::new(),
-            CharPosition { line_number: 1, char_column: 1 },
-            CharPosition { line_number: 1, char_column: 1 },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
+            CharPosition {
+                line_number: 1,
+                char_column: 1,
+            },
         )
     }
 
@@ -2390,7 +2441,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let var_name = string_table.intern("x");
-        
+
         // First assignment
         let stmt1 = HirStmt::Assign {
             target: HirPlace::Var(var_name),
@@ -2427,7 +2478,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let var_name = string_table.intern("y");
-        
+
         // Assignment with is_mutable = true
         let stmt = HirStmt::Assign {
             target: HirPlace::Var(var_name),
@@ -2449,7 +2500,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let var_name = string_table.intern("result");
-        
+
         // Assignment with a binary operation: result = 5 + 3
         let stmt = HirStmt::Assign {
             target: HirPlace::Var(var_name),
@@ -2485,7 +2536,7 @@ mod assignment_statement_tests {
         let var_x = string_table.intern("x");
         let var_y = string_table.intern("y");
         let var_z = string_table.intern("z");
-        
+
         // Assign to x
         let stmt1 = HirStmt::Assign {
             target: HirPlace::Var(var_x),
@@ -2535,7 +2586,7 @@ mod assignment_statement_tests {
 
         let obj_name = string_table.intern("obj");
         let field_name = string_table.intern("value");
-        
+
         // First, declare the object
         let stmt1 = HirStmt::Assign {
             target: HirPlace::Var(obj_name),
@@ -2578,7 +2629,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let arr_name = string_table.intern("arr");
-        
+
         // First, declare the array
         let stmt1 = HirStmt::Assign {
             target: HirPlace::Var(arr_name),
@@ -2622,10 +2673,10 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let var_name = string_table.intern("x");
-        
+
         // PossibleDrop statement
         let stmt = HirStmt::PossibleDrop(HirPlace::Var(var_name));
-        
+
         let output_before = emitter.out.clone();
         emitter.lower_stmt(&stmt);
         let output_after = emitter.out.clone();
@@ -2639,7 +2690,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let func_name = string_table.intern("foo");
-        
+
         // Expression statement: foo()
         let stmt = HirStmt::ExprStmt(HirExpr {
             kind: HirExprKind::Call {
@@ -2660,7 +2711,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let func_name = string_table.intern("myFunction");
-        
+
         // HirStmt::Call with no arguments
         let stmt = HirStmt::Call {
             target: func_name,
@@ -2677,7 +2728,7 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let func_name = string_table.intern("calculate");
-        
+
         // HirStmt::Call with arguments: calculate(5, 10)
         let stmt = HirStmt::Call {
             target: func_name,
@@ -2707,19 +2758,17 @@ mod assignment_statement_tests {
         let func_name = string_table.intern("io");
         let module_name = string_table.intern("host");
         let import_name = string_table.intern("print");
-        
+
         // HirStmt::HostCall: io("Hello, World!")
         let stmt = HirStmt::HostCall {
             target: func_name,
             module: module_name,
             import: import_name,
-            args: vec![
-                HirExpr {
-                    kind: HirExprKind::StringLiteral(string_table.intern("Hello, World!")),
-                    data_type: DataType::String,
-                    location: dummy_location(),
-                },
-            ],
+            args: vec![HirExpr {
+                kind: HirExprKind::StringLiteral(string_table.intern("Hello, World!")),
+                data_type: DataType::String,
+                location: dummy_location(),
+            }],
         };
         emitter.lower_stmt(&stmt);
 
@@ -2735,7 +2784,7 @@ mod assignment_statement_tests {
         let func_name = string_table.intern("io");
         let module_name = string_table.intern("host");
         let import_name = string_table.intern("print");
-        
+
         // HirStmt::HostCall with multiple arguments
         let stmt = HirStmt::HostCall {
             target: func_name,

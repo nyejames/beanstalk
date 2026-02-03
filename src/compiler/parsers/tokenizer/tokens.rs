@@ -164,7 +164,9 @@ impl Token {
             TokenKind::Symbol(id) => string_table.resolve(*id).to_string(),
             TokenKind::StringSliceLiteral(id) => string_table.resolve(*id).to_string(),
             TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
-            TokenKind::Import(path, imports) => format!("{}: {:?}", path.to_string(string_table), imports),
+            TokenKind::Import(path, imports) => {
+                format!("{}: {:?}", path.to_string(string_table), imports)
+            }
             TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }

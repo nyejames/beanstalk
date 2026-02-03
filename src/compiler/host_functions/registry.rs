@@ -10,18 +10,13 @@ use std::collections::HashMap;
 use wasm_encoder::ValType;
 
 /// Runtime backend types for host function execution
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 pub enum RuntimeBackend {
     /// Web execution via JavaScript bindings
+    #[default]
     JavaScript,
     /// For embedded projects
     Rust,
-}
-
-impl Default for RuntimeBackend {
-    fn default() -> Self {
-        RuntimeBackend::JavaScript
-    }
 }
 
 /// Defines how a host function handles errors
@@ -349,7 +344,7 @@ impl HostRegistry {
         self.js_mappings.len()
     }
 
-    /// Validate that the mandatory host_io_functions() function is available
+    /// Validate that the mandatory io() function is available
     /// This should be called during compilation to ensure build system contract compliance
     pub fn validate_io_availability(
         &self,
@@ -381,10 +376,10 @@ pub fn create_builtin_registry(
 ) -> Result<HostRegistry, CompilerError> {
     let mut registry = HostRegistry::new_with_backend(backend);
 
-    // Register the host_io_functions() function with CoerceToString parameter
+    // Register the io() function with CoerceToString parameter
     // This function outputs content to stdout with an automatic newline
     let io_function = HostFunctionDef::new(
-        "host_io_functions",
+        "io",
         vec![BasicParameter {
             name: string_table.intern("content"),
             data_type: DataType::CoerceToString, // Accept any type and coerce to string
@@ -392,14 +387,14 @@ pub fn create_builtin_registry(
         }],
         vec![], // Void return type
         "beanstalk_io",
-        "host_io_functions",
+        "io",
         "Output content to stdout with automatic newline. Accepts any type through CoerceToString.",
         string_table,
     );
 
     let io_js_mapping = JsFunctionDef::new(
         "beanstalk_io",
-        "host_io_functions",
+        "io",
         vec![ValType::I32, ValType::I32], // ptr, len for string data in WASM linear memory
         vec![],                           // Void return
         "Output to console.log with automatic newline",
@@ -429,29 +424,29 @@ fn validate_registry(
         validate_js_function_def(js_function)?;
     }
 
-    // Validate that the mandatory host_io_functions() function is present
+    // Validate that the mandatory io() function is present
     validate_io_function_availability(registry, string_table)?;
 
     Ok(())
 }
 
-/// Validate that the mandatory host_io_functions() function is available in the registry
-/// This is a build system contract requirement - every build system must provide host_io_functions()
+/// Validate that the mandatory io() function is available in the registry
+/// This is a build system contract requirement - every build system must provide io()
 fn validate_io_function_availability(
     registry: &HostRegistry,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    // Check if host_io_functions() function exists by looking through all registered functions
+    // Check if io() function exists by looking through all registered functions
     let has_io = registry.list_functions().iter().any(|func| {
         let func_name = string_table.resolve(func.name);
-        func_name == "host_io_functions"
+        func_name == "io"
     });
 
     if !has_io {
         return_compiler_error!(
-            "Build system does not provide required 'host_io_functions()' function. \
-            Every Beanstalk build system must provide at minimum the host_io_functions() function for basic printing. \
-            Check your build system configuration and ensure the Io struct includes the host_io_functions() function."
+            "Build system does not provide required 'io()' function. \
+            Every Beanstalk build system must provide at minimum the io() function for basic printing. \
+            Check your build system configuration and ensure the Io struct includes the io() function."
         );
     }
 
@@ -568,15 +563,15 @@ fn validate_host_function_def(
         }
     }
 
-    // Special validation for the host_io_functions() function
-    if function_name == "host_io_functions" {
+    // Special validation for the io() function
+    if function_name == "io" {
         validate_io_function(function, string_table)?;
     }
 
     Ok(())
 }
 
-/// Validate the host_io_functions() function definition meets requirements
+/// Validate the io() function definition meets requirements
 fn validate_io_function(
     function: &HostFunctionDef,
     string_table: &StringTable,
@@ -587,7 +582,7 @@ fn validate_io_function(
     // Validate module name is "beanstalk_io"
     if module_name != "beanstalk_io" {
         return_compiler_error!(
-            "Host function '{}' must use module 'beanstalk_io', but found '{}'. The host_io_functions() function is part of the beanstalk_io module.",
+            "Host function '{}' must use module 'beanstalk_io', but found '{}'. The io() function is part of the beanstalk_io module.",
             function_name,
             module_name
         );
@@ -596,7 +591,7 @@ fn validate_io_function(
     // Validate exactly one parameter
     if function.parameters.len() != 1 {
         return_compiler_error!(
-            "Host function '{}' must have exactly 1 parameter, but found {}. The host_io_functions() function accepts a single CoerceToString parameter.",
+            "Host function '{}' must have exactly 1 parameter, but found {}. The io() function accepts a single CoerceToString parameter.",
             function_name,
             function.parameters.len()
         );
@@ -606,7 +601,7 @@ fn validate_io_function(
     let param = &function.parameters[0];
     if !matches!(param.data_type, DataType::CoerceToString) {
         return_compiler_error!(
-            "Host function '{}' parameter must be CoerceToString type, but found {:?}. The host_io_functions() function accepts any type through CoerceToString.",
+            "Host function '{}' parameter must be CoerceToString type, but found {:?}. The io() function accepts any type through CoerceToString.",
             function_name,
             param.data_type
         );
@@ -615,7 +610,7 @@ fn validate_io_function(
     // Validate return type is void (empty vector)
     if !function.return_types.is_empty() {
         return_compiler_error!(
-            "Host function '{}' must have void return type (no return values), but found {} return types. The host_io_functions() function does not return a value.",
+            "Host function '{}' must have void return type (no return values), but found {} return types. The io() function does not return a value.",
             function_name,
             function.return_types.len()
         );
