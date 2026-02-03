@@ -52,7 +52,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
             emit_locations: !release_build,
         };
 
-        let js_module = lower_hir_to_js(&compilation_result.hir_module, js_lowering_config);
+        let js_module = lower_hir_to_js(&compilation_result.hir_module, &compilation_result.string_table, js_lowering_config);
 
         // The project builder determines where the output files need to go
         // by provided the full path from source for each file and its content

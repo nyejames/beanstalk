@@ -168,8 +168,12 @@ Compared to a fully static borrow checker:
 * Some errors are detected later than theoretically possible.
 * Small runtime cost from possible drop checks.
 
-In exchange:
+Comparing the other languages:
+* Swift SIL - ownership is explicit in IR, verifier checks validity, optimizer exploits it
+* Rust MIR - borrow checker annotates regions and rejects programs, MIR shape is mostly stable
+* Beanstalk - borrow checker validates and annotates eligibility, but semantics remain GC-backed
 
+In exchange:
 * The language remains approachable.
 * The compiler remains tractable.
 * The model integrates cleanly with Wasm.

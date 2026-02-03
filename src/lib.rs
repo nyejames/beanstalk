@@ -5,6 +5,8 @@ pub mod settings;
 
 pub(crate) mod compiler_tests {
     pub(crate) mod test_runner;
+    #[cfg(test)]
+    mod js_backend_tests;
 }
 
 // New runtime and build system modules
@@ -99,7 +101,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 
 // Re-export types for the build system
-use crate::compiler::codegen::js::{JsLoweringConfig, JsModule};
+use crate::compiler::codegen::js::{self, JsLoweringConfig, JsModule};
 use crate::compiler::codegen::wasm::encode::encode_wasm;
 use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
@@ -315,7 +317,6 @@ pub fn generate_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
 ///
 /// Can be used instead of the Wasm backend.
 /// Aims to be the initial backend implementation for Beanstalk.
-pub fn lower_hir_to_js(hir: &HirModule, config: JsLoweringConfig) -> JsModule {
-    // implementation lives in js codegen module
-    todo!()
+pub fn lower_hir_to_js(hir: &HirModule, string_table: &StringTable, config: JsLoweringConfig) -> JsModule {
+    js::lower_hir_to_js(hir, string_table, config)
 }

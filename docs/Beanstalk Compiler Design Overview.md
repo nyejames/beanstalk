@@ -199,6 +199,10 @@ Borrow validation is not required for correctness, it's for optimization:
 - If a value passes borrow validation it becomes eligible for non-GC lowering.
 - If it fails or is unanalyzed it remains GC-managed.
 
+The borrow checker does not mutate the HIR, it produces side-table facts keyed by node / value IDs. HIR remains a stable semantic representation.
+
+HIR represents semantic meaning under GC. Ownership is a provable optimization layer, not semantics. Later stages consult these facts during lowering.
+
 ### Purpose
 Statically determine which values are not managed by the GC heap.
 
