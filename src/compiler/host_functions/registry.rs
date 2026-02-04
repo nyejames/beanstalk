@@ -49,6 +49,8 @@ impl HostFunctionDef {
         DataType::Function(Box::new(None), self.params_to_signature(string_table))
     }
 
+    /// Converts host function parameters into a Beanstalk FunctionSignature.
+    /// This allows host functions to be type-checked like regular Beanstalk functions.
     pub(crate) fn params_to_signature(&self, string_table: &mut StringTable) -> FunctionSignature {
         let parameters = self
             .parameters
@@ -216,14 +218,13 @@ fn validate_io_function(
     let name = string_table.resolve(function.name);
 
     if function.parameters.len() != 1 {
-        return_compiler_error!("Function '{}' must take exactly one parameter.", name);
+        return_compiler_error!(
+            "Host function 'io' must take exactly one parameter of type String. Found {} parameters.",
+            function.parameters.len()
+        );
     }
 
     let param = &function.parameters[0];
-
-    if !matches!(param.language_type, DataType::CoerceToString) {
-        return_compiler_error!("Function '{}' parameter must be CoerceToString.", name);
-    }
 
     if param.abi_type != HostAbiType::Utf8Str {
         return_compiler_error!("Function '{}' must use Utf8Str ABI.", name);
@@ -250,7 +251,7 @@ pub fn create_builtin_registry(
     let io_function = HostFunctionDef {
         name: io_name,
         parameters: vec![HostParameter {
-            language_type: DataType::CoerceToString,
+            language_type: DataType::String,
             abi_type: HostAbiType::Utf8Str,
         }],
         return_type: HostAbiType::Void,
