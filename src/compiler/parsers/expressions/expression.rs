@@ -1,4 +1,5 @@
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::host_functions::registry::HostFunctionId;
 use crate::compiler::parsers::ast_nodes::{AstNode, Var};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
@@ -48,6 +49,7 @@ impl Expression {
             }
             ExpressionKind::Function(..) => String::new(),
             ExpressionKind::FunctionCall(..) => String::new(),
+            ExpressionKind::HostFunctionCall(..) => String::new(),
             ExpressionKind::Runtime(..) => String::new(),
             ExpressionKind::Range(lower, upper) => {
                 format!(
@@ -226,6 +228,21 @@ impl Expression {
         }
     }
 
+    pub fn host_function_call(
+        host_function_id: HostFunctionId,
+        args: Vec<Expression>,
+        returns: Vec<DataType>,
+        location: TextLocation,
+    ) -> Self {
+        Self {
+            data_type: DataType::Returns(returns),
+            kind: ExpressionKind::HostFunctionCall(host_function_id, args),
+            location,
+            // TODO: Need to set the ownership based on the return signature
+            ownership: Ownership::MutableOwned,
+        }
+    }
+
     pub fn collection(
         items: Vec<Expression>,
         location: TextLocation,
@@ -324,6 +341,8 @@ pub enum ExpressionKind {
         InternedString,  // Function name
         Vec<Expression>, // Arguments
     ),
+    
+    HostFunctionCall(HostFunctionId, Vec<Expression>),
 
     // Also equivalent to a String if it folds into a string
     Template(Box<Template>), // Template Body, Styles, ID

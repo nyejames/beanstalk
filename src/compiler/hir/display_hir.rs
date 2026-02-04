@@ -136,7 +136,7 @@ impl HirExprKind {
                     .map(|arg| arg.display_with_table(string_table))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("{}({})", string_table.resolve(*target), args_str)
+                format!("{}({})", target.as_string(string_table), args_str)
             }
 
             HirExprKind::MethodCall {
@@ -246,16 +246,7 @@ impl HirStmt {
                     .map(|arg| arg.display_with_table(string_table))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("Call: {}({})", string_table.resolve(*target), args_str)
-            }
-
-            HirStmt::HostCall { target, args } => {
-                let args_str = args
-                    .iter()
-                    .map(|arg| arg.display_with_table(string_table))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!("HostCall: {}({})", string_table.resolve(*target), args_str)
+                format!("Call: {}({})", target.as_string(string_table), args_str)
             }
 
             HirStmt::PossibleDrop(place) => {

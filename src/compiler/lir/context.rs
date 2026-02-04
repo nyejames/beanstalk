@@ -9,9 +9,10 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::BlockId;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
+use crate::compiler::host_functions::registry::CallTarget;
 use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::parsers::ast_nodes::Var;
-use crate::compiler::string_interning::InternedString;
+use crate::compiler::string_interning::{InternedString, StringId};
 
 use super::types::{FieldLayout, StructLayout, build_struct_layout};
 
@@ -52,7 +53,7 @@ pub struct LoweringContext {
     pub errors: Vec<CompilerError>,
 
     /// Maps function names to their WASM function indices
-    pub function_indices: HashMap<InternedString, u32>,
+    pub function_indices: HashMap<StringId, u32>,
 
     /// Maps host function names to their import indices
     pub host_function_indices: HashMap<InternedString, u32>,
@@ -100,19 +101,19 @@ impl LoweringContext {
     }
 
     /// Registers a function and assigns it a WASM function index.
-    pub fn register_function(&mut self, name: InternedString) -> u32 {
-        if let Some(&idx) = self.function_indices.get(&name) {
+    pub fn register_function(&mut self, target: StringId) -> u32 {
+        if let Some(&idx) = self.function_indices.get(&target) {
             return idx;
         }
         let idx = self.next_function_index;
         self.next_function_index += 1;
-        self.function_indices.insert(name, idx);
+        self.function_indices.insert(target, idx);
         idx
     }
 
     /// Retrieves the function index for a function by name.
-    pub fn get_function_index(&self, name: InternedString) -> Option<u32> {
-        self.function_indices.get(&name).copied()
+    pub fn get_function_index(&self, target: StringId) -> Option<u32> {
+        self.function_indices.get(&target).copied()
     }
 
     /// Registers a host function and assigns it an import index.

@@ -11,6 +11,7 @@
 
 mod js_expr;
 mod js_function;
+mod js_host_functions;
 mod js_statement;
 
 // Re-export types that are used in tests and external code
@@ -19,7 +20,7 @@ pub use js_statement::JsStmt;
 
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
-use crate::compiler::hir::nodes::{BlockId, HirBlock, HirExpr, HirModule};
+use crate::compiler::hir::nodes::{BlockId, HirBlock, HirExpr, HirKind, HirModule};
 use crate::compiler::string_interning::{InternedString, StringTable};
 use std::collections::{HashMap, HashSet};
 
@@ -410,7 +411,7 @@ pub fn lower_hir_to_js(
     // Functions are stored as nodes in the module's functions list
     for func_node in &hir.functions {
         match &func_node.kind {
-            crate::compiler::hir::nodes::HirKind::Stmt(stmt) => {
+            HirKind::Stmt(stmt) => {
                 emitter.lower_function_or_template_stmt(stmt)?;
                 emitter.emit_indent(); // Add a blank line between functions
             }

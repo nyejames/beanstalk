@@ -6,6 +6,7 @@
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{BlockId, HirBlock, HirKind, HirNode, HirStmt, HirTerminator};
+use crate::compiler::host_functions::registry::CallTarget;
 use crate::compiler::lir::nodes::{LirField, LirFunction, LirInst, LirStruct, LirType};
 use crate::compiler::lir::types::datatype_to_lir_type;
 use crate::compiler::parsers::ast_nodes::Var;
@@ -13,7 +14,6 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::string_interning::InternedString;
 
 use super::context::LoweringContext;
-use super::types::hir_expr_to_lir_type;
 
 impl LoweringContext {
     // ========================================================================
@@ -65,9 +65,7 @@ impl LoweringContext {
                 is_mutable,
             } => self.lower_assign(target, value, *is_mutable),
 
-            HirStmt::Call { target, args } => self.lower_function_call(*target, args),
-
-            HirStmt::HostCall { target, args } => self.lower_host_call(*target, args),
+            HirStmt::Call { target, args } => self.lower_function_call(target.clone(), args),
 
             HirStmt::PossibleDrop(place) => self.lower_possible_drop(place),
 
@@ -92,7 +90,7 @@ impl LoweringContext {
                 template_fn,
                 captures,
                 ..
-            } => self.lower_function_call(*template_fn, captures),
+            } => self.lower_function_call(CallTarget::UserFunction(*template_fn), captures),
 
             HirStmt::TemplateFn { body, .. } => self.lower_block(*body, blocks),
         }

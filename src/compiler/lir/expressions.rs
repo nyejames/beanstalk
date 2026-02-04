@@ -47,7 +47,7 @@ impl LoweringContext {
             HirExprKind::Move(place) => self.lower_place_load(place),
 
             // Function calls
-            HirExprKind::Call { target, args } => self.lower_call_expr(*target, args),
+            HirExprKind::Call { target, args } => self.lower_call_expr(target, args),
 
             HirExprKind::MethodCall {
                 receiver,

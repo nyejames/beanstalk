@@ -3,9 +3,34 @@ use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
-use crate::compiler::string_interning::{InternedString, StringTable};
+use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
+use std::fmt::{self, Display};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackendKind {
+    Js,
+    Wasm,
+}
+
+#[derive(Debug, Clone, Hash, PartialEq)]
+pub enum CallTarget {
+    UserFunction(InternedString),
+    HostFunction(HostFunctionId),
+}
+
+impl CallTarget {
+    pub fn as_string(&self, string_table: &StringTable) -> String {
+        match self {
+            CallTarget::UserFunction(user_function_id) => {
+                string_table.resolve(*user_function_id).to_string()
+            }
+            CallTarget::HostFunction(host_function_id) => host_function_id.to_string(),
+        }
+    }
+}
+
 // ======================================================
 //                    HOST ABI
 // ======================================================
@@ -16,7 +41,7 @@ pub enum HostAbiType {
     I32,
     F64,
     Utf8Str,
-    OpaquePtr,
+    OpaquePtr, // Might want to turn this into ExternRef / Any at some point
     Void,
 }
 
@@ -37,6 +62,7 @@ pub struct HostParameter {
 #[derive(Debug, Clone)]
 pub struct HostFunctionDef {
     pub name: InternedString,
+    pub host_func_id: HostFunctionId,
     pub parameters: Vec<HostParameter>,
     pub return_type: HostAbiType,
     pub ownership: Ownership,
@@ -113,14 +139,33 @@ pub struct HostBindings {
     pub wasm: Option<WasmHostBinding>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HostFunctionId {
+    Io,
+    // Future:
+    // Now,
+    // Fetch,
+    // Alert,
+}
+
+impl HostFunctionId {}
+
+impl Display for HostFunctionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HostFunctionId::Io => write!(f, "io"),
+        }
+    }
+}
+
 // ======================================================
 //                    REGISTRY
 // ======================================================
 
 #[derive(Clone, Default)]
 pub struct HostRegistry {
-    functions: HashMap<InternedString, HostFunctionDef>,
-    bindings: HashMap<InternedString, HostBindings>,
+    functions: HashMap<HostFunctionId, HostFunctionDef>,
+    bindings: HashMap<HostFunctionId, HostBindings>,
 }
 
 impl HostRegistry {
@@ -128,53 +173,82 @@ impl HostRegistry {
         Self::default()
     }
 
-    pub fn register_function(
-        &mut self,
-        function: HostFunctionDef,
-        string_table: &StringTable,
-    ) -> Result<(), CompilerError> {
-        validate_host_function_def(&function, string_table)?;
-
-        if self.functions.contains_key(&function.name) {
+    pub fn register_function(&mut self, function: HostFunctionDef) -> Result<(), CompilerError> {
+        if self.functions.contains_key(&function.host_func_id) {
             return_compiler_error!(
                 "Host function '{}' is already registered.",
-                string_table.resolve(function.name)
+                function.host_func_id
             );
         }
 
-        self.functions.insert(function.name, function);
+        self.functions.insert(function.host_func_id, function);
         Ok(())
     }
 
-    pub fn register_bindings(&mut self, name: InternedString, bindings: HostBindings) {
-        self.bindings.insert(name, bindings);
+    pub fn register_bindings(&mut self, id: HostFunctionId, bindings: HostBindings) {
+        self.bindings.insert(id, bindings);
     }
 
-    pub fn get_function(&self, name: &InternedString) -> Option<&HostFunctionDef> {
-        self.functions.get(name)
+    pub fn get_function(&self, name: &StringId) -> Option<&HostFunctionDef> {
+        self.functions.values().find(|f| f.name == *name)
     }
 
-    pub fn get_bindings(&self, name: &InternedString) -> Option<&HostBindings> {
-        self.bindings.get(name)
+    pub fn get_bindings(&self, id: &HostFunctionId) -> Option<&HostBindings> {
+        self.bindings.get(id)
     }
 
     pub fn list_functions(&self) -> impl Iterator<Item = &HostFunctionDef> {
         self.functions.values()
     }
 
-    pub fn validate_io_availability(
-        &self,
-        string_table: &StringTable,
-    ) -> Result<(), CompilerError> {
-        let has_io = self
-            .functions
-            .keys()
-            .any(|id| string_table.resolve(*id) == "io");
+    // ======================================================
+    //                     VALIDATION
+    // ======================================================
 
-        if !has_io {
-            return_compiler_error!("Build system does not provide required 'io()' function.");
+    pub fn validate_required_hosts(
+        &self,
+        required: &[HostFunctionId],
+    ) -> Result<(), CompilerError> {
+        for id in required {
+            if !self.functions.contains_key(id) {
+                return_compiler_error!("Required host function '{}' is not registered.", id);
+            }
         }
 
+        Ok(())
+    }
+    pub fn validate_backend_bindings(&self, backend: BackendKind) -> Result<(), CompilerError> {
+        for (id, _) in &self.functions {
+            let bindings = self.bindings.get(id).ok_or_else(|| {
+                CompilerError::compiler_error(format!(
+                    "Host function '{}' has no backend bindings registered.",
+                    id
+                ))
+            })?;
+
+            let has_binding = match backend {
+                BackendKind::Js => bindings.js.is_some(),
+                BackendKind::Wasm => bindings.wasm.is_some(),
+            };
+
+            if !has_binding {
+                return_compiler_error!(
+                    "Host function '{}' is not available on the {:?} backend.",
+                    id,
+                    backend
+                );
+            }
+        }
+
+        Ok(())
+    }
+    pub fn validate_for_backend(
+        &self,
+        backend: BackendKind,
+        required_hosts: &[HostFunctionId],
+    ) -> Result<(), CompilerError> {
+        self.validate_required_hosts(required_hosts)?;
+        self.validate_backend_bindings(backend)?;
         Ok(())
     }
 }
@@ -191,53 +265,6 @@ pub enum ErrorHandling {
 }
 
 // ======================================================
-//                 VALIDATION
-// ======================================================
-
-fn validate_host_function_def(
-    function: &HostFunctionDef,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    let name = string_table.resolve(function.name);
-
-    if name.is_empty() {
-        return_compiler_error!("Host function has empty name.");
-    }
-
-    if name == "io" {
-        validate_io_function(function, string_table)?;
-    }
-
-    Ok(())
-}
-
-fn validate_io_function(
-    function: &HostFunctionDef,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    let name = string_table.resolve(function.name);
-
-    if function.parameters.len() != 1 {
-        return_compiler_error!(
-            "Host function 'io' must take exactly one parameter of type String. Found {} parameters.",
-            function.parameters.len()
-        );
-    }
-
-    let param = &function.parameters[0];
-
-    if param.abi_type != HostAbiType::Utf8Str {
-        return_compiler_error!("Function '{}' must use Utf8Str ABI.", name);
-    }
-
-    if function.return_type != HostAbiType::Void {
-        return_compiler_error!("Function '{}' must return void.", name);
-    }
-
-    Ok(())
-}
-
-// ======================================================
 //               BUILTIN REGISTRY
 // ======================================================
 
@@ -245,11 +272,11 @@ pub fn create_builtin_registry(
     string_table: &mut StringTable,
 ) -> Result<HostRegistry, CompilerError> {
     let mut registry = HostRegistry::new();
-
     let io_name = string_table.intern("io");
 
     let io_function = HostFunctionDef {
         name: io_name,
+        host_func_id: HostFunctionId::Io,
         parameters: vec![HostParameter {
             language_type: DataType::String,
             abi_type: HostAbiType::Utf8Str,
@@ -260,21 +287,7 @@ pub fn create_builtin_registry(
         description: "Output text to the host environment.".into(),
     };
 
-    registry.register_function(io_function, string_table)?;
+    registry.register_function(io_function)?;
 
-    registry.register_bindings(
-        io_name,
-        HostBindings {
-            js: Some(JsHostBinding {
-                js_path: "console.log".into(),
-            }),
-            wasm: Some(WasmHostBinding {
-                module: "beanstalk_io".into(),
-                import_name: "io".into(),
-            }),
-        },
-    );
-
-    registry.validate_io_availability(string_table)?;
     Ok(registry)
 }

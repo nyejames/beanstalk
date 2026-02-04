@@ -1311,6 +1311,7 @@ mod function_call_tests {
     use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
     use crate::compiler::datatypes::DataType;
     use crate::compiler::hir::nodes::{HirBlock, HirExpr, HirExprKind, HirModule, HirPlace};
+    use crate::compiler::host_functions::registry::CallTarget;
     use crate::compiler::interned_path::InternedPath;
     use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
     use crate::compiler::string_interning::StringTable;
@@ -1371,7 +1372,7 @@ mod function_call_tests {
         let func_name = string_table.intern("my_function");
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![],
             },
             location: dummy_location(),
@@ -1389,7 +1390,7 @@ mod function_call_tests {
         let func_name = string_table.intern("square");
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![int_expr(5)],
             },
             location: dummy_location(),
@@ -1407,7 +1408,7 @@ mod function_call_tests {
         let func_name = string_table.intern("add");
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![int_expr(3), int_expr(7)],
             },
             location: dummy_location(),
@@ -1427,7 +1428,7 @@ mod function_call_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![HirExpr {
                     kind: HirExprKind::Load(HirPlace::Var(var_name)),
                     location: dummy_location(),
@@ -1468,7 +1469,7 @@ mod function_call_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![arg1, arg2],
             },
             location: dummy_location(),
@@ -1489,7 +1490,7 @@ mod function_call_tests {
         // Call outer(inner(5))
         let inner_call = HirExpr {
             kind: HirExprKind::Call {
-                target: inner_func,
+                target: CallTarget::UserFunction(outer_func),
                 args: vec![int_expr(5)],
             },
             location: dummy_location(),
@@ -1497,7 +1498,7 @@ mod function_call_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: outer_func,
+                target: CallTarget::UserFunction(inner_func),
                 args: vec![inner_call],
             },
             location: dummy_location(),
@@ -1516,7 +1517,7 @@ mod function_call_tests {
         let func_name = string_table.intern("eval");
         let expr = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![],
             },
             location: dummy_location(),
@@ -1685,7 +1686,7 @@ mod function_call_tests {
         // getString()
         let receiver = HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![],
             },
             location: dummy_location(),
@@ -2235,6 +2236,7 @@ mod assignment_statement_tests {
     use crate::compiler::hir::nodes::{
         HirBlock, HirExpr, HirExprKind, HirModule, HirPlace, HirStmt,
     };
+    use crate::compiler::host_functions::registry::CallTarget;
     use crate::compiler::interned_path::InternedPath;
     use crate::compiler::parsers::tokenizer::tokens::{CharPosition, TextLocation};
     use crate::compiler::string_interning::StringTable;
@@ -2547,7 +2549,7 @@ mod assignment_statement_tests {
         // Expression statement: foo()
         let stmt = HirStmt::ExprStmt(HirExpr {
             kind: HirExprKind::Call {
-                target: func_name,
+                target: CallTarget::UserFunction(func_name),
                 args: vec![],
             },
             location: dummy_location(),
@@ -2566,7 +2568,7 @@ mod assignment_statement_tests {
 
         // HirStmt::Call with no arguments
         let stmt = HirStmt::Call {
-            target: func_name,
+            target: CallTarget::UserFunction(func_name),
             args: vec![],
         };
         emitter.lower_stmt(&stmt);
@@ -2583,7 +2585,7 @@ mod assignment_statement_tests {
 
         // HirStmt::Call with arguments: calculate(5, 10)
         let stmt = HirStmt::Call {
-            target: func_name,
+            target: CallTarget::UserFunction(func_name),
             args: vec![
                 HirExpr {
                     kind: HirExprKind::Int(5),
@@ -2606,12 +2608,10 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let func_name = string_table.intern("io");
-        let module_name = string_table.intern("host");
-        let import_name = string_table.intern("print");
 
         // HirStmt::HostCall: io("Hello, World!")
-        let stmt = HirStmt::HostCall {
-            target: func_name,
+        let stmt = HirStmt::Call {
+            target: CallTarget::UserFunction(func_name),
             args: vec![HirExpr {
                 kind: HirExprKind::StringLiteral(string_table.intern("Hello, World!")),
                 location: dummy_location(),
@@ -2629,12 +2629,10 @@ mod assignment_statement_tests {
         let (mut emitter, _hir, mut string_table) = create_test_emitter();
 
         let func_name = string_table.intern("io");
-        let module_name = string_table.intern("host");
-        let import_name = string_table.intern("print");
 
         // HirStmt::HostCall with multiple arguments
-        let stmt = HirStmt::HostCall {
-            target: func_name,
+        let stmt = HirStmt::Call {
+            target: CallTarget::UserFunction(func_name),
             args: vec![
                 HirExpr {
                     kind: HirExprKind::StringLiteral(string_table.intern("Value: ")),

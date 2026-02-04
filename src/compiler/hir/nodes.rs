@@ -25,6 +25,7 @@
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -115,13 +116,7 @@ pub enum HirStmt {
     /// Regular function call
     /// Results can be assigned via separate Assign nodes
     Call {
-        target: InternedString,
-        args: Vec<HirExpr>,
-    },
-
-    /// Host/builtin function call
-    HostCall {
-        target: InternedString,
+        target: CallTarget, // Could be a host function call also
         args: Vec<HirExpr>,
     },
 
@@ -276,7 +271,7 @@ pub enum HirExprKind {
 
     // === Function Calls ===
     Call {
-        target: InternedString,
+        target: CallTarget,
         args: Vec<HirExpr>,
     },
 

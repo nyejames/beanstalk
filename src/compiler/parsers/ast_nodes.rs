@@ -1,6 +1,6 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::host_functions::registry::HostAbiType;
+use crate::compiler::host_functions::registry::{HostAbiType, HostFunctionId};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
@@ -82,7 +82,7 @@ pub enum NodeKind {
 
     // Host function call (functions provided by the runtime)
     HostFunctionCall {
-        name: InternedString,
+        host_function_id: HostFunctionId,
         args: Vec<Expression>,
         returns: Vec<DataType>,
         location: TextLocation,
@@ -135,18 +135,25 @@ impl AstNode {
                 args: arguments,
                 returns,
                 location,
-            }
-            | NodeKind::HostFunctionCall {
-                name,
-                args: arguments,
-                returns,
-                location,
             } => Ok(Expression::function_call(
                 *name,
                 arguments.to_owned(),
                 returns.to_owned(),
                 location.to_owned(),
             )),
+
+            NodeKind::HostFunctionCall {
+                host_function_id,
+                args: arguments,
+                returns,
+                location,
+            } => Ok(Expression::function_call(
+                InternedString::from_u32(0),
+                arguments.to_owned(),
+                returns.to_owned(),
+                location.to_owned(),
+            )),
+
             NodeKind::FieldAccess {
                 data_type,
                 ownership,

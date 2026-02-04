@@ -1,7 +1,9 @@
-use crate::compiler::codegen::js::JsEmitter;
+use crate::compiler::codegen::js::js_host_functions::{HostFunctionId, get_host_function_str};
 use crate::compiler::codegen::js::js_statement::JsStmt;
+use crate::compiler::codegen::js::{JsEmitter, JsIdent};
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, UnaryOp};
+use crate::compiler::host_functions::registry::CallTarget;
 use crate::compiler::string_interning::InternedString;
 
 /// Result of lowering a HIR expression to JS
@@ -208,7 +210,7 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             // === Function Calls ===
-            HirExprKind::Call { target, args } => self.lower_call(*target, args),
+            HirExprKind::Call { target, args } => self.lower_call(target, args),
 
             HirExprKind::MethodCall {
                 receiver,
@@ -345,10 +347,21 @@ impl<'hir> JsEmitter<'hir> {
     /// All arguments are evaluated in order, with their preludes combined.
     pub(crate) fn lower_call(
         &mut self,
+        target: &CallTarget,
+        args: &[HirExpr],
+    ) -> Result<JsExpr, CompilerError> {
+        match target {
+            CallTarget::UserFunction(name) => self.lower_function_call(*name, args),
+
+            CallTarget::HostFunction(host_id) => self.lower_host_fn(*host_id, args),
+        }
+    }
+
+    pub(crate) fn lower_function_call(
+        &mut self,
         target: InternedString,
         args: &[HirExpr],
     ) -> Result<JsExpr, CompilerError> {
-        // Get the function name
         let func_name = self.make_js_ident(target);
 
         // Lower all arguments
@@ -420,6 +433,32 @@ impl<'hir> JsEmitter<'hir> {
                 method_name,
                 arg_values.join(",")
             )
+        };
+
+        Ok(JsExpr::with_prelude(all_preludes, call_expr))
+    }
+
+    fn lower_host_fn(
+        &mut self,
+        host_fn: HostFunctionId,
+        args: &[HirExpr],
+    ) -> Result<JsExpr, CompilerError> {
+        // Lower all arguments first (same semantics as normal calls)
+        let mut all_preludes = Vec::new();
+        let mut arg_values = Vec::new();
+
+        for arg in args {
+            let arg_expr = self.lower_expr(arg)?;
+            all_preludes.extend(arg_expr.prelude);
+            arg_values.push(arg_expr.value);
+        }
+
+        let js_target = get_host_function_str(host_fn);
+
+        let call_expr = if self.config.pretty {
+            format!("{}({})", js_target, arg_values.join(", "))
+        } else {
+            format!("{}({})", js_target, arg_values.join(","))
         };
 
         Ok(JsExpr::with_prelude(all_preludes, call_expr))

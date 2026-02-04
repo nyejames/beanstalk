@@ -16,7 +16,6 @@
 //! - `OwnershipHints`: Conservative hints for ownership (not authoritative)
 
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::control_flow_linearizer::ControlFlowLinearizer;
 use crate::compiler::hir::expression_linearizer::ExpressionLinearizer;
 use crate::compiler::hir::function_transformer::FunctionTransformer;
@@ -37,7 +36,7 @@ use std::collections::{HashMap, HashSet};
 
 // Re-export validator types for backward compatibility
 pub use crate::compiler::hir::validator::{HirValidationError, HirValidator};
-
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
 // ============================================================================
@@ -922,7 +921,7 @@ impl<'a> HirBuilderContext<'a> {
                 result
             }
             NodeKind::HostFunctionCall {
-                name,
+                host_function_id,
                 args,
                 returns,
                 location,
@@ -930,8 +929,12 @@ impl<'a> HirBuilderContext<'a> {
                 let mut transformer =
                     std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
 
-                let result =
-                    transformer.transform_host_function_call_as_stmt(*name, args, self, location);
+                let result = transformer.transform_host_function_call_as_stmt(
+                    *host_function_id,
+                    args,
+                    self,
+                    location,
+                );
 
                 self.function_transformer = transformer;
                 result
@@ -946,7 +949,7 @@ impl<'a> HirBuilderContext<'a> {
                 result
             }
             NodeKind::StructDefinition(name, fields) => {
-                // Take the struct handler temporarily to work around borrow checker
+                // Take the struct handler temporarily to work around the borrow checker
                 let mut handler = std::mem::replace(&mut self.struct_handler, StructHandler::new());
 
                 let result =
@@ -1137,7 +1140,7 @@ impl<'a> HirBuilderContext<'a> {
 
                 let call_node = HirNode {
                     kind: HirKind::Stmt(HirStmt::Call {
-                        target: io_name,
+                        target: CallTarget::HostFunction(HostFunctionId::Io),
                         args: vec![result_expr],
                     }),
                     location: node.location.clone(),
@@ -1157,7 +1160,7 @@ impl<'a> HirBuilderContext<'a> {
             // Operators should be handled within expressions
             NodeKind::Operator(_) => Ok(Vec::new()),
 
-            // Field access as statement
+            // Field access as a statement
             NodeKind::FieldAccess {
                 base,
                 field,

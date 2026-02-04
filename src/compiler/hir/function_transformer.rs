@@ -16,6 +16,7 @@ use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::nodes::{
     BlockId, HirExpr, HirExprKind, HirKind, HirNode, HirStmt, HirTerminator,
 };
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
@@ -178,11 +179,11 @@ impl FunctionTransformer {
                 location,
             } => self.transform_function_call_as_stmt(*name, args, ctx, location),
             NodeKind::HostFunctionCall {
-                name,
+                host_function_id,
                 args,
                 returns,
                 location,
-            } => self.transform_host_function_call_as_stmt(*name, args, ctx, location),
+            } => self.transform_host_function_call_as_stmt(*host_function_id, args, ctx, location),
             NodeKind::VariableDeclaration(arg) => {
                 // Use the context's helper method to process variable declarations
                 ctx.process_variable_declaration(arg, &node.location)
@@ -289,7 +290,7 @@ impl FunctionTransformer {
         let node_id = ctx.allocate_node_id();
         let call_node = HirNode {
             kind: HirKind::Stmt(HirStmt::Call {
-                target: name,
+                target: CallTarget::UserFunction(name),
                 args: hir_args,
             }),
             location: location.clone(),
@@ -312,24 +313,10 @@ impl FunctionTransformer {
         // Transform arguments
         let hir_args = self.transform_arguments(args, ctx)?;
 
-        // Get the function signature to determine the return type
-        let return_type = if let Some(sig) = ctx.get_function_signature(&name) {
-            if sig.returns.is_empty() {
-                DataType::None
-            } else if sig.returns.len() == 1 {
-                sig.returns[0].clone()
-            } else {
-                // Multiple return values - for now, treat as tuple (simplified)
-                DataType::None // TODO: Proper tuple support
-            }
-        } else {
-            DataType::None
-        };
-
         // Create the call expression
         let call_expr = HirExpr {
             kind: HirExprKind::Call {
-                target: name,
+                target: CallTarget::UserFunction(name),
                 args: hir_args,
             },
             location: location.clone(),
@@ -343,7 +330,7 @@ impl FunctionTransformer {
     /// Host function calls include import information for the WASM module and function name.
     pub fn transform_host_function_call_as_stmt(
         &mut self,
-        name: InternedString,
+        host_function_id: HostFunctionId,
         args: &[Expression],
         ctx: &mut HirBuilderContext,
         location: &TextLocation,
@@ -354,8 +341,8 @@ impl FunctionTransformer {
         // Create the host call statement
         let node_id = ctx.allocate_node_id();
         let call_node = HirNode {
-            kind: HirKind::Stmt(HirStmt::HostCall {
-                target: name,
+            kind: HirKind::Stmt(HirStmt::Call {
+                target: CallTarget::HostFunction(host_function_id),
                 args: hir_args,
             }),
             location: location.clone(),
@@ -370,34 +357,22 @@ impl FunctionTransformer {
     /// This is used when the host function call result is needed in an expression context.
     pub fn transform_host_function_call(
         &mut self,
-        name: InternedString,
+        id: HostFunctionId,
         args: &[Expression],
         return_types: &[DataType],
-        module: InternedString,
-        import: InternedString,
         ctx: &mut HirBuilderContext,
         location: &TextLocation,
     ) -> Result<(Vec<HirNode>, HirExpr), CompilerError> {
         // Transform arguments
         let hir_args = self.transform_arguments(args, ctx)?;
 
-        // Determine return type
-        let return_type = if return_types.is_empty() {
-            DataType::None
-        } else if return_types.len() == 1 {
-            return_types[0].clone()
-        } else {
-            // Multiple return values - for now, treat as tuple (simplified)
-            DataType::None // TODO: Proper tuple support
-        };
-
         // For host calls as expressions, we need to create a statement first
         // and then load the result. For now, we'll create a call expression directly.
         // This is a simplification - a proper implementation would use temporaries.
         let node_id = ctx.allocate_node_id();
         let call_stmt = HirNode {
-            kind: HirKind::Stmt(HirStmt::HostCall {
-                target: name,
+            kind: HirKind::Stmt(HirStmt::Call {
+                target: CallTarget::HostFunction(id),
                 args: hir_args.clone(),
             }),
             location: location.clone(),
@@ -408,7 +383,7 @@ impl FunctionTransformer {
         // In a full implementation, this would use a temporary variable
         let call_expr = HirExpr {
             kind: HirExprKind::Call {
-                target: name,
+                target: CallTarget::HostFunction(id),
                 args: hir_args,
             },
             location: location.clone(),

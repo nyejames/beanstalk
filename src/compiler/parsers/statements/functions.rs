@@ -665,7 +665,7 @@ pub fn parse_host_function_call(
 
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall {
-            name: host_func.name,
+            host_function_id: host_func.host_func_id,
             args,
             returns: vec![host_func.return_type_to_datatype()],
             location: location.clone(),
@@ -691,7 +691,7 @@ pub fn validate_host_function_call(
             return_type_error!(
                 format!(
                     "Function '{}' doesn't take any arguments, but {} {} provided. Did you mean to call it without parentheses?",
-                    function.name,
+                    function.host_func_id,
                     got,
                     if got == 1 { "was" } else { "were" }
                 ),
@@ -705,7 +705,7 @@ pub fn validate_host_function_call(
             return_type_error!(
                 format!(
                     "Function '{}' expects {} argument{}, but none were provided",
-                    function.name,
+                    function.host_func_id,
                     expected,
                     if expected == 1 { "" } else { "s" }
                 ),
@@ -719,7 +719,7 @@ pub fn validate_host_function_call(
             return_type_error!(
                 format!(
                     "Function '{}' expects {} argument{}, got {}. {}",
-                    function.name,
+                    function.host_func_id,
                     expected,
                     if expected == 1 { "" } else { "s" },
                     got,
@@ -749,7 +749,7 @@ pub fn validate_host_function_call(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
                     i + 1,
-                    function.name,
+                    function.host_func_id,
                     format_type_for_error(&param.language_type),
                     format_type_for_error(&expression.data_type),
                     get_type_conversion_hint(&expression.data_type, &param.language_type)

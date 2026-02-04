@@ -11,9 +11,6 @@
 //! environment (e.g., JavaScript in web contexts, native functions in CLI).
 //! They are imported into the WASM module and called like regular functions.
 
-// Many functions are prepared for later integration phases
-#![allow(dead_code)]
-
 use crate::compiler::codegen::wasm::analyzer::{FunctionSignature, WasmType};
 use crate::compiler::codegen::wasm::error::WasmGenerationError;
 use crate::compiler::codegen::wasm::module_builder::WasmModuleBuilder;
@@ -218,12 +215,9 @@ impl HostFunctionManager {
         // Iterate over all host functions and get their WASM bindings
         for def in registry.list_functions() {
             // Get the WASM binding for this function
-            let bindings = registry.get_bindings(&def.name).ok_or_else(|| {
+            let bindings = registry.get_bindings(&def.host_func_id).ok_or_else(|| {
                 WasmGenerationError::lir_analysis(
-                    format!(
-                        "Host function '{}' has no WASM binding",
-                        string_table.resolve(def.name)
-                    ),
+                    format!("Host function '{}' has no WASM binding", def.host_func_id),
                     "register_from_registry",
                 )
                 .to_compiler_error(ErrorLocation::default())
@@ -231,10 +225,7 @@ impl HostFunctionManager {
 
             let wasm_binding = bindings.wasm.as_ref().ok_or_else(|| {
                 WasmGenerationError::lir_analysis(
-                    format!(
-                        "Host function '{}' has no WASM binding",
-                        string_table.resolve(def.name)
-                    ),
+                    format!("Host function '{}' has no WASM binding", def.host_func_id),
                     "register_from_registry",
                 )
                 .to_compiler_error(ErrorLocation::default())
@@ -246,7 +237,7 @@ impl HostFunctionManager {
                 wasm_binding.import_name.clone(),
                 string_table,
             );
-            self.register_import(import, string_table.resolve(def.name))?;
+            self.register_import(import, &def.host_func_id.to_string())?;
         }
 
         Ok(())
@@ -421,6 +412,7 @@ impl HostFunctionManager {
             .iter()
             .filter_map(|v| WasmType::from_val_type(*v))
             .collect();
+
         let import_returns: Vec<WasmType> = import
             .returns
             .iter()

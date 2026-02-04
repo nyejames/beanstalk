@@ -337,9 +337,9 @@ pub fn create_expression(
                         string_table,
                     )?;
 
-                    if let NodeKind::HostFunctionCall { name, args, returns, location} = function_call_node.kind {
-                        let func_call_expr = Expression::function_call(
-                            name.to_owned(),
+                    if let NodeKind::HostFunctionCall { host_function_id, args, returns, location} = function_call_node.kind {
+                        let func_call_expr = Expression::host_function_call(
+                            host_function_id,
                             args.to_owned(),
                             signature.returns,
                             location,

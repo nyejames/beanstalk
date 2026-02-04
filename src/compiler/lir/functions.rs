@@ -6,6 +6,7 @@
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirPlace};
+use crate::compiler::host_functions::registry::CallTarget;
 use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::lir::types::datatype_to_lir_type;
 use crate::compiler::string_interning::InternedString;
@@ -21,7 +22,7 @@ impl LoweringContext {
     /// Lowers a regular function call to LIR instructions.
     pub fn lower_function_call(
         &mut self,
-        target: InternedString,
+        target: CallTarget,
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
@@ -31,7 +32,7 @@ impl LoweringContext {
             insts.extend(self.lower_argument_with_ownership(arg)?);
         }
 
-        // Look up function index
+        // Look up the function index
         let func_idx = self.get_function_index(target).ok_or_else(|| {
             CompilerError::lir_transformation(format!("Unknown function: {}", target))
         })?;
@@ -45,10 +46,10 @@ impl LoweringContext {
     /// Lowers a function call expression (used when call result is needed).
     pub fn lower_call_expr(
         &mut self,
-        target: InternedString,
+        target: &CallTarget,
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
-        self.lower_function_call(target, args)
+        self.lower_function_call(target.clone(), args)
     }
 
     /// Lowers a method call expression.

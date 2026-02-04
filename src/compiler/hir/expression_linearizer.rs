@@ -22,6 +22,7 @@ use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::nodes::{
     BinOp, HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt, UnaryOp,
 };
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -242,13 +243,13 @@ impl ExpressionLinearizer {
 
                 // Host function calls
                 NodeKind::HostFunctionCall {
-                    name,
+                    host_function_id,
                     args,
                     returns,
                     location,
                 } => {
                     let (call_nodes, call_expr) =
-                        self.linearize_host_function_call(*name, args, location, ctx)?;
+                        self.linearize_host_function_call(*host_function_id, args, location, ctx)?;
                     nodes.extend(call_nodes);
                     value_stack.push(call_expr);
                 }
@@ -332,7 +333,7 @@ impl ExpressionLinearizer {
         // Create the call expression
         let call_expr = HirExpr {
             kind: HirExprKind::Call {
-                target: name,
+                target: CallTarget::UserFunction(name),
                 args: hir_args,
             },
             location: location.clone(),
@@ -344,7 +345,7 @@ impl ExpressionLinearizer {
     /// Linearizes a host function call expression.
     fn linearize_host_function_call(
         &mut self,
-        name: InternedString,
+        host_function_id: HostFunctionId,
         args: &[Expression],
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
@@ -362,7 +363,7 @@ impl ExpressionLinearizer {
         // Create the call expression (host calls are represented the same as regular calls in HIR)
         let call_expr = HirExpr {
             kind: HirExprKind::Call {
-                target: name,
+                target: CallTarget::HostFunction(host_function_id),
                 args: hir_args,
             },
             location: location.clone(),
@@ -508,11 +509,11 @@ impl ExpressionLinearizer {
             } => self.linearize_function_call(*name, args, location, ctx),
 
             NodeKind::HostFunctionCall {
-                name,
+                host_function_id,
                 args,
                 returns,
                 location,
-            } => self.linearize_host_function_call(*name, args, location, ctx),
+            } => self.linearize_host_function_call(*host_function_id, args, location, ctx),
 
             NodeKind::FieldAccess {
                 base,

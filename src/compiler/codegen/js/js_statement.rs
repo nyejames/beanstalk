@@ -146,21 +146,7 @@ impl<'hir> JsEmitter<'hir> {
 
             // === Function Calls ===
             HirStmt::Call { target, args } => {
-                let call_expr = self.lower_call(*target, args)?;
-
-                // Emit prelude statements
-                self.emit_stmts(&call_expr.prelude);
-
-                // Emit the call as a statement
-                let stmt = JsStmt::Expr(call_expr.value);
-                self.emit_stmt(&stmt);
-            }
-
-            // === Host Function Calls ===
-            HirStmt::HostCall { target, args } => {
-                // For now, we'll treat host calls like regular calls
-                // TODO: Implement proper host function mapping (e.g., io -> console.log)
-                let call_expr = self.lower_call(*target, args)?;
+                let call_expr = self.lower_call(target, args)?;
 
                 // Emit prelude statements
                 self.emit_stmts(&call_expr.prelude);
@@ -208,7 +194,7 @@ impl<'hir> JsEmitter<'hir> {
                 id: _,
             } => {
                 // Runtime template calls are function calls that return strings
-                let call_expr = self.lower_call(*template_fn, captures)?;
+                let call_expr = self.lower_function_call(*template_fn, captures)?;
 
                 // Emit prelude statements
                 self.emit_stmts(&call_expr.prelude);

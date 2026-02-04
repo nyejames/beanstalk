@@ -25,6 +25,7 @@ use crate::compiler::hir::nodes::{
     BlockId, HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirPattern, HirPlace, HirStmt,
     HirTerminator,
 };
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::branching::MatchArm;
@@ -737,19 +738,16 @@ impl ControlFlowLinearizer {
             } => self.linearize_function_call(*name, args, location, ctx),
 
             NodeKind::HostFunctionCall {
-                name,
+                host_function_id,
                 args,
                 returns,
                 location,
-            } => self.linearize_host_function_call(*name, args, location, ctx),
+            } => self.linearize_host_function_call(*host_function_id, args, location, ctx),
 
             // R-values (expressions as statements)
             NodeKind::Rvalue(expr) => {
                 self.linearize_expression_statement(expr, &node.location, ctx)
             }
-
-            // Print statements (deprecated but still supported)
-            NodeKind::Print(expr) => self.linearize_print_statement(expr, &node.location, ctx),
 
             // Empty nodes
             NodeKind::Empty | NodeKind::Newline | NodeKind::Spaces(_) => Ok(Vec::new()),
@@ -900,7 +898,7 @@ impl ControlFlowLinearizer {
     /// Linearizes a host function call statement
     fn linearize_host_function_call(
         &mut self,
-        name: InternedString,
+        host_function_id: HostFunctionId,
         args: &[Expression],
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
@@ -916,7 +914,8 @@ impl ControlFlowLinearizer {
         }
 
         // Create the host call statement
-        let call_node = self.create_host_call_statement(name, hir_args, location.clone(), ctx);
+        let call_node =
+            self.create_host_call_statement(host_function_id, hir_args, location.clone(), ctx);
         nodes.push(call_node);
 
         Ok(nodes)
@@ -935,7 +934,10 @@ impl ControlFlowLinearizer {
         ctx.record_node_context(node_id, build_context);
 
         HirNode {
-            kind: HirKind::Stmt(HirStmt::Call { target, args }),
+            kind: HirKind::Stmt(HirStmt::Call {
+                target: CallTarget::UserFunction(target),
+                args,
+            }),
             location,
             id: node_id,
         }
@@ -944,7 +946,7 @@ impl ControlFlowLinearizer {
     /// Creates a HostCall statement node
     fn create_host_call_statement(
         &self,
-        target: InternedString,
+        host_function_id: HostFunctionId,
         args: Vec<HirExpr>,
         location: TextLocation,
         ctx: &mut HirBuilderContext,
@@ -954,7 +956,10 @@ impl ControlFlowLinearizer {
         ctx.record_node_context(node_id, build_context);
 
         HirNode {
-            kind: HirKind::Stmt(HirStmt::HostCall { target, args }),
+            kind: HirKind::Stmt(HirStmt::Call {
+                target: CallTarget::HostFunction(host_function_id),
+                args,
+            }),
             location,
             id: node_id,
         }
@@ -996,32 +1001,6 @@ impl ControlFlowLinearizer {
             location,
             id: node_id,
         }
-    }
-
-    /// Linearizes a print statement
-    fn linearize_print_statement(
-        &mut self,
-        expr: &Expression,
-        location: &TextLocation,
-        ctx: &mut HirBuilderContext,
-    ) -> Result<Vec<HirNode>, CompilerError> {
-        // Print is converted to a host function call to host_io_functions
-        let mut nodes = Vec::new();
-
-        // Linearize the expression
-        let (expr_nodes, hir_expr) = self.expr_linearizer.linearize_expression(expr, ctx)?;
-        nodes.extend(expr_nodes);
-
-        // Create a host call to host_io_functions
-        let io_name = ctx.string_table.intern("host_io_functions");
-        let module_name = ctx.string_table.intern("beanstalk_io");
-        let import_name = ctx.string_table.intern("print");
-
-        let call_node =
-            self.create_host_call_statement(io_name, vec![hir_expr], location.clone(), ctx);
-        nodes.push(call_node);
-
-        Ok(nodes)
     }
 
     // =========================================================================
