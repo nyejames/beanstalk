@@ -195,7 +195,7 @@ impl Expression {
     }
     pub fn function_without_args(
         body: Vec<AstNode>,
-        returns: Vec<Var>,
+        returns: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
         let signature = FunctionSignature {
@@ -214,17 +214,11 @@ impl Expression {
     pub fn function_call(
         name: InternedString,
         args: Vec<Expression>,
-        returns: Vec<Var>,
+        returns: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
-        let data_type = if returns.len() == 1 {
-            returns[0].value.data_type.to_owned()
-        } else {
-            DataType::Parameters(returns)
-        };
-
         Self {
-            data_type,
+            data_type: DataType::Returns(returns),
             kind: ExpressionKind::FunctionCall(name, args),
             location,
             // TODO: Need to set the ownership based on the return signature

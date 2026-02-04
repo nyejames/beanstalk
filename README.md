@@ -20,7 +20,7 @@
 
 </div>
 
-Beanstalk is designed for UI and static site generation and embedding.
+Beanstalk is designed for the web.
 
 ```haskell
 @(html/Basic)

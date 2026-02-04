@@ -1,5 +1,6 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
+use crate::compiler::host_functions::registry::HostAbiType;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind, Operator};
 use crate::compiler::parsers::statements::branching::MatchArm;
@@ -71,24 +72,21 @@ pub enum NodeKind {
         signature: FunctionSignature,
     },
 
-    FunctionCall(
-        InternedString,
-        Vec<Expression>, // Arguments passed in (eventually will have a syntax for named arguments)
-        Vec<Var>,        // Returns (can be named so using an Arg rather than just the data type)
-        TextLocation,
+    FunctionCall {
+        name: InternedString,
+        args: Vec<Expression>,
+        returns: Vec<DataType>, 
+        location: TextLocation,
         // bool, // Function is pure
-    ),
+    },
 
     // Host function call (functions provided by the runtime)
-    // Uses the same structure as regular function calls but includes binding info
-    HostFunctionCall(
-        InternedString,  // Function name
-        Vec<Expression>, // Arguments passed in - Can't be named for host functions
-        Vec<DataType>,   // Return types
-        InternedString,  // WASM module name (e.g. "beanstalk_io")
-        InternedString,  // WASM import name (e.g. "print")
-        TextLocation,    // Location for error reporting
-    ),
+    HostFunctionCall {
+        name: InternedString,
+        args: Vec<Expression>,
+        returns: Vec<DataType>,
+        location: TextLocation,
+    },
 
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
     //          new_struct_instance(arg) -- Calls the main function of the struct
@@ -132,33 +130,13 @@ impl AstNode {
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
             NodeKind::Rvalue(value, ..) => Ok(value.to_owned()),
             // NodeKind::Assignment(_, value) => Ok(value.to_owned()),
-            NodeKind::FunctionCall(name, arguments, returns, location) => {
+            NodeKind::FunctionCall { name, args: arguments, returns, location} |
+            NodeKind::HostFunctionCall { name, args: arguments, returns, location}
+            => {
                 Ok(Expression::function_call(
                     *name,
                     arguments.to_owned(),
                     returns.to_owned(),
-                    location.to_owned(),
-                ))
-            }
-            NodeKind::HostFunctionCall(name, arguments, return_types, _, _, location) => {
-                // We need a string table to create interned strings for indices
-                // For now, we'll use a placeholder approach - this will need to be updated
-                // when the AST construction is updated to use the string table
-                let mut return_types_from_expr = Vec::new();
-                for (idx, _return_type) in return_types.iter().enumerate() {
-                    // This is a temporary solution - we'll need to pass string_table here
-                    // when updating AST construction methods
-                    let placeholder_name = InternedString::from_u32(idx as u32);
-                    return_types_from_expr.push(Var {
-                        id: placeholder_name,
-                        value: Expression::int(0, location.to_owned(), Ownership::default()),
-                    })
-                }
-
-                Ok(Expression::function_call(
-                    *name,
-                    arguments.to_owned(),
-                    return_types_from_expr,
                     location.to_owned(),
                 ))
             }

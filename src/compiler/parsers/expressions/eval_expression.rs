@@ -145,7 +145,7 @@ pub fn evaluate_expression(
                 output_queue.push(node.to_owned());
             }
 
-            NodeKind::FunctionCall(_, _, _returns, ..) => {
+            NodeKind::FunctionCall { .. } => {
                 // Check the return type
                 simplified_expression.push(node.to_owned());
             }

@@ -14,10 +14,10 @@ They can implement methods by defining a function that takes an instance of the 
 
 Structs can be assigned with default arguments, these can be any constant expression.
 ```beanstalk
-    Person:
+    Person = |
         name String,
         age Int,
-    ;
+    |
 
     -- Create a new instance of the type
     person ~= Person("Alice", 30)
@@ -27,10 +27,10 @@ Structs can be assigned with default arguments, these can be any constant expres
     io(person.age)  -- 30
 
     -- Defining a plex, then defining a method for it
-    Vector2:
+    Vector2 = |
         x Float = 0,
         y Float = 0,
-    ;
+    |
 
     reset |this ~Vector2|:
         this.x = 0
@@ -44,15 +44,15 @@ Structs can be assigned with default arguments, these can be any constant expres
 ## Methods
 Methods in Beanstalk are created using the special 'this' keyword.
 
-You define a reciever (The type this method will belong to)
+You define a receiver (The type this method will belong to)
 by defining a parameter with the special name 'this'.
 
 ```beanstalk
     -- Define a plex
-    Rectangle:
+    Rectangle = |
         width Float,
         height Float,
-    ;
+    |
 
     -- Define a method for the Rectangle plex
     area |this ~Rectangle|:

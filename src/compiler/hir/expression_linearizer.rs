@@ -36,10 +36,10 @@ use std::collections::HashMap;
 /// independent state, ensuring a single authoritative HIR state per module.
 #[derive(Debug, Default)]
 pub struct ExpressionLinearizer {
-    /// Compiler-introduced local variables and their types.
+    /// Compiler-introduced local variables and their kinds.
     /// CRITICAL: All these locals are treated exactly like user locals with
     /// identical drop and borrow semantics.
-    compiler_introduced_locals: HashMap<InternedString, DataType>,
+    compiler_introduced_locals: HashMap<InternedString, HirExprKind>,
 }
 
 impl ExpressionLinearizer {
@@ -86,7 +86,6 @@ impl ExpressionLinearizer {
             ExpressionKind::Reference(name) => {
                 let hir_expr = HirExpr {
                     kind: HirExprKind::Load(HirPlace::Var(*name)),
-                    data_type: expr.data_type.clone(),
                     location: expr.location.clone(),
                 };
                 Ok((Vec::new(), hir_expr))
@@ -99,7 +98,7 @@ impl ExpressionLinearizer {
 
             // Function calls
             ExpressionKind::FunctionCall(name, args) => {
-                self.linearize_function_call(*name, args, &expr.data_type, &expr.location, ctx)
+                self.linearize_function_call(*name, args, &expr.location, ctx)
             }
 
             // Collections
@@ -176,8 +175,6 @@ impl ExpressionLinearizer {
                         let left = value_stack.pop().unwrap();
 
                         let hir_op = self.convert_operator(op)?;
-                        let result_type =
-                            self.infer_binop_type(&left.data_type, &right.data_type, &hir_op);
 
                         // Create the binary operation expression
                         let binop_expr = HirExpr {
@@ -186,7 +183,6 @@ impl ExpressionLinearizer {
                                 op: hir_op,
                                 right: Box::new(right),
                             },
-                            data_type: result_type.clone(),
                             location: ast_node.location.clone(),
                         };
 
@@ -204,14 +200,12 @@ impl ExpressionLinearizer {
                         let operand = value_stack.pop().unwrap();
 
                         let hir_op = self.convert_unary_operator(op)?;
-                        let result_type = operand.data_type.clone();
 
                         let unary_expr = HirExpr {
                             kind: HirExprKind::UnaryOp {
                                 op: hir_op,
                                 operand: Box::new(operand),
                             },
-                            data_type: result_type,
                             location: ast_node.location.clone(),
                         };
 
@@ -234,36 +228,27 @@ impl ExpressionLinearizer {
                 }
 
                 // Function calls
-                NodeKind::FunctionCall(name, args, returns, call_location) => {
-                    let (call_nodes, call_expr) = self.linearize_function_call(
-                        *name,
-                        args,
-                        &self.get_return_type(returns),
-                        call_location,
-                        ctx,
-                    )?;
+                NodeKind::FunctionCall {
+                    name,
+                    args,
+                    returns,
+                    location,
+                } => {
+                    let (call_nodes, call_expr) =
+                        self.linearize_function_call(*name, args, location, ctx)?;
                     nodes.extend(call_nodes);
                     value_stack.push(call_expr);
                 }
 
                 // Host function calls
-                NodeKind::HostFunctionCall(
+                NodeKind::HostFunctionCall {
                     name,
                     args,
-                    return_types,
-                    module,
-                    import,
-                    call_location,
-                ) => {
-                    let (call_nodes, call_expr) = self.linearize_host_function_call(
-                        *name,
-                        args,
-                        return_types,
-                        *module,
-                        *import,
-                        call_location,
-                        ctx,
-                    )?;
+                    returns,
+                    location,
+                } => {
+                    let (call_nodes, call_expr) =
+                        self.linearize_host_function_call(*name, args, location, ctx)?;
                     nodes.extend(call_nodes);
                     value_stack.push(call_expr);
                 }
@@ -286,7 +271,6 @@ impl ExpressionLinearizer {
                             base: base_var,
                             field: *field,
                         },
-                        data_type: data_type.clone(),
                         location: ast_node.location.clone(),
                     };
                     value_stack.push(field_expr);
@@ -318,7 +302,6 @@ impl ExpressionLinearizer {
                 nodes,
                 HirExpr {
                     kind: HirExprKind::Int(0), // Placeholder for empty expressions
-                    data_type: result_type.clone(),
                     location: location.clone(),
                 },
             ))
@@ -333,7 +316,6 @@ impl ExpressionLinearizer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        result_type: &DataType,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<(Vec<HirNode>, HirExpr), CompilerError> {
@@ -353,7 +335,6 @@ impl ExpressionLinearizer {
                 target: name,
                 args: hir_args,
             },
-            data_type: result_type.clone(),
             location: location.clone(),
         };
 
@@ -365,9 +346,6 @@ impl ExpressionLinearizer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        return_types: &[DataType],
-        _module: InternedString,
-        _import: InternedString,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<(Vec<HirNode>, HirExpr), CompilerError> {
@@ -381,23 +359,12 @@ impl ExpressionLinearizer {
             hir_args.push(arg_expr);
         }
 
-        // Determine result type
-        let result_type = if return_types.len() == 1 {
-            return_types[0].clone()
-        } else if return_types.is_empty() {
-            DataType::None
-        } else {
-            // Multiple return types - use a tuple-like type
-            DataType::Inferred
-        };
-
         // Create the call expression (host calls are represented the same as regular calls in HIR)
         let call_expr = HirExpr {
             kind: HirExprKind::Call {
                 target: name,
                 args: hir_args,
             },
-            data_type: result_type,
             location: location.clone(),
         };
 
@@ -428,10 +395,6 @@ impl ExpressionLinearizer {
         // Convert operator
         let hir_op = self.convert_operator(op)?;
 
-        // Infer result type
-        let result_type =
-            self.infer_binop_type(&left_expr.data_type, &right_expr.data_type, &hir_op);
-
         // Create the binary operation expression
         let binop_expr = HirExpr {
             kind: HirExprKind::BinOp {
@@ -439,7 +402,6 @@ impl ExpressionLinearizer {
                 op: hir_op,
                 right: Box::new(right_expr),
             },
-            data_type: result_type,
             location: location.clone(),
         };
 
@@ -465,7 +427,6 @@ impl ExpressionLinearizer {
 
         let collection_expr = HirExpr {
             kind: HirExprKind::Collection(hir_items),
-            data_type: result_type.clone(),
             location: location.clone(),
         };
 
@@ -494,7 +455,6 @@ impl ExpressionLinearizer {
                 type_name: self.extract_struct_name(result_type),
                 fields: hir_fields,
             },
-            data_type: result_type.clone(),
             location: location.clone(),
         };
 
@@ -523,7 +483,6 @@ impl ExpressionLinearizer {
                 start: Box::new(start_expr),
                 end: Box::new(end_expr),
             },
-            data_type: result_type.clone(),
             location: location.clone(),
         };
 
@@ -541,24 +500,19 @@ impl ExpressionLinearizer {
 
             NodeKind::VariableDeclaration(arg) => self.linearize_expression(&arg.value, ctx),
 
-            NodeKind::FunctionCall(name, args, returns, location) => self.linearize_function_call(
-                *name,
+            NodeKind::FunctionCall {
+                name,
                 args,
-                &self.get_return_type(returns),
+                returns,
                 location,
-                ctx,
-            ),
+            } => self.linearize_function_call(*name, args, location, ctx),
 
-            NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => self
-                .linearize_host_function_call(
-                    *name,
-                    args,
-                    return_types,
-                    *module,
-                    *import,
-                    location,
-                    ctx,
-                ),
+            NodeKind::HostFunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => self.linearize_host_function_call(*name, args, location, ctx),
 
             NodeKind::FieldAccess {
                 base,
@@ -574,7 +528,6 @@ impl ExpressionLinearizer {
                         base: base_var,
                         field: *field,
                     },
-                    data_type: data_type.clone(),
                     location: node.location.clone(),
                 };
 
@@ -591,7 +544,6 @@ impl ExpressionLinearizer {
                             Vec::new(),
                             HirExpr {
                                 kind: HirExprKind::Int(0),
-                                data_type: DataType::None,
                                 location: node.location.clone(),
                             },
                         ))
@@ -611,7 +563,7 @@ impl ExpressionLinearizer {
     /// variable and scope system as user variables, with identical drop and borrow semantics.
     pub fn allocate_compiler_local(
         &mut self,
-        data_type: DataType,
+        kind: HirExprKind,
         location: TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> InternedString {
@@ -621,11 +573,11 @@ impl ExpressionLinearizer {
 
         // Register the temporary in our local tracking
         self.compiler_introduced_locals
-            .insert(interned_name, data_type.clone());
+            .insert(interned_name, kind.clone());
 
         // Register the temporary in the context's metadata
         ctx.metadata_mut()
-            .register_temporary(interned_name, data_type.clone());
+            .register_temporary(interned_name, kind.clone());
 
         // Mark as potentially owned (temporaries can own values)
         ctx.mark_potentially_owned(interned_name);
@@ -671,10 +623,9 @@ impl ExpressionLinearizer {
         ctx: &mut HirBuilderContext,
     ) -> (Vec<HirNode>, HirExpr) {
         let location = value.location.clone();
-        let data_type = value.data_type.clone();
 
         // Allocate a temporary variable
-        let temp_name = self.allocate_compiler_local(data_type.clone(), location.clone(), ctx);
+        let temp_name = self.allocate_compiler_local(value.kind.clone(), location.clone(), ctx);
 
         // Create the assignment
         let assign_node = self.create_assignment(
@@ -688,7 +639,6 @@ impl ExpressionLinearizer {
         // Create the load expression for the temporary
         let load_expr = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(temp_name)),
-            data_type,
             location,
         };
 
@@ -701,7 +651,7 @@ impl ExpressionLinearizer {
     }
 
     /// Gets the type of a compiler-introduced local.
-    pub fn get_compiler_local_type(&self, name: &InternedString) -> Option<&DataType> {
+    pub fn get_compiler_local_type(&self, name: &InternedString) -> Option<&HirExprKind> {
         self.compiler_introduced_locals.get(name)
     }
 
@@ -713,7 +663,6 @@ impl ExpressionLinearizer {
     fn create_int_expr(&self, value: i64, location: &TextLocation) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Int(value),
-            data_type: DataType::Int,
             location: location.clone(),
         }
     }
@@ -722,7 +671,6 @@ impl ExpressionLinearizer {
     fn create_float_expr(&self, value: f64, location: &TextLocation) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Float(value),
-            data_type: DataType::Float,
             location: location.clone(),
         }
     }
@@ -731,7 +679,6 @@ impl ExpressionLinearizer {
     fn create_bool_expr(&self, value: bool, location: &TextLocation) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Bool(value),
-            data_type: DataType::Bool,
             location: location.clone(),
         }
     }
@@ -740,7 +687,6 @@ impl ExpressionLinearizer {
     fn create_char_expr(&self, value: char, location: &TextLocation) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Char(value),
-            data_type: DataType::Char,
             location: location.clone(),
         }
     }
@@ -753,7 +699,6 @@ impl ExpressionLinearizer {
     ) -> HirExpr {
         HirExpr {
             kind: HirExprKind::StringLiteral(value),
-            data_type: DataType::String,
             location: location.clone(),
         }
     }
@@ -762,7 +707,6 @@ impl ExpressionLinearizer {
     fn create_none_expr(&self, location: &TextLocation) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Int(0), // Placeholder
-            data_type: DataType::None,
             location: location.clone(),
         }
     }
@@ -770,7 +714,6 @@ impl ExpressionLinearizer {
     // =========================================================================
     // Operator Conversion
     // =========================================================================
-
     /// Converts an AST operator to an HIR binary operator.
     pub fn convert_operator(&self, op: &Operator) -> Result<BinOp, CompilerError> {
         match op {

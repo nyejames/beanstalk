@@ -162,6 +162,7 @@ impl StructLayoutCalculator {
             }
             DataType::Collection(_, _) => 12, // Pointer + length + capacity
             DataType::Parameters(_) => 8,     // Pointer to tuple
+            DataType::Returns(_) => 8,        // Pointer to tuple
             DataType::Option(_) => 9,         // Tag + value
             DataType::None => 0,
             DataType::Inferred => 8,       // Default to pointer size
@@ -195,6 +196,7 @@ impl StructLayoutCalculator {
             }
             DataType::Collection(_, _) => 8,
             DataType::Parameters(_) => 8,
+            DataType::Returns(_) => 8,
             DataType::Option(_) => 8,
             DataType::None => 1,
             DataType::Inferred => 8,
@@ -594,8 +596,6 @@ impl StructHandler {
         let alloc_node = HirNode {
             kind: HirKind::Stmt(HirStmt::HostCall {
                 target: alloc_name,
-                module: module_name,
-                import: import_name,
                 args: vec![size_expr, align_expr],
             }),
             location: location.clone(),

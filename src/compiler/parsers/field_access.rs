@@ -36,9 +36,10 @@ pub fn parse_field_access(
     while token_stream.current_token_kind() == &TokenKind::Dot {
         token_stream.advance();
 
-        // Get the field/method name
+        // Get the field/method name or index
         let field_id = match token_stream.current_token_kind() {
             TokenKind::Symbol(id) => *id,
+            TokenKind::IntLiteral(val) => string_table.get_or_intern(val.to_string()),
             _ => return_rule_error!(
                 format!(
                     "Expected property or method name after '.', found '{:?}'",
@@ -54,7 +55,8 @@ pub fn parse_field_access(
         // Get the base members
         let mut members = match &current_type {
             DataType::Struct(inner_args, ..) => inner_args.to_owned(),
-            DataType::Function(_, sig) => sig.returns.to_owned(),
+
+            DataType::Function(_, sig) => {}
 
             // Other types may have methods implemented on them
             _ => Vec::new(),

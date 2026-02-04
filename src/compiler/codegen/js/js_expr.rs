@@ -354,7 +354,11 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         // Build the function call expression
-        let call_expr = format!("{}({})", func_name.0, arg_values.join(", "));
+        let call_expr = if self.config.pretty {
+            format!("{}({})", func_name.0, arg_values.join(", "))
+        } else {
+            format!("{}({})", func_name.0, arg_values.join(","))
+        };
 
         Ok(JsExpr::with_prelude(all_preludes, call_expr))
     }
@@ -390,12 +394,21 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         // Build the method call expression
-        let call_expr = format!(
-            "{}.{}({})",
-            receiver_expr.value,
-            method_name,
-            arg_values.join(", ")
-        );
+        let call_expr = if self.config.pretty {
+            format!(
+                "{}.{}({})",
+                receiver_expr.value,
+                method_name,
+                arg_values.join(", ")
+            )
+        } else {
+            format!(
+                "{}.{}({})",
+                receiver_expr.value,
+                method_name,
+                arg_values.join(",")
+            )
+        };
 
         Ok(JsExpr::with_prelude(all_preludes, call_expr))
     }
@@ -428,14 +441,20 @@ impl<'hir> JsEmitter<'hir> {
             let name = self.string_table.resolve(*field_name);
 
             // Build the field pair: name: value
-            field_pairs.push(format!("{}: {}", name, field_expr.value));
+            if self.config.pretty {
+                field_pairs.push(format!("{}: {}", name, field_expr.value));
+            } else {
+                field_pairs.push(format!("{}:{}", name, field_expr.value));
+            }
         }
 
         // Build the object literal
         let object_literal = if field_pairs.is_empty() {
             "{}".to_string()
-        } else {
+        } else if self.config.pretty {
             format!("{{ {} }}", field_pairs.join(", "))
+        } else {
+            format!("{{{}}}", field_pairs.join(","))
         };
 
         Ok(JsExpr::with_prelude(all_preludes, object_literal))
@@ -472,8 +491,10 @@ impl<'hir> JsEmitter<'hir> {
         // Build the array literal
         let array_literal = if element_values.is_empty() {
             "[]".to_string()
-        } else {
+        } else if self.config.pretty {
             format!("[{}]", element_values.join(", "))
+        } else {
+            format!("[{}]", element_values.join(","))
         };
 
         Ok(JsExpr::with_prelude(all_preludes, array_literal))

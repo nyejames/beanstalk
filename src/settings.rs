@@ -1,4 +1,3 @@
-use crate::compiler::host_functions::registry::RuntimeBackend;
 use std::path::PathBuf;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
@@ -64,13 +63,6 @@ impl Config {
             license: String::from("MIT"),
             html_meta: HTMLMeta::default(),
             hot_reload: false,
-        }
-    }
-
-    pub fn runtime_backend(&self) -> RuntimeBackend {
-        match self.project_type {
-            ProjectType::HTML | ProjectType::Jit | ProjectType::Repl => RuntimeBackend::JavaScript,
-            ProjectType::Embedded => RuntimeBackend::Rust,
         }
     }
 }

@@ -171,19 +171,18 @@ impl FunctionTransformer {
     ) -> Result<Vec<HirNode>, CompilerError> {
         match &node.kind {
             NodeKind::Return(exprs) => self.transform_return(exprs, ctx, &node.location),
-            NodeKind::FunctionCall(name, args, returns, location) => {
-                self.transform_function_call_as_stmt(*name, args, returns, ctx, location)
-            }
-            NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => self
-                .transform_host_function_call_as_stmt(
-                    *name,
-                    args,
-                    return_types,
-                    *module,
-                    *import,
-                    ctx,
-                    location,
-                ),
+            NodeKind::FunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => self.transform_function_call_as_stmt(*name, args, ctx, location),
+            NodeKind::HostFunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => self.transform_host_function_call_as_stmt(*name, args, ctx, location),
             NodeKind::VariableDeclaration(arg) => {
                 // Use the context's helper method to process variable declarations
                 ctx.process_variable_declaration(arg, &node.location)
@@ -281,7 +280,6 @@ impl FunctionTransformer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        _returns: &[Var],
         ctx: &mut HirBuilderContext,
         location: &TextLocation,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -315,12 +313,12 @@ impl FunctionTransformer {
         // Transform arguments
         let hir_args = self.transform_arguments(args, ctx)?;
 
-        // Get the function signature to determine return type
+        // Get the function signature to determine the return type
         let return_type = if let Some(sig) = ctx.get_function_signature(&name) {
             if sig.returns.is_empty() {
                 DataType::None
             } else if sig.returns.len() == 1 {
-                sig.returns[0].value.data_type.clone()
+                sig.returns[0].clone()
             } else {
                 // Multiple return values - for now, treat as tuple (simplified)
                 DataType::None // TODO: Proper tuple support
@@ -349,9 +347,6 @@ impl FunctionTransformer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        _return_types: &[DataType],
-        module: InternedString,
-        import: InternedString,
         ctx: &mut HirBuilderContext,
         location: &TextLocation,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -363,8 +358,6 @@ impl FunctionTransformer {
         let call_node = HirNode {
             kind: HirKind::Stmt(HirStmt::HostCall {
                 target: name,
-                module,
-                import,
                 args: hir_args,
             }),
             location: location.clone(),
@@ -402,13 +395,11 @@ impl FunctionTransformer {
 
         // For host calls as expressions, we need to create a statement first
         // and then load the result. For now, we'll create a call expression directly.
-        // This is a simplification - proper implementation would use temporaries.
+        // This is a simplification - a proper implementation would use temporaries.
         let node_id = ctx.allocate_node_id();
         let call_stmt = HirNode {
             kind: HirKind::Stmt(HirStmt::HostCall {
                 target: name,
-                module,
-                import,
                 args: hir_args.clone(),
             }),
             location: location.clone(),

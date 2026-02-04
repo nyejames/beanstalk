@@ -15,6 +15,10 @@ pub struct HtmlProjectBuilder {
     target: BuildTarget,
 }
 
+pub struct JsHostBinding {
+    pub js_path: String, // "console.log" or "Beanstalk.io"
+}
+
 impl HtmlProjectBuilder {
     pub fn new(target: BuildTarget) -> Self {
         Self { target }

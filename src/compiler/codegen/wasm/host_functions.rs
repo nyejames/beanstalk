@@ -26,12 +26,7 @@ use wasm_encoder::{ExportKind, ValType};
 /// Represents a host function import for WASM generation
 #[derive(Debug, Clone)]
 pub struct HostImport {
-    /// WASM import module name (e.g., "beanstalk_io")
-    pub module_name: String,
-    /// WASM import function name (e.g., "host_io_functions")
     pub function_name: String,
-    /// Beanstalk function name (for lookup)
-    pub beanstalk_name: String,
     /// Parameter types in WASM format
     pub params: Vec<ValType>,
     /// Return types in WASM format
@@ -43,17 +38,13 @@ pub struct HostImport {
 impl HostImport {
     /// Create a new host import from a host function definition
     pub fn from_host_def(def: &HostFunctionDef, string_table: &StringTable) -> Self {
-        let module_name = string_table.resolve(def.module).to_string();
-        let function_name = string_table.resolve(def.import_name).to_string();
-        let beanstalk_name = string_table.resolve(def.name).to_string();
+        let function_name = string_table.resolve(def.name).to_string();
 
         // Convert Beanstalk types to WASM types
         // For now, we use the JavaScript mapping which provides the actual WASM types
         // The host function def uses Beanstalk types which need conversion
         HostImport {
-            module_name,
             function_name,
-            beanstalk_name,
             params: Vec::new(), // Will be filled from JS mapping
             returns: Vec::new(),
             wasm_index: None,

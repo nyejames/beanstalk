@@ -108,6 +108,9 @@ pub enum DataType {
     Parameters(Vec<Var>),        // Struct definitions and parameters
     Struct(Vec<Var>, Ownership), // Struct instance
 
+    // Return Parameters
+    Returns(Vec<DataType>),
+
     // Special Beanstalk Types
     // Template types may have more static structure to them in the future
     // They are basically functions that accept a style and return a string
@@ -188,6 +191,7 @@ impl DataType {
                 DataType::Option(Box::new(DataType::Collection(inner_type, ownership)))
             }
             DataType::Parameters(args) => DataType::Option(Box::new(DataType::Parameters(args))),
+            DataType::Returns(returns) => DataType::Option(Box::new(DataType::Returns(returns))),
             DataType::Struct(args, ownership) => {
                 DataType::Option(Box::new(DataType::Struct(args, ownership)))
             }
@@ -289,6 +293,16 @@ impl DataType {
                 }
                 format!("Struct({})", arg_str)
             }
+            DataType::Returns(returns) => {
+                let mut returns_string = String::new();
+                for return_type in returns {
+                    returns_string.push_str(&format!(
+                        "{}",
+                        return_type.display_with_table(string_table)
+                    ));
+                }
+                format!("Returns({})", returns_string)
+            }
             DataType::Function(_, signature) => {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
@@ -301,8 +315,7 @@ impl DataType {
                     ));
                 }
                 for return_type in &signature.returns {
-                    let name = string_table.resolve(return_type.id);
-                    returns_string.push_str(&format!("{}, ", name));
+                    returns_string.push_str(&format!("{}, ", return_type.display_with_table(string_table)));
                 }
                 format!("Function({} -> {})", arg_str, returns_string)
             }
@@ -371,7 +384,7 @@ impl PartialEq for DataType {
                         .iter()
                         .zip(signature2.returns.iter())
                         .all(|(return1, return2)| {
-                            return1.value.data_type == return2.value.data_type
+                            return1 == return2
                         })
             }
             (DataType::Choices(a), DataType::Choices(b)) => {
@@ -430,6 +443,14 @@ impl Display for DataType {
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
+            
+            DataType::Returns(returns) => {
+                let mut returns_string = String::new();
+                for return_type in returns {
+                    returns_string.push_str(&format!("{}, ", return_type.to_string()));
+                }
+                write!(f, "{self:?} Returns({returns_string})")
+            }
 
             DataType::Function(_, signature) => {
                 let mut arg_str = String::new();
@@ -438,7 +459,7 @@ impl Display for DataType {
                     arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
                 }
                 for return_type in &signature.returns {
-                    returns_string.push_str(&format!("{}, ", return_type.id));
+                    returns_string.push_str(&format!("{}, ", return_type.to_string()));
                 }
 
                 write!(f, "Function({arg_str} -> {returns_string})")

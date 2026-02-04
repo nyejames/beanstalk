@@ -43,10 +43,10 @@ it must use a type signature or the name of one of the arguments if it's returni
     value, is_positive = multipleReturns(5)
 
     -- Creating an error type
-    Error:
+    Error = |
         msg String,
         context ~{String},
-    ;
+    |
 
     -- Functions use the '!' to show that they can return an error instead of any other values
     -- This error must always be handled at the call site,

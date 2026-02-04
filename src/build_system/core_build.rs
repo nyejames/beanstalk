@@ -16,6 +16,8 @@ use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{CompilerFrontend, Flag, InputModule, timer_log};
 use std::time::Instant;
+use crate::build_system::html_project::html_project_builder::JsHostBinding;
+use crate::build_system::jit_wasm::WasmHostBinding;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -46,6 +48,11 @@ pub enum ImportType {
     BuiltIn(BuiltInFunction),
     /// User-defined external function from host environment
     External,
+}
+
+pub struct HostBindings {
+    pub wasm: Option<WasmHostBinding>,
+    pub js: Option<JsHostBinding>,
 }
 
 /// Built-in compiler functions that the runtime must provide
@@ -100,7 +107,7 @@ pub fn compile_modules(
 
     // Create a builtin host function registry with print and other host functions
     let host_function_registry =
-        create_builtin_registry(config.runtime_backend(), &mut string_table).map_err(|e| {
+        create_builtin_registry(&mut string_table).map_err(|e| {
             CompilerMessages {
                 errors: vec![e],
                 warnings: Vec::new(),

@@ -5,7 +5,6 @@
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::runtime::jit::execute_direct_jit;
 use crate::settings::Config;
 use crate::{Flag, InputModule, Project, generate_lir, generate_wasm, timer_log};
 use std::time::Instant;
@@ -18,6 +17,10 @@ impl JitProjectBuilder {
     pub fn new(target: BuildTarget) -> Self {
         Self { target }
     }
+}
+pub struct WasmHostBinding {
+    pub module: String,
+    pub import_name: String,
 }
 
 impl ProjectBuilder for JitProjectBuilder {
@@ -85,22 +88,25 @@ impl ProjectBuilder for JitProjectBuilder {
 
         timer_log!(time, "WASM generated in: ");
 
-        // Execute the WASM directly using JIT
-        match execute_direct_jit(&wasm_bytes, &config.runtime_backend()) {
-            Ok(_) => {
-                // For JIT mode, we don't create any output files
-                // Return an empty project to satisfy the interface
-                Ok(Project {
-                    config: config.clone(),
-                    output_files: vec![],
-                    warnings: compiler_messages.warnings,
-                })
-            }
-            Err(e) => Err(CompilerMessages {
-                errors: vec![e],
-                warnings: vec![],
-            }),
-        }
+        // // Execute the WASM directly using JIT
+        // match execute_direct_jit(&wasm_bytes) {
+        //     Ok(_) => {
+        //         // For JIT mode, we don't create any output files
+        //         // Return an empty project to satisfy the interface
+        //         Ok(Project {
+        //             config: config.clone(),
+        //             output_files: vec![],
+        //             warnings: compiler_messages.warnings,
+        //         })
+        //     }
+        //     Err(e) => Err(CompilerMessages {
+        //         errors: vec![e],
+        //         warnings: vec![],
+        //     }),
+        // }
+        
+        println!("Wasm JIT not yet implemented. WASM bytes: {:?}", wasm_bytes);
+        Err(compiler_messages)
     }
 
     fn target_type(&self) -> &BuildTarget {

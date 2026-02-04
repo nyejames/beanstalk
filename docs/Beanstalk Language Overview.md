@@ -1,7 +1,11 @@
 # Beanstalk Language Design Guide
-Beanstalk is a programming language and build system with minimal syntax and a simple type system. It uses Wasm as its target bytecode.
+Beanstalk is a programming language and build system with minimal syntax and a simple type system.
 
-You can think of the language at a high level as being like a blend of Go and Rust. Fast compile times, very minimal and simple like Go, but with a unique style of automatic memory management, and a unique modern syntax with very powerful string templates.
+Beanstalk is a programming language and build system with minimal syntax and a simple type system. 
+It is designed primarily for use building UIs and text-heavy content for the Web and other host environments.
+
+You can think of the language at a high level as being like a blend of Go and Rust. 
+Fast compile times, very minimal and simple like Go, but with a unique style of automatic memory management, and a unique modern syntax with very powerful string templates.
 
 ## Syntax Summary
 For developers coming from most other languages, 
@@ -16,10 +20,10 @@ Square brackets are only used for string templates.
 This comes before the type if there is an explicit type declaration.
 - Double dashes for single line comments (--)
 - Immutable reference semantics are the default for all stack and heap allocated types. 
-- All copies have to be explicit unless they are used in part of a new expression. Inlcuding integers, floats and bools.
+- All copies have to be explicit unless they are used in part of a new expression. Including integers, floats and bools.
 - Result types are created with the '!' symbol. Options use '?'.
 
-**Naming conventions (strictly enforce):**
+**Naming conventions (strictly enforced):**
 - Types/Objects/Choices: `PascalCase`
 - Variables/functions: `regular_snake_case`
 - Constants: `UPPER_SNAKE_CASE`
@@ -309,11 +313,11 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 
 **Multi-file modules**
 
-Beanstalk supports organizing code across multiple files that compile into a single WASM module.
+Beanstalk supports organizing code across multiple files.
 
-Everything at the top level of a file is visible to the rest of the module by default, but must be explicitly exported to be exported from the final wasm module.
+Everything at the top level of a file is visible to the rest of the module by default, but must be explicitly exported to be exported from the final wasm output.
 
-Currently imports can't yet be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
+Imports can't yet be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
 
 **Import syntax:**
 ```beanstalk
@@ -347,31 +351,13 @@ helper.another_func() -- Call another top level function from the file
 ## Template System
 **Templates use `[]` exclusively** - never confuse with collections `{}`.
 
-Templates are either folded to strings at compile time, or become functions that return strings at runtime. They are the ONLY way to create mutable strings in Beanstalk. "" are only for string slices.
+Templates are either folded to strings at compile time, or become functions that return strings at runtime. 
+They are the ONLY way to create mutable strings in Beanstalk. "" are only for string slices.
 
 **Template structure:**
 - Head and body separated by `:`
-- Variable capture from surrounding scope
-- Runtime ID assignment with `@` symbol
+- Variable capture from the surrounding scope
 
-**Template patterns:**
-```beanstalk
--- Basic template
-[: content]
-
--- With style/struct
--- Unpacks the fields so they can be accessed by the children
--- Styles are structs with special fields that affect how the template is parsed.
--- Styles include a formatter function, which parses all of the template content at compile time. A common use case for this is to use a markdown formatter which will convert the content into HTML from a markdown-like syntax.
-[Section: content]
-
--- With ID for easy runtime access
-[@my_id: content]
-
--- Control flow in templates
-
--- Only becomes an empty string if false
-[if condition: content]
-
-[for item in collection: [item]]
-```
+Templates unlock the full power of Beanstalk's HTML / CSS generation capabilities.
+You can use slots and special Style structs to determine how the templates are constructed.
+They can be used to build complex HTML pages with minimal boilerplate.

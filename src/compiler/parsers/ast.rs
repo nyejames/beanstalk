@@ -1,5 +1,6 @@
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::datatypes::DataType;
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
@@ -252,7 +253,7 @@ pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope: InternedPath,
     pub declarations: Vec<Var>,
-    pub returns: Vec<Var>,
+    pub returns: Vec<DataType>,
     pub host_registry: HostRegistry,
 }
 #[derive(PartialEq, Clone)]
@@ -273,7 +274,7 @@ impl ScopeContext {
         scope: InternedPath,
         declarations: &[Var],
         host_registry: HostRegistry,
-        returns: Vec<Var>,
+        returns: Vec<DataType>,
     ) -> ScopeContext {
         ScopeContext {
             kind,
@@ -310,7 +311,7 @@ impl ScopeContext {
         new_context
     }
 
-    pub fn new_child_expression(&self, returns: Vec<Var>) -> ScopeContext {
+    pub fn new_child_expression(&self, returns: Vec<DataType>) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Expression;
         new_context.returns = returns;

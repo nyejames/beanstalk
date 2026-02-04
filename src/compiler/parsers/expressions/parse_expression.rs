@@ -37,7 +37,7 @@ pub fn create_multiple_expressions(
         let expression = create_expression(
             token_stream,
             context,
-            &mut expected_arg.value.data_type,
+            &mut expected_arg,
             &expected_arg.value.ownership,
             consume_closing_parenthesis,
             string_table,
@@ -262,9 +262,9 @@ pub fn create_expression(
                             // -------------------------------
                             // FUNCTION CALL INSIDE EXPRESSION
                             // -------------------------------
-                            if let NodeKind::FunctionCall(func_name, args, returns, location) = function_call_node.kind {
+                            if let NodeKind::FunctionCall{name, args, returns, location} = function_call_node.kind {
                                 let func_call_expr = Expression::function_call(
-                                    func_name,
+                                    name,
                                     args,
                                     returns,
                                     location,
@@ -337,10 +337,10 @@ pub fn create_expression(
                         string_table,
                     )?;
 
-                    if let NodeKind::HostFunctionCall(func_name, expressions, _returns, _module_name, _wasm_import_name, location) = function_call_node.kind {
+                    if let NodeKind::HostFunctionCall { name, args, returns, location} = function_call_node.kind {
                         let func_call_expr = Expression::function_call(
-                            func_name.to_owned(),
-                            expressions.to_owned(),
+                            name.to_owned(),
+                            args.to_owned(),
                             signature.returns,
                             location,
                         );

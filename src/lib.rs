@@ -13,7 +13,6 @@ pub(crate) mod compiler_tests {
 }
 
 // New runtime and build system modules
-pub(crate) mod runtime;
 pub(crate) mod build_system {
     pub(crate) mod core_build;
     pub(crate) mod embedded_project;

@@ -18,7 +18,7 @@ use crate::{ast_log, return_syntax_error, return_type_error};
 #[derive(Clone, Debug)]
 pub struct FunctionSignature {
     pub parameters: Vec<Var>,
-    pub returns: Vec<Var>,
+    pub returns: Vec<DataType>,
 }
 
 impl FunctionSignature {
@@ -62,7 +62,7 @@ impl FunctionSignature {
         }
 
         // Parse return types
-        let mut returns: Vec<Var> = Vec::new();
+        let mut returns: Vec<DataType> = Vec::new();
         let mut next_in_list: bool = true;
         let mut mutable: bool = false;
 
@@ -98,19 +98,7 @@ impl FunctionSignature {
                             }
                         )
                     }
-                    let return_name = format!("return_{}", returns.len());
-                    returns.push(Var {
-                        id: string_table.intern(&return_name),
-                        value: Expression::int(
-                            0,
-                            token_stream.current_location(),
-                            if mutable {
-                                Ownership::MutableOwned
-                            } else {
-                                ImmutableOwned
-                            },
-                        ),
-                    });
+                    returns.push(DataType::Int);
                 }
                 TokenKind::DatatypeFloat => {
                     if !next_in_list {
@@ -124,19 +112,7 @@ impl FunctionSignature {
                             }
                         )
                     }
-                    let return_name = format!("return_{}", returns.len());
-                    returns.push(Var {
-                        id: string_table.intern(&return_name),
-                        value: Expression::float(
-                            0.0,
-                            token_stream.current_location(),
-                            if mutable {
-                                Ownership::MutableOwned
-                            } else {
-                                ImmutableOwned
-                            },
-                        ),
-                    });
+                    returns.push(DataType::Float);
                 }
                 TokenKind::DatatypeBool => {
                     if !next_in_list {
@@ -150,19 +126,7 @@ impl FunctionSignature {
                             }
                         )
                     }
-                    let return_name = format!("return_{}", returns.len());
-                    returns.push(Var {
-                        id: string_table.intern(&return_name),
-                        value: Expression::bool(
-                            false,
-                            token_stream.current_location(),
-                            if mutable {
-                                Ownership::MutableOwned
-                            } else {
-                                ImmutableOwned
-                            },
-                        ),
-                    });
+                    returns.push(DataType::Bool);
                 }
                 TokenKind::DatatypeString => {
                     if !next_in_list {
@@ -176,19 +140,7 @@ impl FunctionSignature {
                             }
                         )
                     }
-                    let return_name = format!("return_{}", returns.len());
-                    returns.push(Var {
-                        id: string_table.intern(&return_name),
-                        value: Expression::string_slice(
-                            string_table.intern(""), // Empty string
-                            token_stream.current_location(),
-                            if mutable {
-                                Ownership::MutableOwned
-                            } else {
-                                ImmutableOwned
-                            },
-                        ),
-                    });
+                    returns.push(DataType::String);
                 }
 
                 TokenKind::Symbol(name) => {
@@ -432,6 +384,7 @@ fn format_type_for_error(data_type: &DataType) -> String {
         DataType::Template => "Template".to_string(),
         DataType::Function(..) => "Function".to_string(),
         DataType::Parameters(..) => "Args".to_string(),
+        DataType::Returns(..) => "Returns".to_string(),
         DataType::Choices(types) => {
             let type_names: Vec<String> = types
                 .iter()
@@ -554,12 +507,12 @@ pub fn parse_function_call(
     let interned_name = *id;
 
     Ok(AstNode {
-        kind: NodeKind::FunctionCall(
-            interned_name,
+        kind: NodeKind::FunctionCall {
+            name: interned_name,
             args,
-            signature.returns.to_owned(),
-            token_stream.current_location(),
-        ),
+            returns: signature.returns.to_owned(),
+            location: token_stream.current_location(),
+        },
         location: token_stream.current_location(),
         scope: context.scope.clone(),
     })
@@ -704,25 +657,16 @@ pub fn parse_host_function_call(
         string_table,
     )?;
 
-    // Apply CoerceToString compile-time folding for constant arguments
-    for (i, param) in host_func.parameters.iter().enumerate() {
-        if matches!(param.data_type, DataType::CoerceToString) && i < args.len() {
-            args[i] = coerce_to_string_at_compile_time(&args[i], string_table)?;
-        }
-    }
-
     // Validate the host function call
     validate_host_function_call(host_func, &args, location.clone(), &string_table)?;
 
     Ok(AstNode {
-        kind: NodeKind::HostFunctionCall(
-            host_func.name,
+        kind: NodeKind::HostFunctionCall {
+            name: host_func.name,
             args,
-            host_func.return_types.clone(),
-            host_func.module,
-            host_func.import_name,
-            location.clone(),
-        ),
+            returns: vec![host_func.return_type_to_datatype()],
+            location: location.clone(),
+        },
         location,
         scope: context.scope.clone(),
     })
@@ -797,39 +741,20 @@ pub fn validate_host_function_call(
 
     // Check argument types
     for (i, (expression, param)) in args.iter().zip(&function.parameters).enumerate() {
-        if !types_compatible(&expression.data_type, &param.data_type) {
+        if !types_compatible(&expression.data_type, &param.language_type) {
             return_type_error!(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
                     i + 1,
                     function.name,
-                    format_type_for_error(&param.data_type),
+                    format_type_for_error(&param.language_type),
                     format_type_for_error(&expression.data_type),
-                    get_type_conversion_hint(&expression.data_type, &param.data_type)
+                    get_type_conversion_hint(&expression.data_type, &param.language_type)
                 ),
                 location.to_error_location(&string_table),
                 {
                     CompilationStage => "Function Call Validation",
                     PrimarySuggestion => "Convert the argument to the expected type",
-                }
-            );
-        }
-
-        // Check mutability requirements
-        if param.ownership.is_mutable() && !expression.ownership.is_mutable() {
-            return_type_error!(
-                format!(
-                    "Argument {} to function '{}' must be mutable, but an immutable {} was provided. Use '~{}' to make it mutable",
-                    i + 1,
-                    function.name,
-                    format_type_for_error(&expression.data_type),
-                    format_type_for_error(&param.data_type).to_lowercase()
-                ),
-                location.to_error_location(&string_table),
-                {
-                    BorrowKind => "Mutable",
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "Add '~' before the argument to make it mutable",
                 }
             );
         }

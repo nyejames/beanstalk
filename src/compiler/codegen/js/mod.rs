@@ -132,8 +132,15 @@ impl<'hir> JsEmitter<'hir> {
     ///
     /// Format: `/* Line X:Y-Z */` where X is the line number, Y is the start column,
     /// and Z is the end column.
+    ///
+    /// Location comments are only emitted when:
+    /// - `emit_locations` is enabled in the configuration
+    /// - Pretty printing is enabled (for readability)
+    ///
+    /// In compact mode, location comments are suppressed to minimize output size.
     pub(crate) fn emit_location_comment(&mut self, location: &crate::compiler::parsers::tokenizer::tokens::TextLocation) {
-        if self.config.emit_locations {
+        // Only emit location comments in pretty mode with emit_locations enabled
+        if self.config.emit_locations && self.config.pretty {
             let line = location.start_pos.line_number + 1; // Convert to 1-based
             let start_col = location.start_pos.char_column;
             let end_col = location.end_pos.char_column;
@@ -143,12 +150,36 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     /// Emits a newline and proper indentation
+    ///
+    /// When pretty printing is enabled, this emits a newline followed by
+    /// indentation (4 spaces per level). When pretty printing is disabled,
+    /// this emits nothing, resulting in compact output.
     pub(crate) fn emit_indent(&mut self) {
         if self.config.pretty {
             self.out.push('\n');
             for _ in 0..self.indent {
                 self.out.push_str("    "); // 4 spaces per indent level
             }
+        }
+    }
+
+    /// Emits a space if pretty printing is enabled
+    ///
+    /// Use this to add spacing between tokens in pretty mode while
+    /// keeping output compact in non-pretty mode.
+    pub(crate) fn emit_space(&mut self) {
+        if self.config.pretty {
+            self.out.push(' ');
+        }
+    }
+
+    /// Emits a newline if pretty printing is enabled
+    ///
+    /// Use this to add blank lines between major sections in pretty mode
+    /// while keeping output compact in non-pretty mode.
+    pub(crate) fn emit_newline(&mut self) {
+        if self.config.pretty {
+            self.out.push('\n');
         }
     }
 
@@ -391,7 +422,9 @@ pub fn lower_hir_to_js(
     // The entry block contains the top-level code that runs when the module loads
     if !hir.blocks.is_empty() {
         emitter.emit_indent();
-        emitter.emit("// Main execution");
+        if emitter.config.pretty {
+            emitter.emit("// Main execution");
+        }
         emitter.emit_block(hir.entry_block)?;
     }
 
@@ -420,7 +453,11 @@ impl<'hir> JsEmitter<'hir> {
 
         // Emit the if statement
         self.emit_indent();
-        self.emit(&format!("if ({}) {{", cond_expr.value));
+        if self.config.pretty {
+            self.emit(&format!("if ({}) {{", cond_expr.value));
+        } else {
+            self.emit(&format!("if({}){{", cond_expr.value));
+        }
 
         // Increase indentation for the then block
         self.indent();
@@ -434,7 +471,11 @@ impl<'hir> JsEmitter<'hir> {
         // Handle the else block if present
         if let Some(else_block_id) = else_block {
             self.emit_indent();
-            self.emit("} else {");
+            if self.config.pretty {
+                self.emit("} else {");
+            } else {
+                self.emit("}else{");
+            }
 
             // Increase indentation for the else block
             self.indent();
@@ -488,30 +529,55 @@ impl<'hir> JsEmitter<'hir> {
 
                     // For loops with both value and index, we need to use entries()
                     // JavaScript: for (const [index, value] of array.entries())
-                    self.emit(&format!(
-                        "{}: for (const [{}, {}] of {}.entries()) {{",
-                        loop_label.0, js_index.0, js_var.0, iter_js.value
-                    ));
+                    if self.config.pretty {
+                        self.emit(&format!(
+                            "{}: for (const [{}, {}] of {}.entries()) {{",
+                            loop_label.0, js_index.0, js_var.0, iter_js.value
+                        ));
+                    } else {
+                        self.emit(&format!(
+                            "{}:for(const [{},{}] of {}.entries()){{",
+                            loop_label.0, js_index.0, js_var.0, iter_js.value
+                        ));
+                    }
                 } else {
                     // For loops with just the value
                     // JavaScript: for (const value of array)
-                    self.emit(&format!(
-                        "{}: for (const {} of {}) {{",
-                        loop_label.0, js_var.0, iter_js.value
-                    ));
+                    if self.config.pretty {
+                        self.emit(&format!(
+                            "{}: for (const {} of {}) {{",
+                            loop_label.0, js_var.0, iter_js.value
+                        ));
+                    } else {
+                        self.emit(&format!(
+                            "{}:for(const {} of {}){{",
+                            loop_label.0, js_var.0, iter_js.value
+                        ));
+                    }
                 }
             } else {
                 // Loop without binding - just iterate for side effects
                 // JavaScript: for (const _ of array)
-                self.emit(&format!(
-                    "{}: for (const _ of {}) {{",
-                    loop_label.0, iter_js.value
-                ));
+                if self.config.pretty {
+                    self.emit(&format!(
+                        "{}: for (const _ of {}) {{",
+                        loop_label.0, iter_js.value
+                    ));
+                } else {
+                    self.emit(&format!(
+                        "{}:for(const _ of {}){{",
+                        loop_label.0, iter_js.value
+                    ));
+                }
             }
         } else {
             // Infinite loop: while(true) in JavaScript
             self.emit_indent();
-            self.emit(&format!("{}: while (true) {{", loop_label.0));
+            if self.config.pretty {
+                self.emit(&format!("{}: while (true) {{", loop_label.0));
+            } else {
+                self.emit(&format!("{}:while(true){{", loop_label.0));
+            }
         }
 
         // Increase indentation for the loop body
@@ -540,11 +606,19 @@ impl<'hir> JsEmitter<'hir> {
         // Look up the loop label for the target block
         if let Some(label) = self.loop_labels.get(&target) {
             // Break with label to target the correct loop
-            self.emit(&format!("break {};", label.0));
+            if self.config.pretty {
+                self.emit(&format!("break {};", label.0));
+            } else {
+                self.emit(&format!("break {};", label.0));
+            }
         } else {
             // If no label found, emit a plain break (should not happen in well-formed HIR)
             // This is a fallback for debugging
-            self.emit("break; /* WARNING: No label found for target */");
+            if self.config.pretty {
+                self.emit("break; /* WARNING: No label found for target */");
+            } else {
+                self.emit("break;");
+            }
         }
     }
 
@@ -555,11 +629,19 @@ impl<'hir> JsEmitter<'hir> {
         // Look up the loop label for the target block
         if let Some(label) = self.loop_labels.get(&target) {
             // Continue with label to target the correct loop
-            self.emit(&format!("continue {};", label.0));
+            if self.config.pretty {
+                self.emit(&format!("continue {};", label.0));
+            } else {
+                self.emit(&format!("continue {};", label.0));
+            }
         } else {
             // If no label found, emit a plain continue (should not happen in well-formed HIR)
             // This is a fallback for debugging
-            self.emit("continue; /* WARNING: No label found for target */");
+            if self.config.pretty {
+                self.emit("continue; /* WARNING: No label found for target */");
+            } else {
+                self.emit("continue;");
+            }
         }
     }
 
@@ -579,7 +661,11 @@ impl<'hir> JsEmitter<'hir> {
 
             // Emit the return statement
             self.emit_indent();
-            self.emit(&format!("return {};", value_expr.value));
+            if self.config.pretty {
+                self.emit(&format!("return {};", value_expr.value));
+            } else {
+                self.emit(&format!("return {};", value_expr.value));
+            }
         } else {
             // Multiple return values - return as an array
             let mut all_preludes = Vec::new();
@@ -596,7 +682,11 @@ impl<'hir> JsEmitter<'hir> {
 
             // Emit the return statement with array
             self.emit_indent();
-            self.emit(&format!("return [{}];", value_strings.join(", ")));
+            if self.config.pretty {
+                self.emit(&format!("return [{}];", value_strings.join(", ")));
+            } else {
+                self.emit(&format!("return [{}];", value_strings.join(",")));
+            }
         }
 
         Ok(())
@@ -620,7 +710,11 @@ impl<'hir> JsEmitter<'hir> {
         // Store the scrutinee in a temporary variable for repeated comparison
         let temp_var = self.gen_temp();
         self.emit_indent();
-        self.emit(&format!("const {} = {};", temp_var.0, scrutinee_expr.value));
+        if self.config.pretty {
+            self.emit(&format!("const {} = {};", temp_var.0, scrutinee_expr.value));
+        } else {
+            self.emit(&format!("const {}={};", temp_var.0, scrutinee_expr.value));
+        }
 
         // Determine if we can use a switch statement or need if-else chain
         // For now, we'll use if-else chain for simplicity and correctness
@@ -634,7 +728,11 @@ impl<'hir> JsEmitter<'hir> {
                 self.emit_indent();
                 first_arm = false;
             } else {
-                self.emit(" else ");
+                if self.config.pretty {
+                    self.emit(" else ");
+                } else {
+                    self.emit("else ");
+                }
             }
 
             // Generate the condition for this arm
@@ -643,7 +741,11 @@ impl<'hir> JsEmitter<'hir> {
                     let lit_js = self.lower_expr(lit_expr)?;
                     // Emit any prelude from the literal (shouldn't be any, but just in case)
                     self.emit_stmts(&lit_js.prelude);
-                    format!("{} === {}", temp_var.0, lit_js.value)
+                    if self.config.pretty {
+                        format!("{} === {}", temp_var.0, lit_js.value)
+                    } else {
+                        format!("{}==={}", temp_var.0, lit_js.value)
+                    }
                 }
 
                 HirPattern::Range { start, end } => {
@@ -654,10 +756,17 @@ impl<'hir> JsEmitter<'hir> {
                     self.emit_stmts(&start_js.prelude);
                     self.emit_stmts(&end_js.prelude);
 
-                    format!(
-                        "{} >= {} && {} <= {}",
-                        temp_var.0, start_js.value, temp_var.0, end_js.value
-                    )
+                    if self.config.pretty {
+                        format!(
+                            "{} >= {} && {} <= {}",
+                            temp_var.0, start_js.value, temp_var.0, end_js.value
+                        )
+                    } else {
+                        format!(
+                            "{}>={}&& {}<={}",
+                            temp_var.0, start_js.value, temp_var.0, end_js.value
+                        )
+                    }
                 }
 
                 HirPattern::Wildcard => {
@@ -670,13 +779,21 @@ impl<'hir> JsEmitter<'hir> {
             let full_condition = if let Some(guard) = &arm.guard {
                 let guard_js = self.lower_expr(guard)?;
                 self.emit_stmts(&guard_js.prelude);
-                format!("({}) && ({})", condition, guard_js.value)
+                if self.config.pretty {
+                    format!("({}) && ({})", condition, guard_js.value)
+                } else {
+                    format!("({})&&({})", condition, guard_js.value)
+                }
             } else {
                 condition
             };
 
             // Emit the if statement
-            self.emit(&format!("if ({}) {{", full_condition));
+            if self.config.pretty {
+                self.emit(&format!("if ({}) {{", full_condition));
+            } else {
+                self.emit(&format!("if({}){{", full_condition));
+            }
 
             // Increase indentation for the arm body
             self.indent();
@@ -693,7 +810,11 @@ impl<'hir> JsEmitter<'hir> {
 
         // Handle default block if present and no wildcard was found
         if let Some(default_id) = default_block {
-            self.emit(" else {");
+            if self.config.pretty {
+                self.emit(" else {");
+            } else {
+                self.emit("else{");
+            }
 
             // Increase indentation for the default block
             self.indent();

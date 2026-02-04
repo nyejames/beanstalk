@@ -34,11 +34,19 @@ impl<'hir> JsEmitter<'hir> {
 
         match stmt {
             JsStmt::Let { name, value } => {
-                self.emit(&format!("let {} = {};", name.0, value));
+                if self.config.pretty {
+                    self.emit(&format!("let {} = {};", name.0, value));
+                } else {
+                    self.emit(&format!("let {}={};", name.0, value));
+                }
             }
 
             JsStmt::Assign { name, value } => {
-                self.emit(&format!("{} = {};", name.0, value));
+                if self.config.pretty {
+                    self.emit(&format!("{} = {};", name.0, value));
+                } else {
+                    self.emit(&format!("{}={};", name.0, value));
+                }
             }
 
             JsStmt::Expr(expr) => {
@@ -149,12 +157,7 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             // === Host Function Calls ===
-            HirStmt::HostCall {
-                target,
-                module: _,
-                import: _,
-                args,
-            } => {
+            HirStmt::HostCall { target, args } => {
                 // For now, we'll treat host calls like regular calls
                 // TODO: Implement proper host function mapping (e.g., io -> console.log)
                 let call_expr = self.lower_call(*target, args)?;

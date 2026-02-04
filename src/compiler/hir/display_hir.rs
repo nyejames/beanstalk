@@ -249,24 +249,13 @@ impl HirStmt {
                 format!("Call: {}({})", string_table.resolve(*target), args_str)
             }
 
-            HirStmt::HostCall {
-                target,
-                module,
-                import,
-                args,
-            } => {
+            HirStmt::HostCall { target, args } => {
                 let args_str = args
                     .iter()
                     .map(|arg| arg.display_with_table(string_table))
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!(
-                    "HostCall: {}::{}::{} ({})",
-                    string_table.resolve(*module),
-                    string_table.resolve(*import),
-                    string_table.resolve(*target),
-                    args_str
-                )
+                format!("HostCall: {}({})", string_table.resolve(*target), args_str)
             }
 
             HirStmt::PossibleDrop(place) => {

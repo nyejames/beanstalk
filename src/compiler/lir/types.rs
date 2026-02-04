@@ -94,6 +94,7 @@ pub fn data_type_to_lir_type(data_type: &DataType) -> LirType {
         DataType::Struct(_, _) => LirType::I32,
         DataType::Collection(_, _) => LirType::I32,
         DataType::Parameters(_) => LirType::I32,
+        DataType::Returns(_) => LirType::I32,
         DataType::Template => LirType::I32,
         DataType::Function(_, _) => LirType::I32,
         DataType::Option(_) => LirType::I32,

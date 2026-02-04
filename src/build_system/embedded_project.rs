@@ -6,7 +6,7 @@
 use crate::build::{BuildTarget, FileKind, ProjectBuilder};
 use crate::build_system::core_build;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::host_functions::registry::{RuntimeBackend, create_builtin_registry};
+use crate::compiler::host_functions::registry::{create_builtin_registry};
 use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{
@@ -152,11 +152,9 @@ impl ProjectBuilder for EmbeddedProjectBuilder {
         // Create a new string table for interning strings
         let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
 
-        let runtime_backend = RuntimeBackend::default();
-
         // Create a builtin host function registry with print and other host functions
         let host_registry =
-            create_builtin_registry(runtime_backend, &mut string_table).map_err(|e| {
+            create_builtin_registry(&mut string_table).map_err(|e| {
                 CompilerMessages {
                     errors: vec![e],
                     warnings: Vec::new(),

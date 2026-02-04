@@ -26,7 +26,7 @@ use crate::compiler::hir::nodes::{
     HirTerminator,
 };
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler::parsers::expressions::expression::Expression;
+use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::branching::MatchArm;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
@@ -443,32 +443,20 @@ impl ControlFlowLinearizer {
     ) -> Result<HirPattern, CompilerError> {
         match &pattern.kind {
             // Literal patterns
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Int(val) => {
-                Ok(HirPattern::Literal(HirExpr {
-                    kind: HirExprKind::Int(*val),
-                    data_type: DataType::Int,
-                    location: pattern.location.clone(),
-                }))
-            }
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Float(val) => {
-                Ok(HirPattern::Literal(HirExpr {
-                    kind: HirExprKind::Float(*val),
-                    data_type: DataType::Float,
-                    location: pattern.location.clone(),
-                }))
-            }
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Bool(val) => {
-                Ok(HirPattern::Literal(HirExpr {
-                    kind: HirExprKind::Bool(*val),
-                    data_type: DataType::Bool,
-                    location: pattern.location.clone(),
-                }))
-            }
+            ExpressionKind::Int(val) => Ok(HirPattern::Literal(HirExpr {
+                kind: HirExprKind::Int(*val),
+                location: pattern.location.clone(),
+            })),
+            ExpressionKind::Float(val) => Ok(HirPattern::Literal(HirExpr {
+                kind: HirExprKind::Float(*val),
+                location: pattern.location.clone(),
+            })),
+            ExpressionKind::Bool(val) => Ok(HirPattern::Literal(HirExpr {
+                kind: HirExprKind::Bool(*val),
+                location: pattern.location.clone(),
+            })),
             // Range patterns
-            crate::compiler::parsers::expressions::expression::ExpressionKind::Range(
-                start,
-                end,
-            ) => {
+            ExpressionKind::Range(start, end) => {
                 let (_, start_expr) = self.expr_linearizer.linearize_expression(start, ctx)?;
                 let (_, end_expr) = self.expr_linearizer.linearize_expression(end, ctx)?;
                 Ok(HirPattern::Range {
@@ -477,9 +465,7 @@ impl ControlFlowLinearizer {
                 })
             }
             // Wildcard pattern (represented as None or special marker)
-            crate::compiler::parsers::expressions::expression::ExpressionKind::None => {
-                Ok(HirPattern::Wildcard)
-            }
+            ExpressionKind::None => Ok(HirPattern::Wildcard),
             // Other patterns - try to linearize as literal
             _ => {
                 let (_, expr) = self.expr_linearizer.linearize_expression(pattern, ctx)?;
@@ -743,21 +729,19 @@ impl ControlFlowLinearizer {
             }
 
             // Function calls
-            NodeKind::FunctionCall(name, args, returns, call_location) => {
-                self.linearize_function_call(*name, args, returns, call_location, ctx)
-            }
+            NodeKind::FunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => self.linearize_function_call(*name, args, location, ctx),
 
-            NodeKind::HostFunctionCall(name, args, return_types, module, import, call_location) => {
-                self.linearize_host_function_call(
-                    *name,
-                    args,
-                    return_types,
-                    *module,
-                    *import,
-                    call_location,
-                    ctx,
-                )
-            }
+            NodeKind::HostFunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => self.linearize_host_function_call(*name, args, location, ctx),
 
             // R-values (expressions as statements)
             NodeKind::Rvalue(expr) => {
@@ -850,9 +834,7 @@ impl ControlFlowLinearizer {
     fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
         match &target.kind {
             NodeKind::Rvalue(expr) => match &expr.kind {
-                crate::compiler::parsers::expressions::expression::ExpressionKind::Reference(
-                    name,
-                ) => Ok(HirPlace::Var(*name)),
+                ExpressionKind::Reference(name) => Ok(HirPlace::Var(*name)),
                 _ => return_compiler_error!("Invalid assignment target expression"),
             },
             NodeKind::FieldAccess { base, field, .. } => {
@@ -895,7 +877,6 @@ impl ControlFlowLinearizer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        _returns: &[crate::compiler::parsers::ast_nodes::Var],
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -921,9 +902,6 @@ impl ControlFlowLinearizer {
         &mut self,
         name: InternedString,
         args: &[Expression],
-        _return_types: &[DataType],
-        module: InternedString,
-        import: InternedString,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -938,8 +916,7 @@ impl ControlFlowLinearizer {
         }
 
         // Create the host call statement
-        let call_node =
-            self.create_host_call_statement(name, module, import, hir_args, location.clone(), ctx);
+        let call_node = self.create_host_call_statement(name, hir_args, location.clone(), ctx);
         nodes.push(call_node);
 
         Ok(nodes)
@@ -968,8 +945,6 @@ impl ControlFlowLinearizer {
     fn create_host_call_statement(
         &self,
         target: InternedString,
-        module: InternedString,
-        import: InternedString,
         args: Vec<HirExpr>,
         location: TextLocation,
         ctx: &mut HirBuilderContext,
@@ -979,12 +954,7 @@ impl ControlFlowLinearizer {
         ctx.record_node_context(node_id, build_context);
 
         HirNode {
-            kind: HirKind::Stmt(HirStmt::HostCall {
-                target,
-                module,
-                import,
-                args,
-            }),
+            kind: HirKind::Stmt(HirStmt::HostCall { target, args }),
             location,
             id: node_id,
         }
@@ -1047,14 +1017,8 @@ impl ControlFlowLinearizer {
         let module_name = ctx.string_table.intern("beanstalk_io");
         let import_name = ctx.string_table.intern("print");
 
-        let call_node = self.create_host_call_statement(
-            io_name,
-            module_name,
-            import_name,
-            vec![hir_expr],
-            location.clone(),
-            ctx,
-        );
+        let call_node =
+            self.create_host_call_statement(io_name, vec![hir_expr], location.clone(), ctx);
         nodes.push(call_node);
 
         Ok(nodes)

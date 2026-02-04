@@ -338,7 +338,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Int(42),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -353,7 +352,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Int(-123),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -368,7 +366,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Float(3.14),
-            data_type: DataType::Float,
             location: dummy_location(),
         };
 
@@ -383,7 +380,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Float(f64::NAN),
-            data_type: DataType::Float,
             location: dummy_location(),
         };
 
@@ -398,7 +394,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Float(f64::INFINITY),
-            data_type: DataType::Float,
             location: dummy_location(),
         };
 
@@ -413,7 +408,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Float(f64::NEG_INFINITY),
-            data_type: DataType::Float,
             location: dummy_location(),
         };
 
@@ -428,7 +422,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Bool(true),
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -443,7 +436,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Bool(false),
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -459,7 +451,6 @@ mod literal_lowering_tests {
         let interned = string_table.intern("hello world");
         let expr = HirExpr {
             kind: HirExprKind::StringLiteral(interned),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -475,7 +466,6 @@ mod literal_lowering_tests {
         let interned = string_table.intern("hello\nworld\t\"quoted\"");
         let expr = HirExpr {
             kind: HirExprKind::StringLiteral(interned),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -491,7 +481,6 @@ mod literal_lowering_tests {
         let interned = string_table.intern("path\\to\\file");
         let expr = HirExpr {
             kind: HirExprKind::StringLiteral(interned),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -507,7 +496,6 @@ mod literal_lowering_tests {
         let interned = string_table.intern("heap string");
         let expr = HirExpr {
             kind: HirExprKind::HeapString(interned),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 

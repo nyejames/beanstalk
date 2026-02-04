@@ -18,3 +18,5 @@ test_output/
 .junie
 /.aiassistant
 test.js
+/.spec-workflow
+/.ai

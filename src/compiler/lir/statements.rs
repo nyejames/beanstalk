@@ -196,7 +196,7 @@ impl LoweringContext {
         let return_types: Vec<LirType> = signature
             .returns
             .iter()
-            .map(|arg| data_type_to_lir_type(&arg.value.data_type))
+            .map(|data_type| data_type_to_lir_type(&data_type))
             .collect();
 
         // Build the complete LirFunction structure

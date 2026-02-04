@@ -122,8 +122,6 @@ pub enum HirStmt {
     /// Host/builtin function call
     HostCall {
         target: InternedString,
-        module: InternedString,
-        import: InternedString,
         args: Vec<HirExpr>,
     },
 
@@ -222,7 +220,6 @@ pub enum HirTerminator {
 #[derive(Debug, Clone)]
 pub struct HirExpr {
     pub kind: HirExprKind,
-    pub data_type: DataType,
     pub location: TextLocation,
 }
 

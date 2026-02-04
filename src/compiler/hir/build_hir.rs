@@ -289,7 +289,7 @@ impl OwnershipHints {
 #[derive(Debug, Clone)]
 pub struct HirGenerationMetadata {
     /// Temporary variables introduced by the compiler (all treated as user locals)
-    pub temporary_variables: HashMap<InternedString, DataType>,
+    pub temporary_variables: HashMap<InternedString, HirExprKind>,
     /// The hierarchy of blocks being built (stack of active block IDs)
     pub block_hierarchy: Vec<BlockId>,
     /// Points where drops should be inserted
@@ -325,8 +325,8 @@ impl HirGenerationMetadata {
     }
 
     /// Registers a temporary variable with its type
-    pub fn register_temporary(&mut self, name: InternedString, data_type: DataType) {
-        self.temporary_variables.insert(name, data_type);
+    pub fn register_temporary(&mut self, name: InternedString, kind: HirExprKind) {
+        self.temporary_variables.insert(name, kind);
     }
 
     /// Checks if a variable is a compiler-introduced temporary
@@ -906,29 +906,32 @@ impl<'a> HirBuilderContext<'a> {
                 self.functions.push(func_node.clone());
                 Ok(vec![func_node])
             }
-            NodeKind::FunctionCall(name, args, returns, location) => {
+            NodeKind::FunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => {
                 let mut transformer =
                     std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
 
-                let result = transformer
-                    .transform_function_call_as_stmt(*name, args, returns, self, location);
+                let result =
+                    transformer.transform_function_call_as_stmt(*name, args, self, location);
 
                 self.function_transformer = transformer;
                 result
             }
-            NodeKind::HostFunctionCall(name, args, return_types, module, import, location) => {
+            NodeKind::HostFunctionCall {
+                name,
+                args,
+                returns,
+                location,
+            } => {
                 let mut transformer =
                     std::mem::replace(&mut self.function_transformer, FunctionTransformer::new());
 
-                let result = transformer.transform_host_function_call_as_stmt(
-                    *name,
-                    args,
-                    return_types,
-                    *module,
-                    *import,
-                    self,
-                    location,
-                );
+                let result =
+                    transformer.transform_host_function_call_as_stmt(*name, args, self, location);
 
                 self.function_transformer = transformer;
                 result
@@ -1176,7 +1179,6 @@ impl<'a> HirBuilderContext<'a> {
                         base: base_var,
                         field: *field,
                     },
-                    data_type: data_type.clone(),
                     location: node.location.clone(),
                 };
 

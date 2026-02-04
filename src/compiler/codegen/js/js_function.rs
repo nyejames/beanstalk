@@ -69,11 +69,19 @@ impl<'hir> JsEmitter<'hir> {
 
         // Emit the function declaration
         self.emit_indent();
-        self.emit(&format!(
-            "function {}({}) {{",
-            func_name.0,
-            param_names.join(", ")
-        ));
+        if self.config.pretty {
+            self.emit(&format!(
+                "function {}({}) {{",
+                func_name.0,
+                param_names.join(", ")
+            ));
+        } else {
+            self.emit(&format!(
+                "function {}({}){{",
+                func_name.0,
+                param_names.join(",")
+            ));
+        }
 
         // Increase indentation for the function body
         self.indent();
@@ -137,11 +145,19 @@ impl<'hir> JsEmitter<'hir> {
 
         // Emit the template function declaration
         self.emit_indent();
-        self.emit(&format!(
-            "function {}({}) {{",
-            func_name.0,
-            param_names.join(", ")
-        ));
+        if self.config.pretty {
+            self.emit(&format!(
+                "function {}({}) {{",
+                func_name.0,
+                param_names.join(", ")
+            ));
+        } else {
+            self.emit(&format!(
+                "function {}({}){{",
+                func_name.0,
+                param_names.join(",")
+            ));
+        }
 
         // Increase indentation for the function body
         self.indent();

@@ -78,12 +78,12 @@ All variables must be assigned a value when they are declared.
     mutable_collection ~= {}
     immutable_collection = {}
 
-    NewPlex = |
+    NewStruct = |
         value Float,
         another_value String,
     |
     
-    instance ~= NewPlex(
+    instance ~= NewStruct(
         value = 1.2, 
         another_value = "hey"
     )
