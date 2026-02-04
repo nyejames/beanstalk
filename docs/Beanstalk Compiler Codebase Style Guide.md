@@ -3,7 +3,7 @@ This guide covers the structure, goals and best practices for Beanstalk's compil
 
 ## Compiler Goals
 - Fast compilation speeds for development builds (as few passes as possible)
-- Wasm focused backend design
+- JS backend/build system is the initial stabilisation target; Wasm remains the long-term primary backend design focus
 - Compiler exposed as a library for ease of developing external tools like more build systems/LSPs etc...
 - Compiler repo is bundled with a CLI and a complete build system with extensive tooling
 

@@ -74,7 +74,7 @@ post = PostGenerator.create_post(date, [:
 </div>
 
 - String templates that can double up as a tiny compile time HTML/markup engine or anything else you want
-- Wasm focused backend designed around producing high-quality Wasm for portability and web integration
+- Near-term milestone: a stable JS backend/build system for static page generation and JS output; Wasm remains the long-term primary target for portability and web integration
 - Minimal and coherent syntax for maximum readability
 - A modular compiler with Fast compile times for snappy tooling and fast development builds
 - An integrated build system for web projects and beyond
@@ -119,6 +119,7 @@ post = PostGenerator.create_post(date, [:
 </div>
 
 A full backend refactor of the compiler is underway.
+Current focus: stabilising the JS backend/build system for static page generation and JS output; syntax and some constructs (e.g., closures, interfaces) are still evolving before full pipeline support.
 
 ### Complete
 - Header parsing 

@@ -5,6 +5,8 @@ All programs are correct under GC. Programs that satisfy stronger static rules r
 
 If static guarantees are missing or incomplete, the value falls back to GC.
 
+Current state: early development with a JS backend/build system as the first milestone for generating static pages and JS output. Syntax and constructs (e.g., closures, interfaces) are still being shaped before full pipeline support. Wasm remains the long-term primary target.
+
 In early compiler iterations and in the JavaScript backend, all heap values are managed by a garbage collector. As the compiler matures, static analyses (last-use analysis, borrow validation, region reasoning) are layered on top to eliminate GC participation where possible, especially for the Wasm backend.
 
 At runtime, ownership is resolved via tagged pointers, allowing a single calling convention for borrowed and owned values.
@@ -12,7 +14,7 @@ At runtime, ownership is resolved via tagged pointers, allowing a single calling
 This style of memory management can be incrementally strengthened with region analysis, stricter static lifetimes or place-based tracking in future iterations of the compiler without having to change the language semantics.
 
 ## Overview
-The build system will determine which files are associated with a single Wasm module. These files are tokenized, parsed into headers, dependency-sorted, and merged into a single AST that has full visibility of all declarations and types.
+Build systems can drive the compiler through header parsing, AST, HIR and borrow checking, then run their own codegen for any backend (including Rust-interpreter-backed flows). For the Wasm target, the build system groups files for a single Wasm module; for JS and other targets, the same pipeline is reused before custom emission.
 
 JS backend: AST or HIR is lowered directly to JavaScript with GC-only semantics.
 
@@ -36,8 +38,9 @@ The Beanstalk compiler processes modules through these stages:
 5. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
 6. (Optional) **Borrow Validation** – Verify memory safety
 7. **Backend Lowering**
-    - JS Backend: HIR → JavaScript (GC-only)
-    - Wasm Backend: HIR → LIR → Wasm (GC-first, ownership-eliding over time)
+    - JS Backend (current stabilisation target): HIR → JavaScript (GC-only)
+    - Wasm Backend (long-term primary target): HIR → LIR → Wasm (GC-first, ownership-eliding over time)
+    - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
 
 ### Stage 1: Tokenization (`src/compiler/parsers/tokenizer.rs`)
 **Purpose**: Convert raw source code into structured tokens with location information.

@@ -7,6 +7,45 @@ It is designed primarily for use building UIs and text-heavy content for the Web
 You can think of the language at a high level as being like a blend of Go and Rust. 
 Fast compile times, very minimal and simple like Go, but with a unique style of automatic memory management, and a unique modern syntax with very powerful string templates.
 
+```beanstalk
+@(html/Basic)
+
+-- Create a new blog post
+create_post |title String, date Int, content String| -> String:
+    
+    io("Creating a blog post!")
+
+    formatted_blog = [Basic.section:
+        [Basic.small, date]
+        [Basic.center: 
+            # [title]
+            ## The worst blog on the internet
+        ]
+
+        [Basic.divider]
+
+        [content]
+    ]
+
+    return formatted_blog
+;
+```
+
+The HTML build system will generate an HTML page from this code:
+```beanstalk
+@(PostGenerator)
+@(html/Basic)
+
+date = 2025
+post = PostGenerator.create_post(date, [:
+    I have absolutely nothing interesting to say, and never will.
+])
+
+[Basic.page:
+    [Basic.pad(3), post]
+]
+```
+
 ## Syntax Summary
 For developers coming from most other languages, 
 here are some key idiosyncrasies from other C-like languages to note:
