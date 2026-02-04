@@ -177,7 +177,6 @@ impl VariableManager {
         // The actual value will be set by a subsequent assignment
         let placeholder_value = HirExpr {
             kind: HirExprKind::Int(0), // Placeholder
-            data_type,
             location: location.clone(),
         };
 
@@ -205,20 +204,11 @@ impl VariableManager {
         location: TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<HirExpr, CompilerError> {
-        // Check if variable exists
-        let info = match self.variable_info.get(&name) {
-            Some(info) => info.clone(),
-            None => {
-                return_compiler_error!("Variable not found in scope");
-            }
-        };
-
         // Record potential last use for ownership tracking
         ctx.record_potential_last_use(name, location.clone());
 
         Ok(HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(name)),
-            data_type: info.data_type,
             location,
         })
     }
@@ -295,7 +285,6 @@ impl VariableManager {
             // Return a regular load for non-ownership-capable variables
             return Ok(HirExpr {
                 kind: HirExprKind::Load(HirPlace::Var(name)),
-                data_type: info.data_type,
                 location,
             });
         }
@@ -307,7 +296,6 @@ impl VariableManager {
         // Return a Move expression
         Ok(HirExpr {
             kind: HirExprKind::Move(HirPlace::Var(name)),
-            data_type: info.data_type,
             location,
         })
     }
@@ -315,7 +303,6 @@ impl VariableManager {
     // =========================================================================
     // Query Methods
     // =========================================================================
-
     /// Checks if a variable is mutable
     pub fn is_variable_mutable(&self, name: InternedString) -> bool {
         self.mutability_tracking

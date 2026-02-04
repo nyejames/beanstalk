@@ -8,7 +8,7 @@ use crate::compiler::hir::nodes::{BlockId, HirBlock, HirExpr, HirMatchArm, HirPa
 use crate::compiler::lir::nodes::{LirInst, LirType};
 
 use super::context::{LoopContext, LoweringContext};
-use super::types::data_type_to_lir_type;
+use super::types::hir_expr_to_lir_type;
 
 impl LoweringContext {
     // ========================================================================
@@ -64,11 +64,11 @@ impl LoweringContext {
         // Lower the scrutinee expression and store in a temporary
         insts.extend(self.lower_expr(scrutinee)?);
 
-        let scrutinee_type = data_type_to_lir_type(&scrutinee.data_type);
+        let scrutinee_type = hir_expr_to_lir_type(&scrutinee.data_type);
         let scrutinee_local = self.local_allocator.allocate(scrutinee_type);
         insts.push(LirInst::LocalSet(scrutinee_local));
 
-        // Build nested if-else structure for arms
+        // Build the nested if-else structure for match arms
         let match_insts =
             self.lower_match_arms(scrutinee_local, scrutinee_type, arms, default_block, blocks)?;
         insts.extend(match_insts);
@@ -296,7 +296,7 @@ impl LoweringContext {
 
         // Allocate locals for loop variables
         if let Some((var_name, var_type)) = binding {
-            let lir_type = data_type_to_lir_type(var_type);
+            let lir_type = hir_expr_to_lir_type(var_type);
             let local_idx = self.local_allocator.allocate(lir_type);
             self.var_to_local.insert(*var_name, local_idx);
 

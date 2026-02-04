@@ -12,7 +12,7 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::string_interning::InternedString;
 
 use super::context::LoweringContext;
-use super::types::data_type_to_lir_type;
+use super::types::hir_expr_to_lir_type;
 
 impl LoweringContext {
     // ========================================================================
@@ -196,7 +196,7 @@ impl LoweringContext {
         let return_types: Vec<LirType> = signature
             .returns
             .iter()
-            .map(|data_type| data_type_to_lir_type(&data_type))
+            .map(|data_type| hir_expr_to_lir_type(&data_type))
             .collect();
 
         // Build the complete LirFunction structure

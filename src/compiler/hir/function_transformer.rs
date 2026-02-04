@@ -267,7 +267,6 @@ impl FunctionTransformer {
 
         Ok(HirExpr {
             kind: hir_expr_kind,
-            data_type: expr.data_type.clone(),
             location: expr.location.clone(),
         })
     }
@@ -333,7 +332,6 @@ impl FunctionTransformer {
                 target: name,
                 args: hir_args,
             },
-            data_type: return_type,
             location: location.clone(),
         };
 
@@ -413,7 +411,6 @@ impl FunctionTransformer {
                 target: name,
                 args: hir_args,
             },
-            data_type: return_type,
             location: location.clone(),
         };
 
@@ -470,7 +467,6 @@ impl FunctionTransformer {
 
         Ok(HirExpr {
             kind: hir_expr_kind,
-            data_type: expr.data_type.clone(),
             location: expr.location.clone(),
         })
     }

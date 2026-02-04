@@ -75,7 +75,6 @@ impl TemplateProcessor {
                     Vec::new(),
                     HirExpr {
                         kind: HirExprKind::StringLiteral(ctx.string_table.intern("")),
-                        data_type: DataType::String,
                         location: template.location.clone(),
                     },
                 ))
@@ -109,7 +108,6 @@ impl TemplateProcessor {
 
         let expr = HirExpr {
             kind: HirExprKind::StringLiteral(folded_string),
-            data_type: DataType::String,
             location: template.location.clone(),
         };
 
@@ -169,7 +167,6 @@ impl TemplateProcessor {
                 target: HirPlace::Var(result_var),
                 value: HirExpr {
                     kind: HirExprKind::HeapString(template_fn_name),
-                    data_type: DataType::String,
                     location: template.location.clone(),
                 },
                 is_mutable: true,
@@ -186,7 +183,6 @@ impl TemplateProcessor {
         // Return the result expression
         let result_expr = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(result_var)),
-            data_type: DataType::String,
             location: template.location.clone(),
         };
 
@@ -246,7 +242,6 @@ impl TemplateProcessor {
                 // This is a variable reference - add it as a capture
                 let hir_expr = HirExpr {
                     kind: HirExprKind::Load(HirPlace::Var(*var_name)),
-                    data_type: expr.data_type.clone(),
                     location: expr.location.clone(),
                 };
                 captures.push(hir_expr);
@@ -409,7 +404,6 @@ impl TemplateProcessor {
                 let node = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(HirExpr {
                         kind: HirExprKind::StringLiteral(*interned_string),
-                        data_type: DataType::String,
                         location: expr.location.clone(),
                     })),
                     location: expr.location.clone(),
@@ -423,7 +417,6 @@ impl TemplateProcessor {
                 let node = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(HirExpr {
                         kind: HirExprKind::Load(HirPlace::Var(*var_name)),
-                        data_type: expr.data_type.clone(),
                         location: expr.location.clone(),
                     })),
                     location: expr.location.clone(),
@@ -442,7 +435,6 @@ impl TemplateProcessor {
                 let node = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(HirExpr {
                         kind: HirExprKind::Int(*value),
-                        data_type: DataType::Int,
                         location: expr.location.clone(),
                     })),
                     location: expr.location.clone(),
@@ -456,7 +448,6 @@ impl TemplateProcessor {
                 let node = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(HirExpr {
                         kind: HirExprKind::Float(*value),
-                        data_type: DataType::Float,
                         location: expr.location.clone(),
                     })),
                     location: expr.location.clone(),
@@ -470,7 +461,6 @@ impl TemplateProcessor {
                 let node = HirNode {
                     kind: HirKind::Stmt(HirStmt::ExprStmt(HirExpr {
                         kind: HirExprKind::Bool(*value),
-                        data_type: DataType::Bool,
                         location: expr.location.clone(),
                     })),
                     location: expr.location.clone(),
@@ -539,7 +529,6 @@ impl TemplateProcessor {
 
         Ok(HirExpr {
             kind: hir_kind,
-            data_type: expr.data_type.clone(),
             location: expr.location.clone(),
         })
     }

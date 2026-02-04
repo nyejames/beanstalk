@@ -11,7 +11,7 @@ use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::string_interning::InternedString;
 
 use super::context::LoweringContext;
-use super::types::data_type_to_lir_type;
+use super::types::hir_expr_to_lir_type;
 
 /// Collection header size in bytes: [length: i32, capacity: i32, element_size: i32]
 const COLLECTION_HEADER_SIZE: u32 = 12;
@@ -344,7 +344,7 @@ impl LoweringContext {
                 if let Some(&local_idx) = self.var_to_local.get(name) {
                     Ok(local_idx)
                 } else {
-                    let lir_type = data_type_to_lir_type(data_type);
+                    let lir_type = hir_expr_to_lir_type(data_type);
                     let local_idx = self.local_allocator.allocate(lir_type);
                     self.var_to_local.insert(*name, local_idx);
                     Ok(local_idx)

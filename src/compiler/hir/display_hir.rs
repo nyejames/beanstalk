@@ -85,7 +85,7 @@ impl HirExpr {
         format!(
             "{} : {:?}",
             self.kind.display_with_table(string_table),
-            self.data_type
+            self.kind
         )
     }
 }

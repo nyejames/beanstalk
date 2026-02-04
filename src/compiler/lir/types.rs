@@ -2,11 +2,11 @@
 //!
 //! This module handles struct layout computation and type conversion
 //! between Beanstalk DataTypes and LIR types.
-
-use crate::compiler::datatypes::DataType;
+use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
 use crate::compiler::lir::nodes::LirType;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::InternedString;
+use colour::red_ln;
 
 // ============================================================================
 // Struct Layout
@@ -81,29 +81,32 @@ pub fn alignment_of_lir_type(ty: LirType) -> u32 {
 }
 
 /// Maps a Beanstalk DataType to its corresponding LIR type.
-pub fn data_type_to_lir_type(data_type: &DataType) -> LirType {
-    match data_type {
-        DataType::Int => LirType::I64,
-        DataType::Float => LirType::F64,
-        DataType::Decimal => LirType::F64,
-        DataType::Bool => LirType::I32,
-        DataType::True => LirType::I32,
-        DataType::False => LirType::I32,
-        DataType::Char => LirType::I32,
-        DataType::String => LirType::I32,
-        DataType::Struct(_, _) => LirType::I32,
-        DataType::Collection(_, _) => LirType::I32,
-        DataType::Parameters(_) => LirType::I32,
-        DataType::Returns(_) => LirType::I32,
-        DataType::Template => LirType::I32,
-        DataType::Function(_, _) => LirType::I32,
-        DataType::Option(_) => LirType::I32,
-        DataType::Choices(_) => LirType::I32,
-        DataType::Range => LirType::I32,
-        DataType::Reference(inner) => data_type_to_lir_type(inner),
-        DataType::CoerceToString => LirType::I32,
-        DataType::None => LirType::I32,
-        DataType::Inferred => LirType::I32,
+pub fn hir_expr_to_lir_type(expr: &HirExpr) -> LirType {
+    match expr.kind {
+        HirExprKind::Int(_) => LirType::I64,
+        HirExprKind::Float(_) => LirType::F64,
+        HirExprKind::Bool(_) => LirType::I32,
+        HirExprKind::Char(_) => LirType::I32,
+        HirExprKind::HeapString(_) => LirType::I32,
+        HirExprKind::StructConstruct { .. } => LirType::I32,
+        HirExprKind::Collection(..) => LirType::I32,
+        HirExprKind::Load(_) => LirType::I32,
+        HirExprKind::Range { .. } => LirType::I32,
+
+        // DataType::Parameters(_) => LirType::I32,
+        // DataType::Returns(_) => LirType::I32,
+        // DataType::Template => LirType::I32,
+        // DataType::Function(_, _) => LirType::I32,
+        // DataType::Option(_) => LirType::I32,
+        // DataType::Choices(_) => LirType::I32,
+        // DataType::Range => LirType::I32,
+        _ => {
+            red_ln!(
+                "Compiler Bug (possibly will lead to undefined behaviour: Unexpected DataType in hir_expr_to_lir_type: {:?}",
+                expr
+            );
+            LirType::I32
+        }
     }
 }
 
@@ -123,7 +126,7 @@ pub fn compute_field_offsets(fields: &[Var]) -> Vec<FieldLayout> {
     let mut current_offset: u32 = 0;
 
     for field in fields {
-        let lir_type = data_type_to_lir_type(&field.value.data_type);
+        let lir_type = hir_expr_to_lir_type(&field.value);
         let alignment = alignment_of_lir_type(lir_type);
         let size = size_of_lir_type(lir_type);
 

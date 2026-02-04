@@ -329,20 +329,12 @@ impl StructHandler {
             hir_fields.push((*field_name, hir_expr));
         }
 
-        // Determine the result type
-        let result_type = if let Some(def) = struct_def {
-            DataType::Struct(def, crate::compiler::datatypes::Ownership::MutableOwned)
-        } else {
-            DataType::Inferred
-        };
-
         // Create the struct construction expression
         let struct_expr = HirExpr {
             kind: HirExprKind::StructConstruct {
                 type_name,
                 fields: hir_fields,
             },
-            data_type: result_type,
             location: location.clone(),
         };
 
@@ -371,7 +363,6 @@ impl StructHandler {
         &mut self,
         base: &Expression,
         field: InternedString,
-        field_type: &DataType,
         _ctx: &mut HirBuilderContext,
         location: &TextLocation,
     ) -> Result<(Vec<HirNode>, HirExpr), CompilerError> {
@@ -386,7 +377,6 @@ impl StructHandler {
                 base: base_var,
                 field,
             },
-            data_type: field_type.clone(),
             location: location.clone(),
         };
 
@@ -524,7 +514,6 @@ impl StructHandler {
 
         Ok(HirExpr {
             kind: hir_expr_kind,
-            data_type: expr.data_type.clone(),
             location: expr.location.clone(),
         })
     }
@@ -575,19 +564,15 @@ impl StructHandler {
         // Create a host call to the memory allocation function
         // In Beanstalk, heap allocation is handled by the runtime
         let alloc_name = ctx.string_table.intern("__bst_alloc");
-        let module_name = ctx.string_table.intern("beanstalk_memory");
-        let import_name = ctx.string_table.intern("alloc");
 
         // Create arguments for the allocation call
         let size_expr = HirExpr {
             kind: HirExprKind::Int(size as i64),
-            data_type: DataType::Int,
             location: location.clone(),
         };
 
         let align_expr = HirExpr {
             kind: HirExprKind::Int(alignment as i64),
-            data_type: DataType::Int,
             location: location.clone(),
         };
 
@@ -608,7 +593,6 @@ impl StructHandler {
                 target: alloc_name,
                 args: vec![],
             },
-            data_type: DataType::Int, // Pointer is represented as i32/i64
             location: location.clone(),
         };
 
@@ -669,7 +653,6 @@ impl StructHandler {
         // Create the final load expression
         let result_expr = HirExpr {
             kind: HirExprKind::Load(current_place),
-            data_type: current_type,
             location: location.clone(),
         };
 
@@ -690,7 +673,7 @@ impl StructHandler {
                     }
                 }
                 return_hir_transformation_error!(
-                    format!("Field not found in struct type"),
+                    "Field not found in struct type".to_string(),
                     crate::compiler::compiler_errors::ErrorLocation::default(),
                     {
                         CompilationStage => "HIR Generation - Field Type Lookup",
@@ -789,17 +772,12 @@ impl StructHandler {
         let base_var = self.extract_base_variable(struct_expr)?;
 
         for (field_name, target_var) in bindings {
-            // Get the field type
-            let field_type =
-                self.get_field_type_from_struct(&struct_expr.data_type, *field_name)?;
-
             // Create the field access expression
             let field_expr = HirExpr {
                 kind: HirExprKind::Field {
                     base: base_var,
                     field: *field_name,
                 },
-                data_type: field_type,
                 location: location.clone(),
             };
 

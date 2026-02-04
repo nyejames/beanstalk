@@ -8,7 +8,7 @@ use crate::compiler::hir::nodes::{HirExpr, HirPlace};
 use crate::compiler::lir::nodes::LirInst;
 
 use super::context::LoweringContext;
-use super::types::data_type_to_lir_type;
+use super::types::hir_expr_to_lir_type;
 
 impl LoweringContext {
     // ========================================================================

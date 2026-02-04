@@ -56,7 +56,10 @@ pub fn parse_field_access(
         let mut members = match &current_type {
             DataType::Struct(inner_args, ..) => inner_args.to_owned(),
 
-            DataType::Function(_, sig) => {}
+            // TODO: Function returns
+            // Needs to convert each return into a var that can be accessed
+            // This will be done by giving each type a number to specify which return it is
+            // DataType::Function(_, sig) => {}
 
             // Other types may have methods implemented on them
             _ => Vec::new(),

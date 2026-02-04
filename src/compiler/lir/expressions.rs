@@ -9,7 +9,7 @@ use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, HirPlace, UnaryOp
 use crate::compiler::lir::nodes::{LirInst, LirType};
 
 use super::context::LoweringContext;
-use super::types::data_type_to_lir_type;
+use super::types::hir_expr_to_lir_type;
 
 impl LoweringContext {
     /// Lowers a HIR expression to a sequence of LIR instructions.
@@ -130,7 +130,7 @@ impl LoweringContext {
         op: BinOp,
         operand_type: &DataType,
     ) -> Result<LirInst, CompilerError> {
-        let lir_type = data_type_to_lir_type(operand_type);
+        let lir_type = hir_expr_to_lir_type(operand_type);
 
         match (op, lir_type) {
             // I64 operations
@@ -212,7 +212,7 @@ impl LoweringContext {
         op: UnaryOp,
         operand_type: &DataType,
     ) -> Result<Vec<LirInst>, CompilerError> {
-        let lir_type = data_type_to_lir_type(operand_type);
+        let lir_type = hir_expr_to_lir_type(operand_type);
 
         match (op, lir_type) {
             // Negation

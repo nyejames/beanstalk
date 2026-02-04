@@ -38,7 +38,7 @@ pub fn create_multiple_expressions(
             token_stream,
             context,
             &mut expected_arg,
-            &expected_arg.value.ownership,
+            &Ownership::ImmutableOwned,
             consume_closing_parenthesis,
             string_table,
         )?;

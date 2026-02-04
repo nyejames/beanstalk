@@ -511,7 +511,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Char('a'),
-            data_type: DataType::Char,
             location: dummy_location(),
         };
 
@@ -526,7 +525,6 @@ mod literal_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Char('😊'),
-            data_type: DataType::Char,
             location: dummy_location(),
         };
 
@@ -542,7 +540,6 @@ mod literal_lowering_tests {
         // Test newline
         let expr_newline = HirExpr {
             kind: HirExprKind::Char('\n'),
-            data_type: DataType::Char,
             location: dummy_location(),
         };
         let result = emitter.lower_expr(&expr_newline).unwrap();
@@ -551,7 +548,6 @@ mod literal_lowering_tests {
         // Test tab
         let expr_tab = HirExpr {
             kind: HirExprKind::Char('\t'),
-            data_type: DataType::Char,
             location: dummy_location(),
         };
         let result = emitter.lower_expr(&expr_tab).unwrap();
@@ -560,7 +556,6 @@ mod literal_lowering_tests {
         // Test quote
         let expr_quote = HirExpr {
             kind: HirExprKind::Char('"'),
-            data_type: DataType::Char,
             location: dummy_location(),
         };
         let result = emitter.lower_expr(&expr_quote).unwrap();
@@ -569,7 +564,6 @@ mod literal_lowering_tests {
         // Test backslash
         let expr_backslash = HirExpr {
             kind: HirExprKind::Char('\\'),
-            data_type: DataType::Char,
             location: dummy_location(),
         };
         let result = emitter.lower_expr(&expr_backslash).unwrap();
@@ -633,7 +627,6 @@ mod binary_and_unary_op_tests {
     fn int_expr(value: i64) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Int(value),
-            data_type: DataType::Int,
             location: dummy_location(),
         }
     }
@@ -642,7 +635,6 @@ mod binary_and_unary_op_tests {
     fn float_expr(value: f64) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Float(value),
-            data_type: DataType::Float,
             location: dummy_location(),
         }
     }
@@ -651,7 +643,6 @@ mod binary_and_unary_op_tests {
     fn bool_expr(value: bool) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Bool(value),
-            data_type: DataType::Bool,
             location: dummy_location(),
         }
     }
@@ -668,7 +659,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Add,
                 right: Box::new(int_expr(3)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -687,7 +677,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Sub,
                 right: Box::new(int_expr(4)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -706,7 +695,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Mul,
                 right: Box::new(int_expr(7)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -725,7 +713,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Div,
                 right: Box::new(int_expr(5)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -744,7 +731,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Mod,
                 right: Box::new(int_expr(5)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -763,7 +749,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Exponent,
                 right: Box::new(int_expr(8)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -782,7 +767,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Root,
                 right: Box::new(int_expr(27)),
             },
-            data_type: DataType::Float,
             location: dummy_location(),
         };
 
@@ -804,7 +788,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Eq,
                 right: Box::new(int_expr(5)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -823,7 +806,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Ne,
                 right: Box::new(int_expr(3)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -842,7 +824,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Lt,
                 right: Box::new(int_expr(5)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -861,7 +842,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Le,
                 right: Box::new(int_expr(5)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -880,7 +860,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Gt,
                 right: Box::new(int_expr(3)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -899,7 +878,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Ge,
                 right: Box::new(int_expr(5)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -920,7 +898,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::And,
                 right: Box::new(bool_expr(false)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -939,7 +916,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Or,
                 right: Box::new(bool_expr(false)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -959,7 +935,6 @@ mod binary_and_unary_op_tests {
                 op: UnaryOp::Neg,
                 operand: Box::new(int_expr(42)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -977,7 +952,6 @@ mod binary_and_unary_op_tests {
                 op: UnaryOp::Not,
                 operand: Box::new(bool_expr(true)),
             },
-            data_type: DataType::Bool,
             location: dummy_location(),
         };
 
@@ -999,7 +973,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Add,
                 right: Box::new(int_expr(3)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1009,7 +982,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Mul,
                 right: Box::new(int_expr(2)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1028,7 +1000,6 @@ mod binary_and_unary_op_tests {
                 op: UnaryOp::Neg,
                 operand: Box::new(int_expr(5)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1037,7 +1008,6 @@ mod binary_and_unary_op_tests {
                 op: UnaryOp::Neg,
                 operand: Box::new(inner),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1057,7 +1027,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Add,
                 right: Box::new(int_expr(3)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1066,7 +1035,6 @@ mod binary_and_unary_op_tests {
                 op: UnaryOp::Neg,
                 operand: Box::new(inner),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1085,7 +1053,6 @@ mod binary_and_unary_op_tests {
                 op: BinOp::Mul,
                 right: Box::new(float_expr(2.0)),
             },
-            data_type: DataType::Float,
             location: dummy_location(),
         };
 
@@ -1154,7 +1121,6 @@ mod variable_access_tests {
         let var_name = string_table.intern("my_var");
         let expr = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1170,7 +1136,6 @@ mod variable_access_tests {
         let var_name = string_table.intern("my_var");
         let expr = HirExpr {
             kind: HirExprKind::Move(HirPlace::Var(var_name)),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1188,14 +1153,12 @@ mod variable_access_tests {
         // Create Load expression
         let load_expr = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
         // Create Move expression
         let move_expr = HirExpr {
             kind: HirExprKind::Move(HirPlace::Var(var_name)),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1221,7 +1184,6 @@ mod variable_access_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Load(place),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1248,7 +1210,6 @@ mod variable_access_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Load(place),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1267,14 +1228,12 @@ mod variable_access_tests {
             base: Box::new(HirPlace::Var(array_name)),
             index: Box::new(HirExpr {
                 kind: HirExprKind::Int(0),
-                data_type: DataType::Int,
                 location: dummy_location(),
             }),
         };
 
         let expr = HirExpr {
             kind: HirExprKind::Load(place),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1294,14 +1253,12 @@ mod variable_access_tests {
             base: Box::new(HirPlace::Var(array_name)),
             index: Box::new(HirExpr {
                 kind: HirExprKind::Load(HirPlace::Var(i_name)),
-                data_type: DataType::Int,
                 location: dummy_location(),
             }),
         };
 
         let expr = HirExpr {
             kind: HirExprKind::Load(place),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1318,7 +1275,6 @@ mod variable_access_tests {
         let var_name = string_table.intern("function");
         let expr = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1340,7 +1296,6 @@ mod variable_access_tests {
             let var_name = string_table.intern(word);
             let expr = HirExpr {
                 kind: HirExprKind::Load(HirPlace::Var(var_name)),
-                data_type: DataType::Int,
                 location: dummy_location(),
             };
 
@@ -1405,7 +1360,6 @@ mod function_call_tests {
     fn int_expr(value: i64) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Int(value),
-            data_type: DataType::Int,
             location: dummy_location(),
         }
     }
@@ -1420,7 +1374,6 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1439,7 +1392,6 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![int_expr(5)],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1458,7 +1410,6 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![int_expr(3), int_expr(7)],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1479,11 +1430,9 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![HirExpr {
                     kind: HirExprKind::Load(HirPlace::Var(var_name)),
-                    data_type: DataType::String,
                     location: dummy_location(),
                 }],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1505,7 +1454,6 @@ mod function_call_tests {
                 op: crate::compiler::hir::nodes::BinOp::Add,
                 right: Box::new(int_expr(3)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1515,7 +1463,6 @@ mod function_call_tests {
                 op: crate::compiler::hir::nodes::BinOp::Sub,
                 right: Box::new(int_expr(2)),
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1524,7 +1471,6 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![arg1, arg2],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1546,7 +1492,6 @@ mod function_call_tests {
                 target: inner_func,
                 args: vec![int_expr(5)],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1555,7 +1500,6 @@ mod function_call_tests {
                 target: outer_func,
                 args: vec![inner_call],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1575,7 +1519,6 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1593,7 +1536,6 @@ mod function_call_tests {
 
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1603,7 +1545,6 @@ mod function_call_tests {
                 method: method_name,
                 args: vec![],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1621,7 +1562,6 @@ mod function_call_tests {
 
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1631,7 +1571,6 @@ mod function_call_tests {
                 method: method_name,
                 args: vec![int_expr(42)],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1649,7 +1588,6 @@ mod function_call_tests {
 
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1659,7 +1597,6 @@ mod function_call_tests {
                 method: method_name,
                 args: vec![int_expr(0), int_expr(5)],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1679,7 +1616,6 @@ mod function_call_tests {
         // str.trim()
         let receiver = HirExpr {
             kind: HirExprKind::Load(HirPlace::Var(var_name)),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1689,7 +1625,6 @@ mod function_call_tests {
                 method: method1_name,
                 args: vec![],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1700,7 +1635,6 @@ mod function_call_tests {
                 method: method2_name,
                 args: vec![],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1723,7 +1657,6 @@ mod function_call_tests {
                 base: Box::new(HirPlace::Var(obj_name)),
                 field: field_name,
             }),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1734,7 +1667,6 @@ mod function_call_tests {
                 method: method_name,
                 args: vec![],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1756,7 +1688,6 @@ mod function_call_tests {
                 target: func_name,
                 args: vec![],
             },
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1767,7 +1698,6 @@ mod function_call_tests {
                 method: method_name,
                 args: vec![],
             },
-            data_type: DataType::Int,
             location: dummy_location(),
         };
 
@@ -1833,7 +1763,6 @@ mod constructor_lowering_tests {
     fn int_expr(value: i64) -> HirExpr {
         HirExpr {
             kind: HirExprKind::Int(value),
-            data_type: DataType::Int,
             location: dummy_location(),
         }
     }
@@ -1850,7 +1779,6 @@ mod constructor_lowering_tests {
                 type_name,
                 fields: vec![],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
@@ -1871,7 +1799,6 @@ mod constructor_lowering_tests {
                 type_name,
                 fields: vec![(field_name, int_expr(30))],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
@@ -1891,7 +1818,6 @@ mod constructor_lowering_tests {
         let name_str = string_table.intern("Alice");
         let name_expr = HirExpr {
             kind: HirExprKind::StringLiteral(name_str),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1900,7 +1826,6 @@ mod constructor_lowering_tests {
                 type_name,
                 fields: vec![(name_field, name_expr), (age_field, int_expr(30))],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
@@ -1921,7 +1846,6 @@ mod constructor_lowering_tests {
         let street_str = string_table.intern("Main St");
         let street_expr = HirExpr {
             kind: HirExprKind::StringLiteral(street_str),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
@@ -1931,7 +1855,6 @@ mod constructor_lowering_tests {
                 type_name: address_type,
                 fields: vec![(street_field, street_expr)],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
@@ -1941,7 +1864,6 @@ mod constructor_lowering_tests {
                 type_name: person_type,
                 fields: vec![(address_field, address_expr)],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
@@ -1958,10 +1880,6 @@ mod constructor_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Int),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
@@ -1976,10 +1894,6 @@ mod constructor_lowering_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![int_expr(42)]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Int),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
@@ -2000,10 +1914,6 @@ mod constructor_lowering_tests {
                 int_expr(4),
                 int_expr(5),
             ]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Int),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
@@ -2021,22 +1931,16 @@ mod constructor_lowering_tests {
 
         let hello_expr = HirExpr {
             kind: HirExprKind::StringLiteral(hello),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
         let world_expr = HirExpr {
             kind: HirExprKind::StringLiteral(world),
-            data_type: DataType::String,
             location: dummy_location(),
         };
 
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![hello_expr, world_expr]),
-            data_type: DataType::Collection(
-                Box::new(DataType::String),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
@@ -2052,32 +1956,17 @@ mod constructor_lowering_tests {
         // Create inner collections
         let inner1 = HirExpr {
             kind: HirExprKind::Collection(vec![int_expr(1), int_expr(2)]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Int),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
         let inner2 = HirExpr {
             kind: HirExprKind::Collection(vec![int_expr(3), int_expr(4)]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Int),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
         // Create outer collection
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![inner1, inner2]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Collection(
-                    Box::new(DataType::Int),
-                    crate::compiler::datatypes::Ownership::default(),
-                )),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
@@ -2100,7 +1989,6 @@ mod constructor_lowering_tests {
                 type_name: point_type,
                 fields: vec![(x_field, int_expr(0)), (y_field, int_expr(0))],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
@@ -2110,20 +1998,12 @@ mod constructor_lowering_tests {
                 type_name: point_type,
                 fields: vec![(x_field, int_expr(10)), (y_field, int_expr(20))],
             },
-            data_type: DataType::Struct(vec![], crate::compiler::datatypes::Ownership::default()),
             location: dummy_location(),
         };
 
         // Create collection of points
         let expr = HirExpr {
             kind: HirExprKind::Collection(vec![point1, point2]),
-            data_type: DataType::Collection(
-                Box::new(DataType::Struct(
-                    vec![],
-                    crate::compiler::datatypes::Ownership::default(),
-                )),
-                crate::compiler::datatypes::Ownership::default(),
-            ),
             location: dummy_location(),
         };
 
@@ -2411,7 +2291,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_name),
             value: HirExpr {
                 kind: HirExprKind::Int(42),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2435,7 +2314,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_name),
             value: HirExpr {
                 kind: HirExprKind::Int(42),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2447,7 +2325,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_name),
             value: HirExpr {
                 kind: HirExprKind::Int(100),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2472,7 +2349,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_name),
             value: HirExpr {
                 kind: HirExprKind::Int(10),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: true,
@@ -2496,17 +2372,14 @@ mod assignment_statement_tests {
                 kind: HirExprKind::BinOp {
                     left: Box::new(HirExpr {
                         kind: HirExprKind::Int(5),
-                        data_type: DataType::Int,
                         location: dummy_location(),
                     }),
                     op: crate::compiler::hir::nodes::BinOp::Add,
                     right: Box::new(HirExpr {
                         kind: HirExprKind::Int(3),
-                        data_type: DataType::Int,
                         location: dummy_location(),
                     }),
                 },
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2530,7 +2403,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_x),
             value: HirExpr {
                 kind: HirExprKind::Int(1),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2542,7 +2414,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_y),
             value: HirExpr {
                 kind: HirExprKind::Int(2),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2554,7 +2425,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(var_z),
             value: HirExpr {
                 kind: HirExprKind::Int(3),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2583,7 +2453,6 @@ mod assignment_statement_tests {
                     type_name: string_table.intern("MyStruct"),
                     fields: vec![],
                 },
-                data_type: DataType::Inferred,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2598,7 +2467,6 @@ mod assignment_statement_tests {
             },
             value: HirExpr {
                 kind: HirExprKind::Int(42),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2623,7 +2491,6 @@ mod assignment_statement_tests {
             target: HirPlace::Var(arr_name),
             value: HirExpr {
                 kind: HirExprKind::Collection(vec![]),
-                data_type: DataType::Inferred,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2636,13 +2503,11 @@ mod assignment_statement_tests {
                 base: Box::new(HirPlace::Var(arr_name)),
                 index: Box::new(HirExpr {
                     kind: HirExprKind::Int(0),
-                    data_type: DataType::Int,
                     location: dummy_location(),
                 }),
             },
             value: HirExpr {
                 kind: HirExprKind::Int(42),
-                data_type: DataType::Int,
                 location: dummy_location(),
             },
             is_mutable: false,
@@ -2685,7 +2550,6 @@ mod assignment_statement_tests {
                 target: func_name,
                 args: vec![],
             },
-            data_type: DataType::Inferred,
             location: dummy_location(),
         });
         emitter.lower_stmt(&stmt);
@@ -2723,12 +2587,10 @@ mod assignment_statement_tests {
             args: vec![
                 HirExpr {
                     kind: HirExprKind::Int(5),
-                    data_type: DataType::Int,
                     location: dummy_location(),
                 },
                 HirExpr {
                     kind: HirExprKind::Int(10),
-                    data_type: DataType::Int,
                     location: dummy_location(),
                 },
             ],
@@ -2750,11 +2612,8 @@ mod assignment_statement_tests {
         // HirStmt::HostCall: io("Hello, World!")
         let stmt = HirStmt::HostCall {
             target: func_name,
-            module: module_name,
-            import: import_name,
             args: vec![HirExpr {
                 kind: HirExprKind::StringLiteral(string_table.intern("Hello, World!")),
-                data_type: DataType::String,
                 location: dummy_location(),
             }],
         };
@@ -2776,17 +2635,13 @@ mod assignment_statement_tests {
         // HirStmt::HostCall with multiple arguments
         let stmt = HirStmt::HostCall {
             target: func_name,
-            module: module_name,
-            import: import_name,
             args: vec![
                 HirExpr {
                     kind: HirExprKind::StringLiteral(string_table.intern("Value: ")),
-                    data_type: DataType::String,
                     location: dummy_location(),
                 },
                 HirExpr {
                     kind: HirExprKind::Int(42),
-                    data_type: DataType::Int,
                     location: dummy_location(),
                 },
             ],

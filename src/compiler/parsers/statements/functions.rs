@@ -1,5 +1,4 @@
 use crate::compiler::compiler_errors::CompilerError;
-use crate::compiler::datatypes::Ownership::ImmutableOwned;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
@@ -566,7 +565,11 @@ pub fn create_function_call_arguments(
 
         Ok(Vec::new())
     } else {
-        let required_argument_types = required_arguments.to_owned();
+        let required_argument_types: Vec<DataType> = required_arguments
+            .iter()
+            .map(|var| var.value.data_type.to_owned())
+            .collect();
+
         let call_context = context.new_child_expression(required_argument_types.to_owned());
 
         create_multiple_expressions(token_stream, &call_context, true, string_table)

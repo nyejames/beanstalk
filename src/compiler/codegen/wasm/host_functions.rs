@@ -18,7 +18,7 @@ use crate::compiler::codegen::wasm::analyzer::{FunctionSignature, WasmType};
 use crate::compiler::codegen::wasm::error::WasmGenerationError;
 use crate::compiler::codegen::wasm::module_builder::WasmModuleBuilder;
 use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler::host_functions::registry::{HostFunctionDef, HostRegistry, JsFunctionDef};
+use crate::compiler::host_functions::registry::{HostFunctionDef, HostRegistry};
 use crate::compiler::string_interning::StringTable;
 use std::collections::HashMap;
 use wasm_encoder::{ExportKind, ValType};
@@ -47,18 +47,6 @@ impl HostImport {
             function_name,
             params: Vec::new(), // Will be filled from JS mapping
             returns: Vec::new(),
-            wasm_index: None,
-        }
-    }
-
-    /// Create a host import from a JavaScript function definition
-    pub fn from_js_def(js_def: &JsFunctionDef, beanstalk_name: &str) -> Self {
-        HostImport {
-            module_name: js_def.module.clone(),
-            function_name: js_def.name.clone(),
-            beanstalk_name: beanstalk_name.to_string(),
-            params: js_def.parameters.clone(),
-            returns: js_def.returns.clone(),
             wasm_index: None,
         }
     }
