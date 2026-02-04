@@ -20,7 +20,10 @@
 
 </div>
 
-Beanstalk is designed for the web.
+<p>Beanstalk is designed for the web.</p>
+<p>This project originated with the desire to never have to use TypeScript, web frameworks or its bloated ecosystem again.</p>
+<p>Beanstalk is an attempt to make something fresh and carefully designed from the ground up.</p>
+<strong>An ambitious language for the future.</strong>
 
 ```haskell
 @(html/Basic)
