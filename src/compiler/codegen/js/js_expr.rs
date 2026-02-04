@@ -232,12 +232,10 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             // Unsupported expression types - return descriptive errors
-            unsupported => {
-                Err(CompilerError::compiler_error(format!(
-                    "JavaScript backend: Unsupported HIR expression type: {:?}. This indicates missing implementation in the JavaScript backend.",
-                    unsupported
-                )))
-            }
+            unsupported => Err(CompilerError::compiler_error(format!(
+                "JavaScript backend: Unsupported HIR expression type: {:?}. This indicates missing implementation in the JavaScript backend.",
+                unsupported
+            ))),
         }
     }
 
@@ -247,7 +245,10 @@ impl<'hir> JsEmitter<'hir> {
     /// In GC semantics, all places are references to GC-managed data.
     ///
     /// Returns an error if the place contains unsupported constructs.
-    pub(crate) fn lower_place(&mut self, place: &crate::compiler::hir::nodes::HirPlace) -> Result<String, CompilerError> {
+    pub(crate) fn lower_place(
+        &mut self,
+        place: &crate::compiler::hir::nodes::HirPlace,
+    ) -> Result<String, CompilerError> {
         use crate::compiler::hir::nodes::HirPlace;
 
         match place {
@@ -281,7 +282,12 @@ impl<'hir> JsEmitter<'hir> {
     ///
     /// Handles operator precedence by wrapping operands in parentheses when necessary.
     /// Combines preludes from both operands to ensure proper evaluation order.
-    fn lower_binop(&mut self, left: &HirExpr, op: BinOp, right: &HirExpr) -> Result<JsExpr, CompilerError> {
+    fn lower_binop(
+        &mut self,
+        left: &HirExpr,
+        op: BinOp,
+        right: &HirExpr,
+    ) -> Result<JsExpr, CompilerError> {
         // Lower both operands
         let left_expr = self.lower_expr(left)?;
         let right_expr = self.lower_expr(right)?;
@@ -305,7 +311,9 @@ impl<'hir> JsEmitter<'hir> {
             BinOp::Root => {
                 // Root operation: a root b = b^(1/a)
                 // In JavaScript: Math.pow(b, 1/a)
-                return Ok(left_expr.combine(right_expr, |l, r| format!("Math.pow({}, 1 / {})", r, l)));
+                return Ok(
+                    left_expr.combine(right_expr, |l, r| format!("Math.pow({}, 1 / {})", r, l))
+                );
             }
         };
 
@@ -335,7 +343,11 @@ impl<'hir> JsEmitter<'hir> {
     ///
     /// Handles regular function calls with proper argument handling.
     /// All arguments are evaluated in order, with their preludes combined.
-    pub(crate) fn lower_call(&mut self, target: InternedString, args: &[HirExpr]) -> Result<JsExpr, CompilerError> {
+    pub(crate) fn lower_call(
+        &mut self,
+        target: InternedString,
+        args: &[HirExpr],
+    ) -> Result<JsExpr, CompilerError> {
         // Get the function name
         let func_name = self.make_js_ident(target);
 
@@ -426,7 +438,10 @@ impl<'hir> JsEmitter<'hir> {
     /// ```javascript
     /// { name: "Alice", age: 30 }
     /// ```
-    fn lower_struct_construct(&mut self, fields: &[(InternedString, HirExpr)]) -> Result<JsExpr, CompilerError> {
+    fn lower_struct_construct(
+        &mut self,
+        fields: &[(InternedString, HirExpr)],
+    ) -> Result<JsExpr, CompilerError> {
         // Lower all field values
         let mut all_preludes = Vec::new();
         let mut field_pairs = Vec::new();

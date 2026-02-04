@@ -4,7 +4,6 @@
 //! including literals, binary operations, and unary operations.
 
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, HirPlace, UnaryOp};
 use crate::compiler::lir::nodes::{LirInst, LirType};
 
@@ -25,14 +24,10 @@ impl LoweringContext {
             HirExprKind::Load(place) => self.lower_place_load(place),
 
             // Binary operations
-            HirExprKind::BinOp { left, op, right } => {
-                self.lower_binary_op(left, *op, right, &expr.data_type)
-            }
+            HirExprKind::BinOp { left, op, right } => self.lower_binary_op(left, *op, right, expr),
 
             // Unary operations
-            HirExprKind::UnaryOp { op, operand } => {
-                self.lower_unary_op(*op, operand, &expr.data_type)
-            }
+            HirExprKind::UnaryOp { op, operand } => self.lower_unary_op(*op, operand, expr),
 
             // String literals
             HirExprKind::StringLiteral(_) | HirExprKind::HeapString(_) => Err(
@@ -108,7 +103,7 @@ impl LoweringContext {
         left: &HirExpr,
         op: BinOp,
         right: &HirExpr,
-        _result_type: &DataType,
+        _result_expr: &HirExpr,
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
 
@@ -119,7 +114,7 @@ impl LoweringContext {
         insts.extend(self.lower_expr(right)?);
 
         // Emit the operation instruction
-        let op_inst = self.lower_binop_instruction(op, &left.data_type)?;
+        let op_inst = self.lower_binop_instruction(op, left)?;
         insts.push(op_inst);
 
         Ok(insts)
@@ -128,9 +123,9 @@ impl LoweringContext {
     fn lower_binop_instruction(
         &self,
         op: BinOp,
-        operand_type: &DataType,
+        operand: &HirExpr,
     ) -> Result<LirInst, CompilerError> {
-        let lir_type = hir_expr_to_lir_type(operand_type);
+        let lir_type = hir_expr_to_lir_type(operand);
 
         match (op, lir_type) {
             // I64 operations
@@ -180,7 +175,7 @@ impl LoweringContext {
             )),
             _ => Err(CompilerError::lir_transformation(format!(
                 "Unsupported binary operation {:?} for type {:?}",
-                op, operand_type
+                op, lir_type
             ))),
         }
     }
@@ -193,7 +188,7 @@ impl LoweringContext {
         &mut self,
         op: UnaryOp,
         operand: &HirExpr,
-        _result_type: &DataType,
+        _result_expr: &HirExpr,
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
 
@@ -201,7 +196,7 @@ impl LoweringContext {
         insts.extend(self.lower_expr(operand)?);
 
         // Emit the operation instructions
-        let op_insts = self.lower_unaryop_instructions(op, &operand.data_type)?;
+        let op_insts = self.lower_unaryop_instructions(op, operand)?;
         insts.extend(op_insts);
 
         Ok(insts)
@@ -210,9 +205,9 @@ impl LoweringContext {
     fn lower_unaryop_instructions(
         &self,
         op: UnaryOp,
-        operand_type: &DataType,
+        operand: &HirExpr,
     ) -> Result<Vec<LirInst>, CompilerError> {
-        let lir_type = hir_expr_to_lir_type(operand_type);
+        let lir_type = hir_expr_to_lir_type(operand);
 
         match (op, lir_type) {
             // Negation
@@ -226,7 +221,7 @@ impl LoweringContext {
             // Unsupported
             (UnaryOp::Not, _) => Err(CompilerError::lir_transformation(format!(
                 "Logical NOT only supported for boolean (I32) types, got {:?}",
-                operand_type
+                lir_type
             ))),
             (UnaryOp::Neg, LirType::F32) => Err(CompilerError::lir_transformation(
                 "F32 negation not yet supported",

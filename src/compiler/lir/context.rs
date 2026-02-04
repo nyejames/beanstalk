@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::BlockId;
+use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
 use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::InternedString;
@@ -162,7 +163,29 @@ impl LoweringContext {
             .and_then(|layout| layout.get_field(field_name))
     }
 
-    /// Checks if a data type is heap-allocated and needs ownership tagging.
+    /// Checks if an HIR expression kind represents a heap-allocated type that needs ownership tagging.
+    pub fn is_heap_allocated_expr(&self, expr: &HirExpr) -> bool {
+        match &expr.kind {
+            HirExprKind::HeapString(_)
+            | HirExprKind::StructConstruct { .. }
+            | HirExprKind::Collection(_)
+            | HirExprKind::Range { .. } => true,
+            // Load operations may be heap-allocated depending on what they load
+            HirExprKind::Load(_) => true,
+            // Scalar types are not heap-allocated
+            HirExprKind::Int(_)
+            | HirExprKind::Float(_)
+            | HirExprKind::Bool(_)
+            | HirExprKind::Char(_) => false,
+            // Binary and unary operations inherit the heap allocation status of their operands
+            HirExprKind::BinOp { left, .. } => self.is_heap_allocated_expr(left),
+            HirExprKind::UnaryOp { operand, .. } => self.is_heap_allocated_expr(operand),
+            _ => false,
+        }
+    }
+
+    /// Checks if a DataType is heap-allocated and needs ownership tagging.
+    /// This is used for function signatures and other contexts where we still have DataType.
     pub fn is_heap_allocated_type(&self, data_type: &DataType) -> bool {
         match data_type {
             DataType::String

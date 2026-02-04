@@ -27,7 +27,7 @@ use crate::compiler::hir::nodes::{
 };
 use crate::compiler::hir::struct_handler::StructHandler;
 use crate::compiler::hir::template_processor::TemplateProcessor;
-use crate::compiler::hir::variable_manager::VariableManager;
+use crate::compiler::hir::variable_manager::{VariableManager, is_type_ownership_capable};
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::statements::functions::FunctionSignature;
@@ -992,7 +992,7 @@ impl<'a> HirBuilderContext<'a> {
                 self.variable_manager.enter_scope();
 
                 // Mark as potentially owned if applicable
-                if self.is_type_ownership_capable(&arg.value.data_type) {
+                if is_type_ownership_capable(&arg.value.data_type) {
                     self.mark_potentially_owned(arg.id);
                     self.add_drop_candidate(arg.id, node.location.clone());
                 }
@@ -1253,32 +1253,6 @@ impl<'a> HirBuilderContext<'a> {
         }
     }
 
-    /// Determines if a type is ownership capable
-    pub fn is_type_ownership_capable(&self, data_type: &DataType) -> bool {
-        match data_type {
-            // Primitive types are typically not ownership capable (copy semantics)
-            DataType::Int | DataType::Float | DataType::Bool | DataType::Char => false,
-            // String slices are borrowed, not owned
-            DataType::String => false,
-            // None type is not ownership capable
-            DataType::None => false,
-            // Collections and structs are ownership capable
-            DataType::Collection(_, _) => true,
-            DataType::Struct(_, _) => true,
-            DataType::Parameters(_) => true,
-            // Templates can be ownership capable
-            DataType::Template => true,
-            // Functions are typically not ownership capable
-            DataType::Function(_, _) => false,
-            // References depend on what they reference
-            DataType::Reference(inner) => self.is_type_ownership_capable(inner),
-            // Inferred types are conservatively ownership capable
-            DataType::Inferred => true,
-            // Other types are conservatively ownership capable
-            _ => true,
-        }
-    }
-
     /// Processes a variable declaration and returns the corresponding HIR nodes.
     /// This is a helper method that can be called from function transformers or other components.
     pub fn process_variable_declaration(
@@ -1315,7 +1289,7 @@ impl<'a> HirBuilderContext<'a> {
         self.variable_manager.enter_scope();
 
         // Mark as potentially owned if applicable
-        if self.is_type_ownership_capable(&arg.value.data_type) {
+        if is_type_ownership_capable(&arg.value.data_type) {
             self.mark_potentially_owned(arg.id);
             self.add_drop_candidate(arg.id, location.clone());
         }

@@ -4,6 +4,8 @@
 // This now only compiles the HIR and runs the borrow checker.
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
+use crate::build_system::html_project::html_project_builder::JsHostBinding;
+use crate::build_system::jit_wasm::WasmHostBinding;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
@@ -16,8 +18,6 @@ use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{CompilerFrontend, Flag, InputModule, timer_log};
 use std::time::Instant;
-use crate::build_system::html_project::html_project_builder::JsHostBinding;
-use crate::build_system::jit_wasm::WasmHostBinding;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -107,11 +107,9 @@ pub fn compile_modules(
 
     // Create a builtin host function registry with print and other host functions
     let host_function_registry =
-        create_builtin_registry(&mut string_table).map_err(|e| {
-            CompilerMessages {
-                errors: vec![e],
-                warnings: Vec::new(),
-            }
+        create_builtin_registry(&mut string_table).map_err(|e| CompilerMessages {
+            errors: vec![e],
+            warnings: Vec::new(),
         })?;
 
     // Create the compiler instance

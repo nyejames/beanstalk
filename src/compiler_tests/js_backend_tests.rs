@@ -365,13 +365,13 @@ mod literal_lowering_tests {
         let (mut emitter, _hir, _st) = create_test_emitter();
 
         let expr = HirExpr {
-            kind: HirExprKind::Float(3.14),
+            kind: HirExprKind::Float(std::f64::consts::PI),
             location: dummy_location(),
         };
 
         let result = emitter.lower_expr(&expr).unwrap();
         assert!(result.is_pure());
-        assert_eq!(result.value, "3.14");
+        assert_eq!(result.value, "3.141");
     }
 
     #[test]
@@ -1049,7 +1049,7 @@ mod binary_and_unary_op_tests {
 
         let expr = HirExpr {
             kind: HirExprKind::BinOp {
-                left: Box::new(float_expr(3.14)),
+                left: Box::new(float_expr(std::f64::consts::PI)),
                 op: BinOp::Mul,
                 right: Box::new(float_expr(2.0)),
             },

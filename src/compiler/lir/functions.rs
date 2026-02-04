@@ -7,6 +7,7 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirPlace};
 use crate::compiler::lir::nodes::{LirInst, LirType};
+use crate::compiler::lir::types::datatype_to_lir_type;
 use crate::compiler::string_interning::InternedString;
 
 use super::context::LoweringContext;
@@ -85,7 +86,7 @@ impl LoweringContext {
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
 
-        let needs_ownership_tagging = self.is_heap_allocated_type(&arg.data_type);
+        let needs_ownership_tagging = self.is_heap_allocated_expr(arg);
 
         if needs_ownership_tagging {
             match &arg.kind {
@@ -116,7 +117,7 @@ impl LoweringContext {
                     // Complex expression - lower it and tag the result
                     insts.extend(self.lower_expr(arg)?);
 
-                    let lir_type = hir_expr_to_lir_type(&arg.data_type);
+                    let lir_type = hir_expr_to_lir_type(arg);
                     let temp_local = self.local_allocator.allocate(lir_type);
                     insts.push(LirInst::LocalTee(temp_local));
                     insts.push(LirInst::TagAsOwned(temp_local));
@@ -141,8 +142,6 @@ impl LoweringContext {
     pub fn lower_host_call(
         &mut self,
         target: InternedString,
-        _module: InternedString,
-        _import: InternedString,
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
@@ -177,7 +176,7 @@ impl LoweringContext {
             let param_local = param_idx as u32;
 
             if self.is_heap_allocated_type(param_type) {
-                let lir_type = hir_expr_to_lir_type(param_type);
+                let lir_type = datatype_to_lir_type(param_type);
                 let real_ptr_local = self.local_allocator.allocate(lir_type);
 
                 insts.push(LirInst::HandleOwnedParam {
@@ -198,12 +197,12 @@ impl LoweringContext {
     pub fn params_to_lir_types(&self, params: &[(InternedString, DataType)]) -> Vec<LirType> {
         params
             .iter()
-            .map(|(_, data_type)| hir_expr_to_lir_type(data_type))
+            .map(|(_, data_type)| datatype_to_lir_type(data_type))
             .collect()
     }
 
     /// Converts function return types to LIR types.
     pub fn returns_to_lir_types(&self, returns: &[DataType]) -> Vec<LirType> {
-        returns.iter().map(hir_expr_to_lir_type).collect()
+        returns.iter().map(datatype_to_lir_type).collect()
     }
 }

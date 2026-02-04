@@ -18,15 +18,28 @@ use crate::compiler::codegen::wasm::analyzer::{FunctionSignature, WasmType};
 use crate::compiler::codegen::wasm::error::WasmGenerationError;
 use crate::compiler::codegen::wasm::module_builder::WasmModuleBuilder;
 use crate::compiler::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler::host_functions::registry::{HostFunctionDef, HostRegistry};
+use crate::compiler::host_functions::registry::{HostAbiType, HostFunctionDef, HostRegistry};
 use crate::compiler::string_interning::StringTable;
 use std::collections::HashMap;
 use wasm_encoder::{ExportKind, ValType};
+
+/// Convert HostAbiType to WASM ValType(s)
+/// Some ABI types expand to multiple WASM values (e.g., Utf8Str becomes ptr + len)
+fn abi_type_to_wasm(abi_type: &HostAbiType) -> Vec<ValType> {
+    match abi_type {
+        HostAbiType::I32 => vec![ValType::I32],
+        HostAbiType::F64 => vec![ValType::F64],
+        HostAbiType::Utf8Str => vec![ValType::I32, ValType::I32], // ptr, len
+        HostAbiType::OpaquePtr => vec![ValType::I32],
+        HostAbiType::Void => vec![],
+    }
+}
 
 /// Represents a host function import for WASM generation
 #[derive(Debug, Clone)]
 pub struct HostImport {
     pub function_name: String,
+    pub module_name: String,
     /// Parameter types in WASM format
     pub params: Vec<ValType>,
     /// Return types in WASM format
@@ -36,17 +49,27 @@ pub struct HostImport {
 }
 
 impl HostImport {
-    /// Create a new host import from a host function definition
-    pub fn from_host_def(def: &HostFunctionDef, string_table: &StringTable) -> Self {
-        let function_name = string_table.resolve(def.name).to_string();
+    /// Create a new host import from a host function definition and WASM binding
+    pub fn from_host_def(
+        def: &HostFunctionDef,
+        module_name: String,
+        import_name: String,
+        string_table: &StringTable,
+    ) -> Self {
+        // Convert HostAbiType to WASM ValType
+        let params: Vec<ValType> = def
+            .parameters
+            .iter()
+            .flat_map(|p| abi_type_to_wasm(&p.abi_type))
+            .collect();
 
-        // Convert Beanstalk types to WASM types
-        // For now, we use the JavaScript mapping which provides the actual WASM types
-        // The host function def uses Beanstalk types which need conversion
+        let returns: Vec<ValType> = abi_type_to_wasm(&def.return_type).into_iter().collect();
+
         HostImport {
-            function_name,
-            params: Vec::new(), // Will be filled from JS mapping
-            returns: Vec::new(),
+            function_name: import_name,
+            module_name,
+            params,
+            returns,
             wasm_index: None,
         }
     }
@@ -166,6 +189,8 @@ pub struct HostFunctionManager {
     global_exports: Vec<GlobalExport>,
     /// Map from Beanstalk function name to WASM function index
     name_to_index: HashMap<String, u32>,
+    /// Map from Beanstalk function name to import index (for lookups)
+    name_to_import: HashMap<String, usize>,
     /// Next available import function index
     next_import_index: u32,
 }
@@ -179,6 +204,7 @@ impl HostFunctionManager {
             memory_exports: Vec::new(),
             global_exports: Vec::new(),
             name_to_index: HashMap::new(),
+            name_to_import: HashMap::new(),
             next_import_index: 0,
         }
     }
@@ -189,25 +215,53 @@ impl HostFunctionManager {
         registry: &HostRegistry,
         string_table: &StringTable,
     ) -> Result<(), CompilerError> {
-        // Get all JavaScript mappings (these have the actual WASM types)
-        for (beanstalk_name, js_def) in registry.list_js_mappings() {
-            let name_str = string_table.resolve(*beanstalk_name);
-            let import = HostImport::from_js_def(js_def, name_str);
-            self.register_import(import)?;
+        // Iterate over all host functions and get their WASM bindings
+        for def in registry.list_functions() {
+            // Get the WASM binding for this function
+            let bindings = registry.get_bindings(&def.name).ok_or_else(|| {
+                WasmGenerationError::lir_analysis(
+                    format!(
+                        "Host function '{}' has no WASM binding",
+                        string_table.resolve(def.name)
+                    ),
+                    "register_from_registry",
+                )
+                .to_compiler_error(ErrorLocation::default())
+            })?;
+
+            let wasm_binding = bindings.wasm.as_ref().ok_or_else(|| {
+                WasmGenerationError::lir_analysis(
+                    format!(
+                        "Host function '{}' has no WASM binding",
+                        string_table.resolve(def.name)
+                    ),
+                    "register_from_registry",
+                )
+                .to_compiler_error(ErrorLocation::default())
+            })?;
+
+            let import = HostImport::from_host_def(
+                def,
+                wasm_binding.module.clone(),
+                wasm_binding.import_name.clone(),
+                string_table,
+            );
+            self.register_import(import, string_table.resolve(def.name))?;
         }
 
         Ok(())
     }
 
     /// Register a single host import
-    pub fn register_import(&mut self, mut import: HostImport) -> Result<u32, CompilerError> {
+    pub fn register_import(
+        &mut self,
+        mut import: HostImport,
+        beanstalk_name: &str,
+    ) -> Result<u32, CompilerError> {
         // Check for duplicate registration
-        if self.name_to_index.contains_key(&import.beanstalk_name) {
+        if self.name_to_index.contains_key(beanstalk_name) {
             return Err(WasmGenerationError::lir_analysis(
-                format!(
-                    "Host function '{}' is already registered",
-                    import.beanstalk_name
-                ),
+                format!("Host function '{}' is already registered", beanstalk_name),
                 "register_import",
             )
             .to_compiler_error(ErrorLocation::default()));
@@ -219,8 +273,10 @@ impl HostFunctionManager {
         self.next_import_index += 1;
 
         // Store mapping
-        self.name_to_index
-            .insert(import.beanstalk_name.clone(), index);
+        let import_idx = self.imports.len();
+        self.name_to_index.insert(beanstalk_name.to_string(), index);
+        self.name_to_import
+            .insert(beanstalk_name.to_string(), import_idx);
         self.imports.push(import);
 
         Ok(index)
@@ -278,10 +334,8 @@ impl HostFunctionManager {
 
     /// Get the signature for a host function
     pub fn get_signature(&self, beanstalk_name: &str) -> Option<FunctionSignature> {
-        self.imports
-            .iter()
-            .find(|i| i.beanstalk_name == beanstalk_name)
-            .map(|i| i.to_signature())
+        let import_idx = self.name_to_import.get(beanstalk_name)?;
+        self.imports.get(*import_idx).map(|i| i.to_signature())
     }
 
     /// Apply all imports to a WASM module builder
@@ -291,7 +345,9 @@ impl HostFunctionManager {
     ) -> Result<HashMap<String, u32>, CompilerError> {
         let mut index_map = HashMap::new();
 
-        for import in &self.imports {
+        for (beanstalk_name, import_idx) in &self.name_to_import {
+            let import = &self.imports[*import_idx];
+
             // First, add the function type
             let type_idx = builder.add_function_type(import.params.clone(), import.returns.clone());
 
@@ -299,7 +355,7 @@ impl HostFunctionManager {
             let func_idx =
                 builder.add_import_function(&import.module_name, &import.function_name, type_idx);
 
-            index_map.insert(import.beanstalk_name.clone(), func_idx);
+            index_map.insert(beanstalk_name.clone(), func_idx);
         }
 
         Ok(index_map)
@@ -350,16 +406,14 @@ impl HostFunctionManager {
         expected_params: &[WasmType],
         expected_returns: &[WasmType],
     ) -> Result<(), WasmGenerationError> {
-        let import = self
-            .imports
-            .iter()
-            .find(|i| i.beanstalk_name == beanstalk_name)
-            .ok_or_else(|| {
-                WasmGenerationError::lir_analysis(
-                    format!("Host function '{}' not found", beanstalk_name),
-                    "validate_type_compatibility",
-                )
-            })?;
+        let import_idx = self.name_to_import.get(beanstalk_name).ok_or_else(|| {
+            WasmGenerationError::lir_analysis(
+                format!("Host function '{}' not found", beanstalk_name),
+                "validate_type_compatibility",
+            )
+        })?;
+
+        let import = &self.imports[*import_idx];
 
         // Convert import params to WasmType for comparison
         let import_params: Vec<WasmType> = import
@@ -429,13 +483,13 @@ impl Default for HostFunctionManager {
 }
 
 /// Helper function to create standard Beanstalk host imports
+/// Note: This is deprecated - use HostFunctionManager::register_from_registry instead
 pub fn create_standard_host_imports() -> Vec<HostImport> {
     vec![
-        // host_io_functions() function - outputs to stdout
+        // io() function - outputs to stdout
         HostImport {
             module_name: "beanstalk_io".to_string(),
-            function_name: "host_io_functions".to_string(),
-            beanstalk_name: "host_io_functions".to_string(),
+            function_name: "io".to_string(),
             params: vec![ValType::I32, ValType::I32], // ptr, len for string
             returns: vec![],
             wasm_index: None,
@@ -447,10 +501,10 @@ pub fn create_standard_host_imports() -> Vec<HostImport> {
 pub fn validate_required_host_functions(
     manager: &HostFunctionManager,
 ) -> Result<(), WasmGenerationError> {
-    // The host_io_functions() function is mandatory
-    if !manager.is_host_import("host_io_functions") {
+    // The io() function is mandatory
+    if !manager.is_host_import("io") {
         return Err(WasmGenerationError::lir_analysis(
-            "Required host function 'host_io_functions' is not registered. Every Beanstalk module requires the host_io_functions() function.",
+            "Required host function 'io' is not registered. Every Beanstalk module requires the io() function.",
             "validate_required_host_functions",
         ));
     }

@@ -75,7 +75,7 @@ pub enum NodeKind {
     FunctionCall {
         name: InternedString,
         args: Vec<Expression>,
-        returns: Vec<DataType>, 
+        returns: Vec<DataType>,
         location: TextLocation,
         // bool, // Function is pure
     },
@@ -130,16 +130,23 @@ impl AstNode {
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
             NodeKind::Rvalue(value, ..) => Ok(value.to_owned()),
             // NodeKind::Assignment(_, value) => Ok(value.to_owned()),
-            NodeKind::FunctionCall { name, args: arguments, returns, location} |
-            NodeKind::HostFunctionCall { name, args: arguments, returns, location}
-            => {
-                Ok(Expression::function_call(
-                    *name,
-                    arguments.to_owned(),
-                    returns.to_owned(),
-                    location.to_owned(),
-                ))
+            NodeKind::FunctionCall {
+                name,
+                args: arguments,
+                returns,
+                location,
             }
+            | NodeKind::HostFunctionCall {
+                name,
+                args: arguments,
+                returns,
+                location,
+            } => Ok(Expression::function_call(
+                *name,
+                arguments.to_owned(),
+                returns.to_owned(),
+                location.to_owned(),
+            )),
             NodeKind::FieldAccess {
                 data_type,
                 ownership,

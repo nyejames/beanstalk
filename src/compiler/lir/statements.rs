@@ -7,6 +7,7 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{BlockId, HirBlock, HirKind, HirNode, HirStmt, HirTerminator};
 use crate::compiler::lir::nodes::{LirField, LirFunction, LirInst, LirStruct, LirType};
+use crate::compiler::lir::types::datatype_to_lir_type;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::string_interning::InternedString;
@@ -66,21 +67,14 @@ impl LoweringContext {
 
             HirStmt::Call { target, args } => self.lower_function_call(*target, args),
 
-            HirStmt::HostCall {
-                target,
-                module,
-                import,
-                args,
-            } => self.lower_host_call(*target, *module, *import, args),
+            HirStmt::HostCall { target, args } => self.lower_host_call(*target, args),
 
             HirStmt::PossibleDrop(place) => self.lower_possible_drop(place),
 
             HirStmt::ExprStmt(expr) => {
                 let mut insts = self.lower_expr(expr)?;
-                // Drop the result if the expression produces a value
-                if !matches!(expr.data_type, DataType::None) {
-                    insts.push(LirInst::Drop);
-                }
+                // Drop the result - all expressions produce a value
+                insts.push(LirInst::Drop);
                 Ok(insts)
             }
 
@@ -196,7 +190,7 @@ impl LoweringContext {
         let return_types: Vec<LirType> = signature
             .returns
             .iter()
-            .map(|data_type| hir_expr_to_lir_type(&data_type))
+            .map(|data_type| datatype_to_lir_type(data_type))
             .collect();
 
         // Build the complete LirFunction structure

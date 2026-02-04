@@ -78,7 +78,7 @@ impl LoweringContext {
         insts.extend(self.lower_expr(value)?);
 
         // Get or allocate the target local
-        let target_local = self.get_or_allocate_local(target, &value.data_type)?;
+        let target_local = self.get_or_allocate_local(target, value)?;
 
         // Store the value in the local
         insts.push(LirInst::LocalSet(target_local));
@@ -101,7 +101,7 @@ impl LoweringContext {
         insts.extend(self.lower_expr(value)?);
 
         // Get or allocate the target local
-        let target_local = self.get_or_allocate_local(target, &value.data_type)?;
+        let target_local = self.get_or_allocate_local(target, value)?;
 
         // Store the value in the local
         insts.push(LirInst::LocalSet(target_local));

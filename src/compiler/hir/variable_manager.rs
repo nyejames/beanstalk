@@ -141,7 +141,7 @@ impl VariableManager {
         }
 
         // Determine ownership capability based on type
-        let ownership_capable = self.is_type_ownership_capable(&data_type);
+        let ownership_capable = is_type_ownership_capable(&data_type);
 
         // Store variable info
         let info = VariableInfo {
@@ -227,7 +227,7 @@ impl VariableManager {
         ctx: &mut HirBuilderContext,
     ) -> Result<HirNode, CompilerError> {
         // Extract the variable name from the target
-        let var_name = self.extract_var_name(&target)?;
+        let var_name = extract_var_name(&target)?;
 
         // Check if variable exists
         if !self.variable_scopes.contains_key(&var_name) {
@@ -350,53 +350,53 @@ impl VariableManager {
             .copied()
             .collect()
     }
+}
 
-    // =========================================================================
-    // Helper Methods
-    // =========================================================================
+// =========================================================================
+// Helper Functions
+// =========================================================================
 
-    /// Determines if a type is ownership capable.
-    ///
-    /// CONSERVATIVE: This is a heuristic - the borrow checker makes final decisions.
-    fn is_type_ownership_capable(&self, data_type: &DataType) -> bool {
-        match data_type {
-            // Primitive types are typically not ownership capable (copy semantics)
-            DataType::Int | DataType::Float | DataType::Bool | DataType::Char => false,
+/// Determines if a type is ownership-capable.
+///
+/// CONSERVATIVE: This is a heuristic - the borrow checker makes final decisions.
+pub fn is_type_ownership_capable(data_type: &DataType) -> bool {
+    match data_type {
+        // Primitive types are typically not ownership capable (copy semantics)
+        DataType::Int | DataType::Float | DataType::Bool | DataType::Char => false,
 
-            // String slices are borrowed, not owned
-            DataType::String => false,
+        // String slices are borrowed, not owned
+        DataType::String => false,
 
-            // None type is not ownership capable
-            DataType::None => false,
+        // None type is not ownership-capable
+        DataType::None => false,
 
-            // Collections and structs are ownership capable
-            DataType::Collection(_, _) => true,
-            DataType::Struct(_, _) => true,
-            DataType::Parameters(_) => true,
+        // Collections and structs are ownership-capable
+        DataType::Collection(_, _) => true,
+        DataType::Struct(_, _) => true,
+        DataType::Parameters(_) => true,
 
-            // Templates can be ownership capable
-            DataType::Template => true,
+        // Templates can be ownership-capable
+        DataType::Template => true,
 
-            // Functions are typically not ownership capable
-            DataType::Function(_, _) => false,
+        // Functions are typically not ownership-capable
+        DataType::Function(_, _) => false,
 
-            // References depend on what they reference
-            DataType::Reference(inner) => self.is_type_ownership_capable(inner),
+        // References depend on what they reference
+        DataType::Reference(inner) => is_type_ownership_capable(inner),
 
-            // Inferred types are conservatively ownership capable
-            DataType::Inferred => true,
+        // Inferred types are conservatively ownership-capable
+        DataType::Inferred => true,
 
-            // Other types are conservatively ownership capable
-            _ => true,
-        }
+        // Other types are conservatively ownership-capable
+        _ => true,
     }
+}
 
-    /// Extracts the variable name from an HIR place.
-    fn extract_var_name(&self, place: &HirPlace) -> Result<InternedString, CompilerError> {
-        match place {
-            HirPlace::Var(name) => Ok(*name),
-            HirPlace::Field { base, .. } => self.extract_var_name(base),
-            HirPlace::Index { base, .. } => self.extract_var_name(base),
-        }
+/// Extracts the variable name from an HIR place.
+pub fn extract_var_name(place: &HirPlace) -> Result<InternedString, CompilerError> {
+    match place {
+        HirPlace::Var(name) => Ok(*name),
+        HirPlace::Field { base, .. } => extract_var_name(base),
+        HirPlace::Index { base, .. } => extract_var_name(base),
     }
 }

@@ -104,7 +104,7 @@ impl ProjectBuilder for JitProjectBuilder {
         //         warnings: vec![],
         //     }),
         // }
-        
+
         println!("Wasm JIT not yet implemented. WASM bytes: {:?}", wasm_bytes);
         Err(compiler_messages)
     }

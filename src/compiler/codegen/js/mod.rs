@@ -138,13 +138,16 @@ impl<'hir> JsEmitter<'hir> {
     /// - Pretty printing is enabled (for readability)
     ///
     /// In compact mode, location comments are suppressed to minimize output size.
-    pub(crate) fn emit_location_comment(&mut self, location: &crate::compiler::parsers::tokenizer::tokens::TextLocation) {
+    pub(crate) fn emit_location_comment(
+        &mut self,
+        location: &crate::compiler::parsers::tokenizer::tokens::TextLocation,
+    ) {
         // Only emit location comments in pretty mode with emit_locations enabled
         if self.config.emit_locations && self.config.pretty {
             let line = location.start_pos.line_number + 1; // Convert to 1-based
             let start_col = location.start_pos.char_column;
             let end_col = location.end_pos.char_column;
-            
+
             self.emit(&format!(" /* Line {}:{}-{} */", line, start_col, end_col));
         }
     }
@@ -298,7 +301,10 @@ impl<'hir> JsEmitter<'hir> {
     /// structure in the generated JavaScript.
     ///
     /// Returns an error if an unsupported terminator is encountered or if lowering fails.
-    pub fn lower_terminator(&mut self, terminator: &crate::compiler::hir::nodes::HirTerminator) -> Result<(), CompilerError> {
+    pub fn lower_terminator(
+        &mut self,
+        terminator: &crate::compiler::hir::nodes::HirTerminator,
+    ) -> Result<(), CompilerError> {
         use crate::compiler::hir::nodes::HirTerminator;
 
         match terminator {
@@ -406,7 +412,7 @@ pub fn lower_hir_to_js(
         match &func_node.kind {
             crate::compiler::hir::nodes::HirKind::Stmt(stmt) => {
                 emitter.lower_function_or_template_stmt(stmt)?;
-                emitter.emit_indent(); // Add blank line between functions
+                emitter.emit_indent(); // Add a blank line between functions
             }
             _ => {
                 // Functions should always be statements

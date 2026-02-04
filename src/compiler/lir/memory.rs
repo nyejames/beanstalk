@@ -337,14 +337,14 @@ impl LoweringContext {
     pub fn get_or_allocate_local(
         &mut self,
         place: &HirPlace,
-        data_type: &crate::compiler::datatypes::DataType,
+        value_expr: &HirExpr,
     ) -> Result<u32, CompilerError> {
         match place {
             HirPlace::Var(name) => {
                 if let Some(&local_idx) = self.var_to_local.get(name) {
                     Ok(local_idx)
                 } else {
-                    let lir_type = hir_expr_to_lir_type(data_type);
+                    let lir_type = hir_expr_to_lir_type(value_expr);
                     let local_idx = self.local_allocator.allocate(lir_type);
                     self.var_to_local.insert(*name, local_idx);
                     Ok(local_idx)
