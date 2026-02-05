@@ -327,15 +327,25 @@ pub fn function_body_to_ast(
                 token_stream.advance();
             }
 
-            // String template as an expression without being assigned.
-            // NOTE: For output, use the host_io_functions() function instead of top-level templates.
-            // The host_io_functions() function is the standard way to print to stdout with automatic newlines.
+            // String template at the top level of a function.
             TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
+                // If this isn't the top level of the module, this should be an error
+                // Only top level scope can have top level templates
+                if context.kind != ContextKind::Module {
+                    return_rule_error!(
+                        "Templates can only be used like this at the top level. Not inside the body of a function",
+                        token_stream
+                            .current_location()
+                            .to_error_location(&string_table),
+                        {}
+                    )
+                }
+
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
                 ast.push(AstNode {
-                    kind: NodeKind::ParentTemplate(expr),
+                    kind: NodeKind::TopLevelTemplate(expr),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 })

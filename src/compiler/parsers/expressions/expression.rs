@@ -341,7 +341,7 @@ pub enum ExpressionKind {
         InternedString,  // Function name
         Vec<Expression>, // Arguments
     ),
-    
+
     HostFunctionCall(HostFunctionId, Vec<Expression>),
 
     // Also equivalent to a String if it folds into a string

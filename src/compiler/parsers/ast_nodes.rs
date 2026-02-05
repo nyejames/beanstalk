@@ -112,7 +112,8 @@ pub enum NodeKind {
     // It accepts any type through CoerceToString and automatically adds newlines
     Print(Expression),
 
-    ParentTemplate(Expression),
+    Template(Expression),
+    TopLevelTemplate(Expression),
     Slot,
     Empty, //
 

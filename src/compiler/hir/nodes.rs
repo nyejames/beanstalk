@@ -27,6 +27,7 @@
 use crate::compiler::datatypes::DataType;
 use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::parsers::ast_nodes::Var;
+use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
@@ -36,8 +37,9 @@ use crate::compiler::string_interning::InternedString;
 pub struct HirModule {
     pub blocks: Vec<HirBlock>,
     pub entry_block: BlockId,
-    pub functions: Vec<HirNode>, // FunctionDef nodes
-    pub structs: Vec<HirNode>,   // StructDef nodes
+    pub functions: Vec<HirNode>,            // FunctionDef nodes
+    pub structs: Vec<HirNode>,              // StructDef nodes
+    pub top_level_templates: Vec<Template>, // Separated top level templates for the build system
 }
 
 /// A basic block containing a sequence of HIR nodes

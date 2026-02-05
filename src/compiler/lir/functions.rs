@@ -50,12 +50,8 @@ impl LoweringContext {
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
         match target {
-            CallTarget::UserFunction(name) => {
-                self.lower_function_call(*name, args)
-            }
-            CallTarget::HostFunction(id) => {
-                self.lower_host_call(*id, args)
-            }
+            CallTarget::UserFunction(name) => self.lower_function_call(*name, args),
+            CallTarget::HostFunction(id) => self.lower_host_call(*id, args),
         }
     }
 

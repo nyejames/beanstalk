@@ -23,6 +23,7 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 use crate::return_hir_transformation_error;
+use colour::red_ln;
 
 /// The FunctionTransformer component handles transformation of functions from AST to HIR.
 ///
@@ -187,6 +188,26 @@ impl FunctionTransformer {
             NodeKind::VariableDeclaration(arg) => {
                 // Use the context's helper method to process variable declarations
                 ctx.process_variable_declaration(arg, &node.location)
+            }
+
+            // Used by the host environment / build system for special purposes,
+            // For example, in the HTML build system
+            // these are separated from the rest of the JS/Wasm codegen to become the actual HTML page content.
+            // But this is up to the build system to decide how these are used and lowered,
+            // so it can be separated from the rest of the HIR nodes for the build system's convenience
+            NodeKind::TopLevelTemplate(expr) => {
+                if let ExpressionKind::Template(ref template) = expr.kind {
+                    ctx.top_level_templates.push(*template.clone());
+                } else {
+                    // This should never happen, but show a warning if it does
+                    red_ln!(
+                        "Compiler Bug: Top level template has the wrong type expression inside it for some reason: {:?}",
+                        expr.kind
+                    );
+                }
+
+                // Don't add anything to the actual codegen
+                Ok(Vec::new())
             }
             _ => {
                 // For other node types, delegate to the main context processing

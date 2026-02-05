@@ -28,4 +28,3 @@ wasm-encoder = "0.244.0"
 wasmer-types = "6.1.0-rc.5"
 
 [dev-dependencies]
-quickcheck = "1.0"
