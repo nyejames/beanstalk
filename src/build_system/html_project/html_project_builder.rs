@@ -41,6 +41,24 @@ impl ProjectBuilder for HtmlProjectBuilder {
             });
         }
 
+        // TODO:
+        // HTML project builder uses directory based routing for the HTML pages.
+        // Each page has a special name "#page" that can import any resources
+        // and acts as the index page served from the path to its directory.
+        // So "/info/specific_page" is a directory,
+        // inside specific_page a #page can be added to serve this as a route.
+        // Directories that don't have a #page are not served as routes.
+        // Although currently this is a basic static site builder,
+        // so this is more framework level stuff for the future.
+
+        // TODO: Design decision
+        // What imports are visible to each directory is not decided on yet.
+        // Might be that what each page can import is determined in the config
+        // (only their own directory or a selection of special folders like /lib /components etc...)
+
+        // So here the builder should check the name of the file to check for its special properties.
+        // Top Level templates outside #page have to be explicitly imported from other files if they have some to use.
+
         // Use the core build pipeline to compile to HIR
         let compilation_result =
             core_build::compile_modules(modules, config, release_build, flags)?;

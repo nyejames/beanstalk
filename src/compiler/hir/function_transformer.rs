@@ -28,7 +28,7 @@ use colour::red_ln;
 /// The FunctionTransformer component handles transformation of functions from AST to HIR.
 ///
 /// This component operates on borrowed HirBuilderContext and does not maintain
-/// independent state. All transformations are coordinated through the context.
+///  an independent state. All transformations are coordinated through the context.
 pub struct FunctionTransformer;
 
 impl FunctionTransformer {
@@ -197,7 +197,102 @@ impl FunctionTransformer {
             // so it can be separated from the rest of the HIR nodes for the build system's convenience
             NodeKind::TopLevelTemplate(expr) => {
                 if let ExpressionKind::Template(ref template) = expr.kind {
-                    ctx.top_level_templates.push(*template.clone());
+                // TODO:
+                /*
+
+                    ## Templates are just expressions with capture
+                    * every file has an implicit `start() -> String`
+                    * all top-level templates contribute to that return value
+                    * templates can capture variables declared earlier in `start`
+
+                    > **Lower top-level templates exactly like any other runtime template expression, except their results are accumulated into the implicit return of `start`.**
+
+                    The build system can later decide:
+                    * whether the returned string is HTML
+                    * whether it’s written to disk
+                    * whether it’s concatenated with something else
+
+                    So HIR’s job is just: *produce a string value*.
+
+                    ## Concrete lowering strategy (recommended)
+
+                    ### Step 1: Make `start` return a string always
+                    If there are no templates, return `""`.
+
+                    ### Step 2: Introduce a hidden accumulator local
+
+                    Inside `start`, introduce a compiler-generated local, conceptually:
+
+                    ```text
+                    __start_result : String
+                    ```
+
+                    Initialization:
+
+                    * Empty string literal (or whatever your canonical empty template lowers to)
+
+                    This happens **before** lowering any body nodes.
+
+                    This fits well with your current HIR philosophy:
+
+                    * “No temporaries at the language level”
+                    * Compiler-introduced locals are normal locals
+
+                    ---
+
+                    ### Step 3: Lower each `NodeKind::TopLevelTemplate` as:
+
+                    1. Lower the template expression *as an expression*, not as a side-channel
+                    2. Append its result into `__start_result`
+
+                    In pseudocode terms:
+
+                    ```beanstalk
+                    __start_result = __start_result + (lowered template expression)
+                    ```
+
+                    In HIR terms, this likely becomes:
+                    * Call to a string concat intrinsic or runtime helper
+                    * Assignment back into the accumulator
+
+                    ---
+
+                    ### Step 4: Emit a final return
+
+                    At the end of `start`:
+
+                    ```text
+                    return __start_result
+                    ```
+
+                    What you want here is something like:
+
+                    * Lower `expr` → `(Vec<HirNode>, HirExpr)`
+                    * Emit nodes to evaluate the template
+                    * Emit a call / assignment that mutates `__start_result`
+
+                    That suggests two small architectural nudges:
+
+                    ### A. `FunctionTransformer` needs awareness of “current start accumulator”
+
+                    Not as a special case, but as *context*.
+
+                    For example, in `HirBuilderContext`:
+
+                    * Optional `current_start_accumulator: Option<VarId>`
+
+                    * `ExpressionKind::Template` already lowers to either:
+
+                      * `HirExprKind::StringLiteral` (folded case)
+                      * `HirExprKind::Call { target: runtime_template_fn }`
+
+                    * `start` is a normal function scope
+                    * Template expressions reference variables by `InternedString`
+                    * HIR loads variables via `HirPlace::Var(name)`
+                    * Any runtime template function call receives captured values as arguments (explicitly or implicitly, depending on your template model)
+
+                    No closure machinery is required *at HIR level* unless templates outlive the function (they don’t here).
+                 */
                 } else {
                     // This should never happen, but show a warning if it does
                     red_ln!(
@@ -209,6 +304,7 @@ impl FunctionTransformer {
                 // Don't add anything to the actual codegen
                 Ok(Vec::new())
             }
+
             _ => {
                 // For other node types, delegate to the main context processing
                 // This will be handled by expression linearizer, control flow linearizer, etc.
