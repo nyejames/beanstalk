@@ -230,7 +230,7 @@ impl DataflowEngine {
 
                 accesses
             }
-            HirStmt::Call { args, .. } | HirStmt::HostCall { args, .. } => args
+            HirStmt::Call { args, .. } => args
                 .iter()
                 .flat_map(|expr| self.collect_expr_accesses(expr))
                 .collect(),

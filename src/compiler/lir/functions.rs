@@ -6,10 +6,10 @@
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirPlace};
-use crate::compiler::host_functions::registry::CallTarget;
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::lir::types::datatype_to_lir_type;
-use crate::compiler::string_interning::InternedString;
+use crate::compiler::string_interning::{InternedString, StringId};
 
 use super::context::LoweringContext;
 use super::types::hir_expr_to_lir_type;
@@ -22,7 +22,7 @@ impl LoweringContext {
     /// Lowers a regular function call to LIR instructions.
     pub fn lower_function_call(
         &mut self,
-        target: CallTarget,
+        name: StringId,
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
@@ -33,8 +33,8 @@ impl LoweringContext {
         }
 
         // Look up the function index
-        let func_idx = self.get_function_index(target).ok_or_else(|| {
-            CompilerError::lir_transformation(format!("Unknown function: {}", target))
+        let func_idx = self.get_function_index(name).ok_or_else(|| {
+            CompilerError::lir_transformation(format!("Unknown function: {}", name))
         })?;
 
         // Emit call instruction
@@ -49,7 +49,14 @@ impl LoweringContext {
         target: &CallTarget,
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
-        self.lower_function_call(target.clone(), args)
+        match target {
+            CallTarget::UserFunction(name) => {
+                self.lower_function_call(*name, args)
+            }
+            CallTarget::HostFunction(id) => {
+                self.lower_host_call(*id, args)
+            }
+        }
     }
 
     /// Lowers a method call expression.
@@ -142,7 +149,7 @@ impl LoweringContext {
     /// Lowers a host function call to LIR instructions.
     pub fn lower_host_call(
         &mut self,
-        target: InternedString,
+        id: HostFunctionId,
         args: &[HirExpr],
     ) -> Result<Vec<LirInst>, CompilerError> {
         let mut insts = Vec::new();
@@ -153,7 +160,7 @@ impl LoweringContext {
         }
 
         // Get or register the host function index
-        let host_func_idx = self.register_host_function(target);
+        let host_func_idx = self.register_host_function(id);
 
         // Host functions use offset 0x10000 to distinguish from regular functions
         let import_call_idx = 0x10000 + host_func_idx;

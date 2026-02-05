@@ -9,7 +9,7 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::BlockId;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
-use crate::compiler::host_functions::registry::CallTarget;
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::{InternedString, StringId};
@@ -56,7 +56,7 @@ pub struct LoweringContext {
     pub function_indices: HashMap<StringId, u32>,
 
     /// Maps host function names to their import indices
-    pub host_function_indices: HashMap<InternedString, u32>,
+    pub host_function_indices: HashMap<HostFunctionId, u32>,
 
     /// The next available function index for allocation
     next_function_index: u32,
@@ -117,19 +117,19 @@ impl LoweringContext {
     }
 
     /// Registers a host function and assigns it an import index.
-    pub fn register_host_function(&mut self, name: InternedString) -> u32 {
-        if let Some(&idx) = self.host_function_indices.get(&name) {
+    pub fn register_host_function(&mut self, id: HostFunctionId) -> u32 {
+        if let Some(&idx) = self.host_function_indices.get(&id) {
             return idx;
         }
         let idx = self.next_host_function_index;
         self.next_host_function_index += 1;
-        self.host_function_indices.insert(name, idx);
+        self.host_function_indices.insert(id, idx);
         idx
     }
 
     /// Retrieves the host function index for a host function by name.
-    pub fn get_host_function_index(&self, name: InternedString) -> Option<u32> {
-        self.host_function_indices.get(&name).copied()
+    pub fn get_host_function_index(&self, id: HostFunctionId) -> Option<u32> {
+        self.host_function_indices.get(&id).copied()
     }
 
     /// Marks a variable as being at its last use.

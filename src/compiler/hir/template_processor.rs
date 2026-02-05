@@ -18,6 +18,7 @@ use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt};
+use crate::compiler::host_functions::registry::CallTarget;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::template::TemplateType;
@@ -251,7 +252,7 @@ impl TemplateProcessor {
                 let nested_captures = self.collect_template_captures(nested_template, ctx)?;
                 captures.extend(nested_captures);
             }
-            ExpressionKind::FunctionCall(_, args) => {
+            ExpressionKind::FunctionCall(_, args) | ExpressionKind::HostFunctionCall(_, args) => {
                 // Process function call arguments
                 for arg in args {
                     self.collect_captures_from_expression(arg, captures, ctx)?;
@@ -513,7 +514,7 @@ impl TemplateProcessor {
                     hir_args.push(hir_arg);
                 }
                 HirExprKind::Call {
-                    target: *name,
+                    target: CallTarget::UserFunction(*name),
                     args: hir_args,
                 }
             }

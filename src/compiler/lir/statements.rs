@@ -65,7 +65,10 @@ impl LoweringContext {
                 is_mutable,
             } => self.lower_assign(target, value, *is_mutable),
 
-            HirStmt::Call { target, args } => self.lower_function_call(target.clone(), args),
+            HirStmt::Call { target, args } => match target {
+                CallTarget::UserFunction(name) => self.lower_function_call(*name, args),
+                CallTarget::HostFunction(id) => self.lower_host_call(*id, args),
+            },
 
             HirStmt::PossibleDrop(place) => self.lower_possible_drop(place),
 
@@ -90,7 +93,7 @@ impl LoweringContext {
                 template_fn,
                 captures,
                 ..
-            } => self.lower_function_call(CallTarget::UserFunction(*template_fn), captures),
+            } => self.lower_function_call(*template_fn, captures),
 
             HirStmt::TemplateFn { body, .. } => self.lower_block(*body, blocks),
         }

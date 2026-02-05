@@ -391,11 +391,6 @@ impl HirValidator {
                     Self::check_expr_nesting_depth(arg, 0, location)?;
                 }
             }
-            HirStmt::HostCall { args, .. } => {
-                for arg in args {
-                    Self::check_expr_nesting_depth(arg, 0, location)?;
-                }
-            }
             HirStmt::RuntimeTemplateCall { captures, .. } => {
                 for capture in captures {
                     Self::check_expr_nesting_depth(capture, 0, location)?;

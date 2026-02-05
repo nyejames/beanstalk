@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 //! Expression Linearizer for HIR Builder
 //!
 //! This module implements the ExpressionLinearizer component that converts nested AST
@@ -94,12 +96,16 @@ impl ExpressionLinearizer {
 
             // Runtime expressions need full linearization
             ExpressionKind::Runtime(ast_nodes) => {
-                self.linearize_runtime_expression(ast_nodes, &expr.data_type, &expr.location, ctx)
+                self.linearize_runtime_expression(ast_nodes, &expr.location, ctx)
             }
 
             // Function calls
             ExpressionKind::FunctionCall(name, args) => {
                 self.linearize_function_call(*name, args, &expr.location, ctx)
+            }
+
+            ExpressionKind::HostFunctionCall(id, args) => {
+                self.linearize_host_function_call(*id, args, &expr.location, ctx)
             }
 
             // Collections
@@ -151,7 +157,6 @@ impl ExpressionLinearizer {
     fn linearize_runtime_expression(
         &mut self,
         ast_nodes: &[AstNode],
-        result_type: &DataType,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<(Vec<HirNode>, HirExpr), CompilerError> {

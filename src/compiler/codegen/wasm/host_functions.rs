@@ -47,12 +47,7 @@ pub struct HostImport {
 
 impl HostImport {
     /// Create a new host import from a host function definition and WASM binding
-    pub fn from_host_def(
-        def: &HostFunctionDef,
-        module_name: String,
-        import_name: String,
-        string_table: &StringTable,
-    ) -> Self {
+    pub fn from_host_def(def: &HostFunctionDef, module_name: String, import_name: String) -> Self {
         // Convert HostAbiType to WASM ValType
         let params: Vec<ValType> = def
             .parameters
@@ -235,7 +230,6 @@ impl HostFunctionManager {
                 def,
                 wasm_binding.module.clone(),
                 wasm_binding.import_name.clone(),
-                string_table,
             );
             self.register_import(import, &def.host_func_id.to_string())?;
         }

@@ -19,6 +19,7 @@ use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt};
+use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
@@ -563,7 +564,6 @@ impl StructHandler {
     ) -> Result<(Vec<HirNode>, HirExpr), CompilerError> {
         // Create a host call to the memory allocation function
         // In Beanstalk, heap allocation is handled by the runtime
-        let alloc_name = ctx.string_table.intern("__bst_alloc");
 
         // Create arguments for the allocation call
         let size_expr = HirExpr {
@@ -579,8 +579,8 @@ impl StructHandler {
         // Create the host call node for allocation
         let node_id = ctx.allocate_node_id();
         let alloc_node = HirNode {
-            kind: HirKind::Stmt(HirStmt::HostCall {
-                target: alloc_name,
+            kind: HirKind::Stmt(HirStmt::Call {
+                target: CallTarget::HostFunction(HostFunctionId::Alloc),
                 args: vec![size_expr, align_expr],
             }),
             location: location.clone(),
@@ -590,7 +590,7 @@ impl StructHandler {
         // The result is a pointer (represented as Int in WASM)
         let result_expr = HirExpr {
             kind: HirExprKind::Call {
-                target: alloc_name,
+                target: CallTarget::HostFunction(HostFunctionId::Alloc),
                 args: vec![],
             },
             location: location.clone(),

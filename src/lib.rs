@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 pub(crate) mod build;
 pub mod cli;
 mod dev_server;

@@ -14,6 +14,25 @@ pub enum BackendKind {
     Wasm,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HostFunctionId {
+    Io,
+    Alloc, // Host environment manages heap
+           // Future:
+           // Now,
+           // Fetch,
+           // Alert,
+}
+
+impl Display for HostFunctionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HostFunctionId::Io => write!(f, "io"),
+            HostFunctionId::Alloc => write!(f, "alloc"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Hash, PartialEq)]
 pub enum CallTarget {
     UserFunction(InternedString),
@@ -137,25 +156,6 @@ pub struct WasmHostBinding {
 pub struct HostBindings {
     pub js: Option<JsHostBinding>,
     pub wasm: Option<WasmHostBinding>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HostFunctionId {
-    Io,
-    // Future:
-    // Now,
-    // Fetch,
-    // Alert,
-}
-
-impl HostFunctionId {}
-
-impl Display for HostFunctionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            HostFunctionId::Io => write!(f, "io"),
-        }
-    }
 }
 
 // ======================================================
