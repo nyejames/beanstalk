@@ -37,8 +37,6 @@ use std::collections::{HashMap, HashSet};
 // Re-export validator types for backward compatibility
 pub use crate::compiler::hir::validator::{HirValidationError, HirValidator};
 use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
-use crate::compiler::parsers::expressions::expression::Expression;
-use crate::compiler::parsers::statements::create_template_node::Template;
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
 // ============================================================================
@@ -474,7 +472,7 @@ pub struct HirBuilderContext<'a> {
     function_signatures: HashMap<InternedString, FunctionSignature>,
 
     /// Registered struct definitions (name -> fields)
-    struct_definitions: HashMap<InternedString, Vec<Var>>,
+    struct_definitions: HashMap<InternedString, Vec<crate::compiler::parsers::ast_nodes::Var>>,
 
     /// Candidates for possible drop insertion
     drop_candidates: Vec<DropCandidate>,
@@ -517,11 +515,6 @@ pub struct HirBuilderContext<'a> {
 
     /// Template processor component
     template_processor: TemplateProcessor,
-
-    /// Top level templates.
-    /// Collected here to be separated from the rest of the codegen.
-    /// This is so the build system can determine what to do with them easily.
-    pub(crate) top_level_templates: Vec<Template>,
 }
 
 impl<'a> HirBuilderContext<'a> {
@@ -549,7 +542,6 @@ impl<'a> HirBuilderContext<'a> {
             function_transformer: FunctionTransformer::new(),
             struct_handler: StructHandler::new(),
             template_processor: TemplateProcessor::new(),
-            top_level_templates: Vec::new(),
         }
     }
 
@@ -588,7 +580,6 @@ impl<'a> HirBuilderContext<'a> {
             entry_block: entry_block_id,
             functions: self.functions,
             structs: self.structs,
-            top_level_templates: self.top_level_templates,
         };
 
         // Run validation

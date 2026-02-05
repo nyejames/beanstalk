@@ -22,7 +22,6 @@ mod tests {
             blocks: Vec::new(),
             functions: Vec::new(),
             structs: Vec::new(),
-            top_level_templates: Vec::new(),
             entry_block: 0,
         }));
 

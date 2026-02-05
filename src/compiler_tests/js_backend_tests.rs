@@ -18,7 +18,6 @@ fn test_js_emitter_initialization() {
         entry_block: 0,
         functions: vec![],
         structs: vec![],
-        top_level_templates: vec![],
     };
 
     let string_table = StringTable::new();
@@ -64,7 +63,6 @@ fn test_js_emitter_block_lookup() {
         entry_block: 0,
         functions: vec![],
         structs: vec![],
-        top_level_templates: vec![],
     };
 
     let string_table = StringTable::new();
@@ -98,7 +96,6 @@ fn test_js_emitter_config() {
         entry_block: 0,
         functions: vec![],
         structs: vec![],
-        top_level_templates: vec![],
     };
 
     let string_table = StringTable::new();
@@ -303,7 +300,6 @@ mod literal_lowering_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -595,7 +591,6 @@ mod binary_and_unary_op_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -1087,7 +1082,6 @@ mod variable_access_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -1333,7 +1327,6 @@ mod function_call_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -1735,7 +1728,6 @@ mod constructor_lowering_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -2039,7 +2031,6 @@ mod statement_emission_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -2190,7 +2181,6 @@ mod statement_emission_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -2262,7 +2252,6 @@ mod assignment_statement_tests {
             entry_block: 0,
             functions: vec![],
             structs: vec![],
-            top_level_templates: vec![],
         });
 
         let string_table = Box::new(StringTable::new());
@@ -2333,7 +2322,7 @@ mod assignment_statement_tests {
         };
         emitter.lower_stmt(&stmt1);
 
-        // Second assignment to the same variable
+        // Second assignment to same variable
         let stmt2 = HirStmt::Assign {
             target: HirPlace::Var(var_name),
             value: HirExpr {
