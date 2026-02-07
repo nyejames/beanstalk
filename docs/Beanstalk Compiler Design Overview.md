@@ -1,11 +1,17 @@
 # Compilation 
+## What is this compiler?
+- A high-level language with templates as first-class citizens and ownership treated as an optimisation (GC is the fallback).
+- Near-term target is a stable JS backend/build system for static pages and JS output; Wasm remains the long-term primary target.
+- Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds.
+- A modular compiler exposed as a library, plus a build system and CLI that assemble single-file and multi-file projects into runnable bundles.
+
 Beanstalk’s compiler enforces memory safety through a hybrid strategy: A fallback garbage collector combined with increasingly strong static analysis that incrementally removes the need for runtime memory management.
-
 All programs are correct under GC. Programs that satisfy stronger static rules run faster. Beanstalk treats ownership as an optimization target.
-
 If static guarantees are missing or incomplete, the value falls back to GC.
 
-Current state: early development with a JS backend/build system as the first milestone for generating static pages and JS output. Syntax and constructs (e.g., closures, interfaces) are still being shaped before full pipeline support. Wasm remains the long-term primary target.
+## Current status
+- Early development: The primary milestone is a stable JS build system/backend for static pages and JS output.
+- Syntax and semantics are still shifting. Some constructs such as closures, interfaces or async are not final or fully implemented in the pipeline.
 
 In early compiler iterations and in the JavaScript backend, all heap values are managed by a garbage collector. As the compiler matures, static analyses (last-use analysis, borrow validation, region reasoning) are layered on top to eliminate GC participation where possible, especially for the Wasm backend.
 

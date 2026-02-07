@@ -6,7 +6,7 @@ mod dev_server;
 pub mod settings;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod integration_test_runner; // For running all integration tests and report back results
+    pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
 
     #[cfg(test)]
     mod js_backend_tests;
