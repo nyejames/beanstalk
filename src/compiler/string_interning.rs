@@ -28,9 +28,7 @@ impl StringId {
     /// Time complexity: O(1) for ID resolution + O(n) for string comparison
     #[inline]
     pub fn eq_str(self, table: &StringTable, other: &str) -> bool {
-        // SAFETY: We can use unchecked indexing here since StringIds are only
-        // created by StringTable and are guaranteed to be valid indices
-        unsafe { table.strings.get_unchecked(self.0 as usize).as_str() == other }
+        table.strings[self.0 as usize].as_ref() == other
     }
 
     /// Resolve this interned string using the provided StringTable.
