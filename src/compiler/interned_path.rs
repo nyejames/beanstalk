@@ -1,3 +1,4 @@
+use crate::compiler::basic_utility_functions::is_valid_var_char;
 use crate::compiler::string_interning::{StringId, StringTable};
 use colour::red_ln;
 use std::path::{Path, PathBuf};
@@ -204,43 +205,27 @@ impl InternedPath {
         string_table.get_or_intern(path_str)
     }
 
-    /// Extract the simple name from a header path by removing the .header suffix
-    ///
-    /// For a path like "file.bst/function_name.header", returns StringId for "function_name"
-    ///
-    /// # Arguments
-    /// * `string_table` - The string table for resolving and interning strings
-    ///
-    /// # Returns
-    /// * `Some(StringId)` - The simple name without .header suffix
-    /// * `None` - If the path is empty or doesn't end with .header
-    ///
-    /// # Examples
-    /// ```
-    /// // Path: "tests/cases/success/basic_function.bst/simple_function.header"
-    /// // Returns: StringId for "simple_function"
-    ///
-    /// // Path: "file.bst/struct_name.header"
-    /// // Returns: StringId for "struct_name"
-    ///
-    /// // Path: "file.bst/no_suffix"
-    /// // Returns: Some(StringId for "no_suffix")
-    ///
-    /// // Path: "" (empty)
-    /// // Returns: None
-    /// ```
-    pub fn extract_header_name(&self, string_table: &mut StringTable) -> Option<StringId> {
-        // Get the last component (e.g., "function_name.header")
-        let last_component_id = self.file_name()?;
-        let last_component_str = string_table.resolve(last_component_id);
+    /// Extract the simple name from a header path by creating a name from the components,
+    /// removing any invalid characters
+    /// For a path like "file.bst/function_name.header", returns StringId for "file_function_name"
+    pub fn extract_header_name(&self, string_table: &mut StringTable) -> StringId {
+        // Combine each part of the path with underscores to create a unique name for the header
+        let mut name = String::with_capacity(self.len() * 2);
+        for component in self.components.iter() {
+            let chars = string_table.resolve(*component).chars();
 
-        // Remove the .header suffix if present
-        if let Some(name_without_suffix) = last_component_str.strip_suffix(".header") {
-            Some(string_table.get_or_intern(name_without_suffix.to_string()))
-        } else {
-            // If no .header suffix, return the component as-is
-            Some(last_component_id)
+            // Strip any invalid characters from the component
+            // Then add it to the string
+            for c in chars {
+                if is_valid_var_char(&c) {
+                    name.push(c);
+                } else {
+                    name.push('_');
+                }
+            }
         }
+
+        string_table.intern(&name)
     }
 }
 

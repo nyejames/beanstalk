@@ -77,7 +77,7 @@ impl Ast {
                     // Make name from header path
                     // This ensures unique namespaced function names
                     // ALL symbols become full paths in the AST converted to interned strings
-                    let unique_name = header.path.to_interned_string(string_table);
+                    let unique_name = header.path.extract_header_name(string_table);
                     ast.push(AstNode {
                         kind: NodeKind::Function(
                             unique_name,
@@ -117,7 +117,7 @@ impl Ast {
                     let interned_name = header
                         .path
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table)
-                        .to_interned_string(string_table);
+                        .extract_header_name(string_table);
 
                     let main_signature = FunctionSignature {
                         parameters: vec![],
@@ -132,19 +132,8 @@ impl Ast {
                 }
 
                 HeaderKind::Struct(fields) => {
-                    // Extract simple name for AST node identifier
-                    let simple_name = match header.path.extract_header_name(string_table) {
-                        Some(name) => name,
-                        None => {
-                            return Err(CompilerMessages {
-                                errors: vec![CompilerError::compiler_error(format!(
-                                    "Failed to extract struct name from header path: {}",
-                                    header.path.to_string(string_table)
-                                ))],
-                                warnings,
-                            });
-                        }
-                    };
+                    // Create name for AST node identifier from the path
+                    let simple_name = header.path.extract_header_name(string_table);
 
                     ast.push(AstNode {
                         kind: NodeKind::StructDefinition(simple_name, fields), // Use simple name for identifier

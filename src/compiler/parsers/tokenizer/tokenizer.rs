@@ -1,4 +1,4 @@
-use crate::compiler::basic_utility_functions::NumericalParsing;
+use crate::compiler::basic_utility_functions::{NumericalParsing, is_valid_var_char};
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::imports::parse_imports;
@@ -563,7 +563,7 @@ fn keyword_or_variable(
     // Match variables or keywords
     loop {
         if let Some(char) = stream.peek()
-            && (char.is_alphanumeric() || *char == '_')
+            && is_valid_var_char(char)
         {
             token_value.push(stream.next().unwrap());
             continue;

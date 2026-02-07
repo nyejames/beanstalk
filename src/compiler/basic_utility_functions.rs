@@ -6,6 +6,10 @@ use crate::compiler::compiler_errors::CompilerError;
 use crate::return_file_error;
 use std::path::{Path, PathBuf};
 
+pub fn is_valid_var_char(char: &char) -> bool {
+    (char.is_alphanumeric() || *char == '_') && !char.is_ascii_punctuation()
+}
+
 // Checks the path and converts it to a PathBuf
 // Resolves mixing unix and windows paths
 pub fn check_if_valid_file_path(path: &str) -> Result<PathBuf, CompilerError> {
