@@ -2,7 +2,7 @@ use crate::build::BuildTarget;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::build_system::html_project::new_html_project;
 use crate::build_system::repl;
-use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::{print_compiler_messages, print_formatted_error};
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use crate::settings::Config;

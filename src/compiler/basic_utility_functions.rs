@@ -12,7 +12,7 @@ pub fn is_valid_var_char(char: &char) -> bool {
 
 // Checks the path and converts it to a PathBuf
 // Resolves mixing unix and windows paths
-pub fn check_if_valid_file_path(path: &str) -> Result<PathBuf, CompilerError> {
+pub fn check_if_valid_path(path: &str) -> Result<PathBuf, CompilerError> {
     // If it contains Unix-style slashes, convert them
     let path = if cfg!(windows) && path.contains('/') {
         // Replace forward slashes with backslashes
@@ -26,13 +26,6 @@ pub fn check_if_valid_file_path(path: &str) -> Result<PathBuf, CompilerError> {
     // Check if the path exists
     if !path.exists() {
         return_file_error!(path, "Path does not exist", {
-            CompilationStage => "Build system path checking"
-        });
-    }
-
-    // Check if the path is a directory
-    if !path.is_file() {
-        return_file_error!(path, "Path is not a file", {
             CompilationStage => "Build system path checking"
         });
     }

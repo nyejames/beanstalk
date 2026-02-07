@@ -1,6 +1,6 @@
 use crate::build::{BuildTarget, ProjectBuilder};
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
 use crate::compiler::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, print_compiler_messages,
