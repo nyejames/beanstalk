@@ -122,12 +122,14 @@ impl OutputModule {
     }
 }
 
-/// Flags change the behaviour of the core compiler pipeline.
-/// These are a futureproof way of extending the behaviour of a build system or the core pipeline
+/// Flags change the behavior of the core compiler pipeline.
+/// These are a future-proof way of extending the behavior of a build system or the core pipeline
+/// For the built-in CLI these are added as cli flags, but builders can decide how to choose flags
 #[derive(PartialEq, Debug, Clone)]
 pub enum Flag {
+    Release,        // Dev mode is default
     DisableWarnings,
-    ShowWarnings, // The default behaviour for tests is to hide warnings, so this enables them in those cases
+    ShowWarnings,   // The default behavior for tests is to hide warnings, so this enables them in those cases
     DisableTimers,
 }
 
@@ -156,12 +158,8 @@ impl<'a> CompilerFrontend<'a> {
         &mut self,
         source_code: &str,
         module_path: &PathBuf,
+        tokenizer_mode: TokenizeMode,
     ) -> Result<FileTokens, CompilerError> {
-        let tokenizer_mode = match self.project_config.build_target {
-            BuildTarget::Interpreter { .. } => TokenizeMode::TemplateHead,
-            _ => TokenizeMode::Normal,
-        };
-
         let interned_path = &InternedPath::from_path_buf(module_path, &mut self.string_table);
 
         match tokenize(

@@ -4,7 +4,7 @@
 // This now only compiles the HIR and runs the borrow checker.
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
-use crate::build_system::html_project::html_project_builder::JsHostBinding;
+use crate::build_system::html_project::html_project_builder::{create_all_modules_in_project, JsHostBinding};
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
@@ -16,8 +16,10 @@ use crate::compiler::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{CompilerFrontend, Flag, InputFile, return_file_error, settings, timer_log};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
+use crate::build::Module;
+use crate::build_system::core_build;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -86,9 +88,144 @@ pub struct CoreCompilationResult {
     pub string_table: StringTable,
 }
 
+/// Find and compile all modules in the project.
+/// This function is agnostic for all projects,
+/// every builder will use it. It defines the structure of all Beanstalk projects
+pub fn compile_project_frontend(
+    entry_path: PathBuf,
+    flags: &[Flag],
+    warnings: &mut Vec<CompilerWarning>,
+) -> Result<Vec<Module>, CompilerMessages> {
+    let mut project_modules: Vec<Module> = Vec::with_capacity(1);
+    let mut compiler_messages = CompilerMessages::new();
+    let mut config = Config::new(entry_path);
+
+    // -----------------------------
+    //    SINGLE FILE COMPILATION
+    // -----------------------------
+    // If the entry is a file (not a directory),
+    // Just compile and output that single file
+    // Will just use the default config
+    if let Some(extension) = config.entry_dir.extension() {
+        match extension.to_str().unwrap() {
+            BEANSTALK_FILE_EXTENSION => {
+                // Single BST file
+                let code = match extract_source_code(&config.entry_dir) {
+                    Ok(code) => code,
+                    Err(e) => {
+                        compiler_messages.errors.push(e);
+                        return Err(compiler_messages);
+                    }
+                };
+
+                let input_file = InputFile {
+                    source_code: code,
+                    source_path: config.entry_dir.clone(),
+                };
+
+                project_modules.push(Module {
+                    files: vec![input_file],
+
+                    // TODO: probably will never happen, but should get rid of the unwrap here
+                    name: config
+                        .entry_dir
+                        .file_name()
+                        .unwrap()
+                        .to_string_lossy()
+                        .to_string(),
+                })
+            }
+            _ => {
+                compiler_messages.errors.push(CompilerError::file_error(
+                    &config.entry_dir,
+                    format!("Unsupported file extension for compilation. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}"),
+                ));
+                return Err(compiler_messages);
+            }
+        }
+
+    } else {
+
+        // Guard clause to make sure the entry is a directory
+        // Could be a file without an extension, which would be weird
+        if !config.entry_dir.is_dir() {
+            compiler_messages.errors.push(CompilerError::file_error(
+                &config.entry_dir,
+                "Found a file without an extension set. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}",
+            ));
+
+            return Err(compiler_messages);
+        }
+
+        // --------------------
+        //   PARSE THE CONFIG
+        // --------------------
+        let config_path = config.entry_dir.join(settings::CONFIG_FILE_NAME);
+        match fs::exists(&config_path) {
+            Ok(true) => {
+                let source_code = fs::read_to_string(&config_path);
+                let config_code = match source_code {
+                    Ok(content) => content,
+                    Err(e) => {
+                        compiler_messages.errors.push(CompilerError::file_error(&config_path, e.to_string()));
+                        return Err(compiler_messages);
+                    }
+                };
+
+                // TODO: Mutate the current config with any additional user-specified config settings in the file
+                // Add things like all library paths specified by the config to the list of modules to compile
+                // Then the dependency resolution stage can deal with tree shaking and things like that.
+                // Parser for config file is not sorted out yet, but it should be based on top level constants
+                todo!();
+            }
+            Err(e) => {
+                compiler_messages.errors.push(CompilerError::file_error(&config_path, e.to_string()));
+            }
+
+            // No config
+            // TODO: Decide whether all projects MUST have a config and error OR they just have default settings
+            Ok(false) => {}
+        };
+
+        // -------------------------------------
+        //  DISCOVER ALL MODULES IN THE PROJECT
+        // -------------------------------------
+        // Modules are folders that contain a '#' file
+        // This is any file that starts with a '#' and becomes an entry point for the module
+        // The #config file is a special '#' file that should only live in the entry path
+        let modules = match create_all_modules_in_project(&config) {
+            Ok(modules) => modules,
+            Err(e) => {
+                compiler_messages
+                    .errors
+                    .push(CompilerError::file_error(&config.entry_dir, e));
+                return Err(compiler_messages);
+            }
+        };
+
+        project_modules.extend(modules);
+    }
+
+
+    // ------------------------------------
+    //
+    // ------------------------------------
+
+
+    // -----------------------------
+    //     FRONTEND COMPILATION
+    // -----------------------------
+    // Use the core build pipeline to compile to HIR
+    let compilation_result = compile_module(module.hir, &config)?;
+
+    compiler_messages
+        .warnings
+        .extend(compilation_result.warnings);
+}
+
 /// Perform the core compilation pipeline shared by all project types
-pub fn compile_modules(
-    modules: Vec<InputFile>,
+pub fn compile_module(
+    module: Vec<InputFile>,
     config: &Config,
 ) -> Result<CoreCompilationResult, CompilerMessages> {
     // Module capacity heuristic
@@ -96,7 +233,7 @@ pub fn compile_modules(
     const MODULES_CAPACITY: usize = 16;
 
     // Create a new string table for interning strings
-    let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
+    let mut string_table = StringTable::with_capacity(module.len() * MODULES_CAPACITY);
 
     // Create the compiler instance
     let mut compiler = CompilerFrontend::new(config, string_table);
@@ -106,7 +243,7 @@ pub fn compile_modules(
     // ----------------------------------
     //         Token generation
     // ----------------------------------
-    let tokenizer_result: Vec<Result<FileTokens, CompilerError>> = modules
+    let tokenizer_result: Vec<Result<FileTokens, CompilerError>> = module
         .iter()
         .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
         .collect();
