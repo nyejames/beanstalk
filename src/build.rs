@@ -1,9 +1,11 @@
 use crate::build_system::html_project;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::hir::nodes::HirModule;
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{Flag, return_compiler_error, return_file_error, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
@@ -13,12 +15,20 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, path};
 
+pub struct Module {
+    folder_name: StringId,
+    entry_point: StringId, // The name of the main start function
+    hir: HirModule,
+    string_table: StringTable,
+}
+
 /// Unified build interface for all project types
 pub trait ProjectBuilder {
     /// Build the project with the given configuration
     fn build_project(
         &self,
-        path: PathBuf,
+        modules: &[Module],
+        config: Config,
         release_build: bool,
     ) -> Result<Project, CompilerMessages>;
 
@@ -52,7 +62,6 @@ impl OutputFile {
     }
 }
 pub struct Project {
-    pub config: Config,
     pub output_files: Vec<OutputFile>,
     pub warnings: Vec<CompilerWarning>,
 }
@@ -93,7 +102,7 @@ pub enum BuildTarget {
 /// - `None`: Use automatic target detection based on project structure
 pub fn build_project_files(
     project_builder: Box<dyn ProjectBuilder>,
-    path: &str,
+    entry_path: &str,
     release_build: bool,
 ) -> Result<CompilerMessages, CompilerError> {
     let _time = Instant::now();
@@ -101,7 +110,7 @@ pub fn build_project_files(
     // For early returns before using the compiler messages from the actual compiler pipeline later
     let mut messages = CompilerMessages::new();
 
-    let valid_path = check_if_valid_file_path(path)?;
+    let valid_path = check_if_valid_path(entry_path)?;
 
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,

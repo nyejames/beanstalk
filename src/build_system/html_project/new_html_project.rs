@@ -1,5 +1,5 @@
 use crate::build::BuildTarget;
-use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::settings::Config;
 use colour::red_ln;
@@ -14,7 +14,7 @@ pub fn create_html_project_template(
     // Get the current directory
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
 
-    let valid_path = match check_if_valid_file_path(&user_project_path) {
+    let valid_path = match check_if_valid_path(&user_project_path) {
         Ok(path) => path,
         Err(e) => return Err(e.msg),
     };
