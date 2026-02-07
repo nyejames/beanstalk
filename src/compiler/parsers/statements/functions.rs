@@ -1,15 +1,13 @@
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::{DataType, Ownership};
 use crate::compiler::host_functions::registry::HostFunctionDef;
+use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler::parsers::statements::structs::parse_parameters;
-use crate::compiler::string_interning::{StringId, StringTable};
-use colour::red_ln;
-
-use crate::compiler::parsers::ast::ScopeContext;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler::parsers::statements::structs::parse_parameters;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler::string_interning::{StringId, StringTable};
 use crate::{ast_log, return_syntax_error, return_type_error};
 
 // Arg names and types are required
@@ -63,33 +61,32 @@ impl FunctionSignature {
         // Parse return types
         let mut returns: Vec<DataType> = Vec::new();
         let mut next_in_list: bool = true;
-        let mut mutable: bool = false;
+        // let mut mutable: bool = false;
 
         loop {
             token_stream.advance();
 
             match token_stream.current_token_kind() {
-                TokenKind::Mutable => {
-                    if !next_in_list {
-                        return_syntax_error!(
-                            "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(&string_table),
-                            {
-                                CompilationStage => "Function Signature Parsing",
-                                PrimarySuggestion => "Add ',' between return types",
-                                SuggestedInsertion => ",",
-                            }
-                        )
-                    }
-
-                    mutable = true;
-                }
-
+                // TokenKind::Mutable => {
+                //     if !next_in_list {
+                //         return_syntax_error!(
+                //             "Should have a comma to separate return types",
+                //             token_stream.current_location().to_error_location(&string_table),
+                //             {
+                //                 CompilationStage => "Function Signature Parsing",
+                //                 PrimarySuggestion => "Add ',' between return types",
+                //                 SuggestedInsertion => ",",
+                //             }
+                //         )
+                //     }
+                //
+                //     mutable = true;
+                // }
                 TokenKind::DatatypeInt => {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(&string_table),
+                            token_stream.current_location().to_error_location(string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",
@@ -103,7 +100,7 @@ impl FunctionSignature {
                     if !next_in_list {
                         return_syntax_error!(
                             "Should have a comma to separate return types",
-                            token_stream.current_location().to_error_location(&string_table),
+                            token_stream.current_location().to_error_location(string_table),
                             {
                                 CompilationStage => "Function Signature Parsing",
                                 PrimarySuggestion => "Add ',' between return types",

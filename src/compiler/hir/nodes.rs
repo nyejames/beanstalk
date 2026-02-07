@@ -25,7 +25,7 @@
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
 use crate::compiler::datatypes::DataType;
-use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
+use crate::compiler::host_functions::registry::CallTarget;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;

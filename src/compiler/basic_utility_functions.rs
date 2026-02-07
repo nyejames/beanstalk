@@ -1,7 +1,40 @@
 // This crate currently has a lot of dead code.
 // But some of these may become useful again in the future.
-// So cli.rs is using #[allow(dead_code)] on this crate. This attribute should be removed in the future.
+#![allow(dead_code)]
 
+use crate::compiler::compiler_errors::CompilerError;
+use crate::return_file_error;
+use std::path::{Path, PathBuf};
+
+// Checks the path and converts it to a PathBuf
+// Resolves mixing unix and windows paths
+pub fn check_if_valid_file_path(path: &str) -> Result<PathBuf, CompilerError> {
+    // If it contains Unix-style slashes, convert them
+    let path = if cfg!(windows) && path.contains('/') {
+        // Replace forward slashes with backslashes
+        &path.replace('/', "\\")
+    } else {
+        path
+    };
+
+    let path = Path::new(path);
+
+    // Check if the path exists
+    if !path.exists() {
+        return_file_error!(path, "Path does not exist", {
+            CompilationStage => "Build system path checking"
+        });
+    }
+
+    // Check if the path is a directory
+    if !path.is_file() {
+        return_file_error!(path, "Path is not a file", {
+            CompilationStage => "Build system path checking"
+        });
+    }
+
+    Ok(path.to_path_buf())
+}
 pub fn combine_two_slices_to_vec<T: Clone>(a: &[T], b: &[T]) -> Vec<T> {
     let mut combined = Vec::with_capacity(a.len() + b.len());
     combined.extend_from_slice(a);
@@ -67,4 +100,19 @@ impl NumericalParsing for char {
     fn is_bracket(&self) -> bool {
         matches!(self, '(' | ')' | '{' | '}' | '[' | ']')
     }
+}
+
+// Convert snake_case to PascalCase
+pub fn to_pascal_case(s: &str) -> String {
+    s.split('_')
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                None => String::new(),
+                Some(first) => {
+                    first.to_uppercase().collect::<String>() + &chars.as_str().to_lowercase()
+                }
+            }
+        })
+        .collect()
 }

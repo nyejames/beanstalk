@@ -169,8 +169,34 @@ pub struct HostRegistry {
 }
 
 impl HostRegistry {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(string_table: &mut StringTable) -> Self {
+        let mut registry = HostRegistry::default();
+
+        // This function creates the built-in Beanstalk registry
+        // This must be the same for all projects regardless of the build system.
+        // So all new registries always start with the following
+        // ======================================================
+        //                   BUILTIN REGISTRY
+        // ======================================================
+        let io_name = string_table.intern("io");
+        let io_function = HostFunctionDef {
+            name: io_name,
+            host_func_id: HostFunctionId::Io,
+            parameters: vec![HostParameter {
+                language_type: DataType::String,
+                abi_type: HostAbiType::Utf8Str,
+            }],
+            return_type: HostAbiType::Void,
+            ownership: Ownership::ImmutableReference,
+            error_handling: ErrorHandling::None,
+            description: "Output text to the host environment.".into(),
+        };
+
+        registry
+            .functions
+            .insert(io_function.host_func_id, io_function);
+
+        registry
     }
 
     pub fn register_function(&mut self, function: HostFunctionDef) -> Result<(), CompilerError> {
@@ -262,32 +288,4 @@ pub enum ErrorHandling {
     None,
     ReturnsError,
     Panics,
-}
-
-// ======================================================
-//               BUILTIN REGISTRY
-// ======================================================
-
-pub fn create_builtin_registry(
-    string_table: &mut StringTable,
-) -> Result<HostRegistry, CompilerError> {
-    let mut registry = HostRegistry::new();
-    let io_name = string_table.intern("io");
-
-    let io_function = HostFunctionDef {
-        name: io_name,
-        host_func_id: HostFunctionId::Io,
-        parameters: vec![HostParameter {
-            language_type: DataType::String,
-            abi_type: HostAbiType::Utf8Str,
-        }],
-        return_type: HostAbiType::Void,
-        ownership: Ownership::ImmutableReference,
-        error_handling: ErrorHandling::None,
-        description: "Output text to the host environment.".into(),
-    };
-
-    registry.register_function(io_function)?;
-
-    Ok(registry)
 }

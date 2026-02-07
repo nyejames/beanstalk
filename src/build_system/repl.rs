@@ -101,21 +101,14 @@ fn compile_beanstalk_to_string(
         ContextKind::Template,
         interned_path,
         &[],
-        HostRegistry::new(),
+        HostRegistry::new(&mut string_table),
         Vec::new(),
     );
 
     // Build Template
     let template = Template::new(&mut tokenizer_output, &ast_context, None, &mut string_table)?;
 
-    // TODO: put all this into an AST block, then lower it to wasm and run it
-    // There is currently no codegen for templates.
-    // They need to be lowered to a function that returns a string.
-    // Temporary gross function that should work for constants but doesn't atm
-
-    // For now, this will be able to return a string if it can be folded at compile time
-    // If not, it will throw an error.
-    // Since the repl is purely inside the string template, new variables or functions can't be used anyway.
+    // TODO: INSTEAD OF ALL THIS WAIT UNTIL RUST INTERPRETER IS DONE
 
     // This is super gross as we are interning then resolving immediately
     let template_string = template.fold(&None, &mut string_table)?;

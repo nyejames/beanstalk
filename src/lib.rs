@@ -1,4 +1,4 @@
-#![allow(unused)]
+#![allow(unused_imports, unused_mut)]
 
 pub(crate) mod build;
 pub mod cli;
@@ -6,26 +6,14 @@ mod dev_server;
 pub mod settings;
 
 pub(crate) mod compiler_tests {
-    pub(crate) mod test_runner; // For running all integration tests and report back results
+    pub(crate) mod integration_test_runner; // For running all integration tests and report back results
 
     #[cfg(test)]
     mod js_backend_tests;
     #[cfg(test)]
     mod name_hygiene_tests;
 }
-
-// New runtime and build system modules
-pub(crate) mod build_system {
-    pub(crate) mod core_build;
-    pub(crate) mod embedded_project;
-    pub(crate) mod html_project {
-        pub(crate) mod code_block_highlighting;
-        pub(crate) mod html_project_builder;
-        pub(crate) mod new_html_project;
-    }
-    pub(crate) mod jit_wasm;
-    pub(crate) mod repl;
-}
+pub(crate) mod build_system;
 
 mod compiler {
     pub(crate) mod parsers {
@@ -67,7 +55,6 @@ mod compiler {
 
     pub(crate) mod module_dependencies;
 
-    #[allow(dead_code)]
     pub(crate) mod basic_utility_functions;
 
     pub(crate) mod compiler_messages {
@@ -100,7 +87,7 @@ mod compiler {
 
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::string_interning::StringTable;
-use crate::settings::{Config, ProjectType};
+use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -135,13 +122,13 @@ impl OutputModule {
     }
 }
 
-#[derive(PartialEq, Debug)]
+/// Flags change the behaviour of the core compiler pipeline.
+/// These are a futureproof way of extending the behaviour of a build system or the core pipeline
+#[derive(PartialEq, Debug, Clone)]
 pub enum Flag {
-    ShowAst,
     DisableWarnings,
     ShowWarnings, // The default behaviour for tests is to hide warnings, so this enables them in those cases
     DisableTimers,
-    Verbose, // TODO: Prints out absolutely everything
 }
 
 pub struct CompilerFrontend<'a> {
@@ -151,11 +138,10 @@ pub struct CompilerFrontend<'a> {
 }
 
 impl<'a> CompilerFrontend<'a> {
-    pub fn new(
-        project_config: &'a Config,
-        host_function_registry: HostRegistry,
-        string_table: StringTable,
-    ) -> Self {
+    pub fn new(project_config: &'a Config, mut string_table: StringTable) -> Self {
+        // Create a builtin host function registry with print and other host functions
+        let host_function_registry = HostRegistry::new(&mut string_table);
+
         Self {
             project_config,
             host_function_registry,
@@ -171,8 +157,8 @@ impl<'a> CompilerFrontend<'a> {
         source_code: &str,
         module_path: &PathBuf,
     ) -> Result<FileTokens, CompilerError> {
-        let tokenizer_mode = match self.project_config.project_type {
-            ProjectType::Repl => TokenizeMode::TemplateHead,
+        let tokenizer_mode = match self.project_config.build_target {
+            BuildTarget::Interpreter { .. } => TokenizeMode::TemplateHead,
             _ => TokenizeMode::Normal,
         };
 
@@ -208,7 +194,7 @@ impl<'a> CompilerFrontend<'a> {
             files,
             &self.host_function_registry,
             warnings,
-            &self.project_config.entry_point,
+            &self.project_config.entry_dir,
             &mut self.string_table,
         )
     }
@@ -236,11 +222,14 @@ impl<'a> CompilerFrontend<'a> {
     /// The headers of each file will be parsed first, then each file will be combined into one module.
     /// The AST also provides a list of exports from the module.
     pub fn headers_to_ast(&mut self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
-        // Pass string table to AST construction for string interning during AST building
+        let interned_entry_dir =
+            InternedPath::from_path_buf(&self.project_config.entry_dir, &mut self.string_table);
+
         Ast::new(
             module_tokens,
             &self.host_function_registry,
             &mut self.string_table,
+            interned_entry_dir,
         )
     }
 

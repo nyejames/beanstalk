@@ -1,8 +1,10 @@
 use crate::build::BuildTarget;
+use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::build_system::html_project::new_html_project;
 use crate::build_system::repl;
-use crate::compiler::compiler_errors::print_compiler_messages;
-use crate::compiler_tests::test_runner::run_all_test_cases;
+use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::compiler_errors::{print_compiler_messages, print_formatted_error};
+use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use crate::settings::Config;
 use crate::{Flag, build, dev_server};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
@@ -14,24 +16,29 @@ use std::{
 };
 
 enum Command {
-    NewHTMLProject(PathBuf),
-    Build(PathBuf), // Builds a file or project in development mode
+    NewHTMLProject(String), // Creates a new HTML project template
 
-    Run(PathBuf), // Jit the project/file
+    Build { path: String, target: BuildTarget }, // Builds a file or project in development mode
+    Release { path: String, target: BuildTarget }, // Builds a file or project in release mode
 
-    Dev(PathBuf), // Runs local dev server
-    Release(PathBuf),
+    // Run(&'static str),  //TODO:  Jit the project/file. This will be an eventual Rust interpreter project
+
+    // Runs a hot reloading dev server that can be accessed in the browser
+    // Will only support HTML projects for now
+    Dev { path: String, target: BuildTarget },
 
     Help,
-    CompilerTests,
+    CompilerTests, // Runs all the compiler integration tests for Beanstalk compiler development
 }
 
 pub fn start_cli() {
     let compiler_args: Vec<String> = env::args().collect();
 
     if compiler_args.len() < 2 {
+        // TODO: When interpreter is working properly
         // Start REPL session for running small snippets of Beanstalk code
-        repl::start_repl_session();
+        // repl::start_repl_session();
+        print_help(true);
         return;
     }
 
@@ -57,17 +64,11 @@ pub fn start_cli() {
             let name_args = args.first();
 
             let project_name = match name_args {
-                Some(name) => {
-                    if name.is_empty() {
-                        "test_output".to_string()
-                    } else {
-                        name.to_string()
-                    }
-                }
-                None => "test_output".to_string(),
+                Some(name) => name,
+                None => "",
             };
 
-            match new_html_project::create_project(path, &project_name) {
+            match new_html_project::create_html_project_template(path, project_name) {
                 Ok(_) => {
                     println!("Creating new HTML project...");
                 }
@@ -77,24 +78,38 @@ pub fn start_cli() {
             }
         }
 
-        Command::Build(path) => {
-            let messages = build::build_project_files(&path, false, &flags, None);
+        Command::Build { path, target } => {
+            let html_project_builder = Box::new(HtmlProjectBuilder::new(flags));
+            let messages = match build::build_project_files(html_project_builder, &path, false) {
+                Ok(messages) => messages,
+                Err(e) => {
+                    print_formatted_error(e);
+                    return;
+                }
+            };
             print_compiler_messages(messages);
         }
 
-        Command::Run(path) => {
-            let messages = build::build_project_files(&path, false, &flags, Some(BuildTarget::Jit));
+        // Command::Run(path) => {
+        //     let messages =
+        //         build::build_project_files(&path, false, &flags, Some(BuildTarget::Interpreter));
+        //     print_compiler_messages(messages);
+        // }
+        Command::Release { path, target } => {
+            let html_project_builder = Box::new(HtmlProjectBuilder::new(flags));
+            let messages = match build::build_project_files(html_project_builder, &path, true) {
+                Ok(messages) => messages,
+                Err(e) => {
+                    print_formatted_error(e);
+                    return;
+                }
+            };
             print_compiler_messages(messages);
         }
 
-        Command::Release(path) => {
-            let messages = build::build_project_files(&path, true, &flags, None);
-            print_compiler_messages(messages);
-        }
-
-        Command::Dev(ref path) => {
-            println!("Starting dev server...");
-            dev_server::start_dev_server(path, &flags);
+        Command::Dev { path, target } => {
+            println!("\nStarting dev server...");
+            dev_server::start_dev_server(&path, &flags);
         }
 
         Command::CompilerTests => {
@@ -120,11 +135,10 @@ fn get_command(args: &[String]) -> Result<Command, String> {
 
                     if dir.len() == 1 {
                         let dir = dir[0].to_string();
-                        let valid_path = check_if_valid_directory_path(&dir)?;
-                        Ok(Command::NewHTMLProject(valid_path))
+                        Ok(Command::NewHTMLProject(dir))
                     } else {
                         // use the current directory
-                        Ok(Command::NewHTMLProject(PathBuf::from("")))
+                        Ok(Command::NewHTMLProject(String::new()))
                     }
                 }
                 _ => {
@@ -134,56 +148,60 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         }
 
         Some("build") => {
-            let entry_path = env::current_dir()
-                .map_err(|e| format!("Error getting current directory: {:?}", e))?;
-
-            match args.get(1).map(String::as_str) {
-                Some(string) => {
-                    let valid_path = check_if_valid_file_path(string)?;
-                    Ok(Command::Build(entry_path.join(valid_path)))
-                }
+            // For now, the backend is always JS
+            // Eventually, if the Wasm backend is done,
+            // using JS will be a flag that will switch it to that backend
+            match args.get(1) {
+                Some(str) => Ok(Command::Build {
+                    path: str.to_string(),
+                    target: BuildTarget::HtmlJSProject,
+                }),
                 _ => {
-                    // Return the current working directory path
-                    Ok(Command::Build(entry_path))
+                    // Return no path (will work from whatever dir the user is inside)
+                    Ok(Command::Build {
+                        path: String::new(),
+                        target: BuildTarget::HtmlJSProject,
+                    })
                 }
             }
         }
 
-        Some("run") => {
-            let entry_path = env::current_dir()
-                .map_err(|e| format!("Error getting current directory: {:?}", e))?;
-
-            match args.get(1).map(String::as_str) {
-                Some(string) => {
-                    let valid_path = check_if_valid_file_path(string)?;
-                    Ok(Command::Run(entry_path.join(valid_path)))
-                }
-                _ => Ok(Command::Run(entry_path)),
-            }
-        }
-
-        Some("release") => {
-            let entry_path = env::current_dir()
-                .map_err(|e| format!("Error getting current directory: {:?}", e))?;
-
-            match args.get(1).map(String::as_str) {
-                Some(string) => {
-                    let valid_path = check_if_valid_file_path(string)?;
-                    Ok(Command::Release(entry_path.join(valid_path)))
-                }
-                _ => Ok(Command::Release(entry_path)),
-            }
-        }
+        // Some("run") => match args.get(1).map(String::as_str) {
+        //     Some(str) => {
+        //         Ok(Command::Run(str))
+        //     }
+        //     _ => Ok(Command::Run("")),
+        // },
+        Some("release") => match args.get(1) {
+            Some(str) => Ok(Command::Release {
+                path: str.to_string(),
+                target: BuildTarget::HtmlJSProject,
+            }),
+            _ => Ok(Command::Release {
+                path: String::new(),
+                target: BuildTarget::HtmlJSProject,
+            }),
+        },
 
         Some("dev") => match args.get(1) {
+            // TODO: remove the testing path and make this a proper path
             Some(path) => {
                 if path.is_empty() {
-                    Ok(Command::Dev(PathBuf::from("../../test_output")))
+                    Ok(Command::Dev {
+                        path: String::from("../../test_output"),
+                        target: BuildTarget::HtmlJSProject,
+                    })
                 } else {
-                    Ok(Command::Dev(PathBuf::from(path)))
+                    Ok(Command::Dev {
+                        path: path.to_owned(),
+                        target: BuildTarget::HtmlJSProject,
+                    })
                 }
             }
-            None => Ok(Command::Dev(PathBuf::from("../../test_output"))),
+            None => Ok(Command::Dev {
+                path: String::from("../../test_output"),
+                target: BuildTarget::HtmlJSProject,
+            }),
         },
 
         Some("tests") => Ok(Command::CompilerTests),
@@ -197,11 +215,9 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
 
     for arg in args {
         match arg.as_str() {
-            "--ast" => flags.push(Flag::ShowAst),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
             "--show-warnings" => flags.push(Flag::ShowWarnings),
-            "--verbose" => flags.push(Flag::Verbose),
             _ => {}
         }
     }
@@ -236,32 +252,6 @@ fn check_if_valid_directory_path(path: &str) -> Result<PathBuf, String> {
     let metadata = fs::metadata(path).expect("Unable to read metadata");
     if metadata.permissions().readonly() {
         return Err(format!("Directory is not writable: {}", path.display()));
-    }
-
-    Ok(path.to_path_buf())
-}
-
-// Checks the path and converts it to a PathBuf
-// Resolves mixing unix and windows paths
-fn check_if_valid_file_path(path: &str) -> Result<PathBuf, String> {
-    // If it contains Unix-style slashes, convert them
-    let path = if cfg!(windows) && path.contains('/') {
-        // Replace forward slashes with backslashes
-        &path.replace('/', "\\")
-    } else {
-        path
-    };
-
-    let path = Path::new(path);
-
-    // Check if the path exists
-    if !path.exists() {
-        return Err(format!("Path does not exist: {}", path.display()));
-    }
-
-    // Check if the path is a directory
-    if !path.is_file() {
-        return Err(format!("Path is not a file: {}", path.display()));
     }
 
     Ok(path.to_path_buf())

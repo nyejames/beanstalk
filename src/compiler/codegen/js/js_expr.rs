@@ -1,6 +1,6 @@
+use crate::compiler::codegen::js::JsEmitter;
 use crate::compiler::codegen::js::js_host_functions::{HostFunctionId, get_host_function_str};
 use crate::compiler::codegen::js::js_statement::JsStmt;
-use crate::compiler::codegen::js::{JsEmitter, JsIdent};
 use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::hir::nodes::{BinOp, HirExpr, HirExprKind, UnaryOp};
 use crate::compiler::host_functions::registry::CallTarget;

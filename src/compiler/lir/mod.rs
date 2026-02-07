@@ -33,9 +33,4 @@ mod types;
 
 // Re-export the main public interface
 pub use build_lir::lower_hir_to_lir;
-pub use context::{LocalAllocator, LoopContext, LoweringContext};
 pub use display::display_lir;
-pub use types::{
-    FieldLayout, StructLayout, alignment_of_lir_type, build_struct_layout, calculate_struct_size,
-    compute_field_offsets, hir_expr_to_lir_type, size_of_lir_type,
-};

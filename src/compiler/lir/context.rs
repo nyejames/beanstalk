@@ -9,7 +9,7 @@ use crate::compiler::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::BlockId;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
-use crate::compiler::host_functions::registry::{CallTarget, HostFunctionId};
+use crate::compiler::host_functions::registry::HostFunctionId;
 use crate::compiler::lir::nodes::{LirInst, LirType};
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::{InternedString, StringId};

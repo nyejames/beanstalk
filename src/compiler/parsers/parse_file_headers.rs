@@ -28,12 +28,6 @@ pub enum HeaderKind {
     // Start functions have no arguments or return values
     // and are not visible to the host from the final wasm module.
     StartFunction(Vec<Token>),
-
-    // This is the main function that the host environment can use to run the final Wasm module.
-    // The start function of the entry file.
-    // It has the same rules as other start functions,
-    // but it is exposed to the host from the final Wasm module.
-    Main(Vec<Token>),
 }
 
 #[derive(Clone, Debug)]
@@ -98,50 +92,6 @@ pub fn parse_headers(
 
     if !errors.is_empty() {
         return Err(errors);
-    }
-
-    // Validate that only one EntryPoint exists in the module
-    let entry_point_count = headers
-        .iter()
-        .filter(|h| matches!(h.kind, HeaderKind::Main(_)))
-        .count();
-
-    if entry_point_count > 1 {
-        let entry_points: Vec<_> = headers
-            .iter()
-            .filter(|h| matches!(h.kind, HeaderKind::Main(_)))
-            .collect();
-
-        let first_path_str: &'static str = Box::leak(
-            format!("{:?}", entry_points[0].path.to_string(string_table)).into_boxed_str(),
-        );
-        let second_path_str: &'static str = Box::leak(
-            format!("{:?}", entry_points[1].path.to_string(string_table)).into_boxed_str(),
-        );
-
-        return Err(vec![CompilerError::new_rule_error_with_metadata(
-            format!(
-                "Multiple entry points found in module. Only one entry point is allowed per module. First entry point: {}, Second entry point: {}",
-                first_path_str, second_path_str
-            ),
-            entry_points[1]
-                .name_location
-                .to_owned()
-                .to_error_location(string_table),
-            {
-                let mut map = HashMap::new();
-                map.insert(
-                    ErrorMetaDataKey::CompilationStage,
-                    "Module Dependency Resolution",
-                );
-                map.insert(
-                    ErrorMetaDataKey::PrimarySuggestion,
-                    "Ensure only one file is designated as the entry point for the module",
-                );
-                map.insert(ErrorMetaDataKey::SuggestedLocation, second_path_str);
-                map
-            },
-        )]);
     }
 
     Ok(headers)
@@ -225,7 +175,7 @@ pub fn parse_headers_in_file(
                         )?;
 
                         match header.kind {
-                            HeaderKind::StartFunction(_) | HeaderKind::Main(_) => {
+                            HeaderKind::StartFunction(_) => {
                                 main_function_body.push(current_token);
                                 if let Some(path) = file_imports.get(&name_id) {
                                     main_function_dependencies.insert(path.to_owned());
@@ -294,13 +244,6 @@ pub fn parse_headers_in_file(
         }
     }
 
-    // Create the appropriate header kind based on whether this is the entry file
-    let main_header_kind = if is_entry_file {
-        HeaderKind::Main(main_function_body)
-    } else {
-        HeaderKind::StartFunction(main_function_body)
-    };
-
     // The implicit main function also depends on other headers in this file.
     // So it can use and call any functions or structs defined in this file.
     for header in headers.iter() {
@@ -311,7 +254,7 @@ pub fn parse_headers_in_file(
 
     headers.push(Header {
         path: token_stream.src_path.to_owned(),
-        kind: main_header_kind,
+        kind: HeaderKind::StartFunction(main_function_body),
         exported: next_statement_exported,
         dependencies: main_function_dependencies,
         name_location: TextLocation::default(),

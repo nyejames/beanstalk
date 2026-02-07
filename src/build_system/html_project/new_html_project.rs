@@ -1,38 +1,77 @@
+use crate::build::BuildTarget;
+use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::compiler_errors::CompilerError;
+use crate::settings::Config;
 use colour::red_ln;
 use fs_extra::dir::{CopyOptions, copy};
+use std::path::Path;
 use std::{env, fs, path::PathBuf};
 
-pub fn create_project(
-    user_project_path: PathBuf,
+pub fn create_html_project_template(
+    user_project_path: String,
     project_name: &str,
-) -> Result<(), fs_extra::error::Error> {
+) -> Result<(), String> {
     // Get the current directory
-    let current_dir = env::current_dir()?;
+    let current_dir = env::current_dir().map_err(|e| e.to_string())?;
 
-    // TODO: CHANGE ALL THIS TO ACTUALLY CREATE THE FILES AND DIRECTORIES
-    // Copying will be weird when distributing the compiler
+    let valid_path = match check_if_valid_file_path(&user_project_path) {
+        Ok(path) => path,
+        Err(e) => return Err(e.msg),
+    };
+
+    // If the project name is empty, then make a default name
+    let name = if project_name.is_empty() {
+        "Beanstalk Project"
+    } else {
+        project_name
+    };
 
     // Create the full path to the user specified path
-    let full_path = current_dir.join(user_project_path);
+    let full_path = current_dir.join(valid_path).join(project_name);
 
     // Create a user-specified path
-    fs::create_dir_all(&full_path)?;
+    fs::create_dir_all(&full_path).map_err(|e| e.to_string())?;
 
-    let options = CopyOptions::new(); // Default options
+    // Create the default config file
+    let mut config = Config::new(full_path.clone(), BuildTarget::HtmlJSProject);
 
-    let os_safe_path: PathBuf = full_path
-        .join("build_system")
-        .join("html_project")
-        .join("html_project_template");
+    config.project_name = String::from(name);
+    let config_content = format!(
+        "#project_name {name}\n
+         #src \"src\"\n
+         #output_folder \"dist\"\n
+         #name \"html_project\"\n
+         #version \"0.1.0\"\n
+         #author \"\"\n
+         #license \"MIT\"\n
+         #libraries {{
+             @(core/html),
+         }}\n
+        "
+    );
+    fs::write(full_path.join("#config.bst"), config_content).map_err(|e| e.to_string())?;
 
-    red_ln!("OS safe path: {:?}", os_safe_path);
-
-    // Copy project directory from /html_project_template folder to user specified path
-    copy(os_safe_path, &full_path, &options)?;
-
-    fs::rename(full_path.join("html_project_template"), project_name)?;
+    // Basic directories
+    fs::create_dir(full_path.join("src")).map_err(|e| e.to_string())?;
+    fs::create_dir(full_path.join("release")).map_err(|e| e.to_string())?;
+    fs::create_dir(full_path.join("dev")).map_err(|e| e.to_string())?;
 
     println!("Project created at: {:?}", &full_path);
 
     Ok(())
 }
+
+// pub fn create_default_project_name(full_path: &Path) -> &str {
+//     // If any of these stages fail, just set an empty string
+//     if full_path.is_file() {
+//         // Get the name of the directory this file is in
+//         if let Some(last) = full_path.ancestors().last() {
+//             last.to_str().unwrap_or_default()
+//         } else {
+//             ""
+//         }
+//     } else {
+//         // Get the name of this directory
+//         full_path.to_str().unwrap_or_default()
+//     }
+// }

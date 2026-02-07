@@ -5,18 +5,18 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::html_project::html_project_builder::JsHostBinding;
-use crate::build_system::jit_wasm::WasmHostBinding;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
-use crate::compiler::host_functions::registry::create_builtin_registry;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 use crate::compiler::string_interning::StringTable;
-use crate::settings::Config;
-use crate::{CompilerFrontend, Flag, InputModule, timer_log};
+use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
+use crate::{CompilerFrontend, Flag, InputFile, return_file_error, settings, timer_log};
+use std::fs;
+use std::path::Path;
 use std::time::Instant;
 
 /// External function import required by the compiled WASM
@@ -50,11 +50,6 @@ pub enum ImportType {
     External,
 }
 
-pub struct HostBindings {
-    pub wasm: Option<WasmHostBinding>,
-    pub js: Option<JsHostBinding>,
-}
-
 /// Built-in compiler functions that the runtime must provide
 #[derive(Debug, Clone)]
 pub enum BuiltInFunction {
@@ -83,7 +78,7 @@ pub enum WasmType {
 }
 
 /// Core compilation result containing WASM and required imports
-pub struct CompilationResult {
+pub struct CoreCompilationResult {
     pub hir_module: HirModule,
     pub required_module_imports: Vec<ExternalImport>,
     pub exported_functions: Vec<String>,
@@ -93,11 +88,9 @@ pub struct CompilationResult {
 
 /// Perform the core compilation pipeline shared by all project types
 pub fn compile_modules(
-    modules: Vec<InputModule>,
+    modules: Vec<InputFile>,
     config: &Config,
-    _release_build: bool,
-    _flags: &[Flag],
-) -> Result<CompilationResult, CompilerMessages> {
+) -> Result<CoreCompilationResult, CompilerMessages> {
     // Module capacity heuristic
     // Just a guess of how many strings we might need to intern per module
     const MODULES_CAPACITY: usize = 16;
@@ -105,15 +98,8 @@ pub fn compile_modules(
     // Create a new string table for interning strings
     let mut string_table = StringTable::with_capacity(modules.len() * MODULES_CAPACITY);
 
-    // Create a builtin host function registry with print and other host functions
-    let host_function_registry =
-        create_builtin_registry(&mut string_table).map_err(|e| CompilerMessages {
-            errors: vec![e],
-            warnings: Vec::new(),
-        })?;
-
     // Create the compiler instance
-    let mut compiler = CompilerFrontend::new(config, host_function_registry, string_table);
+    let mut compiler = CompilerFrontend::new(config, string_table);
 
     let time = Instant::now();
 
@@ -189,7 +175,7 @@ pub fn compile_modules(
     let mut module_ast = Ast {
         nodes: Vec::with_capacity(sorted_modules.len()),
         entry_path: InternedPath::from_path_buf(
-            &compiler.project_config.entry_point,
+            &compiler.project_config.entry_dir,
             &mut compiler.string_table,
         ),
         external_exports: Vec::new(),
@@ -265,7 +251,7 @@ pub fn compile_modules(
         println!("=== END BORROW CHECKER OUTPUT ===");
     }
 
-    Ok(CompilationResult {
+    Ok(CoreCompilationResult {
         hir_module,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
         exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
@@ -274,84 +260,153 @@ pub fn compile_modules(
     })
 }
 
-/// Extract required external imports from the compilation
-fn extract_required_imports(_exported_declarations: &[Var]) -> Vec<ExternalImport> {
-    let mut imports = Vec::new();
+/// Recursively adds Beanstalk files to the list of input modules.
+/// It scans through all subdirectories of the provided dir and adds them to the list
+pub fn add_all_bst_files_from_dir(
+    beanstalk_modules: &mut Vec<InputFile>,
+    project_root_dir: &Path,
+) -> Result<(), CompilerError> {
+    // Can't just use the src_dir from config, because this might be recursively called for new subdirectories
 
-    // Add standard IO imports that are always required
-    imports.extend(get_standard_io_imports());
+    // Read all files in the src directory
+    let all_dir_entries: fs::ReadDir = match fs::read_dir(project_root_dir) {
+        Ok(dir) => dir,
+        Err(e) => {
+            let error_msg: &'static str = Box::leak(
+                format!(
+                    "Can't find any files to parse inside this directory. Might be empty? \nError: {:?}",
+                    e
+                ).into_boxed_str()
+            );
 
-    // TODO: Scan the WIR/AST for user-defined external function calls
-    // This will be implemented when we add support for importing external functions
+            let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                "Check that the directory exists at the specified path"
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                "Check that you have permission to read this directory"
+            } else {
+                "Verify the directory is accessible"
+            };
 
-    imports
+            return_file_error!(project_root_dir, error_msg, {
+                CompilationStage => "File System",
+                PrimarySuggestion => suggestion,
+            });
+        }
+    };
+
+    for file in all_dir_entries {
+        match file {
+            Ok(f) => {
+                let file_path = f.path();
+
+                // If it's a .bst file, add it to the list of files to compile
+                if file_path.extension() == Some(BEANSTALK_FILE_EXTENSION.as_ref()) {
+                    let code = extract_source_code(&file_path)?;
+
+                    // If code is empty, skip compiling this module
+                    if code.is_empty() {
+                        continue;
+                    }
+
+                    let mut global = false;
+
+                    let _file_name = match file_path.file_stem().unwrap().to_str() {
+                        Some(stem_str) => {
+                            if stem_str.contains(settings::GLOBAL_PAGE_KEYWORD) {
+                                global = true;
+                                settings::GLOBAL_PAGE_KEYWORD.to_string()
+                            } else if stem_str.contains(settings::COMP_PAGE_KEYWORD) {
+                                settings::INDEX_PAGE_NAME.to_string()
+                            } else {
+                                stem_str.to_string()
+                            }
+                        }
+                        None => {
+                            return_file_error!(
+                                &file_path,
+                                "Error getting file stem - file name contains invalid characters", {
+                                    CompilationStage => "File System",
+                                    PrimarySuggestion => "Ensure the file name contains only valid UTF-8 characters"
+                                }
+                            )
+                        }
+                    };
+
+                    let final_output_file = InputFile {
+                        source_code: code,
+                        source_path: file_path,
+                    };
+
+                    if global {
+                        beanstalk_modules.insert(0, final_output_file);
+                    } else {
+                        beanstalk_modules.push(final_output_file);
+                    }
+
+                // If directory, recursively call add_bs_files_to_parse
+                } else if file_path.is_dir() {
+                    // Recursively call add_bst_files_to_parse on the new directory
+                    add_all_bst_files_from_dir(beanstalk_modules, &file_path)?;
+
+                    // HANDLE USING JS / HTML / CSS MIXED INTO THE PROJECT
+                }
+
+                // else if let Some(ext) = file_path.extension() {
+                //     // TEMPORARY: PUT THEM DIRECTLY INTO THE OUTPUT DIRECTORY
+                //     if ext == "js" || ext == "html" || ext == "css" {
+                //         let file_name = file_path.file_name().unwrap().to_str().unwrap();
+                //
+                //         source_code_to_parse.push(TemplateModule::new(
+                //             "",
+                //             &file_path,
+                //             &output_dir.join(file_name),
+                //         ));
+                //     }
+                // }
+            }
+
+            Err(e) => {
+                let error_msg: &'static str = Box::leak(
+                    format!(
+                        "Error reading directory entry when adding new bst files to parse: {:?}",
+                        e
+                    )
+                    .into_boxed_str(),
+                );
+
+                return_file_error!(
+                    project_root_dir,
+                    error_msg, {
+                        CompilationStage => "File System",
+                        PrimarySuggestion => "Check directory permissions and file system integrity"
+                    }
+                )
+            }
+        }
+    }
+
+    Ok(())
 }
 
-/// Get the standard IO imports that are built into the compiler
-fn get_standard_io_imports() -> Vec<ExternalImport> {
-    vec![
-        ExternalImport {
-            module: "beanstalk_io".to_string(),
-            function: "print".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32, WasmType::I32], // ptr, len
-                returns: vec![],
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::Print),
-        },
-        ExternalImport {
-            module: "beanstalk_io".to_string(),
-            function: "read_input".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32],  // buffer ptr
-                returns: vec![WasmType::I32], // bytes read
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::ReadInput),
-        },
-        ExternalImport {
-            module: "beanstalk_io".to_string(),
-            function: "write_file".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32, WasmType::I32, WasmType::I32, WasmType::I32], // path_ptr, path_len, content_ptr, content_len
-                returns: vec![WasmType::I32], // success/error code
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::WriteFile),
-        },
-        ExternalImport {
-            module: "beanstalk_io".to_string(),
-            function: "read_file".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32, WasmType::I32, WasmType::I32], // path_ptr, path_len, buffer_ptr
-                returns: vec![WasmType::I32], // bytes read or error code
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::ReadFile),
-        },
-        ExternalImport {
-            module: "beanstalk_env".to_string(),
-            function: "get_env".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32, WasmType::I32, WasmType::I32], // key_ptr, key_len, buffer_ptr
-                returns: vec![WasmType::I32], // value length or -1 if not found
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::GetEnv),
-        },
-        ExternalImport {
-            module: "beanstalk_env".to_string(),
-            function: "set_env".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32, WasmType::I32, WasmType::I32, WasmType::I32], // key_ptr, key_len, value_ptr, value_len
-                returns: vec![WasmType::I32], // success/error code
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::SetEnv),
-        },
-        ExternalImport {
-            module: "beanstalk_sys".to_string(),
-            function: "exit".to_string(),
-            signature: FunctionSignature {
-                params: vec![WasmType::I32], // exit code
-                returns: vec![],
-            },
-            import_type: ImportType::BuiltIn(BuiltInFunction::Exit),
-        },
-    ]
+pub fn extract_source_code(file_path: &Path) -> Result<String, CompilerError> {
+    match fs::read_to_string(file_path) {
+        Ok(content) => Ok(content),
+        Err(e) => {
+            let suggestion: &'static str = if e.kind() == std::io::ErrorKind::NotFound {
+                "Check that the file exists at the specified path"
+            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
+                "Check that you have permission to read this file"
+            } else {
+                "Verify the file is accessible and not corrupted"
+            };
+
+            return_file_error!(
+                &file_path,
+                format!("Error reading file when adding new bst files to parse: {:?}", e), {
+                    CompilationStage => "File System",
+                    PrimarySuggestion => suggestion,
+                }
+            )
+        }
+    }
 }

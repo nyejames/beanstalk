@@ -1,6 +1,11 @@
-use crate::build::BuildTarget;
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, print_compiler_messages};
-// print_compiler_messages is available via compiler_errors re-export in lib.rs
+use crate::build::{BuildTarget, ProjectBuilder};
+use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
+use crate::compiler::basic_utility_functions::check_if_valid_file_path;
+use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
+use crate::compiler::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, print_compiler_messages,
+    print_formatted_error,
+};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
@@ -16,8 +21,9 @@ use std::{
 };
 
 //noinspection HttpUrlsUsage
-pub fn start_dev_server(path: &Path, flags: &[Flag]) {
-    let url = "127.0.0.1:6969";
+pub fn start_dev_server(user_entry_path: &str, flags: &[Flag]) {
+    // TODO: get a custom port number from a flag specified by the user
+    let url = "127.0.0.1:6347";
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
         Err(e) => {
@@ -27,26 +33,8 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
         }
     };
 
-    // Is checking to make sure the path is a directory
-    let path = match get_current_dir() {
-        Ok(p) => p.join(path),
-        Err(e) => {
-            e_red_ln!("Error getting current directory: {:?}", e);
-            return;
-        }
-    };
-
-    let mut project_config = Config::new(path.to_owned());
-    let messages = build::build_project_files(&path, false, flags, Some(BuildTarget::HtmlProject));
-
-    if messages.errors.is_empty() {
-        print_bold!("Dev Server created on: ");
-        green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
-    } else {
-        print_compiler_messages(messages);
-        print_bold!("Dev Server failed to build the project 😞");
-        return;
-    }
+    print_bold!("Dev Server created on: ");
+    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
 
     // TODO: Now separately build all the runtime hooks / project structure
 
@@ -54,7 +42,7 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
 
     for stream in listener.incoming() {
         let stream = stream.unwrap();
-        match handle_connection(stream, &path, &mut modified, &project_config, flags) {
+        match handle_connection(stream, user_entry_path, &mut modified, flags) {
             Ok(warnings) => {
                 for warning in warnings {
                     e_red_ln!("{:?}", warning);
@@ -69,15 +57,20 @@ pub fn start_dev_server(path: &Path, flags: &[Flag]) {
 
 fn handle_connection(
     mut stream: TcpStream,
-    path: &Path,
+    path: &str,
     last_modified: &mut SystemTime,
-    project_config: &Config,
     flags: &[Flag],
 ) -> Result<Vec<CompilerWarning>, CompilerMessages> {
     let buf_reader = BufReader::new(&mut stream);
 
-    let dir_404 = &path
-        .join(&project_config.dev_folder)
+    let mut messages = CompilerMessages::new();
+
+    let mut config = Config::new(PathBuf::from(path), BuildTarget::HtmlJSProject);
+    let builder = Box::new(HtmlProjectBuilder::new(flags.to_vec()));
+
+    let dir_404 = &config
+        .entry_dir
+        .join(&config.dev_folder)
         .join("404")
         .with_extension("html");
 
@@ -86,14 +79,13 @@ fn handle_connection(
     let mut status_line = "HTTP/1.1 404 NOT FOUND";
     let mut content_type = "text/html";
 
-    let mut messages = CompilerMessages::new();
-
     let request_line = buf_reader.lines().next().unwrap();
+
     match request_line {
         Ok(request) => {
             // HANDLE REQUESTS
             if request == "GET / HTTP/1.1" {
-                let p = match get_home_page_path(path, false, project_config) {
+                let p = match get_home_page_path(false, &config) {
                     Ok(p) => p,
                     Err(e) => {
                         messages.errors.push(e);
@@ -122,7 +114,7 @@ fn handle_connection(
                     Some(p) => {
                         let page_path = p.split_whitespace().collect::<Vec<&str>>()[0];
                         if page_path == "/" {
-                            match get_home_page_path(path, true, project_config) {
+                            match get_home_page_path(true, &config) {
                                 Ok(p) => p,
                                 Err(e) => {
                                     messages.errors.push(e);
@@ -131,12 +123,12 @@ fn handle_connection(
                             }
                         } else {
                             PathBuf::from(path)
-                                .join(&project_config.src)
+                                .join(&config.src)
                                 .join(page_path)
                                 .with_extension(BEANSTALK_FILE_EXTENSION)
                         }
                     }
-                    None => match get_home_page_path(path, true, project_config) {
+                    None => match get_home_page_path(true, &config) {
                         Ok(p) => p,
                         Err(e) => {
                             messages.errors.push(e);
@@ -146,7 +138,7 @@ fn handle_connection(
                 };
 
                 let global_file_path = &PathBuf::from(&path)
-                    .join(&project_config.src)
+                    .join(&config.src)
                     .join(settings::GLOBAL_PAGE_KEYWORD)
                     .with_extension(BEANSTALK_FILE_EXTENSION);
 
@@ -174,17 +166,18 @@ fn handle_connection(
                 };
                 if has_been_modified || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    let build_messages = build::build_project_files(
-                        path,
-                        false,
-                        flags,
-                        Some(BuildTarget::HtmlProject),
-                    );
+                    let messages =
+                        build::build_project_files(builder, path, false).unwrap_or_else(|e| {
+                            CompilerMessages {
+                                errors: vec![e],
+                                warnings: vec![],
+                            }
+                        });
 
-                    if build_messages.errors.is_empty() {
+                    if messages.errors.is_empty() {
                         status_line = "HTTP/1.1 205 Reset Content";
                     } else {
-                        return Err(build_messages);
+                        return Err(messages);
                     }
                 } else {
                     status_line = "HTTP/1.1 200 OK";
@@ -194,8 +187,8 @@ fn handle_connection(
                 let file_path = request.split_whitespace().collect::<Vec<&str>>()[1];
 
                 // Set the Content-Type based on the file extension
-                let path_to_file = &path
-                    .join(&project_config.dev_folder)
+                let path_to_file = &PathBuf::from(file_path)
+                    .join(&config.dev_folder)
                     .join(file_path.strip_prefix("/").unwrap_or(file_path));
 
                 let file_requested = if file_path.ends_with(".js") {
@@ -266,7 +259,7 @@ fn handle_connection(
         Ok(_) => Ok(messages.warnings),
         Err(e) => {
             messages.errors.push(CompilerError::new_file_error(
-                path,
+                &PathBuf::from(path),
                 format!("Error writing response: {:?}", e),
                 // TODO: add some metadata to this error
                 HashMap::new(),
@@ -370,21 +363,20 @@ fn has_been_modified(path: &PathBuf, modified: &mut SystemTime) -> Result<bool, 
 }
 
 fn get_home_page_path(
-    path: &Path,
     source_folder: bool,
     project_config: &Config,
 ) -> Result<PathBuf, CompilerError> {
     let root_src_path = if source_folder {
-        PathBuf::from(&path).join(&project_config.src)
+        PathBuf::from(&project_config.entry_dir).join(&project_config.src)
     } else {
-        PathBuf::from(&path).join(&project_config.dev_folder)
+        PathBuf::from(&project_config.entry_dir).join(&project_config.dev_folder)
     };
 
     let src_files = match fs::read_dir(&root_src_path) {
         Ok(m) => m,
         Err(e) => {
             return Err(CompilerError::new_file_error(
-                path,
+                &project_config.entry_dir,
                 format!("Error trying to read the source directory path: {:?}", e),
                 // TODO: add some metadata to this error
                 HashMap::new(),
@@ -425,7 +417,7 @@ fn get_home_page_path(
 
             Err(e) => {
                 return Err(CompilerError::new_file_error(
-                    path,
+                    &project_config.entry_dir,
                     format!("Error reading the source directory file: {:?}", e),
                     // TODO: add some metadata to this error
                     HashMap::new(),

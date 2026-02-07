@@ -10,6 +10,7 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::FileTokens;
 use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings::{self, IMPLICIT_START_FUNC_NAME};
+use std::path::Path;
 
 pub struct ModuleExport {
     pub id: StringId,
@@ -33,13 +34,13 @@ impl Ast {
         sorted_headers: Vec<Header>,
         host_registry: &HostRegistry,
         string_table: &mut StringTable,
+        entry_dir: InternedPath,
     ) -> Result<Ast, CompilerMessages> {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
             Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
         let mut external_exports: Vec<ModuleExport> = Vec::new();
         let mut warnings: Vec<CompilerWarning> = Vec::new();
-        let mut entry_path = None;
 
         // Collect all function signatures and struct definitions to register them in scope
         let mut declarations: Vec<Var> = Vec::new();
@@ -85,61 +86,6 @@ impl Ast {
                         ),
                         location: header.name_location,
                         scope: context.scope.clone(), // Preserve full path in scope field
-                    });
-                }
-
-                // The main entry point
-                // The big difference between this function and the StartFunction,
-                // is that this one is exposed to the host environment.
-
-                // Both the main function and start functions are given a set name,
-                // But should never conflict as each file can only have one,
-                // and when imported into another file, they are automatically namespaced into a struct.
-                // Beanstalk currently doesn't and may never support universal imports.
-                HeaderKind::Main(tokens) => {
-                    let context = ScopeContext::new(
-                        ContextKind::Module,
-                        header.path.to_owned(),
-                        &declarations,
-                        host_registry.clone(),
-                        Vec::new(),
-                    );
-
-                    let body = match function_body_to_ast(
-                        &mut FileTokens::new(header.path.to_owned(), tokens),
-                        context.to_owned(),
-                        &mut warnings,
-                        string_table,
-                    ) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            return Err(CompilerMessages {
-                                errors: vec![e],
-                                warnings,
-                            });
-                        }
-                    };
-
-                    // Create an entry point function that will be exported as the start function
-                    let entry_signature = FunctionSignature {
-                        parameters: vec![],
-                        returns: vec![],
-                    };
-
-                    entry_path = Some(header.path.to_owned());
-
-                    // The main function is the only function in the module with the implicit start name,
-                    // And no path prefix. Other start functions are namespaced by their file path.
-                    let start_name = string_table.intern(settings::IMPLICIT_START_FUNC_NAME);
-                    ast.push(AstNode {
-                        kind: NodeKind::Function(start_name, entry_signature, body),
-                        location: header.name_location.clone(),
-                        scope: context.scope.clone(),
-                    });
-
-                    external_exports.push(ModuleExport {
-                        id: start_name,
-                        signature: FunctionSignature::default(),
                     });
                 }
 
@@ -231,20 +177,12 @@ impl Ast {
             if header.exported {}
         }
 
-        match entry_path {
-            None => Err(CompilerMessages {
-                warnings,
-                errors: vec![CompilerError::compiler_error(
-                    "No entry point found. The compiler should always create an entry point.",
-                )],
-            }),
-            Some(path) => Ok(Ast {
-                nodes: ast,
-                entry_path: path,
-                external_exports,
-                warnings,
-            }),
-        }
+        Ok(Ast {
+            nodes: ast,
+            entry_path: entry_dir,
+            external_exports,
+            warnings,
+        })
     }
 }
 
