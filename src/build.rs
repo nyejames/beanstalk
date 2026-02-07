@@ -14,6 +14,7 @@ use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, path};
+use crate::build_system::core_build::compile_project_frontend;
 
 pub struct Module {
     folder_name: StringId,
@@ -29,7 +30,7 @@ pub trait ProjectBuilder {
         &self,
         modules: &[Module],
         config: Config,
-        release_build: bool,
+        flags: &[Flag],
     ) -> Result<Project, CompilerMessages>;
 
     /// Validate the project configuration
@@ -66,19 +67,6 @@ pub struct Project {
     pub warnings: Vec<CompilerWarning>,
 }
 
-/// Build configuration that determines how files are generated and organized
-#[derive(Debug, Clone)]
-pub enum BuildTarget {
-    /// HTML/JS project - generates separate WASM files for different HTML imports
-    /// First implementation will just generate JS,
-    /// then eventually core parts will move to Wasm when that part of the backend as that part of the compiler is developed
-    HtmlJSProject,
-
-    // HTMLWasmProject,
-    /// Embedded project - Beanstalk embedding in Rust applications
-    Interpreter,
-}
-
 /// Build a Beanstalk project with an explicit target specification
 ///
 /// Extended version of [`build_project_files`] that allows overriding the automatic
@@ -103,29 +91,54 @@ pub enum BuildTarget {
 pub fn build_project_files(
     project_builder: Box<dyn ProjectBuilder>,
     entry_path: &str,
-    release_build: bool,
-) -> Result<CompilerMessages, CompilerError> {
+    flags: &[Flag],
+) -> Result<Vec<CompilerWarning>, CompilerMessages> {
     let _time = Instant::now();
 
     // For early returns before using the compiler messages from the actual compiler pipeline later
     let mut messages = CompilerMessages::new();
 
-    let valid_path = check_if_valid_path(entry_path)?;
+    let valid_path = match check_if_valid_path(entry_path) {
+        Ok(path) => path,
+        Err(e) => messages.errors.push(e)
+    };
 
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            return_compiler_error!(format!("Could not get the current directory: {e}"));
+            messages.errors.push(
+                CompilerError::compiler_error(format!("Could not get the current directory: {e}"))
+            );
+            return Err(messages)
         }
     };
 
     print_bold!("\nCompiling Project");
+    // --------------------------------------------
+    //   PERFORM THE CORE COMPILER FRONTEND BUILD
+    // --------------------------------------------
+    // This discovers all the modules, parses the config
+    // and compiles each module to an HirModule for the backend to use
+    let modules = match compile_project_frontend(
+        valid_path,
+        flags,
+        &mut messages.warnings
+    ) {
+        Ok(modules) => modules,
+        Err(e) => return Err(e)
+    };
+
+    messages.warnings.extend(modules
+        .iter()
+        .map(|m| m.warnings.clone())
+        .collect()
+    );
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
     let start = Instant::now();
-    let output_files = match project_builder.build_project(valid_path, release_build) {
+    let output_files = match project_builder.build_project(modules, release_build) {
         Ok(project) => {
             let duration = start.elapsed();
 

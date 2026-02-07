@@ -1,5 +1,4 @@
 use crate::CompilerFrontend;
-use crate::build::BuildTarget;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::CompilerError;
 use std::collections::HashMap;
@@ -29,7 +28,6 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 #[derive(Clone)]
 pub struct Config {
     pub project_name: String,
-    pub build_target: BuildTarget,
     pub entry_dir: PathBuf,
     pub src: PathBuf,
     pub dev_folder: PathBuf,
@@ -42,11 +40,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(user_specified_path: PathBuf, build_target: BuildTarget) -> Self {
+    pub fn new(user_specified_path: PathBuf) -> Self {
         Config {
-            build_target,
             entry_dir: user_specified_path,
-
             // These Default to the same directory as the project
             src: PathBuf::from(""),
             dev_folder: PathBuf::from(""),
@@ -57,6 +53,9 @@ impl Config {
             version: String::from("0.1.0"),
             author: String::new(),
             license: String::from("MIT"),
+            
+            // Custom settings for any project builder to use
+            settings: HashMap::new(),
         }
     }
 }
@@ -64,8 +63,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            build_target: BuildTarget::HtmlJSProject,
-            entry_dir: PathBuf::from("src/main.bst"),
+            entry_dir: PathBuf::new(),
             src: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
@@ -74,6 +72,7 @@ impl Default for Config {
             version: String::from("0.1.0"),
             author: String::new(),
             license: String::from("MIT"),
+            settings: HashMap::new(),
         }
     }
 }

@@ -1,4 +1,3 @@
-use crate::build::BuildTarget;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::settings::Config;
@@ -6,10 +5,12 @@ use colour::red_ln;
 use fs_extra::dir::{CopyOptions, copy};
 use std::path::Path;
 use std::{env, fs, path::PathBuf};
+use crate::Flag;
 
 pub fn create_html_project_template(
     user_project_path: String,
     project_name: &str,
+    flags: Vec<Flag>,
 ) -> Result<(), String> {
     // Get the current directory
     let current_dir = env::current_dir().map_err(|e| e.to_string())?;
@@ -33,7 +34,7 @@ pub fn create_html_project_template(
     fs::create_dir_all(&full_path).map_err(|e| e.to_string())?;
 
     // Create the default config file
-    let mut config = Config::new(full_path.clone(), BuildTarget::HtmlJSProject);
+    let mut config = Config::new(full_path.clone());
 
     config.project_name = String::from(name);
     let config_content = format!(

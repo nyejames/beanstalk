@@ -1,4 +1,3 @@
-use crate::build::BuildTarget;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::build_system::html_project::new_html_project;
 use crate::build_system::repl;
@@ -18,14 +17,14 @@ use std::{
 enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
 
-    Build { path: String, target: BuildTarget }, // Builds a file or project in development mode
-    Release { path: String, target: BuildTarget }, // Builds a file or project in release mode
+    Build(String), // Builds a file or project in development mode
+    Release(String), // Builds a file or project in release mode
 
     // Run(&'static str),  //TODO:  Jit the project/file. This will be an eventual Rust interpreter project
 
     // Runs a hot reloading dev server that can be accessed in the browser
     // Will only support HTML projects for now
-    Dev { path: String, target: BuildTarget },
+    Dev(String),
 
     Help,
     CompilerTests, // Runs all the compiler integration tests for Beanstalk compiler development
@@ -68,7 +67,7 @@ pub fn start_cli() {
                 None => "",
             };
 
-            match new_html_project::create_html_project_template(path, project_name) {
+            match new_html_project::create_html_project_template(path, project_name, flags) {
                 Ok(_) => {
                     println!("Creating new HTML project...");
                 }
@@ -78,9 +77,9 @@ pub fn start_cli() {
             }
         }
 
-        Command::Build { path, target } => {
-            let html_project_builder = Box::new(HtmlProjectBuilder::new(flags));
-            let messages = match build::build_project_files(html_project_builder, &path, false) {
+        Command::Build(path)=> {
+            let html_project_builder = Box::new(HtmlProjectBuilder::new());
+            let messages = match build::build_project_files(html_project_builder, &path, flags) {
                 Ok(messages) => messages,
                 Err(e) => {
                     print_formatted_error(e);
@@ -95,9 +94,9 @@ pub fn start_cli() {
         //         build::build_project_files(&path, false, &flags, Some(BuildTarget::Interpreter));
         //     print_compiler_messages(messages);
         // }
-        Command::Release { path, target } => {
-            let html_project_builder = Box::new(HtmlProjectBuilder::new(flags));
-            let messages = match build::build_project_files(html_project_builder, &path, true) {
+        Command::Release(path) => {
+            let html_project_builder = Box::new(HtmlProjectBuilder::new());
+            let messages = match build::build_project_files(html_project_builder, &path, flags) {
                 Ok(messages) => messages,
                 Err(e) => {
                     print_formatted_error(e);
@@ -107,7 +106,7 @@ pub fn start_cli() {
             print_compiler_messages(messages);
         }
 
-        Command::Dev { path, target } => {
+        Command::Dev(path) => {
             println!("\nStarting dev server...");
             dev_server::start_dev_server(&path, &flags);
         }
@@ -152,17 +151,10 @@ fn get_command(args: &[String]) -> Result<Command, String> {
             // Eventually, if the Wasm backend is done,
             // using JS will be a flag that will switch it to that backend
             match args.get(1) {
-                Some(str) => Ok(Command::Build {
-                    path: str.to_string(),
-                    target: BuildTarget::HtmlJSProject,
-                }),
-                _ => {
-                    // Return no path (will work from whatever dir the user is inside)
-                    Ok(Command::Build {
-                        path: String::new(),
-                        target: BuildTarget::HtmlJSProject,
-                    })
-                }
+                Some(path) => Ok(Command::Build(path.to_string())),
+
+                // Return no path (will work from whatever dir the user is inside)
+                _ => Ok(Command::Build(String::new())),
             }
         }
 
@@ -173,35 +165,20 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         //     _ => Ok(Command::Run("")),
         // },
         Some("release") => match args.get(1) {
-            Some(str) => Ok(Command::Release {
-                path: str.to_string(),
-                target: BuildTarget::HtmlJSProject,
-            }),
-            _ => Ok(Command::Release {
-                path: String::new(),
-                target: BuildTarget::HtmlJSProject,
-            }),
+            Some(path) => Ok(Command::Release(path.to_string())),
+            _ => Ok(Command::Release(String::new())),
         },
 
         Some("dev") => match args.get(1) {
             // TODO: remove the testing path and make this a proper path
             Some(path) => {
                 if path.is_empty() {
-                    Ok(Command::Dev {
-                        path: String::from("../../test_output"),
-                        target: BuildTarget::HtmlJSProject,
-                    })
+                    Ok(Command::Dev(String::from("../../test_output")))
                 } else {
-                    Ok(Command::Dev {
-                        path: path.to_owned(),
-                        target: BuildTarget::HtmlJSProject,
-                    })
+                    Ok(Command::Dev(path.to_owned()))
                 }
             }
-            None => Ok(Command::Dev {
-                path: String::from("../../test_output"),
-                target: BuildTarget::HtmlJSProject,
-            }),
+            None => Ok(Command::Dev(String::from("../../test_output")))
         },
 
         Some("tests") => Ok(Command::CompilerTests),
@@ -215,6 +192,7 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
 
     for arg in args {
         match arg.as_str() {
+            "--release" => flags.push(Flag::Release),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
             "--show-warnings" => flags.push(Flag::ShowWarnings),
