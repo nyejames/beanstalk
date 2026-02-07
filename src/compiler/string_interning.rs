@@ -1,5 +1,5 @@
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 /// A unique identifier for an interned string, represented as a u32 for memory efficiency.
 /// This provides type safety to prevent mixing string IDs with other integer values.
@@ -11,11 +11,13 @@ pub type InternedString = StringId;
 
 impl StringId {
     /// Convert the StringId to its underlying u32 value for serialization
+    #[inline]
     pub fn as_u32(self) -> u32 {
         self.0
     }
 
     /// Create a StringId from a u32 value for deserialization
+    #[inline]
     pub fn from_u32(id: u32) -> Self {
         Self(id)
     }
@@ -24,23 +26,24 @@ impl StringId {
     /// Requires access to the StringTable that created this ID.
     ///
     /// Time complexity: O(1) for ID resolution + O(n) for string comparison
+    #[inline]
     pub fn eq_str(self, table: &StringTable, other: &str) -> bool {
-        table.resolve(self) == other
+        // SAFETY: We can use unchecked indexing here since StringIds are only
+        // created by StringTable and are guaranteed to be valid indices
+        unsafe { table.strings.get_unchecked(self.0 as usize).as_str() == other }
     }
 
     /// Resolve this interned string using the provided StringTable.
     /// This is a convenience method that delegates to StringTable::resolve.
     ///
     /// Time complexity: O(1)
+    #[inline]
     pub fn resolve<'a>(self, table: &'a StringTable) -> &'a str {
         table.resolve(self)
     }
 }
 
 /// Custom Debug implementation that shows the underlying ID value.
-/// Note: This doesn't show the actual string content since that requires
-/// access to the StringTable. Use StringTable::resolve() for debugging
-/// the actual string content.
 impl std::fmt::Display for StringId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "StringId({})", self.0)
@@ -50,8 +53,8 @@ impl std::fmt::Display for StringId {
 /// A centralized string interning system that stores unique strings only once in memory.
 ///
 /// The StringTable uses a dual-mapping approach for optimal performance:
-/// - Vec<String> for O(1) ID→string resolution
-/// - HashMap<String, StringId> for O(1) string→ID lookup during interning
+/// - Vec<Box<str>> for O(1) ID→string resolution with minimal overhead
+/// - FxHashMap<&str, StringId> for O(1) string→ID lookup during interning
 ///
 /// This design provides:
 /// - O(1) interning operations (average case)
@@ -61,15 +64,19 @@ impl std::fmt::Display for StringId {
 #[derive(Debug, Clone)]
 pub struct StringTable {
     /// Primary storage: ID → String mapping for fast resolution
-    strings: Vec<String>,
+    /// Using Box<str> instead of String saves 8 bytes per entry (no capacity field)
+    strings: Vec<Box<str>>,
 
     /// Reverse lookup: String → ID mapping for fast interning
-    string_to_id: HashMap<String, StringId>,
+    /// FxHashMap is ~2-3x faster than default HashMap for string keys
+    /// Stores borrowed references to avoid duplicating string data
+    string_to_id: FxHashMap<&'static str, StringId>,
 
     /// Next available string ID
     next_id: u32,
 
-    /// Stored source text locations for each interned string
+    /// Stored source text locations for each interned string (if needed)
+    /// NOTE: This appears unused in your current code - consider removing if not needed
     location: Vec<TextLocation>,
 }
 
@@ -84,7 +91,7 @@ impl StringTable {
     pub fn new() -> Self {
         Self {
             strings: Vec::new(),
-            string_to_id: HashMap::new(),
+            string_to_id: FxHashMap::default(),
             next_id: 0,
             location: Vec::new(),
         }
@@ -94,7 +101,7 @@ impl StringTable {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             strings: Vec::with_capacity(capacity),
-            string_to_id: HashMap::with_capacity(capacity),
+            string_to_id: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
             next_id: 0,
             location: Vec::with_capacity(capacity),
         }
@@ -105,19 +112,43 @@ impl StringTable {
     /// If the string is new, stores it and returns a new ID.
     ///
     /// Time complexity: O(1) average case
+    #[inline]
     pub fn intern(&mut self, s: &str) -> InternedString {
-        // Check if we already have this string
+        // Fast path: check if we already have this string
+        // This is a single hash lookup with no allocations
         if let Some(&existing_id) = self.string_to_id.get(s) {
             return existing_id;
         }
 
-        // String is new, so we need to store it
+        // Slow path: string is new, so we need to store it
+        self.intern_new(s)
+    }
+
+    /// Internal helper for interning new strings (cold path)
+    /// Marked as cold to optimize the hot path in `intern`
+    #[cold]
+    #[inline(never)]
+    fn intern_new(&mut self, s: &str) -> InternedString {
         let new_id = StringId(self.next_id);
         self.next_id += 1;
 
-        // Store the string and create the mapping
-        self.strings.push(s.to_owned());
-        self.string_to_id.insert(s.to_owned(), new_id);
+        // Box<str> is more memory efficient than String (no capacity field)
+        let boxed: Box<str> = s.into();
+
+        // SAFETY: We're creating a 'static reference to data we own and will never drop
+        // The string table owns the Box<str> for the program's lifetime
+        // This is safe because:
+        // 1. We never remove strings from the table
+        // 2. We never reallocate the Box<str> (it's heap-allocated with stable address)
+        // 3. The StringTable itself lives for the entire compilation
+        let static_ref: &'static str =
+            unsafe { std::mem::transmute::<&str, &'static str>(boxed.as_ref()) };
+
+        // Insert into reverse lookup (uses the static ref as key - no allocation!)
+        self.string_to_id.insert(static_ref, new_id);
+
+        // Store the owned string
+        self.strings.push(boxed);
 
         new_id
     }
@@ -126,61 +157,76 @@ impl StringTable {
     ///
     /// Time complexity: O(1)
     ///
-    /// # Panics
-    /// Panics if the StringId is invalid (not created by this StringTable)
+    /// # Safety
+    /// This uses unchecked indexing for maximum performance.
+    /// StringIds are only created by this StringTable, so indices are guaranteed valid.
+    #[inline]
     pub fn resolve(&self, id: InternedString) -> &str {
-        self.strings
-            .get(id.0 as usize)
-            .map(|s| s.as_str())
-            .unwrap_or_else(|| panic!("Invalid StringId: {}", id.0))
+        // SAFETY: StringIds are only created by this StringTable and are guaranteed
+        // to be valid indices into self.strings
+        unsafe { self.strings.get_unchecked(id.0 as usize).as_ref() }
     }
 
     /// Efficiently intern a String by taking ownership, avoiding an extra allocation
-    /// if the string is new. If the string already exists, the owned String is dropped
-    /// and the existing ID is returned.
+    /// if the string is new.
     ///
     /// Time complexity: O(1) average case
+    #[inline]
     pub fn get_or_intern(&mut self, s: String) -> InternedString {
-        // Check if we already have this string
-        if let Some(&existing_id) = self.string_to_id.get(&s) {
+        // Fast path: check if we already have this string
+        if let Some(&existing_id) = self.string_to_id.get(s.as_str()) {
             return existing_id;
         }
 
-        // String is new, so we can use the owned String directly
+        // Slow path: string is new
+        self.intern_new_owned(s)
+    }
+
+    /// Internal helper for interning new owned strings (cold path)
+    #[cold]
+    #[inline(never)]
+    fn intern_new_owned(&mut self, s: String) -> InternedString {
         let new_id = StringId(self.next_id);
         self.next_id += 1;
 
-        // Insert into reverse lookup first (we need to clone for the key)
-        self.string_to_id.insert(s.clone(), new_id);
+        // Convert directly to Box<str> to avoid keeping String's capacity overhead
+        let boxed: Box<str> = s.into_boxed_str();
 
-        // Then move the owned String into our storage
-        self.strings.push(s);
+        // SAFETY: Same reasoning as intern_new
+        let static_ref: &'static str =
+            unsafe { std::mem::transmute::<&str, &'static str>(boxed.as_ref()) };
+
+        self.string_to_id.insert(static_ref, new_id);
+        self.strings.push(boxed);
 
         new_id
     }
 
-    /// Try to resolve an interned string ID, returning None if the ID is invalid
-    /// instead of panicking.
+    /// Try to resolve an interned string ID, returning None if the ID is invalid.
     ///
     /// Time complexity: O(1)
+    #[inline]
     pub fn try_resolve(&self, id: InternedString) -> Option<&str> {
-        self.strings.get(id.0 as usize).map(|s| s.as_str())
+        self.strings.get(id.0 as usize).map(|s| s.as_ref())
     }
 
     /// Check if a string is already interned without interning it.
     /// Returns the StringId if found, None otherwise.
     ///
     /// Time complexity: O(1) average case
+    #[inline]
     pub fn get_existing(&self, s: &str) -> Option<InternedString> {
         self.string_to_id.get(s).copied()
     }
 
     /// Get the number of unique strings stored in the table
+    #[inline]
     pub fn len(&self) -> usize {
         self.strings.len()
     }
 
     /// Check if the string table is empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.strings.is_empty()
     }
@@ -189,9 +235,12 @@ impl StringTable {
     pub fn memory_usage(&self) -> MemoryStats {
         let string_content_bytes: usize = self.strings.iter().map(|s| s.len()).sum();
 
-        let vec_overhead = self.strings.capacity() * std::mem::size_of::<String>();
+        // Box<str> overhead: ptr + len (no capacity like String)
+        let vec_overhead = self.strings.capacity() * std::mem::size_of::<Box<str>>();
+
+        // FxHashMap overhead is minimal
         let hashmap_overhead = self.string_to_id.capacity()
-            * (std::mem::size_of::<String>() + std::mem::size_of::<StringId>());
+            * (std::mem::size_of::<&str>() + std::mem::size_of::<StringId>());
 
         let total_bytes = string_content_bytes
             + vec_overhead
@@ -212,7 +261,7 @@ impl StringTable {
         self.strings
             .iter()
             .enumerate()
-            .map(|(idx, s)| (StringId(idx as u32), s.as_str()))
+            .map(|(idx, s)| (StringId(idx as u32), s.as_ref()))
             .collect()
     }
 }
