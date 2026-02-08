@@ -149,6 +149,7 @@ use std::{env, fs};
 
 // The final set of errors and warnings emitted from the compiler
 #[derive(Debug)]
+#[derive(Clone)]
 pub struct CompilerMessages {
     pub errors: Vec<CompilerError>,
     pub warnings: Vec<CompilerWarning>,
@@ -1285,7 +1286,7 @@ macro_rules! return_thread_err {
 macro_rules! return_messages_with_err {
     ($messages:expr, $new_err:expr) => {
         $messages.errors.push($new_err);
-        return Err($messages)
+        return Err($messages);
     };
 }
 

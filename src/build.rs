@@ -1,4 +1,3 @@
-use crate::build_system::core_build::compile_project_frontend;
 use crate::build_system::html_project;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
@@ -18,10 +17,10 @@ use std::{fs, path};
 use crate::build_system::core_build::compile_project_frontend;
 
 pub struct Module {
-    folder_name: StringId,
-    entry_point: StringId, // The name of the main start function
-    hir: HirModule,
-    string_table: StringTable,
+    pub(crate) folder_name: String,
+    pub(crate) entry_point: PathBuf, // The name of the main start function
+    pub(crate) hir: HirModule,
+    pub(crate) string_table: StringTable,
 }
 
 /// Unified build interface for all project types
@@ -29,8 +28,8 @@ pub trait ProjectBuilder {
     /// Build the project with the given configuration
     fn build_project(
         &self,
-        modules: &[Module],
-        config: Config,
+        modules: Vec<Module>,
+        config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages>;
 
@@ -121,13 +120,14 @@ pub fn build_project_files(
     // --------------------------------------------
     // This discovers all the modules, parses the config
     // and compiles each module to an HirModule for the backend to use
-    let modules = compile_project_frontend(valid_path, flags, messages)?;
+    let mut config = Config::new(valid_path);
+    let modules = compile_project_frontend(&mut config, flags, &mut messages)?;
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
     let start = Instant::now();
-    let output_files = match project_builder.build_project(modules, release_build) {
+    let output_files = match project_builder.build_project(modules, &config, flags) {
         Ok(project) => {
             let duration = start.elapsed();
 
@@ -138,11 +138,10 @@ pub fn build_project_files(
             );
             green_ln_bold!("{:?}", duration);
 
-            messages.warnings.extend(project.warnings);
             project.output_files
         }
 
-        Err(compiler_messages) => return Ok(compiler_messages),
+        Err(compiler_messages) => return Err(compiler_messages),
     };
 
     // TODO: Now write the output files returned from the builder
@@ -172,11 +171,12 @@ pub fn build_project_files(
                 fs::write(file, content)
             }
         } {
-            return_compiler_error!(format!("Error writing file: {:?}", e))
+            let err = CompilerError::compiler_error(format!("Error writing file: {e}"));
+            return_messages_with_err!(messages, err);
         };
     }
 
-    Ok(messages)
+    Ok(messages.warnings)
 }
 
 // fn remove_old_files(output_dir: &Path) -> Result<(), Vec<CompileError>> {
