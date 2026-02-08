@@ -5,7 +5,7 @@
 
 use crate::build::{FileKind, Module, OutputFile, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::build_system::core_build::{CoreCompilationResult, extract_source_code};
+use crate::build_system::core_build::{CoreCompilationResult, extract_source_code, compile_module};
 use crate::compiler::codegen::js::JsLoweringConfig;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::HirModule;
@@ -14,6 +14,7 @@ use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{Flag, InputFile, Project, lower_hir_to_js, return_config_error, settings};
 use colour::{dark_cyan_ln, e_red_ln};
 use std::cmp::PartialEq;
+use std::ffi::OsStr;
 use std::fs;
 use std::path::PathBuf;
 
@@ -49,12 +50,11 @@ impl ProjectBuilder for HtmlProjectBuilder {
         let mut output_files = Vec::with_capacity(1);
         for module in modules {
 
-
             // -----------------------------
             //      BACKEND COMPILATION
             // -----------------------------
             match compile_js_module(
-                &compilation_result.hir_module,
+                module,
                 &compilation_result.string_table,
                 &mut output_files,
                 release_build,
@@ -86,6 +86,19 @@ impl ProjectBuilder for HtmlProjectBuilder {
 
 pub(crate) fn create_all_modules_in_project(config: &Config) -> Result<Vec<Module>, String> {
     let mut modules = Vec::with_capacity(1);
+
+    let result = compile_module(vec![input_file], &config)?;
+
+    modules.push(Module {
+        folder_name: config.entry_dir
+            .file_name()
+            .unwrap_or(OsStr::new(""))
+            .to_str().unwrap_or("")
+            .to_string(),
+        entry_point: config.entry_dir.clone(), // The name of the main start function
+        hir: result.hir_module,
+        string_table: result.string_table,
+    });
 
     // TODO:
     // HTML project builder uses directory based routing for the HTML pages.
