@@ -1,3 +1,4 @@
+use crate::build_system::core_build::compile_project_frontend;
 use crate::build_system::html_project;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
@@ -7,7 +8,7 @@ use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{Flag, return_compiler_error, return_file_error, settings};
+use crate::{Flag, return_compiler_error, return_file_error, return_messages_with_err, settings};
 use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
 use std::fmt::format;
 use std::fs::FileType;
@@ -97,19 +98,20 @@ pub fn build_project_files(
 
     // For early returns before using the compiler messages from the actual compiler pipeline later
     let mut messages = CompilerMessages::new();
-
+    
     let valid_path = match check_if_valid_path(entry_path) {
         Ok(path) => path,
-        Err(e) => messages.errors.push(e)
+        Err(e) => {
+            return_messages_with_err!(messages, e);
+        }
     };
-
+    
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
-            messages.errors.push(
-                CompilerError::compiler_error(format!("Could not get the current directory: {e}"))
-            );
-            return Err(messages)
+            let err =
+                CompilerError::compiler_error(format!("Could not get the current directory: {e}"));
+            return_messages_with_err!(messages, err);
         }
     };
 
@@ -119,20 +121,7 @@ pub fn build_project_files(
     // --------------------------------------------
     // This discovers all the modules, parses the config
     // and compiles each module to an HirModule for the backend to use
-    let modules = match compile_project_frontend(
-        valid_path,
-        flags,
-        &mut messages.warnings
-    ) {
-        Ok(modules) => modules,
-        Err(e) => return Err(e)
-    };
-
-    messages.warnings.extend(modules
-        .iter()
-        .map(|m| m.warnings.clone())
-        .collect()
-    );
+    let modules = compile_project_frontend(valid_path, flags, messages)?;
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
@@ -161,7 +150,8 @@ pub fn build_project_files(
         // A safety check to make sure the file name has been set
         // This is to avoid accidentally overwriting things by mistake
         if output_file.full_file_path == PathBuf::new() {
-            return_compiler_error!("File did not have a name or path set");
+            let err = CompilerError::compiler_error("File did not have a name or path set");
+            return_messages_with_err!(messages, err);
         }
 
         let full_file_path = current_dir.clone().join(output_file.full_file_path);

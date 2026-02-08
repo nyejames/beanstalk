@@ -1281,6 +1281,14 @@ macro_rules! return_thread_err {
     };
 }
 
+#[macro_export]
+macro_rules! return_messages_with_err {
+    ($messages:expr, $new_err:expr) => {
+        $messages.errors.push($new_err);
+        return Err($messages)
+    };
+}
+
 pub fn print_compiler_messages(messages: CompilerMessages) {
     // Format and print out the messages:
     for err in messages.errors {
