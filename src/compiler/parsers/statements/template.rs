@@ -84,7 +84,7 @@ pub struct Style {
     pub id: &'static str,
 
     // A callback function for how the string content of the template should be parsed
-    // If at all. COMPILE TIME ONLY PARSING.
+    // If at all. Compiler will determine if this can be run at compile-time, or need a runtime call.
     pub formatter: Option<Formatter>,
     pub formatter_precedence: i32,
 
@@ -96,8 +96,6 @@ pub struct Style {
     // Or child wrappers that are higher precedence
     pub child_default: Option<Box<Style>>,
 
-    pub compatibility: TemplateCompatibility,
-
     // templates that this style will unlock
     // Basically a bunch of template declarations that are captured by this template
     // TODO: Styles and template unlocks as different things? Do full templates with styles being inherited suffice if they are empty?
@@ -105,6 +103,7 @@ pub struct Style {
 
     // If this is true, no unlocked styles will be inherited from the parent
     pub unlocks_override: bool,
+    pub strict: bool, // MAYBE - enforces only strings to be used in the template head, no dynamic behaviour
 }
 
 impl Style {
@@ -115,9 +114,9 @@ impl Style {
             formatter_precedence: -1,
             override_precedence: -1,
             child_default: None,
-            compatibility: TemplateCompatibility::All,
             unlocked_templates: HashMap::new(),
             unlocks_override: false,
+            strict: false,
         }
     }
 

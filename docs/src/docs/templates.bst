@@ -13,17 +13,24 @@ Beanstalk has unique, superpowered templating strings.
 
 These are the only way to create mutable strings, as double quotes are only used for string slices.
 
-Templates have two sections, the head and the body, separated with a colon. 
-
-Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling. 
-
-The main purpose of a template is to generate either text content, markdown, HTML, code or just formatted strings.
-
-You can think of them in their most basic form as a function at runtime that returns a string, 
+You can think of them in their most basic form as a function at runtime that returns a string,
 but they turn into regular strings at compile time if they identify that they can be folded and won't change at runtime.
 
-In the future, templates **might** be extended to generate more than just strings, 
-and become a small macro system (not sure if this is the right direction for the language yet).
+The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.
+
+Templates form a declarative DSL where parsing rules, semantic interpretation, and output formatting are controlled by first-class style values.
+They are not strings themselves, but string-producing expressions.
+
+Styles act as scoped parsing and interpretation rules, and slots provide typed composition points.
+Styles define scoped parsing and formatting rules, slots provide semantic composition points,
+and the compiler freely chooses compile-time or runtime string construction without changing semantics.
+
+Templates have two sections, the head and the body, separated with a colon. 
+
+Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.
+
+In the future, templates **might** be extended to generate more than just utf8 strings.
+Other string-like types such as byte arrays could be supported.
 
 #### The head section
 Is used to:
