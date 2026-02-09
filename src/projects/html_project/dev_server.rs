@@ -1,18 +1,13 @@
-use crate::build::{BuildTarget, ProjectBuilder};
+use crate::build_system::build;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::compiler::basic_utility_functions::check_if_valid_path;
-use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
-use crate::compiler::compiler_errors::{
-    CompilerError, CompilerMessages, ErrorMetaDataKey, print_compiler_messages,
-    print_formatted_error,
-};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, print_compiler_messages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
-use crate::{Flag, build, settings};
+use crate::{Flag, settings};
 use colour::{blue_ln, e_red_ln, green_ln_bold, print_bold, red_ln};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::SystemTime;
 use std::{
     fs::{self, metadata},
@@ -65,7 +60,7 @@ fn handle_connection(
 
     let mut messages = CompilerMessages::new();
 
-    let mut config = Config::new(PathBuf::from(path), BuildTarget::HtmlJSProject);
+    let mut config = Config::new(PathBuf::from(path));
     let builder = Box::new(HtmlProjectBuilder::new(flags.to_vec()));
 
     let dir_404 = &config
