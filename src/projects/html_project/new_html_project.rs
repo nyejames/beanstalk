@@ -1,3 +1,4 @@
+use crate::Flag;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::settings::Config;
@@ -5,7 +6,6 @@ use colour::red_ln;
 use fs_extra::dir::{CopyOptions, copy};
 use std::path::Path;
 use std::{env, fs, path::PathBuf};
-use crate::Flag;
 
 pub fn create_html_project_template(
     user_project_path: String,
@@ -53,7 +53,7 @@ pub fn create_html_project_template(
     fs::write(full_path.join("#config.bst"), config_content).map_err(|e| e.to_string())?;
 
     // Basic directories
-    fs::create_dir(full_path.join("src")).map_err(|e| e.to_string())?;
+    fs::create_dir(full_path.join("../..")).map_err(|e| e.to_string())?;
     fs::create_dir(full_path.join("release")).map_err(|e| e.to_string())?;
     fs::create_dir(full_path.join("dev")).map_err(|e| e.to_string())?;
 

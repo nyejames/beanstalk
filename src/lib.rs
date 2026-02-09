@@ -1,7 +1,5 @@
 #![allow(unused_imports, unused_mut)]
 
-pub(crate) mod build;
-pub mod cli;
 mod dev_server;
 pub mod settings;
 
@@ -85,6 +83,8 @@ mod compiler {
     }
 }
 
+pub(crate) mod projects;
+
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::string_interning::StringTable;
 use crate::settings::Config;
@@ -106,7 +106,7 @@ use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
-pub(crate) use build::*;
+pub(crate) use build_system::build::*;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -127,9 +127,9 @@ impl OutputModule {
 /// For the built-in CLI these are added as cli flags, but builders can decide how to choose flags
 #[derive(PartialEq, Debug, Clone)]
 pub enum Flag {
-    Release,        // Dev mode is default
+    Release, // Dev mode is default
     DisableWarnings,
-    ShowWarnings,   // The default behavior for tests is to hide warnings, so this enables them in those cases
+    ShowWarnings, // The default behavior for tests is to hide warnings, so this enables them in those cases
     DisableTimers,
 }
 

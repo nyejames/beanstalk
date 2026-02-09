@@ -1,3 +1,4 @@
+use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
 use crate::build_system::html_project;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
@@ -14,12 +15,14 @@ use std::fs::FileType;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, path};
-use crate::build_system::core_build::compile_project_frontend;
 
 pub struct Module {
     pub(crate) folder_name: String,
     pub(crate) entry_point: PathBuf, // The name of the main start function
     pub(crate) hir: HirModule,
+    pub(crate) required_module_imports: Vec<ExternalImport>,
+    pub(crate) exported_functions: Vec<String>,
+    pub(crate) warnings: Vec<CompilerWarning>,
     pub(crate) string_table: StringTable,
 }
 
@@ -28,9 +31,9 @@ pub trait ProjectBuilder {
     /// Build the project with the given configuration
     fn build_project(
         &self,
-        modules: Vec<Module>,
-        config: &Config,
-        flags: &[Flag],
+        modules: Vec<Module>, // Each collection of files the frontend has compiled into modules
+        config: &Config,      // Persistent settings across the whole project
+        flags: &[Flag],       // Settings only relevant to this build
     ) -> Result<Project, CompilerMessages>;
 
     /// Validate the project configuration
@@ -97,14 +100,14 @@ pub fn build_project_files(
 
     // For early returns before using the compiler messages from the actual compiler pipeline later
     let mut messages = CompilerMessages::new();
-    
+
     let valid_path = match check_if_valid_path(entry_path) {
         Ok(path) => path,
         Err(e) => {
             return_messages_with_err!(messages, e);
         }
     };
-    
+
     let current_dir = match std::env::current_dir() {
         Ok(dir) => dir,
         Err(e) => {
@@ -121,7 +124,7 @@ pub fn build_project_files(
     // This discovers all the modules, parses the config
     // and compiles each module to an HirModule for the backend to use
     let mut config = Config::new(valid_path);
-    let modules = compile_project_frontend(&mut config, flags, &mut messages)?;
+    let modules = compile_project_frontend(&mut config, flags)?;
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER

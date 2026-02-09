@@ -1,6 +1,6 @@
 //! Test runner for validating core Beanstalk compiler functionality
 
-use crate::build::BuildTarget;
+use crate::build_system::build::BuildTarget;
 use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::compiler_messages::compiler_errors::{
     error_type_to_str, print_formatted_error,
@@ -17,7 +17,7 @@ const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 /// Run all test cases from the tests/cases directory
 pub fn run_all_test_cases(show_warnings: bool) {
     use crate::Flag;
-    use crate::build::build_project_files;
+    use crate::build_system::build::build_project_files;
     use colour::{cyan_ln, green_ln, red_ln, yellow_ln};
     use std::fs;
     use std::path::Path;

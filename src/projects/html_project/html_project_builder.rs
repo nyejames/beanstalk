@@ -5,7 +5,7 @@
 
 use crate::build::{FileKind, Module, OutputFile, ProjectBuilder};
 use crate::build_system::core_build;
-use crate::build_system::core_build::{CoreCompilationResult, extract_source_code, compile_module};
+use crate::build_system::core_build::{compile_module, extract_source_code};
 use crate::compiler::codegen::js::JsLoweringConfig;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::HirModule;
@@ -34,11 +34,10 @@ impl HtmlProjectBuilder {
 impl ProjectBuilder for HtmlProjectBuilder {
     fn build_project(
         &self,
-        modules: &[Module],
-        mut config: Config,
+        modules: Vec<Module>,
+        config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
-
         // Validate the config has everything needed for an HTML project
         if let Err(e) = self.validate_project_config(&config) {
             return Err(CompilerMessages {
@@ -49,15 +48,14 @@ impl ProjectBuilder for HtmlProjectBuilder {
 
         let mut output_files = Vec::with_capacity(1);
         for module in modules {
-
             // -----------------------------
             //      BACKEND COMPILATION
             // -----------------------------
             match compile_js_module(
-                module,
-                &compilation_result.string_table,
+                &module.hir,
+                &module.string_table,
                 &mut output_files,
-                release_build,
+                flags.contains(&Flag::Release),
             ) {
                 Ok(()) => {}
                 Err(e) => {
@@ -82,35 +80,6 @@ impl ProjectBuilder for HtmlProjectBuilder {
 
         Ok(())
     }
-}
-
-pub(crate) fn create_all_modules_in_project(config: &Config) -> Result<Vec<Module>, String> {
-    let mut modules = Vec::with_capacity(1);
-
-    let result = compile_module(vec![input_file], &config)?;
-
-    modules.push(Module {
-        folder_name: config.entry_dir
-            .file_name()
-            .unwrap_or(OsStr::new(""))
-            .to_str().unwrap_or("")
-            .to_string(),
-        entry_point: config.entry_dir.clone(), // The name of the main start function
-        hir: result.hir_module,
-        string_table: result.string_table,
-    });
-
-    // TODO:
-    // HTML project builder uses directory based routing for the HTML pages.
-    // Each page has a special name "#page" that can import any resources
-    // and acts as the index page served from the path to its directory.
-    // So "/info/specific_page" is a directory,
-    // inside specific_page a #page can be added to serve this as a route.
-    // Directories that don't have a #page are not served as routes.
-    // Although currently this is a basic static site builder,
-    // so this is more framework level stuff for the future.
-
-    Ok(modules)
 }
 
 fn compile_js_module(

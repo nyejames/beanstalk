@@ -4,27 +4,25 @@
 // This now only compiles the HIR and runs the borrow checker.
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
-use std::ffi::OsStr;
-use crate::build_system::html_project::html_project_builder::{
-    JsHostBinding, create_all_modules_in_project,
-};
+use crate::build_system::build::Module;
+use crate::build_system::html_project::html_project_builder::JsHostBinding;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::ast_nodes::Var;
-use crate::compiler::parsers::tokenizer::tokens::FileTokens;
+use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler::string_interning::{StringId, StringTable};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{
     CompilerFrontend, Flag, InputFile, return_file_error, return_messages_with_err, settings,
     timer_log,
 };
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use crate::build::Module;
 
 /// External function import required by the compiled WASM
 #[derive(Debug, Clone)]
@@ -84,24 +82,15 @@ pub enum WasmType {
     F64,
 }
 
-/// Core compilation result containing WASM and required imports
-pub struct CoreCompilationResult {
-    pub hir_module: HirModule,
-    pub required_module_imports: Vec<ExternalImport>,
-    pub exported_functions: Vec<String>,
-    pub warnings: Vec<CompilerWarning>,
-    pub string_table: StringTable,
-}
-
 /// Find and compile all modules in the project.
 /// This function is agnostic for all projects,
 /// every builder will use it. It defines the structure of all Beanstalk projects
 pub fn compile_project_frontend(
     config: &mut Config,
     flags: &[Flag],
-    compiler_messages: &mut CompilerMessages,
 ) -> Result<Vec<Module>, CompilerMessages> {
-    let mut project_modules: Vec<Module> = Vec::with_capacity(1);
+    // For collecting warnings on the error path
+    let mut messages = CompilerMessages::new();
 
     // -----------------------------
     //    SINGLE FILE COMPILATION
@@ -109,14 +98,14 @@ pub fn compile_project_frontend(
     // If the entry is a file (not a directory),
     // Just compile and output that single file
     // Will just use the default config
-    if let Some(extension) = config.entry_dir.extension() {
+    let result = if let Some(extension) = config.entry_dir.extension() {
         match extension.to_str().unwrap() {
             BEANSTALK_FILE_EXTENSION => {
                 // Single BST file
                 let code = match extract_source_code(&config.entry_dir) {
                     Ok(code) => code,
                     Err(e) => {
-                        return_messages_with_err!(compiler_messages.to_owned(), e);
+                        return_messages_with_err!(messages, e);
                     }
                 };
 
@@ -125,28 +114,36 @@ pub fn compile_project_frontend(
                     source_path: config.entry_dir.clone(),
                 };
 
-                let result = compile_module(vec![input_file], &config)?;
+                let module = match compile_module(vec![input_file], &config) {
+                    Ok(module) => module,
+                    Err(e) => return Err(e),
+                };
 
-                project_modules.push()
+                vec![module]
             }
             _ => {
-                compiler_messages.errors.push(CompilerError::file_error(
+                let err = CompilerError::file_error(
                     &config.entry_dir,
-                    format!("Unsupported file extension for compilation. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}"),
-                ));
-                return Err(compiler_messages.to_owned());
+                    format!(
+                        "Unsupported file extension for compilation. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}"
+                    ),
+                );
+
+                return_messages_with_err!(messages, err);
             }
         }
     } else {
         // Guard clause to make sure the entry is a directory
         // Could be a file without an extension, which would be weird
         if !config.entry_dir.is_dir() {
-            compiler_messages.errors.push(CompilerError::file_error(
+            let err = CompilerError::file_error(
                 &config.entry_dir,
-                "Found a file without an extension set. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}",
-            ));
+                format!(
+                    "Found a file without an extension set. Beanstalk files use .{BEANSTALK_FILE_EXTENSION}"
+                ),
+            );
 
-            return Err(compiler_messages.to_owned());
+            return_messages_with_err!(messages, err);
         }
 
         // --------------------
@@ -160,7 +157,7 @@ pub fn compile_project_frontend(
                     Ok(content) => content,
                     Err(e) => {
                         let err = CompilerError::file_error(&config_path, e.to_string());
-                        return_messages_with_err!(compiler_messages.to_owned(), err);
+                        return_messages_with_err!(messages, err);
                     }
                 };
 
@@ -171,9 +168,8 @@ pub fn compile_project_frontend(
                 todo!();
             }
             Err(e) => {
-                compiler_messages
-                    .errors
-                    .push(CompilerError::file_error(&config_path, e.to_string()));
+                let err = CompilerError::file_error(&config_path, e.to_string());
+                return_messages_with_err!(messages, err);
             }
 
             // No config
@@ -187,39 +183,23 @@ pub fn compile_project_frontend(
         // Modules are folders that contain a '#' file
         // This is any file that starts with a '#' and becomes an entry point for the module
         // The #config file is a special '#' file that should only live in the entry path
-        let modules = match create_all_modules_in_project(&config) {
+        let modules = match discover_all_modules_in_project(&config) {
             Ok(modules) => modules,
             Err(e) => {
-                compiler_messages
-                    .errors
-                    .push(CompilerError::file_error(&config.entry_dir, e));
-                return Err(compiler_messages.to_owned());
+                let err = CompilerError::file_error(&config.entry_dir, e);
+                return_messages_with_err!(messages, err);
             }
         };
 
-        project_modules.extend(modules);
-    }
+        // TODO: discover and then compile modules in two separate stages
+        modules
+    };
 
-    // ------------------------------------
-    //
-    // ------------------------------------
-
-    // -----------------------------
-    //     FRONTEND COMPILATION
-    // -----------------------------
-    // Use the core build pipeline to compile to HIR
-    let compilation_result = compile_module(module.hir, &config)?;
-
-    compiler_messages
-        .warnings
-        .extend(compilation_result.warnings);
+    Ok(result)
 }
 
 /// Perform the core compilation pipeline shared by all project types
-pub fn compile_module(
-    module: Vec<InputFile>,
-    config: &Config,
-) -> Result<Module, CompilerMessages> {
+pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module, CompilerMessages> {
     // Module capacity heuristic
     // Just a guess of how many strings we might need to intern per module
     const MODULES_CAPACITY: usize = 16;
@@ -237,27 +217,31 @@ pub fn compile_module(
     // ----------------------------------
     let tokenizer_result: Vec<Result<FileTokens, CompilerError>> = module
         .iter()
-        .map(|module| compiler.source_to_tokens(&module.source_code, &module.source_path))
+        .map(|module| {
+            compiler.source_to_tokens(
+                &module.source_code,
+                &module.source_path,
+                TokenizeMode::Normal,
+            )
+        })
         .collect();
 
     // Check for any errors first
     let mut project_tokens = Vec::with_capacity(tokenizer_result.len());
-    let mut errors: Vec<CompilerError> = Vec::new();
+    let mut compiler_messages = CompilerMessages::new();
     for file in tokenizer_result {
         match file {
             Ok(tokens) => {
                 project_tokens.push(tokens);
             }
             Err(e) => {
-                errors.push(e);
+                compiler_messages.errors.push(e);
             }
         }
     }
 
-    if !errors.is_empty() {
-        let mut messages = CompilerMessages::new();
-        messages.errors = errors;
-        return Err(messages);
+    if !compiler_messages.errors.is_empty() {
+        return Err(compiler_messages);
     }
 
     timer_log!(time, "Tokenized in: ");
@@ -269,7 +253,6 @@ pub fn compile_module(
     // This is to split up the AST generation into discreet blocks and make all the public declarations known during AST generation.
     // All imports are figured out at this stage, so each header can be ordered depending on their dependencies.
     let time = Instant::now();
-    let mut compiler_messages = CompilerMessages::new();
 
     let module_headers =
         match compiler.tokens_to_headers(project_tokens, &mut compiler_messages.warnings) {
@@ -380,24 +363,37 @@ pub fn compile_module(
         println!("=== END BORROW CHECKER OUTPUT ===");
     }
 
-    Module {
-        folder_name: config.entry_dir
+    Ok(Module {
+        folder_name: config
+            .entry_dir
             .file_name()
             .unwrap_or(OsStr::new(""))
-            .to_str().unwrap_or("")
+            .to_str()
+            .unwrap_or("")
             .to_string(),
         entry_point: config.entry_dir.clone(), // The name of the main start function
         hir: hir_module,
-        string_table: compiler.string_table,
-    }
-
-    Ok(CoreCompilationResult {
-        hir_module,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
         exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: compiler_messages.warnings,
         string_table: compiler.string_table,
     })
+}
+
+pub(crate) fn discover_all_modules_in_project(config: &Config) -> Result<Vec<Module>, String> {
+    let mut modules = Vec::with_capacity(1);
+
+    // TODO:
+    // HTML project builder uses directory based routing for the HTML pages.
+    // Each page has a special name "#page" that can import any resources
+    // and acts as the index page served from the path to its directory.
+    // So "/info/specific_page" is a directory,
+    // inside specific_page a #page can be added to serve this as a route.
+    // Directories that don't have a #page are not served as routes.
+    // Although currently this is a basic static site builder,
+    // so this is more framework level stuff for the future.
+
+    Ok(modules)
 }
 
 /// Recursively adds Beanstalk files to the list of input modules.
