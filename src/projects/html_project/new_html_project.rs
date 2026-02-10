@@ -3,7 +3,6 @@ use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::settings::Config;
 use colour::red_ln;
-use fs_extra::dir::{CopyOptions, copy};
 use std::path::Path;
 use std::{env, fs, path::PathBuf};
 

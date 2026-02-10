@@ -2,10 +2,7 @@
 //
 // Builds Beanstalk projects for web deployment, generating separate WASM files
 // for different HTML pages and including JavaScript bindings for DOM interaction.
-
-use crate::build::{FileKind, Module, OutputFile, ProjectBuilder};
-use crate::build_system::core_build;
-use crate::build_system::core_build::{compile_module, extract_source_code};
+use crate::build_system::build::{FileKind, Module, OutputFile, ProjectBuilder};
 use crate::compiler::codegen::js::JsLoweringConfig;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::HirModule;
@@ -38,6 +35,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
         config: &Config,
         flags: &[Flag],
     ) -> Result<Project, CompilerMessages> {
+        let mut compiler_messages = CompilerMessages::new();
         // Validate the config has everything needed for an HTML project
         if let Err(e) = self.validate_project_config(&config) {
             return Err(CompilerMessages {

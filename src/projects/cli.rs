@@ -1,11 +1,7 @@
-use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::build_system::html_project::new_html_project;
-use crate::build_system::repl;
-use crate::compiler::basic_utility_functions::check_if_valid_path;
-use crate::compiler::compiler_errors::{print_compiler_messages, print_formatted_error};
+use crate::build_system::{build, repl};
+use crate::compiler::compiler_errors::{print_compiler_messages};
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
-use crate::settings::Config;
-use crate::{Flag, build, dev_server};
+use crate::{Flag};
 use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
 use std::path::PathBuf;
 use std::{
@@ -13,6 +9,8 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
+use crate::projects::html_project::{dev_server, new_html_project};
 
 enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
@@ -79,13 +77,7 @@ pub fn start_cli() {
 
         Command::Build(path)=> {
             let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            let messages = match build::build_project_files(html_project_builder, &path, flags) {
-                Ok(messages) => messages,
-                Err(e) => {
-                    print_formatted_error(e);
-                    return;
-                }
-            };
+            let messages = build::build_project_files(html_project_builder, &path, &flags);
             print_compiler_messages(messages);
         }
 
@@ -96,13 +88,7 @@ pub fn start_cli() {
         // }
         Command::Release(path) => {
             let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            let messages = match build::build_project_files(html_project_builder, &path, flags) {
-                Ok(messages) => messages,
-                Err(e) => {
-                    print_formatted_error(e);
-                    return;
-                }
-            };
+            let messages = build::build_project_files(html_project_builder, &path, &flags);
             print_compiler_messages(messages);
         }
 

@@ -1,6 +1,4 @@
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
-use crate::build_system::html_project;
-use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
@@ -95,7 +93,7 @@ pub fn build_project_files(
     project_builder: Box<dyn ProjectBuilder>,
     entry_path: &str,
     flags: &[Flag],
-) -> Result<Vec<CompilerWarning>, CompilerMessages> {
+) -> CompilerMessages {
     let _time = Instant::now();
 
     // For early returns before using the compiler messages from the actual compiler pipeline later
@@ -124,7 +122,10 @@ pub fn build_project_files(
     // This discovers all the modules, parses the config
     // and compiles each module to an HirModule for the backend to use
     let mut config = Config::new(valid_path);
-    let modules = compile_project_frontend(&mut config, flags)?;
+    let modules = match compile_project_frontend(&mut config, flags) {
+        Ok(modules) => modules,
+        Err(e) => return e,
+    };
 
     // --------------------------------------------
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
@@ -144,7 +145,7 @@ pub fn build_project_files(
             project.output_files
         }
 
-        Err(compiler_messages) => return Err(compiler_messages),
+        Err(compiler_messages) => return compiler_messages,
     };
 
     // TODO: Now write the output files returned from the builder
@@ -179,7 +180,7 @@ pub fn build_project_files(
         };
     }
 
-    Ok(messages.warnings)
+    messages
 }
 
 // fn remove_old_files(output_dir: &Path) -> Result<(), Vec<CompileError>> {
