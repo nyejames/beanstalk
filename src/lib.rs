@@ -1,6 +1,4 @@
-#![allow(unused_imports, unused_mut)]
-
-mod dev_server;
+// #![allow(unused_imports, unused_mut)]
 pub mod settings;
 
 pub(crate) mod compiler_tests {

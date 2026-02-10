@@ -168,6 +168,9 @@ impl CompilerMessages {
             warnings: Vec::new(),
         }
     }
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
 }
 
 #[derive(Debug, Eq, Hash, PartialEq, Clone)]
@@ -1286,7 +1289,7 @@ macro_rules! return_thread_err {
 macro_rules! return_messages_with_err {
     ($messages:expr, $new_err:expr) => {
         $messages.errors.push($new_err);
-        return Err($messages);
+        return $messages;
     };
 }
 

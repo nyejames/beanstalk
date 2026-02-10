@@ -1,7 +1,7 @@
 use crate::build_system::build;
-use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, print_compiler_messages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, settings};
@@ -61,7 +61,7 @@ fn handle_connection(
     let mut messages = CompilerMessages::new();
 
     let mut config = Config::new(PathBuf::from(path));
-    let builder = Box::new(HtmlProjectBuilder::new(flags.to_vec()));
+    let builder = Box::new(HtmlProjectBuilder::new());
 
     let dir_404 = &config
         .entry_dir
@@ -161,13 +161,7 @@ fn handle_connection(
                 };
                 if has_been_modified || global_file_modified {
                     blue_ln!("Changes detected for {:?}", parsed_url);
-                    let messages =
-                        build::build_project_files(builder, path, false).unwrap_or_else(|e| {
-                            CompilerMessages {
-                                errors: vec![e],
-                                warnings: vec![],
-                            }
-                        });
+                    let messages = build::build_project_files(builder, path, false);
 
                     if messages.errors.is_empty() {
                         status_line = "HTTP/1.1 205 Reset Content";
