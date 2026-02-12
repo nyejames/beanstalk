@@ -140,16 +140,13 @@
 use crate::compiler::borrow_checker::borrow_state::BorrowKind;
 use crate::compiler::compiler_warnings::{CompilerWarning, print_formatted_warning};
 use crate::compiler::parsers::tokenizer::tokens::CharPosition;
-use colour::{
-    e_dark_magenta, e_dark_yellow_ln, e_magenta_ln, e_red_ln, e_yellow, e_yellow_ln, red_ln,
-};
+use saying::say;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::{env, fs};
 
 // The final set of errors and warnings emitted from the compiler
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CompilerMessages {
     pub errors: Vec<CompilerError>,
     pub warnings: Vec<CompilerWarning>,
@@ -1315,8 +1312,8 @@ pub fn print_formatted_error(e: CompilerError) {
             }
         }
         Err(err) => {
-            red_ln!(
-                "Compiler failed to find the file to give you the snippet. Another compiler developer skill issue. {}",
+            say!(Red
+                "Compiler failed to find the file to give you the snippet. Another compiler developer skill issue. ",
                 err
             );
             e.location.scope.to_string_lossy().to_string()
@@ -1342,7 +1339,7 @@ pub fn print_formatted_error(e: CompilerError) {
             .unwrap_or_default()
             .to_string(),
         Err(_) => {
-            // red_ln!(
+            // say!(Red
             //     "Compiler Skill Issue: Error with printing error. File path is invalid: {}",
             //     actual_file.display()
             // );
@@ -1350,133 +1347,108 @@ pub fn print_formatted_error(e: CompilerError) {
         }
     };
 
-    // red_ln!("Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
+    // say!(Red "Error with printing error ヽ༼☉ ‿ ⚆༽ﾉ Line number is out of range of file. If you see this, it confirms the compiler developer is an idiot");
 
     // e_dark_yellow!("Error: ");
 
     match e.error_type {
         ErrorType::Syntax => {
             if !relative_dir.is_empty() {
-                eprint!("\n(╯°□°)╯  🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥  Σ(°△°;) ");
+                say!("\n(╯°□°)╯  🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥  Σ(°△°;) ");
             }
 
-            e_red_ln!("Syntax");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
+            say!(Red "Syntax");
+            say!(Dark Magenta "Line ", Bright {line_number + 1});
         }
 
         ErrorType::Type => {
             if !relative_dir.is_empty() {
-                eprint!("\n(ಠ_ಠ) ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" ( ._. ) ");
+                say!("\n(ಠ_ಠ) ", Dark Magenta relative_dir);
+                say!(Inline " ( ._. ) ");
             }
 
-            e_red_ln!("Type Error");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
+            say!(Red "Type Error");
+            say!(Dark Magenta "Line ", Bright {line_number + 1});
         }
 
         ErrorType::Rule => {
             if !relative_dir.is_empty() {
-                eprint!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥🔥  ╰(°□°╰) ");
+                say!("\nヽ(˶°o°)ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(°□°╰) ");
             }
 
-            e_red_ln!("Rule");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
+            say!(Red "Rule");
+            say!(Dark Magenta "Line ", Bright {line_number + 1});
         }
 
         ErrorType::File => {
-            e_yellow_ln!("🏚 Can't find/read file or directory: {:?}", relative_dir);
-            e_yellow_ln!("{}", e.msg);
+            say!(Yellow "🏚 Can't find/read file or directory: ", relative_dir);
+            say!(e.msg);
             return;
         }
 
         ErrorType::Compiler => {
             if !relative_dir.is_empty() {
-                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥🔥🔥  ╰(° _ o╰) ");
+                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  ╰(° _ o╰) ");
             }
-            e_yellow!("COMPILER BUG - ");
-            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+            say!(Yellow "COMPILER BUG - ");
+            say!(Dark Yellow "compiler developer skill issue (not your fault)");
         }
 
         ErrorType::Config => {
             if !relative_dir.is_empty() {
-                eprint!("\n (-_-)  🔥🔥🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥🔥🔥  <(^~^)/ ");
+                say!("\n (-_-)  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  <(^~^)/ ");
             }
-            e_yellow!("CONFIG FILE ISSUE- ");
-            e_dark_yellow_ln!(
-                "Malformed config file, something doesn't make sense inside the project config)"
+            say!(Yellow "CONFIG FILE ISSUE- ");
+            say!(
+                Dark Yellow "Malformed config file, something doesn't make sense inside the project config)"
             );
         }
 
         ErrorType::DevServer => {
             if !relative_dir.is_empty() {
-                eprint!("\n(ﾉ☉_⚆)ﾉ  🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥 ╰(° O °)╯ ");
+                say!("\n(ﾉ☉_⚆)ﾉ  🔥 ", Dark Magenta relative_dir, " 🔥 ╰(° O °)╯ ");
             }
 
-            e_yellow_ln!("Dev Server whoopsie");
-            e_red_ln!("  {}", e.msg);
+            say!(Yellow "Dev Server whoopsie: ", Red e.msg);
             return;
         }
 
         ErrorType::BorrowChecker => {
             if !relative_dir.is_empty() {
-                eprint!("\n(╯°Д°)╯  🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥  ╰(°□°╰) ");
+                say!("\n(╯°Д°)╯  🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥  ╰(°□°╰) ");
             }
 
-            e_red_ln!("Borrow Checker");
-            e_dark_magenta!("Line ");
-            e_magenta_ln!("{}\n", line_number + 1);
+            say!(Red "Borrow Checker");
+            say!(Dark Magenta "Line ", Bright {line_number + 1});
         }
 
         ErrorType::HirTransformation => {
             if !relative_dir.is_empty() {
-                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥🔥  ╰(°□°╰) ");
+                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(°□°╰) ");
             }
 
-            e_yellow!("HIR TRANSFORMATION BUG - ");
-            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+            say!(Yellow "HIR TRANSFORMATION BUG - ");
+            say!(Dark Yellow "compiler developer skill issue (not your fault)");
         }
 
         ErrorType::LirTransformation => {
             if !relative_dir.is_empty() {
-                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥🔥  ╰(° _ o╰) ");
+                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥  ╰(° _ o╰) ");
             }
 
-            e_yellow!("LIR TRANSFORMATION BUG - ");
-            e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+            say!(Yellow "LIR TRANSFORMATION BUG - ");
+            say!(Dark Yellow "compiler developer skill issue (not your fault)");
         }
 
         ErrorType::WasmGeneration => {
             if !relative_dir.is_empty() {
-                eprint!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ");
-                e_dark_magenta!("{}", relative_dir);
-                eprintln!(" 🔥🔥🔥🔥  ╰(° O °)╯ ");
-                e_yellow!("WASM GENERATION BUG - ");
-                e_dark_yellow_ln!("compiler developer skill issue (not your fault)");
+                say!("\nヽ༼☉ ‿ ⚆༽ﾉ  🔥🔥🔥🔥 ", Dark Magenta relative_dir, " 🔥🔥🔥🔥  ╰(° O °)╯ ");
+                say!(Yellow "WASM GENERATION BUG - ", Dark "compiler developer skill issue (not your fault)");
             }
         }
     }
 
-    e_red_ln!("  {}", e.msg);
+    say!(Red e.msg);
 
     println!("\n{line}");
 
@@ -1488,5 +1460,5 @@ pub fn print_formatted_error(e: CompilerError) {
 
     let length_of_underline =
         (e.location.end_pos.char_column - e.location.start_pos.char_column + 1).max(1) as usize;
-    red_ln!("{}", "^".repeat(length_of_underline));
+    say!(Red { "^".repeat(length_of_underline) });
 }

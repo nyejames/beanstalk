@@ -1,21 +1,21 @@
-use crate::build_system::{build, repl};
-use crate::compiler::compiler_errors::{print_compiler_messages};
+use crate::Flag;
+use crate::build_system::build;
+use crate::compiler::compiler_errors::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
-use crate::{Flag};
-use colour::{e_red_ln, green_ln_bold, grey_ln, red_ln};
+use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
+use crate::projects::html_project::{dev_server, new_html_project};
+use saying::say;
 use std::path::PathBuf;
 use std::{
     env, fs,
     io::{self, Write},
     path::Path,
 };
-use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::projects::html_project::{dev_server, new_html_project};
 
 enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
 
-    Build(String), // Builds a file or project in development mode
+    Build(String),   // Builds a file or project in development mode
     Release(String), // Builds a file or project in release mode
 
     // Run(&'static str),  //TODO:  Jit the project/file. This will be an eventual Rust interpreter project
@@ -42,7 +42,7 @@ pub fn start_cli() {
     let command = match get_command(&compiler_args[1..]) {
         Ok(command) => command,
         Err(e) => {
-            red_ln!("{}", e);
+            say!(e);
             print_help(true);
             return;
         }
@@ -67,15 +67,15 @@ pub fn start_cli() {
 
             match new_html_project::create_html_project_template(path, project_name, flags) {
                 Ok(_) => {
-                    println!("Creating new HTML project...");
+                    say!("Creating new HTML project...");
                 }
                 Err(e) => {
-                    e_red_ln!("Error creating project: {:?}", e);
+                    say!("Error creating project:  ", e);
                 }
             }
         }
 
-        Command::Build(path)=> {
+        Command::Build(path) => {
             let html_project_builder = Box::new(HtmlProjectBuilder::new());
             let messages = build::build_project_files(html_project_builder, &path, &flags);
             print_compiler_messages(messages);
@@ -93,7 +93,7 @@ pub fn start_cli() {
         }
 
         Command::Dev(path) => {
-            println!("\nStarting dev server...");
+            say!("\nStarting dev server...");
             dev_server::start_dev_server(&path, &flags);
         }
 
@@ -164,7 +164,7 @@ fn get_command(args: &[String]) -> Result<Command, String> {
                     Ok(Command::Dev(path.to_owned()))
                 }
             }
-            None => Ok(Command::Dev(String::from("../../test_output")))
+            None => Ok(Command::Dev(String::from("../../test_output"))),
         },
 
         Some("tests") => Ok(Command::CompilerTests),
@@ -233,18 +233,18 @@ fn prompt_user_for_input(msg: &str) -> Vec<String> {
 
 fn print_help(commands_only: bool) {
     if !commands_only {
-        grey_ln!("------------------------------------");
-        green_ln_bold!("The Beanstalk compiler and build system");
-        println!("Usage: <command> <args>");
+        say!(Bright Black "------------------------------------");
+        say!(Green Bold "The Beanstalk compiler and build system");
+        say!("Usage: ", Bold "<command>",  Italic "<args>");
     }
-    green_ln_bold!("\nCommands:");
-    //println!("  new <project name>   - Creates a new project");
-    //println!(
+    say!(Green Bold "\nCommands:");
+    //say!("  new <project name>   - Creates a new project");
+    //say!(
     //   // "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
     //);
-    //println!("  build <path>         - Builds a file");
-    println!("  run <path>           - JITs a file");
-    println!("  release <path>       - Builds a project in release mode");
-    println!("  tests                - Runs the test suite");
-    // println!("  wat <path>           - Compiles a WAT file to WebAssembly");
+    //say!("  build <path>         - Builds a file");
+    say!("  run <path>           - JITs a file");
+    say!("  release <path>       - Builds a project in release mode");
+    say!("  tests                - Runs the test suite");
+    // say!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }
