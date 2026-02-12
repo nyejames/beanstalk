@@ -6,8 +6,7 @@ use crate::compiler::compiler_messages::compiler_errors::{
     error_type_to_str, print_formatted_error,
 };
 use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
-use crate::settings::Config;
-use colour::e_red_ln;
+use saying::say;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 
@@ -18,7 +17,6 @@ const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 pub fn run_all_test_cases(show_warnings: bool) {
     use crate::Flag;
     use crate::build_system::build::build_project_files;
-    use colour::{cyan_ln, green_ln, red_ln, yellow_ln};
     use std::fs;
     use std::path::Path;
 
@@ -37,7 +35,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
     // Test files that should succeed
     if success_dir.exists() {
-        cyan_ln!("Testing files that should succeed:");
+        say!(Cyan "Testing files that should succeed:");
         println!("------------------------------------------");
         if let Ok(entries) = fs::read_dir(&success_dir) {
             for entry in entries.flatten() {
@@ -65,9 +63,9 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     };
 
                     if messages.errors.is_empty() {
-                        green_ln!("✓ PASS");
+                        say!(Green "✓ PASS");
                         if !messages.warnings.is_empty() {
-                            yellow_ln!("With {} warnings", messages.warnings.len().to_string());
+                            say!(Yellow "With ", messages.warnings.len().to_string(), " warnings");
                             if show_warnings {
                                 for warning in messages.warnings {
                                     print_formatted_warning(warning);
@@ -76,7 +74,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
                         }
                         passed_tests += 1;
                     } else {
-                        red_ln!("✗ FAIL");
+                        say!(Red "✗ FAIL");
                         failed_tests += 1;
                         for error in messages.errors {
                             print_formatted_error(error);
@@ -93,7 +91,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
     // Test files that should fail
     if failure_dir.exists() {
-        cyan_ln!("Testing files that should fail:");
+        say!(Cyan "Testing files that should fail:");
         println!("------------------------------------------");
         if let Ok(entries) = fs::read_dir(&failure_dir) {
             for entry in entries.flatten() {
@@ -120,10 +118,10 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     };
 
                     if messages.errors.is_empty() {
-                        yellow_ln!("✗ UNEXPECTED SUCCESS");
+                        say!(Yellow "✗ UNEXPECTED SUCCESS");
                         unexpected_successes += 1;
                         if !messages.warnings.is_empty() {
-                            yellow_ln!("With {} warnings", messages.warnings.len().to_string());
+                            say!(Yellow "With ", messages.warnings.len().to_string(), " warnings");
                             if show_warnings {
                                 for warning in messages.warnings {
                                     print_formatted_warning(warning);
@@ -131,14 +129,14 @@ pub fn run_all_test_cases(show_warnings: bool) {
                             }
                         }
                     } else {
-                        green_ln!("✓ EXPECTED FAILURE");
+                        say!(Green "✓ EXPECTED FAILURE");
                         expected_failures += 1;
                         for error in messages.errors {
-                            yellow_ln!("{}", error_type_to_str(&error.error_type));
+                            say!(Yellow error_type_to_str(&error.error_type));
                             // print_formatted_error(error);
                         }
                         if !messages.warnings.is_empty() {
-                            yellow_ln!("With {} warnings", messages.warnings.len().to_string());
+                            say!("With ", messages.warnings.len().to_string(), " warnings");
                             if show_warnings {
                                 for warning in messages.warnings {
                                     print_formatted_warning(warning);
@@ -157,7 +155,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
     // Print summary
     println!("\n{}", "=".repeat(50));
     print!("Test Results Summary. Took: ");
-    green_ln!("{:?}", timer.elapsed());
+    say!(#timer.elapsed());
     println!("  Total tests: {}", total_tests);
     println!("  Successful compilations: {}", passed_tests);
     println!("  Failed compilations: {}", failed_tests);
@@ -174,10 +172,10 @@ pub fn run_all_test_cases(show_warnings: bool) {
     );
 
     if incorrect_results == 0 {
-        green_ln!("\n🎉 All tests behaved as expected!");
+        say!("\n🎉 All tests behaved as expected!");
     } else {
         let percentage = (correct_results as f64 / total_tests as f64) * 100.0;
-        yellow_ln!("\n⚠ {:.1}% of tests behaved as expected", percentage);
+        say!("\n⚠", percentage, "% of tests behaved as expected");
     }
 
     println!("{}", "=".repeat(50));

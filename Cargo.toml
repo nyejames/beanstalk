@@ -20,10 +20,10 @@ name = "bst"
 path = "src/main.rs"
 
 [dependencies]
-colour = "2.1.0"
-wasmparser = "0.244.0"
-wasm-encoder = "0.244.0"
+wasmparser = "0.245.0"
+wasm-encoder = "0.245.0"
 rustc-hash = "2.1.1"
+saying = "0.1.6"
 
 [dev-dependencies]
 

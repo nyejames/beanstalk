@@ -1,6 +1,5 @@
 use crate::compiler::compiler_errors::ErrorLocation;
-use crate::compiler::string_interning::StringTable;
-use colour::yellow_ln_bold;
+use saying::say;
 use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
@@ -17,22 +16,6 @@ impl CompilerWarning {
         location: ErrorLocation,
         warning_kind: WarningKind,
         file_path: PathBuf,
-    ) -> CompilerWarning {
-        CompilerWarning {
-            msg: msg.to_owned(),
-            location,
-            warning_kind,
-            file_path,
-        }
-    }
-
-    /// Create a CompilerWarning from a PathBuf (for compatibility)
-    pub fn new_from_path_buf(
-        msg: &str,
-        location: ErrorLocation,
-        warning_kind: WarningKind,
-        file_path: PathBuf,
-        string_table: &mut StringTable,
     ) -> CompilerWarning {
         CompilerWarning {
             msg: msg.to_owned(),
@@ -63,7 +46,7 @@ pub enum WarningKind {
 }
 
 pub fn print_formatted_warning(w: CompilerWarning) {
-    yellow_ln_bold!("WARNING: ");
+    say!(Yellow Bold "WARNING: ");
     println!("File: {}", w.file_path_string());
     match w.warning_kind {
         WarningKind::UnusedVariable => {
