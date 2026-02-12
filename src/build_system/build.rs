@@ -1,18 +1,15 @@
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
 use crate::compiler::basic_utility_functions::check_if_valid_path;
-use crate::compiler::compiler_errors::ErrorMetaDataKey::CompilationStage;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
-use crate::compiler::string_interning::{StringId, StringTable};
+use crate::compiler::string_interning::{StringTable};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{Flag, return_compiler_error, return_file_error, return_messages_with_err, settings};
-use colour::{dark_cyan_ln, dark_yellow_ln, green_ln_bold, print_bold};
-use std::fmt::format;
-use std::fs::FileType;
+use crate::{Flag, return_messages_with_err, settings};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use std::{fs, path};
+use saying::say;
 
 pub struct Module {
     pub(crate) folder_name: String,
@@ -115,7 +112,7 @@ pub fn build_project_files(
         }
     };
 
-    print_bold!("\nCompiling Project");
+    say!("\nCompiling Project");
     // --------------------------------------------
     //   PERFORM THE CORE COMPILER FRONTEND BUILD
     // --------------------------------------------
@@ -140,7 +137,7 @@ pub fn build_project_files(
                 "\nBuilt {} files successfully in: ",
                 project.output_files.len()
             );
-            green_ln_bold!("{:?}", duration);
+            say!(Green Bold #duration);
 
             project.output_files
         }
