@@ -1,5 +1,5 @@
 use crate::build_system::build;
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, print_compiler_messages};
+use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
@@ -14,6 +14,7 @@ use std::{
     net::{TcpListener, TcpStream},
 };
 use saying::say;
+use crate::compiler::display_messages::print_compiler_messages;
 
 //noinspection HttpUrlsUsage
 pub fn start_dev_server(user_entry_path: &str, flags: &[Flag]) {

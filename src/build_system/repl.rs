@@ -5,7 +5,7 @@
 // ONLY DOES COMPILE TIME TEMPLATE ATM.
 // Function templates are not yet supported
 
-use crate::compiler::compiler_errors::{print_formatted_error, CompilerError};
+use crate::compiler::compiler_errors::{CompilerError};
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::create_template_node::Template;
@@ -15,6 +15,7 @@ use std::env;
 use std::io::{self, Write};
 use std::path::Path;
 use saying::say;
+use crate::compiler::display_messages::print_formatted_error;
 
 /// Start the REPL session
 pub fn start_repl_session() {

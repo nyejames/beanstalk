@@ -1,6 +1,5 @@
 use crate::Flag;
 use crate::build_system::build;
-use crate::compiler::compiler_errors::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use saying::say;
 use std::path::PathBuf;
@@ -9,6 +8,7 @@ use std::{
     io::{self, Write},
     path::Path,
 };
+use crate::compiler::display_messages::print_compiler_messages;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::html_project::{dev_server, new_html_project};
 
