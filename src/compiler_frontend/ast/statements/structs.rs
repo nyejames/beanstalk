@@ -1,15 +1,12 @@
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::host_functions::registry::HostRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::parsers::ast_nodes::Var;
-use crate::compiler_frontend::parsers::expressions::expression::Expression;
-use crate::compiler_frontend::parsers::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::ast::{ScopeContext};
+use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::return_syntax_error;
 use crate::{CompilerError, ast_log};
-use std::collections::HashSet;
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as

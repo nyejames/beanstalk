@@ -1,15 +1,15 @@
 use super::eval_expression::evaluate_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::parsers::ast::ScopeContext;
-use crate::compiler_frontend::parsers::ast::{self, ContextKind};
-use crate::compiler_frontend::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, Operator};
-use crate::compiler_frontend::parsers::statements::collections::new_collection;
-use crate::compiler_frontend::parsers::statements::create_template_node::Template;
-use crate::compiler_frontend::parsers::statements::functions::parse_function_call;
-use crate::compiler_frontend::parsers::statements::template::TemplateType;
-use crate::compiler_frontend::parsers::statements::variables::create_reference;
+use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast::{ContextKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::statements::collections::new_collection;
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::statements::functions::parse_function_call;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::ast::statements::variables::create_reference;
 use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::traits::ContainsReferences;
@@ -254,7 +254,7 @@ pub fn create_expression(
                                 token_stream,
                                 id,
                                 context,
-                                signature,
+                                &signature,
                                 string_table,
                             )?;
 

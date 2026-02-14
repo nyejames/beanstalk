@@ -1,16 +1,14 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::parsers::ast::ScopeContext;
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::parsers::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::parsers::statements::template::{
-    Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType,
-};
 use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
+use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::templates::template::{Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType};
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 

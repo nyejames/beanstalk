@@ -11,8 +11,8 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::compiler_frontend::host_functions::registry::HostRegistry;
-use crate::compiler_frontend::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::parsers::statements::create_template_node::Template;
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::parsers::tokenizer::tokens::TokenizeMode;
 use saying::say;

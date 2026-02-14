@@ -1,9 +1,9 @@
-use crate::compiler_frontend::parsers::ast_nodes::Var;
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::parsers::statements::functions::FunctionSignature;
 use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::fmt::Display;
+use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Ownership {

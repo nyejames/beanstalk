@@ -25,8 +25,8 @@ use crate::compiler_frontend::hir::nodes::{
     BinOp, HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt, UnaryOp,
 };
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
-use crate::compiler_frontend::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::parsers::expressions::expression::{
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
@@ -444,7 +444,7 @@ impl ExpressionLinearizer {
     /// Linearizes a struct instance expression.
     fn linearize_struct_instance(
         &mut self,
-        args: &[crate::compiler_frontend::parsers::ast_nodes::Var],
+        args: &[Var],
         result_type: &DataType,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
@@ -792,7 +792,7 @@ impl ExpressionLinearizer {
     /// Gets the return type from a list of return arguments.
     fn get_return_type(
         &self,
-        returns: &[crate::compiler_frontend::parsers::ast_nodes::Var],
+        returns: &[Var],
     ) -> DataType {
         if returns.len() == 1 {
             returns[0].value.data_type.clone()

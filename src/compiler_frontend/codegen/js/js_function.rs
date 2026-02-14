@@ -1,7 +1,7 @@
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::codegen::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{BlockId, HirStmt};
-use crate::compiler_frontend::parsers::statements::functions::FunctionSignature;
 use crate::compiler_frontend::string_interning::InternedString;
 
 /// What kind of callable is currently being lowered

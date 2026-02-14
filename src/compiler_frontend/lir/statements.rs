@@ -11,8 +11,8 @@ use crate::compiler_frontend::hir::nodes::{
 use crate::compiler_frontend::host_functions::registry::CallTarget;
 use crate::compiler_frontend::lir::nodes::{LirField, LirFunction, LirInst, LirStruct, LirType};
 use crate::compiler_frontend::lir::types::datatype_to_lir_type;
-use crate::compiler_frontend::parsers::ast_nodes::Var;
-use crate::compiler_frontend::parsers::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::string_interning::InternedString;
 
 use super::context::LoweringContext;

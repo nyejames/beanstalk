@@ -27,13 +27,13 @@ use crate::compiler_frontend::hir::nodes::{
 use crate::compiler_frontend::hir::struct_handler::StructHandler;
 use crate::compiler_frontend::hir::template_processor::TemplateProcessor;
 use crate::compiler_frontend::hir::variable_manager::{VariableManager, is_type_ownership_capable};
-use crate::compiler_frontend::parsers::ast::Ast;
-use crate::compiler_frontend::parsers::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::parsers::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use std::collections::{HashMap, HashSet};
-
+use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 // Re-export validator types for backward compatibility
 pub use crate::compiler_frontend::hir::validator::{HirValidationError, HirValidator};
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
@@ -473,7 +473,7 @@ pub struct HirBuilderContext<'a> {
 
     /// Registered struct definitions (name -> fields)
     struct_definitions:
-        HashMap<InternedString, Vec<crate::compiler_frontend::parsers::ast_nodes::Var>>,
+        HashMap<InternedString, Vec<Var>>,
 
     /// Candidates for possible drop insertion
     drop_candidates: Vec<DropCandidate>,
@@ -677,7 +677,7 @@ impl<'a> HirBuilderContext<'a> {
     pub fn register_struct(
         &mut self,
         name: InternedString,
-        fields: Vec<crate::compiler_frontend::parsers::ast_nodes::Var>,
+        fields: Vec<Var>,
     ) {
         self.struct_definitions.insert(name, fields);
     }
@@ -686,7 +686,7 @@ impl<'a> HirBuilderContext<'a> {
     pub fn get_struct_definition(
         &self,
         name: &InternedString,
-    ) -> Option<&Vec<crate::compiler_frontend::parsers::ast_nodes::Var>> {
+    ) -> Option<&Vec<Var>> {
         self.struct_definitions.get(name)
     }
 
@@ -1217,9 +1217,9 @@ impl<'a> HirBuilderContext<'a> {
     fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
         match &target.kind {
             NodeKind::Rvalue(expr) => match &expr.kind {
-                crate::compiler_frontend::parsers::expressions::expression::ExpressionKind::Reference(
+                ExpressionKind::Reference(
                     name,
-                ) => Ok(HirPlace::Var(*name)),
+                ) => Ok(HirPlace::Var(name.to_owned())),
                 _ => {
                     crate::return_compiler_error!("Unsupported assignment target expression")
                 }

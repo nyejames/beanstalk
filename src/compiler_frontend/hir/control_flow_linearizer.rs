@@ -26,9 +26,9 @@ use crate::compiler_frontend::hir::nodes::{
     HirTerminator,
 };
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
-use crate::compiler_frontend::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::parsers::statements::branching::MatchArm;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::return_compiler_error;
@@ -182,7 +182,7 @@ impl ControlFlowLinearizer {
     /// - Break/continue targets are set up for nested control flow
     pub fn linearize_for_loop(
         &mut self,
-        binding: &crate::compiler_frontend::parsers::ast_nodes::Var,
+        binding: &Var,
         iterator: &Expression,
         body: &[AstNode],
         location: &TextLocation,
@@ -773,7 +773,7 @@ impl ControlFlowLinearizer {
     /// Linearizes a variable declaration
     fn linearize_variable_declaration(
         &mut self,
-        arg: &crate::compiler_frontend::parsers::ast_nodes::Var,
+        arg: &Var,
         location: &TextLocation,
         ctx: &mut HirBuilderContext,
     ) -> Result<Vec<HirNode>, CompilerError> {
@@ -832,7 +832,7 @@ impl ControlFlowLinearizer {
     fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
         match &target.kind {
             NodeKind::Rvalue(expr) => match &expr.kind {
-                ExpressionKind::Reference(name) => Ok(HirPlace::Var(*name)),
+                ExpressionKind::Reference(name) => Ok(HirPlace::Var(name.to_owned())),
                 _ => return_compiler_error!("Invalid assignment target expression"),
             },
             NodeKind::FieldAccess { base, field, .. } => {

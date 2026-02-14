@@ -1,25 +1,22 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::host_functions::registry::HostRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::parsers::ast_nodes::AstNode;
-use crate::compiler_frontend::parsers::build_ast::function_body_to_ast;
-use crate::compiler_frontend::parsers::expressions::expression::Expression;
-use crate::compiler_frontend::parsers::field_access::parse_field_access;
-use crate::compiler_frontend::parsers::statements::functions::{
+use crate::compiler_frontend::ast::ast::{ScopeContext};
+use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::build_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::field_access::parse_field_access;
+use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, parse_function_call,
 };
-use crate::compiler_frontend::parsers::statements::structs::create_struct_definition;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, Token, TokenKind};
-use crate::compiler_frontend::parsers::{
-    ast_nodes::{NodeKind, Var},
+use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
+use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::ast::{
+    ast_nodes::{Var},
     expressions::parse_expression::create_expression,
 };
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::{ast_log, return_rule_error, return_syntax_error};
-use std::collections::HashMap;
 
 pub fn create_reference(
     token_stream: &mut FileTokens,

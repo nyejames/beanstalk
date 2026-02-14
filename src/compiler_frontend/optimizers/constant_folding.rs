@@ -26,8 +26,8 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership;
-use crate::compiler_frontend::parsers::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::parsers::expressions::expression::{
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::string_interning::StringTable;
