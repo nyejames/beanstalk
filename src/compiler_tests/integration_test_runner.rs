@@ -1,9 +1,10 @@
 //! Test runner for validating core Beanstalk compiler functionality
 use crate::compiler::compiler_messages::compiler_errors::{
-    error_type_to_str, print_formatted_error,
+    error_type_to_str,
 };
 use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
 use saying::say;
+use crate::compiler::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";

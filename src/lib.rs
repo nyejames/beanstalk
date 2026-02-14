@@ -56,9 +56,11 @@ mod compiler {
         pub(crate) mod compiler_dev_logging;
         pub(crate) mod compiler_errors;
         pub(crate) mod compiler_warnings;
+        pub(crate) mod display_messages;
     }
     pub(crate) use compiler_messages::compiler_errors;
     pub(crate) use compiler_messages::compiler_warnings;
+    pub(crate) use compiler_messages::display_messages;
     pub(crate) mod datatypes;
     pub(crate) mod interned_path;
     pub(crate) mod string_interning;
