@@ -1,4 +1,3 @@
-use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use rustc_hash::FxHashMap;
 
 /// A unique identifier for an interned string, represented as a u32 for memory efficiency.
@@ -72,10 +71,6 @@ pub struct StringTable {
 
     /// Next available string ID
     next_id: u32,
-
-    /// Stored source text locations for each interned string (if needed)
-    /// NOTE: This appears unused in your current code - consider removing if not needed
-    location: Vec<TextLocation>,
 }
 
 impl Default for StringTable {
@@ -91,7 +86,6 @@ impl StringTable {
             strings: Vec::new(),
             string_to_id: FxHashMap::default(),
             next_id: 0,
-            location: Vec::new(),
         }
     }
 
@@ -101,7 +95,6 @@ impl StringTable {
             strings: Vec::with_capacity(capacity),
             string_to_id: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
             next_id: 0,
-            location: Vec::with_capacity(capacity),
         }
     }
 

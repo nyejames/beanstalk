@@ -3,13 +3,13 @@ use crate::compiler::basic_utility_functions::check_if_valid_path;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
 use crate::compiler::hir::nodes::HirModule;
-use crate::compiler::string_interning::{StringTable};
-use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{Flag, return_messages_with_err, settings};
-use std::path::{Path, PathBuf};
-use std::time::Instant;
-use std::{fs, path};
+use crate::compiler::string_interning::StringTable;
+use crate::settings::Config;
+use crate::{Flag, return_messages_with_err};
 use saying::say;
+use std::fs;
+use std::path::PathBuf;
+use std::time::Instant;
 
 pub struct Module {
     pub(crate) folder_name: String,
@@ -24,7 +24,7 @@ pub struct Module {
 /// Unified build interface for all project types
 pub trait ProjectBuilder {
     /// Build the project with the given configuration
-    fn build_project(
+    fn build_backend(
         &self,
         modules: Vec<Module>, // Each collection of files the frontend has compiled into modules
         config: &Config,      // Persistent settings across the whole project
@@ -67,7 +67,7 @@ pub struct Project {
 
 /// Build a Beanstalk project with an explicit target specification
 ///
-/// Extended version of [`build_project_files`] that allows overriding the automatic
+/// Extended version of [`build_project`] that allows overriding the automatic
 /// target detection with a specific build target. This is useful for:
 /// - Cross-compilation scenarios
 /// - Testing different target configurations
@@ -86,7 +86,7 @@ pub struct Project {
 /// - `Some(BuildTarget::HtmlProject)`: Force HTML/WASM output
 /// - `Some(BuildTarget::Native { .. })`: Force native WASM output
 /// - `None`: Use automatic target detection based on project structure
-pub fn build_project_files(
+pub fn build_project(
     project_builder: Box<dyn ProjectBuilder>,
     entry_path: &str,
     flags: &[Flag],
@@ -128,16 +128,17 @@ pub fn build_project_files(
     // BUILD PROJECT USING THE APPROPRIATE BUILDER
     // --------------------------------------------
     let start = Instant::now();
-    let output_files = match project_builder.build_project(modules, &config, flags) {
+    let output_files = match project_builder.build_backend(modules, &config, flags) {
         Ok(project) => {
             let duration = start.elapsed();
 
             // Show build results
-            print!(
-                "\nBuilt {} files successfully in: ",
-                project.output_files.len()
+            say!(
+                "\nBuilt ",
+                Blue project.output_files.len(),
+                "files successfully in: ",
+                Green Bold #duration
             );
-            say!(Green Bold #duration);
 
             project.output_files
         }

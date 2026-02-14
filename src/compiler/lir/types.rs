@@ -3,12 +3,12 @@
 //! This module handles struct layout computation and type conversion
 //! between Beanstalk DataTypes and LIR types.
 
-use saying::say;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
 use crate::compiler::lir::nodes::LirType;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::InternedString;
+use saying::say;
 
 // ============================================================================
 // Struct Layout

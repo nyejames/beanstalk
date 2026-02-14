@@ -1,11 +1,9 @@
 //! Test runner for validating core Beanstalk compiler functionality
-use crate::compiler::compiler_messages::compiler_errors::{
-    error_type_to_str,
-};
+use crate::compiler::compiler_messages::compiler_errors::error_type_to_str;
 use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
-use saying::say;
 use crate::compiler::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
+use saying::say;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 
@@ -15,7 +13,7 @@ const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 /// Run all test cases from the tests/cases directory
 pub fn run_all_test_cases(show_warnings: bool) {
     use crate::Flag;
-    use crate::build_system::build::build_project_files;
+    use crate::build_system::build::build_project;
     use std::fs;
     use std::path::Path;
 
@@ -51,11 +49,8 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
                     let html_project_builder = Box::new(HtmlProjectBuilder::new());
 
-                    let messages = build_project_files(
-                        html_project_builder,
-                        INTEGRATION_TESTS_PATH,
-                        &flags,
-                    );
+                    let messages =
+                        build_project(html_project_builder, INTEGRATION_TESTS_PATH, &flags);
 
                     if messages.errors.is_empty() {
                         say!(Green "✓ PASS");
@@ -99,11 +94,8 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     println!("  {}", file_name);
                     let html_project_builder = Box::new(HtmlProjectBuilder::new());
 
-                    let messages = build_project_files(
-                        html_project_builder,
-                        INTEGRATION_TESTS_PATH,
-                        &flags,
-                    );
+                    let messages =
+                        build_project(html_project_builder, INTEGRATION_TESTS_PATH, &flags);
 
                     if messages.errors.is_empty() {
                         say!(Yellow "✗ UNEXPECTED SUCCESS");

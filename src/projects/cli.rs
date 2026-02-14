@@ -1,6 +1,9 @@
 use crate::Flag;
 use crate::build_system::build;
+use crate::compiler::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
+use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
+use crate::projects::html_project::{dev_server, new_html_project};
 use saying::say;
 use std::path::PathBuf;
 use std::{
@@ -8,9 +11,6 @@ use std::{
     io::{self, Write},
     path::Path,
 };
-use crate::compiler::display_messages::print_compiler_messages;
-use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::projects::html_project::{dev_server, new_html_project};
 
 enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
@@ -77,7 +77,7 @@ pub fn start_cli() {
 
         Command::Build(path) => {
             let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            let messages = build::build_project_files(html_project_builder, &path, &flags);
+            let messages = build::build_project(html_project_builder, &path, &flags);
             print_compiler_messages(messages);
         }
 
@@ -88,7 +88,7 @@ pub fn start_cli() {
         // }
         Command::Release(path) => {
             let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            let messages = build::build_project_files(html_project_builder, &path, &flags);
+            let messages = build::build_project(html_project_builder, &path, &flags);
             print_compiler_messages(messages);
         }
 
@@ -187,38 +187,6 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
     }
 
     flags
-}
-
-// Checks the path and converts it to a PathBuf
-// Resolves mixing unix and windows paths
-fn check_if_valid_directory_path(path: &str) -> Result<PathBuf, String> {
-    // If it contains Unix-style slashes, convert them
-    let path = if cfg!(windows) && path.contains('/') {
-        // Replace forward slashes with backslashes
-        &path.replace('/', "\\")
-    } else {
-        path
-    };
-
-    let path = Path::new(path);
-
-    // Check if the path exists
-    if !path.exists() {
-        return Err(format!("Path does not exist: {}", path.display()));
-    }
-
-    // Check if the path is a directory
-    if !path.is_dir() {
-        return Err(format!("Path is not a directory: {}", path.display()));
-    }
-
-    // Check if the directory is writable
-    let metadata = fs::metadata(path).expect("Unable to read metadata");
-    if metadata.permissions().readonly() {
-        return Err(format!("Directory is not writable: {}", path.display()));
-    }
-
-    Ok(path.to_path_buf())
 }
 
 fn prompt_user_for_input(msg: &str) -> Vec<String> {

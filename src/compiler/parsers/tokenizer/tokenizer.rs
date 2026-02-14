@@ -1,4 +1,4 @@
-use crate::compiler::basic_utility_functions::{is_valid_var_char};
+use crate::compiler::basic_utility_functions::is_valid_var_char;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::imports::parse_imports;
@@ -6,7 +6,7 @@ use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive
 use crate::compiler::parsers::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::compiler::string_interning::{StringTable};
+use crate::compiler::string_interning::StringTable;
 use crate::{return_syntax_error, settings, token_log};
 
 pub const END_SCOPE_CHAR: char = ';';
@@ -642,80 +642,6 @@ fn is_valid_identifier(s: &str) -> bool {
         .next()
         .is_some_and(|c| c.is_alphabetic() || c == '_')
         && s.chars().all(|c| c.is_alphanumeric() || c == '_')
-}
-
-// A block that starts with an open parenthesis and ends with a close parenthesis
-// Everything in between is returned as a string
-// Throws an error if there is no starting parenthesis or ending parenthesis
-pub fn string_block(
-    stream: &mut TokenStream,
-    string_table: &StringTable,
-) -> Result<String, CompilerError> {
-    let mut string_value = String::new();
-
-    while let Some(ch) = stream.peek() {
-        // Skip whitespace before the first colon that starts the block
-        if ch.is_whitespace() {
-            stream.next();
-            continue;
-        }
-
-        // Start the code block at the colon
-        if *ch != '(' {
-            return_syntax_error!(
-                format!("Expected '(' to start a new block, found '{}'", ch),
-                stream.new_location().to_error_location(string_table),
-                {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Add '(' to start the block",
-                    SuggestedReplacement => "(",
-                }
-            )
-        } else {
-            stream.next();
-            break;
-        }
-    }
-
-    let mut parenthesis_closed = 0;
-    let mut parenthesis_opened = 1;
-
-    loop {
-        match stream.peek() {
-            Some(char) => {
-                if char == &')' {
-                    parenthesis_closed += 1;
-                }
-                if char == &'(' {
-                    parenthesis_opened += 1;
-                }
-
-                if parenthesis_opened == parenthesis_closed {
-                    stream.next();
-                    break;
-                }
-                string_value.push(*char);
-                stream.next();
-            }
-            None => {
-                if parenthesis_opened > parenthesis_closed {
-                    return_syntax_error!(
-                        "File ended before closing the last parenthesis",
-                        stream.new_location().to_error_location(&string_table),
-                        {
-                            CompilationStage => "Tokenization",
-                            PrimarySuggestion => "Add ')' to close the block",
-                            SuggestedInsertion => ")",
-                            SuggestedLocation => "at end of file",
-                        }
-                    )
-                }
-                break;
-            }
-        };
-    }
-
-    Ok(string_value)
 }
 
 fn tokenize_string(

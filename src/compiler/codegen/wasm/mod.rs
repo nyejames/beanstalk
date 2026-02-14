@@ -1,3 +1,6 @@
+// This is early prototype code, so ignore placeholder unused stuff for now
+#![allow(unused)]
+
 //! # WASM Codegen Module
 //!
 //! This module implements the LIR to WASM codegen stage for the Beanstalk compiler.

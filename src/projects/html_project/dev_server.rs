@@ -1,10 +1,12 @@
 use crate::build_system::build;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::compiler_warnings::CompilerWarning;
+use crate::compiler::display_messages::print_compiler_messages;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, settings};
+use saying::say;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -13,8 +15,6 @@ use std::{
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
 };
-use saying::say;
-use crate::compiler::display_messages::print_compiler_messages;
 
 //noinspection HttpUrlsUsage
 pub fn start_dev_server(user_entry_path: &str, flags: &[Flag]) {
@@ -163,7 +163,7 @@ fn handle_connection(
 
                 if has_been_modified || global_file_modified {
                     say!(Blue "Changes detected for ", #parsed_url);
-                    let messages = build::build_project_files(builder, path, &flags);
+                    let messages = build::build_project(builder, path, &flags);
 
                     if messages.errors.is_empty() {
                         status_line = "HTTP/1.1 205 Reset Content";
@@ -173,7 +173,6 @@ fn handle_connection(
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }
-
             } else if request.starts_with("GET /") {
                 // Get a requested path
                 let file_path = request.split_whitespace().collect::<Vec<&str>>()[1];
@@ -435,12 +434,5 @@ fn get_home_page_path(
                 HashMap::new(),
             ))
         }
-    }
-}
-
-fn get_current_dir() -> Result<PathBuf, String> {
-    match std::env::current_dir() {
-        Ok(dir) => Ok(dir),
-        Err(e) => Err(format!("Error getting current directory: {:?}", e)),
     }
 }
