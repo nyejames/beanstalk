@@ -2,15 +2,12 @@
 pub mod settings;
 pub(crate) mod compiler_tests {
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
-
-    #[cfg(test)]
-    mod js_backend_tests;
     #[cfg(test)]
     mod name_hygiene_tests;
 }
 pub(crate) mod build_system;
 
-mod compiler {
+mod compiler_frontend {
     pub(crate) mod parsers {
         pub(crate) mod ast;
         pub(crate) mod ast_nodes;
@@ -86,27 +83,30 @@ pub mod projects {
     pub(crate) mod html_project;
 }
 
-use crate::compiler::host_functions::registry::HostRegistry;
-use crate::compiler::string_interning::StringTable;
+use crate::compiler_frontend::host_functions::registry::HostRegistry;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 // Re-export types for the build system
-use crate::compiler::codegen::js::{self, JsLoweringConfig, JsModule};
-use crate::compiler::codegen::wasm::encode::encode_wasm;
-use crate::compiler::compiler_messages::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::compiler_messages::compiler_warnings::CompilerWarning;
-use crate::compiler::hir::build_hir::HirBuilderContext;
-use crate::compiler::hir::nodes::HirModule;
-use crate::compiler::interned_path::InternedPath;
-use crate::compiler::lir::lower_hir_to_lir;
-use crate::compiler::lir::nodes::LirModule;
-use crate::compiler::module_dependencies::resolve_module_dependencies;
-use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::parse_file_headers::{Header, parse_headers};
-use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::compiler_frontend::borrow_checker::{BorrowCheckOutcome, BorrowChecker};
+use crate::compiler_frontend::codegen::js::{self, JsLoweringConfig, JsModule};
+use crate::compiler_frontend::codegen::wasm::encode::encode_wasm;
+use crate::compiler_frontend::compiler_messages::compiler_errors::{
+    CompilerError, CompilerMessages,
+};
+use crate::compiler_frontend::compiler_messages::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
+use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::lir::lower_hir_to_lir;
+use crate::compiler_frontend::lir::nodes::LirModule;
+use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
+use crate::compiler_frontend::parsers::ast::Ast;
+use crate::compiler_frontend::parsers::parse_file_headers::{Header, parse_headers};
+use crate::compiler_frontend::parsers::tokenizer::tokenizer::tokenize;
+use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build_system::build::*;
 
 pub struct OutputModule {
@@ -123,7 +123,7 @@ impl OutputModule {
     }
 }
 
-/// Flags change the behavior of the core compiler pipeline.
+/// Flags change the behavior of the core compiler_frontend pipeline.
 /// These are a future-proof way of extending the behavior of a build system or the core pipeline
 /// For the built-in CLI these are added as cli flags, but builders can decide how to choose flags
 #[derive(PartialEq, Debug, Clone)]
@@ -258,8 +258,8 @@ impl<'a> CompilerFrontend<'a> {
     pub fn check_borrows(
         &self,
         hir_module: &HirModule,
-    ) -> Result<compiler::borrow_checker::BorrowCheckOutcome, CompilerMessages> {
-        let mut checker = compiler::borrow_checker::BorrowChecker::new();
+    ) -> Result<BorrowCheckOutcome, CompilerMessages> {
+        let mut checker = BorrowChecker::new();
         checker.check_module(hir_module, &self.string_table)
     }
 }
@@ -284,7 +284,7 @@ pub fn generate_lir(hir_module: HirModule) -> Result<LirModule, CompilerMessages
     // Display LIR if the show_lir feature is enabled
     #[cfg(feature = "show_lir")]
     {
-        use crate::compiler::lir::display_lir;
+        use crate::compiler_frontend::lir::display_lir;
         println!("{}", display_lir(&lir_module));
     }
 

@@ -1,14 +1,14 @@
-//! Test runner for validating core Beanstalk compiler functionality
-use crate::compiler::compiler_messages::compiler_errors::error_type_to_str;
-use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
-use crate::compiler::display_messages::print_formatted_error;
+//! Test runner for validating core Beanstalk compiler_frontend functionality
+use crate::compiler_frontend::compiler_messages::compiler_errors::error_type_to_str;
+use crate::compiler_frontend::compiler_messages::compiler_warnings::print_formatted_warning;
+use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 
 /// This module provides a focused test suite that validates the essential
-/// compiler operations without getting bogged down in implementation details.
+/// compiler_frontend operations without getting bogged down in implementation details.
 ///
 /// Run all test cases from the tests/cases directory
 pub fn run_all_test_cases(show_warnings: bool) {

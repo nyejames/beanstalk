@@ -1,9 +1,5 @@
-use crate::CompilerFrontend;
-use crate::compiler::basic_utility_functions::check_if_valid_path;
-use crate::compiler::compiler_errors::CompilerError;
 use std::collections::HashMap;
-use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub const BEANSTALK_FILE_EXTENSION: &str = "bst";
 pub const COMP_PAGE_KEYWORD: &str = "#page";

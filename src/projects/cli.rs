@@ -1,6 +1,6 @@
 use crate::Flag;
 use crate::build_system::build;
-use crate::compiler::display_messages::print_compiler_messages;
+use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::html_project::{dev_server, new_html_project};
@@ -25,7 +25,7 @@ enum Command {
     Dev(String),
 
     Help,
-    CompilerTests, // Runs all the compiler integration tests for Beanstalk compiler development
+    CompilerTests, // Runs all the compiler_frontend integration tests for Beanstalk compiler_frontend development
 }
 
 pub fn start_cli() {
@@ -50,7 +50,7 @@ pub fn start_cli() {
 
     // Gather a list of any additional flags
     let flags = get_flags(&compiler_args);
-    // grey_ln!("compiler settings {:#?}", flags);
+    // grey_ln!("compiler_frontend settings {:#?}", flags);
 
     match command {
         Command::Help => {
@@ -98,7 +98,7 @@ pub fn start_cli() {
         }
 
         Command::CompilerTests => {
-            // Warnings are hidden by default for compiler tests,
+            // Warnings are hidden by default for compiler_frontend tests,
             // unless the show-warnings flag is set
             let show_warnings = flags.contains(&Flag::ShowWarnings);
             run_all_test_cases(show_warnings);
@@ -202,7 +202,7 @@ fn prompt_user_for_input(msg: &str) -> Vec<String> {
 fn print_help(commands_only: bool) {
     if !commands_only {
         say!(Bright Black "------------------------------------");
-        say!(Green Bold "The Beanstalk compiler and build system");
+        say!(Green Bold "The Beanstalk compiler_frontend and build system");
         say!("Usage: ", Bold "<command>",  Italic "<args>");
     }
     say!(Green Bold "\nCommands:");

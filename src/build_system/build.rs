@@ -1,9 +1,9 @@
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
-use crate::compiler::basic_utility_functions::check_if_valid_path;
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::hir::nodes::HirModule;
-use crate::compiler::string_interning::StringTable;
+use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Flag, return_messages_with_err};
 use saying::say;
@@ -93,7 +93,7 @@ pub fn build_project(
 ) -> CompilerMessages {
     let _time = Instant::now();
 
-    // For early returns before using the compiler messages from the actual compiler pipeline later
+    // For early returns before using the compiler_frontend messages from the actual compiler_frontend pipeline later
     let mut messages = CompilerMessages::new();
 
     let valid_path = match check_if_valid_path(entry_path) {

@@ -8,13 +8,13 @@
 // ONLY DOES COMPILE TIME TEMPLATE ATM.
 // Function templates are not yet supported
 
-use crate::compiler::compiler_errors::CompilerError;
-use crate::compiler::display_messages::print_formatted_error;
-use crate::compiler::host_functions::registry::HostRegistry;
-use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler::parsers::statements::create_template_node::Template;
-use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
-use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::display_messages::print_formatted_error;
+use crate::compiler_frontend::host_functions::registry::HostRegistry;
+use crate::compiler_frontend::parsers::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::parsers::statements::create_template_node::Template;
+use crate::compiler_frontend::parsers::tokenizer::tokenizer::tokenize;
+use crate::compiler_frontend::parsers::tokenizer::tokens::TokenizeMode;
 use saying::say;
 use std::env;
 use std::io::{self, Write};
@@ -82,8 +82,8 @@ fn compile_beanstalk_to_string(
     source_code: &str,
     source_path: &Path,
 ) -> Result<String, CompilerError> {
-    use crate::compiler::interned_path::InternedPath;
-    use crate::compiler::string_interning::StringTable;
+    use crate::compiler_frontend::interned_path::InternedPath;
+    use crate::compiler_frontend::string_interning::StringTable;
 
     // Create a string table for this compilation
     let mut string_table = StringTable::new();
