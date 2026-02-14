@@ -1,0 +1,1314 @@
+//! # Compiler Error Handling System
+//!
+//! This module provides a unified error handling system for the Beanstalk compiler_frontend.
+//! All error types are consolidated here with structured metadata for LLM and LSP integration.
+//!
+//! ## Architecture
+//!
+//! The error system is built around three core types:
+//! - [`CompilerError`]: The unified error type with owned data and structured metadata
+//! - [`ErrorLocation`]: Owned location information without string interning dependencies
+//! - [`ErrorMetaDataKey`]: Structured metadata keys for intelligent error analysis
+//!
+//! ## Error Types
+//!
+//! The compiler_frontend uses different error types for different failure categories:
+//! - **Syntax**: Malformed code that doesn't follow language syntax rules
+//! - **Type**: Type system violations and mismatches
+//! - **Rule**: Semantic errors like undefined variables or scope violations
+//! - **BorrowChecker**: Memory safety violations detected during lifetime analysis
+//! - **HirTransformation**: Failures during AST to HIR conversion (compiler_frontend bugs)
+//! - **LirTransformation**: Failures during HIR to LIR conversion (compiler_frontend bugs)
+//! - **WasmGeneration**: Failures during LIR to WASM (compiler_frontend bugs)
+//! - **Compiler**: Internal compiler_frontend bugs (not user's fault)
+//! - **File**: File system errors
+//! - **Config**: Configuration file issues
+//! - **DevServer**: Development server issues
+//!
+//! ## Error Creation Macros
+//!
+//! The module provides convenient macros for creating errors with consistent patterns:
+//!
+//! ### User-Facing Errors
+//! - [`return_syntax_error!`]: For syntax violations in user code
+//! - [`return_type_error!`]: For type system violations
+//! - [`return_rule_error!`]: For semantic rule violations
+//! - [`return_borrow_checker_error!`]: For memory safety violations
+//!
+//! ### Compiler Bug Errors
+//! - [`return_compiler_error!`]: For internal compiler_frontend bugs
+//! - [`return_hir_transformation_error!`]: For HIR transformation failures
+//! - [`return_lir_transformation_error!`]: For LIR transformation failures
+//! - [`return_wasm_generation_error!`]: For WASM generation failures
+//!
+//! ### Specialized Borrow Checker Errors
+//! - [`create_multiple_mutable_borrows_error!`]: Multiple mutable borrow conflicts
+//! - [`create_shared_mutable_conflict_error!`]: Shared/mutable borrow conflicts
+//! - [`create_use_after_move_error!`]: Use after move violations
+//! - [`create_move_while_borrowed_error!`]: Move while borrowed violations
+//! - [`create_whole_object_borrow_error!`]: Whole-object borrowing violations
+//!
+//! ## Usage Examples
+//!
+//! ### Basic Error Creation
+//! ```rust
+//! // Syntax error with metadata
+//! return_syntax_error!(
+//!     "Expected ';' after statement",
+//!     location,
+//!     {
+//!         CompilationStage => "Parsing",
+//!         PrimarySuggestion => "Add a semicolon at the end of the statement"
+//!     }
+//! );
+//!
+//! // Simple error without metadata
+//! return_type_error!("Cannot add Int and String", location);
+//! ```
+//!
+//! ### Borrow Checker Errors
+//! ```rust
+//! // Multiple mutable borrows
+//! let error = create_multiple_mutable_borrows_error!(
+//!     place,
+//!     existing_location,
+//!     new_location
+//! );
+//! errors.push(error);
+//!
+//! // Or return immediately
+//! return_multiple_mutable_borrows_error!(place, existing_loc, new_loc);
+//! ```
+//!
+//! ### ErrorLocation Conversion
+//! ```rust
+//! // Convert from TextLocation (used in frontend)
+//! let error_location = text_location.to_error_location(string_table);
+//!
+//! // Use in error creation
+//! return_hir_transformation_error!(
+//!     format!("Cannot transform expression type {:?}", expr_type),
+//!     error_location,
+//!     {
+//!         CompilationStage => "HIR Transformation",
+//!         PrimarySuggestion => "This is a compiler_frontend bug - please report it"
+//!     }
+//! );
+//! ```
+//!
+//! ## Design Principles
+//!
+//! ### No StringTable Dependencies
+//! All error types use owned `String` and `PathBuf` data, eliminating the need to pass
+//! `StringTable` through the call stack. This simplifies error propagation and allows
+//! errors to be created and returned without additional context.
+//!
+//! ### Structured Metadata
+//! Errors include structured metadata via `ErrorMetaDataKey` for:
+//! - LLM integration: Enables intelligent code suggestions and fixes
+//! - LSP integration: Provides rich IDE diagnostics
+//! - User experience: Offers helpful suggestions and context
+//!
+//! ### Consistent Patterns
+//! All error macros follow consistent patterns:
+//! - Simple form: `macro!(message, location)`
+//! - Detailed form: `macro!(message, location, { metadata })`
+//! - Returning vs non-returning variants for flexibility
+//!
+//! ## Error Flow Through Compilation Pipeline
+//!
+//! ```text
+//! Source Code
+//!     ↓
+//! Tokenizer → Syntax Errors
+//!     ↓
+//! Parser → Syntax/Rule Errors
+//!     ↓
+//! AST Builder → Type/Rule Errors
+//!     ↓
+//! HIR Builder → HirTransformation Errors
+//!     ↓
+//! LIR Builder → LirTransformation Errors
+//!     ↓
+//! Borrow Checker → BorrowChecker Errors
+//!     ↓
+//! WASM Codegen → WasmGeneration Errors
+//!     ↓
+//! CompilerMessages (aggregated errors and warnings)
+//! ```
+
+use crate::compiler_frontend::borrow_checker::borrow_state::BorrowKind;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, print_formatted_warning};
+use crate::compiler_frontend::parsers::tokenizer::tokens::CharPosition;
+use saying::say;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::{env, fs};
+
+// The final set of errors and warnings emitted from the compiler_frontend
+#[derive(Debug, Clone)]
+pub struct CompilerMessages {
+    pub errors: Vec<CompilerError>,
+    pub warnings: Vec<CompilerWarning>,
+}
+
+impl Default for CompilerMessages {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CompilerMessages {
+    pub fn new() -> Self {
+        CompilerMessages {
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+    pub fn has_errors(&self) -> bool {
+        !self.errors.is_empty()
+    }
+}
+
+#[derive(Debug, Eq, Hash, PartialEq, Clone)]
+pub enum ErrorMetaDataKey {
+    VariableName,
+    CompilationStage,
+
+    // Optional suggestions
+    // Can be expanded to add more later
+    PrimarySuggestion,     // One-line fix or top-level idea
+    AlternativeSuggestion, // Secondary alternative
+    SuggestedReplacement,  // Text that could replace the offending code
+    SuggestedInsertion,    // Text that could be inserted
+    SuggestedLocation,     // Relative descriptor: "before token X", "after semicolon"
+
+    // Data type information
+    ExpectedType,
+    FoundType,
+    InferredType,
+    BorrowKind,          // "Shared" or "Mutable"
+    LifetimeHint,        // For lifetime inference explanations
+    MovedVariable,       // Variable name that was moved
+    BorrowedVariable,    // Variable name that was borrowed
+    ConflictingVariable, // Variable causing a borrow conflict
+    ConflictingPlace,    // Place that conflicts with another
+    ExistingBorrowPlace, // Place that has an existing borrow
+    ConflictType,        // Type of conflict (e.g., "WholeObjectBorrowingViolation")
+}
+
+// A completely owned version of TextLocation
+// Without interning to avoid having to pass the string table up with compiler_frontend messages
+#[derive(Debug, Clone)]
+pub struct ErrorLocation {
+    pub scope: PathBuf,
+    pub start_pos: CharPosition,
+    pub end_pos: CharPosition,
+}
+
+impl ErrorLocation {
+    pub fn new(path_buf: PathBuf, start: CharPosition, end: CharPosition) -> ErrorLocation {
+        ErrorLocation {
+            scope: path_buf,
+            start_pos: start,
+            end_pos: end,
+        }
+    }
+    pub fn default() -> ErrorLocation {
+        ErrorLocation {
+            scope: PathBuf::new(),
+            start_pos: CharPosition::default(),
+            end_pos: CharPosition::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CompilerError {
+    pub msg: String,
+
+    // Includes the scope path, which will have the file name and header data.
+    // This file path will need to be resolved to the actual file path when the error is displayed.
+    // As this path will include the actual name of the header that the error came from.
+    pub location: ErrorLocation,
+    pub error_type: ErrorType,
+
+    // This is for creating more structured and detailed error messages
+    // Optimized for LLMs to understand exactly what went wrong
+    pub metadata: HashMap<ErrorMetaDataKey, &'static str>,
+}
+
+impl CompilerError {
+    pub fn new(
+        msg: impl Into<String>,
+        location: ErrorLocation,
+        error_type: ErrorType,
+    ) -> CompilerError {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type,
+            metadata: HashMap::new(),
+        }
+    }
+
+    pub fn with_file_path(mut self, file_path: PathBuf) -> Self {
+        self.location.scope = file_path;
+        self
+    }
+
+    pub fn with_error_type(mut self, error_type: ErrorType) -> Self {
+        self.error_type = error_type;
+        self
+    }
+
+    pub fn new_metadata_entry(&mut self, key: ErrorMetaDataKey, value: &'static str) {
+        self.metadata.insert(key, value);
+    }
+
+    /// Create a new syntax error with a clear explanation
+    pub fn new_syntax_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::Syntax,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a new rule error with a descriptive message (no metadata)
+    pub fn new_rule_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::Rule,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a new rule error with metadata
+    pub fn new_rule_error_with_metadata(
+        msg: impl Into<String>,
+        location: ErrorLocation,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::Rule,
+            metadata,
+        }
+    }
+
+    /// Create a new type error with type information and suggestions
+    pub fn new_type_error(msg: impl Into<String>, location: ErrorLocation) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::Type,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a thread panic error (internal compiler_frontend issue)
+    pub fn new_thread_panic(msg: impl Into<String>) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location: ErrorLocation::default(),
+            error_type: ErrorType::Compiler,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a compiler_frontend error (internal bug, not user's fault)
+    pub fn compiler_error(msg: impl Into<String>) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location: ErrorLocation::default(),
+            error_type: ErrorType::Compiler,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create an LIR transformation error (for HIR to LIR lowering failures)
+    pub fn lir_transformation(msg: impl Into<String>) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location: ErrorLocation::default(),
+            error_type: ErrorType::LirTransformation,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a new borrow checker error with metadata
+    pub fn new_borrow_checker_error(
+        msg: impl Into<String>,
+        location: ErrorLocation,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location,
+            error_type: ErrorType::BorrowChecker,
+            metadata,
+        }
+    }
+
+    /// Create a file system error from a Path
+    pub fn file_error(path: &std::path::Path, msg: impl Into<String>) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location: ErrorLocation::new(
+                path.to_path_buf(),
+                CharPosition::default(),
+                CharPosition::default(),
+            ),
+            error_type: ErrorType::File,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a file system error from Path with metadata
+    pub fn new_file_error(
+        path: &std::path::Path,
+        msg: impl Into<String>,
+        metadata: HashMap<ErrorMetaDataKey, &'static str>,
+    ) -> Self {
+        CompilerError {
+            msg: msg.into(),
+            location: ErrorLocation::new(
+                path.to_path_buf(),
+                CharPosition::default(),
+                CharPosition::default(),
+            ),
+            error_type: ErrorType::File,
+            metadata,
+        }
+    }
+
+    //     pub fn to_llm_friendly_json(&self) -> serde_json::Value {
+    //         json!({
+    //             "type": format!("{:?}", self.error_type),
+    // x           "message": self.msg.to_string(),
+    //             "file": self.location.scope.to_string(),
+    //             "line": self.location.line,
+    //             "column": self.location.column,
+    //             "suggestions": self.suggestions.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+    //             "metadata": self.metadata,
+    //         })
+    //     }
+}
+
+// Adds more information to the CompileError
+// So it knows the file path (possible specific part of the line soon)
+// And the type of error
+#[derive(PartialEq, Debug, Clone)]
+pub enum ErrorType {
+    Syntax,
+    Type,
+    Rule,
+    File,
+    Config,
+    Compiler,
+    DevServer,
+    BorrowChecker,
+    HirTransformation,
+    LirTransformation,
+    WasmGeneration,
+}
+
+pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
+    match e_type {
+        ErrorType::Compiler => "Compiler Bug",
+        ErrorType::Syntax => "Syntax Error",
+        ErrorType::Config => "Malformed Config",
+        ErrorType::File => "File Error",
+        ErrorType::Rule => "Language Rule Violation",
+        ErrorType::Type => "Type Error",
+        ErrorType::DevServer => "Dev Server Issue",
+        ErrorType::BorrowChecker => "Borrow Checker",
+        ErrorType::HirTransformation => "HIR Transformation",
+        ErrorType::LirTransformation => "LIR Transformation",
+        ErrorType::WasmGeneration => "WASM Generation",
+    }
+}
+
+/// Returns a new CompileError for syntax violations.
+///
+/// Syntax errors indicate malformed code that don't follow Beanstalk language rules.
+/// These should include clear explanations and suggestions when possible.
+///
+/// Usage:
+/// `return_syntax_error!("message", location, {
+///     VariableName => "foo",
+///     CompilationStage => "Parsing",
+///     PrimarySuggestion => "Did you mean 'bar'?",
+/// })`;
+#[macro_export]
+macro_rules! return_syntax_error {
+    // Without metadata
+    ($msg:expr, $loc:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $loc,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Syntax,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+
+    // With metadata
+    ($msg:expr, $loc:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $loc,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Syntax,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $(
+                    map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value);
+                )*
+                map
+            },
+        })
+    };
+}
+
+/// Returns a new CompileError for type system violations.
+///
+/// Type errors indicate mismatched types or invalid type operations.
+/// Should mention both expected and actual types with suggestions.
+///
+/// Usage:
+/// `return_type_error!("Cannot add x and y — both must be numeric", location, { ExpectedType => "Int", FoundType => "String" })`;
+#[macro_export]
+macro_rules! return_type_error {
+    // New with metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Type,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Type,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for semantic rule violations.
+///
+/// Rule errors indicate violations of language semantics like undefined variables,
+/// scope violations, or incorrect usage patterns. Include specific names and
+/// helpful suggestions when possible.
+///
+/// Usage examples:
+/// `return_rule_error!("Undefined variable", location, { VariableName => "x" })`;
+#[macro_export]
+macro_rules! return_rule_error {
+    // Arm with a metadata map
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Rule,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // Arm without metadata
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Rule,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+/// Returns a new CompileError
+///
+/// Usage: `return_file_error!(path, "message", { metadata })`;
+#[macro_export]
+macro_rules! return_file_error {
+    // New usage with metadata (Path)
+    ($path:expr, $msg:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError::new_file_error(
+            $path,
+            $msg,
+            {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        ));
+    }};
+    // Simplified usage without metadata
+    ($path:expr, $msg:expr) => {{
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError::file_error(
+            $path, $msg,
+        ));
+    }};
+}
+
+/// Returns a new CompileError
+///
+/// Usage: `return_config_error!(string_table, location, "message", message format args)`;
+#[macro_export]
+macro_rules! return_config_error {
+    // New with metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Config,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Config,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for internal compiler_frontend bugs.
+///
+/// Compiler errors indicate bugs in the compiler_frontend itself, not user code issues.
+/// These provide the location of the bug in the compiler_frontend source code
+#[macro_export]
+macro_rules! return_compiler_error {
+    // Variant with format string, arguments, and metadata (with semicolon separator)
+    ($fmt:expr, $($arg:expr),+ ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        });
+    }};
+    // Variant with format string and arguments (no metadata)
+    ($fmt:expr, $($arg:expr),+ $(,)?) => {{
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
+            metadata: std::collections::HashMap::new(),
+        });
+    }};
+    // Variant with message and metadata (with semicolon separator)
+    ($msg:expr ; { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        });
+    }};
+    // Simple variant with just a message (no metadata)
+    ($msg:expr) => {{
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
+            metadata: std::collections::HashMap::new(),
+        });
+    }};
+}
+
+/// Returns a new CompileError for development server issues.
+/// INSIDE A VEC ALREADY.
+///
+/// Usage: `return_dev_server_error!("message")` or `return_dev_server_error!(path, "message", args...)`;
+#[macro_export]
+macro_rules! return_dev_server_error {
+    // With path, format string, and arguments
+    ($path:expr, $fmt:expr, $($arg:expr),+) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerMessages {
+            errors: vec![$crate::compiler_frontend::compiler_errors::CompilerError::file_error(
+                &$path,
+                &format!($fmt, $($arg),+),
+            ).with_error_type($crate::compiler_frontend::compiler_errors::ErrorType::DevServer)],
+            warnings: Vec::new(),
+        })
+    };
+    // With path and message (no format args)
+    ($path:expr, $msg:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerMessages {
+            errors: vec![$crate::compiler_frontend::compiler_errors::CompilerError::file_error(
+                &$path,
+                $msg,
+            ).with_error_type($crate::compiler_frontend::compiler_errors::ErrorType::DevServer)],
+            warnings: Vec::new(),
+        })
+    };
+    // Message only (location defaults)
+    ($msg:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerMessages {
+            errors: vec![$crate::compiler_frontend::compiler_errors::CompilerError {
+                msg: $msg.into(),
+                location: $crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation::default(),
+                error_type: $crate::compiler_frontend::compiler_errors::ErrorType::DevServer,
+                metadata: std::collections::HashMap::new(),
+            }],
+            warnings: Vec::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for borrow checking violations.
+///
+/// Borrow checker errors indicate memory safety violations detected during
+/// lifetime analysis. These should include clear explanations of the conflict
+/// and suggestions for resolving it.
+///
+/// Usage: `return_borrow_checker_error!("Cannot borrow '{}' as mutable because it is already borrowed", location, metadata)`;
+#[macro_export]
+macro_rules! return_borrow_checker_error {
+    // New with metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // New simple
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+/// Creates a CompileError for multiple mutable borrows (non-returning version).
+///
+/// This macro creates a detailed error when attempting to create a second mutable
+/// borrow while a first one is still active. Returns the error object without returning from function.
+///
+/// Usage: `let error = create_multiple_mutable_borrows_error!(place, existing_location, new_location);`;
+#[macro_export]
+macro_rules! create_multiple_mutable_borrows_error {
+    ($place:expr, $existing_location:expr, $new_location:expr) => {{
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+
+        $crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!(
+                "cannot mutably borrow `{:?}` because it is already mutably borrowed",
+                $place
+            ),
+            location: $new_location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowKind,
+                    "Mutable",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictingVariable,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Ensure the first mutable borrow is no longer used before creating the second",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint,
+                    "Only one mutable borrow can exist at a time",
+                );
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for multiple mutable borrows (returning version).
+///
+/// This macro creates a detailed error when attempting to create a second mutable
+/// borrow while a first one is still active, and returns it immediately.
+///
+/// Usage: `return_multiple_mutable_borrows_error!(place, existing_location, new_location)`;
+#[macro_export]
+macro_rules! return_multiple_mutable_borrows_error {
+    ($place:expr, $existing_location:expr, $new_location:expr) => {{
+        return Err(create_multiple_mutable_borrows_error!(
+            $place,
+            $existing_location,
+            $new_location
+        ));
+    }};
+}
+
+/// Creates a CompileError for shared/mutable borrow conflicts (non-returning version).
+///
+/// This macro creates a detailed error when attempting to create a borrow that
+/// conflicts with an existing borrow (e.g., mutable when shared exists, or vice versa).
+///
+/// Usage: `let error = create_shared_mutable_conflict_error!(place, existing_kind, new_kind, existing_location, new_location);`;
+#[macro_export]
+macro_rules! create_shared_mutable_conflict_error {
+    ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        let existing_kind_str: &'static str = match $existing_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mutable => "Mutable",
+            BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
+            BorrowKind::Move => "Move",
+        };
+        let new_kind_str: &'static str = match $new_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mutable => "Mutable",
+            BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
+            BorrowKind::Move => "Move",
+        };
+
+        let (message, suggestion, lifetime_hint) = match (&$existing_kind, &$new_kind) {
+            (BorrowKind::Shared, BorrowKind::Mutable) => (
+                format!(
+                    "cannot mutably borrow `{:?}` because it is already referenced",
+                    $place
+                ),
+                "Ensure all shared references are finished before creating mutable access",
+                "Mutable borrows require exclusive access - no other borrows can exist",
+            ),
+            (BorrowKind::Mutable, BorrowKind::Shared) => (
+                format!(
+                    "cannot reference `{:?}` because it is already mutably borrowed",
+                    $place
+                ),
+                "Finish using the mutable borrow before creating shared references",
+                "Mutable borrows are exclusive - no other borrows can exist while active",
+            ),
+            (BorrowKind::Move, _) | (_, BorrowKind::Move) => (
+                format!("use of moved value `{:?}`", $place),
+                "Consider borrowing instead of moving, or clone the value",
+                "Once a value is moved, ownership transfers and the original variable can no longer be used",
+            ),
+            _ => (
+                format!("conflicting borrows of `{:?}`", $place),
+                "Resolve the borrow conflict by restructuring your code",
+                "Check the borrow rules for your specific case",
+            ),
+        };
+
+        let existing_borrow_info: &'static str = Box::leak(
+            format!(
+                "Existing {} borrow conflicts with new {} borrow",
+                existing_kind_str, new_kind_str
+            )
+            .into_boxed_str(),
+        );
+
+        $crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: message,
+            location: $new_location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowKind,
+                    new_kind_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictingVariable,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    suggestion,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint,
+                    lifetime_hint,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion,
+                    existing_borrow_info,
+                );
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for shared/mutable borrow conflicts (returning version).
+///
+/// Usage: `return_shared_mutable_conflict_error!(place, existing_kind, new_kind, existing_location, new_location)`;
+#[macro_export]
+macro_rules! return_shared_mutable_conflict_error {
+    ($place:expr, $existing_kind:expr, $new_kind:expr, $existing_location:expr, $new_location:expr) => {{
+        return Err(create_shared_mutable_conflict_error!(
+            $place,
+            $existing_kind,
+            $new_kind,
+            $existing_location,
+            $new_location
+        ));
+    }};
+}
+
+/// Creates a CompileError for use after move (non-returning version).
+///
+/// This macro creates a detailed error when attempting to use a value that has
+/// already been moved.
+///
+/// Usage: `let error = create_use_after_move_error!(place, move_location, use_location);`;
+#[macro_export]
+macro_rules! create_use_after_move_error {
+    ($place:expr, $move_location:expr, $use_location:expr) => {{
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+
+        $crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!("borrow of moved value: `{:?}`", $place),
+            location: $use_location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName, place_str);
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::MovedVariable, place_str);
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage, "Borrow Checking");
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion, "Consider using a reference instead of moving the value");
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion, "Clone the value before moving if you need to use it later");
+                map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint, "Once a value is moved, ownership transfers and the original variable can no longer be used");
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for use after move (returning version).
+///
+/// Usage: `return_use_after_move_error!(place, move_location, use_location)`;
+#[macro_export]
+macro_rules! return_use_after_move_error {
+    ($place:expr, $move_location:expr, $use_location:expr) => {{
+        return Err(create_use_after_move_error!(
+            $place,
+            $move_location,
+            $use_location
+        ));
+    }};
+}
+
+/// Creates a CompileError for move while borrowed (non-returning version).
+///
+/// This macro creates a detailed error when attempting to move a value that has
+/// active borrows.
+///
+/// Usage: `let error = create_move_while_borrowed_error!(place, borrow_kind, borrow_location, move_location);`;
+#[macro_export]
+macro_rules! create_move_while_borrowed_error {
+    ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
+        let place_str: &'static str = Box::leak(format!("{:?}", $place).into_boxed_str());
+        let borrow_kind_str: &'static str = match $borrow_kind {
+            BorrowKind::Shared => "Shared",
+            BorrowKind::Mutable => "Mutable",
+            BorrowKind::CandidateMove => "Mutable", // Treat as mutable for error reporting
+            BorrowKind::Move => "Move",
+        };
+
+        let borrow_type = match $borrow_kind {
+            BorrowKind::Shared => "referenced",
+            BorrowKind::Mutable => "mutably borrowed",
+            BorrowKind::CandidateMove => "mutably borrowed", // Treat as mutable for error reporting
+            BorrowKind::Move => "moved",
+        };
+
+        $crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!(
+                "cannot move out of `{:?}` because it is {}",
+                $place, borrow_type
+            ),
+            location: $move_location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::BorrowChecker,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::VariableName,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowedVariable,
+                    place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::BorrowKind,
+                    borrow_kind_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                    "Borrow Checking",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Ensure all borrows are finished before moving the value",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::AlternativeSuggestion,
+                    "Use references instead of moving the value",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::LifetimeHint,
+                    "Cannot move a value while it has active borrows - the borrows must end first",
+                );
+                map
+            },
+        }
+    }};
+}
+
+/// Creates a borrow checker error for move while borrowed (returning version).
+///
+/// Usage: `return_move_while_borrowed_error!(place, borrow_kind, borrow_location, move_location)`;
+#[macro_export]
+macro_rules! return_move_while_borrowed_error {
+    ($place:expr, $borrow_kind:expr, $borrow_location:expr, $move_location:expr) => {{
+        return Err(create_move_while_borrowed_error!(
+            $place,
+            $borrow_kind,
+            $borrow_location,
+            $move_location
+        ));
+    }};
+}
+
+/// Creates a CompileError for whole-object borrowing violations (non-returning version).
+///
+/// This error occurs when attempting to borrow a whole object while a part of it
+/// is already borrowed, violating Beanstalk's design constraint (Requirement 15).
+///
+/// Usage: `let error = create_whole_object_borrow_error!(whole_place, part_place, part_location, whole_location);`;
+#[macro_export]
+macro_rules! create_whole_object_borrow_error {
+    ($whole_place:expr, $part_place:expr, $part_location:expr, $whole_location:expr) => {{
+        let whole_place_str: &'static str =
+            Box::leak(format!("{:?}", $whole_place).into_boxed_str());
+        let part_place_str: &'static str = Box::leak(format!("{:?}", $part_place).into_boxed_str());
+
+        $crate::compiler_frontend::compiler_errors::CompilerError::new_borrow_checker_error(
+            format!(
+                "Cannot borrow whole object '{}' while part '{}' is already borrowed",
+                $whole_place, $part_place
+            ),
+            $whole_location,
+            {
+                let mut map = std::collections::HashMap::new();
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictingPlace,
+                    whole_place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ExistingBorrowPlace,
+                    part_place_str,
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::ConflictType,
+                    "WholeObjectBorrowingViolation",
+                );
+                map.insert(
+                    $crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                    "Consider using the existing borrow of the part, or end the part borrow first",
+                );
+                map
+            },
+        )
+    }};
+}
+
+/// Returns a CompileError for whole-object borrowing violations (returning version).
+///
+/// Usage: `return_whole_object_borrow_error!(whole_place, part_place, part_location, whole_location)`;
+#[macro_export]
+macro_rules! return_whole_object_borrow_error {
+    ($whole_place:expr, $part_place:expr, $part_location:expr, $whole_location:expr) => {{
+        return Err(create_whole_object_borrow_error!(
+            $whole_place,
+            $part_place,
+            $part_location,
+            $whole_location
+        ));
+    }};
+}
+
+/// Creates a CompileError for general borrow checker violations (non-returning version).
+///
+/// This macro creates a borrow checker error with custom message and metadata.
+/// Use this for borrow checker errors that don't fit the specific patterns above.
+///
+/// Usage: `let error = create_borrow_checker_error!("Custom message", location, { metadata });`;
+#[macro_export]
+macro_rules! create_borrow_checker_error {
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        $crate::compiler_frontend::compiler_errors::CompilerError::new_borrow_checker_error(
+            $msg,
+            $location,
+            {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            }
+        )
+    }};
+    ($msg:expr, $location:expr) => {{
+        $crate::compiler_frontend::compiler_errors::CompilerError::new_borrow_checker_error(
+            $msg,
+            $location,
+            std::collections::HashMap::new()
+        )
+    }};
+}
+
+/// Creates a borrow checker error for general violations (returning version).
+///
+/// Usage: `return_borrow_checker_error_with_metadata!("Custom message", location, { metadata })`;
+#[macro_export]
+macro_rules! return_borrow_checker_error_with_metadata {
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {{
+        return Err(create_borrow_checker_error!(
+            $msg,
+            $location,
+            { $( $key => $value ),* }
+        ));
+    }};
+    ($msg:expr, $location:expr) => {{
+        return Err(create_borrow_checker_error!($msg, $location));
+    }};
+}
+
+/// Returns a new CompileError for HIR transformation failures.
+///
+/// HIR transformation errors indicate failures during AST to HIR conversion.
+/// These are typically compiler_frontend bugs where the HIR infrastructure is missing
+/// or incomplete for a particular language feature.
+///
+/// Usage: `return_hir_transformation_error!("Function '{}' transformation not yet implemented", func_name, location, {})`;
+#[macro_export]
+macro_rules! return_hir_transformation_error {
+    // New arms
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for LIR transformation failures.
+///
+/// LIR transformation errors indicate failures during HIR to LIR conversion.
+/// These are typically compiler_frontend bugs where the LIR infrastructure is missing
+/// or incomplete for a particular language feature.
+///
+/// Usage: `return_lir_transformation_error!("Cannot lower expression type {:?}", expr_type, location, {})`;
+#[macro_export]
+macro_rules! return_lir_transformation_error {
+    // With format string, arguments, and metadata (with semicolon separator)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // With format string and arguments (no metadata)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+    // With metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // Simple variant
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::LirTransformation,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+/// Returns a new CompileError for WASM generation failures.
+///
+/// WASM generation errors indicate failures during LIR to WASM conversion.
+/// These are typically compiler_frontend bugs where the WASM codegen infrastructure is missing
+/// or incomplete for a particular language feature, or when WASM validation fails.
+///
+/// Usage: `return_wasm_generation_error!("Cannot encode instruction {:?}", inst, location, {})`;
+#[macro_export]
+macro_rules! return_wasm_generation_error {
+    // With format string, arguments, and metadata (with semicolon separator)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // With format string and arguments (no metadata)
+    ($fmt:expr, $($arg:expr),+ ; $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: format!($fmt, $($arg),+),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+    // With metadata
+    ($msg:expr, $location:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
+            metadata: {
+                let mut map = std::collections::HashMap::new();
+                $( map.insert($crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::$key, $value); )*
+                map
+            },
+        })
+    };
+    // Simple variant
+    ($msg:expr, $location:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $location,
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+    // No location variant (for internal WASM generation bugs)
+    ($msg:expr) => {
+        return Err($crate::compiler_frontend::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $crate::compiler_frontend::compiler_errors::ErrorLocation::default(),
+            error_type: $crate::compiler_frontend::compiler_errors::ErrorType::WasmGeneration,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! return_thread_err {
+    ($process:expr) => {
+        return Err(CompilerError {
+            msg: &format!("Thread panicked during {}", $process),
+            location: crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation::default(),
+            error_type: crate::compiler_frontend::compiler_errors::ErrorType::Compiler,
+            file_path: std::path::PathBuf::new(),
+            suggestions: Vec::new(),
+        })
+    };
+}
+
+#[macro_export]
+macro_rules! return_messages_with_err {
+    ($messages:expr, $new_err:expr) => {
+        $messages.errors.push($new_err);
+        return $messages;
+    };
+}
+
+#[macro_export]
+macro_rules! return_err_as_messages {
+    ($new_err:expr) => {
+        return Err(
+            crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages {
+                errors: vec![$new_err],
+                warnings: Vec::new(),
+            },
+        )
+    };
+}

@@ -50,7 +50,7 @@ pub struct HirExpression { ...}
 - Complex multi-stage operations: Use explicit loops for clarity
 
 ```rust
-// Prefer explicit loops for complex compiler logic
+// Prefer explicit loops for complex compiler_frontend logic
 let mut processed_nodes = Vec::new();
 for node in ast_nodes {
     if let Some(ir_node) = convert_to_ir(&node)? {
@@ -145,19 +145,19 @@ return_syntax_error!(
     }
 );
 
-// Bad: Using compiler error for user mistakes
+// Bad: Using compiler_frontend error for user mistakes
 return_compiler_error!("User provided invalid variable name"); // Should be rule_error!
 
-// Instead, Use for: Internal compiler bugs and unimplemented features
+// Instead, Use for: Internal compiler_frontend bugs and unimplemented features
 // Examples: Unsupported AST nodes, internal state corruption
-// User-facing: No - indicates the compiler developer needs to fix
+// User-facing: No - indicates the compiler_frontend developer needs to fix
 // Note: Automatically prefixed with "COMPILER BUG" in output
 // No location required: These are internal errors
 return_compiler_error!(
     "Unsupported AST node type: {:?}",
     node_type; {
         CompilationStage => "AST Processing",
-        PrimarySuggestion => "This is a compiler bug - please report it"
+        PrimarySuggestion => "This is a compiler_frontend bug - please report it"
     }
 );
 

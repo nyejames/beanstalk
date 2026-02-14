@@ -3,10 +3,10 @@
 // Builds Beanstalk projects for web deployment, generating separate WASM files
 // for different HTML pages and including JavaScript bindings for DOM interaction.
 use crate::build_system::build::{FileKind, Module, OutputFile, ProjectBuilder};
-use crate::compiler::codegen::js::JsLoweringConfig;
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::hir::nodes::HirModule;
-use crate::compiler::string_interning::StringTable;
+use crate::compiler_frontend::codegen::js::JsLoweringConfig;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::Config;
 use crate::{Flag, Project, lower_hir_to_js};
 use std::path::PathBuf;

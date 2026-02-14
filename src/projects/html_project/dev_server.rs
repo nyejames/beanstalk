@@ -1,7 +1,7 @@
 use crate::build_system::build;
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::display_messages::print_compiler_messages;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;

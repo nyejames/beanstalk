@@ -5,11 +5,11 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::Module;
-use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::interned_path::InternedPath;
-use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::compiler::string_interning::StringTable;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::parsers::ast::Ast;
+use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{
     CompilerFrontend, Flag, InputFile, return_err_as_messages, return_file_error,
@@ -29,7 +29,7 @@ pub struct ExternalImport {
     pub function: String,
     /// Function signature for validation
     pub signature: FunctionSignature,
-    /// Whether this is a built-in compiler function or user-defined import
+    /// Whether this is a built-in compiler_frontend function or user-defined import
     pub import_type: ImportType,
 }
 
@@ -45,13 +45,13 @@ pub struct FunctionSignature {
 /// Type of external import
 #[derive(Debug, Clone)]
 pub enum ImportType {
-    /// Built-in compiler library function (IO, memory management, etc.)
+    /// Built-in compiler_frontend library function (IO, memory management, etc.)
     BuiltIn(BuiltInFunction),
     /// User-defined external function from host environment
     External,
 }
 
-/// Built-in compiler functions that the runtime must provide
+/// Built-in compiler_frontend functions that the runtime must provide
 #[derive(Debug, Clone)]
 pub enum BuiltInFunction {
     /// IO operations
@@ -203,7 +203,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     // Create a new string table for interning strings
     let mut string_table = StringTable::with_capacity(module.len() * MODULES_CAPACITY);
 
-    // Create the compiler instance
+    // Create the compiler_frontend instance
     let mut compiler = CompilerFrontend::new(config, string_table);
 
     let time = Instant::now();
@@ -297,7 +297,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
             module_ast
                 .external_exports
                 .extend(parser_output.external_exports);
-            // Extends the compiler messages with warnings and errors from the parser
+            // Extends the compiler_frontend messages with warnings and errors from the parser
             compiler_messages.warnings.extend(parser_output.warnings);
         }
         Err(e) => {

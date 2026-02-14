@@ -1,5 +1,5 @@
 use crate::Flag;
-use crate::compiler::basic_utility_functions::check_if_valid_path;
+use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::settings::Config;
 use std::{env, fs};
 

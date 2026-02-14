@@ -6,9 +6,9 @@
 /// 3. Name collision avoidance works correctly
 #[cfg(test)]
 mod tests {
-    use crate::compiler::codegen::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler::hir::nodes::HirModule;
-    use crate::compiler::string_interning::StringTable;
+    use crate::compiler_frontend::codegen::js::{JsEmitter, JsLoweringConfig};
+    use crate::compiler_frontend::hir::nodes::HirModule;
+    use crate::compiler_frontend::string_interning::StringTable;
 
     /// Helper function to create a test emitter
     /// Each test gets its own emitter and string table
