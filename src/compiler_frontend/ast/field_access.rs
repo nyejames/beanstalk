@@ -1,13 +1,13 @@
-use crate::compiler_frontend::parsers::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::{
     compiler_frontend::{
         compiler_errors::CompilerError,
         datatypes::DataType,
-        parsers::{
+        parsers::tokenizer::tokens::{FileTokens, TokenKind},
+        ast::{
             ast::ScopeContext,
             ast_nodes::{AstNode, NodeKind, Var},
             statements::functions::parse_function_call,
-            tokenizer::tokens::{FileTokens, TokenKind},
         },
         string_interning::StringTable,
         traits::ContainsReferences,

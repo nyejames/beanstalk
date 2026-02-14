@@ -1,9 +1,9 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::Ownership::MutableOwned;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::parsers::ast::ScopeContext;
-use crate::compiler_frontend::parsers::expressions::expression::Expression;
-use crate::compiler_frontend::parsers::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_syntax_error;

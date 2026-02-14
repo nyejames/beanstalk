@@ -1,18 +1,17 @@
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::optimizers::constant_folding::constant_fold;
-use crate::compiler_frontend::parsers::ast_nodes::AstNode;
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::parsers::statements::create_template_node::Template;
 
-use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_type_error;
 use crate::{
-    compiler_frontend::datatypes::DataType, compiler_frontend::parsers::ast_nodes::NodeKind,
     eval_log, return_compiler_error, return_syntax_error,
 };
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 
 /**
  * Evaluates an abstract syntax tree (AST) expression using the shunting-yard algorithm

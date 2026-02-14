@@ -3,14 +3,13 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::registry::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::parsers::build_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::build_ast::function_body_to_ast;
 use crate::compiler_frontend::parsers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::parsers::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::parsers::tokenizer::tokens::FileTokens;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::settings::{self, IMPLICIT_START_FUNC_NAME};
-use std::path::Path;
 
 pub struct ModuleExport {
     pub id: StringId,

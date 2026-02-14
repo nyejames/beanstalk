@@ -22,12 +22,12 @@ use crate::compiler_frontend::hir::nodes::{
     HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
 };
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
-use crate::compiler_frontend::parsers::ast_nodes::Var;
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::return_hir_transformation_error;
 use std::collections::HashMap;
+use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 
 /// Layout information for a struct type
 #[derive(Debug, Clone)]

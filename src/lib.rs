@@ -8,32 +8,14 @@ pub(crate) mod compiler_tests {
 pub(crate) mod build_system;
 
 mod compiler_frontend {
+    pub(crate) mod ast;
     pub(crate) mod parsers {
-        pub(crate) mod ast;
-        pub(crate) mod ast_nodes;
-        pub(crate) mod build_ast;
+
         pub(crate) mod imports;
 
         pub(crate) mod parse_file_headers;
         // pub(crate) mod markdown; // Commented out to silence unused warnings - will be used by frontend later
-        pub(crate) mod expressions {
-            pub(crate) mod eval_expression;
-            pub(crate) mod expression;
-            pub(crate) mod function_call_inline;
-            pub(crate) mod mutation;
-            pub(crate) mod parse_expression;
-        }
-        pub(crate) mod statements {
-            pub(crate) mod branching;
-            pub(crate) mod collections;
-            pub(crate) mod create_template_node;
-            pub(crate) mod functions;
-            pub(crate) mod loops;
-            pub(crate) mod structs;
-            pub(crate) mod template;
-            pub(crate) mod variables;
-        }
-        pub(crate) mod field_access;
+
 
         pub(crate) mod tokenizer {
             pub(crate) mod compiler_directives;
@@ -103,11 +85,11 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::lir::lower_hir_to_lir;
 use crate::compiler_frontend::lir::nodes::LirModule;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
-use crate::compiler_frontend::parsers::ast::Ast;
 use crate::compiler_frontend::parsers::parse_file_headers::{Header, parse_headers};
 use crate::compiler_frontend::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build_system::build::*;
+use crate::compiler_frontend::ast::ast::Ast;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,

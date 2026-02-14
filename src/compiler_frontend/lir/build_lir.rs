@@ -92,7 +92,7 @@ pub fn lower_hir_to_lir(hir_module: HirModule) -> Result<LirModule, CompilerMess
 fn lower_function(
     ctx: &mut LoweringContext,
     name: crate::compiler_frontend::string_interning::InternedString,
-    signature: &crate::compiler_frontend::parsers::statements::functions::FunctionSignature,
+    signature: &crate::compiler_frontend::ast::statements::functions::FunctionSignature,
     body: crate::compiler_frontend::hir::nodes::BlockId,
     blocks: &[HirBlock],
     is_main: bool,

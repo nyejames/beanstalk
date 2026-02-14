@@ -21,9 +21,9 @@ use crate::compiler_frontend::hir::nodes::{
     HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
 };
 use crate::compiler_frontend::host_functions::registry::CallTarget;
-use crate::compiler_frontend::parsers::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::parsers::statements::create_template_node::Template;
-use crate::compiler_frontend::parsers::statements::template::TemplateType;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::return_compiler_error;
 

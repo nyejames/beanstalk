@@ -1,5 +1,5 @@
-use crate::compiler_frontend::parsers::ast::ScopeContext;
-use crate::compiler_frontend::parsers::ast_nodes::Var;
+use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::string_interning::StringId;
 
 pub trait ContainsReferences {

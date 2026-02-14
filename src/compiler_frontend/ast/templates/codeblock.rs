@@ -1,6 +1,7 @@
-use crate::compiler::parsers::ast_nodes::AstNode;
 use std::iter::Peekable;
 use std::str::Chars;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::string_interning::StringTable;
 
 // Ignores everything except for the closing brackets
 // If there is a greater number of closing brackets than opening brackets,
@@ -9,6 +10,7 @@ pub fn _tokenize_codeblock(
     chars: &mut Peekable<Chars>,
     line_number: &mut u32,
     char_column: &mut u32,
+    string_table: &mut StringTable
 ) -> AstNode {
     // Codeblock indicator character (invisible multiply)
     // This is used to signal to the Markdown parser that this is a codeblock
@@ -50,5 +52,9 @@ pub fn _tokenize_codeblock(
     }
 
     // codeblock.push('\u{2062}');
-    AstNode::TokenKind::StringLiteral(codeblock)
+    AstNode {
+        kind: NodeKind::Rvalue(Expression::)
+    }
+        string_table.get_or_intern(codeblock)
+    )
 }

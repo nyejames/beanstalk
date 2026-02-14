@@ -7,13 +7,13 @@
 use crate::build_system::build::Module;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::ast::Ast;
+use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{
     CompilerFrontend, Flag, InputFile, return_err_as_messages, return_file_error,
-    return_messages_with_err, settings, timer_log,
+    settings, timer_log,
 };
 use std::ffi::OsStr;
 use std::fs;
