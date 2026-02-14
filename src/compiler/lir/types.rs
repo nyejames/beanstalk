@@ -2,12 +2,13 @@
 //!
 //! This module handles struct layout computation and type conversion
 //! between Beanstalk DataTypes and LIR types.
+
+use saying::say;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::nodes::{HirExpr, HirExprKind};
 use crate::compiler::lir::nodes::LirType;
 use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::string_interning::InternedString;
-use colour::red_ln;
 
 // ============================================================================
 // Struct Layout
@@ -96,9 +97,9 @@ pub fn hir_expr_to_lir_type(expr: &HirExpr) -> LirType {
         HirExprKind::BinOp { left, .. } => hir_expr_to_lir_type(left),
         HirExprKind::UnaryOp { operand, .. } => hir_expr_to_lir_type(operand),
         _ => {
-            red_ln!(
-                "Compiler Bug (possibly will lead to undefined behaviour): Unexpected HirExprKind in hir_expr_to_lir_type: {:?}",
-                expr.kind
+            say!(
+                Red "Compiler Bug (possibly will lead to undefined behaviour): Unexpected HirExprKind in hir_expr_to_lir_type",
+                #expr.kind
             );
             LirType::I32
         }

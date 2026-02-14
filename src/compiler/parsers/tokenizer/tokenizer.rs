@@ -1,4 +1,4 @@
-use crate::compiler::basic_utility_functions::{NumericalParsing, is_valid_var_char};
+use crate::compiler::basic_utility_functions::{is_valid_var_char};
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::imports::parse_imports;
@@ -6,9 +6,8 @@ use crate::compiler::parsers::tokenizer::compiler_directives::compiler_directive
 use crate::compiler::parsers::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::compiler::string_interning::{StringId, StringTable};
+use crate::compiler::string_interning::{StringTable};
 use crate::{return_syntax_error, settings, token_log};
-use colour::green_ln;
 
 pub const END_SCOPE_CHAR: char = ';';
 

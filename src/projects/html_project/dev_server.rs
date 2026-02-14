@@ -5,7 +5,6 @@ use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::settings::BEANSTALK_FILE_EXTENSION;
 use crate::settings::Config;
 use crate::{Flag, settings};
-use colour::{blue_ln, e_red_ln, green_ln_bold, print_bold, red_ln};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -14,6 +13,7 @@ use std::{
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
 };
+use saying::say;
 
 //noinspection HttpUrlsUsage
 pub fn start_dev_server(user_entry_path: &str, flags: &[Flag]) {
@@ -22,14 +22,14 @@ pub fn start_dev_server(user_entry_path: &str, flags: &[Flag]) {
     let listener = match TcpListener::bind(url) {
         Ok(l) => l,
         Err(e) => {
-            e_red_ln!("Errors while starting dev server: \n");
-            e_red_ln!("{:?}", e);
+            say!(Red "Errors while starting dev server: \n");
+            say!(Red "{:?}", e);
             return;
         }
     };
 
-    print_bold!("Dev Server created on: ");
-    green_ln_bold!("http://{}", url.replace("127.0.0.1", "localhost"));
+    say!(Bold "Dev Server created on: ");
+    say!(Green "http://{}", url.replace("127.0.0.1", "localhost"));
 
     // TODO: Now separately build all the runtime hooks / project structure
 
@@ -40,7 +40,7 @@ pub fn start_dev_server(user_entry_path: &str, flags: &[Flag]) {
         match handle_connection(stream, user_entry_path, &mut modified, flags) {
             Ok(warnings) => {
                 for warning in warnings {
-                    e_red_ln!("{:?}", warning);
+                    say!(Red #warning);
                 }
             }
             Err(messages) => {
@@ -159,9 +159,10 @@ fn handle_connection(
                         return Err(messages);
                     }
                 };
+
                 if has_been_modified || global_file_modified {
-                    blue_ln!("Changes detected for {:?}", parsed_url);
-                    let messages = build::build_project_files(builder, path, false);
+                    say!(Blue "Changes detected for ", #parsed_url);
+                    let messages = build::build_project_files(builder, path, &flags);
 
                     if messages.errors.is_empty() {
                         status_line = "HTTP/1.1 205 Reset Content";
@@ -171,6 +172,7 @@ fn handle_connection(
                 } else {
                     status_line = "HTTP/1.1 200 OK";
                 }
+
             } else if request.starts_with("GET /") {
                 // Get a requested path
                 let file_path = request.split_whitespace().collect::<Vec<&str>>()[1];
@@ -213,7 +215,7 @@ fn handle_connection(
                             contents = c;
                             status_line = "HTTP/1.1 200 OK";
                         } else {
-                            red_ln!(
+                            say!(Red
                                 "Dev Server Error: File tried to access outside of /dev directory"
                             );
                             contents = String::new().into_bytes();
@@ -222,16 +224,16 @@ fn handle_connection(
                     }
 
                     Err(_) => {
-                        red_ln!(
-                            "File not found. Site made a GET request for: {:?}",
-                            path_to_file
+                        say!(Red
+                            "File not found. Site made a GET request for: ",
+                            #path_to_file
                         );
                     }
                 }
             }
         }
         _ => {
-            red_ln!("Error reading request line");
+            say!(Red "Error reading request line");
         }
     }
 

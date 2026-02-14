@@ -17,7 +17,6 @@ use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
     return_type_error,
 };
-use colour::red_ln;
 
 // For multiple returns or function calls
 // MUST know all the types

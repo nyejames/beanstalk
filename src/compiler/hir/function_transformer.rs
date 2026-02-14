@@ -10,6 +10,7 @@
 //! - Transform host function calls with proper import information
 //! - Prepare arguments for Beanstalk's unified ABI
 
+use saying::say;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
@@ -23,7 +24,6 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 use crate::return_hir_transformation_error;
-use colour::red_ln;
 
 /// The FunctionTransformer component handles transformation of functions from AST to HIR.
 ///
@@ -295,9 +295,9 @@ impl FunctionTransformer {
                     */
                 } else {
                     // This should never happen, but show a warning if it does
-                    red_ln!(
-                        "Compiler Bug: Top level template has the wrong type expression inside it for some reason: {:?}",
-                        expr.kind
+                    say!(Red
+                        "Compiler Bug: Top level template has the wrong type expression inside it for some reason: ",
+                        #expr.kind
                     );
                 }
 
