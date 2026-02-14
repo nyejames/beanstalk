@@ -10,7 +10,6 @@
 //! - Transform host function calls with proper import information
 //! - Prepare arguments for Beanstalk's unified ABI
 
-use saying::say;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::datatypes::DataType;
 use crate::compiler::hir::build_hir::HirBuilderContext;
@@ -24,6 +23,7 @@ use crate::compiler::parsers::statements::functions::FunctionSignature;
 use crate::compiler::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler::string_interning::InternedString;
 use crate::return_hir_transformation_error;
+use saying::say;
 
 /// The FunctionTransformer component handles transformation of functions from AST to HIR.
 ///

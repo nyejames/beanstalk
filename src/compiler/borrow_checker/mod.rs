@@ -1,3 +1,6 @@
+// This is early prototype code, so ignore placeholder unused stuff for now
+#![allow(unused)]
+
 //! # Borrow Checker Module
 //!
 //! The Beanstalk borrow checker enforces memory safety rules and enables optimization opportunities.

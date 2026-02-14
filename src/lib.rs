@@ -1,4 +1,4 @@
-// #![allow(unused_imports, unused_mut)]
+// #![allow(unused)]
 pub mod settings;
 pub(crate) mod compiler_tests {
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
@@ -82,8 +82,8 @@ mod compiler {
     }
 }
 pub mod projects {
-    pub(crate) mod html_project;
     pub mod cli;
+    pub(crate) mod html_project;
 }
 
 use crate::compiler::host_functions::registry::HostRegistry;

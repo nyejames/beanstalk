@@ -1,3 +1,6 @@
+// This is early prototype code, so ignore placeholder unused stuff for now
+#![allow(unused)]
+
 pub(crate) mod build_hir;
 pub(crate) mod control_flow_linearizer;
 mod display_hir;

@@ -53,7 +53,7 @@ impl Config {
             version: String::from("0.1.0"),
             author: String::new(),
             license: String::from("MIT"),
-            
+
             // Custom settings for any project builder to use
             settings: HashMap::new(),
         }

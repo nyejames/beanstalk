@@ -9,12 +9,15 @@ use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::compiler::string_interning::{StringTable};
+use crate::compiler::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{CompilerFrontend, Flag, InputFile, return_file_error, return_messages_with_err, settings, timer_log, return_err_as_messages};
+use crate::{
+    CompilerFrontend, Flag, InputFile, return_err_as_messages, return_file_error,
+    return_messages_with_err, settings, timer_log,
+};
 use std::ffi::OsStr;
 use std::fs;
-use std::path::{Path};
+use std::path::Path;
 use std::time::Instant;
 
 /// External function import required by the compiled WASM

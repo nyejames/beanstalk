@@ -1304,10 +1304,11 @@ macro_rules! return_messages_with_err {
 #[macro_export]
 macro_rules! return_err_as_messages {
     ($new_err:expr) => {
-        return Err(crate::compiler::compiler_messages::compiler_errors::CompilerMessages {
-            errors: vec![$new_err],
-            warnings: Vec::new()
-        })
+        return Err(
+            crate::compiler::compiler_messages::compiler_errors::CompilerMessages {
+                errors: vec![$new_err],
+                warnings: Vec::new(),
+            },
+        )
     };
 }
-

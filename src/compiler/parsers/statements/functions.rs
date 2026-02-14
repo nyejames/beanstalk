@@ -404,15 +404,6 @@ fn format_type_for_error(data_type: &DataType) -> String {
     }
 }
 
-/// Format a DataType for user-friendly error messages with proper string resolution
-fn format_type_for_error_with_table(
-    data_type: &DataType,
-    string_table: &crate::compiler::string_interning::StringTable,
-) -> String {
-    // Use the display_with_table method for proper string resolution
-    data_type.display_with_table(string_table)
-}
-
 /// Provide helpful hints for type conversion
 fn get_type_conversion_hint(from_type: &DataType, to_type: &DataType) -> String {
     match (from_type, to_type) {

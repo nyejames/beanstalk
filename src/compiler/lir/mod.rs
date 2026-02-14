@@ -1,3 +1,6 @@
+// This is early prototype code, so ignore placeholder unused stuff for now
+#![allow(unused)]
+
 //! Low-Level Intermediate Representation (LIR) Module
 //!
 //! This module contains the LIR data structures and the HIR to LIR lowering pass.

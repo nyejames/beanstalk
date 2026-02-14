@@ -1,3 +1,6 @@
+// This is early prototype code, so ignore placeholder unused stuff for now
+#![allow(unused)]
+
 // For running Beanstalk string templates in the REPL,
 // Starts in the template head rather than body (unlike .mt files which will start in the body).
 // This will ALWAYS return a UTF-8 string
@@ -5,17 +8,17 @@
 // ONLY DOES COMPILE TIME TEMPLATE ATM.
 // Function templates are not yet supported
 
-use crate::compiler::compiler_errors::{CompilerError};
+use crate::compiler::compiler_errors::CompilerError;
+use crate::compiler::display_messages::print_formatted_error;
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::tokenizer::tokenizer::tokenize;
 use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
+use saying::say;
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
-use saying::say;
-use crate::compiler::display_messages::print_formatted_error;
 
 /// Start the REPL session
 pub fn start_repl_session() {

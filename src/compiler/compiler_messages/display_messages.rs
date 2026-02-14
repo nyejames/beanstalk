@@ -1,7 +1,7 @@
-use std::{env, fs};
-use saying::say;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
 use crate::compiler::compiler_warnings::print_formatted_warning;
+use saying::say;
+use std::{env, fs};
 
 pub fn print_compiler_messages(messages: CompilerMessages) {
     // Format and print out the messages:

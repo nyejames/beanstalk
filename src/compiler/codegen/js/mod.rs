@@ -1,3 +1,6 @@
+// This is early prototype code, so ignore placeholder unused stuff for now
+#![allow(unused)]
+
 //! JavaScript backend for Beanstalk
 //!
 //! This backend lowers HIR into **structured JavaScript** with pure GC semantics.

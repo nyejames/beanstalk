@@ -7,16 +7,12 @@ use crate::compiler::codegen::js::JsLoweringConfig;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::string_interning::StringTable;
-use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
+use crate::settings::Config;
 use crate::{Flag, Project, lower_hir_to_js};
 use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct HtmlProjectBuilder {}
-
-pub struct JsHostBinding {
-    pub js_path: String, // "console.log" or "Beanstalk.io"
-}
 
 impl HtmlProjectBuilder {
     pub fn new() -> Self {
@@ -25,7 +21,7 @@ impl HtmlProjectBuilder {
 }
 
 impl ProjectBuilder for HtmlProjectBuilder {
-    fn build_project(
+    fn build_backend(
         &self,
         modules: Vec<Module>,
         config: &Config,
@@ -65,7 +61,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
         })
     }
 
-    fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError> {
+    fn validate_project_config(&self, _config: &Config) -> Result<(), CompilerError> {
         // Validate HTML-specific configuration
 
         // This used to just check that there was a dev / release folder set,
