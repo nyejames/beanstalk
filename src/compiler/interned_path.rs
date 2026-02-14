@@ -1,6 +1,5 @@
 use crate::compiler::basic_utility_functions::is_valid_var_char;
 use crate::compiler::string_interning::{StringId, StringTable};
-use colour::red_ln;
 use std::path::{Path, PathBuf};
 
 /// An efficient path representation using interned string components.

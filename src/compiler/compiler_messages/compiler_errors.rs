@@ -446,6 +446,17 @@ pub fn error_type_to_str(e_type: &ErrorType) -> &'static str {
 /// })`;
 #[macro_export]
 macro_rules! return_syntax_error {
+    // Without metadata
+    ($msg:expr, $loc:expr) => {
+        return Err($crate::compiler::compiler_errors::CompilerError {
+            msg: $msg.into(),
+            location: $loc,
+            error_type: $crate::compiler::compiler_errors::ErrorType::Syntax,
+            metadata: std::collections::HashMap::new(),
+        })
+    };
+
+    // With metadata
     ($msg:expr, $loc:expr, { $( $key:ident => $value:expr ),* $(,)? }) => {
         return Err($crate::compiler::compiler_errors::CompilerError {
             msg: $msg.into(),
@@ -1287,6 +1298,16 @@ macro_rules! return_messages_with_err {
     ($messages:expr, $new_err:expr) => {
         $messages.errors.push($new_err);
         return $messages;
+    };
+}
+
+#[macro_export]
+macro_rules! return_err_as_messages {
+    ($new_err:expr) => {
+        return Err(crate::compiler::compiler_messages::compiler_errors::CompilerMessages {
+            errors: vec![$new_err],
+            warnings: Vec::new()
+        })
     };
 }
 

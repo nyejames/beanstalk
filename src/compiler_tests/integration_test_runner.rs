@@ -1,12 +1,10 @@
 //! Test runner for validating core Beanstalk compiler functionality
-
-use crate::build_system::build::BuildTarget;
-use crate::build_system::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::compiler::compiler_messages::compiler_errors::{
     error_type_to_str, print_formatted_error,
 };
 use crate::compiler::compiler_messages::compiler_warnings::print_formatted_warning;
 use saying::say;
+use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 
@@ -26,6 +24,9 @@ pub fn run_all_test_cases(show_warnings: bool) {
     let test_cases_dir = Path::new(INTEGRATION_TESTS_PATH);
     let success_dir = test_cases_dir.join("success");
     let failure_dir = test_cases_dir.join("failure");
+
+    // Flags set for all the integration tests
+    let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
 
     let mut total_tests = 0;
     let mut passed_tests = 0;
@@ -47,20 +48,13 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     // println!("\n------------------------------------------");
                     println!("  {}", file_name);
 
-                    let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    let html_project_builder = Box::new(HtmlProjectBuilder::new(flags));
+                    let html_project_builder = Box::new(HtmlProjectBuilder::new());
 
-                    let messages = match build_project_files(
+                    let messages = build_project_files(
                         html_project_builder,
                         INTEGRATION_TESTS_PATH,
-                        false,
-                    ) {
-                        Ok(messages) => messages,
-                        Err(e) => {
-                            print_formatted_error(e);
-                            return;
-                        }
-                    };
+                        &flags,
+                    );
 
                     if messages.errors.is_empty() {
                         say!(Green "✓ PASS");
@@ -102,20 +96,13 @@ pub fn run_all_test_cases(show_warnings: bool) {
 
                     // println!("\n------------------------------------------");
                     println!("  {}", file_name);
-                    let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
-                    let html_project_builder = Box::new(HtmlProjectBuilder::new(flags));
+                    let html_project_builder = Box::new(HtmlProjectBuilder::new());
 
-                    let messages = match build_project_files(
+                    let messages = build_project_files(
                         html_project_builder,
                         INTEGRATION_TESTS_PATH,
-                        false,
-                    ) {
-                        Ok(messages) => messages,
-                        Err(e) => {
-                            print_formatted_error(e);
-                            return;
-                        }
-                    };
+                        &flags,
+                    );
 
                     if messages.errors.is_empty() {
                         say!(Yellow "✗ UNEXPECTED SUCCESS");

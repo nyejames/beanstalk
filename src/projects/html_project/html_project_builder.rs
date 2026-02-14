@@ -8,11 +8,7 @@ use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::string_interning::StringTable;
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{Flag, InputFile, Project, lower_hir_to_js, return_config_error, settings};
-use colour::{dark_cyan_ln, e_red_ln};
-use std::cmp::PartialEq;
-use std::ffi::OsStr;
-use std::fs;
+use crate::{Flag, Project, lower_hir_to_js};
 use std::path::PathBuf;
 
 #[derive(Debug)]

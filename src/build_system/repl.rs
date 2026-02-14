@@ -5,7 +5,7 @@
 // ONLY DOES COMPILE TIME TEMPLATE ATM.
 // Function templates are not yet supported
 
-use crate::compiler::compiler_errors::CompilerError;
+use crate::compiler::compiler_errors::{print_formatted_error, CompilerError};
 use crate::compiler::host_functions::registry::HostRegistry;
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
 use crate::compiler::parsers::statements::create_template_node::Template;
@@ -14,19 +14,16 @@ use crate::compiler::parsers::tokenizer::tokens::TokenizeMode;
 use std::env;
 use std::io::{self, Write};
 use std::path::Path;
+use saying::say;
 
 /// Start the REPL session
 pub fn start_repl_session() {
-    use crate::compiler::compiler_errors::print_formatted_error;
-    use colour::{green_ln_bold, grey_ln, red_ln};
-
-    green_ln_bold!("Beanstalk string template REPL");
-    grey_ln!("Enter Beanstalk template snippets.");
-    grey_ln!(
+    say!("Beanstalk string template REPL");
+    say!(Green "Enter Beanstalk template snippets.");
+    say!(Bright Black
         "Type 'exit' to quit. and 'clear' to restart the REPL or type 'show' to see the current code."
     );
-    grey_ln!("This starts inside the template head.");
-    println!();
+    say!(Bright Black "This starts inside the template head. \n");
 
     // Just to avoid extra allocations, memory will not be much of a constraint in the repl (I think)
     const EXPECTED_INPUT_LENGTH: usize = 30;
@@ -69,7 +66,7 @@ pub fn start_repl_session() {
                 }
             }
             Err(e) => {
-                red_ln!("Error reading input: {}", e);
+                say!(Red "Error reading input: ", e);
                 break;
             }
         }

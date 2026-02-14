@@ -5,23 +5,16 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::Module;
-use crate::build_system::html_project::html_project_builder::JsHostBinding;
 use crate::compiler::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler::compiler_warnings::CompilerWarning;
-use crate::compiler::hir::nodes::HirModule;
 use crate::compiler::interned_path::InternedPath;
 use crate::compiler::parsers::ast::Ast;
-use crate::compiler::parsers::ast_nodes::Var;
 use crate::compiler::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::compiler::string_interning::{StringId, StringTable};
+use crate::compiler::string_interning::{StringTable};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{
-    CompilerFrontend, Flag, InputFile, return_file_error, return_messages_with_err, settings,
-    timer_log,
-};
+use crate::{CompilerFrontend, Flag, InputFile, return_file_error, return_messages_with_err, settings, timer_log, return_err_as_messages};
 use std::ffi::OsStr;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Path};
 use std::time::Instant;
 
 /// External function import required by the compiled WASM
@@ -105,7 +98,7 @@ pub fn compile_project_frontend(
                 let code = match extract_source_code(&config.entry_dir) {
                     Ok(code) => code,
                     Err(e) => {
-                        return_messages_with_err!(messages, e);
+                        return_err_as_messages!(e);
                     }
                 };
 
@@ -129,7 +122,7 @@ pub fn compile_project_frontend(
                     ),
                 );
 
-                return_messages_with_err!(messages, err);
+                return_err_as_messages!(err);
             }
         }
     } else {
@@ -143,7 +136,7 @@ pub fn compile_project_frontend(
                 ),
             );
 
-            return_messages_with_err!(messages, err);
+            return_err_as_messages!(err);
         }
 
         // --------------------
@@ -157,7 +150,7 @@ pub fn compile_project_frontend(
                     Ok(content) => content,
                     Err(e) => {
                         let err = CompilerError::file_error(&config_path, e.to_string());
-                        return_messages_with_err!(messages, err);
+                        return_err_as_messages!(err);
                     }
                 };
 
@@ -169,7 +162,7 @@ pub fn compile_project_frontend(
             }
             Err(e) => {
                 let err = CompilerError::file_error(&config_path, e.to_string());
-                return_messages_with_err!(messages, err);
+                return_err_as_messages!(err);
             }
 
             // No config
@@ -187,7 +180,7 @@ pub fn compile_project_frontend(
             Ok(modules) => modules,
             Err(e) => {
                 let err = CompilerError::file_error(&config.entry_dir, e);
-                return_messages_with_err!(messages, err);
+                return_err_as_messages!(err);
             }
         };
 

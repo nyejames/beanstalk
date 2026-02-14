@@ -4,7 +4,6 @@ use crate::compiler::string_interning::{InternedString, StringId, StringTable};
 
 use crate::compiler::compiler_errors::ErrorLocation;
 use crate::compiler::parsers::tokenizer::compiler_directives::CompilerDirective;
-use colour::red_ln;
 use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::str::Chars;

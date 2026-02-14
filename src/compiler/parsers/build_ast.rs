@@ -2,14 +2,12 @@ use super::ast_nodes::NodeKind;
 use crate::compiler::compiler_errors::CompilerError;
 use crate::compiler::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler::datatypes::{DataType, Ownership};
-use crate::compiler::parsers::ast_nodes::{AstNode, Var};
+use crate::compiler::parsers::ast_nodes::{AstNode};
 use crate::compiler::parsers::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler::parsers::expressions::mutation::handle_mutation;
 use crate::compiler::parsers::expressions::parse_expression::create_multiple_expressions;
-use colour::red_ln;
 
 use crate::compiler::parsers::ast::{ContextKind, ScopeContext};
-use crate::compiler::parsers::field_access::parse_field_access;
 use crate::compiler::parsers::statements::branching::create_branch;
 use crate::compiler::parsers::statements::create_template_node::Template;
 use crate::compiler::parsers::statements::functions::parse_function_call;

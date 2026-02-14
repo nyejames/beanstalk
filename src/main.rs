@@ -1,5 +1,4 @@
-use beanstalk::cli::start_cli;
-
+use beanstalk::projects::cli::start_cli;
 fn main() {
     start_cli();
 }

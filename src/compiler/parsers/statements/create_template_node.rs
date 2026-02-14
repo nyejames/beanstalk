@@ -11,7 +11,6 @@ use crate::compiler::string_interning::{InternedString, StringTable};
 use crate::compiler::traits::ContainsReferences;
 use crate::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_compiler_error, return_syntax_error};
-use colour::red_ln;
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 
@@ -197,8 +196,7 @@ impl Template {
                         ),
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table),
-                        {}
+                            .to_error_location(&string_table)
                     )
                 }
             }
@@ -249,8 +247,7 @@ impl Template {
                 // Error, can't use slots in the scene head (would be empty square brackets)
                 return_syntax_error!(
                     "Can't use slots in the template head. Token",
-                    self.location.to_owned().to_error_location(&string_table),
-                    {}
+                    self.location.to_owned().to_error_location(&string_table)
                 )
             }
             TemplateType::String => {
@@ -382,7 +379,7 @@ impl Template {
     }
 }
 
-// TOOD: move these old formatters to the new trait style ones
+// TODO: move these old formatters to the new trait style ones
 
 // StyleFormat::Markdown => {
 // let default_tag = "p";
@@ -455,8 +452,7 @@ pub fn parse_template_head(
                     ),
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table),
-                    {}
+                        .to_error_location(&string_table)
                 )
             }
 
@@ -515,12 +511,11 @@ pub fn parse_template_head(
 
                         // TODO: Special stuff for Types (structs)
                         // In the future, Types can implement a Style interface to do cool stuff
-                        ExpressionKind::StructInstance(args) => {}
+                        ExpressionKind::StructInstance(_args) => {}
 
                         // Otherwise this is a reference to some other variable
                         // String, Number, Bool, etc. References
                         _ => {
-                            // red_ln!("reference in template head ownership: {:#?}", arg.value.ownership);
                             let expr = create_expression(
                                 token_stream,
                                 context,
@@ -543,7 +538,7 @@ pub fn parse_template_head(
                     return_syntax_error!(
                         format!("Cannot declare new variables inside of a template head. Variable '{}' is not declared.
                         \n Here are all the variables in scope: {:#?}", name, context.declarations),
-                        token_stream.current_location().to_error_location(&string_table), {}
+                        token_stream.current_location().to_error_location(&string_table)
                     )
                 };
             }
@@ -591,8 +586,7 @@ pub fn parse_template_head(
                     "Multiple commas used back to back in the template head. You must have a valid expression between each comma",
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table),
-                    {}
+                        .to_error_location(&string_table)
                 )
             }
 
@@ -609,8 +603,7 @@ pub fn parse_template_head(
                     ),
                     token_stream
                         .current_location()
-                        .to_error_location(&string_table),
-                    {}
+                        .to_error_location(&string_table)
                 )
             }
         }
