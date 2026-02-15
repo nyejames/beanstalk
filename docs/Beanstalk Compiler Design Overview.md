@@ -48,7 +48,7 @@ The Beanstalk compiler processes modules through these stages:
     - Wasm Backend (long-term primary target): HIR → LIR → Wasm (GC-first, ownership-eliding over time)
     - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
 
-### Stage 1: Tokenization (`src/compiler/parsers/tokenizer.rs`)
+### Stage 1: Tokenization (`src/compiler/tokenizer/tokenizer.rs`)
 **Purpose**: Convert raw source code into structured tokens with location information.
 
 **Key Features**:
@@ -61,14 +61,14 @@ This stage of the compiler is stable and currently can represent almost all the 
 
 ---
 
-### Stage 2: Header Parsing (`src/compiler/parsers/parse_file_headers.rs`)
+### Stage 2: Header Parsing (`src/compiler/headers/parse_file_headers.rs`)
 **Purpose**: Extract function definitions, structs, constants, imports and identify entry points before AST construction.
 
 **Key Features**:
 - **Header Extraction**: Separates declarations from top-level code
 - **Implicit Start Function**: Top level code that does not fit into the other header catagories is placed into a  `HeaderKind::StartFunction` header that becomes a public "start" function.
 - **Entry Point Detection**: Identifies the entry file and converts its start function to `HeaderKind::Main`
-- **Import Resolution**: Processes `#import "path/function_name"` directives
+- **Import Resolution**: Processes import declarations
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
 
 **Development Notes**:

@@ -46,6 +46,10 @@ pub struct OutputFile {
 }
 
 pub enum FileKind {
+    // This signals for the build system to not create this file.
+    // Good for error checking / LSPs etc.
+    NotBuilt,
+
     Wasm(Vec<u8>),
     Js(String), // Either just glue code for web or pure JS backend
     Html(String),
@@ -159,6 +163,7 @@ pub fn build_project(
 
         // Otherwise create the file and fill it with the code
         if let Err(e) = match output_file.file_kind {
+            FileKind::NotBuilt => continue,
             FileKind::Js(content) => {
                 let file = full_file_path.with_extension("js");
                 fs::write(file, content)
