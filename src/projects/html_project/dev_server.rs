@@ -1,11 +1,12 @@
 use crate::build_system::build;
+use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::settings::BEANSTALK_FILE_EXTENSION;
-use crate::settings::Config;
-use crate::{Flag, settings};
+use crate::projects::settings;
+use crate::projects::settings::BEANSTALK_FILE_EXTENSION;
+use crate::projects::settings::Config;
 use saying::say;
 use std::collections::HashMap;
 use std::path::PathBuf;

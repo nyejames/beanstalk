@@ -191,6 +191,14 @@
 //!
 //! Run tests with: `cargo test --lib wasm_codegen_tests`
 
+use crate::backends::lir;
+use crate::backends::lir::lower_hir_to_lir;
+use crate::backends::lir::nodes::LirModule;
+use crate::backends::wasm::encode::encode_wasm;
+use crate::codegen_log;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::hir::nodes::HirModule;
+
 pub mod analyzer;
 pub mod constants;
 pub mod control_flow;
@@ -205,3 +213,36 @@ pub mod module_builder;
 pub mod optimizer;
 pub mod ownership_manager;
 pub mod validator;
+
+/// -----------------------------
+///         LIR GENERATION
+/// -----------------------------
+/// Generate LIR from a validated HIR module.
+///
+/// This stage transforms the high-level, language-shaped HIR into the
+/// low-level, WASM-shaped LIR. The transformation:
+/// - Resolves ownership decisions using runtime tagged pointers
+/// - Lowers control flow structures to WASM-compatible blocks
+/// - Converts RPN-ordered expressions into stack-based LIR instructions
+/// - Lowers struct field access and collection operations to concrete memory offsets
+/// - Allocates and tracks WASM locals for variables and temporaries
+///
+/// **Validates: Requirements 8.1, 8.2, 8.4**
+pub fn generate_lir(hir_module: HirModule) -> Result<LirModule, CompilerMessages> {
+    let lir_module = lower_hir_to_lir(hir_module)?;
+
+    codegen_log!(lir::display_lir(&lir_module));
+
+    Ok(lir_module)
+}
+
+/// -----------------------------
+///         Wasm Codegen
+/// -----------------------------
+/// Lower to wasm bytes from the LIR.
+///
+/// This is the final stage of the compilation pipeline that produces
+/// the actual WebAssembly bytecode from the LIR module.
+pub fn generate_wasm(lir: &LirModule) -> Result<Vec<u8>, CompilerError> {
+    encode_wasm(lir)
+}

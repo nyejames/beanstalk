@@ -1,6 +1,6 @@
-use crate::Flag;
+use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
-use crate::settings::Config;
+use crate::projects::settings::Config;
 use std::{env, fs};
 
 pub fn create_html_project_template(

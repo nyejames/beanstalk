@@ -4,6 +4,10 @@ use crate::compiler_frontend::compiler_messages::compiler_warnings::print_format
 use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
+use crate::compiler_frontend::Flag;
+use crate::build_system::build::build_project;
+use std::fs;
+use std::path::Path;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 
@@ -12,11 +16,6 @@ const INTEGRATION_TESTS_PATH: &str = "tests/cases";
 ///
 /// Run all test cases from the tests/cases directory
 pub fn run_all_test_cases(show_warnings: bool) {
-    use crate::Flag;
-    use crate::build_system::build::build_project;
-    use std::fs;
-    use std::path::Path;
-
     println!("Running all Beanstalk test cases...\n");
     let timer = std::time::Instant::now();
 

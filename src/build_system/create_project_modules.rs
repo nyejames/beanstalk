@@ -4,17 +4,16 @@
 // This now only compiles the HIR and runs the borrow checker.
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
-use crate::build_system::build::Module;
+use crate::build_system::build::{InputFile, Module};
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{
-    CompilerFrontend, Flag, InputFile, return_err_as_messages, return_file_error, settings,
-    timer_log,
-};
+use crate::compiler_frontend::{CompilerFrontend, Flag};
+use crate::projects::settings;
+use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
+use crate::{return_err_as_messages, return_file_error, timer_log};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;

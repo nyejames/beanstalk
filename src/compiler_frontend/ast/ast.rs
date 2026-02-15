@@ -9,7 +9,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
-use crate::settings::{self, IMPLICIT_START_FUNC_NAME};
+use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
 
 pub struct ModuleExport {
     pub id: StringId,

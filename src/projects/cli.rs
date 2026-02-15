@@ -1,5 +1,5 @@
-use crate::Flag;
 use crate::build_system::build;
+use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;

@@ -16,7 +16,8 @@ use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
-use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
+use crate::projects::settings;
+use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
 
 pub fn function_body_to_ast(
     token_stream: &mut FileTokens,

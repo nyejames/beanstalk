@@ -60,7 +60,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             entry_dir: PathBuf::new(),
-            src: PathBuf::from("src"),
+            src: PathBuf::from(".."),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
             libraries: Vec::new(),

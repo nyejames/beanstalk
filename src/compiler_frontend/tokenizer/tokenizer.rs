@@ -7,7 +7,8 @@ use crate::compiler_frontend::tokenizer::compiler_directives::compiler_directive
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::{return_syntax_error, settings, token_log};
+use crate::projects::settings;
+use crate::{return_syntax_error, token_log};
 
 pub const END_SCOPE_CHAR: char = ';';
 
