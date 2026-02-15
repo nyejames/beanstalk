@@ -5,14 +5,18 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::{return_syntax_error, return_token};
 
-pub fn parse_imports(
+pub fn parse_file_path(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     // Path Syntax
     // @(path/to/file)
     // Path to multiple items within the same directory (used for imports)
-    // @(path/to/file/import1, import2, import3)
+    // @(path/to/file/ {import1, import2, import3})
+    // or @(path/to/file/ {
+    //        import1,
+    //        import2
+    // })
     let mut full_import_string = String::new();
 
     // Skip initial non-newline whitespace
@@ -40,14 +44,16 @@ pub fn parse_imports(
     let mut comma_indexes: Vec<usize> = Vec::new();
     while let Some(c) = stream.peek() {
         // Breakout on the first parenthesis that isn't escaped
+        // TODO: support escaped parenthesis / balanced parenthesis
         if c == &')' {
             stream.next();
             break;
         }
 
-        // If there is a comma encountered,
-        // Then there are multiple imports from this path
-        if c == &',' {
+        // If there is a curly brace encountered,
+        // Then there are one or more imports from this path.
+        // Switches into creating each import symbol.
+        if c == &'{' {
             comma_indexes.push(full_import_string.len());
         }
 
@@ -93,5 +99,5 @@ pub fn parse_imports(
 
     let interned_path =
         InternedPath::from_components(vec![string_table.intern(&full_import_string)]);
-    return_token!(TokenKind::Import(interned_path, imports), stream)
+    return_token!(TokenKind::Path(interned_path, imports), stream)
 }

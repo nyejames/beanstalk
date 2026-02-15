@@ -118,113 +118,6 @@ function_name |param Int| -> Int:
     return value
 ;
 ```
-### Handling Errors in Beanstalk
-Errors are treated as values in Beanstalk, and
-they represent Result types similar to Rust.
-
-Any function that can return an error must have its error handled.
-
-The bang symbol ! is used for creating Result types and handling errors.
-
-```beanstalk
-    func_call_that_can_return_an_error() Int!:
-        -- Error handling code
-    ;
-
-    -- Here, we define a type called 'BadStuff' that we will use as our error value.
-    BadStuff = |
-        msg String
-    |
-
-    -- This function can return a String and an Int or a BadStuff error
-    -- The ! indicates that instead of the normal return values, the error value could be returned instead of the other two
-    -- Using return! returns only the error value
-    -- The regular return doesn't return the error value
-    -- Only one value can use the ! symbol to represent the error value
-    parent_func || -> String, Int, BadStuff!:
-        text = func_call_that_can_return_an_error() !err:
-            io("Error: ", err)
-            return! BadStuff(err.msg)
-        ;
-
-        return text, 42
-    ;
-    
-    text, number = parent_func() !err:
-        io("Error from parent_func: ", err.msg)
-        return
-    ;
-
-    -- Handling an error with default values
-    string_returned, number_returned = parent_func() !("", 0)
-
-    -- Bubbling up errors without handling them
-    another_parent_func || -> String, Int, BadStuff!:
-        -- Since this function has the same return signature, 
-        -- it can be directly returned without handling the error here
-        return parent_func()
-    ;
-
-    -- By default, accessing items in a collection by their index using .get() returns an error if the index is out of bounds
-    -- Unlike other languages where this can cause a panic or exception by default
-
-    my_list ~= [1, 2, 3]
-
-    -- If you wanted to both open a scope for handling the error and provide a default value, you could do it like this:
-    -- Default to the last index, and also print an error message
-    value ~= my_list.get(5) !(
-        my_list.length() - 1
-    ) !msg:
-        io("Index out of bounds error: ", msg)
-    ;
-```
-
-## Using the ? operator
-```beanstalk
-
-    -- Using the Option type (?) we can represent that a value might not exist
-    -- This function returns a string or None
-    getURL || -> String?:
-        response = getNetworkRequest()
-
-        if response is None:
-            return None
-        ;
-
-        return response.body
-    ;
-
-    -- We can use some ? syntax sugar to set a default value if the value is None
-    url = getURL() ?("https://nyejames.com")
-
-    -- This function always returns a Response, as we've handled the None case inside the function
-    getURL || -> Response:
-        return getNetworkRequest() ?(
-            Response("Default Body")
-        )
-    ;
-
-    -- Ignoring the error syntax sugar and returning errors with the values
-    -- Notice, not using the ! 
-    -- Instead, we will use an option '?' to represent that the error could be None
-    -- This is equivalent to the pattern used for error handling in Go
-    parent_func_no_sugar || -> String, Int, BadStuff?:
-        text, number = func_call_that_can_return_an_error() !:
-            return "", 0, BadStuff("An error occurred")
-        ;
-
-        return text, number, None
-    ;
-
-    -- We are just treating the error as an optional here instead
-    -- So we can seperately check if there was an error
-    text, number, error? = parent_func_no_sugar()
-
-    if error is not None:
-        io("Error from parent_func_no_sugar: ", error.msg)
-        return
-    ;
-```
 
 ### Panics
 Panics use a compiler directive.
@@ -263,7 +156,7 @@ io([: Hello, [name]!])
 
 -- Print in functions
 greet |name String|:
-    io([: Hello, [name]!])
+    io([message] World)
 ;
 ```
 
@@ -271,7 +164,7 @@ Every host environment must provide an io function to compile Beanstalk.
 
 **Control flow patterns:**
 
-There is no 'else if', you use pattern matching instead for more than 2 branches.
+There is no 'else if', you use pattern matching instead for more than two branches.
 ```beanstalk
 -- Conditional (use 'is', never ==)
 if value is not 0:
@@ -279,16 +172,9 @@ if value is not 0:
 else
     -- code
 ;
-
--- Pattern matching (always exhaustive)
-if value is:
-    0: return "zero";
-    < 0: return "negative";
-    else: return "other";
-;
 ```
 
-Only 1 keyword for loops "loop". 
+Only one keyword for loops "loop". 
 
 Using the "in" keyword, you can specify an integer, float or collection to iterate through or define a new integer, float or collection. 
 
@@ -354,26 +240,29 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 
 Beanstalk supports organizing code across multiple files.
 
-Everything at the top level of a file is visible to the rest of the module by default, but must be explicitly exported to be exported from the final wasm output.
+Everything at the top level of a file is visible to the rest of the module by default.
 
-Imports can't yet be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
+A single project can be made up of multiple modules.
+At the root of every project is a #config.bst file.
 
+Imports can't be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
+
+Imports are just paths used as Lvalues at the top level of a file.
 **Import syntax:**
 ```beanstalk
 -- Import another file in the same module
-import @path/to/file
+@(path/to/file)
 ```
 
 **Entry files and implicit main functions:**
 - Every Beanstalk file has an **implicit start function** containing all top-level code
 - The **entry file** (specified during compilation) has its implicit start become the module's entry point (the main function). Only the entry file's top-level code executes automatically
 - Imported files' implicit mains are callable but don't execute automatically. They must be imported as "start"
-- **Single WASM output**: All files in a module compile to one WASM module with proper exports
 
 **File execution semantics:**
 ```beanstalk
 -- main.bst (entry file)
-import @utils/helper
+@(utils/helper)
 
 -- This executes automatically when the module starts
 io("Starting main")

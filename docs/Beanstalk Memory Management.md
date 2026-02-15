@@ -1,7 +1,7 @@
 # Beanstalk Memory Management Strategy
 The goal of Beanstalk’s memory system is to guarantee memory safety under all circumstances, while allowing performance to scale with the strength of static analysis.
 
-Beanstalk adopts a GC-first, statically-eliding strategy. Garbage collection defines the baseline semantics. Static analysis progressively removes GC participation where it can prove safety.
+Beanstalk adopts a GC-first, statically eliding strategy. Garbage collection defines the baseline semantics. Static analysis progressively removes GC participation where it can prove safety.
 
 ## High-Level Goals
 - Memory safety is always ensured.

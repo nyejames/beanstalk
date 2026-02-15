@@ -210,7 +210,7 @@ pub fn parse_headers_in_file(
             }
 
             // @(libraries/math: round, sqrt)
-            TokenKind::Import(interned_path, imports) => {
+            TokenKind::Path(interned_path, imports) => {
                 encountered_symbols.extend(imports.clone());
                 for import in imports {
                     file_imports.insert(import, interned_path.clone());

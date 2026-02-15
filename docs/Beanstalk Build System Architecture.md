@@ -40,7 +40,7 @@ Beanstalk defines a minimal, opinionated project structure:
 - Any file whose name starts with `#` defines a **module root**
 - Any directory containing a `#*` file is treated as a separate module
 - The exact name of the file (e.g. `#page`, `#layout`, `#lib`) is preserved and interpreted by the build system
-- Only one `#` file is allowed per directory
+- The project builder can be aware of multiple `#` files per root, but they can only exist at the root of a module
 
 The compiler does not assign semantic meaning to `#` file names. It only enforces structure and boundaries.
 

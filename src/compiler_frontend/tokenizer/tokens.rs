@@ -164,7 +164,7 @@ impl Token {
             TokenKind::Symbol(id) => string_table.resolve(*id).to_string(),
             TokenKind::StringSliceLiteral(id) => string_table.resolve(*id).to_string(),
             TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
-            TokenKind::Import(path, imports) => {
+            TokenKind::Path(path, imports) => {
                 format!("{}: {:?}", path.to_string(string_table), imports)
             }
             TokenKind::ModuleStart(name) => name.clone(),
@@ -343,7 +343,7 @@ pub enum TokenKind {
 
     // Values
     StringSliceLiteral(InternedString),
-    Import(InternedPath, Vec<StringId>), // Compile time imports from a file
+    Path(InternedPath, Vec<StringId>), // Compile time path resolution
     FloatLiteral(f64),
     IntLiteral(i64),
     CharLiteral(char),

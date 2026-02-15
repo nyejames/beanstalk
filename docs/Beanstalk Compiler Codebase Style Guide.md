@@ -1,12 +1,6 @@
 # Beanstalk Compiler Development Guide
 This guide covers the structure, goals and best practices for Beanstalk's compiler development.
 
-## Compiler Goals
-- Fast compilation speeds for development builds (as few passes as possible)
-- JS backend/build system is the initial stabilisation target; Wasm remains the long-term primary backend design focus
-- Compiler exposed as a library for ease of developing external tools like more build systems/LSPs etc...
-- Compiler repo is bundled with a CLI and a complete build system with extensive tooling
-
 Beanstalk makes deliberate tradeoffs for compilation speed:
 - **Early constant folding** at AST stage eliminates optimisation passes
 - **External optimisation** delegates complex transforms to WASM tooling, which will be used for release builds only
@@ -242,11 +236,6 @@ See the Cargo.toml for all feature flags.
 
 **Performance Analysis**:
 - `detailed_timers` - Show timing for each compilation stage
-- `memory_usage` - Track memory usage during compilation
-
-**Error Debugging**:
-- `verbose_errors` - Extended error information with stack traces
-- `borrow_checker_debug` - Detailed borrow checking analysis
 
 ## Testing Workflow
 The primary goal is to get the language working end-to-end. Focus on real-world usage patterns and language features.
@@ -263,7 +252,7 @@ and using integration tests with actual language snippets should always be prefe
 Integration tests are the main way to check new features or refactors still work.
 They run actual snippets of Beanstalk code.
 
-Using `cargo run -- run tests` starts the test runner inside src/compiler_tests and automatically run all the integration tests.
+Using `cargo run tests` starts the test runner inside src/compiler_tests and automatically run all the integration tests.
 This will provide a percentage pass rate for both expected and unexpected failures.
 
 **Test Case Structure** (`tests/cases/`):
@@ -290,8 +279,6 @@ cargo run -- run tests
 # Run with debugging
 cargo run --features "show_ast,show_hir" -- run tests/cases/success/multi_file_module
 
-# Show borrow checker and codegen output on single test file, ignore warnings
-RUSTFLAGS="-A warnings" cargo run --features "detailed_timers,show_hir,show_borrow_checker" -- run tests/cases/test.bst
 ```
 
 When testing something new or experimenting with the language, 

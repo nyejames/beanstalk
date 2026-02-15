@@ -1,6 +1,6 @@
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::headers::imports::parse_imports;
+use crate::compiler_frontend::headers::imports::parse_file_path;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::compiler_directives::compiler_directive;
@@ -476,7 +476,7 @@ pub fn get_token_kind(
 
         stream.next();
 
-        return parse_imports(stream, string_table);
+        return parse_file_path(stream, string_table);
     }
 
     // Wildcard for pattern matching
