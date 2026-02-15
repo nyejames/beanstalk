@@ -5,8 +5,8 @@
 //! dataflow analysis and conflict detection.
 
 pub(crate) use super::control_flow::ProgramPoint;
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 
 use super::place_registry::PlaceId;

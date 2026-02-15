@@ -5,9 +5,9 @@
 //! - Struct field access and assignment
 //! - Collection element access and assignment
 
+use crate::backends::lir::nodes::{LirInst, LirType};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{HirExpr, HirPlace};
-use crate::compiler_frontend::lir::nodes::{LirInst, LirType};
 use crate::compiler_frontend::string_interning::InternedString;
 
 use super::context::LoweringContext;

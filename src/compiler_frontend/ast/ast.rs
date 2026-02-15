@@ -1,14 +1,14 @@
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::registry::HostRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::build_ast::function_body_to_ast;
-use crate::compiler_frontend::parsers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::parsers::tokenizer::tokens::FileTokens;
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::host_functions::registry::HostRegistry;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::settings::{self, IMPLICIT_START_FUNC_NAME};
 
 pub struct ModuleExport {
@@ -38,11 +38,11 @@ impl Ast {
         // Each file will be combined into a single AST.
         let mut ast: Vec<AstNode> =
             Vec::with_capacity(sorted_headers.len() * settings::TOKEN_TO_NODE_RATIO);
-        let mut external_exports: Vec<ModuleExport> = Vec::new();
+        let external_exports: Vec<ModuleExport> = Vec::new();
         let mut warnings: Vec<CompilerWarning> = Vec::new();
 
         // Collect all function signatures and struct definitions to register them in scope
-        let mut declarations: Vec<Var> = Vec::new();
+        let declarations: Vec<Var> = Vec::new();
         for header in sorted_headers {
             match header.kind {
                 HeaderKind::Function {

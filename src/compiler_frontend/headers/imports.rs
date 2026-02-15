@@ -1,8 +1,8 @@
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{Token, TokenKind, TokenStream};
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::{return_syntax_error, return_token};
 
 pub fn parse_imports(

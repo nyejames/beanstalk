@@ -18,6 +18,10 @@
 //! - Expression flattening creates explicit temporaries for intermediate results
 //! - The linearizer operates on borrowed HirBuilderContext to maintain single authoritative state
 
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
@@ -25,12 +29,8 @@ use crate::compiler_frontend::hir::nodes::{
     BinOp, HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt, UnaryOp,
 };
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
-};
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_compiler_error;
 use std::collections::HashMap;
 
@@ -790,10 +790,7 @@ impl ExpressionLinearizer {
     // =========================================================================
 
     /// Gets the return type from a list of return arguments.
-    fn get_return_type(
-        &self,
-        returns: &[Var],
-    ) -> DataType {
+    fn get_return_type(&self, returns: &[Var]) -> DataType {
         if returns.len() == 1 {
             returns[0].value.data_type.clone()
         } else if returns.is_empty() {

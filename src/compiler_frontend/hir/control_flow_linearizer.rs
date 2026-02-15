@@ -17,6 +17,9 @@
 //! - Nested control flow maintains correct block nesting
 //! - All scope exits are explicit through terminators or drop points
 
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::build_hir::{HirBuilderContext, ScopeType};
@@ -26,11 +29,8 @@ use crate::compiler_frontend::hir::nodes::{
     HirTerminator,
 };
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::statements::branching::MatchArm;
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_compiler_error;
 
 /// The ControlFlowLinearizer component converts nested control flow constructs

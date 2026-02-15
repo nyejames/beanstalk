@@ -22,8 +22,8 @@ use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
 use crate::compiler_frontend::hir::nodes::{
     HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
 };
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_compiler_error;
 use std::collections::HashMap;
 

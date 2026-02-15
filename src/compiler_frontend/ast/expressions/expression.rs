@@ -1,10 +1,10 @@
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Var};
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::host_functions::registry::HostFunctionId;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Var};
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.

@@ -137,13 +137,10 @@
 //! CompilerMessages (aggregated errors and warnings)
 //! ```
 
-use crate::compiler_frontend::borrow_checker::borrow_state::BorrowKind;
-use crate::compiler_frontend::compiler_warnings::{CompilerWarning, print_formatted_warning};
-use crate::compiler_frontend::parsers::tokenizer::tokens::CharPosition;
-use saying::say;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::{env, fs};
 
 // The final set of errors and warnings emitted from the compiler_frontend
 #[derive(Debug, Clone)]

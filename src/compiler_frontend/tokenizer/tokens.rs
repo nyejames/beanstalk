@@ -3,7 +3,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
 
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
-use crate::compiler_frontend::parsers::tokenizer::compiler_directives::CompilerDirective;
+use crate::compiler_frontend::tokenizer::compiler_directives::CompilerDirective;
+use crate::token_log;
 use std::cmp::Ordering;
 use std::iter::Peekable;
 use std::str::Chars;
@@ -229,8 +230,7 @@ impl FileTokens {
             // Can't advance past End of File
             &TokenKind::Eof => {
                 // Show a warning for compiler_frontend development purposes
-                #[cfg(feature = "show_tokens")]
-                red_ln!("Compiler tried to advance past EOF");
+                token_log!(Red "Compiler tried to advance past EOF");
             }
 
             _ => {

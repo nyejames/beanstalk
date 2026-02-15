@@ -22,8 +22,8 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::build_hir::{DropInsertionType, HirBuilderContext};
 use crate::compiler_frontend::hir::nodes::{BlockId, HirKind, HirNode, HirPlace, HirStmt};
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 /// The DropPointInserter component handles insertion of possible_drop operations
 /// at appropriate control flow boundaries.

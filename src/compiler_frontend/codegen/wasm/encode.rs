@@ -27,6 +27,7 @@
 //! 5. Add exports (main function, memory)
 //! 6. Validate and finalize module
 
+use crate::backends::lir::nodes::{LirFunction, LirInst, LirModule};
 use crate::compiler_frontend::codegen::wasm::{
     analyzer::LirAnalyzer,
     control_flow::ControlFlowManager,
@@ -40,7 +41,6 @@ use crate::compiler_frontend::codegen::wasm::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::host_functions::registry::HostRegistry;
-use crate::compiler_frontend::lir::nodes::{LirFunction, LirModule};
 use crate::compiler_frontend::string_interning::StringTable;
 use std::collections::HashMap;
 use wasm_encoder::{ExportKind, Function, Instruction, ValType};
@@ -333,12 +333,10 @@ fn encode_function(
 /// For functions with return types, we check if the last instruction is a Return.
 /// If not, we add default values to satisfy the stack requirements.
 fn ensure_function_return(
-    body: &[crate::compiler_frontend::lir::nodes::LirInst],
+    body: &[LirInst],
     return_types: &[ValType],
     function: &mut Function,
 ) -> Result<(), CompilerError> {
-    use crate::compiler_frontend::lir::nodes::LirInst;
-
     // If no return types, nothing to do
     if return_types.is_empty() {
         return Ok(());

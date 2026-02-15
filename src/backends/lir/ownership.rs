@@ -3,9 +3,9 @@
 //! This module handles ownership tagging and drop operations for
 //! Beanstalk's runtime ownership model.
 
+use crate::backends::lir::nodes::LirInst;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{HirExpr, HirPlace};
-use crate::compiler_frontend::lir::nodes::LirInst;
 
 use super::context::LoweringContext;
 use super::types::hir_expr_to_lir_type;

@@ -1,8 +1,8 @@
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;

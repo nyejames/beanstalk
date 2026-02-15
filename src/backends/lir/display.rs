@@ -3,7 +3,7 @@
 //! This module provides functions for displaying LIR structures in a
 //! human-readable format for debugging and inspection.
 
-use crate::compiler_frontend::lir::nodes::{LirFunction, LirInst, LirModule, LirStruct, LirType};
+use crate::backends::lir::nodes::{LirFunction, LirInst, LirModule, LirStruct, LirType};
 
 /// Pretty-prints a complete LIR module.
 pub fn display_lir(module: &LirModule) -> String {

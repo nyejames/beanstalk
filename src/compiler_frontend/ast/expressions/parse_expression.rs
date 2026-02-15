@@ -1,17 +1,17 @@
 use super::eval_expression::evaluate_expression;
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::ast::ast::ContextKind;
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast::{ContextKind};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::statements::collections::new_collection;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::statements::functions::parse_function_call;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::statements::variables::create_reference;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{
     ast_log, new_template_context, return_compiler_error, return_rule_error, return_syntax_error,
@@ -95,9 +95,10 @@ pub fn create_expression(
     // let mut number_union = get_any_number_datatype(false);
 
     ast_log!(
-        "Parsing {:?} {} Expression",
-        ownership,
-        data_type.to_string()
+        "Parsing ",
+        #ownership,
+        data_type.to_string(),
+        " Expression"
     );
 
     // Loop through the expression and create the AST nodes
@@ -106,7 +107,7 @@ pub fn create_expression(
     let mut next_number_negative = false;
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
-        ast_log!("Parsing token (expression): {:?}", token);
+        ast_log!("Parsing token (expression): ", #token);
 
         match token {
             TokenKind::CloseParenthesis => {

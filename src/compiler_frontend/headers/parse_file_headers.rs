@@ -1,16 +1,14 @@
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
+use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::host_functions::registry::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{
-    FileTokens, TextLocation, Token, TokenKind,
-};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::path::Path;
-use crate::compiler_frontend::ast::ast_nodes::Var;
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {

@@ -2,15 +2,15 @@
 #[macro_export]
 #[cfg(feature = "show_tokens")]
 macro_rules! token_log {
-    ($token:expr) => {
-        eprintln!("{}\n", $token.to_string())
+    ($($arg:tt)*) => {
+        saying::say!($($arg)*);
     };
 }
 
 #[macro_export]
 #[cfg(not(feature = "show_tokens"))]
 macro_rules! token_log {
-    ($tokens:expr) => {
+    ($($arg:tt)*) => {
         // Nothing
     };
 }
@@ -20,8 +20,7 @@ macro_rules! token_log {
 #[cfg(feature = "detailed_timers")]
 macro_rules! timer_log {
     ($time:expr, $msg:expr) => {
-        print!("{}", $msg);
-        colour::green_ln!("{:?}", $time.elapsed());
+        saying::say!($msg, Green #$time.elapsed());
     };
 }
 
@@ -38,7 +37,7 @@ macro_rules! timer_log {
 #[cfg(feature = "show_headers")]
 macro_rules! header_log {
     ($header:expr) => {
-        eprintln!("{}\n", $header.to_string())
+        saying::say!("\n", $header.to_string());
     };
 }
 
@@ -55,7 +54,7 @@ macro_rules! header_log {
 #[cfg(feature = "show_ast")]
 macro_rules! ast_log {
     ($($arg:tt)*) => {
-        eprintln!($($arg)*);
+        saying::say!($($arg)*);
     };
 }
 
@@ -72,7 +71,7 @@ macro_rules! ast_log {
 #[cfg(feature = "show_eval")]
 macro_rules! eval_log {
     ($($arg:tt)*) => {
-        eprintln!($($arg)*);
+        saying::say!($($arg)*);
     };
 }
 
@@ -89,7 +88,7 @@ macro_rules! eval_log {
 #[cfg(feature = "show_codegen")]
 macro_rules! codegen_log {
     ($($arg:tt)*) => {
-        eprintln!($($arg)*);
+        saying::say!($($arg)*);
     };
 }
 
@@ -106,7 +105,7 @@ macro_rules! codegen_log {
 #[cfg(feature = "show_hir")]
 macro_rules! hir_log {
     ($($arg:tt)*) => {
-        eprintln!($($arg)*);
+        saying::say!($($arg)*);
     };
 }
 
@@ -123,7 +122,7 @@ macro_rules! hir_log {
 #[cfg(feature = "show_borrow_checker")]
 macro_rules! borrow_log {
     ($($arg:tt)*) => {
-        eprintln!($($arg)*);
+        saying::say!($($arg)*);
     };
 }
 

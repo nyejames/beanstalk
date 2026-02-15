@@ -11,8 +11,8 @@
 // (full integration with encode.rs)
 #![allow(dead_code)]
 
+use crate::backends::lir::nodes::LirFunction;
 use crate::compiler_frontend::codegen::wasm::analyzer::{LocalMap, WasmType};
-use crate::compiler_frontend::lir::nodes::LirFunction;
 use std::collections::HashMap;
 use wasm_encoder::{Function, ValType};
 

@@ -31,7 +31,7 @@ use crate::compiler_frontend::compiler_errors::{
 };
 use crate::compiler_frontend::hir::build_hir::HirValidationError;
 use crate::compiler_frontend::hir::nodes::BlockId;
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::HashMap;
 use std::fmt;
 

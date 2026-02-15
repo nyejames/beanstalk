@@ -15,6 +15,10 @@
 //! - `AstHirMapping`: Maps between AST and HIR nodes for error reporting
 //! - `OwnershipHints`: Conservative hints for ownership (not authoritative)
 
+use crate::compiler_frontend::ast::ast::Ast;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::control_flow_linearizer::ControlFlowLinearizer;
 use crate::compiler_frontend::hir::expression_linearizer::ExpressionLinearizer;
@@ -27,13 +31,9 @@ use crate::compiler_frontend::hir::nodes::{
 use crate::compiler_frontend::hir::struct_handler::StructHandler;
 use crate::compiler_frontend::hir::template_processor::TemplateProcessor;
 use crate::compiler_frontend::hir::variable_manager::{VariableManager, is_type_ownership_capable};
-use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
-use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 // Re-export validator types for backward compatibility
 pub use crate::compiler_frontend::hir::validator::{HirValidationError, HirValidator};
 use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
@@ -472,8 +472,7 @@ pub struct HirBuilderContext<'a> {
     function_signatures: HashMap<InternedString, FunctionSignature>,
 
     /// Registered struct definitions (name -> fields)
-    struct_definitions:
-        HashMap<InternedString, Vec<Var>>,
+    struct_definitions: HashMap<InternedString, Vec<Var>>,
 
     /// Candidates for possible drop insertion
     drop_candidates: Vec<DropCandidate>,
@@ -674,19 +673,12 @@ impl<'a> HirBuilderContext<'a> {
     }
 
     /// Registers a struct definition
-    pub fn register_struct(
-        &mut self,
-        name: InternedString,
-        fields: Vec<Var>,
-    ) {
+    pub fn register_struct(&mut self, name: InternedString, fields: Vec<Var>) {
         self.struct_definitions.insert(name, fields);
     }
 
     /// Gets a registered struct definition
-    pub fn get_struct_definition(
-        &self,
-        name: &InternedString,
-    ) -> Option<&Vec<Var>> {
+    pub fn get_struct_definition(&self, name: &InternedString) -> Option<&Vec<Var>> {
         self.struct_definitions.get(name)
     }
 
@@ -1217,9 +1209,7 @@ impl<'a> HirBuilderContext<'a> {
     fn convert_target_to_place(&self, target: &AstNode) -> Result<HirPlace, CompilerError> {
         match &target.kind {
             NodeKind::Rvalue(expr) => match &expr.kind {
-                ExpressionKind::Reference(
-                    name,
-                ) => Ok(HirPlace::Var(name.to_owned())),
+                ExpressionKind::Reference(name) => Ok(HirPlace::Var(name.to_owned())),
                 _ => {
                     crate::return_compiler_error!("Unsupported assignment target expression")
                 }

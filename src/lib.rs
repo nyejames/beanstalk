@@ -1,4 +1,7 @@
-// #![allow(unused)]
+// While many parts of the compiler are in heavy development,
+// there are lots of placeholders and code that will possibly be used, but isn't atm.
+#![allow(dead_code, unused_macros, unused_variables)]
+
 pub mod settings;
 pub(crate) mod compiler_tests {
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
@@ -9,20 +12,8 @@ pub(crate) mod build_system;
 
 mod compiler_frontend {
     pub(crate) mod ast;
-    pub(crate) mod parsers {
-
-        pub(crate) mod imports;
-
-        pub(crate) mod parse_file_headers;
-        // pub(crate) mod markdown; // Commented out to silence unused warnings - will be used by frontend later
-
-
-        pub(crate) mod tokenizer {
-            pub(crate) mod compiler_directives;
-            pub(crate) mod tokenizer;
-            pub(crate) mod tokens;
-        }
-    }
+    pub(crate) mod headers;
+    pub(crate) mod tokenizer;
     pub(crate) mod optimizers {
         pub(crate) mod constant_folding;
     }
@@ -53,12 +44,14 @@ mod compiler_frontend {
 
     pub(crate) mod borrow_checker;
 
-    pub(crate) mod lir;
-
     pub(crate) mod codegen {
         pub(crate) mod js;
         pub(crate) mod wasm;
     }
+}
+
+mod backends {
+    pub mod lir;
 }
 pub mod projects {
     pub mod cli;
@@ -70,8 +63,10 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::Config;
 use std::collections::HashSet;
 use std::path::PathBuf;
-
 // Re-export types for the build system
+use crate::backends::lir::lower_hir_to_lir;
+use crate::backends::lir::nodes::LirModule;
+use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::borrow_checker::{BorrowCheckOutcome, BorrowChecker};
 use crate::compiler_frontend::codegen::js::{self, JsLoweringConfig, JsModule};
 use crate::compiler_frontend::codegen::wasm::encode::encode_wasm;
@@ -79,17 +74,14 @@ use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages,
 };
 use crate::compiler_frontend::compiler_messages::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, parse_headers};
 use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
 use crate::compiler_frontend::hir::nodes::HirModule;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::lir::lower_hir_to_lir;
-use crate::compiler_frontend::lir::nodes::LirModule;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
-use crate::compiler_frontend::parsers::parse_file_headers::{Header, parse_headers};
-use crate::compiler_frontend::parsers::tokenizer::tokenizer::tokenize;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 pub(crate) use build_system::build::*;
-use crate::compiler_frontend::ast::ast::Ast;
 
 pub struct OutputModule {
     pub(crate) imports: HashSet<PathBuf>,
@@ -263,12 +255,7 @@ impl<'a> CompilerFrontend<'a> {
 pub fn generate_lir(hir_module: HirModule) -> Result<LirModule, CompilerMessages> {
     let lir_module = lower_hir_to_lir(hir_module)?;
 
-    // Display LIR if the show_lir feature is enabled
-    #[cfg(feature = "show_lir")]
-    {
-        use crate::compiler_frontend::lir::display_lir;
-        println!("{}", display_lir(&lir_module));
-    }
+    codegen_log!(backends::lir::display_lir(&lir_module));
 
     Ok(lir_module)
 }

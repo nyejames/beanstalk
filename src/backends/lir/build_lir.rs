@@ -3,11 +3,11 @@
 //! This module contains the main `lower_hir_to_lir` function that transforms
 //! a HIR module into a LIR module.
 
+use crate::backends::lir::nodes::{LirFunction, LirModule, LirStruct};
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages,
 };
 use crate::compiler_frontend::hir::nodes::{HirBlock, HirKind, HirModule, HirStmt};
-use crate::compiler_frontend::lir::nodes::{LirFunction, LirModule, LirStruct};
 
 use super::context::LoweringContext;
 

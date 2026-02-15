@@ -136,7 +136,7 @@ pub fn build_project(
             say!(
                 "\nBuilt ",
                 Blue project.output_files.len(),
-                "files successfully in: ",
+                Reset " files successfully in: ",
                 Green Bold #duration
             );
 

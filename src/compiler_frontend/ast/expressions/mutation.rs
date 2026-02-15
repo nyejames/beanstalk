@@ -1,11 +1,11 @@
-use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 /// Handle mutation of existing mutable variables
@@ -25,9 +25,9 @@ pub fn handle_mutation(
     // Check if the variable is mutable
     let ownership = &variable_arg.value.ownership;
     ast_log!(
-        "Handling mutation for {:?}: '{}'",
-        ownership,
-        string_table.resolve(variable_arg.id)
+        "Handling mutation for ",
+        #ownership, " ",
+        Blue string_table.resolve(variable_arg.id)
     );
 
     if !ownership.is_mutable() {
@@ -93,9 +93,7 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
             let add_op = AstNode {
-                kind: NodeKind::Operator(
-                   Operator::Add,
-                ),
+                kind: NodeKind::Operator(Operator::Add),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
@@ -134,9 +132,7 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
             let subtract_op = AstNode {
-                kind: NodeKind::Operator(
-                    Operator::Subtract,
-                ),
+                kind: NodeKind::Operator(Operator::Subtract),
                 location: location.to_owned(),
                 scope: context.scope.clone(),
             };
@@ -175,9 +171,7 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
             let multiply_op = AstNode {
-                kind: NodeKind::Operator(
-                    Operator::Multiply,
-                ),
+                kind: NodeKind::Operator(Operator::Multiply),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
@@ -216,9 +210,7 @@ pub fn handle_mutation(
                 scope: context.scope.clone(),
             };
             let divide_op = AstNode {
-                kind: NodeKind::Operator(
-                    Operator::Divide,
-                ),
+                kind: NodeKind::Operator(Operator::Divide),
                 location: location.clone(),
                 scope: context.scope.clone(),
             };
