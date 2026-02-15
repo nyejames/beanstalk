@@ -12,7 +12,7 @@
 //! - Suggestions for common validation failures
 //! - Integration with WasmModuleBuilder for pre-validation checks
 
-use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
+use crate::backends::wasm::error::WasmGenerationError;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use std::collections::HashMap;
 

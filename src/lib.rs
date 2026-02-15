@@ -36,31 +36,29 @@ mod compiler_frontend {
     pub(crate) mod string_interning;
     pub(crate) mod traits;
 
-    pub(crate) mod host_functions {
-        pub(crate) mod registry;
-    }
+    pub(crate) mod host_functions {}
 
     pub(crate) mod hir;
 
     pub(crate) mod borrow_checker;
 
-    pub(crate) mod codegen {
-        pub(crate) mod js;
-        pub(crate) mod wasm;
-    }
+    pub(crate) mod codegen {}
 }
 
 mod backends {
+    pub(crate) mod host_function_registry;
+    pub(crate) mod js;
     pub mod lir;
+    pub(crate) mod wasm;
 }
 pub mod projects {
     pub mod cli;
     pub(crate) mod html_project;
 }
 
-use crate::compiler_frontend::host_functions::registry::HostRegistry;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::settings::Config;
+use backends::host_function_registry::HostRegistry;
 use std::collections::HashSet;
 use std::path::PathBuf;
 // Re-export types for the build system
@@ -68,8 +66,6 @@ use crate::backends::lir::lower_hir_to_lir;
 use crate::backends::lir::nodes::LirModule;
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::borrow_checker::{BorrowCheckOutcome, BorrowChecker};
-use crate::compiler_frontend::codegen::js::{self, JsLoweringConfig, JsModule};
-use crate::compiler_frontend::codegen::wasm::encode::encode_wasm;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages,
 };
@@ -81,6 +77,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
+use backends::js::{self, JsLoweringConfig, JsModule};
+use backends::wasm::encode::encode_wasm;
 pub(crate) use build_system::build::*;
 
 pub struct OutputModule {

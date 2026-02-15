@@ -12,7 +12,7 @@
 #![allow(dead_code)]
 
 use crate::backends::lir::nodes::LirInst;
-use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
+use crate::backends::wasm::error::WasmGenerationError;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use wasm_encoder::{BlockType, Function, Instruction, ValType};
 

@@ -13,7 +13,7 @@
 #![allow(dead_code)]
 
 use crate::backends::lir::nodes::{LirFunction, LirModule, LirStruct, LirType};
-use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
+use crate::backends::wasm::error::WasmGenerationError;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use std::collections::HashMap;
 use wasm_encoder::ValType;

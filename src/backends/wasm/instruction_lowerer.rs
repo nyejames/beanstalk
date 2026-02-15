@@ -15,9 +15,9 @@
 #![allow(dead_code)]
 
 use crate::backends::lir::nodes::LirInst;
-use crate::compiler_frontend::codegen::wasm::analyzer::LocalMap;
-use crate::compiler_frontend::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
-use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
+use crate::backends::wasm::analyzer::LocalMap;
+use crate::backends::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
+use crate::backends::wasm::error::WasmGenerationError;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use std::collections::HashMap;
 use wasm_encoder::{Function, Ieee32, Ieee64, Instruction, MemArg};
@@ -856,7 +856,7 @@ impl InstructionLowerer {
         instructions: &[LirInst],
         result_type: Option<wasm_encoder::ValType>,
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         // Generate block instruction and enter block
         control_flow.generate_block(result_type, function)?;
@@ -880,7 +880,7 @@ impl InstructionLowerer {
         instructions: &[LirInst],
         result_type: Option<wasm_encoder::ValType>,
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         // Generate loop instruction and enter block
         control_flow.generate_loop(result_type, function)?;
@@ -905,7 +905,7 @@ impl InstructionLowerer {
         else_branch: Option<&[LirInst]>,
         result_type: Option<wasm_encoder::ValType>,
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         // Generate if instruction and enter block
         control_flow.generate_if(result_type, function)?;
@@ -936,7 +936,7 @@ impl InstructionLowerer {
         &self,
         target_depth: u32,
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         control_flow.generate_branch(target_depth, function)
     }
@@ -948,7 +948,7 @@ impl InstructionLowerer {
         &self,
         target_depth: u32,
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         control_flow.generate_branch_if(target_depth, function)
     }
@@ -960,7 +960,7 @@ impl InstructionLowerer {
         &self,
         inst: &LirInst,
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         match inst {
             // Control flow instructions - delegate to specialized methods
@@ -996,7 +996,7 @@ impl InstructionLowerer {
         &self,
         instructions: &[LirInst],
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
     ) -> Result<(), CompilerError> {
         for inst in instructions {
             self.lower_instruction_with_control_flow(inst, function, control_flow)?;
@@ -1146,7 +1146,7 @@ impl InstructionLowerer {
         &self,
         local: u32,
         function: &mut Function,
-        ownership_manager: &crate::compiler_frontend::codegen::wasm::ownership_manager::OwnershipManager,
+        ownership_manager: &crate::backends::wasm::ownership_manager::OwnershipManager,
     ) -> Result<(), CompilerError> {
         let wasm_local = self
             .get_wasm_local(local)
@@ -1161,7 +1161,7 @@ impl InstructionLowerer {
         &self,
         inst: &LirInst,
         function: &mut Function,
-        ownership_manager: &crate::compiler_frontend::codegen::wasm::ownership_manager::OwnershipManager,
+        ownership_manager: &crate::backends::wasm::ownership_manager::OwnershipManager,
     ) -> Result<(), CompilerError> {
         match inst {
             LirInst::PossibleDrop(local) => {
@@ -1179,8 +1179,8 @@ impl InstructionLowerer {
         &self,
         instructions: &[LirInst],
         function: &mut Function,
-        control_flow: &mut crate::compiler_frontend::codegen::wasm::control_flow::ControlFlowManager,
-        ownership_manager: &crate::compiler_frontend::codegen::wasm::ownership_manager::OwnershipManager,
+        control_flow: &mut crate::backends::wasm::control_flow::ControlFlowManager,
+        ownership_manager: &crate::backends::wasm::ownership_manager::OwnershipManager,
     ) -> Result<(), CompilerError> {
         for inst in instructions {
             match inst {

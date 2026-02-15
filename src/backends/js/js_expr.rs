@@ -1,11 +1,9 @@
-use crate::compiler_frontend::codegen::js::JsEmitter;
-use crate::compiler_frontend::codegen::js::js_host_functions::{
-    HostFunctionId, get_host_function_str,
-};
-use crate::compiler_frontend::codegen::js::js_statement::JsStmt;
+use crate::backends::host_function_registry::CallTarget;
+use crate::backends::js::JsEmitter;
+use crate::backends::js::js_host_functions::{HostFunctionId, get_host_function_str};
+use crate::backends::js::js_statement::JsStmt;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{BinOp, HirExpr, HirExprKind, UnaryOp};
-use crate::compiler_frontend::host_functions::registry::CallTarget;
 use crate::compiler_frontend::string_interning::InternedString;
 
 /// Result of lowering a HIR expression to JS

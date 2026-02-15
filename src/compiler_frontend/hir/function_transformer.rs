@@ -10,6 +10,7 @@
 //! - Transform host function calls with proper import information
 //! - Prepare arguments for Beanstalk's unified ABI
 
+use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -19,7 +20,6 @@ use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
 use crate::compiler_frontend::hir::nodes::{
     BlockId, HirExpr, HirExprKind, HirKind, HirNode, HirStmt, HirTerminator,
 };
-use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_hir_transformation_error;

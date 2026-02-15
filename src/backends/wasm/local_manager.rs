@@ -12,7 +12,7 @@
 #![allow(dead_code)]
 
 use crate::backends::lir::nodes::LirFunction;
-use crate::compiler_frontend::codegen::wasm::analyzer::{LocalMap, WasmType};
+use crate::backends::wasm::analyzer::{LocalMap, WasmType};
 use std::collections::HashMap;
 use wasm_encoder::{Function, ValType};
 

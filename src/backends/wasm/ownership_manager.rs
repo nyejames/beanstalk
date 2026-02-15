@@ -24,7 +24,7 @@
 // All methods will be used when ownership system is integrated
 #![allow(dead_code)]
 
-use crate::compiler_frontend::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
+use crate::backends::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use wasm_encoder::{Function, Instruction};
 

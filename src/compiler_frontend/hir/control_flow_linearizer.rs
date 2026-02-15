@@ -17,6 +17,7 @@
 //! - Nested control flow maintains correct block nesting
 //! - All scope exits are explicit through terminators or drop points
 
+use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
@@ -28,7 +29,6 @@ use crate::compiler_frontend::hir::nodes::{
     BlockId, HirExpr, HirExprKind, HirKind, HirMatchArm, HirNode, HirPattern, HirPlace, HirStmt,
     HirTerminator,
 };
-use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_compiler_error;

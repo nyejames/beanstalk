@@ -33,14 +33,14 @@
 #![allow(dead_code)]
 
 // Re-export constants for backward compatibility
-pub use crate::compiler_frontend::codegen::wasm::constants::{
+pub use crate::backends::wasm::constants::{
     DEFAULT_MAX_PAGES, DEFAULT_MIN_PAGES, HEAP_START_OFFSET, MIN_ALLOCATION_ALIGNMENT,
 };
 
-use crate::compiler_frontend::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
-use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
-use crate::compiler_frontend::codegen::wasm::module_builder::WasmModuleBuilder;
-use crate::compiler_frontend::codegen::wasm::ownership_manager::OwnershipManager;
+use crate::backends::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
+use crate::backends::wasm::error::WasmGenerationError;
+use crate::backends::wasm::module_builder::WasmModuleBuilder;
+use crate::backends::wasm::ownership_manager::OwnershipManager;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use wasm_encoder::{Function, Instruction, ValType};
 
