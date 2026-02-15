@@ -198,7 +198,13 @@ fn print_help(commands_only: bool) {
     //   // "  dev <path>           - Runs the dev server (builds files in dev directory with hot reloading)"
     //);
     //say!("  build <path>         - Builds a file");
-    say!("  run <path>           - JITs a file");
-    say!("  release <path>       - Builds a project in release mode");
-    say!("  tests                - Runs the test suite");
+    say!("  run <path>        - JITs a file");
+    say!("  build <path>      - Builds a project");
+    say!("  tests             - Runs the test suite");
+
+    say!(Green Bold "\nFlags:");
+    say!("  --release");
+    say!("  --hide-warnings");
+    say!("  --hide-timers");
+    say!("  --show-warnings");
 }
