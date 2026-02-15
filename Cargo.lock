@@ -85,9 +85,9 @@ checksum = "357703d41365b4b27c590e3ed91eabb1b663f07c4c084095e60cbed4362dff0d"
 
 [[package]]
 name = "saying"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ebabed30f2707a01e5e7cec1f1e8237c8d0a23afc96117ab9e7ce1ad1e7c857"
+checksum = "339f5594014952f85294d03d562b359713db36f77327e3f48f1fa04199263c3a"
 
 [[package]]
 name = "semver"
