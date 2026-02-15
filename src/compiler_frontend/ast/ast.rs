@@ -1,3 +1,4 @@
+use crate::backends::host_function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::build_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -5,7 +6,6 @@ use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::host_functions::registry::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;

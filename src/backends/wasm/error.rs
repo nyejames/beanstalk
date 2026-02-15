@@ -962,46 +962,128 @@ macro_rules! return_wasm_error {
 #[macro_export]
 macro_rules! wasm_error {
     (lir_analysis: $context:expr, $construct:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::lir_analysis($context, $construct).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::lir_analysis($context, $construct)
+                .to_compiler_error($location),
+        )
     };
     (lir_analysis_with_suggestion: $context:expr, $construct:expr, $suggestion:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::lir_analysis_with_suggestion($context, $construct, $suggestion).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::lir_analysis_with_suggestion(
+                $context,
+                $construct,
+                $suggestion,
+            )
+            .to_compiler_error($location),
+        )
     };
     (instruction_lowering: $instruction:expr, $context:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::instruction_lowering($instruction, $context).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::instruction_lowering(
+                $instruction,
+                $context,
+            )
+            .to_compiler_error($location),
+        )
     };
     (instruction_lowering_with_stack: $instruction:expr, $context:expr, $stack:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::instruction_lowering_with_stack($instruction, $context, $stack).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::instruction_lowering_with_stack(
+                $instruction,
+                $context,
+                $stack,
+            )
+            .to_compiler_error($location),
+        )
     };
     (validation: $wasm_error:expr, $lir_context:expr, $suggestion:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::validation_failure($wasm_error, $lir_context, $suggestion).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::validation_failure(
+                $wasm_error,
+                $lir_context,
+                $suggestion,
+            )
+            .to_compiler_error($location),
+        )
     };
     (type_mismatch: $expected:expr, $found:expr, $context:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::type_mismatch($expected, $found, $context).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::type_mismatch(
+                $expected, $found, $context,
+            )
+            .to_compiler_error($location),
+        )
     };
     (type_mismatch_with_suggestion: $expected:expr, $found:expr, $context:expr, $suggestion:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::type_mismatch_with_suggestion($expected, $found, $context, $suggestion).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::type_mismatch_with_suggestion(
+                $expected,
+                $found,
+                $context,
+                $suggestion,
+            )
+            .to_compiler_error($location),
+        )
     };
     (stack_imbalance: $expected:expr, $actual:expr, $context:expr, $suggestion:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::stack_imbalance($expected, $actual, $context, $suggestion).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::stack_imbalance(
+                $expected,
+                $actual,
+                $context,
+                $suggestion,
+            )
+            .to_compiler_error($location),
+        )
     };
     (tagged_pointer: $operation:expr, $context:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::tagged_pointer($operation, $context).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::tagged_pointer(
+                $operation, $context,
+            )
+            .to_compiler_error($location),
+        )
     };
     (control_flow: $block_type:expr, $depth:expr, $target:expr, $context:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::control_flow($block_type, $depth, $target, $context).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::control_flow(
+                $block_type,
+                $depth,
+                $target,
+                $context,
+            )
+            .to_compiler_error($location),
+        )
     };
     (signature_mismatch: $expected:expr, $found:expr, $func_name:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::signature_mismatch($expected, $found, $func_name).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::signature_mismatch(
+                $expected, $found, $func_name,
+            )
+            .to_compiler_error($location),
+        )
     };
     (index_error: $section:expr, $index:expr, $max:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::index_error($section, $index, $max).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::index_error($section, $index, $max)
+                .to_compiler_error($location),
+        )
     };
     (host_function: $func_name:expr, $module:expr, $context:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::host_function($func_name, $module, $context).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::host_function(
+                $func_name, $module, $context,
+            )
+            .to_compiler_error($location),
+        )
     };
     (export_error: $name:expr, $kind:expr, $context:expr, $location:expr) => {
-        return Err($crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::export_error($name, $kind, $context).to_compiler_error($location))
+        return Err(
+            $crate::backends::wasm::error::WasmGenerationError::export_error(
+                $name, $kind, $context,
+            )
+            .to_compiler_error($location),
+        )
     };
 }
 
@@ -1015,20 +1097,18 @@ macro_rules! wasm_error {
 #[macro_export]
 macro_rules! create_wasm_error {
     (lir_analysis: $context:expr, $construct:expr, $location:expr) => {
-        $crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::lir_analysis(
-            $context, $construct,
-        )
-        .to_compiler_error($location)
+        $crate::backends::wasm::error::WasmGenerationError::lir_analysis($context, $construct)
+            .to_compiler_error($location)
     };
     (instruction_lowering: $instruction:expr, $context:expr, $location:expr) => {
-        $crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::instruction_lowering(
+        $crate::backends::wasm::error::WasmGenerationError::instruction_lowering(
             $instruction,
             $context,
         )
         .to_compiler_error($location)
     };
     (validation: $wasm_error:expr, $lir_context:expr, $suggestion:expr, $location:expr) => {
-        $crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::validation_failure(
+        $crate::backends::wasm::error::WasmGenerationError::validation_failure(
             $wasm_error,
             $lir_context,
             $suggestion,
@@ -1036,13 +1116,13 @@ macro_rules! create_wasm_error {
         .to_compiler_error($location)
     };
     (type_mismatch: $expected:expr, $found:expr, $context:expr, $location:expr) => {
-        $crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::type_mismatch(
+        $crate::backends::wasm::error::WasmGenerationError::type_mismatch(
             $expected, $found, $context,
         )
         .to_compiler_error($location)
     };
     (stack_imbalance: $expected:expr, $actual:expr, $context:expr, $suggestion:expr, $location:expr) => {
-        $crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::stack_imbalance(
+        $crate::backends::wasm::error::WasmGenerationError::stack_imbalance(
             $expected,
             $actual,
             $context,
@@ -1051,10 +1131,8 @@ macro_rules! create_wasm_error {
         .to_compiler_error($location)
     };
     (tagged_pointer: $operation:expr, $context:expr, $location:expr) => {
-        $crate::compiler_frontend::codegen::wasm::error::WasmGenerationError::tagged_pointer(
-            $operation, $context,
-        )
-        .to_compiler_error($location)
+        $crate::backends::wasm::error::WasmGenerationError::tagged_pointer($operation, $context)
+            .to_compiler_error($location)
     };
 }
 

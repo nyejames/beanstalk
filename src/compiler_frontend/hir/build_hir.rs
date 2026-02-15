@@ -35,8 +35,8 @@ use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 // Re-export validator types for backward compatibility
+use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
 pub use crate::compiler_frontend::hir::validator::{HirValidationError, HirValidator};
-use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
 // ============================================================================

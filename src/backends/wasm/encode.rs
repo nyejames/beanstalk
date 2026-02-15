@@ -27,8 +27,9 @@
 //! 5. Add exports (main function, memory)
 //! 6. Validate and finalize module
 
+use crate::backends::host_function_registry::HostRegistry;
 use crate::backends::lir::nodes::{LirFunction, LirInst, LirModule};
-use crate::compiler_frontend::codegen::wasm::{
+use crate::backends::wasm::{
     analyzer::LirAnalyzer,
     control_flow::ControlFlowManager,
     error::WasmGenerationError,
@@ -40,7 +41,6 @@ use crate::compiler_frontend::codegen::wasm::{
     validator::{WasmValidator, validate_wasm_module_comprehensive},
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::host_functions::registry::HostRegistry;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::collections::HashMap;
 use wasm_encoder::{ExportKind, Function, Instruction, ValType};
@@ -394,7 +394,7 @@ pub fn get_host_function_index(
 /// This performs basic validation to ensure the module is well-formed.
 #[allow(dead_code)]
 fn validate_wasm_module(wasm_bytes: &[u8]) -> Result<(), CompilerError> {
-    use crate::compiler_frontend::codegen::wasm::error::validate_wasm_bytes;
+    use crate::backends::wasm::error::validate_wasm_bytes;
 
     validate_wasm_bytes(wasm_bytes, "Generated WASM module")
         .map_err(|e| e.to_compiler_error(ErrorLocation::default()))

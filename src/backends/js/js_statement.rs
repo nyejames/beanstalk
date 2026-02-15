@@ -1,4 +1,4 @@
-use crate::compiler_frontend::codegen::js::{JsEmitter, JsIdent};
+use crate::backends::js::{JsEmitter, JsIdent};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{HirPlace, HirStmt};
 

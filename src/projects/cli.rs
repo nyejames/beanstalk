@@ -13,8 +13,7 @@ use std::{
 enum Command {
     NewHTMLProject(String), // Creates a new HTML project template
 
-    Build(String),   // Builds a file or project in development mode
-    Release(String), // Builds a file or project in release mode
+    Build(String), // Builds a file or project
 
     // Run(&'static str),  //TODO:  Jit the project/file. This will be an eventual Rust interpreter project
 
@@ -54,6 +53,7 @@ pub fn start_cli() {
         Command::Help => {
             print_help(true);
         }
+
         Command::NewHTMLProject(path) => {
             let args = prompt_user_for_input("Project name: ");
             let name_args = args.first();
@@ -84,12 +84,6 @@ pub fn start_cli() {
         //         build::build_project_files(&path, false, &flags, Some(BuildTarget::Interpreter));
         //     print_compiler_messages(messages);
         // }
-        Command::Release(path) => {
-            let html_project_builder = Box::new(HtmlProjectBuilder::new());
-            let messages = build::build_project(html_project_builder, &path, &flags);
-            print_compiler_messages(messages);
-        }
-
         Command::Dev(path) => {
             say!("\nStarting dev server...");
             dev_server::start_dev_server(&path, &flags);
@@ -148,11 +142,6 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         //     }
         //     _ => Ok(Command::Run("")),
         // },
-        Some("release") => match args.get(1) {
-            Some(path) => Ok(Command::Release(path.to_string())),
-            _ => Ok(Command::Release(String::new())),
-        },
-
         Some("dev") => match args.get(1) {
             // TODO: remove the testing path and make this a proper path
             Some(path) => {
@@ -212,5 +201,4 @@ fn print_help(commands_only: bool) {
     say!("  run <path>           - JITs a file");
     say!("  release <path>       - Builds a project in release mode");
     say!("  tests                - Runs the test suite");
-    // say!("  wat <path>           - Compiles a WAT file to WebAssembly");
 }

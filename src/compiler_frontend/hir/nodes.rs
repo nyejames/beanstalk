@@ -24,10 +24,10 @@
 //! - Borrow intent recorded, an ownership outcome determined later (or ignored entirely in GC-only backends)
 //! - Language-shaped, not Wasm-shaped (deferred to LIR)
 
+use crate::backends::host_function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::registry::CallTarget;
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 

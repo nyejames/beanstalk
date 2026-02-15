@@ -11,13 +11,11 @@
 //! environment (e.g., JavaScript in web contexts, native functions in CLI).
 //! They are imported into the WASM module and called like regular functions.
 
-use crate::compiler_frontend::codegen::wasm::analyzer::{FunctionSignature, WasmType};
-use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
-use crate::compiler_frontend::codegen::wasm::module_builder::WasmModuleBuilder;
+use crate::backends::host_function_registry::{HostAbiType, HostFunctionDef, HostRegistry};
+use crate::backends::wasm::analyzer::{FunctionSignature, WasmType};
+use crate::backends::wasm::error::WasmGenerationError;
+use crate::backends::wasm::module_builder::WasmModuleBuilder;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::host_functions::registry::{
-    HostAbiType, HostFunctionDef, HostRegistry,
-};
 use crate::compiler_frontend::string_interning::StringTable;
 use std::collections::HashMap;
 use wasm_encoder::{ExportKind, ValType};

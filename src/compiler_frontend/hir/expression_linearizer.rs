@@ -18,6 +18,7 @@
 //! - Expression flattening creates explicit temporaries for intermediate results
 //! - The linearizer operates on borrowed HirBuilderContext to maintain single authoritative state
 
+use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
@@ -28,7 +29,6 @@ use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
 use crate::compiler_frontend::hir::nodes::{
     BinOp, HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt, UnaryOp,
 };
-use crate::compiler_frontend::host_functions::registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::return_compiler_error;

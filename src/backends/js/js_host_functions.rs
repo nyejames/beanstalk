@@ -1,4 +1,4 @@
-pub(crate) use crate::compiler_frontend::host_functions::registry::HostFunctionId;
+pub(crate) use crate::backends::host_function_registry::HostFunctionId;
 
 pub fn get_host_function_str(id: HostFunctionId) -> &'static str {
     match id {
