@@ -347,7 +347,6 @@ fn concat_template(
                 // Some styles will override others based on their precedence
                 template.style.formatter = template_to_concat.style.formatter.to_owned();
                 template.style.child_default = template_to_concat.style.child_default.to_owned();
-                template.style.compatibility = template_to_concat.style.compatibility.to_owned();
                 template.style.override_precedence =
                     template_to_concat.style.override_precedence.to_owned();
             }
