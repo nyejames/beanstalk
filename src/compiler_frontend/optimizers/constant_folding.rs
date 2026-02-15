@@ -24,12 +24,12 @@
 //! - **Code Size**: Reduces generated WASM by pre-computing known values
 //! - **Optimization**: Enables dead code elimination and further optimizations
 
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::{return_rule_error, return_syntax_error};
 
@@ -72,8 +72,7 @@ pub fn constant_fold(
                             output_stack,
                             stack
                         ),
-                        node.location.to_owned().to_error_location(&string_table),
-                        {}
+                        node.location.to_owned().to_error_location(string_table)
                     )
                 }
 
@@ -162,8 +161,7 @@ impl Expression {
                     // Other operations are not applicable to floats
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on floats", op.to_str()),
-                        self.location.to_owned().to_error_location(&string_table),
-                        {}
+                        self.location.to_owned().to_error_location(string_table)
                     ),
                 }
             }
@@ -179,8 +177,7 @@ impl Expression {
                         if *rhs_val == 0 {
                             return_rule_error!(
                                 "Can't divide by zero",
-                                self.location.to_owned().to_error_location(&string_table),
-                                {}
+                                self.location.to_owned().to_error_location(string_table)
                             )
                         }
 
@@ -190,8 +187,7 @@ impl Expression {
                         if *rhs_val == 0 {
                             return_rule_error!(
                                 "Can't modulus by zero",
-                                self.location.to_owned().to_error_location(&string_table),
-                                {}
+                                self.location.to_owned().to_error_location(string_table)
                             )
                         }
 
@@ -232,8 +228,7 @@ impl Expression {
 
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on integers", op.to_str()),
-                        self.location.to_owned().to_error_location(&string_table),
-                        {}
+                        self.location.to_owned().to_error_location(string_table)
                     ),
                 }
             }
@@ -246,8 +241,7 @@ impl Expression {
 
                 _ => return_rule_error!(
                     format!("Can't perform operation {} on booleans", op.to_str()),
-                    self.location.to_owned().to_error_location(&string_table),
-                    {}
+                    self.location.to_owned().to_error_location(string_table)
                 ),
             },
 
@@ -265,8 +259,7 @@ impl Expression {
                     Operator::Equality => ExpressionKind::Bool(lhs_val == rhs_val),
                     _ => return_rule_error!(
                         format!("Can't perform operation {} on strings", op.to_str()),
-                        self.location.to_owned().to_error_location(&string_table),
-                        {}
+                        self.location.to_owned().to_error_location(string_table)
                     ),
                 }
             }

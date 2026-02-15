@@ -2,16 +2,14 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::optimizers::constant_folding::constant_fold;
 
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
-use crate::compiler_frontend::string_interning::StringTable;
-use crate::return_type_error;
-use crate::{
-    eval_log, return_compiler_error, return_syntax_error,
-};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+use crate::return_type_error;
+use crate::{eval_log, return_compiler_error, return_syntax_error};
 
 /**
  * Evaluates an abstract syntax tree (AST) expression using the shunting-yard algorithm
@@ -101,7 +99,7 @@ pub fn evaluate_expression(
     let location = extract_location(&nodes)?;
 
     'outer: for node in nodes {
-        eval_log!("Evaluating node in expression: {:?}", node);
+        eval_log!("Evaluating node in expression: ", Pretty node);
         match &node.kind {
             // Values
             NodeKind::Rvalue(expr, ..) => {
@@ -249,12 +247,12 @@ pub fn evaluate_expression(
                 output_queue.push(operator);
             }
 
-            eval_log!("Attempting to Fold: {:#?}", output_queue);
+            eval_log!("Attempting to Fold: ", Pretty output_queue);
 
             // Evaluate all constants in the maths expression
             let stack = constant_fold(&output_queue, string_table)?;
 
-            eval_log!("Stack after folding: {:#?}", stack);
+            eval_log!("Stack after folding: ", Pretty stack);
 
             if stack.len() == 1 {
                 return stack[0].get_expr();

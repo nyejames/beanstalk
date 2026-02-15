@@ -11,9 +11,9 @@
 // (full integration with instruction lowering)
 #![allow(dead_code)]
 
+use crate::backends::lir::nodes::LirInst;
 use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::lir::nodes::LirInst;
 use wasm_encoder::{BlockType, Function, Instruction, ValType};
 
 /// Manages WASM structured control flow generation.

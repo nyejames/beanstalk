@@ -14,11 +14,11 @@
 // (full instruction lowering integration with encode.rs)
 #![allow(dead_code)]
 
+use crate::backends::lir::nodes::LirInst;
 use crate::compiler_frontend::codegen::wasm::analyzer::LocalMap;
 use crate::compiler_frontend::codegen::wasm::constants::{ALIGNMENT_MASK, OWNERSHIP_BIT};
 use crate::compiler_frontend::codegen::wasm::error::WasmGenerationError;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::lir::nodes::LirInst;
 use std::collections::HashMap;
 use wasm_encoder::{Function, Ieee32, Ieee64, Instruction, MemArg};
 

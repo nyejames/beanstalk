@@ -19,7 +19,7 @@ use crate::compiler_frontend::hir::nodes::{
     BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirPlace, HirStmt,
     HirTerminator,
 };
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::HashSet;
 
 // ============================================================================

@@ -14,6 +14,9 @@
 //! Feature: hir-builder, Property 8: Template Processing Correctness
 //! Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.6
 
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
@@ -21,9 +24,6 @@ use crate::compiler_frontend::hir::nodes::{
     HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
 };
 use crate::compiler_frontend::host_functions::registry::CallTarget;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::return_compiler_error;
 

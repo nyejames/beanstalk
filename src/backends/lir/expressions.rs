@@ -3,9 +3,9 @@
 //! This module handles lowering HIR expressions to LIR instructions,
 //! including literals, binary operations, and unary operations.
 
+use crate::backends::lir::nodes::{LirInst, LirType};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{BinOp, HirExpr, HirExprKind, HirPlace, UnaryOp};
-use crate::compiler_frontend::lir::nodes::{LirInst, LirType};
 
 use super::context::LoweringContext;
 use super::types::hir_expr_to_lir_type;

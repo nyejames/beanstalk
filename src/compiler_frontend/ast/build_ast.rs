@@ -1,20 +1,20 @@
 use super::ast_nodes::NodeKind;
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::statements::functions::parse_function_call;
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::statements::variables::new_var;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error, settings};
 
@@ -31,7 +31,7 @@ pub fn function_body_to_ast(
         // This should be starting after the imports
         let current_token = token_stream.current_token_kind().to_owned();
 
-        ast_log!("Parsing Token: {:?}", current_token);
+        ast_log!("Parsing Token: ", #current_token);
 
         match current_token {
             TokenKind::ModuleStart(..) => {
@@ -260,8 +260,7 @@ pub fn function_body_to_ast(
                         "Return statements can only be used inside functions",
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table),
-                        {}
+                            .to_error_location(string_table)
                     )
                 }
 
@@ -289,18 +288,14 @@ pub fn function_body_to_ast(
                         return_syntax_error!(
                             "Unexpected scope close. Expressions are not terminated like this.
                             Surround the expression with brackets if you need it to be multi-line. This might just be a compiler_frontend bug.",
-                            token_stream.current_location().to_error_location(&string_table), {
-
-                            }
+                            token_stream.current_location().to_error_location(string_table)
                         );
                     }
                     ContextKind::Template => {
                         return_syntax_error!(
                             "Unexpected use of ';' inside a template. Templates are not closed with ';'.
                             If you are seeing this error, this might be a compiler_frontend bug instead.",
-                            token_stream.current_location().to_error_location(&string_table), {
-
-                            }
+                            token_stream.current_location().to_error_location(string_table)
                         )
                     }
                     _ => {
@@ -334,8 +329,7 @@ pub fn function_body_to_ast(
                         "Templates can only be used like this at the top level. Not inside the body of a function",
                         token_stream
                             .current_location()
-                            .to_error_location(&string_table),
-                        {}
+                            .to_error_location(string_table)
                     )
                 }
 

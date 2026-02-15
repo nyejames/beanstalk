@@ -1,15 +1,15 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::{
     compiler_frontend::{
-        compiler_errors::CompilerError,
-        datatypes::DataType,
-        parsers::tokenizer::tokens::{FileTokens, TokenKind},
         ast::{
             ast::ScopeContext,
             ast_nodes::{AstNode, NodeKind, Var},
             statements::functions::parse_function_call,
         },
+        compiler_errors::CompilerError,
+        datatypes::DataType,
         string_interning::StringTable,
+        tokenizer::tokens::{FileTokens, TokenKind},
         traits::ContainsReferences,
     },
     return_rule_error,

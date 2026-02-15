@@ -8,13 +8,13 @@
 // ONLY DOES COMPILE TIME TEMPLATE ATM.
 // Function templates are not yet supported
 
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::compiler_frontend::host_functions::registry::HostRegistry;
-use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::ast::templates::create_template_node::Template;
-use crate::compiler_frontend::parsers::tokenizer::tokenizer::tokenize;
-use crate::compiler_frontend::parsers::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::tokenizer::tokenizer::tokenize;
+use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 use saying::say;
 use std::env;
 use std::io::{self, Write};

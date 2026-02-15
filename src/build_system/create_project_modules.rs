@@ -5,15 +5,15 @@
 // This is because both a Wasm and JS backend must be supported, so it is agnostic about what happens after that.
 
 use crate::build_system::build::Module;
+use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::{
-    CompilerFrontend, Flag, InputFile, return_err_as_messages, return_file_error,
-    settings, timer_log,
+    CompilerFrontend, Flag, InputFile, return_err_as_messages, return_file_error, settings,
+    timer_log,
 };
 use std::ffi::OsStr;
 use std::fs;
@@ -86,7 +86,7 @@ pub fn compile_project_frontend(
     flags: &[Flag],
 ) -> Result<Vec<Module>, CompilerMessages> {
     // For collecting warnings on the error path
-    let mut messages = CompilerMessages::new();
+    let messages = CompilerMessages::new();
 
     // -----------------------------
     //    SINGLE FILE COMPILATION
@@ -201,7 +201,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     const MODULES_CAPACITY: usize = 16;
 
     // Create a new string table for interning strings
-    let mut string_table = StringTable::with_capacity(module.len() * MODULES_CAPACITY);
+    let string_table = StringTable::with_capacity(module.len() * MODULES_CAPACITY);
 
     // Create the compiler_frontend instance
     let mut compiler = CompilerFrontend::new(config, string_table);
@@ -377,7 +377,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
 }
 
 pub(crate) fn discover_all_modules_in_project(config: &Config) -> Result<Vec<Module>, String> {
-    let mut modules = Vec::with_capacity(1);
+    let modules = Vec::with_capacity(1);
 
     // TODO:
     // HTML project builder uses directory based routing for the HTML pages.

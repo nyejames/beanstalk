@@ -11,7 +11,7 @@ use super::{
 use crate::compiler_frontend::hir::nodes::{
     HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirStmt, HirTerminator,
 };
-use crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation;
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 #[derive(Default)]

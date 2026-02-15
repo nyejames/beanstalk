@@ -10,9 +10,9 @@
 // (ownership system, memory model integration)
 #![allow(dead_code)]
 
+use crate::backends::lir::nodes::{LirStruct, LirType};
 use crate::compiler_frontend::codegen::wasm::analyzer::{FieldLayout, StructLayout, WasmType};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::lir::nodes::{LirStruct, LirType};
 use std::collections::HashMap;
 use wasm_encoder::Function;
 

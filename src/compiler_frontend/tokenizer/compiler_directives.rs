@@ -1,8 +1,8 @@
 // Compiler Directives
 // These are special keywords that are started with a hash, e.g., #slot
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream};
 use crate::{return_syntax_error, return_token};
 
 // Compiler directives are special keywords that start with a hash.

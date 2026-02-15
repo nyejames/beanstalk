@@ -1,12 +1,12 @@
 use crate::compiler_frontend::basic_utility_functions::is_valid_var_char;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::headers::imports::parse_imports;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::imports::parse_imports;
-use crate::compiler_frontend::parsers::tokenizer::compiler_directives::compiler_directive;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{
+use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::compiler_directives::compiler_directive;
+use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
-use crate::compiler_frontend::string_interning::StringTable;
 use crate::{return_syntax_error, settings, token_log};
 
 pub const END_SCOPE_CHAR: char = ';';
@@ -43,7 +43,7 @@ pub fn tokenize(
     );
 
     loop {
-        token_log!(token);
+        token_log!(#token);
 
         if token.kind == TokenKind::Eof {
             break;
@@ -70,9 +70,6 @@ pub fn get_token_kind(
     };
 
     let mut token_value: String = String::new();
-
-    #[cfg(feature = "show_char_stream")]
-    green_ln!("get_token_kind starting with: '{current_char}'");
 
     // Check for raw strings (backticks)
     // Also used in scenes for raw outputs

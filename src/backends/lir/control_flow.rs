@@ -3,9 +3,9 @@
 //! This module handles lowering control flow constructs (if, match, loop,
 //! break, continue, return) to LIR instructions.
 
+use crate::backends::lir::nodes::{LirInst, LirType};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::nodes::{BlockId, HirBlock, HirExpr, HirMatchArm, HirPattern};
-use crate::compiler_frontend::lir::nodes::{LirInst, LirType};
 
 use super::context::{LoopContext, LoweringContext};
 use super::types::{datatype_to_lir_type, hir_expr_to_lir_type};

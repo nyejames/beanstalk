@@ -1,14 +1,16 @@
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
-use crate::compiler_frontend::traits::ContainsReferences;
-use crate::settings::BS_VAR_PREFIX;
-use crate::{ast_log, return_compiler_error, return_syntax_error};
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
-use crate::compiler_frontend::ast::templates::template::{Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType};
+use crate::compiler_frontend::ast::templates::template::{
+    Formatter, Style, TemplateContent, TemplateControlFlow, TemplateType,
+};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::compiler_frontend::traits::ContainsReferences;
+use crate::settings::BS_VAR_PREFIX;
+use crate::{ast_log, return_compiler_error, return_syntax_error};
 
 pub const TEMPLATE_SPECIAL_IGNORE_CHAR: char = '\u{FFFC}';
 
@@ -420,7 +422,7 @@ pub fn parse_template_head(
     while token_stream.index < token_stream.length {
         let token = token_stream.current_token_kind().to_owned();
 
-        ast_log!("Parsing template head token: {:?}", token);
+        ast_log!("Parsing template head token: ", #token);
 
         // We are doing something similar to new_ast()
         // But with the specific scene head syntax,

@@ -61,7 +61,7 @@ fn handle_connection(
 
     let mut messages = CompilerMessages::new();
 
-    let mut config = Config::new(PathBuf::from(path));
+    let config = Config::new(PathBuf::from(path));
     let builder = Box::new(HtmlProjectBuilder::new());
 
     let dir_404 = &config

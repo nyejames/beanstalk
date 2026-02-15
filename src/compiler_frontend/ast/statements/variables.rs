@@ -1,7 +1,4 @@
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::ast::ast::{ScopeContext};
+use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::build_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -10,12 +7,14 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, parse_function_call,
 };
 use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
-use crate::compiler_frontend::parsers::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::ast::{
-    ast_nodes::{Var},
-    expressions::parse_expression::create_expression,
+    ast_nodes::Var, expressions::parse_expression::create_expression,
 };
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
@@ -262,7 +261,7 @@ pub fn new_var(
         )?,
     };
 
-    ast_log!("Created new {:?} {} variable", ownership, data_type);
+    ast_log!("Created new ", #ownership, " ", data_type);
 
     Ok(Var {
         id,

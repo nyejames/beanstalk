@@ -11,7 +11,7 @@
 // Many methods are prepared for later implementation phases
 #![allow(dead_code)]
 
-use crate::compiler_frontend::lir::nodes::{LirInst, LirType};
+use crate::backends::lir::nodes::{LirInst, LirType};
 use std::collections::HashMap;
 use wasm_encoder::ValType;
 

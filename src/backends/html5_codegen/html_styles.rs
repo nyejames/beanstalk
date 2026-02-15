@@ -1,4 +1,4 @@
-// use crate::parsers::scene::{PrecedenceStyle, Style, StyleFormat};
+// use crate::headers::scene::{PrecedenceStyle, Style, StyleFormat};
 // use std::collections::HashMap;
 //
 // // Core HTML Styles

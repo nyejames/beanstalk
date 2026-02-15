@@ -3,8 +3,8 @@
 // Declarations will be parsed first in the tokenizer now.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::headers::parse_file_headers::Header;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::parsers::parse_file_headers::Header;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
 use std::collections::{HashMap, HashSet};

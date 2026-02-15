@@ -23,8 +23,11 @@ pub use js_statement::JsStmt;
 
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::nodes::{BlockId, HirBlock, HirExpr, HirKind, HirModule};
+use crate::compiler_frontend::hir::nodes::{
+    BlockId, HirBlock, HirExpr, HirKind, HirMatchArm, HirModule, HirPattern, HirTerminator,
+};
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 
 /// Configuration for JS lowering
@@ -142,10 +145,7 @@ impl<'hir> JsEmitter<'hir> {
     /// - Pretty printing is enabled (for readability)
     ///
     /// In compact mode, location comments are suppressed to minimize output size.
-    pub(crate) fn emit_location_comment(
-        &mut self,
-        location: &crate::compiler_frontend::parsers::tokenizer::tokens::TextLocation,
-    ) {
+    pub(crate) fn emit_location_comment(&mut self, location: &TextLocation) {
         // Only emit location comments in pretty mode with emit_locations enabled
         if self.config.emit_locations && self.config.pretty {
             let line = location.start_pos.line_number + 1; // Convert to 1-based
@@ -286,10 +286,10 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             match &node.kind {
-                crate::compiler_frontend::hir::nodes::HirKind::Stmt(stmt) => {
+                HirKind::Stmt(stmt) => {
                     self.lower_stmt(stmt)?;
                 }
-                crate::compiler_frontend::hir::nodes::HirKind::Terminator(term) => {
+                HirKind::Terminator(term) => {
                     self.lower_terminator(term)?;
                 }
             }
@@ -305,12 +305,7 @@ impl<'hir> JsEmitter<'hir> {
     /// structure in the generated JavaScript.
     ///
     /// Returns an error if an unsupported terminator is encountered or if lowering fails.
-    pub fn lower_terminator(
-        &mut self,
-        terminator: &crate::compiler_frontend::hir::nodes::HirTerminator,
-    ) -> Result<(), CompilerError> {
-        use crate::compiler_frontend::hir::nodes::HirTerminator;
-
+    pub fn lower_terminator(&mut self, terminator: &HirTerminator) -> Result<(), CompilerError> {
         match terminator {
             HirTerminator::If {
                 condition,
@@ -706,11 +701,9 @@ impl<'hir> JsEmitter<'hir> {
     fn lower_match_terminator(
         &mut self,
         scrutinee: &HirExpr,
-        arms: &[crate::compiler_frontend::hir::nodes::HirMatchArm],
+        arms: &[HirMatchArm],
         default_block: Option<BlockId>,
     ) -> Result<(), CompilerError> {
-        use crate::compiler_frontend::hir::nodes::HirPattern;
-
         // Lower the scrutinee expression
         let scrutinee_expr = self.lower_expr(scrutinee)?;
 
