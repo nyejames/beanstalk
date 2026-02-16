@@ -23,7 +23,7 @@ pub use js_statement::JsStmt;
 
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBlock, HirExpr, HirKind, HirMatchArm, HirModule, HirPattern, HirTerminator,
 };
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};

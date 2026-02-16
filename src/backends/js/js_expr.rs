@@ -1,9 +1,9 @@
-use crate::backends::host_function_registry::CallTarget;
+use crate::backends::function_registry::CallTarget;
 use crate::backends::js::JsEmitter;
 use crate::backends::js::js_host_functions::{HostFunctionId, get_host_function_str};
 use crate::backends::js::js_statement::JsStmt;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::nodes::{BinOp, HirExpr, HirExprKind, UnaryOp};
+use crate::compiler_frontend::hir::hir_nodes::{BinOp, HirExpr, HirExprKind, UnaryOp};
 use crate::compiler_frontend::string_interning::InternedString;
 
 /// Result of lowering a HIR expression to JS
@@ -249,9 +249,9 @@ impl<'hir> JsEmitter<'hir> {
     /// Returns an error if the place contains unsupported constructs.
     pub(crate) fn lower_place(
         &mut self,
-        place: &crate::compiler_frontend::hir::nodes::HirPlace,
+        place: &crate::compiler_frontend::hir::hir_nodes::HirPlace,
     ) -> Result<String, CompilerError> {
-        use crate::compiler_frontend::hir::nodes::HirPlace;
+        use crate::compiler_frontend::hir::hir_nodes::HirPlace;
 
         match place {
             // Simple variable reference

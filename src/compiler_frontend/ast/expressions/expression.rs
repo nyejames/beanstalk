@@ -1,4 +1,4 @@
-use crate::backends::host_function_registry::HostFunctionId;
+use crate::backends::function_registry::HostFunctionId;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Var};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;

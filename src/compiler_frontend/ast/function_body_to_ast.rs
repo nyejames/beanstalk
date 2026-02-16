@@ -1,4 +1,4 @@
-use super::ast_nodes::NodeKind;
+use super::ast_nodes::{NodeKind, Var};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
@@ -7,6 +7,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
+use crate::compiler_frontend::TOP_LEVEL_TEMPLATE_NAME;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::functions::parse_function_call;
@@ -307,21 +308,7 @@ pub fn function_body_to_ast(
                 }
             }
 
-            TokenKind::Export => {
-                // You can only export functions and variables at the top level
-                // Push it as a warning
-                warnings.push(CompilerWarning::new(
-                    "You can only export functions and variables from the top level of a file",
-                    token_stream
-                        .current_location()
-                        .to_error_location(&string_table),
-                    WarningKind::PointlessExport,
-                    context.scope.to_path_buf(&string_table),
-                ));
-                token_stream.advance();
-            }
-
-            // String template at the top level of a function.
+            // String template at the top level of the start function.
             TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
                 // If this isn't the top level of the module, this should be an error
                 // Only top level scope can have top level templates
@@ -337,8 +324,13 @@ pub fn function_body_to_ast(
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
+                let template_var = Var {
+                    id: string_table.intern(TOP_LEVEL_TEMPLATE_NAME),
+                    value: expr,
+                };
+
                 ast.push(AstNode {
-                    kind: NodeKind::TopLevelTemplate(expr),
+                    kind: NodeKind::VariableDeclaration(template_var),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 })

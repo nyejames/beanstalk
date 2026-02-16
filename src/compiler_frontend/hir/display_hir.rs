@@ -4,7 +4,7 @@
 //! Types that require a StringTable use `display_with_table()` methods.
 //! Types that don't need string resolution implement the standard `Display` trait.
 
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     BinOp, HirBlock, HirExpr, HirExprKind, HirKind, HirMatchArm, HirModule, HirNode, HirPattern,
     HirPlace, HirStmt, HirTerminator, UnaryOp,
 };

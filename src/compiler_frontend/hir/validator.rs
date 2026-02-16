@@ -15,7 +15,7 @@
 //! 7. **Assignment Discipline**: Assignments must be explicit and properly ordered
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirPlace, HirStmt,
     HirTerminator,
 };

@@ -3,12 +3,12 @@
 //! This module handles lowering function calls, method calls, and host function calls
 //! to LIR instructions, including ownership tagging for arguments.
 
-use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
+use crate::backends::function_registry::{CallTarget, HostFunctionId};
 use crate::backends::lir::nodes::{LirInst, LirType};
 use crate::backends::lir::types::datatype_to_lir_type;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::nodes::{HirExpr, HirExprKind, HirPlace};
+use crate::compiler_frontend::hir::hir_nodes::{HirExpr, HirExprKind, HirPlace};
 use crate::compiler_frontend::string_interning::{InternedString, StringId};
 
 use super::context::LoweringContext;

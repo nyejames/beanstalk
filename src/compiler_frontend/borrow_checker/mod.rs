@@ -45,7 +45,7 @@ use self::dataflow::DataflowEngine;
 use self::error_reporting::BorrowErrorReporter;
 use self::place_registry::PlaceRegistry;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 
 pub struct BorrowCheckOutcome {

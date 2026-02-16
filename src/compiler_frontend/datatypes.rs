@@ -67,9 +67,6 @@ impl Ownership {
 
 #[derive(Debug, Clone)]
 pub enum DataType {
-    // Mutability is part of the type
-    // This helps with compile time constant folding
-
     // Type is inferred, This only exists before the type checking stage.
     // All 'inferred' variables must be evaluated to other types after the AST stage for the program to compile.
     // At the header parsing stage, 'inferred' is used where a symbol type is not yet known (as the type might be another header).
@@ -114,7 +111,7 @@ pub enum DataType {
     // Special Beanstalk Types
     // Template types may have more static structure to them in the future
     // They are basically functions that accept a style and return a string
-    Template, // is_mutable
+    Template,
 
     Function(Box<Option<DataType>>, FunctionSignature), // Receiver, signature
 

@@ -11,7 +11,7 @@
 //! environment (e.g., JavaScript in web contexts, native functions in CLI).
 //! They are imported into the WASM module and called like regular functions.
 
-use crate::backends::host_function_registry::{HostAbiType, HostFunctionDef, HostRegistry};
+use crate::backends::function_registry::{HostAbiType, HostFunctionDef, HostRegistry};
 use crate::backends::wasm::analyzer::{FunctionSignature, WasmType};
 use crate::backends::wasm::error::WasmGenerationError;
 use crate::backends::wasm::module_builder::WasmModuleBuilder;

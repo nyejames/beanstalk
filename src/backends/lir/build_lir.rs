@@ -7,7 +7,7 @@ use crate::backends::lir::nodes::{LirFunction, LirModule, LirStruct};
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages,
 };
-use crate::compiler_frontend::hir::nodes::{HirBlock, HirKind, HirModule, HirStmt};
+use crate::compiler_frontend::hir::hir_nodes::{HirBlock, HirKind, HirModule, HirStmt};
 
 use super::context::LoweringContext;
 
@@ -93,7 +93,7 @@ fn lower_function(
     ctx: &mut LoweringContext,
     name: crate::compiler_frontend::string_interning::InternedString,
     signature: &crate::compiler_frontend::ast::statements::functions::FunctionSignature,
-    body: crate::compiler_frontend::hir::nodes::BlockId,
+    body: crate::compiler_frontend::hir::hir_nodes::BlockId,
     blocks: &[HirBlock],
     is_main: bool,
 ) -> Result<LirFunction, CompilerError> {

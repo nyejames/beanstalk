@@ -1,6 +1,6 @@
 use crate::backends::js::{JsEmitter, JsIdent};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::nodes::{HirPlace, HirStmt};
+use crate::compiler_frontend::hir::hir_nodes::{HirPlace, HirStmt};
 
 /// Internal representation of simple JS statements
 #[derive(Debug)]

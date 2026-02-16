@@ -197,7 +197,7 @@ use crate::backends::lir::nodes::LirModule;
 use crate::backends::wasm::encode::encode_wasm;
 use crate::codegen_log;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::hir::hir_nodes::HirModule;
 
 pub mod analyzer;
 pub mod constants;

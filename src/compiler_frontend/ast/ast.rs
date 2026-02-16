@@ -1,6 +1,8 @@
-use crate::backends::host_function_registry::HostRegistry;
+use crate::backends::function_registry::HostRegistry;
+use crate::compiler_frontend::TOP_LEVEL_TEMPLATE_NAME;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::ast::build_ast::function_body_to_ast;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -84,21 +86,21 @@ impl Ast {
                             body.to_owned(),
                         ),
                         location: header.name_location,
-                        scope: context.scope.clone(), // Preserve full path in scope field
+                        scope: context.scope.clone(), // Preserve the full path in the scope field
                     });
                 }
 
-                HeaderKind::StartFunction(tokens) => {
+                HeaderKind::StartFunction(body) => {
                     let context = ScopeContext::new(
                         ContextKind::Module,
                         header.path.to_owned(),
                         &declarations,
                         host_registry.clone(),
-                        Vec::new(),
+                        vec![],
                     );
 
                     let body = match function_body_to_ast(
-                        &mut FileTokens::new(header.path.to_owned(), tokens),
+                        &mut FileTokens::new(header.path.to_owned(), body),
                         context.to_owned(),
                         &mut warnings,
                         string_table,
@@ -112,6 +114,16 @@ impl Ast {
                         }
                     };
 
+                    // Add the automatic return statement for the start function
+                    ast.push(AstNode {
+                        kind: NodeKind::Return(vec![Expression::reference(&Var {
+                            id: string_table.resolve(TOP_LEVEL_TEMPLATE_NAME),
+                            value: Expression::runtime(),
+                        })]),
+                        location: token_stream.current_location(),
+                        scope: context.scope.clone(),
+                    });
+
                     // Create an implicit "start" function that can be called by other modules
                     let interned_name = header
                         .path
@@ -120,7 +132,7 @@ impl Ast {
 
                     let main_signature = FunctionSignature {
                         parameters: vec![],
-                        returns: vec![],
+                        returns: vec![DataType::String],
                     };
 
                     ast.push(AstNode {
@@ -137,7 +149,7 @@ impl Ast {
                     ast.push(AstNode {
                         kind: NodeKind::StructDefinition(simple_name, fields), // Use simple name for identifier
                         location: header.name_location,
-                        scope: header.path.to_owned(), // Preserve full path in scope field
+                        scope: header.path.to_owned(), // Preserve the full path in scope field
                     });
                 }
 
@@ -147,17 +159,6 @@ impl Ast {
 
                 HeaderKind::Choice(_args) => {
                     // TODO: Implement choice handling
-                }
-
-                HeaderKind::Template(tokens) => {
-                    // TODO: Implement exposing top level templates for HTML projects
-                    let context = ScopeContext::new(
-                        ContextKind::Template,
-                        header.path.to_owned(),
-                        &declarations,
-                        host_registry.clone(),
-                        Vec::new(),
-                    );
                 }
             }
 

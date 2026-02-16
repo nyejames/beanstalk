@@ -29,14 +29,14 @@ pub(crate) mod hir;
 
 pub(crate) mod borrow_checker;
 
-use crate::backends::host_function_registry::HostRegistry;
+use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::borrow_checker::{BorrowCheckOutcome, BorrowChecker};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, parse_headers};
 use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
-use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -76,6 +76,9 @@ pub struct CompilerFrontend<'a> {
     pub(crate) host_function_registry: HostRegistry,
     pub(crate) string_table: StringTable,
 }
+
+/// Special reserved name for top-level templates
+pub const TOP_LEVEL_TEMPLATE_NAME: &str = "#template";
 
 impl<'a> CompilerFrontend<'a> {
     pub(crate) fn new(project_config: &'a Config, mut string_table: StringTable) -> Self {

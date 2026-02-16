@@ -1,16 +1,16 @@
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
+use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::hir::nodes::HirModule;
+use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::Config;
-use crate::{return_messages_with_err};
+use crate::return_messages_with_err;
 use saying::say;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
-use crate::compiler_frontend::Flag;
 
 pub struct Module {
     pub(crate) folder_name: String,

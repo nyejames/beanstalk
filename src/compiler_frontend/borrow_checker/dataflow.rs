@@ -8,7 +8,7 @@ use super::{
     control_flow::{BlockId, ControlFlowGraph},
     place_registry::{PlaceId, PlaceRegistry},
 };
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirStmt, HirTerminator,
 };
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;

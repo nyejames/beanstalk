@@ -1,6 +1,6 @@
 pub(crate) mod ast;
 pub(crate) mod ast_nodes;
-pub(crate) mod build_ast;
+pub(crate) mod function_body_to_ast;
 pub(crate) mod expressions {
     pub(crate) mod eval_expression;
     pub(crate) mod expression;

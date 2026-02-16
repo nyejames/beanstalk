@@ -1,4 +1,4 @@
-use crate::backends::host_function_registry::HostRegistry;
+use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -16,7 +16,7 @@ pub enum HeaderKind {
         signature: FunctionSignature,
         body: Vec<Token>,
     },
-    Template(Vec<Token>), // Top level templates are used for HTML page generation
+
     Struct(Vec<Var>),
     Choice(Vec<Var>), // Tagged unions. Not yet implemented in the language
     Constant(Var),
@@ -175,7 +175,7 @@ pub fn parse_headers_in_file(
                         )?;
 
                         match header.kind {
-                            HeaderKind::StartFunction(_) => {
+                            HeaderKind::StartFunction(..) => {
                                 main_function_body.push(current_token);
                                 if let Some(path) = file_imports.get(&name_id) {
                                     main_function_dependencies.insert(path.to_owned());
@@ -209,26 +209,11 @@ pub fn parse_headers_in_file(
                 }
             }
 
-            // @(libraries/math: round, sqrt)
+            // @(libraries/math/ {round, sqrt})
             TokenKind::Path(interned_path, imports) => {
                 encountered_symbols.extend(imports.clone());
                 for import in imports {
                     file_imports.insert(import, interned_path.clone());
-                }
-            }
-
-            TokenKind::Export => {
-                if let TokenKind::Symbol(_name) = token_stream.current_token_kind() {
-                    next_statement_exported = true;
-                } else {
-                    warnings.push(CompilerWarning::new(
-                        "Expected variable declaration after an export",
-                        token_stream
-                            .current_location()
-                            .to_error_location(string_table),
-                        WarningKind::PointlessExport,
-                        token_stream.src_path.to_path_buf(string_table),
-                    ))
                 }
             }
 

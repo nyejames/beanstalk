@@ -7,7 +7,7 @@
 #[cfg(test)]
 mod tests {
     use crate::backends::js::{JsEmitter, JsLoweringConfig};
-    use crate::compiler_frontend::hir::nodes::HirModule;
+    use crate::compiler_frontend::hir::hir_nodes::HirModule;
     use crate::compiler_frontend::string_interning::StringTable;
 
     /// Helper function to create a test emitter

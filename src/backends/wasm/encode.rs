@@ -27,7 +27,7 @@
 //! 5. Add exports (main function, memory)
 //! 6. Validate and finalize module
 
-use crate::backends::host_function_registry::HostRegistry;
+use crate::backends::function_registry::HostRegistry;
 use crate::backends::lir::nodes::{LirFunction, LirInst, LirModule};
 use crate::backends::wasm::{
     analyzer::LirAnalyzer,

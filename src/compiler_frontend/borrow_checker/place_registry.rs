@@ -7,7 +7,7 @@
 //! array elements, etc. The registry tracks parent-child relationships to enable
 //! field-level precision in borrow checking.
 
-use crate::compiler_frontend::hir::nodes::{HirExpr, HirPlace as HirExpressionPlace};
+use crate::compiler_frontend::hir::hir_nodes::{HirExpr, HirPlace as HirExpressionPlace};
 use crate::compiler_frontend::string_interning::InternedString;
 use std::collections::HashMap;
 
@@ -166,7 +166,7 @@ impl PlaceRegistry {
 
     /// Convert a HIR expression to a place (if possible)
     pub fn expr_to_place(&mut self, expr: &HirExpr) -> Option<PlaceId> {
-        use crate::compiler_frontend::hir::nodes::HirExprKind;
+        use crate::compiler_frontend::hir::hir_nodes::HirExprKind;
 
         match &expr.kind {
             HirExprKind::Load(hir_place) | HirExprKind::Move(hir_place) => {

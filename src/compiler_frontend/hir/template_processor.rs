@@ -10,18 +10,15 @@
 //! - Transforming runtime templates into HIR function calls
 //! - Handling template variables and control flow
 //! - Preserving template ID information for runtime access
-//!
-//! Feature: hir-builder, Property 8: Template Processing Correctness
-//! Validates: Requirements 10.1, 10.2, 10.3, 10.4, 10.5, 10.6
 
-use crate::backends::host_function_registry::CallTarget;
+use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     HirExpr, HirExprKind, HirKind, HirNode, HirPlace, HirStmt,
 };
 use crate::compiler_frontend::string_interning::InternedString;
@@ -90,10 +87,6 @@ impl TemplateProcessor {
     /// Compile-time templates are those that can be completely evaluated at compile time.
     /// They contain only literal values and no runtime expressions. These templates
     /// are folded into string literals during AST construction.
-    ///
-    /// # Requirements
-    /// - 10.1: WHEN processing compile-time templates THEN the system SHALL convert
-    ///   them to HIR string literals since they were resolved at AST stage
     pub fn process_compile_time_template(
         &mut self,
         template: &Template,
@@ -214,10 +207,6 @@ impl TemplateProcessor {
     ///
     /// This method walks through the template content and identifies all variables
     /// that need to be captured for runtime evaluation.
-    ///
-    /// # Requirements
-    /// - 10.3: WHEN encountering template variables THEN the system SHALL create
-    ///   proper HIR variable access instructions for template interpolation
     pub fn collect_template_captures(
         &mut self,
         template: &Template,
@@ -304,10 +293,6 @@ impl TemplateProcessor {
     ///
     /// Template IDs are used for runtime access to templates, particularly
     /// in web/DOM contexts where templates may need to be referenced by ID.
-    ///
-    /// # Requirements
-    /// - 10.5: WHEN handling template IDs THEN the system SHALL preserve template
-    ///   ID information for runtime access
     pub fn parse_template_id(
         &self,
         template: &Template,
@@ -324,10 +309,6 @@ impl TemplateProcessor {
     ///
     /// This method generates an HIR function definition that will be called
     /// at runtime to construct the template string.
-    ///
-    /// # Requirements
-    /// - 10.2: WHEN handling runtime templates THEN the system SHALL generate HIR
-    ///   function calls to template functions created during AST processing
     pub fn create_template_function(
         &mut self,
         name: InternedString,
@@ -372,10 +353,6 @@ impl TemplateProcessor {
     ///
     /// This method handles the various types of content that can appear in a template,
     /// including string literals, variable interpolations, and nested templates.
-    ///
-    /// # Requirements
-    /// - 10.4: WHEN processing template control flow THEN the system SHALL handle
-    ///   if and for constructs within templates appropriately
     fn process_template_content(
         &mut self,
         template: &Template,

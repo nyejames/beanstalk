@@ -3,7 +3,7 @@
 //! Represents the control flow structure of the program for dataflow analysis.
 //! Provides utilities for traversal, merge point identification, and path analysis.
 
-use crate::compiler_frontend::hir::nodes::{HirKind, HirModule, HirTerminator};
+use crate::compiler_frontend::hir::hir_nodes::{HirKind, HirModule, HirTerminator};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Unique identifier for a basic block

@@ -5,7 +5,9 @@
 
 use crate::backends::lir::nodes::{LirInst, LirType};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::nodes::{BlockId, HirBlock, HirExpr, HirMatchArm, HirPattern};
+use crate::compiler_frontend::hir::hir_nodes::{
+    BlockId, HirBlock, HirExpr, HirMatchArm, HirPattern,
+};
 
 use super::context::{LoopContext, LoweringContext};
 use super::types::{datatype_to_lir_type, hir_expr_to_lir_type};
@@ -290,7 +292,7 @@ impl LoweringContext {
         index_binding: &Option<crate::compiler_frontend::string_interning::InternedString>,
         iterator: &HirExpr,
     ) -> Result<Vec<LirInst>, CompilerError> {
-        use crate::compiler_frontend::hir::nodes::HirExprKind;
+        use crate::compiler_frontend::hir::hir_nodes::HirExprKind;
 
         let mut insts = Vec::new();
 

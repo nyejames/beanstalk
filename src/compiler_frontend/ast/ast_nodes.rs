@@ -1,4 +1,4 @@
-use crate::backends::host_function_registry::HostFunctionId;
+use crate::backends::function_registry::HostFunctionId;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };

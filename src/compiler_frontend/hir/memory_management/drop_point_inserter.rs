@@ -21,7 +21,7 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::build_hir::{DropInsertionType, HirBuilderContext};
-use crate::compiler_frontend::hir::nodes::{BlockId, HirKind, HirNode, HirPlace, HirStmt};
+use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirKind, HirNode, HirPlace, HirStmt};
 use crate::compiler_frontend::string_interning::InternedString;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 

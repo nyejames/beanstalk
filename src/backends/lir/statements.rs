@@ -3,14 +3,14 @@
 //! This module handles lowering HIR statements, terminators, and definitions
 //! (functions, structs) to LIR.
 
-use crate::backends::host_function_registry::CallTarget;
+use crate::backends::function_registry::CallTarget;
 use crate::backends::lir::nodes::{LirField, LirFunction, LirInst, LirStruct, LirType};
 use crate::backends::lir::types::datatype_to_lir_type;
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBlock, HirKind, HirNode, HirStmt, HirTerminator,
 };
 use crate::compiler_frontend::string_interning::InternedString;

@@ -6,7 +6,7 @@
 use crate::backends::lir::nodes::LirType;
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::nodes::{HirExpr, HirExprKind};
+use crate::compiler_frontend::hir::hir_nodes::{HirExpr, HirExprKind};
 use crate::compiler_frontend::string_interning::InternedString;
 use saying::say;
 

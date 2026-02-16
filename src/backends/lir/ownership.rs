@@ -5,7 +5,7 @@
 
 use crate::backends::lir::nodes::LirInst;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::nodes::{HirExpr, HirPlace};
+use crate::compiler_frontend::hir::hir_nodes::{HirExpr, HirPlace};
 
 use super::context::LoweringContext;
 use super::types::hir_expr_to_lir_type;

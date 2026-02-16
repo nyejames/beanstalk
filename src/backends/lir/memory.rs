@@ -7,7 +7,7 @@
 
 use crate::backends::lir::nodes::{LirInst, LirType};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::nodes::{HirExpr, HirPlace};
+use crate::compiler_frontend::hir::hir_nodes::{HirExpr, HirPlace};
 use crate::compiler_frontend::string_interning::InternedString;
 
 use super::context::LoweringContext;

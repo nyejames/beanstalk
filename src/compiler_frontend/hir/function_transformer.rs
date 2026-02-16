@@ -10,14 +10,14 @@
 //! - Transform host function calls with proper import information
 //! - Prepare arguments for Beanstalk's unified ABI
 
-use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
+use crate::backends::function_registry::{CallTarget, HostFunctionId};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpr, HirExprKind, HirKind, HirNode, HirStmt, HirTerminator,
 };
 use crate::compiler_frontend::string_interning::InternedString;
@@ -365,9 +365,9 @@ impl FunctionTransformer {
             ExpressionKind::Bool(val) => HirExprKind::Bool(*val),
             ExpressionKind::StringSlice(s) => HirExprKind::StringLiteral(*s),
             ExpressionKind::Char(c) => HirExprKind::Char(*c),
-            ExpressionKind::Reference(name) => {
-                HirExprKind::Load(crate::compiler_frontend::hir::nodes::HirPlace::Var(*name))
-            }
+            ExpressionKind::Reference(name) => HirExprKind::Load(
+                crate::compiler_frontend::hir::hir_nodes::HirPlace::Var(*name),
+            ),
             _ => {
                 return_hir_transformation_error!(
                     format!(
@@ -539,9 +539,9 @@ impl FunctionTransformer {
             ExpressionKind::Bool(val) => HirExprKind::Bool(*val),
             ExpressionKind::StringSlice(s) => HirExprKind::StringLiteral(*s),
             ExpressionKind::Char(c) => HirExprKind::Char(*c),
-            ExpressionKind::Reference(name) => {
-                HirExprKind::Load(crate::compiler_frontend::hir::nodes::HirPlace::Var(*name))
-            }
+            ExpressionKind::Reference(name) => HirExprKind::Load(
+                crate::compiler_frontend::hir::hir_nodes::HirPlace::Var(*name),
+            ),
             _ => {
                 return_hir_transformation_error!(
                     format!(
@@ -584,7 +584,7 @@ impl FunctionTransformer {
                 if ctx.is_potentially_owned(name) {
                     // Mark this as a potential move
                     hir_arg.kind = HirExprKind::Move(
-                        crate::compiler_frontend::hir::nodes::HirPlace::Var(*name),
+                        crate::compiler_frontend::hir::hir_nodes::HirPlace::Var(*name),
                     );
                     ctx.mark_potentially_consumed(*name);
                 }

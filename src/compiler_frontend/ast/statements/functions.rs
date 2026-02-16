@@ -1,4 +1,4 @@
-use crate::backends::host_function_registry::HostFunctionDef;
+use crate::backends::function_registry::HostFunctionDef;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};

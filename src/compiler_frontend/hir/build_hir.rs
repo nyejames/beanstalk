@@ -23,11 +23,11 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::hir::control_flow_linearizer::ControlFlowLinearizer;
 use crate::compiler_frontend::hir::expression_linearizer::ExpressionLinearizer;
 use crate::compiler_frontend::hir::function_transformer::FunctionTransformer;
-use crate::compiler_frontend::hir::memory_management::drop_point_inserter::DropPointInserter;
-use crate::compiler_frontend::hir::nodes::{
+use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirNodeId, HirPlace,
     HirStmt,
 };
+use crate::compiler_frontend::hir::memory_management::drop_point_inserter::DropPointInserter;
 use crate::compiler_frontend::hir::struct_handler::StructHandler;
 use crate::compiler_frontend::hir::template_processor::TemplateProcessor;
 use crate::compiler_frontend::hir::variable_manager::{VariableManager, is_type_ownership_capable};
@@ -35,7 +35,7 @@ use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 // Re-export validator types for backward compatibility
-use crate::backends::host_function_registry::{CallTarget, HostFunctionId};
+use crate::backends::function_registry::{CallTarget, HostFunctionId};
 pub use crate::compiler_frontend::hir::validator::{HirValidationError, HirValidator};
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
@@ -1279,7 +1279,7 @@ impl<'a> HirBuilderContext<'a> {
             id: node_id,
         };
 
-        // Track the variable in variable manager
+        // Track the variable in a variable manager
         self.variable_manager.enter_scope();
 
         // Mark as potentially owned if applicable
