@@ -22,10 +22,6 @@ This style of memory management can be incrementally strengthened with region an
 ## Overview
 Build systems can drive the compiler through header parsing, AST, HIR and borrow checking, then run their own codegen for any backend (including Rust-interpreter-backed flows). For the Wasm target, the build system groups files for a single Wasm module; for JS and other targets, the same pipeline is reused before custom emission.
 
-JS backend: AST or HIR is lowered directly to JavaScript with GC-only semantics.
-
-Wasm backend: HIR is progressively enriched with ownership information and lowered to Wasm, initially relying on Wasm GC and later reducing it. All files compile to one WASM module with proper function exports.
-
 Since compile speed is a goal of the compiler, complex optimizations are left to external tools for release builds only.
 
 **Entry Point Semantics**:
