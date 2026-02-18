@@ -67,7 +67,6 @@ impl OutputModule {
 pub enum Flag {
     Release, // Dev mode is default
     DisableWarnings,
-    ShowWarnings, // The default behavior for tests is to hide warnings, so this enables them in those cases
     DisableTimers,
 }
 

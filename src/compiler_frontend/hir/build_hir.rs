@@ -6,7 +6,7 @@
 //! and ownership reasoning.
 //!
 //! The builder follows a component-based architecture where each component operates
-//! on a shared `HirBuilderContext` to maintain a single authoritative state.
+//! on a shared `HirBuilderContext`.
 //!
 //! ## Key Data Structures
 //!
@@ -20,17 +20,10 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::hir::control_flow_linearizer::ControlFlowLinearizer;
-use crate::compiler_frontend::hir::expression_linearizer::ExpressionLinearizer;
-use crate::compiler_frontend::hir::function_transformer::FunctionTransformer;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirNodeId, HirPlace,
     HirStmt,
 };
-use crate::compiler_frontend::hir::memory_management::drop_point_inserter::DropPointInserter;
-use crate::compiler_frontend::hir::struct_handler::StructHandler;
-use crate::compiler_frontend::hir::template_processor::TemplateProcessor;
-use crate::compiler_frontend::hir::variable_manager::{VariableManager, is_type_ownership_capable};
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};

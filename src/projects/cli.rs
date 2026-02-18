@@ -90,10 +90,7 @@ pub fn start_cli() {
         }
 
         Command::CompilerTests => {
-            // Warnings are hidden by default for compiler_frontend tests,
-            // unless the show-warnings flag is set
-            let show_warnings = flags.contains(&Flag::ShowWarnings);
-            run_all_test_cases(show_warnings);
+            run_all_test_cases(true);
         }
     }
 }
@@ -143,15 +140,14 @@ fn get_command(args: &[String]) -> Result<Command, String> {
         //     _ => Ok(Command::Run("")),
         // },
         Some("dev") => match args.get(1) {
-            // TODO: remove the testing path and make this a proper path
             Some(path) => {
                 if path.is_empty() {
-                    Ok(Command::Dev(String::from("../../test_output")))
+                    Ok(Command::Dev(String::from("")))
                 } else {
                     Ok(Command::Dev(path.to_owned()))
                 }
             }
-            None => Ok(Command::Dev(String::from("../../test_output"))),
+            None => Ok(Command::Dev(String::from(""))),
         },
 
         Some("tests") => Ok(Command::CompilerTests),
@@ -168,7 +164,6 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
             "--release" => flags.push(Flag::Release),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
-            "--show-warnings" => flags.push(Flag::ShowWarnings),
             _ => {}
         }
     }

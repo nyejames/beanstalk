@@ -90,7 +90,6 @@ pub struct HirModule {
 // ============================================================
 // Regions
 // ============================================================
-
 #[derive(Debug, Clone)]
 pub struct HirRegion {
     id: RegionId,
