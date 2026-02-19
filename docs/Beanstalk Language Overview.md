@@ -1,11 +1,14 @@
 # Beanstalk Language Design Guide
 Beanstalk is a programming language and build system with minimal syntax and a simple type system.
 
-Beanstalk is a programming language and build system with minimal syntax and a simple type system. 
 It is designed primarily for use building UIs and text-heavy content for the Web and other host environments.
 
-You can think of the language at a high level as being like a blend of Go and Rust. 
-Fast compile times, very minimal and simple like Go, but with a unique style of automatic memory management, and a unique modern syntax with very powerful string templates.
+The design principles are:
+- Very powerful and flexible string templates for rendering content or describing UI
+- Very minimal and consistent syntax. Simple to learn and reason about
+- Fast compile times for hot reloading dev builds that can give quick feedback for UI heavy projects
+- Memory Safe with fallback GC that can eventally be statically optimised out with borrow checker rules
+- Strict, statically typed and opinionated about doing things in as few ways as possible as cleanly as possible
 
 ```beanstalk
 @(html/Basic)
@@ -48,7 +51,7 @@ post = PostGenerator.create_post(date, [:
 
 ## Syntax Summary
 For developers coming from most other languages, 
-here are some key idiosyncrasies from other C-like languages to note:
+here are some key idiosyncrasies:
 
 - Colon opens a scope, semicolon closes it. Semicolon does not end statements!
 - Square brackets are NOT used for arrays, curly braces are used instead. 
@@ -60,6 +63,7 @@ This comes before the type if there is an explicit type declaration.
 - Double dashes for single line comments (--)
 - Immutable reference semantics are the default for all stack and heap allocated types. 
 - All copies have to be explicit unless they are used in part of a new expression. Including integers, floats and bools.
+- Parameters and struct definitions use vertical pipes | 
 - Result types are created with the '!' symbol. Options use '?'.
 
 **Naming conventions (strictly enforced):**
@@ -156,15 +160,13 @@ io([: Hello, [name]!])
 
 -- Print in functions
 greet |name String|:
-    io([message] World)
+    io(Hi [name])
 ;
 ```
 
-Every host environment must provide an io function to compile Beanstalk.
-
 **Control flow patterns:**
 
-There is no 'else if', you use pattern matching instead for more than two branches.
+There is no 'else if', you use pattern matching instead for more than two branches. Pattern matching is exhaustive, if statements are not.
 ```beanstalk
 -- Conditional (use 'is', never ==)
 if value is not 0:
@@ -238,16 +240,14 @@ Using the "in" keyword, you can specify an integer, float or collection to itera
 
 **Multi-file modules**
 
-Beanstalk supports organizing code across multiple files.
+A module is multiple Beanstalk files compiled together into a single output. Each module will have its own entry point.
 
-Everything at the top level of a file is visible to the rest of the module by default.
+A project is one or more of these modules together with libraries and sometimes other file types that is all compiled together into a more complex output.
 
-A single project can be made up of multiple modules.
+Everything at the top level of a file is visible to the rest of the module by default, but may not be visible to the rest of the project.
+
 At the root of every project is a #config.bst file.
 
-Imports can't be aliased, so the import will just have the same name as the file and can be used like a struct containing all the headers at the top level of the file.
-
-Imports are just paths used as Lvalues at the top level of a file.
 **Import syntax:**
 ```beanstalk
 -- Import another file in the same module
@@ -257,7 +257,7 @@ Imports are just paths used as Lvalues at the top level of a file.
 **Entry files and implicit main functions:**
 - Every Beanstalk file has an **implicit start function** containing all top-level code
 - The **entry file** (specified during compilation) has its implicit start become the module's entry point (the main function). Only the entry file's top-level code executes automatically
-- Imported files' implicit mains are callable but don't execute automatically. They must be imported as "start"
+- Imported files' implicit mains are callable but don't execute automatically.
 
 **File execution semantics:**
 ```beanstalk
@@ -274,7 +274,7 @@ helper.another_func() -- Call another top level function from the file
 **Import resolution rules:**
 - Paths are relative to the root of the module, defined by the directory the entry point file is in or a config file
 - Circular imports are detected and cause compilation errors
-- Each file can only be imported once per module
+  
 
 ## Template System
 **Templates use `[]` exclusively** - never confuse with collections `{}`.
