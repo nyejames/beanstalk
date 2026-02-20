@@ -13,12 +13,10 @@ Beanstalk adopts a GC-first, statically eliding strategy. Garbage collection def
 ## Core Design Philosophy
 
 Beanstalk’s memory model is intentionally layered:
-
-Garbage collection guarantees correctness for all heap-managed values. Static analysis enforces exclusivity rules and identifies where ownership might matter.
-
-Runtime ownership mechanisms (when enabled) exploit these guarantees to reduce GC work.
-
-Ownership is therefore not a semantic requirement, but a performance contract. If the compiler cannot prove that a value obeys the rules required for deterministic destruction, that value simply remains GC-managed.
+- Garbage collection guarantees correctness for all heap-managed values by default. 
+- Static analysis enforces exclusivity rules and identifies where ownership might matter.
+- Runtime ownership mechanisms (when enabled) exploit these guarantees to reduce GC work.
+- Ownership is purely for optimisation. If the compiler cannot prove that a value obeys the rules required for deterministic destruction, that value simply remains GC-managed.
 
 ## GC as the Semantic Baseline
 - In the baseline execution model:
@@ -55,7 +53,7 @@ These are similar to Rust.
 
 ### Shared Access (Default)
 
-* All variable usage creates a shared reference by default.
+* All variable usages create a shared reference by default.
 * Any number of shared references may exist simultaneously.
 * Shared access is read-only.
 * Shared references never imply ownership.
@@ -152,7 +150,7 @@ The compiler enforces memory safety through the following steps:
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
    * Enables ownership eligibility.
-4. **Lowering to LIR**, where:
+4. **Final Lowering**, where:
    * ownership flags are generated,
    * possible drops become conditional frees,
    * runtime checks are emitted.

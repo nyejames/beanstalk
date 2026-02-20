@@ -1,11 +1,11 @@
 # Compilation 
 ## What is this compiler?
 - A high-level language with templates as first-class citizens and ownership treated as an optimisation (GC is the fallback).
-- Near-term target is a stable JS backend/build system for static pages and JS output; Wasm remains the long-term primary target.
+- Near-term target is a stable JS backend/build system for static pages and JS output. Wasm remains the long-term primary target.
 - Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds.
 - A modular compiler exposed as a library, plus a build system and CLI that assemble single-file and multi-file projects into runnable bundles.
 
-Beanstalk’s compiler enforces memory safety through a hybrid strategy: A fallback garbage collector combined with increasingly strong static analysis that incrementally removes the need for runtime memory management.
+Beanstalk's compiler enforces memory safety through a hybrid strategy: A fallback garbage collector combined with increasingly strong static analysis that incrementally removes the need for runtime memory management.
 All programs are correct under GC. Programs that satisfy stronger static rules run faster. Beanstalk treats ownership as an optimization target.
 If static guarantees are missing or incomplete, the value falls back to GC.
 
@@ -20,9 +20,39 @@ At runtime, ownership is resolved via tagged pointers, allowing a single calling
 This style of memory management can be incrementally strengthened with region analysis, stricter static lifetimes or place-based tracking in future iterations of the compiler without having to change the language semantics.
 
 ## Overview
-Build systems can drive the compiler through header parsing, AST, HIR and borrow checking, then run their own codegen for any backend (including Rust-interpreter-backed flows). For the Wasm target, the build system groups files for a single Wasm module; for JS and other targets, the same pipeline is reused before custom emission.
+Build systems can create a function that implements the ProjectBuilder trait and pass that, along with a list of input files to the compiler's core build system.
+The project builder takes the output of the compiler's frontend (A list of Hir modules) and performs the backend compilation stages.
+The compiler's core build system then creates and writes the list of output files the project builder produced.
 
-Since compile speed is a goal of the compiler, complex optimizations are left to external tools for release builds only.
+```rust
+    /// Unified build interface for all project types
+    pub trait ProjectBuilder {
+    /// Build the project with the given configuration
+    fn build_backend(
+        &self,
+        modules: Vec<Module>, // Each collection of files the frontend has compiled into modules
+        config: &Config,      // Persistent settings across the whole project
+        flags: &[Flag],       // Settings only relevant to this build
+    ) -> Result<Project, CompilerMessages>;
+    
+        /// Validate the project configuration
+        fn validate_project_config(&self, config: &Config) -> Result<(), CompilerError>;
+    }
+```
+
+Project builders:
+- Decide how modules are interpreted
+- Decide how output files are structured
+- Select and run backend code generation
+- Emit artefacts (HTML, JS, Wasm, tooling output, etc.)
+
+Project builders do **not**:
+- Parse files
+- Discover modules
+- Read configuration files directly
+- Perform semantic compilation
+
+Since compile speed is a goal of the compiler, complex optimisations are left to external tools for release builds only.
 
 **Entry Point Semantics**:
 - Each file has an **implicit start function** containing its top-level code
@@ -32,24 +62,51 @@ Since compile speed is a goal of the compiler, complex optimizations are left to
 this is the `HeaderKind::Main` and is implicit start function of the entry file
 
 ## Pipeline Stages
-The Beanstalk compiler processes modules through these stages:
+The Beanstalk compiler frontend and build system processes modules through these stages:
+0. **Project Structure** – Parses the config file and determines the boundaries of each module in the project
 1. **Tokenization** – Convert source text to tokens
 2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes `#import "path"` statements so dependencies can be sorted after.
-3. **Dependency Sorting** – Order headers by import dependencies
-4. **AST Construction** – Name resolution, type checking and constant folding
-5. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
-6. (Optional) **Borrow Validation** – Verify memory safety
-7. **Backend Lowering**
+5. **Dependency Sorting** – Order headers by import dependencies
+6. **AST Construction** – Name resolution, type checking and constant folding
+7. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
+8. **Borrow Validation** – An analysis pass to verify memory safety
+
+Project builders then perform:
+9. **Backend Lowering**
     - JS Backend (current stabilisation target): HIR → JavaScript (GC-only)
     - Wasm Backend (long-term primary target): HIR → LIR → Wasm (GC-first, ownership-eliding over time)
     - Other build systems: reuse the shared pipeline through HIR (and borrow checking) and apply custom codegen while keeping Beanstalk semantics identical across targets
 
-### Stage 1: Tokenization (`src/compiler/tokenizer/tokenizer.rs`)
+The core build system then assembles the output files from the project builder's output.
+
+### Stage 0: Project Structure (`src/build_system/build.rs`)
+**Purpose**: Determine the boundaries of each module in the project and the config for the project.
+
+**key Features**:
+- Provides a canonical opinionated project structure
+- Discovers all the modules in the project
+- Parses and validates the config
+- Determines what libraries are available for import
+- Provides the project builder with the file name and path to each module's entry point file
+
+**`#config`**
+- A project-level configuration file
+- Always located at the project root
+- Parsed and validated by the compiler
+- Provides a unified configuration map for all build systems
+
+**`#*` Files and Modules**
+- Any file whose name starts with `#` defines a **module root**
+- Any directory containing a `#*` file is treated as a separate module
+- The exact name of the file (e.g. `#page`, `#layout`, `#lib`) is preserved and interpreted by the build system
+- The project builder can be aware of multiple `#` files per root, but they can only exist at the root of a module
+
+### Stage 1: Tokenization (`src/compiler_frontend/tokenizer/tokenizer.rs`)
 **Purpose**: Convert raw source code into structured tokens with location information.
 
 **Key Features**:
 - Precise source location tracking for error reporting
-- Recognition of Beanstalk-specific syntax (`:`, `;`, `~`, `#import`)
+- Recognition of Beanstalk-specific syntax
 - Context switching for delimiter handling (`[]` vs `""`)
 
 **Development Notes**:
@@ -57,7 +114,7 @@ This stage of the compiler is stable and currently can represent almost all the 
 
 ---
 
-### Stage 2: Header Parsing (`src/compiler/headers/parse_file_headers.rs`)
+### Stage 2: Header Parsing (`src/compiler_frontend/headers/parse_file_headers.rs`)
 **Purpose**: Extract function definitions, structs, constants, imports and identify entry points before AST construction.
 
 **Key Features**:
@@ -96,7 +153,7 @@ pub enum HeaderKind {
 
 ---
 
-### Stage 3: Dependency Sorting (`src/lib.rs::sort_headers`)
+### Stage 3: Dependency Sorting (`src/compiler_frontend/headers/parse_file_headers.rs`)
 **Purpose**: Order headers topologically to ensure the proper compilation sequence so the AST for the whole module can be created in one pass. This enables the AST to perform full type checking.
 
 **Key Features**:
@@ -106,7 +163,7 @@ pub enum HeaderKind {
 
 ---
 
-### Stage 4: AST Construction (`src/compiler/parsers/ast.rs`)
+### Stage 4: AST Construction (`src/compiler_frontend/parsers/ast.rs`)
 **Purpose**: Transform headers into Abstract Syntax Tree with compile-time optimizations.
 
 **Key Features**:
@@ -116,10 +173,11 @@ pub enum HeaderKind {
 - **Namespace Resolution**: Makes sure that variables exist and are unique to the scope
 - **Type Checking**: Early type resolution and validation
 
-**Compile-Time Folding**: The AST stage performs aggressive constant folding in `src/compiler/optimizers/constant_folding.rs`:
+**Compile-Time Folding**: The AST stage performs aggressive constant folding in `src/compiler_frontend/optimizers/constant_folding.rs`:
 - Pure literal expressions (e.g., `2 + 3`) are evaluated immediately
 - Results in `ExpressionKind::Int(5)` rather than runtime operations
 - Expressions are converted to **Reverse Polish Notation (RPN)** for evaluation
+
 #### Templates
 - Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
@@ -139,7 +197,7 @@ pub enum HeaderKind {
 
 ---
 
-## Stage 5: HIR Generation (`src/compiler/hir/`)
+## Stage 5: HIR Generation (`src/compiler_frontend/hir/`)
 HIR (High-Level IR) is Beanstalk’s semantic lowering stage.
 It converts the fully typed AST into a linear, control-flow-explicit representation suitable for last-use analysis and ownership reasoning. HIR never performs template parsing or folding.
 
@@ -151,7 +209,6 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 - Linearize control flow
 - Make evaluation order explicit
 - Normalize control flow (if, loop, break, return) into explicit blocks
-- Insert possible drop points based on control flow
 - Preserve enough structure to reason about variable usage and exclusivity
 - Prepare the program for optional borrow validation and final lowering
 - Serve as a shared source for all backends
@@ -174,7 +231,7 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 
 - Whether a drop actually happens is decided at runtime via ownership flags OR whether the value is managed by the GC
 
-**Ownership Is Not Yet Final**
+**Ownership Is Not Yet Final**  
 - HIR does not decide whether an operation is a move or borrow
 - It records where ownership could be consumed
 - Final ownership resolution happens during lowering
@@ -183,11 +240,6 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 - Assignment forms, mutation syntax and control-flow sugar are normalized
 - All effects are explicit statements
 - Calls to runtime templates appear as normal HIR call nodes
-
-**Not Wasm-Shaped**
-- No stack discipline
-- No memory offsets
-- No ABI lowering
 
 #### Host Calls
 - Builtins such as `io` are preserved as explicit call nodes.
@@ -199,14 +251,17 @@ Use the `show_hir` flag to see the output.
 
 ---
 
-## Stage 6: Borrow Validation (`src/compiler/borrow_checker/`)
+## Stage 6: Borrow Validation (`src/compiler_frontend/borrow_checker/`)
 Borrow validation is not required for correctness, it's for optimization:
-- If a value passes borrow validation it becomes eligible for non-GC lowering.
-- If it fails or is unanalyzed it remains GC-managed.
+- If a value passes borrow validation, it becomes eligible for non-GC lowering.
+- If it fails or is unanalyzed, it remains GC-managed.
 
 The borrow checker does not mutate the HIR, it produces side-table facts keyed by node / value IDs. HIR remains a stable semantic representation.
 
-HIR represents semantic meaning under GC. Ownership is a provable optimization layer, not semantics. Later stages consult these facts during lowering.
+HIR represents semantic meaning under GC. Ownership is an optimization layer, not semantics. Later stages consult these facts during lowering.
+
+While the single mutable access rule is always enforced,
+project builders and debug builds can skip any further analysis to avoid compile time overhead.
 
 ### Purpose
 Statically determine which values are not managed by the GC heap.
@@ -232,58 +287,6 @@ Ensures all values that might own data eventually reach a drop site.
 
 ---
 
-## Wasm Backend (HIR → LIR → Wasm)
-
-## Stage 7: LIR Generation (`src/compiler/lir/`)
-LIR (Low-Level IR) is the *Wasm-shaped* representation of the program.  
-It is a close, structural match to Wasm’s execution model, with stack effects and control blocks fully explicit.
-
-LIR contains no remaining high-level constructs from Beanstalk: everything has been lowered into concrete Wasm-compatible operations. It is where ownership becomes concrete.
-
-### Purpose
-- Transform HIR into an instruction-level IR that can be directly emitted as Wasm.
-- Make control flow, locals and memory operations explicit.
-- Insert drops, compute field offsets and rewrite multi-value returns.
-
-### Key Features
-- **Ownership Resolution**: Tagged pointers are generated and ownership flags are masked and tested. `possible_drop` nodes become conditional frees.
-- **Wasm-Friendly Control Flow**: Blocks, loops and branches match Wasm’s structured CFG.
-- **Concrete Memory Access**: All field and array accesses lowered to explicit offsets and load/store instructions.
-- **Explicit Locals**: All temporaries materialized as Wasm locals or stack values.
-- **Drop Semantics**: Ownership outcomes from HIR lowering translated to explicit drop/free operations.
-- **Stack Discipline**: Expressions sequenced according to Wasm’s operand stack rules.
-- **Final Type Model**: All values lowered to Wasm types (`i32`, `i64`, `f32`, `f64`, plus reference types if enabled).
-
-### Debugging LIR
-- Use `show_lir` to inspect Wasm-shaped blocks.
-- Verify stack height balancing.
-- Confirm struct layouts and offsets.
-- Inspect lowered drop instructions and ownership decisions.
-
-## Stage 8: Codegen (`src/compiler/codegen/`)
-Transforms LIR directly into Wasm bytecode.
-
-### Purpose
-- Encode LIR instructions into valid WebAssembly.
-- Produce linear memory layout, data segments, function tables and exports.
-
-### Key Features
-- **Direct Encoding**: LIR nodes correspond 1:1 (or close) to Wasm bytecode
-
----
-
-# Beanstalk Memory Model and Borrow Semantics
-Beanstalk treats ownership like vectorization or inlining. Programmers who follow the rules get faster code.
-
-Ownership is not a type-level distinction, it's a runtime property constrained by static rules.
-If those static rules are not followed, then GC is used as a fallback.
-
-### Rules
-Rather than forcing ownership correctness:
-- Beanstalk treats ownership like vectorization or inlining
-- Programmers who follow the rules get faster code
-- Everyone else still gets correct code
-
 ### 1. Shared References (Default)
 - Borrowing is the Default
 - Multiple shared references to the same data are allowed
@@ -295,7 +298,7 @@ Rather than forcing ownership correctness:
 ### 2. Mutable Access (`~` syntax)
 - Mutability is always explicit
 - Use `~` to indicate mutable access (reference or ownership)
-- Only one mutable access allowed at a time
+- Only one mutable access is allowed at a time
 - Mutable access is exclusive (no other references allowed)
 - Created by mutable assignment: `x ~= y`
 - The compiler guarantees exclusivity statically; whether the access consumes ownership is resolved dynamically.

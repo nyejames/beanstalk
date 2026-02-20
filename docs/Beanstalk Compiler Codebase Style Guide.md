@@ -10,7 +10,6 @@ Beanstalk makes deliberate tradeoffs for compilation speed:
 ### Variables and Functions
 - Use descriptive, full names—avoid abbreviations except for simple iterators (`i`, `j`)
 - Functions should be self-documenting through clear naming
-- Compiler-specific prefixes: `ast_`, `hir_`, `lir_`, `wasm_` for clarity
 - Compiler passes: descriptive names (`build_ast`, `generate_hir`, `emit_wasm`)
 - Comments should use correct grammar without dropping definitive articles or connectives (`BAD:// Build AST` vs `GOOD:// Builds the AST`)
 
@@ -20,8 +19,7 @@ Beanstalk makes deliberate tradeoffs for compilation speed:
 
 ### Code Style and Organisation
 **Compiler Development**:
-- Maintain clear separation between compilation stages. Each compilation stage is independently exposed as a library in `src/lib.rs`.
-- Follow the same style and patterns as the frontend of the codebase (`src/compiler/parsers`).
+- Maintain clear separation between compilation stages.
 - Never use .unwrap() unless blatantly safe, prefer match to handle results.
 - Prefer `.to_owned()` over `.clone()` for string/data copying (signals potential future refactoring)
 - Use `.clone()` only when you are sure a copy is unavoidable with this pattern
@@ -84,7 +82,7 @@ for node in ast_nodes {
 - Use `#[allow(dead_code)]` sparingly with justification
 - Try to reduce unused variable warnings as much as possible 
 - Use clippy to check code
-- Use the default Rust formatter on new code
+- Use the default Rust formatter
 
 ### Comments:
 Avoid over commenting code. Stick to concise and brief descriptions. 
@@ -107,10 +105,10 @@ CompilerError Best practices:
 - **User errors**: Use `return_syntax_error!`, `return_rule_error!`, or `return_type_error!`
 - **Compiler bugs**: Use `return_compiler_error!` (prefix added automatically)
 - Always include source location (ErrorLocation) for user errors
-- Use consistent error handling patterns across stages, use provided macros and methods inside `src/compiler/compiler_messages/compiler_errors.rs` to do this cleanly and consistently. 
+- Use consistent error handling patterns across stages, use provided macros and methods inside `src/compiler_frontend/compiler_messages/compiler_errors.rs` to do this cleanly and consistently. 
 - Each macro can support multiple variations, but sometimes using CompilerError methods directly will be more concise and clear for advanced error handling
 - Return a CompilerMessages Err result when a mix of warnings and/or multiple errors can be created at once. Use a single CompilerError when only one error without warnings could be returned.
-- Add warnings to the output when it is appropriate to warn rather than error. See `src/compiler/compiler_messages/compiler_warnings.rs`.
+- Add warnings to the output when it is appropriate to warn rather than error. See `src/compiler_frontend/compiler_messages/compiler_warnings.rs`.
 
 Every error as an associated type which informs the error output formatter how to display it and what data to expect and display.
 ``` rust
@@ -204,8 +202,6 @@ moved ~= data           -- Compiler determines: ownership transfer (data's last 
 | Explicit operations | Borrow | Mutability/Move |
 | Copy behavior | Implicit for Copy types | Always explicit |
 
-This memory model provides memory safety while maintaining Beanstalk's goal of minimal, intuitive syntax.
-
 ## Development Commands and Feature Flags
 
 ### Basic Development Commands
@@ -232,7 +228,6 @@ See the Cargo.toml for all feature flags.
 - `show_headers` - Display parsed headers and dependencies
 - `show_ast` - Display generated Abstract Syntax Tree
 - `show_hir` - Display High level IR
-- `show_wasm` - Display generated WASM bytecode
 
 **Performance Analysis**:
 - `detailed_timers` - Show timing for each compilation stage
@@ -241,12 +236,12 @@ See the Cargo.toml for all feature flags.
 The primary goal is to get the language working end-to-end. Focus on real-world usage patterns and language features.
 
 ### Unit Testing (`src/compiler_tests`)
-Unit testing should be used only to check new compiler features work as expected, but not used extensively.
-The tests should always be stored inside src/compiler tests, and never inline with actual code.
+Unit testing should be used only to check new compiler features work as expected but not used extensively.
+The tests should always be stored inside src/compiler tests and never inline with actual code.
 
-Once a system is working as expected, old unit tests should be pruned to reduce graudal unit test bloat.
-Rewriting unit tests is preferable to leaving them in the codebase, 
-and using integration tests with actual language snippets should always be prefered.
+Once a system is working as expected, old unit tests should be pruned to reduce gradual unit test bloat.
+Rewriting unit tests is preferable to leaving them in the codebase. 
+Integration tests with actual language snippets should always be preferred.
 
 ### Integration Testing
 Integration tests are the main way to check new features or refactors still work.
@@ -273,66 +268,12 @@ tests/cases/
 
 **Running Integration Tests**:
 ```bash
-# Run all test cases
-cargo run -- run tests
+# Use the compiler's test runner to run all integration tests
+cargo run -- tests
 
-# Run with debugging
-cargo run --features "show_ast,show_hir" -- run tests/cases/success/multi_file_module
+# Debugging a single file
+cargo run --features "detailed_timers,show_ast,show_hir" -- build tests/cases/test.bst
 
 ```
-
-When testing something new or experimenting with the language, 
-there is a `tests/cases/test.bst` file that can be written over and used for quick testing in a project.
-This is useful for highlighting a particular priority that is being worked on without yet adding the case to the list of tests.
-
-cargo run --features "detailed_timers" -- run tests/cases/test.bst
 
 Once an integration test case has been fixed, it should be added as a new test to the list of cases if there isn't already a similar integration test.
-
-### Basic Beanstalk Debugging Examples
-**Simple Value Inspection**:
-```beanstalk
--- Debug variable values
-count = 42
-io(count)  -- Prints: 42
-
-message = "Debug message"
-io(message)  -- Prints: Debug message
-
-result = true
-io(result)  -- Prints: true
-```
-
-**Debugging with Labels**:
-```beanstalk
--- Add context to debug output
-count = 10
-io([: Count: count])  -- Prints: Count: 10
-
-status = "active"
-io([: Status: status])  -- Prints: Status: active
-```
-
-**Debugging Function Execution**:
-```beanstalk
-calculate |x Int, y Int| -> Int:
-    io([: Calculating: x + y])
-    result = x + y
-    io([: Result: result])
-    return result
-;
-
-value = calculate(5, 3)
-io([: Final value: value])
-```
-
-**Debugging Loops**:
-```beanstalk
-items = {1, 2, 3, 4, 5}
-
-for item in items:
-    io([: Processing item: item])
-;
-
-io("Loop complete")
-```

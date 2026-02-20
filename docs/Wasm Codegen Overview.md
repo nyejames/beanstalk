@@ -2,6 +2,46 @@
 
 This document explains the structure and functionality of the WASM codegen stage in the Beanstalk compiler. The codegen transforms Beanstalk's Low-Level Intermediate Representation (LIR) into valid WebAssembly bytecode.
 
+## Wasm Backend (HIR → LIR → Wasm)
+
+## Stage 7: LIR Generation (`src/compiler/lir/`)
+LIR (Low-Level IR) is the *Wasm-shaped* representation of the program.  
+It is a close, structural match to Wasm’s execution model, with stack effects and control blocks fully explicit.
+
+LIR contains no remaining high-level constructs from Beanstalk: everything has been lowered into concrete Wasm-compatible operations. It is where ownership becomes concrete.
+
+### Purpose
+- Transform HIR into an instruction-level IR that can be directly emitted as Wasm.
+- Make control flow, locals and memory operations explicit.
+- Insert drops, compute field offsets and rewrite multi-value returns.
+
+### Key Features
+- **Ownership Resolution**: Tagged pointers are generated and ownership flags are masked and tested. `possible_drop` nodes become conditional frees.
+- **Wasm-Friendly Control Flow**: Blocks, loops and branches match Wasm’s structured CFG.
+- **Concrete Memory Access**: All field and array accesses lowered to explicit offsets and load/store instructions.
+- **Explicit Locals**: All temporaries materialized as Wasm locals or stack values.
+- **Drop Semantics**: Ownership outcomes from HIR lowering translated to explicit drop/free operations.
+- **Stack Discipline**: Expressions sequenced according to Wasm’s operand stack rules.
+- **Final Type Model**: All values lowered to Wasm types (`i32`, `i64`, `f32`, `f64`, plus reference types if enabled).
+
+### Debugging LIR
+- Use `show_lir` to inspect Wasm-shaped blocks.
+- Verify stack height balancing.
+- Confirm struct layouts and offsets.
+- Inspect lowered drop instructions and ownership decisions.
+
+## Stage 8: Codegen (`src/compiler/codegen/`)
+Transforms LIR directly into Wasm bytecode.
+
+### Purpose
+- Encode LIR instructions into valid WebAssembly.
+- Produce linear memory layout, data segments, function tables and exports.
+
+### Key Features
+- **Direct Encoding**: LIR nodes correspond 1:1 (or close) to Wasm bytecode
+
+---
+
 ## What is WebAssembly?
 
 WebAssembly (WASM) is a binary instruction format designed as a portable compilation target. A valid WASM module consists of several sections that must appear in a specific order:
