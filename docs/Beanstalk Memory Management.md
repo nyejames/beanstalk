@@ -112,7 +112,7 @@ This guarantees:
 Infinite loops require no destruction unless they can exit.
 
 ## Unified ABI (Deferred Responsibility)
-Beanstalk is designed to support a unified ABI when ownership lowering is active, but does not require it initially. It deliberately avoids generating separate functions for borrowed vs owned arguments.
+Beanstalk is designed to support a unified ABI when ownership lowering is active. It deliberately avoids generating separate functions for borrowed vs owned arguments.
 
 Instead, all functions use a **single ABI**:
 
@@ -132,6 +132,17 @@ This design:
 * avoids monomorphization,
 * keeps Wasm binaries small,
 * and preserves predictable performance.
+
+Future release optimisations can also remove the 'possible' part if all calls either consume or borrow their arguments the same way across the program.
+```Rust
+    enum OwnershipEffect {
+        MayConsume,     // Default, possible_drop will be used in this function
+        NeverConsumes,  // No drop inserted at all
+        AlwaysConsumes, // Drop is always inserted
+    }
+```
+
+But all of this optimisation can be skipped for GC backends such as JS.
 
 ## Compiler Responsibilities
 
