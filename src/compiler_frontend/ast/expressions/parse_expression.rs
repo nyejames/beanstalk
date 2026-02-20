@@ -426,7 +426,7 @@ pub fn create_expression(
                 });
             }
 
-            TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
+            TokenKind::TemplateHead => {
                 let template =
                     Template::new(token_stream, new_template_context!(context), None, string_table)?;
 

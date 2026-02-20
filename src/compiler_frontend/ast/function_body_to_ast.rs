@@ -4,10 +4,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 
-use crate::compiler_frontend::TOP_LEVEL_TEMPLATE_NAME;
 use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::functions::parse_function_call;
@@ -18,6 +17,7 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings;
+use crate::projects::settings::TOP_LEVEL_TEMPLATE_NAME;
 use crate::{ast_log, return_compiler_error, return_rule_error, return_syntax_error};
 
 pub fn function_body_to_ast(
@@ -309,7 +309,7 @@ pub fn function_body_to_ast(
             }
 
             // String template at the top level of the start function.
-            TokenKind::TemplateHead | TokenKind::TopLevelTemplate => {
+            TokenKind::TemplateHead => {
                 // If this isn't the top level of the module, this should be an error
                 // Only top level scope can have top level templates
                 if context.kind != ContextKind::Module {
@@ -320,6 +320,9 @@ pub fn function_body_to_ast(
                             .to_error_location(string_table)
                     )
                 }
+
+                // TODO: check for existing top level template declaration,
+                // If it already exists in this context, then concat it rather than creating a new one
 
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);

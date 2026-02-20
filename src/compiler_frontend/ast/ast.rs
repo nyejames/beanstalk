@@ -1,17 +1,16 @@
 use crate::backends::function_registry::HostRegistry;
-use crate::compiler_frontend::TOP_LEVEL_TEMPLATE_NAME;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
-use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME};
+use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 
 pub struct ModuleExport {
     pub id: StringId,
@@ -60,8 +59,10 @@ impl Ast {
                         signature.returns.clone(),
                     );
 
+                    let mut token_stream = FileTokens::new(header.path.to_owned(), tokens);
+
                     let body = match function_body_to_ast(
-                        &mut FileTokens::new(header.path.to_owned(), tokens),
+                        &mut token_stream,
                         context.to_owned(),
                         &mut warnings,
                         string_table,
@@ -99,8 +100,10 @@ impl Ast {
                         vec![],
                     );
 
+                    let mut token_stream = FileTokens::new(header.path.to_owned(), body);
+
                     let body = match function_body_to_ast(
-                        &mut FileTokens::new(header.path.to_owned(), body),
+                        &mut token_stream,
                         context.to_owned(),
                         &mut warnings,
                         string_table,
@@ -116,10 +119,12 @@ impl Ast {
 
                     // Add the automatic return statement for the start function
                     ast.push(AstNode {
-                        kind: NodeKind::Return(vec![Expression::reference(&Var {
-                            id: string_table.resolve(TOP_LEVEL_TEMPLATE_NAME),
-                            value: Expression::runtime(),
-                        })]),
+                        kind: NodeKind::Return(vec![Expression::reference(
+                            string_table.intern(TOP_LEVEL_TEMPLATE_NAME),
+                            DataType::Template,
+                            token_stream.current_location(),
+                            Ownership::MutableOwned,
+                        )]),
                         location: token_stream.current_location(),
                         scope: context.scope.clone(),
                     });

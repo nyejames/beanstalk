@@ -196,11 +196,11 @@ pub fn compile_project_frontend(
 /// Perform the core compilation pipeline shared by all project types
 pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module, CompilerMessages> {
     // Module capacity heuristic
-    // Just a guess of how many strings we might need to intern per module
-    const MODULES_CAPACITY: usize = 16;
+    // Just a guess of how many strings we might need to intern per file
+    const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 16;
 
     // Create a new string table for interning strings
-    let string_table = StringTable::with_capacity(module.len() * MODULES_CAPACITY);
+    let string_table = StringTable::with_capacity(module.len() * FILE_MIN_UNIQUE_SYMBOLS_CAPACITY);
 
     // Create the compiler_frontend instance
     let mut compiler = CompilerFrontend::new(config, string_table);

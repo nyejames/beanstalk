@@ -448,7 +448,6 @@ pub enum TokenKind {
     Copy,
 
     // Templates
-    TopLevelTemplate,
     EmptyTemplate(usize), // MIGHT REMOVE THIS
     Slot,
     TemplateClose,

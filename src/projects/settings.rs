@@ -7,12 +7,16 @@ pub const GLOBAL_PAGE_KEYWORD: &str = "#global";
 pub const INDEX_PAGE_NAME: &str = "index.html";
 pub const CONFIG_FILE_NAME: &str = "#config.bst";
 pub const BS_VAR_PREFIX: &str = "bst_";
+
+/// Special reserved names for functions and variables created by the compiler
+pub const TOP_LEVEL_TEMPLATE_NAME: &str = "#template";
 pub const IMPLICIT_START_FUNC_NAME: &str = "start";
 
-// This is a guess about how much should be initially allocated for the token and node vecs.
+// This is a guess about how much should be initially allocated for vecs in the compiler.
 // This should be a rough guess to help avoid too many allocations
 // and is just a heuristic based on tests with rudimentary small snippets of code.
 // Should be recalculated at a later point.
+pub const MINIMUM_STRING_TABLE_CAPACITY: usize = 32;
 pub const SRC_TO_TOKEN_RATIO: usize = 5; // (Maybe) About 1/6 source code to tokens observed
 pub const IMPORTS_CAPACITY: usize = 6; // (No Idea atm)
 pub const EXPORTS_CAPACITY: usize = 6; // (No Idea atm)

@@ -76,9 +76,6 @@ pub struct CompilerFrontend<'a> {
     pub(crate) string_table: StringTable,
 }
 
-/// Special reserved name for top-level templates
-pub const TOP_LEVEL_TEMPLATE_NAME: &str = "#template";
-
 impl<'a> CompilerFrontend<'a> {
     pub(crate) fn new(project_config: &'a Config, mut string_table: StringTable) -> Self {
         // Create a builtin host function registry with print and other host functions

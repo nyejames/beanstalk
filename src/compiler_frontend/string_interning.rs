@@ -1,3 +1,6 @@
+use crate::projects::settings::{
+    IMPLICIT_START_FUNC_NAME, MINIMUM_STRING_TABLE_CAPACITY, TOP_LEVEL_TEMPLATE_NAME,
+};
 use rustc_hash::FxHashMap;
 
 /// A unique identifier for an interned string, represented as a u32 for memory efficiency.
@@ -52,12 +55,6 @@ impl std::fmt::Display for StringId {
 /// The StringTable uses a dual-mapping approach for optimal performance:
 /// - Vec<Box<str>> for O(1) ID→string resolution with minimal overhead
 /// - FxHashMap<&str, StringId> for O(1) string→ID lookup during interning
-///
-/// This design provides:
-/// - O(1) interning operations (average case)
-/// - O(1) string resolution by ID
-/// - Memory deduplication for repeated strings
-/// - Type-safe string IDs to prevent mixing with other integers
 #[derive(Debug, Clone)]
 pub struct StringTable {
     /// Primary storage: ID → String mapping for fast resolution
@@ -73,36 +70,28 @@ pub struct StringTable {
     next_id: u32,
 }
 
-impl Default for StringTable {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl StringTable {
     /// Create a new empty string table
     pub fn new() -> Self {
         Self {
-            strings: Vec::new(),
-            string_to_id: FxHashMap::default(),
             next_id: 0,
+            strings: Vec::with_capacity(MINIMUM_STRING_TABLE_CAPACITY),
+            string_to_id: FxHashMap::default(),
         }
     }
 
     /// Create a new string table with a specified initial capacity
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            strings: Vec::with_capacity(capacity),
-            string_to_id: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
             next_id: 0,
+            strings: Vec::with_capacity(capacity + MINIMUM_STRING_TABLE_CAPACITY),
+            string_to_id: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 
     /// Intern a string slice, returning its unique ID.
     /// If the string already exists, returns the existing ID.
     /// If the string is new, stores it and returns a new ID.
-    ///
-    /// Time complexity: O(1) average case
     #[inline]
     pub fn intern(&mut self, s: &str) -> InternedString {
         // Fast path: check if we already have this string

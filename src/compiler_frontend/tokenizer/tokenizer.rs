@@ -61,7 +61,7 @@ pub fn tokenize(
 }
 
 pub fn get_token_kind(
-    stream: &mut TokenStream,
+    stream: &mut TokenStream<'_>,
     template_nesting_level: &mut i64,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
@@ -554,7 +554,7 @@ pub fn get_token_kind(
 
 fn keyword_or_variable(
     token_value: &mut String,
-    stream: &mut TokenStream,
+    stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     // Match variables or keywords

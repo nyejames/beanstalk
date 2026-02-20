@@ -21,15 +21,13 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirBlock, HirExpr, HirExprKind, HirKind, HirModule, HirNode, HirNodeId, HirPlace,
-    HirStmt,
+    BlockId, HirBlock, HirExpr, HirExprKind, HirModule, HirNodeId, HirPlace, HirStmt,
 };
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::{HashMap, HashSet};
 // Re-export validator types for backward compatibility
 use crate::backends::function_registry::{CallTarget, HostFunctionId};
-pub use crate::compiler_frontend::hir::validator::{HirValidationError, HirValidator};
 // ============================================================================
 // HIR Build Context (attached to HIR nodes)
 // ============================================================================

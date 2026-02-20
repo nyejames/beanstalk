@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Var};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 // Expressions represent anything that will turn into a value
@@ -141,12 +141,17 @@ impl Expression {
         }
     }
 
-    pub fn reference(arg: &Var) -> Self {
+    pub fn reference(
+        id: StringId,
+        data_type: DataType,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
         Self {
-            data_type: arg.value.data_type.clone(),
-            kind: ExpressionKind::Reference(arg.id),
-            location: arg.value.location.to_owned(),
-            ownership: arg.value.ownership.clone(),
+            data_type,
+            kind: ExpressionKind::Reference(id),
+            location,
+            ownership,
         }
     }
 
