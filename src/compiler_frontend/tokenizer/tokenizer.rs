@@ -643,7 +643,7 @@ fn is_valid_identifier(s: &str) -> bool {
 }
 
 fn tokenize_string(
-    stream: &mut TokenStream,
+    stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut token_value = String::new();
@@ -678,7 +678,7 @@ fn tokenize_string(
 
 fn tokenize_template_body(
     current_char: char,
-    stream: &mut TokenStream,
+    stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerError> {
     let mut token_value = String::from(current_char);

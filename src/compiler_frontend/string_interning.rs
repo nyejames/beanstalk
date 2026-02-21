@@ -1,6 +1,4 @@
-use crate::projects::settings::{
-    IMPLICIT_START_FUNC_NAME, MINIMUM_STRING_TABLE_CAPACITY, TOP_LEVEL_TEMPLATE_NAME,
-};
+use crate::projects::settings::MINIMUM_STRING_TABLE_CAPACITY;
 use rustc_hash::FxHashMap;
 
 /// A unique identifier for an interned string, represented as a u32 for memory efficiency.

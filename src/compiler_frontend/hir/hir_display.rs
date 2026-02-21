@@ -242,6 +242,24 @@ impl HirSideTable {
         self.map_hir_source_location(hir_location, &statement.location);
     }
 
+    pub(crate) fn map_function(&mut self, ast_location: &TextLocation, function: &HirFunction) {
+        let hir_location = HirLocation::Function(function.id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, ast_location);
+    }
+
+    pub(crate) fn map_block(&mut self, ast_location: &TextLocation, block: &HirBlock) {
+        let hir_location = HirLocation::Block(block.id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, ast_location);
+    }
+
+    pub(crate) fn map_terminator(&mut self, ast_location: &TextLocation, block_id: BlockId) {
+        let hir_location = HirLocation::Terminator(block_id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, ast_location);
+    }
+
     pub(crate) fn map_local_source(&mut self, local: &HirLocal) {
         if let Some(location) = &local.source_info {
             self.map_hir_source_location(HirLocation::Local(local.id), location);

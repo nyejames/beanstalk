@@ -126,6 +126,40 @@ enum RegionKind {
     UserArena, // explicit syntax (POSSIBLE FUTURE EXTENSION TO THE LANGUAGE)
 }
 
+impl HirRegion {
+    pub(crate) fn lexical(id: RegionId, parent: Option<RegionId>) -> Self {
+        Self {
+            id,
+            parent,
+            kind: RegionKind::Lexical,
+        }
+    }
+
+    pub(crate) fn user_arena(id: RegionId, parent: Option<RegionId>) -> Self {
+        Self {
+            id,
+            parent,
+            kind: RegionKind::UserArena,
+        }
+    }
+
+    pub fn id(&self) -> RegionId {
+        self.id
+    }
+
+    pub fn parent(&self) -> Option<RegionId> {
+        self.parent
+    }
+
+    pub(crate) fn is_lexical(&self) -> bool {
+        matches!(self.kind, RegionKind::Lexical)
+    }
+
+    pub(crate) fn is_user_arena(&self) -> bool {
+        matches!(self.kind, RegionKind::UserArena)
+    }
+}
+
 // ============================================================
 // Structs
 // ============================================================

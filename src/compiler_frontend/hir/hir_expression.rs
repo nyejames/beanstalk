@@ -821,26 +821,8 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         location: &TextLocation,
     ) -> Result<&mut HirBlock, CompilerError> {
-        let Some(block_id) = self.current_block else {
-            return_hir_transformation_error!(
-                "No current HIR block is active",
-                self.hir_error_location(location)
-            );
-        };
-
-        let Some(block_index) = self
-            .module
-            .blocks
-            .iter()
-            .position(|block| block.id == block_id)
-        else {
-            return_hir_transformation_error!(
-                format!("Current HIR block {:?} does not exist in module", block_id),
-                self.hir_error_location(location)
-            );
-        };
-
-        Ok(&mut self.module.blocks[block_index])
+        let block_id = self.current_block_id_or_error(location)?;
+        self.block_mut_by_id_or_error(block_id, location)
     }
 
     pub(crate) fn current_region_or_error(
@@ -1128,7 +1110,7 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    fn unit_expression(&mut self, region: RegionId) -> HirExpression {
+    pub(crate) fn unit_expression(&mut self, region: RegionId) -> HirExpression {
         HirExpression {
             kind: HirExpressionKind::TupleConstruct { elements: vec![] },
             ty: self.intern_type_kind(HirTypeKind::Unit),
@@ -1137,7 +1119,7 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    fn hir_error_location(&self, location: &TextLocation) -> ErrorLocation {
+    pub(crate) fn hir_error_location(&self, location: &TextLocation) -> ErrorLocation {
         location.to_error_location(self.string_table)
     }
 

@@ -17,7 +17,7 @@ pub enum CompilerDirective {
 
 pub fn compiler_directive(
     token_value: &mut String,
-    stream: &mut TokenStream,
+    stream: &mut TokenStream<'_>,
     string_table: &StringTable,
 ) -> Result<Token, CompilerError> {
     loop {

@@ -1,5 +1,5 @@
 // This is early prototype code, so ignore placeholder unused stuff for now
-#![allow(unused, unreachable_pub)]
+#![allow(unused)]
 
 // CURRENT REFACTOR
 pub(crate) mod hir_builder;
