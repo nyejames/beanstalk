@@ -102,7 +102,7 @@ impl Ast {
 
                     let mut token_stream = FileTokens::new(header.path.to_owned(), body);
 
-                    let body = match function_body_to_ast(
+                    let mut body = match function_body_to_ast(
                         &mut token_stream,
                         context.to_owned(),
                         &mut warnings,
@@ -118,7 +118,7 @@ impl Ast {
                     };
 
                     // Add the automatic return statement for the start function
-                    ast.push(AstNode {
+                    body.push(AstNode {
                         kind: NodeKind::Return(vec![Expression::reference(
                             string_table.intern(TOP_LEVEL_TEMPLATE_NAME),
                             DataType::Template,
