@@ -170,7 +170,7 @@ pub enum HeaderKind {
 - **Header Integration**: Convert headers to AST nodes
 - **Entry Point Handling**: StartFunction and Main headers are parsed into normal functions and given a reserved name. Only the main function is exposed to the host.
 - **Constant Folding**: Immediate evaluation of compile-time expressions
-- **Namespace Resolution**: Makes sure that variables exist and are unique to the scope
+- **Namespace Resolution**: Makes sure that variables exist and are unique to the entire module (variables store their full path including their parents in their name)
 - **Type Checking**: Early type resolution and validation
 
 **Compile-Time Folding**: The AST stage performs aggressive constant folding in `src/compiler_frontend/optimizers/constant_folding.rs`:

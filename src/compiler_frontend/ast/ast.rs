@@ -152,7 +152,7 @@ impl Ast {
                     let simple_name = header.path.extract_header_name(string_table);
 
                     ast.push(AstNode {
-                        kind: NodeKind::StructDefinition(simple_name, fields), // Use simple name for identifier
+                        kind: NodeKind::StructDefinition(simple_name, fields), // Use the simple name for identifier
                         location: header.name_location,
                         scope: header.path.to_owned(), // Preserve the full path in scope field
                     });

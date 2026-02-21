@@ -333,6 +333,8 @@ fn create_header(
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 // TODO: Struct headers
                 // This needs to skip until the end of the type parameter bracket
+                
+                // Struct fields must prefix their name with their parent's name to make sure they are unique
             } else if exported {
                 // This is a global constant (exported immutable variable)
                 // TODO: Constant headers
