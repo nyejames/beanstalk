@@ -5,7 +5,7 @@
 //!  - All symbols are resolved to stable IDs
 //!  - All expressions fully typed
 //!  - Explicit locals and regions
-//!  - No AST artifacts
+//!  - No AST artefacts
 //!  - No inference remnants
 //!
 //! This module defines the High-Level Intermediate Representation (HIR) for Beanstalk.
@@ -17,17 +17,18 @@
 //! ============================================================
 //!
 //! All heap values are GC references by default.
-//! Ownership is a runtime optimization, not a type distinction.
+//! Ownership is a runtime optimisation, not a type distinction.
 //! HIR provides:
 //!   - RegionId for lifetime analysis
 //!   - Mutability flags for exclusivity checking
-//!   - Drop statements for possible_drop insertion
 //!
 //! Ownership analysis runs as a separate pass keyed by HIR IDs.
 //! See: docs/Beanstalk Memory Management.md
+//! The analysis phases AFTER the HIR creation are responsible for giving the project builder
+//! info about where it could insert possible_drops, drops, or other optimisations.
 //!
 //! HIR is designed to support both models:
-//! - Ownership annotations are **advisory hints** for optimization, not semantic requirements
+//! - Ownership annotations are **advisory hints** for optimisation, not semantic requirements
 //! - All programs are correct under pure GC interpretation
 //! - Static analysis strengthens guarantees incrementally without changing HIR structure
 //!
