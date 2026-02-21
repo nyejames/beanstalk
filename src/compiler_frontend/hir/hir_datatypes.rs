@@ -22,7 +22,7 @@ pub struct TypeId(pub u32);
 /// can be attached here later without changing the IR.
 #[derive(Debug, Clone)]
 pub struct HirType {
-    pub kind: TypeKind,
+    pub kind: HirTypeKind,
     // Future extension points:
     //
     // - Cached layout information
@@ -38,7 +38,7 @@ pub struct HirType {
 /// Guarantees canonical identity of all types.
 /// If two expressions have the same TypeId,
 /// they are exactly the same type.
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TypeContext {
     types: Vec<HirType>,
 }
@@ -62,7 +62,7 @@ impl TypeContext {
 // ============================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TypeKind {
+pub enum HirTypeKind {
     // --------------------------------------------------------
     // Primitive Types
     // --------------------------------------------------------

@@ -43,9 +43,10 @@
 //! - `fn || -> Int, String?` → returns Option<(Int, String)>
 //! - `fn || -> Int, String!` → returns Result<(Int, String), Error>
 
+use super::hir_display::HirSideTable;
 use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::hir::hir_datatypes::TypeId;
+use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 // ============================================================
@@ -80,6 +81,8 @@ pub struct HirModule {
     pub blocks: Vec<HirBlock>,
     pub functions: Vec<HirFunction>,
     pub structs: Vec<HirStruct>,
+    pub type_context: TypeContext,
+    pub side_table: HirSideTable,
 
     /// Entry point for execution.
     pub start_function: FunctionId,
@@ -97,6 +100,8 @@ impl HirModule {
             blocks: vec![],
             functions: vec![],
             structs: vec![],
+            type_context: TypeContext::default(),
+            side_table: HirSideTable::default(),
             start_function: FunctionId(0),
             regions: vec![],
             warnings: vec![],

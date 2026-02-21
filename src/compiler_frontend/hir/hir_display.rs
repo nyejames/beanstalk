@@ -7,7 +7,7 @@
 //! It will also enable printing out Hir structures for easy debugging also.
 
 use crate::backends::function_registry::CallTarget;
-use crate::compiler_frontend::hir::hir_datatypes::{TypeContext, TypeId, TypeKind};
+use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
     HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirStatement,
@@ -964,15 +964,15 @@ impl<'a> HirDisplayContext<'a> {
 
         let kind = &type_context.get(ty).kind;
         match kind {
-            TypeKind::Bool => "Bool".to_owned(),
-            TypeKind::Int => "Int".to_owned(),
-            TypeKind::Float => "Float".to_owned(),
-            TypeKind::Decimal => "Decimal".to_owned(),
-            TypeKind::Char => "Char".to_owned(),
-            TypeKind::String => "String".to_owned(),
-            TypeKind::Range => "Range".to_owned(),
-            TypeKind::Unit => "()".to_owned(),
-            TypeKind::Tuple { fields } => {
+            HirTypeKind::Bool => "Bool".to_owned(),
+            HirTypeKind::Int => "Int".to_owned(),
+            HirTypeKind::Float => "Float".to_owned(),
+            HirTypeKind::Decimal => "Decimal".to_owned(),
+            HirTypeKind::Char => "Char".to_owned(),
+            HirTypeKind::String => "String".to_owned(),
+            HirTypeKind::Range => "Range".to_owned(),
+            HirTypeKind::Unit => "()".to_owned(),
+            HirTypeKind::Tuple { fields } => {
                 if fields.is_empty() {
                     return "()".to_owned();
                 }
@@ -984,14 +984,14 @@ impl<'a> HirDisplayContext<'a> {
                     .join(", ");
                 format!("({})", joined)
             }
-            TypeKind::Collection { element } => {
+            HirTypeKind::Collection { element } => {
                 format!(
                     "[{}]",
                     self.render_type_with_context(type_context, *element, depth + 1)
                 )
             }
-            TypeKind::Struct { struct_id } => self.struct_label(*struct_id),
-            TypeKind::Function {
+            HirTypeKind::Struct { struct_id } => self.struct_label(*struct_id),
+            HirTypeKind::Function {
                 receiver,
                 params,
                 returns,
@@ -1027,18 +1027,18 @@ impl<'a> HirDisplayContext<'a> {
                     None => format!("fn({})->{}", params, returns),
                 }
             }
-            TypeKind::Option { inner } => {
+            HirTypeKind::Option { inner } => {
                 format!(
                     "Option<{}>",
                     self.render_type_with_context(type_context, *inner, depth + 1)
                 )
             }
-            TypeKind::Result { ok, err } => format!(
+            HirTypeKind::Result { ok, err } => format!(
                 "Result<{}, {}>",
                 self.render_type_with_context(type_context, *ok, depth + 1),
                 self.render_type_with_context(type_context, *err, depth + 1)
             ),
-            TypeKind::Union { variants } => {
+            HirTypeKind::Union { variants } => {
                 let joined = variants
                     .iter()
                     .map(|variant| self.render_type_with_context(type_context, *variant, depth + 1))

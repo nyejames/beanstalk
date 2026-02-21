@@ -15,13 +15,16 @@
 //!
 //! Those occur in later compilation phases.
 
-use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
-
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation};
+use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::string_interning::StringTable;
+use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::hir::hir_display::HirSideTable;
+use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
+use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::return_err_as_messages;
+use rustc_hash::FxHashMap;
 
 // -----------
 // Entry Point
@@ -45,20 +48,35 @@ pub fn lower_module(
 
 pub struct HirBuilder<'a> {
     // === Result being built ===
-    module: HirModule,
+    pub(super) module: HirModule,
 
     // === For variable name resolution ===
-    string_table: &'a mut StringTable,
+    pub(super) string_table: &'a mut StringTable,
 
     // === ID Counters ===
-    next_block_id: u32,
-    next_local_id: u32,
-    next_region_id: u32,
+    pub(super) next_block_id: u32,
+    pub(super) next_local_id: u32,
+    pub(super) next_node_id: u32,
+    pub(super) next_region_id: u32,
+    pub(super) temp_local_counter: u32,
+
+    // === Type interning ===
+    pub(super) type_context: TypeContext,
+    pub(super) type_interner: FxHashMap<HirTypeKind, TypeId>,
+
+    // === Source / name side table ===
+    pub(super) side_table: HirSideTable,
+
+    // === Name resolution tables (filled by other lowering phases) ===
+    pub(super) locals_by_name: FxHashMap<InternedString, LocalId>,
+    pub(super) functions_by_name: FxHashMap<InternedString, FunctionId>,
+    pub(super) structs_by_name: FxHashMap<InternedString, StructId>,
+    pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedString), FieldId>,
 
     // === Current Function State ===
-    current_function: Option<FunctionId>,
-    current_block: Option<BlockId>,
-    current_region: Option<RegionId>,
+    pub(super) current_function: Option<FunctionId>,
+    pub(super) current_block: Option<BlockId>,
+    pub(super) current_region: Option<RegionId>,
 
     // Parallel Metadata Arrays (Index-aligned with the arenas above)
     // This is for resolving statements back to their original source code locations
@@ -77,7 +95,18 @@ impl<'a> HirBuilder<'a> {
 
             next_block_id: 0,
             next_local_id: 0,
+            next_node_id: 0,
             next_region_id: 0,
+            temp_local_counter: 0,
+
+            type_context: TypeContext::default(),
+            type_interner: FxHashMap::default(),
+            side_table: HirSideTable::default(),
+
+            locals_by_name: FxHashMap::default(),
+            functions_by_name: FxHashMap::default(),
+            structs_by_name: FxHashMap::default(),
+            fields_by_struct_and_name: FxHashMap::default(),
 
             current_function: None,
             current_block: None,
@@ -105,6 +134,9 @@ impl<'a> HirBuilder<'a> {
                 }
             }
         }
+
+        self.module.type_context = self.type_context;
+        self.module.side_table = self.side_table;
 
         Ok(self.module)
     }

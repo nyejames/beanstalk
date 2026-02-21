@@ -3,6 +3,8 @@
 #![allow(dead_code, unused_macros, unused_variables)]
 #![warn(rust_2018_idioms, unreachable_pub)]
 mod compiler_tests {
+    #[cfg(test)]
+    pub(crate) mod hir_expression_lowering_tests;
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
 }
 pub mod build_system;
