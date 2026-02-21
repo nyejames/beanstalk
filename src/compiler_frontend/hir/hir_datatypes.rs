@@ -108,11 +108,16 @@ pub enum TypeKind {
 
     /// Option wraps any type (including Tuple)
     /// fn || -> Int, String?  becomes  Option { inner: Tuple { ... } }
-    Option { inner: TypeId },
+    Option {
+        inner: TypeId,
+    },
 
     /// Result wraps any type (including Tuple)
     /// fn || -> Int, String!  becomes  Result { ok: Tuple { ... }, err: ErrorType }
-    Result { ok: TypeId, err: TypeId },
+    Result {
+        ok: TypeId,
+        err: TypeId,
+    },
 
     /// Tagged union.
     ///

@@ -82,7 +82,7 @@ impl<'a> HirBuilder<'a> {
             current_function: None,
             current_block: None,
             current_region: None,
-            
+
             statement_locations: vec![],
         }
     }

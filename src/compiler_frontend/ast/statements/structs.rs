@@ -1,13 +1,13 @@
+use crate::ast_log;
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::string_interning::{InternedString, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
-use crate::{ast_log};
-use crate::compiler_frontend::compiler_errors::CompilerError;
 
 // Currently only ever called from build_ast
 // Since structs can only exist in function bodies or at the top level of a file.as

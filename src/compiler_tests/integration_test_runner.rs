@@ -1,11 +1,11 @@
 //! Test runner for validating core Beanstalk compiler_frontend functionality
+use crate::build_system::build::build_project;
+use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_messages::compiler_errors::error_type_to_str;
 use crate::compiler_frontend::compiler_messages::compiler_warnings::print_formatted_warning;
 use crate::compiler_frontend::display_messages::print_formatted_error;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use saying::say;
-use crate::compiler_frontend::Flag;
-use crate::build_system::build::build_project;
 use std::fs;
 use std::path::Path;
 
