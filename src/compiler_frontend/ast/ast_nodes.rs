@@ -8,7 +8,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
+pub(crate) use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::{return_compiler_error, return_type_error};
 use std::path::PathBuf;
 

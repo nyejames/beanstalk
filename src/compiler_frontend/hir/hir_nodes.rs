@@ -157,7 +157,7 @@ pub struct HirBlock {
     /// All locals declared within this block.
     pub locals: Vec<HirLocal>,
 
-    pub statements: Vec<HirStmt>,
+    pub statements: Vec<HirStatement>,
     pub terminator: HirTerminator,
 }
 
@@ -184,7 +184,7 @@ pub enum HirPlace {
 
     Index {
         base: Box<HirPlace>,
-        index: Box<HirExpr>,
+        index: Box<HirExpression>,
     },
 }
 
@@ -192,29 +192,29 @@ pub enum HirPlace {
 // Statements
 // ============================================================
 #[derive(Debug, Clone)]
-pub struct HirStmt {
+pub struct HirStatement {
     pub id: HirNodeId,
-    pub kind: HirStmtKind,
+    pub kind: HirStatementKind,
     pub location: TextLocation,
 }
 
 #[derive(Debug, Clone)]
-pub enum HirStmtKind {
+pub enum HirStatementKind {
     Assign {
         target: HirPlace,
-        value: HirExpr,
+        value: HirExpression,
     },
 
     // HIR construction flattens nested calls.
     // Single-call expressions don't need explicit assignment in the source
     Call {
         target: CallTarget,
-        args: Vec<HirExpr>,
+        args: Vec<HirExpression>,
         result: Option<LocalId>,
     },
 
     /// Expression evaluated only for side effects.
-    Expr(HirExpr),
+    Expr(HirExpression),
 
     /// Explicit deterministic drop.
     Drop(LocalId),
@@ -231,13 +231,13 @@ pub enum HirTerminator {
     },
 
     If {
-        condition: HirExpr,
+        condition: HirExpression,
         then_block: BlockId,
         else_block: BlockId, // Required, must jump or return somewhere (Could just be continuation)
     },
 
     Match {
-        scrutinee: HirExpr,
+        scrutinee: HirExpression,
         arms: Vec<HirMatchArm>, // Each arm's body block must end with Jump or Return
     },
 
@@ -254,10 +254,10 @@ pub enum HirTerminator {
         target: BlockId,
     },
 
-    Return(HirExpr),
+    Return(HirExpression),
 
     Panic {
-        message: Option<HirExpr>,
+        message: Option<HirExpression>,
     },
 }
 
@@ -265,8 +265,8 @@ pub enum HirTerminator {
 // Expressions
 // ============================================================
 #[derive(Debug, Clone)]
-pub struct HirExpr {
-    pub kind: HirExprKind,
+pub struct HirExpression {
+    pub kind: HirExpressionKind,
     pub ty: TypeId,
     pub value_kind: ValueKind,
     pub region: RegionId,
@@ -285,7 +285,7 @@ pub enum ValueKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum HirExprKind {
+pub enum HirExpressionKind {
     // --------------------------------------------------------
     // Literals
     // --------------------------------------------------------
@@ -304,14 +304,14 @@ pub enum HirExprKind {
     // Operations
     // --------------------------------------------------------
     BinOp {
-        left: Box<HirExpr>,
-        op: BinOp,
-        right: Box<HirExpr>,
+        left: Box<HirExpression>,
+        op: HirBinOp,
+        right: Box<HirExpression>,
     },
 
     UnaryOp {
-        op: UnaryOp,
-        operand: Box<HirExpr>,
+        op: HirUnaryOp,
+        operand: Box<HirExpression>,
     },
 
     // --------------------------------------------------------
@@ -319,14 +319,14 @@ pub enum HirExprKind {
     // --------------------------------------------------------
     StructConstruct {
         struct_id: StructId,
-        fields: Vec<(FieldId, HirExpr)>,
+        fields: Vec<(FieldId, HirExpression)>,
     },
 
-    Collection(Vec<HirExpr>),
+    Collection(Vec<HirExpression>),
 
     Range {
-        start: Box<HirExpr>,
-        end: Box<HirExpr>,
+        start: Box<HirExpression>,
+        end: Box<HirExpression>,
     },
 
     /// Construct a tuple value (for multi-return)
@@ -334,7 +334,7 @@ pub enum HirExprKind {
     /// EMPTY TUPLE IS THE UNIT TYPE ()
     /// EMPTY TUPLE == DataType::None
     TupleConstruct {
-        elements: Vec<HirExpr>,
+        elements: Vec<HirExpression>,
     },
 
     ///Construct an Option value
@@ -342,14 +342,14 @@ pub enum HirExprKind {
     /// - None variant: value must be None
     OptionConstruct {
         variant: OptionVariant,
-        value: Option<Box<HirExpr>>, // None for None variant, Some for Some variant
+        value: Option<Box<HirExpression>>, // None for None variant, Some for Some variant
     },
 
     /// Construct a Result value
     /// Example: Ok(42) or Err("error")
     ResultConstruct {
         variant: ResultVariant,
-        value: Box<HirExpr>, // The wrapped value
+        value: Box<HirExpression>, // The wrapped value
     },
 }
 
@@ -359,13 +359,13 @@ pub enum HirExprKind {
 #[derive(Debug, Clone)]
 pub struct HirMatchArm {
     pub pattern: HirPattern,
-    pub guard: Option<HirExpr>,
+    pub guard: Option<HirExpression>,
     pub body: BlockId,
 }
 
 #[derive(Debug, Clone)]
 pub enum HirPattern {
-    Literal(HirExpr),
+    Literal(HirExpression),
     Wildcard,
 
     Binding {
@@ -419,7 +419,7 @@ pub enum ResultVariant {
 // Operators
 // ============================================================
 #[derive(Debug, Clone, Copy)]
-pub enum BinOp {
+pub enum HirBinOp {
     Add,
     Sub,
     Mul,
@@ -438,19 +438,7 @@ pub enum BinOp {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum UnaryOp {
+pub enum HirUnaryOp {
     Neg,
     Not,
-}
-
-// ============================================================
-// Debug Overlay
-// ============================================================
-//
-// Semantic identity is ID-based.
-// Names are stored separately for diagnostics.
-pub struct HirDebug {
-    pub locals: Vec<String>,    // indexed by LocalId
-    pub functions: Vec<String>, // indexed by FunctionId
-    pub structs: Vec<String>,   // indexed by StructId
 }

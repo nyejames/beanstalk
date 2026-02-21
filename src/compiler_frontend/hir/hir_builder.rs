@@ -18,7 +18,7 @@
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
 
 use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_err_as_messages;
@@ -47,6 +47,9 @@ pub struct HirBuilder<'a> {
     // === Result being built ===
     module: HirModule,
 
+    // === For variable name resolution ===
+    string_table: &'a mut StringTable,
+
     // === ID Counters ===
     next_block_id: u32,
     next_local_id: u32,
@@ -57,7 +60,9 @@ pub struct HirBuilder<'a> {
     current_block: Option<BlockId>,
     current_region: Option<RegionId>,
 
-    string_table: &'a mut StringTable,
+    // Parallel Metadata Arrays (Index-aligned with the arenas above)
+    // This is for resolving statements back to their original source code locations
+    pub statement_locations: Vec<TextLocation>,
 }
 
 impl<'a> HirBuilder<'a> {
@@ -68,6 +73,8 @@ impl<'a> HirBuilder<'a> {
         HirBuilder {
             module: HirModule::new(),
 
+            string_table,
+
             next_block_id: 0,
             next_local_id: 0,
             next_region_id: 0,
@@ -75,8 +82,8 @@ impl<'a> HirBuilder<'a> {
             current_function: None,
             current_block: None,
             current_region: None,
-
-            string_table,
+            
+            statement_locations: vec![],
         }
     }
 
