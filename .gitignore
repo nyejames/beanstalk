@@ -16,7 +16,6 @@ test_output/
 .clinerules
 .aiignore
 .junie
-/.aiassistant
-test.js
-/.spec-workflow
-/.ai
+.aiassistant
+.spec-workflow
+.ai
