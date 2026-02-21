@@ -44,6 +44,7 @@
 //! - `fn || -> Int, String!` → returns Result<(Int, String), Error>
 
 use crate::backends::function_registry::CallTarget;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::hir::hir_datatypes::TypeId;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
@@ -85,6 +86,22 @@ pub struct HirModule {
 
     /// Region tree
     pub regions: Vec<HirRegion>,
+
+    /// Warnings Collected along the way
+    pub warnings: Vec<CompilerWarning>,
+}
+
+impl HirModule {
+    pub fn new() -> Self {
+        Self {
+            blocks: vec![],
+            functions: vec![],
+            structs: vec![],
+            start_function: FunctionId(0),
+            regions: vec![],
+            warnings: vec![],
+        }
+    }
 }
 
 // ============================================================

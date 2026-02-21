@@ -27,15 +27,14 @@ pub(crate) mod host_functions {}
 
 pub(crate) mod hir;
 
-pub(crate) mod borrow_checker;
+// pub(crate) mod borrow_checker;
 
 use crate::backends::function_registry::HostRegistry;
 use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::borrow_checker::{BorrowCheckOutcome, BorrowChecker};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, parse_headers};
-use crate::compiler_frontend::hir::build_hir::HirBuilderContext;
+use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
@@ -174,28 +173,31 @@ impl<'a> CompilerFrontend<'a> {
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        let ctx = HirBuilderContext::new(&mut self.string_table);
-        let hir_module = ctx.build_hir_module(ast)?;
+        let hir_module = lower_module(ast, &mut self.string_table)?;
 
         // Display HIR if the show_hir feature is enabled
-        #[cfg(feature = "show_hir")]
-        {
-            println!("{}", hir_module.debug_string(&self.string_table));
-        }
+        // #[cfg(feature = "show_hir")]
+        // {
+        //     println!("{}", hir_module.debug_string(&self.string_table));
+        // }
 
         Ok(hir_module)
     }
 
-    /// -----------------------------
-    ///        BORROW CHECKING
-    /// -----------------------------
-    /// Perform borrow checking on HIR nodes to validate memory safety
-    /// and ownership rules according to Beanstalk's reference semantics.
-    pub fn check_borrows(
-        &self,
-        hir_module: &HirModule,
-    ) -> Result<BorrowCheckOutcome, CompilerMessages> {
-        let mut checker = BorrowChecker::new();
-        checker.check_module(hir_module, &self.string_table)
-    }
+    // ------------------------------
+    //  BORROW CHECKING AND ANALYSIS
+    // ------------------------------
+    // This will be split into separate phases so project builders can skip certain analysis phases
+
+    // TODO: Enforcing the single mutable reference / n immutable references rule
+    // All projects MUST have this as part of the language rules so this is always performed
+    // pub fn check_borrows()
+
+    // TODO: Last use analysis (skippable)
+    // Provides a list of places that possible_drops can be inserted for heap managed values
+    // pub fn last_use_analysis()
+
+    // Other phases (might be wrapped into the previous phase)
+    // - Determine which functions can be statically dispatched with guaranteed drops or no drops at all
+    // - Determine inlining opportunities
 }

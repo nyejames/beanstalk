@@ -29,7 +29,6 @@
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, ErrorLocation, ErrorMetaDataKey, ErrorType,
 };
-use crate::compiler_frontend::hir::build_hir::HirValidationError;
 use crate::compiler_frontend::hir::hir_nodes::BlockId;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::collections::HashMap;

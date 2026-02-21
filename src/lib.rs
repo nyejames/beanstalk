@@ -4,17 +4,15 @@
 #![warn(rust_2018_idioms, unreachable_pub)]
 mod compiler_tests {
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
-    #[cfg(test)]
-    mod name_hygiene_tests;
 }
 pub mod build_system;
 mod compiler_frontend;
 
 mod backends {
     pub(crate) mod function_registry;
-    pub(crate) mod js;
-    pub mod lir;
-    pub(crate) mod wasm;
+    // pub(crate) mod js;
+    // pub mod lir;
+    // pub(crate) mod wasm;
 }
 
 pub mod projects {

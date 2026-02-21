@@ -324,39 +324,39 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     timer_log!(time, "HIR generated in: ");
 
     // Debug output for HIR if enabled
-    #[cfg(feature = "show_hir")]
-    {
-        println!("=== HIR OUTPUT ===");
-        println!("{}", hir_module.debug_string(&compiler.string_table));
-        println!("=== END HIR OUTPUT ===");
-    }
+    // #[cfg(feature = "show_hir")]
+    // {
+    //     println!("=== HIR OUTPUT ===");
+    //     println!("{}", hir_module.debug_string(&compiler.string_table));
+    //     println!("=== END HIR OUTPUT ===");
+    // }
 
     // ----------------------------------
     //          BORROW CHECKING
     // ----------------------------------
     let time = Instant::now();
 
-    let borrow_analysis = match compiler.check_borrows(&hir_module) {
-        Ok(outcome) => outcome,
-        Err(e) => {
-            compiler_messages.errors.extend(e.errors);
-            compiler_messages.warnings.extend(e.warnings);
-            return Err(compiler_messages);
-        }
-    };
+    // let borrow_analysis = match compiler.check_borrows(&hir_module) {
+    //     Ok(outcome) => outcome,
+    //     Err(e) => {
+    //         compiler_messages.errors.extend(e.errors);
+    //         compiler_messages.warnings.extend(e.warnings);
+    //         return Err(compiler_messages);
+    //     }
+    // };
 
     timer_log!(time, "Borrow checking completed in: ");
 
     // Debug output for the borrow checker if enabled
-    #[cfg(feature = "show_borrow_checker")]
-    {
-        println!("=== BORROW CHECKER OUTPUT ===");
-        println!(
-            "Borrow checking completed successfully ({} program points analysed)",
-            borrow_analysis.analysis.states.len()
-        );
-        println!("=== END BORROW CHECKER OUTPUT ===");
-    }
+    // #[cfg(feature = "show_borrow_checker")]
+    // {
+    //     println!("=== BORROW CHECKER OUTPUT ===");
+    //     println!(
+    //         "Borrow checking completed successfully ({} program points analysed)",
+    //         borrow_analysis.analysis.states.len()
+    //     );
+    //     println!("=== END BORROW CHECKER OUTPUT ===");
+    // }
 
     Ok(Module {
         folder_name: config

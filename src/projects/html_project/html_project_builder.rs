@@ -2,7 +2,6 @@
 //
 // Builds Beanstalk projects for web deployment, generating separate WASM files
 // for different HTML pages and including JavaScript bindings for DOM interaction.
-use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -78,21 +77,23 @@ fn compile_js_module(
     output_files: &mut Vec<OutputFile>,
     release_build: bool,
 ) -> Result<(), CompilerError> {
-    // The project builder determines where the output files need to go
-    // by provided the full path from source for each file and its content
-    let js_lowering_config = JsLoweringConfig {
-        pretty: !release_build,
-        emit_locations: !release_build,
-    };
+    todo!();
 
-    let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
-
-    output_files.push(OutputFile::new(
-        PathBuf::from("test".to_string()),
-        FileKind::Js(js_module.source),
-    ));
-
-    Ok(())
+    // // The project builder determines where the output files need to go
+    // // by provided the full path from source for each file and its content
+    // let js_lowering_config = JsLoweringConfig {
+    //     pretty: !release_build,
+    //     emit_locations: !release_build,
+    // };
+    //
+    // let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
+    //
+    // output_files.push(OutputFile::new(
+    //     PathBuf::from("test".to_string()),
+    //     FileKind::Js(js_module.source),
+    // ));
+    //
+    // Ok(())
 }
 
 #[allow(dead_code)]

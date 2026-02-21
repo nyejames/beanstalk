@@ -23,7 +23,12 @@ pub fn parse_field_access(
 ) -> Result<AstNode, CompilerError> {
     // Start with the base variable
     let mut current_node = AstNode {
-        kind: NodeKind::Rvalue(Expression::reference(base_arg)),
+        kind: NodeKind::Rvalue(Expression::reference(
+            base_arg.id,
+            base_arg.value.data_type.clone(),
+            base_arg.value.location.clone(),
+            base_arg.value.ownership.clone(),
+        )),
         scope: base_arg.value.location.scope.to_owned(),
         location: base_arg.value.location.to_owned(),
     };
