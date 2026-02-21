@@ -153,14 +153,14 @@ The compiler enforces memory safety through the following steps:
    * name resolution happens, 
    * eager folding of expressions takes place.
 2. **HIR lowering**, where:
-   * Advisory possible_drop insertion
    * control flow is linearized,
    * ownership boundaries are identified.
 3. **Borrow validation**, which:
    * performs last-use analysis,
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
-   * Enables ownership eligibility.
+   * Enables ownership eligibility,
+   * provides advisory possible_drop sites
 4. **Final Lowering**, where:
    * ownership flags are generated,
    * possible drops become conditional frees,
@@ -192,7 +192,7 @@ In exchange:
 
 This memory model is designed to evolve.
 
-Possible future enhancements include:
+Future enhancements might include:
 
 * Region-based memory management
 * Stronger static lifetime inference

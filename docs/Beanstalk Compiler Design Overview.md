@@ -223,14 +223,6 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 - Instead, it enables backwards last-use analysis
 - Variables are tracked by symbol identity, not by place projections
 
-**Possible Drop Insertion**
-- Conditional possible_drop(x) nodes are inserted:
-    1. At block exits
-    2. On return
-    3. On break from ownership-bearing scopes
-
-- Whether a drop actually happens is decided at runtime via ownership flags OR whether the value is managed by the GC
-
 **Ownership Is Not Yet Final**  
 - HIR does not decide whether an operation is a move or borrow
 - It records where ownership could be consumed
@@ -262,6 +254,14 @@ HIR represents semantic meaning under GC. Ownership is an optimization layer, no
 
 While the single mutable access rule is always enforced,
 project builders and debug builds can skip any further analysis to avoid compile time overhead.
+
+**Possible Drop Insertion**
+- Conditional possible_drop(x) locations can be revealed by this analysis:
+    1. At block exits
+    2. On return
+    3. On break from ownership-bearing scopes
+
+- Whether a drop actually happens is decided at runtime via ownership flags OR whether the value is managed by the GC
 
 ### Purpose
 Statically determine which values are not managed by the GC heap.
