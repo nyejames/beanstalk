@@ -1,3 +1,9 @@
+//! Borrow Checker Driver
+//!
+//! This module orchestrates borrow checking for a complete HIR module.
+//! It builds function metadata, runs a forward fixed-point dataflow analysis
+//! per function, and stores snapshots/facts for downstream phases.
+
 mod diagnostics;
 mod state;
 mod transfer;
@@ -43,8 +49,10 @@ struct BorrowChecker<'a> {
     host_registry: &'a HostRegistry,
     string_table: &'a StringTable,
     diagnostics: BorrowDiagnostics<'a>,
+    // Fast ID lookups used throughout analysis.
     block_index_by_id: FxHashMap<BlockId, usize>,
     region_parent_by_id: FxHashMap<RegionId, Option<RegionId>>,
+    // Call/signature metadata caches used by transfer for O(1) access.
     function_by_path: FxHashMap<InternedPath, FunctionId>,
     function_param_mutability: FxHashMap<FunctionId, Vec<bool>>,
     function_return_alias: FxHashMap<FunctionId, FunctionReturnAliasSummary>,
@@ -83,7 +91,8 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn run(mut self) -> Result<BorrowCheckReport, CompilerError> {
-        // Build all metadata once so transfer only needs O(1) lookups.
+        // Build all metadata once so block transfer stays allocation-light
+        // and does not repeat module scans.
         self.build_function_lookup()?;
         self.build_function_param_mutability()?;
         self.build_function_return_alias_summaries()?;
@@ -111,6 +120,8 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn build_function_lookup(&mut self) -> Result<(), CompilerError> {
+        // Function call targets are path-based, so the checker builds one
+        // canonical path -> FunctionId map from side-table bindings.
         for function in &self.module.functions {
             let Some(path) = self
                 .module
@@ -137,6 +148,8 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn build_function_param_mutability(&mut self) -> Result<(), CompilerError> {
+        // Parameter mutability is stored on locals. Gather it once globally,
+        // then materialize each function's param mutability vector in order.
         let mut local_mutability_by_id = FxHashMap::default();
         for block in &self.module.blocks {
             for local in &block.locals {
@@ -173,6 +186,7 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn build_function_return_alias_summaries(&mut self) -> Result<(), CompilerError> {
+        // Conservative callee summaries are computed once and reused at each call site.
         for function in &self.module.functions {
             let summary = self.classify_function_return_alias(function)?;
             self.function_return_alias.insert(function.id, summary);
@@ -185,6 +199,9 @@ impl<'a> BorrowChecker<'a> {
         &self,
         function: &HirFunction,
     ) -> Result<FunctionReturnAliasSummary, CompilerError> {
+        // Summary lattice:
+        // Fresh < AliasParams(bitset) < Unknown
+        // If any reachable return shape is ambiguous, we escalate to Unknown.
         let reachable_blocks = self.collect_reachable_blocks(function)?;
         let mut param_index_by_local = FxHashMap::default();
         for (param_index, param_local) in function.params.iter().enumerate() {
@@ -205,6 +222,7 @@ impl<'a> BorrowChecker<'a> {
             summary = merge_return_alias(summary, return_summary);
 
             if matches!(summary, FunctionReturnAliasSummary::Unknown) {
+                // Unknown is the lattice top; no additional scanning can improve it.
                 break;
             }
         }
@@ -221,6 +239,10 @@ impl<'a> BorrowChecker<'a> {
         function: &HirFunction,
         report: &mut BorrowCheckReport,
     ) -> Result<FunctionBorrowSummary, CompilerError> {
+        // Function analysis pipeline:
+        // 1) Build per-function local layout and visibility masks.
+        // 2) Run forward worklist transfer to fixed point.
+        // 3) Persist facts + entry/exit snapshots for reachable blocks.
         let reachable_blocks = self.collect_reachable_blocks(function)?;
         let reachable_block_set = reachable_blocks.iter().copied().collect::<FxHashSet<_>>();
         let layout = self.build_function_layout(function, &reachable_blocks)?;
@@ -240,6 +262,7 @@ impl<'a> BorrowChecker<'a> {
         let mut in_states: FxHashMap<BlockId, BorrowState> = FxHashMap::default();
         let mut out_states: FxHashMap<BlockId, BorrowState> = FxHashMap::default();
 
+        // Entry state starts as UNINIT, with parameters immediately initialized.
         let mut initial_state = BorrowState::new_uninitialized(layout.local_count());
         for param in &function.params {
             let Some(param_index) = layout.index_of(*param) else {
@@ -293,6 +316,7 @@ impl<'a> BorrowChecker<'a> {
             reachable_blocks.len()
         ));
 
+        // Standard forward fixed-point iteration over reachable blocks.
         while let Some(block_id) = worklist.pop_front() {
             summary.worklist_iterations += 1;
 
@@ -335,6 +359,7 @@ impl<'a> BorrowChecker<'a> {
                 None => true,
             };
 
+            // If output state is unchanged, successor joins cannot change either.
             if !changed_out {
                 continue;
             }
@@ -346,6 +371,8 @@ impl<'a> BorrowChecker<'a> {
                     continue;
                 }
 
+                // Apply lexical visibility kills before join to prevent
+                // branch-local aliases from leaking into outer regions.
                 let mut successor_input = output_state.clone();
                 if let Some(mask) = visible_locals_by_block.get(&successor) {
                     successor_input.kill_invisible(mask);
@@ -361,6 +388,7 @@ impl<'a> BorrowChecker<'a> {
                     None => true,
                 };
 
+                // Revisit successors only when their input state grows.
                 if changed_in {
                     in_states.insert(successor, next_state);
                     worklist.push_back(successor);
@@ -372,6 +400,7 @@ impl<'a> BorrowChecker<'a> {
         alias_heavy_blocks.sort_by_key(|id| id.0);
         summary.alias_heavy_blocks = alias_heavy_blocks;
 
+        // Persist snapshots for debug tooling and downstream analyses.
         for block_id in &reachable_blocks {
             if let Some(state) = in_states.get(block_id) {
                 report
@@ -401,6 +430,8 @@ impl<'a> BorrowChecker<'a> {
         function: &HirFunction,
         reachable_blocks: &[BlockId],
     ) -> Result<FunctionLayout, CompilerError> {
+        // Borrow state uses dense indices for speed.
+        // Build one stable LocalId -> dense index layout from reachable blocks.
         let mut local_info_by_id = FxHashMap::default();
 
         for block_id in reachable_blocks {
@@ -447,6 +478,8 @@ impl<'a> BorrowChecker<'a> {
         layout: &FunctionLayout,
         reachable_blocks: &[BlockId],
     ) -> Result<FxHashMap<BlockId, RootSet>, CompilerError> {
+        // A local is visible in a block when local.region is an ancestor
+        // of block.region in the lexical region tree.
         let mut masks = FxHashMap::default();
 
         for block_id in reachable_blocks {
@@ -477,6 +510,7 @@ impl<'a> BorrowChecker<'a> {
         function_id: FunctionId,
         block_id: BlockId,
     ) -> Result<bool, CompilerError> {
+        // Walk parent links from `region` to root.
         loop {
             if region == ancestor {
                 return Ok(true);
@@ -518,6 +552,7 @@ impl<'a> BorrowChecker<'a> {
         &self,
         function: &HirFunction,
     ) -> Result<Vec<BlockId>, CompilerError> {
+        // Breadth-first traversal over explicit terminator successors.
         let mut visited = FxHashSet::default();
         let mut order = Vec::new();
         let mut queue = VecDeque::new();
@@ -573,6 +608,8 @@ fn merge_return_alias(
     left: FunctionReturnAliasSummary,
     right: FunctionReturnAliasSummary,
 ) -> FunctionReturnAliasSummary {
+    // Conservative join:
+    // Unknown dominates; Fresh is neutral; AliasParams unions indices.
     match (left, right) {
         (FunctionReturnAliasSummary::Unknown, _) | (_, FunctionReturnAliasSummary::Unknown) => {
             FunctionReturnAliasSummary::Unknown
@@ -598,6 +635,8 @@ fn classify_return_expression(
     expression: &HirExpression,
     param_index_by_local: &FxHashMap<LocalId, usize>,
 ) -> FunctionReturnAliasSummary {
+    // Direct `return load(param_root)` is a precise alias.
+    // Any other load usage is conservatively treated as Unknown.
     if let HirExpressionKind::Load(place) = &expression.kind {
         if let Some(root_local) = root_local_for_place(place) {
             return match param_index_by_local.get(&root_local).copied() {
@@ -617,6 +656,8 @@ fn classify_return_expression(
 }
 
 fn expression_has_any_load(expression: &HirExpression) -> bool {
+    // A load anywhere in a return expression means the value may alias
+    // existing storage rather than being provably fresh.
     match &expression.kind {
         HirExpressionKind::Load(_) => true,
         HirExpressionKind::BinOp { left, right, .. } => {
@@ -654,6 +695,7 @@ fn root_local_for_place(place: &HirPlace) -> Option<LocalId> {
 }
 
 fn successors(terminator: &HirTerminator) -> Vec<BlockId> {
+    // Successor extraction for CFG traversal and propagation.
     match terminator {
         HirTerminator::Jump { target, .. } => vec![*target],
 
