@@ -6,16 +6,10 @@ test_output/
 **/*.rs.bk
 *.pdb
 
-# Ignore IDE specific folders
-.vscode
-.idea
-.cursor
-.cursorignore
-.kiro
-.github/instructions
-.clinerules
-.aiignore
-.junie
-.aiassistant
-.spec-workflow
-.ai
+# Ignore all hidden files
+.*
+
+# But allow .git hidden files
+!.gitignore
+!.gitattributes
+!.github/**
