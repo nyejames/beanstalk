@@ -6,9 +6,6 @@ use rustc_hash::FxHashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StringId(u32);
 
-/// Type alias for better readability - InternedString is the same as StringId
-pub type InternedString = StringId;
-
 impl StringId {
     /// Convert the StringId to its underlying u32 value for serialization
     #[inline]
@@ -91,7 +88,7 @@ impl StringTable {
     /// If the string already exists, returns the existing ID.
     /// If the string is new, stores it and returns a new ID.
     #[inline]
-    pub fn intern(&mut self, s: &str) -> InternedString {
+    pub fn intern(&mut self, s: &str) -> StringId {
         // Fast path: check if we already have this string
         // This is a single hash lookup with no allocations
         if let Some(&existing_id) = self.string_to_id.get(s) {
@@ -106,7 +103,7 @@ impl StringTable {
     /// Marked as cold to optimize the hot path in `intern`
     #[cold]
     #[inline(never)]
-    fn intern_new(&mut self, s: &str) -> InternedString {
+    fn intern_new(&mut self, s: &str) -> StringId {
         let new_id = StringId(self.next_id);
         self.next_id += 1;
 
@@ -139,7 +136,7 @@ impl StringTable {
     /// This uses unchecked indexing for maximum performance.
     /// StringIds are only created by this StringTable, so indices are guaranteed valid.
     #[inline]
-    pub fn resolve(&self, id: InternedString) -> &str {
+    pub fn resolve(&self, id: StringId) -> &str {
         // SAFETY: StringIds are only created by this StringTable and are guaranteed
         // to be valid indices into self.strings
         unsafe { self.strings.get_unchecked(id.0 as usize).as_ref() }
@@ -150,7 +147,7 @@ impl StringTable {
     ///
     /// Time complexity: O(1) average case
     #[inline]
-    pub fn get_or_intern(&mut self, s: String) -> InternedString {
+    pub fn get_or_intern(&mut self, s: String) -> StringId {
         // Fast path: check if we already have this string
         if let Some(&existing_id) = self.string_to_id.get(s.as_str()) {
             return existing_id;
@@ -163,7 +160,7 @@ impl StringTable {
     /// Internal helper for interning new owned strings (cold path)
     #[cold]
     #[inline(never)]
-    fn intern_new_owned(&mut self, s: String) -> InternedString {
+    fn intern_new_owned(&mut self, s: String) -> StringId {
         let new_id = StringId(self.next_id);
         self.next_id += 1;
 
@@ -184,7 +181,7 @@ impl StringTable {
     ///
     /// Time complexity: O(1)
     #[inline]
-    pub fn try_resolve(&self, id: InternedString) -> Option<&str> {
+    pub fn try_resolve(&self, id: StringId) -> Option<&str> {
         self.strings.get(id.0 as usize).map(|s| s.as_ref())
     }
 
@@ -193,7 +190,7 @@ impl StringTable {
     ///
     /// Time complexity: O(1) average case
     #[inline]
-    pub fn get_existing(&self, s: &str) -> Option<InternedString> {
+    pub fn get_existing(&self, s: &str) -> Option<StringId> {
         self.string_to_id.get(s).copied()
     }
 

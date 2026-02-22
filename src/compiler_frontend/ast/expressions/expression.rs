@@ -1,9 +1,9 @@
-use crate::backends::function_registry::HostFunctionId;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Var};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 // Expressions represent anything that will turn into a value
@@ -29,9 +29,7 @@ impl Expression {
             ExpressionKind::Float(float) => float.to_string(),
             ExpressionKind::Bool(bool) => bool.to_string(),
             ExpressionKind::Char(char) => char.to_string(),
-            ExpressionKind::Reference(interned_name) => {
-                string_table.resolve(*interned_name).to_string()
-            }
+            ExpressionKind::Reference(interned_name) => interned_name.to_string(string_table),
             ExpressionKind::Template(..) => String::new(),
             ExpressionKind::Collection(items, ..) => {
                 let mut all_items = String::new();
@@ -112,11 +110,7 @@ impl Expression {
             ownership,
         }
     }
-    pub fn string_slice(
-        value: InternedString,
-        location: TextLocation,
-        ownership: Ownership,
-    ) -> Self {
+    pub fn string_slice(value: StringId, location: TextLocation, ownership: Ownership) -> Self {
         Self {
             data_type: DataType::String,
             kind: ExpressionKind::StringSlice(value),
@@ -142,7 +136,7 @@ impl Expression {
     }
 
     pub fn reference(
-        id: StringId,
+        id: InternedPath,
         data_type: DataType,
         location: TextLocation,
         ownership: Ownership,
@@ -219,7 +213,7 @@ impl Expression {
 
     // Function calls
     pub fn function_call(
-        name: InternedString,
+        name: InternedPath,
         args: Vec<Expression>,
         returns: Vec<DataType>,
         location: TextLocation,
@@ -234,16 +228,15 @@ impl Expression {
     }
 
     pub fn host_function_call(
-        host_function_id: HostFunctionId,
+        name: InternedPath,
         args: Vec<Expression>,
         returns: Vec<DataType>,
         location: TextLocation,
     ) -> Self {
         Self {
             data_type: DataType::Returns(returns),
-            kind: ExpressionKind::HostFunctionCall(host_function_id, args),
+            kind: ExpressionKind::HostFunctionCall(name, args),
             location,
-            // TODO: Need to set the ownership based on the return signature
             ownership: Ownership::MutableOwned,
         }
     }
@@ -300,7 +293,7 @@ impl Expression {
     }
 
     pub fn parameter(
-        name: InternedString,
+        name: InternedPath,
         data_type: DataType,
         location: TextLocation,
         ownership: Ownership,
@@ -329,12 +322,12 @@ pub enum ExpressionKind {
 
     Int(i64),
     Float(f64),
-    StringSlice(InternedString),
+    StringSlice(StringId),
     Bool(bool),
     Char(char),
 
     // Reference to a variable by name
-    Reference(InternedString),
+    Reference(InternedPath),
 
     // Because functions can all be values
     Function(
@@ -343,11 +336,11 @@ pub enum ExpressionKind {
     ),
 
     FunctionCall(
-        InternedString,  // Function name
+        InternedPath,    // Function name
         Vec<Expression>, // Arguments
     ),
 
-    HostFunctionCall(HostFunctionId, Vec<Expression>),
+    HostFunctionCall(InternedPath, Vec<Expression>),
 
     // Also equivalent to a String if it folds into a string
     Template(Box<Template>), // Template Body, Styles, ID

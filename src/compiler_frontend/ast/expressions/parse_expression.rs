@@ -244,7 +244,9 @@ pub fn create_expression(
             // REFERENCE OR FUNCTION CALL INSIDE EXPRESSION
             // --------------------------------------------
             TokenKind::Symbol(ref id, ..) => {
-                if let Some(arg) = context.get_reference(id) {
+                let full_name = context.scope.to_owned().append(*id);
+
+                if let Some(arg) = context.get_reference(&id) {
                     match &arg.value.data_type {
                         DataType::Function(_, signature) => {
                             // Advance past the function name to position at the opening parenthesis
@@ -253,7 +255,7 @@ pub fn create_expression(
                             // This is a function call - parse it using the function call parser
                             let function_call_node = parse_function_call(
                                 token_stream,
-                                id,
+                                &full_name,
                                 context,
                                 &signature,
                                 string_table,
@@ -262,7 +264,7 @@ pub fn create_expression(
                             // -------------------------------
                             // FUNCTION CALL INSIDE EXPRESSION
                             // -------------------------------
-                            if let NodeKind::FunctionCall{name, args, returns, location} = function_call_node.kind {
+                            if let NodeKind::FunctionCall { name, args, returns, location } = function_call_node.kind {
                                 let func_call_expr = Expression::function_call(
                                     name,
                                     args,
@@ -323,7 +325,7 @@ pub fn create_expression(
                 // ------------------------------------
                 // HOST FUNCTION CALL INSIDE EXPRESSION
                 // ------------------------------------
-                if let Some(host_func_def) = context.host_registry.get_function(id) {
+                if let Some(host_func_def) = context.host_registry.get_function(string_table.resolve(*id)) {
 
                     // Convert return types to Arg format
                     let signature = host_func_def.params_to_signature(string_table);
@@ -331,13 +333,13 @@ pub fn create_expression(
                     // This is a function call - parse it using the function call parser
                     let function_call_node = parse_function_call(
                         token_stream,
-                        id,
+                        &full_name,
                         context,
                         &signature,
                         string_table,
                     )?;
 
-                    if let NodeKind::HostFunctionCall { host_function_id, args, returns, location} = function_call_node.kind {
+                    if let NodeKind::HostFunctionCall { name: host_function_id, args, returns, location } = function_call_node.kind {
                         let func_call_expr = Expression::host_function_call(
                             host_function_id,
                             args.to_owned(),

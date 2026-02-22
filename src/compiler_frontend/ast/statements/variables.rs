@@ -53,6 +53,8 @@ pub fn new_var(
     // Move past the name
     token_stream.advance();
 
+    let full_name = context.scope.to_owned().append(id);
+
     let mut ownership = Ownership::ImmutableOwned;
 
     if token_stream.current_token_kind() == &TokenKind::Mutable {
@@ -73,7 +75,7 @@ pub fn new_var(
         }
 
         TokenKind::TypeParameterBracket => {
-            let func_sig = FunctionSignature::new(token_stream, string_table)?;
+            let func_sig = FunctionSignature::new(token_stream, string_table, &full_name)?;
             let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
 
             // TODO: fast check for function without signature
@@ -94,7 +96,7 @@ pub fn new_var(
             )?;
 
             return Ok(Var {
-                id,
+                id: full_name,
                 value: Expression::function(
                     None,
                     func_sig,
@@ -139,10 +141,10 @@ pub fn new_var(
         }
 
         TokenKind::Colon => {
-            let struct_def = create_struct_definition(token_stream, string_table)?;
+            let struct_def = create_struct_definition(token_stream, string_table, &full_name)?;
 
             return Ok(Var {
-                id,
+                id: full_name,
                 value: Expression::struct_definition(
                     struct_def,
                     token_stream.current_location(),
@@ -264,7 +266,7 @@ pub fn new_var(
     ast_log!("Created new ", #ownership, " ", data_type);
 
     Ok(Var {
-        id,
+        id: full_name,
         value: parsed_expr,
     })
 }

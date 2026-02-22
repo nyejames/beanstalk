@@ -18,7 +18,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirFunction, HirLocal, HirMatchArm, HirPattern, HirRegion, HirStatement, HirStatementKind,
     HirStruct, HirTerminator, LocalId, StructId, ValueKind,
 };
-use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::string_interning::StringId;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
 
@@ -70,7 +70,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn lower_function_body(
         &mut self,
-        function_name: InternedString,
+        function_name: StringId,
         signature: &FunctionSignature,
         body: &[AstNode],
         location: &TextLocation,
@@ -121,7 +121,7 @@ impl<'a> HirBuilder<'a> {
             } => self.lower_call_statement(CallTarget::UserFunction(*name), args, location),
 
             NodeKind::HostFunctionCall {
-                host_function_id,
+                name: host_function_id,
                 args,
                 returns: _,
                 location,
@@ -178,7 +178,7 @@ impl<'a> HirBuilder<'a> {
 
     fn register_struct_declaration(
         &mut self,
-        name: InternedString,
+        name: StringId,
         fields: &[Var],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
@@ -252,7 +252,7 @@ impl<'a> HirBuilder<'a> {
 
     fn register_function_declaration(
         &mut self,
-        name: InternedString,
+        name: StringId,
         signature: &FunctionSignature,
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
@@ -787,7 +787,7 @@ impl<'a> HirBuilder<'a> {
 
     fn allocate_named_local(
         &mut self,
-        name: InternedString,
+        name: StringId,
         ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,
         mutable: bool,
         source_info: Option<TextLocation>,

@@ -6,7 +6,7 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::projects::settings::BS_VAR_PREFIX;
@@ -284,7 +284,7 @@ impl Template {
         &self,
         inherited_style: &Option<Style>,
         string_table: &mut StringTable,
-    ) -> Result<InternedString, CompilerError> {
+    ) -> Result<StringId, CompilerError> {
         // Now we start combining everything into one string
         let mut final_string = String::with_capacity(3);
         let mut formatter: Option<Formatter> = self.style.formatter.to_owned();

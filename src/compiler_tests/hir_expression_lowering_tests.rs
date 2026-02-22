@@ -12,7 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirTerminator, HirUnaryOp, LocalId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
@@ -36,7 +36,7 @@ fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
 
 fn register_local(
     builder: &mut HirBuilder<'_>,
-    name: InternedString,
+    name: StringId,
     local_id: LocalId,
     data_type: DataType,
     location: TextLocation,

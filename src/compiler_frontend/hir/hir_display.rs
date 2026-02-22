@@ -15,7 +15,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     StructId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use rustc_hash::FxHashMap;
 use std::fmt::{Display, Formatter, Result as FmtResult, Write as _};
@@ -129,10 +129,10 @@ pub(crate) struct HirSideTable {
     hir_to_ast: FxHashMap<HirLocation, SourceLocationId>,
     hir_to_source: FxHashMap<HirLocation, SourceLocationId>,
 
-    local_names: FxHashMap<LocalId, InternedString>,
-    function_names: FxHashMap<FunctionId, InternedString>,
-    struct_names: FxHashMap<StructId, InternedString>,
-    field_names: FxHashMap<FieldId, InternedString>,
+    local_names: FxHashMap<LocalId, StringId>,
+    function_names: FxHashMap<FunctionId, StringId>,
+    struct_names: FxHashMap<StructId, StringId>,
+    field_names: FxHashMap<FieldId, StringId>,
 }
 
 impl HirSideTable {
@@ -317,42 +317,42 @@ impl HirSideTable {
     }
 
     #[inline]
-    pub(crate) fn bind_local_name(&mut self, local_id: LocalId, name: InternedString) {
+    pub(crate) fn bind_local_name(&mut self, local_id: LocalId, name: StringId) {
         self.local_names.insert(local_id, name);
     }
 
     #[inline]
-    pub(crate) fn bind_function_name(&mut self, function_id: FunctionId, name: InternedString) {
+    pub(crate) fn bind_function_name(&mut self, function_id: FunctionId, name: StringId) {
         self.function_names.insert(function_id, name);
     }
 
     #[inline]
-    pub(crate) fn bind_struct_name(&mut self, struct_id: StructId, name: InternedString) {
+    pub(crate) fn bind_struct_name(&mut self, struct_id: StructId, name: StringId) {
         self.struct_names.insert(struct_id, name);
     }
 
     #[inline]
-    pub(crate) fn bind_field_name(&mut self, field_id: FieldId, name: InternedString) {
+    pub(crate) fn bind_field_name(&mut self, field_id: FieldId, name: StringId) {
         self.field_names.insert(field_id, name);
     }
 
     #[inline]
-    pub(crate) fn local_name_id(&self, local_id: LocalId) -> Option<InternedString> {
+    pub(crate) fn local_name_id(&self, local_id: LocalId) -> Option<StringId> {
         self.local_names.get(&local_id).copied()
     }
 
     #[inline]
-    pub(crate) fn function_name_id(&self, function_id: FunctionId) -> Option<InternedString> {
+    pub(crate) fn function_name_id(&self, function_id: FunctionId) -> Option<StringId> {
         self.function_names.get(&function_id).copied()
     }
 
     #[inline]
-    pub(crate) fn struct_name_id(&self, struct_id: StructId) -> Option<InternedString> {
+    pub(crate) fn struct_name_id(&self, struct_id: StructId) -> Option<StringId> {
         self.struct_names.get(&struct_id).copied()
     }
 
     #[inline]
-    pub(crate) fn field_name_id(&self, field_id: FieldId) -> Option<InternedString> {
+    pub(crate) fn field_name_id(&self, field_id: FieldId) -> Option<StringId> {
         self.field_names.get(&field_id).copied()
     }
 

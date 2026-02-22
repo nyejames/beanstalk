@@ -10,7 +10,6 @@ use crate::{
         datatypes::DataType,
         string_interning::StringTable,
         tokenizer::tokens::{FileTokens, TokenKind},
-        traits::ContainsReferences,
     },
     return_rule_error,
 };
@@ -24,7 +23,7 @@ pub fn parse_field_access(
     // Start with the base variable
     let mut current_node = AstNode {
         kind: NodeKind::Rvalue(Expression::reference(
-            base_arg.id,
+            base_arg.id.clone(),
             base_arg.value.data_type.clone(),
             base_arg.value.location.clone(),
             base_arg.value.ownership.clone(),
@@ -70,16 +69,7 @@ pub fn parse_field_access(
             _ => Vec::new(),
         };
 
-        // Lookup methods implemented by this type and add them to the members list
-        if let Some(arg) = context.get_reference(&field_id) {
-            if let DataType::Function(receiver, ..) = &arg.value.data_type {
-                if let Some(receiver_type) = receiver.as_ref() {
-                    if *receiver_type == current_type {
-                        members.push(arg.clone());
-                    }
-                }
-            }
-        }
+        // TODO: Lookup methods implemented by this type and add them to the members list
 
         if members.is_empty() {
             return_rule_error!(
@@ -95,7 +85,7 @@ pub fn parse_field_access(
         }
 
         // Find the accessed member
-        let member = match members.iter().find(|m| m.id == field_id) {
+        let member = match members.iter().find(|m| m.id.name() == Some(field_id)) {
             Some(member) => member.clone(),
             None => {
                 return_rule_error!(

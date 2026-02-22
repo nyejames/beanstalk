@@ -9,6 +9,7 @@ use crate::compiler_frontend::tokenizer::tokens::{
 };
 use crate::projects::settings;
 use crate::{return_syntax_error, token_log};
+use std::path::PathBuf;
 
 pub const END_SCOPE_CHAR: char = ';';
 
@@ -31,17 +32,14 @@ pub fn tokenize(
     let mut template_nesting_level: i64 = if mode == TokenizeMode::Normal {
         0
     } else {
-        // This is so .mt files or the repl can't break out of the template head/body when starting there
+        // This is so anything starting in the template head/body can't break out of it
         i64::MAX / 2
     };
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
     let mut stream = TokenStream::new(source_code, src_path, mode);
 
-    let mut token: Token = Token::new(
-        TokenKind::ModuleStart(String::new()),
-        TextLocation::default(),
-    );
+    let mut token: Token = Token::new(TokenKind::ModuleStart, TextLocation::default());
 
     loop {
         token_log!(#token);
@@ -552,7 +550,7 @@ pub fn get_token_kind(
     )
 }
 
-fn keyword_or_variable(
+pub(crate) fn keyword_or_variable(
     token_value: &mut String,
     stream: &mut TokenStream<'_>,
     string_table: &mut StringTable,

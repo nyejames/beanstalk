@@ -10,18 +10,22 @@ pub trait ContainsReferences {
 
 impl ContainsReferences for Vec<Var> {
     fn get_reference(&self, name: &StringId) -> Option<&Var> {
-        self.iter().rfind(|arg| &arg.id == name)
+        self.iter().rfind(|arg| arg.id.name() == Some(*name))
     }
     fn get_reference_mut(&mut self, name: &StringId) -> Option<&mut Var> {
-        self.iter_mut().rfind(|arg| &arg.id == name)
+        self.iter_mut().rfind(|arg| arg.id.name() == Some(*name))
     }
 }
 
 impl ContainsReferences for ScopeContext {
     fn get_reference(&self, name: &StringId) -> Option<&Var> {
-        self.declarations.iter().rfind(|arg| &arg.id == name)
+        self.declarations
+            .iter()
+            .rfind(|arg| arg.id.name() == Some(*name))
     }
     fn get_reference_mut(&mut self, name: &StringId) -> Option<&mut Var> {
-        self.declarations.iter_mut().rfind(|arg| &arg.id == name)
+        self.declarations
+            .iter_mut()
+            .rfind(|arg| arg.id.name() == Some(*name))
     }
 }

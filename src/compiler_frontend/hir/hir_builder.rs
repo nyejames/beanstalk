@@ -20,7 +20,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_display::HirSideTable;
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::return_hir_transformation_error;
 use rustc_hash::FxHashMap;
 
@@ -69,10 +69,10 @@ pub struct HirBuilder<'a> {
     pub(super) side_table: HirSideTable,
 
     // === Name resolution tables (filled during declaration pass) ===
-    pub(super) locals_by_name: FxHashMap<InternedString, LocalId>,
-    pub(super) functions_by_name: FxHashMap<InternedString, FunctionId>,
-    pub(super) structs_by_name: FxHashMap<InternedString, StructId>,
-    pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedString), FieldId>,
+    pub(super) locals_by_name: FxHashMap<StringId, LocalId>,
+    pub(super) functions_by_name: FxHashMap<StringId, FunctionId>,
+    pub(super) structs_by_name: FxHashMap<StringId, StructId>,
+    pub(super) fields_by_struct_and_name: FxHashMap<(StructId, StringId), FieldId>,
 
     // === Fast ID -> arena index maps ===
     pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
@@ -373,7 +373,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: InternedString) {
+    pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: StringId) {
         let current_block = self.current_block.unwrap_or(BlockId(0));
         let _ = self
             .block_mut_by_id_or_error(current_block, &TextLocation::default())
@@ -389,7 +389,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn test_register_function_name(&mut self, name: InternedString, id: FunctionId) {
+    pub(crate) fn test_register_function_name(&mut self, name: StringId, id: FunctionId) {
         self.functions_by_name.insert(name, id);
         self.side_table.bind_function_name(id, name);
 

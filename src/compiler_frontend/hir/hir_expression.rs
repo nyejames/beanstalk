@@ -19,7 +19,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirNodeId, HirPlace, HirStatement, HirStatementKind, HirUnaryOp, LocalId, RegionId, StructId,
     ValueKind,
 };
-use crate::compiler_frontend::string_interning::InternedString;
+use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::hir_log;
 use crate::return_hir_transformation_error;
@@ -307,7 +307,7 @@ impl<'a> HirBuilder<'a> {
                 }
 
                 NodeKind::HostFunctionCall {
-                    host_function_id,
+                    name: host_function_id,
                     args,
                     returns,
                     location,
@@ -468,7 +468,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             NodeKind::HostFunctionCall {
-                host_function_id,
+                name: host_function_id,
                 args,
                 returns,
                 location,
@@ -544,7 +544,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             NodeKind::HostFunctionCall {
-                host_function_id,
+                name: host_function_id,
                 args,
                 returns,
                 location,
@@ -841,7 +841,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn resolve_local_id_or_error(
         &self,
-        name: InternedString,
+        name: StringId,
         location: &TextLocation,
     ) -> Result<LocalId, CompilerError> {
         let Some(local_id) = self.locals_by_name.get(&name).copied() else {
@@ -859,7 +859,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn resolve_function_id_or_error(
         &self,
-        name: InternedString,
+        name: StringId,
         location: &TextLocation,
     ) -> Result<FunctionId, CompilerError> {
         let Some(function_id) = self.functions_by_name.get(&name).copied() else {
@@ -878,7 +878,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn resolve_field_id_or_error(
         &self,
         struct_id: StructId,
-        field_name: InternedString,
+        field_name: StringId,
         location: &TextLocation,
     ) -> Result<FieldId, CompilerError> {
         let Some(field_id) = self
@@ -901,7 +901,7 @@ impl<'a> HirBuilder<'a> {
 
     fn resolve_unique_field_id_or_error(
         &self,
-        field_name: InternedString,
+        field_name: StringId,
         location: &TextLocation,
     ) -> Result<FieldId, CompilerError> {
         let mut matches = self

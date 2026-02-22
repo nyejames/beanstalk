@@ -53,13 +53,13 @@ impl Ast {
                     // Function parameters should be available in the function body scope
                     let context = ScopeContext::new(
                         ContextKind::Function,
-                        header.path.to_owned(),
+                        header.full_name.to_owned(),
                         &signature.parameters,
                         host_registry.clone(),
                         signature.returns.clone(),
                     );
 
-                    let mut token_stream = FileTokens::new(header.path.to_owned(), tokens);
+                    let mut token_stream = FileTokens::new(header.full_name.to_owned(), tokens);
 
                     let body = match function_body_to_ast(
                         &mut token_stream,
@@ -79,10 +79,9 @@ impl Ast {
                     // Make name from header path
                     // This ensures unique namespaced function names
                     // ALL symbols become full paths in the AST converted to interned strings
-                    let unique_name = header.path.extract_header_name(string_table);
                     ast.push(AstNode {
                         kind: NodeKind::Function(
-                            unique_name,
+                            header.full_name,
                             signature.to_owned(),
                             body.to_owned(),
                         ),
@@ -94,13 +93,13 @@ impl Ast {
                 HeaderKind::StartFunction(body) => {
                     let context = ScopeContext::new(
                         ContextKind::Module,
-                        header.path.to_owned(),
+                        header.full_name.to_owned(),
                         &declarations,
                         host_registry.clone(),
                         vec![],
                     );
 
-                    let mut token_stream = FileTokens::new(header.path.to_owned(), body);
+                    let mut token_stream = FileTokens::new(header.full_name.to_owned(), body);
 
                     let mut body = match function_body_to_ast(
                         &mut token_stream,
@@ -120,7 +119,7 @@ impl Ast {
                     // Add the automatic return statement for the start function
                     body.push(AstNode {
                         kind: NodeKind::Return(vec![Expression::reference(
-                            string_table.intern(TOP_LEVEL_TEMPLATE_NAME),
+                            InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, string_table),
                             DataType::Template,
                             token_stream.current_location(),
                             Ownership::MutableOwned,
@@ -130,10 +129,9 @@ impl Ast {
                     });
 
                     // Create an implicit "start" function that can be called by other modules
-                    let interned_name = header
-                        .path
-                        .join_str(IMPLICIT_START_FUNC_NAME, string_table)
-                        .extract_header_name(string_table);
+                    let full_name = header
+                        .full_name
+                        .join_str(IMPLICIT_START_FUNC_NAME, string_table);
 
                     let main_signature = FunctionSignature {
                         parameters: vec![],
@@ -141,20 +139,17 @@ impl Ast {
                     };
 
                     ast.push(AstNode {
-                        kind: NodeKind::Function(interned_name, main_signature, body),
+                        kind: NodeKind::Function(full_name, main_signature, body),
                         location: header.name_location,
                         scope: context.scope.clone(),
                     });
                 }
 
                 HeaderKind::Struct(fields) => {
-                    // Create name for AST node identifier from the path
-                    let simple_name = header.path.extract_header_name(string_table);
-
                     ast.push(AstNode {
-                        kind: NodeKind::StructDefinition(simple_name, fields), // Use the simple name for identifier
+                        kind: NodeKind::StructDefinition(header.full_name.to_owned(), fields), // Use the simple name for identifier
                         location: header.name_location,
-                        scope: header.path.to_owned(), // Preserve the full path in scope field
+                        scope: header.full_name, // Preserve the full path in the scope field
                     });
                 }
 
@@ -236,7 +231,7 @@ impl ScopeContext {
         new_context.returns = signature.returns.to_owned();
 
         // Create a new scope path by joining the current scope with the function name
-        new_context.scope = self.scope.join_header(id, string_table);
+        new_context.scope = self.scope.append(id);
 
         new_context.declarations = signature.parameters;
 

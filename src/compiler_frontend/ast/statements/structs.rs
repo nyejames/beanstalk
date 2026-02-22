@@ -5,7 +5,8 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_syntax_error;
 
@@ -14,12 +15,13 @@ use crate::return_syntax_error;
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
+    scope: &InternedPath,
 ) -> Result<Vec<Var>, CompilerError> {
     // Should start at the Colon
     // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, &mut true, string_table, true)?;
+    let arguments = parse_parameters(token_stream, &mut true, string_table, scope, true)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -31,6 +33,7 @@ pub fn parse_parameters(
     token_stream: &mut FileTokens,
     pure: &mut bool,
     string_table: &mut StringTable,
+    scope: &InternedPath,
     is_struct: bool, // False for function definitions, true for struct definitions
 ) -> Result<Vec<Var>, CompilerError> {
     let mut args: Vec<Var> = Vec::with_capacity(1);
@@ -88,7 +91,7 @@ pub fn parse_parameters(
                 }
 
                 // Create a new variable
-                let argument = new_parameter(token_stream, arg_name, string_table)?;
+                let argument = new_parameter(token_stream, scope.append(arg_name), string_table)?;
 
                 if argument.value.ownership.is_mutable() {
                     *pure = false;
@@ -142,7 +145,7 @@ pub fn parse_parameters(
 // 2. The assigned values (default values) are optional and must be constants if assigned
 pub fn new_parameter(
     token_stream: &mut FileTokens,
-    name: InternedString,
+    full_name: InternedPath,
     string_table: &mut StringTable,
 ) -> Result<Var, CompilerError> {
     // Move past the name
@@ -199,7 +202,7 @@ pub fn new_parameter(
                 format!(
                     "Unexpected Token: {:?} after parameter name for {}. Expected a type declaration.",
                     token_stream.tokens[token_stream.index].kind,
-                    string_table.resolve(name)
+                    full_name.to_string(string_table)
                 ),
                 token_stream.current_location().to_error_location(string_table),
                 {
@@ -231,7 +234,7 @@ pub fn new_parameter(
         | TokenKind::TypeParameterBracket => {
             ast_log!("Created new parameter of type: {}", data_type);
             return Ok(Var {
-                id: name,
+                id: full_name,
                 value: Expression::none(),
             });
         }
@@ -287,7 +290,7 @@ pub fn new_parameter(
     );
 
     Ok(Var {
-        id: name,
+        id: full_name,
         value: parsed_expr,
     })
 }

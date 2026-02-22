@@ -15,7 +15,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirPattern, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{InternedString, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 fn test_location(line: i32) -> TextLocation {
@@ -30,11 +30,11 @@ fn node(kind: NodeKind, location: TextLocation) -> AstNode {
     }
 }
 
-fn var(name: InternedString, value: Expression) -> Var {
+fn var(name: StringId, value: Expression) -> Var {
     Var { id: name, value }
 }
 
-fn param(name: InternedString, data_type: DataType, mutable: bool, location: TextLocation) -> Var {
+fn param(name: StringId, data_type: DataType, mutable: bool, location: TextLocation) -> Var {
     let ownership = if mutable {
         Ownership::MutableOwned
     } else {
@@ -48,7 +48,7 @@ fn param(name: InternedString, data_type: DataType, mutable: bool, location: Tex
 }
 
 fn function_node(
-    name: InternedString,
+    name: StringId,
     signature: FunctionSignature,
     body: Vec<AstNode>,
     location: TextLocation,
@@ -65,8 +65,8 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     }
 }
 
-fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, InternedString) {
-    let entry_path = InternedPath::from_path_buf(Path::new("main.bst"), string_table);
+fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, StringId) {
+    let entry_path = InternedPath::from_single_str("main.bst", string_table);
     let start_name = entry_path
         .join_str(IMPLICIT_START_FUNC_NAME, string_table)
         .extract_header_name(string_table);
@@ -317,7 +317,7 @@ fn call_statements_emit_without_result_binding() {
             ),
             node(
                 NodeKind::HostFunctionCall {
-                    host_function_id: HostFunctionId::Alloc,
+                    name: HostFunctionId::Alloc,
                     args: vec![Expression::int(
                         1,
                         test_location(3),

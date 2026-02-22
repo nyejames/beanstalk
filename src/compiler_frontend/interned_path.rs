@@ -27,6 +27,12 @@ impl InternedPath {
         }
     }
 
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            components: Vec::with_capacity(capacity),
+        }
+    }
+
     /// Create an InternedPath from a PathBuf by interning each component
     pub fn from_path_buf(path: &Path, string_table: &mut StringTable) -> Self {
         let components = path
@@ -45,6 +51,13 @@ impl InternedPath {
     /// Create an InternedPath from a vector of StringIds
     pub fn from_components(components: Vec<StringId>) -> Self {
         Self { components }
+    }
+
+    pub fn from_single_str(entry: &str, string_table: &mut StringTable) -> Self {
+        let interned = string_table.intern(entry);
+        Self {
+            components: vec![interned],
+        }
     }
 
     /// Convert this InternedPath back to a PathBuf
@@ -99,13 +112,10 @@ impl InternedPath {
             components: new_components,
         }
     }
-
-    pub fn join_header(&self, other: StringId, string_table: &mut StringTable) -> InternedPath {
+    pub fn append(&self, new: StringId) -> Self {
         let mut new_components = self.components.clone();
-        let other = format!("{}.header", string_table.resolve(other));
-        let interned = string_table.get_or_intern(other);
-        new_components.push(interned);
-        InternedPath {
+        new_components.push(new);
+        Self {
             components: new_components,
         }
     }
@@ -128,13 +138,13 @@ impl InternedPath {
     }
 
     /// Get the last component of this path (the "file name")
-    pub fn file_name(&self) -> Option<StringId> {
+    pub fn name(&self) -> Option<StringId> {
         self.components.last().copied()
     }
 
     /// Get the last component as a string
-    pub fn file_name_str<'a>(&self, string_table: &'a StringTable) -> Option<&'a str> {
-        self.file_name().map(|id| string_table.resolve(id))
+    pub fn name_str<'a>(&self, string_table: &'a StringTable) -> Option<&'a str> {
+        self.name().map(|id| string_table.resolve(id))
     }
 
     /// Get an iterator over the components

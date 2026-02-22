@@ -1,4 +1,3 @@
-use crate::backends::function_registry::HostFunctionId;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -7,14 +6,13 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 pub(crate) use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::{return_compiler_error, return_type_error};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone)]
 pub struct Var {
-    pub id: InternedString,
+    pub id: InternedPath,
     pub value: Expression,
 }
 
@@ -33,14 +31,6 @@ pub enum NodeKind {
 
     // Config settings
     Config(Vec<Var>), // Settings,
-
-    // Imports a function from the host environment
-    // This could be another Wasm file or a native function provided by the runtime
-    Import(PathBuf),
-
-    // Generic import path to another Beanstalk file
-    // Effectively means the file is included in the current file as a struct that can be accessed
-    Include(InternedString, PathBuf), // Name of file import, Imported file object
 
     // Control Flow
     Return(Vec<Expression>),                            // Return value,
@@ -75,7 +65,7 @@ pub enum NodeKind {
     },
 
     FunctionCall {
-        name: InternedString,
+        name: InternedPath,
         args: Vec<Expression>,
         returns: Vec<DataType>,
         location: TextLocation,
@@ -84,7 +74,7 @@ pub enum NodeKind {
 
     // Host function call (functions provided by the runtime)
     HostFunctionCall {
-        host_function_id: HostFunctionId,
+        name: InternedPath,
         args: Vec<Expression>,
         returns: Vec<DataType>,
         location: TextLocation,
@@ -93,11 +83,11 @@ pub enum NodeKind {
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
     //          new_struct_instance(arg) -- Calls the main function of the struct
     StructDefinition(
-        InternedString, // Name
-        Vec<Var>,       // Fields
+        InternedPath, // Full unique name path
+        Vec<Var>,     // Fields
     ),
 
-    Function(InternedString, FunctionSignature, Vec<AstNode>),
+    Function(InternedPath, FunctionSignature, Vec<AstNode>),
 
     // Mutation of existing mutable variables
     Assignment {
@@ -134,19 +124,19 @@ impl AstNode {
                 returns,
                 location,
             } => Ok(Expression::function_call(
-                *name,
+                name.to_owned(),
                 arguments.to_owned(),
                 returns.to_owned(),
                 location.to_owned(),
             )),
 
             NodeKind::HostFunctionCall {
-                host_function_id,
+                name,
                 args: arguments,
                 returns,
                 location,
             } => Ok(Expression::function_call(
-                InternedString::from_u32(0),
+                name.to_owned(),
                 arguments.to_owned(),
                 returns.to_owned(),
                 location.to_owned(),

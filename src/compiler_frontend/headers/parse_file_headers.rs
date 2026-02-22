@@ -6,7 +6,7 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
 
@@ -33,8 +33,9 @@ pub enum HeaderKind {
 #[derive(Clone, Debug)]
 pub struct Header {
     // The last part of the path is the name of the header
-    // It will also have a special extension to indicate it's a header and not a file or directory
-    pub path: InternedPath,
+    // It will also (MAYBE) have a special extension to indicate it's a header and not a file or directory
+    // Might not bother with this idea tho
+    pub full_name: InternedPath,
     pub kind: HeaderKind,
     pub exported: bool,
     // Which headers should be parsed before this one?
@@ -119,9 +120,7 @@ pub fn parse_headers_in_file(
 
     // We parse and track imports as we go,
     // so we can check if the headers depend on those imports.
-    // The StringId is the symbol for the header,
-    // The path is the file it's from.
-    let mut file_imports: HashMap<StringId, InternedPath> = HashMap::new();
+    let mut file_imports: HashSet<InternedPath> = HashSet::new();
 
     loop {
         let current_token = token_stream.current_token();
@@ -132,7 +131,10 @@ pub fn parse_headers_in_file(
         match current_token.kind.to_owned() {
             // New Function, Struct, Choice, or Constant declaration
             TokenKind::Symbol(name_id) => {
-                if host_function_registry.get_function(&name_id).is_none() {
+                if host_function_registry
+                    .get_function(&string_table.resolve(name_id))
+                    .is_none()
+                {
                     // Reference to an existing symbol
                     if encountered_symbols.contains(&name_id) {
                         // This is a reference, so it goes into the implicit main function
@@ -141,8 +143,7 @@ pub fn parse_headers_in_file(
                         // We also store the path in dependencies and check if it's a header in scope already.
                         // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
                         // Create a path from the current file plus the symbol name
-                        main_function_dependencies
-                            .insert(token_stream.src_path.join_header(name_id, string_table));
+                        main_function_dependencies.insert(token_stream.src_path.append(name_id));
 
                         if next_statement_exported {
                             next_statement_exported = false;
@@ -162,7 +163,7 @@ pub fn parse_headers_in_file(
                         // we check if it fits into one of the Header categories.
                         // If not, it goes into the implicit main function.
                         let header = create_header(
-                            token_stream.src_path.join_header(name_id, string_table),
+                            token_stream.src_path.append(name_id),
                             next_statement_exported,
                             token_stream,
                             current_location,
@@ -177,7 +178,9 @@ pub fn parse_headers_in_file(
                         match header.kind {
                             HeaderKind::StartFunction(..) => {
                                 main_function_body.push(current_token);
-                                if let Some(path) = file_imports.get(&name_id) {
+                                if let Some(path) =
+                                    file_imports.iter().find(|f| f.name() == Some(name_id))
+                                {
                                     main_function_dependencies.insert(path.to_owned());
                                 }
                             }
@@ -209,12 +212,10 @@ pub fn parse_headers_in_file(
                 }
             }
 
-            // @(libraries/math/ {round, sqrt})
-            TokenKind::Path(interned_path, imports) => {
-                encountered_symbols.extend(imports.clone());
-                for import in imports {
-                    file_imports.insert(import, interned_path.clone());
-                }
+            // @(libraries/math/{round, sqrt})
+            TokenKind::Path(paths) => {
+                encountered_symbols.extend(paths.iter().map(|p| p.name().unwrap().clone()));
+                file_imports.extend(paths);
             }
 
             TokenKind::Eof => {
@@ -232,13 +233,13 @@ pub fn parse_headers_in_file(
     // The implicit main function also depends on other headers in this file.
     // So it can use and call any functions or structs defined in this file.
     for header in headers.iter() {
-        println!("{:?}", header.path);
+        println!("{:?}", header.full_name);
 
-        main_function_dependencies.insert(header.path.to_owned());
+        main_function_dependencies.insert(header.full_name.to_owned());
     }
 
     headers.push(Header {
-        path: token_stream.src_path.to_owned(),
+        full_name: token_stream.src_path.to_owned(),
         kind: HeaderKind::StartFunction(main_function_body),
         exported: next_statement_exported,
         dependencies: main_function_dependencies,
@@ -249,11 +250,11 @@ pub fn parse_headers_in_file(
 }
 
 fn create_header(
-    path: InternedPath,
+    full_name: InternedPath,
     exported: bool,
     token_stream: &mut FileTokens,
     name_location: TextLocation,
-    file_imports: &HashMap<StringId, InternedPath>,
+    file_imports: &HashSet<InternedPath>,
     _host_registry: &HostRegistry,
     string_table: &mut StringTable,
 ) -> Result<Header, CompilerError> {
@@ -268,7 +269,7 @@ fn create_header(
     match current_token {
         // FUNCTIONS
         TokenKind::TypeParameterBracket => {
-            let signature = FunctionSignature::new(token_stream, string_table)?;
+            let signature = FunctionSignature::new(token_stream, string_table, &full_name)?;
 
             let mut scopes_opened = 1;
             let mut scopes_closed = 0;
@@ -302,7 +303,8 @@ fn create_header(
                     }
 
                     TokenKind::Symbol(name_id) => {
-                        if let Some(path) = file_imports.get(name_id) {
+                        if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id))
+                        {
                             dependencies.insert(path.to_owned());
                         }
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
@@ -333,7 +335,7 @@ fn create_header(
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 // TODO: Struct headers
                 // This needs to skip until the end of the type parameter bracket
-                
+
                 // Struct fields must prefix their name with their parent's name to make sure they are unique
             } else if exported {
                 // This is a global constant (exported immutable variable)
@@ -357,7 +359,7 @@ fn create_header(
     }
 
     Ok(Header {
-        path,
+        full_name,
         kind,
         exported,
         dependencies,

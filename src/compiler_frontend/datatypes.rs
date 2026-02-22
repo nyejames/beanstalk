@@ -1,6 +1,7 @@
 use crate::compiler_frontend::ast::ast_nodes::Var;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::fmt::Display;
@@ -236,18 +237,6 @@ impl DataType {
         }
     }
 
-    pub fn to_arg(&self, string_table: &mut StringTable) -> Var {
-        Var {
-            id: string_table.get_or_intern(self.to_string()),
-            value: Expression::new(
-                ExpressionKind::None,
-                TextLocation::default(),
-                self.to_owned(),
-                Ownership::MutableOwned,
-            ),
-        }
-    }
-
     /// Display the DataType with proper string resolution for interned strings.
     /// This method should be used instead of Display when a StringTable is available.
     pub fn display_with_table(&self, string_table: &StringTable) -> String {
@@ -269,7 +258,7 @@ impl DataType {
             DataType::Parameters(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    let name = string_table.resolve(arg.id);
+                    let name = arg.id.to_string(string_table);
                     arg_str.push_str(&format!(
                         "{}: {}, ",
                         name,
@@ -281,7 +270,7 @@ impl DataType {
             DataType::Struct(args, ..) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    let name = string_table.resolve(arg.id);
+                    let name = arg.id.to_string(string_table);
                     arg_str.push_str(&format!(
                         "{}: {}, ",
                         name,
@@ -302,7 +291,7 @@ impl DataType {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
                 for arg in &signature.parameters {
-                    let name = string_table.resolve(arg.id);
+                    let name = arg.id.to_string(string_table);
                     arg_str.push_str(&format!(
                         "{}: {}, ",
                         name,
@@ -428,14 +417,14 @@ impl Display for DataType {
             DataType::Parameters(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
+                    arg_str.push_str(&format!("{:?}, {}", arg.id, arg.value.data_type));
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
             DataType::Struct(args, ..) => {
                 let mut arg_str = String::new();
                 for arg in args {
-                    arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
+                    arg_str.push_str(&format!("{:?}: {}, ", arg.id, arg.value.data_type));
                 }
                 write!(f, "{self:?} Arguments({arg_str})")
             }
@@ -452,7 +441,7 @@ impl Display for DataType {
                 let mut arg_str = String::new();
                 let mut returns_string = String::new();
                 for arg in &signature.parameters {
-                    arg_str.push_str(&format!("{}: {}, ", arg.id, arg.value.data_type));
+                    arg_str.push_str(&format!("{:?}: {}, ", arg.id, arg.value.data_type));
                 }
                 for return_type in &signature.returns {
                     returns_string.push_str(&format!("{}, ", return_type.to_string()));

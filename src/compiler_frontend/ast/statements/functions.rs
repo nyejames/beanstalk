@@ -6,9 +6,11 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_multipl
 use crate::compiler_frontend::ast::statements::structs::parse_parameters;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
 use crate::{ast_log, return_syntax_error, return_type_error};
+use std::path::PathBuf;
 
 // Arg names and types are required
 // Can have default values
@@ -22,12 +24,13 @@ impl FunctionSignature {
     pub fn new(
         token_stream: &mut FileTokens,
         string_table: &mut StringTable,
+        scope: &InternedPath,
     ) -> Result<Self, CompilerError> {
         // Should start at the Colon
         // Need to skip it,
         token_stream.advance();
 
-        let parameters = parse_parameters(token_stream, &mut true, string_table, false)?;
+        let parameters = parse_parameters(token_stream, &mut true, string_table, scope, false)?;
 
         // create_struct_definition already advances past the closing |,
         // So we're now at the Arrow or Colon token
@@ -457,14 +460,17 @@ fn types_compatible(arg_type: &DataType, param_type: &DataType) -> bool {
 // Built-in functions will do their own thing
 pub fn parse_function_call(
     token_stream: &mut FileTokens,
-    id: &StringId,
+    id: &InternedPath,
     context: &ScopeContext,
     signature: &FunctionSignature,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     // Assumes we're starting at the first token after the name of the function call
     // Check if it's a host function first
-    if let Some(host_func) = &context.host_registry.get_function(id) {
+    if let Some(host_func) = &context
+        .host_registry
+        .get_function(id.name_str(string_table).unwrap_or(""))
+    {
         return parse_host_function_call(token_stream, host_func, context, string_table);
     }
 
@@ -491,11 +497,9 @@ pub fn parse_function_call(
     //     return inline_function_call(&args, &accessed_args, &original_function.value);
     // }
 
-    let interned_name = *id;
-
     Ok(AstNode {
         kind: NodeKind::FunctionCall {
-            name: interned_name,
+            name: id.to_owned(),
             args,
             returns: signature.returns.to_owned(),
             location: token_stream.current_location(),
@@ -651,9 +655,12 @@ pub fn parse_host_function_call(
     // Validate the host function call
     validate_host_function_call(host_func, &args, location.clone(), &string_table)?;
 
+    // Create an interned path name from the name
+    let name = InternedPath::from_single_str(host_func.name, string_table);
+
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall {
-            host_function_id: host_func.host_func_id,
+            name,
             args,
             returns: vec![host_func.return_type_to_datatype()],
             location: location.clone(),
@@ -679,7 +686,7 @@ pub fn validate_host_function_call(
             return_type_error!(
                 format!(
                     "Function '{}' doesn't take any arguments, but {} {} provided. Did you mean to call it without parentheses?",
-                    function.host_func_id,
+                    function.name,
                     got,
                     if got == 1 { "was" } else { "were" }
                 ),
@@ -693,7 +700,7 @@ pub fn validate_host_function_call(
             return_type_error!(
                 format!(
                     "Function '{}' expects {} argument{}, but none were provided",
-                    function.host_func_id,
+                    function.name,
                     expected,
                     if expected == 1 { "" } else { "s" }
                 ),
@@ -707,7 +714,7 @@ pub fn validate_host_function_call(
             return_type_error!(
                 format!(
                     "Function '{}' expects {} argument{}, got {}. {}",
-                    function.host_func_id,
+                    function.name,
                     expected,
                     if expected == 1 { "" } else { "s" },
                     got,
@@ -737,7 +744,7 @@ pub fn validate_host_function_call(
                 format!(
                     "Argument {} to function '{}' has incorrect type. Expected {}, but got {}. {}",
                     i + 1,
-                    function.host_func_id,
+                    function.name,
                     format_type_for_error(&param.language_type),
                     format_type_for_error(&expression.data_type),
                     get_type_conversion_hint(&expression.data_type, &param.language_type)

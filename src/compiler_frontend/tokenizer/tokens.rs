@@ -1,6 +1,6 @@
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{InternedString, StringId, StringTable};
+use crate::compiler_frontend::string_interning::{StringId, StringTable};
 
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use crate::compiler_frontend::tokenizer::compiler_directives::CompilerDirective;
@@ -161,13 +161,17 @@ impl Token {
     /// Returns empty string for other token types.
     pub fn as_string(&self, string_table: &StringTable) -> String {
         match &self.kind {
-            TokenKind::Symbol(id) => string_table.resolve(*id).to_string(),
-            TokenKind::StringSliceLiteral(id) => string_table.resolve(*id).to_string(),
-            TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
-            TokenKind::Path(path, imports) => {
-                format!("{}: {:?}", path.to_string(string_table), imports)
+            TokenKind::Symbol(id)
+            | TokenKind::StringSliceLiteral(id)
+            | TokenKind::RawStringLiteral(id) => string_table.resolve(*id).to_string(),
+
+            TokenKind::Path(paths) => {
+                let mut string = String::with_capacity(8 * paths.len());
+                for path in paths {
+                    string.extend(path.to_string(string_table).chars())
+                }
+                string
             }
-            TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }
     }
@@ -177,10 +181,9 @@ impl Token {
     /// Returns false for tokens that don't contain string data.
     pub fn eq_str(&self, string_table: &StringTable, other: &str) -> bool {
         match &self.kind {
-            TokenKind::Symbol(id) => string_table.resolve(*id) == other,
-            TokenKind::StringSliceLiteral(id) => string_table.resolve(*id) == other,
-            TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
-            TokenKind::ModuleStart(name) => name == other,
+            TokenKind::Symbol(id)
+            | TokenKind::StringSliceLiteral(id)
+            | TokenKind::RawStringLiteral(id) => string_table.resolve(*id) == other,
             _ => false,
         }
     }
@@ -321,8 +324,8 @@ impl<'a> TokenStream<'a> {
 #[derive(PartialEq, Debug, Clone)]
 pub enum TokenKind {
     // For Compiler
-    ModuleStart(String), // Contains module name space
-    Eof,                 // End of the file
+    ModuleStart, // Contains module name space
+    Eof,         // End of the file
 
     // Module Import
     /// For Wasm files or host environment - importing from a different module or the host
@@ -339,15 +342,15 @@ pub enum TokenKind {
     Arrow,
 
     /// Variable name
-    Symbol(InternedString),
+    Symbol(StringId),
 
     // Values
-    StringSliceLiteral(InternedString),
-    Path(InternedPath, Vec<StringId>), // Compile time path resolution
+    StringSliceLiteral(StringId),
+    Path(Vec<InternedPath>), // Compile time path resolution
     FloatLiteral(f64),
     IntLiteral(i64),
     CharLiteral(char),
-    RawStringLiteral(InternedString),
+    RawStringLiteral(StringId),
     BoolLiteral(bool),
 
     // Collections
@@ -453,7 +456,7 @@ pub enum TokenKind {
     TemplateClose,
     TemplateHead,
 
-    Id(InternedString), // ID for scenes
+    Id(StringId), // ID for scenes
 
     Empty,
 
@@ -470,7 +473,6 @@ impl TokenKind {
             TokenKind::Symbol(name) => string_table.resolve(*name).to_string(),
             TokenKind::RawStringLiteral(value) => string_table.resolve(*value).to_string(),
             TokenKind::StringSliceLiteral(string) => string_table.resolve(*string).to_string(),
-            TokenKind::ModuleStart(name) => name.clone(),
             _ => String::new(),
         }
     }

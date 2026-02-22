@@ -13,6 +13,7 @@ use crate::compiler_frontend::ast::statements::functions::parse_function_call;
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::statements::variables::new_var;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
@@ -36,12 +37,14 @@ pub fn function_body_to_ast(
         ast_log!("Parsing Token: ", #current_token);
 
         match current_token {
-            TokenKind::ModuleStart(..) => {
+            TokenKind::ModuleStart => {
                 // Module start token is only used for naming; skip it.
                 token_stream.advance();
             }
 
             TokenKind::Symbol(id) => {
+                let full_path = context.scope.append(id);
+
                 // Check if this has already been declared (is a reference)
                 if let Some(arg) = context.get_reference(&id) {
                     // Then the associated mutation afterward.
@@ -68,7 +71,7 @@ pub fn function_body_to_ast(
                             // I think this means field access ONLY happens here if it happens at this stage,
                             // expression parsing will need to do its own thing separately
 
-                            ast.push(handle_mutation(token_stream, &arg, &context, string_table)?);
+                            ast.push(handle_mutation(token_stream, arg, &context, string_table)?);
                         }
 
                         // Type declarations after variable reference - error (shadowing not supported)
@@ -83,21 +86,17 @@ pub fn function_body_to_ast(
                             if let Some(TokenKind::Assign) = token_stream.peek_next_token() {
                                 // This is invalid: var ~= value where var already exists
                                 // ~= should only be used for initial declarations, not reassignments
-                                let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_syntax_error!(
                                     format!("Invalid use of '~=' for reassignment. Variable '{}' is already declared. Use '=' to mutate it or create a new variable with a different name.", string_table.resolve(id)),
                                     token_stream.current_location().to_error_location(string_table), {
-                                        VariableName => var_name_static,
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable instead of '~='",
                                     }
                                 );
                             } else {
-                                let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                                 return_rule_error!(
                                     format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
                                     token_stream.current_location().to_error_location(string_table), {
-                                        VariableName => var_name_static,
                                         CompilationStage => "AST Construction",
                                         PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
                                     }
@@ -126,9 +125,9 @@ pub fn function_body_to_ast(
 
                                 ast.push(parse_function_call(
                                     token_stream,
-                                    &id,
+                                    &full_path,
                                     &context,
-                                    &signature,
+                                    signature,
                                     string_table,
                                 )?)
                             }
@@ -136,11 +135,9 @@ pub fn function_body_to_ast(
 
                         // At top level, a bare variable reference without assignment is a syntax error
                         _ => {
-                            let var_name_static: &'static str = Box::leak(string_table.resolve(id).to_string().into_boxed_str());
                             return_syntax_error!(
                                 format!("Unexpected token '{:?}' after variable reference '{}'. Expected assignment operator (=, +=, -=, etc.) for mutation", token_stream.current_token_kind(), string_table.resolve(id)),
                                 token_stream.current_location().to_error_location(string_table), {
-                                    VariableName => var_name_static,
                                     CompilationStage => "AST Construction",
                                     PrimarySuggestion => "Add an assignment operator like '=' or '+=' after the variable",
                                 }
@@ -151,7 +148,10 @@ pub fn function_body_to_ast(
                 // ----------------------------
                 //     HOST FUNCTION CALLS
                 // ----------------------------
-                } else if let Some(host_func_call) = context.host_registry.get_function(&id) {
+                } else if let Some(host_func_call) = context
+                    .host_registry
+                    .get_function(&string_table.resolve(id))
+                {
                     // Move past the name
                     token_stream.advance();
 
@@ -160,7 +160,7 @@ pub fn function_body_to_ast(
 
                     ast.push(parse_function_call(
                         token_stream,
-                        &id,
+                        &full_path,
                         &context,
                         &signature,
                         string_table,
@@ -178,7 +178,10 @@ pub fn function_body_to_ast(
                     match arg.value.kind {
                         ExpressionKind::StructDefinition(ref params) => {
                             ast.push(AstNode {
-                                kind: NodeKind::StructDefinition(id, params.to_owned()),
+                                kind: NodeKind::StructDefinition(
+                                    arg.id.to_owned(),
+                                    params.to_owned(),
+                                ),
                                 location: token_stream.current_location(),
                                 scope: context.scope.clone(),
                             });
@@ -189,7 +192,11 @@ pub fn function_body_to_ast(
                         // -----------------------------
                         ExpressionKind::Function(ref signature, ref body) => {
                             ast.push(AstNode {
-                                kind: NodeKind::Function(id, signature.to_owned(), body.to_owned()),
+                                kind: NodeKind::Function(
+                                    arg.id.to_owned(),
+                                    signature.to_owned(),
+                                    body.to_owned(),
+                                ),
                                 location: token_stream.current_location(),
                                 scope: context.scope.clone(),
                             });
@@ -328,7 +335,7 @@ pub fn function_body_to_ast(
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
                 let template_var = Var {
-                    id: string_table.intern(TOP_LEVEL_TEMPLATE_NAME),
+                    id: InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, string_table),
                     value: expr,
                 };
 
