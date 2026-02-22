@@ -13,7 +13,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, Flag};
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
-use crate::{return_err_as_messages, return_file_error, timer_log};
+use crate::{borrow_log, return_err_as_messages, return_file_error, timer_log};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::Path;
@@ -336,27 +336,30 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     // ----------------------------------
     let time = Instant::now();
 
-    // let borrow_analysis = match compiler.check_borrows(&hir_module) {
-    //     Ok(outcome) => outcome,
-    //     Err(e) => {
-    //         compiler_messages.errors.extend(e.errors);
-    //         compiler_messages.warnings.extend(e.warnings);
-    //         return Err(compiler_messages);
-    //     }
-    // };
+    let borrow_analysis = match compiler.check_borrows(&hir_module) {
+        Ok(outcome) => outcome,
+        Err(e) => {
+            compiler_messages.errors.extend(e.errors);
+            compiler_messages.warnings.extend(e.warnings);
+            return Err(compiler_messages);
+        }
+    };
 
     timer_log!(time, "Borrow checking completed in: ");
 
     // Debug output for the borrow checker if enabled
-    // #[cfg(feature = "show_borrow_checker")]
-    // {
-    //     println!("=== BORROW CHECKER OUTPUT ===");
-    //     println!(
-    //         "Borrow checking completed successfully ({} program points analysed)",
-    //         borrow_analysis.analysis.states.len()
-    //     );
-    //     println!("=== END BORROW CHECKER OUTPUT ===");
-    // }
+    #[cfg(feature = "show_borrow_checker")]
+    {
+        borrow_log!("=== BORROW CHECKER OUTPUT ===");
+        borrow_log!(format!(
+            "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={})",
+            borrow_analysis.analysis.total_state_snapshots(),
+            borrow_analysis.stats.functions_analyzed,
+            borrow_analysis.stats.blocks_analyzed,
+            borrow_analysis.stats.conflicts_checked
+        ));
+        borrow_log!("=== END BORROW CHECKER OUTPUT ===");
+    }
 
     Ok(Module {
         folder_name: config
@@ -368,6 +371,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
             .to_string(),
         entry_point: config.entry_dir.clone(), // The name of the main start function
         hir: hir_module,
+        borrow_analysis,
         required_module_imports: Vec::new(), //TODO: parse imports for external modules and add to requirements list
         exported_functions: Vec::new(), //TODO: Get the list of exported functions from the AST (with their signatures)
         warnings: compiler_messages.warnings,

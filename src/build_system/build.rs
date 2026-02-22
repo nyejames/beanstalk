@@ -1,5 +1,6 @@
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
 use crate::compiler_frontend::Flag;
+use crate::compiler_frontend::analysis::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -16,6 +17,7 @@ pub struct Module {
     pub(crate) folder_name: String,
     pub(crate) entry_point: PathBuf, // The name of the main start function
     pub(crate) hir: HirModule,
+    pub(crate) borrow_analysis: BorrowCheckReport,
     pub(crate) required_module_imports: Vec<ExternalImport>,
     pub(crate) exported_functions: Vec<String>,
     pub(crate) warnings: Vec<CompilerWarning>,

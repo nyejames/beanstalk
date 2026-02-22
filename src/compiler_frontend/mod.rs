@@ -27,9 +27,10 @@ pub(crate) mod host_functions {}
 
 pub(crate) mod hir;
 
-// pub(crate) mod borrow_checker;
+pub(crate) mod analysis;
 
 use crate::backends::function_registry::HostRegistry;
+use crate::compiler_frontend::analysis::{BorrowCheckReport, check_borrows as run_borrow_checker};
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -88,7 +89,7 @@ impl<'a> CompilerFrontend<'a> {
     }
 
     /// -----------------------------
-    ///          TOKENIZER
+    /// TOKENIZER
     /// -----------------------------
     pub fn source_to_tokens(
         &mut self,
@@ -110,7 +111,7 @@ impl<'a> CompilerFrontend<'a> {
     }
 
     /// ---------------------------
-    ///       HEADER PARSING
+    /// HEADER PARSING
     /// ---------------------------
     /// First, each file will be parsed into separate headers
     /// so every symbol they use is known before parsing their bodies.
@@ -134,7 +135,7 @@ impl<'a> CompilerFrontend<'a> {
     }
 
     /// ---------------------------
-    ///     DEPENDENCY SORTING
+    /// DEPENDENCY SORTING
     /// ---------------------------
     /// Now, as we parse the headers and combine the files,
     /// the types of each dependency will be known.
@@ -150,7 +151,7 @@ impl<'a> CompilerFrontend<'a> {
     }
 
     /// -----------------------------
-    ///         AST CREATION
+    /// AST CREATION
     /// -----------------------------
     /// This assumes that the vec of FileTokens contains all dependencies for each file.
     /// The headers of each file will be parsed first, then each file will be combined into one module.
@@ -168,7 +169,7 @@ impl<'a> CompilerFrontend<'a> {
     }
 
     /// -----------------------------
-    ///         HIR GENERATION
+    /// HIR GENERATION
     /// -----------------------------
     /// Generate HIR from AST nodes, linearizing expressions and creating
     /// a place-based representation suitable for borrow checking analysis.
@@ -187,11 +188,20 @@ impl<'a> CompilerFrontend<'a> {
     // ------------------------------
     //  BORROW CHECKING AND ANALYSIS
     // ------------------------------
-    // This will be split into separate phases so project builders can skip certain analysis phases
-
-    // TODO: Enforcing the single mutable reference / n immutable references rule
-    // All projects MUST have this as part of the language rules so this is always performed
-    // pub fn check_borrows()
+    // Borrow validation runs after HIR construction. The borrow checker enforces
+    // language rules that must be consistent across all backends.
+    pub fn check_borrows(
+        &self,
+        hir_module: &HirModule,
+    ) -> Result<BorrowCheckReport, CompilerMessages> {
+        match run_borrow_checker(hir_module, &self.string_table) {
+            Ok(report) => Ok(report),
+            Err(error) => Err(CompilerMessages {
+                errors: vec![error],
+                warnings: Vec::new(),
+            }),
+        }
+    }
 
     // TODO: Last use analysis (skippable)
     // Provides a list of places that possible_drops can be inserted for heap managed values

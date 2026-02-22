@@ -57,7 +57,7 @@ use crate::{eval_log, return_compiler_error, return_syntax_error};
  *
  * # Example
  *
- * ```rust
+ * ```text
  * use std::path::PathBuf;
  *
  * // Assume `nodes` is already parsed (parse_expression) and represents a valid AST expression

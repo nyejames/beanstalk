@@ -51,7 +51,7 @@
 //! ## Usage Examples
 //!
 //! ### Basic Error Creation
-//! ```rust
+//! ```text
 //! // Syntax error with metadata
 //! return_syntax_error!(
 //!     "Expected ';' after statement",
@@ -67,7 +67,7 @@
 //! ```
 //!
 //! ### Borrow Checker Errors
-//! ```rust
+//! ```text
 //! // Multiple mutable borrows
 //! let error = create_multiple_mutable_borrows_error!(
 //!     place,
@@ -81,7 +81,7 @@
 //! ```
 //!
 //! ### ErrorLocation Conversion
-//! ```rust
+//! ```text
 //! // Convert from TextLocation (used in frontend)
 //! let error_location = text_location.to_error_location(string_table);
 //!

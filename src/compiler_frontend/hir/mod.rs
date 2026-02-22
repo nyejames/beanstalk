@@ -7,7 +7,7 @@ pub(crate) mod hir_datatypes;
 pub(crate) mod hir_nodes;
 
 // Private parts of the hir lowering
-mod hir_display;
+pub(crate) mod hir_display;
 mod hir_expression;
 mod hir_statement;
 mod hir_structs;
