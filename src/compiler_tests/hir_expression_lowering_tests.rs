@@ -1,15 +1,17 @@
 #![cfg(test)]
 
 use crate::backends::function_registry::CallTarget;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator,
+};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirStatementKind,
-    HirTerminator, HirUnaryOp, LocalId, RegionId, ValueKind,
+    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal, HirPlace,
+    HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -58,6 +60,14 @@ fn register_local(
 
 fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)
+}
+
+fn field_symbol(
+    parent: &InternedPath,
+    field_name: &str,
+    string_table: &mut StringTable,
+) -> InternedPath {
+    parent.append(string_table.intern(field_name))
 }
 
 fn rvalue_node(expr: Expression) -> AstNode {
@@ -521,4 +531,166 @@ fn local_resolution_uses_full_path_identity_not_leaf_name() {
 
     assert_eq!(err.error_type, ErrorType::HirTransformation);
     assert!(err.msg.contains("Unresolved local"));
+}
+
+#[test]
+fn nominal_struct_identity_uses_field_parent_path() {
+    let mut string_table = StringTable::new();
+    let location = TextLocation::new_just_line(11);
+    let struct_path = symbol("MyStruct", &mut string_table);
+    let field_path = field_symbol(&struct_path, "value", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+    let int_type = builder
+        .lower_data_type(&DataType::Int, &location)
+        .expect("int type lowering should succeed");
+
+    builder.test_register_struct_with_fields(
+        StructId(1),
+        struct_path.clone(),
+        vec![(FieldId(3), field_path.clone(), int_type)],
+    );
+
+    let expr_fields = vec![Var {
+        id: field_path.clone(),
+        value: Expression::int(42, location.clone(), Ownership::ImmutableOwned),
+    }];
+
+    let expression = Expression::new(
+        ExpressionKind::StructInstance(expr_fields.clone()),
+        location.clone(),
+        DataType::Struct(expr_fields, Ownership::MutableOwned),
+        Ownership::MutableOwned,
+    );
+
+    let lowered = builder
+        .lower_expression(&expression)
+        .expect("struct instance lowering should succeed");
+
+    match lowered.value.kind {
+        HirExpressionKind::StructConstruct { struct_id, fields } => {
+            assert_eq!(struct_id, StructId(1));
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].0, FieldId(3));
+        }
+        other => panic!("expected StructConstruct, got {:?}", other),
+    }
+}
+
+#[test]
+fn temp_locals_are_not_resolvable_as_user_symbols() {
+    let mut string_table = StringTable::new();
+    let callee = symbol("callee", &mut string_table);
+    let temp_name = symbol("__hir_tmp_0", &mut string_table);
+    let location = TextLocation::new_just_line(12);
+    let mut builder = setup_builder(&mut string_table);
+
+    builder.test_register_function_name(callee.clone(), FunctionId(8));
+
+    let call_expr =
+        Expression::function_call(callee, vec![], vec![DataType::Int], location.clone());
+    let lowered = builder
+        .lower_expression(&call_expr)
+        .expect("call lowering should succeed");
+
+    assert_eq!(lowered.prelude.len(), 1);
+    assert!(matches!(
+        lowered.prelude[0].kind,
+        HirStatementKind::Call {
+            result: Some(_),
+            ..
+        }
+    ));
+
+    let temp_reference = Expression::reference(
+        temp_name,
+        DataType::Int,
+        location.clone(),
+        Ownership::ImmutableReference,
+    );
+
+    let error = builder
+        .lower_expression(&temp_reference)
+        .expect_err("compiler temp local should not resolve through locals_by_name");
+
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains("Unresolved local"));
+}
+
+#[test]
+fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
+    let mut string_table = StringTable::new();
+    let location = TextLocation::new_just_line(13);
+    let struct_a = symbol("StructA", &mut string_table);
+    let struct_b = symbol("StructB", &mut string_table);
+    let field_leaf = string_table.intern("value");
+    let field_a = struct_a.append(field_leaf);
+    let field_b = struct_b.append(field_leaf);
+    let local_name = symbol("my_struct", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+    let int_type = builder
+        .lower_data_type(&DataType::Int, &location)
+        .expect("int type lowering should succeed");
+
+    builder.test_register_struct_with_fields(
+        StructId(10),
+        struct_a.clone(),
+        vec![(FieldId(100), field_a.clone(), int_type)],
+    );
+    builder.test_register_struct_with_fields(
+        StructId(11),
+        struct_b.clone(),
+        vec![(FieldId(101), field_b.clone(), int_type)],
+    );
+
+    let local_struct_type = DataType::Struct(
+        vec![Var {
+            id: field_a.clone(),
+            value: Expression::new(
+                ExpressionKind::None,
+                location.clone(),
+                DataType::Int,
+                Ownership::ImmutableOwned,
+            ),
+        }],
+        Ownership::MutableOwned,
+    );
+
+    register_local(
+        &mut builder,
+        local_name.clone(),
+        LocalId(30),
+        local_struct_type.clone(),
+        location.clone(),
+    );
+
+    let base_node = AstNode {
+        kind: NodeKind::Rvalue(Expression::reference(
+            local_name,
+            local_struct_type,
+            location.clone(),
+            Ownership::ImmutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let field_access = AstNode {
+        kind: NodeKind::FieldAccess {
+            base: Box::new(base_node),
+            field: field_leaf,
+            data_type: DataType::Int,
+            ownership: Ownership::ImmutableReference,
+        },
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+
+    let (_prelude, place) = builder
+        .lower_ast_node_to_place(&field_access)
+        .expect("field access should lower via base struct identity");
+
+    match place {
+        HirPlace::Field { field, .. } => assert_eq!(field, FieldId(100)),
+        other => panic!("expected field place, got {:?}", other),
+    }
 }

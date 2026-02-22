@@ -7,6 +7,8 @@ mod compiler_tests {
     pub(crate) mod hir_expression_lowering_tests;
     #[cfg(test)]
     pub(crate) mod hir_statement_lowering_tests;
+    #[cfg(test)]
+    pub(crate) mod hir_validation_tests;
     pub(crate) mod integration_test_runner; // For running all integration tests and report back the results
 }
 pub mod build_system;

@@ -11,3 +11,4 @@ mod hir_display;
 mod hir_expression;
 mod hir_statement;
 mod hir_structs;
+mod hir_validation;

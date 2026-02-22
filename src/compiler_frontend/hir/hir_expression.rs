@@ -199,7 +199,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             ExpressionKind::StructInstance(args) => {
-                let struct_id = self.resolve_struct_id_from_fields(args, &expr.location)?;
+                let struct_id = self.resolve_struct_id_from_nominal_fields(args, &expr.location)?;
                 let mut prelude = Vec::new();
                 let mut fields = Vec::with_capacity(args.len());
 
@@ -565,7 +565,11 @@ impl<'a> HirBuilder<'a> {
 
             NodeKind::FieldAccess { base, field, .. } => {
                 let (prelude, base_place) = self.lower_ast_node_to_place(base)?;
-                let field_id = self.resolve_unique_field_id_or_error(*field, &node.location)?;
+                let field_id = self.resolve_field_id_for_base_place_or_error(
+                    &base_place,
+                    *field,
+                    &node.location,
+                )?;
 
                 Ok((
                     prelude,
@@ -751,7 +755,7 @@ impl<'a> HirBuilder<'a> {
             }
 
             DataType::Parameters(fields) | DataType::Struct(fields, _) => {
-                let struct_id = self.resolve_struct_id_from_fields(fields, location)?;
+                let struct_id = self.resolve_struct_id_from_nominal_fields(fields, location)?;
                 HirTypeKind::Struct { struct_id }
             }
         };
@@ -814,7 +818,8 @@ impl<'a> HirBuilder<'a> {
         self.temp_local_counter += 1;
         let temp_name_id = InternedPath::from_single_str(&temp_name, self.string_table);
 
-        self.locals_by_name.insert(temp_name_id.clone(), local_id);
+        // Compiler-introduced temporaries are intentionally excluded from AST symbol resolution.
+        // They are named only for diagnostics/debug rendering via the side table.
         self.side_table.bind_local_name(local_id, temp_name_id);
         self.side_table.map_local_source(&local);
 
@@ -905,16 +910,90 @@ impl<'a> HirBuilder<'a> {
         Ok(field_id)
     }
 
-    fn resolve_unique_field_id_or_error(
+    fn resolve_struct_id_from_nominal_fields(
         &self,
+        fields: &[Var],
+        location: &TextLocation,
+    ) -> Result<StructId, CompilerError> {
+        let Some(first_field) = fields.first() else {
+            return_hir_transformation_error!(
+                "Cannot lower struct from empty field list",
+                self.hir_error_location(location)
+            );
+        };
+
+        let Some(struct_path) = first_field.id.parent() else {
+            return_hir_transformation_error!(
+                format!(
+                    "Field '{}' has no parent struct path during HIR lowering",
+                    self.symbol_name_for_diagnostics(&first_field.id)
+                ),
+                self.hir_error_location(location)
+            );
+        };
+
+        let Some(struct_id) = self.structs_by_name.get(&struct_path).copied() else {
+            return_hir_transformation_error!(
+                format!(
+                    "Unresolved struct '{}' during HIR lowering",
+                    self.symbol_name_for_diagnostics(&struct_path)
+                ),
+                self.hir_error_location(location)
+            );
+        };
+
+        for field in fields {
+            let Some(parent) = field.id.parent() else {
+                return_hir_transformation_error!(
+                    format!(
+                        "Field '{}' has no parent struct path during HIR lowering",
+                        self.symbol_name_for_diagnostics(&field.id)
+                    ),
+                    self.hir_error_location(location)
+                );
+            };
+
+            if parent != struct_path {
+                return_hir_transformation_error!(
+                    format!(
+                        "Field '{}' does not belong to struct '{}'",
+                        self.symbol_name_for_diagnostics(&field.id),
+                        self.symbol_name_for_diagnostics(&struct_path)
+                    ),
+                    self.hir_error_location(location)
+                );
+            }
+
+            if !self
+                .fields_by_struct_and_name
+                .contains_key(&(struct_id, field.id.clone()))
+            {
+                return_hir_transformation_error!(
+                    format!(
+                        "Field '{}' is not registered for struct '{}'",
+                        self.symbol_name_for_diagnostics(&field.id),
+                        self.symbol_name_for_diagnostics(&struct_path)
+                    ),
+                    self.hir_error_location(location)
+                );
+            }
+        }
+
+        Ok(struct_id)
+    }
+
+    fn resolve_field_id_for_base_place_or_error(
+        &self,
+        base_place: &HirPlace,
         field_name: StringId,
         location: &TextLocation,
     ) -> Result<FieldId, CompilerError> {
+        let struct_id = self.resolve_struct_id_for_place_or_error(base_place, location)?;
         let mut matches = self
             .fields_by_struct_and_name
             .iter()
-            .filter_map(|((_, name), field_id)| {
-                if name.name() == Some(field_name) {
+            .filter_map(|((candidate_struct_id, candidate_name), field_id)| {
+                if *candidate_struct_id == struct_id && candidate_name.name() == Some(field_name) {
                     Some(*field_id)
                 } else {
                     None
@@ -926,21 +1005,23 @@ impl<'a> HirBuilder<'a> {
         matches.dedup_by_key(|id| id.0);
 
         match matches.as_slice() {
+            [single] => Ok(*single),
             [] => {
                 return_hir_transformation_error!(
                     format!(
-                        "Unresolved field '{}' during HIR expression lowering",
-                        self.string_table.resolve(field_name)
+                        "Field '{}' is not defined on struct {:?}",
+                        self.string_table.resolve(field_name),
+                        struct_id
                     ),
                     self.hir_error_location(location)
                 )
             }
-            [single] => Ok(*single),
             _ => {
                 return_hir_transformation_error!(
                     format!(
-                        "Ambiguous field '{}' (found in multiple structs)",
-                        self.string_table.resolve(field_name)
+                        "Ambiguous field '{}' on struct {:?}",
+                        self.string_table.resolve(field_name),
+                        struct_id
                     ),
                     self.hir_error_location(location)
                 )
@@ -948,63 +1029,78 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    fn resolve_struct_id_from_fields(
+    fn resolve_struct_id_for_place_or_error(
         &self,
-        fields: &[Var],
+        place: &HirPlace,
         location: &TextLocation,
     ) -> Result<StructId, CompilerError> {
-        let mut candidates = self
-            .structs_by_name
-            .values()
-            .copied()
-            .collect::<Vec<StructId>>();
-
-        candidates.sort_by_key(|id| id.0);
-        candidates.dedup_by_key(|id| id.0);
-
-        let mut matches = Vec::new();
-
-        'candidate: for struct_id in candidates {
-            let struct_field_names = self
-                .fields_by_struct_and_name
-                .keys()
-                .filter_map(|(sid, name)| {
-                    if *sid == struct_id {
-                        Some(name.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            if struct_field_names.len() != fields.len() {
-                continue;
-            }
-
-            for field in fields {
-                if !struct_field_names.contains(&field.id) {
-                    continue 'candidate;
-                }
-            }
-
-            matches.push(struct_id);
-        }
-
-        match matches.as_slice() {
-            [single] => Ok(*single),
-            [] => {
-                return_hir_transformation_error!(
-                    "No registered struct matches the field set of this struct expression",
-                    self.hir_error_location(location)
-                )
-            }
+        let ty = self.resolve_place_type_id_or_error(place, location)?;
+        match &self.type_context.get(ty).kind {
+            HirTypeKind::Struct { struct_id } => Ok(*struct_id),
             _ => {
                 return_hir_transformation_error!(
-                    "Multiple registered structs match this field set; lowering is ambiguous",
+                    "Field access base does not resolve to a struct value in this HIR phase",
                     self.hir_error_location(location)
                 )
             }
         }
+    }
+
+    fn resolve_place_type_id_or_error(
+        &self,
+        place: &HirPlace,
+        location: &TextLocation,
+    ) -> Result<TypeId, CompilerError> {
+        match place {
+            HirPlace::Local(local_id) => self.resolve_local_type_id_or_error(*local_id, location),
+            HirPlace::Field { field, .. } => self.resolve_field_type_id_or_error(*field, location),
+            HirPlace::Index { base, .. } => {
+                let base_type = self.resolve_place_type_id_or_error(base, location)?;
+                match &self.type_context.get(base_type).kind {
+                    HirTypeKind::Collection { element } => Ok(*element),
+                    _ => {
+                        return_hir_transformation_error!(
+                            "Index access base is not a collection type",
+                            self.hir_error_location(location)
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fn resolve_local_type_id_or_error(
+        &self,
+        local_id: LocalId,
+        location: &TextLocation,
+    ) -> Result<TypeId, CompilerError> {
+        for block in &self.module.blocks {
+            if let Some(local) = block.locals.iter().find(|local| local.id == local_id) {
+                return Ok(local.ty);
+            }
+        }
+
+        return_hir_transformation_error!(
+            format!("Local {:?} is not registered in HIR blocks", local_id),
+            self.hir_error_location(location)
+        )
+    }
+
+    fn resolve_field_type_id_or_error(
+        &self,
+        field_id: FieldId,
+        location: &TextLocation,
+    ) -> Result<TypeId, CompilerError> {
+        for hir_struct in &self.module.structs {
+            if let Some(field) = hir_struct.fields.iter().find(|field| field.id == field_id) {
+                return Ok(field.ty);
+            }
+        }
+
+        return_hir_transformation_error!(
+            format!("Field {:?} is not registered in HIR structs", field_id),
+            self.hir_error_location(location)
+        )
     }
 
     fn place_from_expression(

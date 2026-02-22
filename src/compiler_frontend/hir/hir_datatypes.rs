@@ -55,6 +55,14 @@ impl TypeContext {
     pub fn get(&self, id: TypeId) -> &HirType {
         &self.types[id.0 as usize]
     }
+
+    pub fn contains(&self, id: TypeId) -> bool {
+        (id.0 as usize) < self.types.len()
+    }
+
+    pub fn len(&self) -> usize {
+        self.types.len()
+    }
 }
 
 // ============================================================

@@ -235,9 +235,14 @@ See the Cargo.toml for all feature flags.
 ## Testing Workflow
 The primary goal is to get the language working end-to-end. Focus on real-world usage patterns and language features.
 
-### Unit Testing (`src/compiler_tests`)
+### Unit Testing
 Unit testing should be used only to check new compiler features work as expected but not used extensively.
-The tests should always be stored inside src/compiler tests and never inline with actual code.
+Tests should NEVER be kept in the same files as actual code.
+
+Otherwise, tests specific to a module should go inside their own folder inside that module's directory. 
+For example, Hir tests should go inside `src/compiler_frontend/hir/tests/`.
+
+End-to-end tests, or tests that use many modules at once should be kept in `src/compiler_tests/`.
 
 Once a system is working as expected, old unit tests should be pruned to reduce gradual unit test bloat.
 Rewriting unit tests is preferable to leaving them in the codebase. 

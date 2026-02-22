@@ -19,6 +19,7 @@ use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_display::HirSideTable;
+use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -34,6 +35,14 @@ pub fn lower_module(
 ) -> Result<HirModule, CompilerMessages> {
     let mut ctx = HirBuilder::new(string_table);
     ctx.build_hir_module(ast)
+}
+
+#[cfg(test)]
+pub(crate) fn validate_module_for_tests(
+    module: &HirModule,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    validate_hir_module(module, string_table)
 }
 
 // -------------------
@@ -158,6 +167,13 @@ impl<'a> HirBuilder<'a> {
 
         self.module.type_context = self.type_context;
         self.module.side_table = self.side_table;
+
+        if let Err(error) = validate_hir_module(&self.module, self.string_table) {
+            return Err(CompilerMessages {
+                errors: vec![error],
+                warnings: self.module.warnings.clone(),
+            });
+        }
 
         Ok(self.module)
     }
@@ -405,6 +421,38 @@ impl<'a> HirBuilder<'a> {
 
         if id.0 >= self.next_function_id {
             self.next_function_id = id.0 + 1;
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn test_register_struct_with_fields(
+        &mut self,
+        struct_id: StructId,
+        name: InternedPath,
+        fields: Vec<(FieldId, InternedPath, TypeId)>,
+    ) {
+        self.structs_by_name.insert(name.clone(), struct_id);
+        self.side_table.bind_struct_name(struct_id, name);
+
+        let mut hir_fields = Vec::with_capacity(fields.len());
+        for (field_id, field_name, ty) in fields {
+            self.fields_by_struct_and_name
+                .insert((struct_id, field_name.clone()), field_id);
+            self.side_table.bind_field_name(field_id, field_name);
+            hir_fields.push(HirField { id: field_id, ty });
+
+            if field_id.0 >= self.next_field_id {
+                self.next_field_id = field_id.0 + 1;
+            }
+        }
+
+        self.module.structs.push(HirStruct {
+            id: struct_id,
+            fields: hir_fields,
+        });
+
+        if struct_id.0 >= self.next_struct_id {
+            self.next_struct_id = struct_id.0 + 1;
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpressionKind, HirPattern, HirStatementKind, HirTerminator,
+    HirExpressionKind, HirModule, HirPattern, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -80,13 +80,23 @@ fn lower_ast(
     HirBuilder::new(string_table).build_hir_module(ast)
 }
 
+fn assert_no_placeholder_terminators(module: &HirModule) {
+    assert!(
+        module
+            .blocks
+            .iter()
+            .all(|block| !matches!(block.terminator, HirTerminator::Panic { message: None })),
+        "expected no placeholder Panic(None) terminators in lowered HIR"
+    );
+}
+
 #[test]
 fn registers_declarations_and_resolves_start_function() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
 
-    let field_name = symbol("field", &mut string_table);
     let struct_name = symbol("MyStruct", &mut string_table);
+    let field_name = struct_name.append(string_table.intern("field"));
 
     let struct_node = node(
         NodeKind::StructDefinition(
@@ -551,6 +561,7 @@ fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
 
     let chooser_block = &module.blocks[module.functions[1].entry.0 as usize];
     assert!(matches!(chooser_block.terminator, HirTerminator::If { .. }));
+    assert_no_placeholder_terminators(&module);
 }
 
 #[test]
@@ -674,6 +685,7 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
         chooser_block.terminator,
         HirTerminator::Match { .. }
     ));
+    assert_no_placeholder_terminators(&module);
 }
 
 #[test]
@@ -744,6 +756,56 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
     assert!(matches!(arms[0].pattern, HirPattern::Literal(_)));
     assert!(matches!(arms[1].pattern, HirPattern::Literal(_)));
     assert!(matches!(arms[2].pattern, HirPattern::Wildcard));
+}
+
+#[test]
+fn match_rejects_non_literal_pattern_expressions() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(x.clone(), DataType::Int, false, test_location(2))],
+            returns: vec![],
+        },
+        vec![node(
+            NodeKind::Match(
+                Expression::reference(
+                    x.clone(),
+                    DataType::Int,
+                    test_location(3),
+                    Ownership::ImmutableReference,
+                ),
+                vec![MatchArm {
+                    condition: Expression::reference(
+                        x,
+                        DataType::Int,
+                        test_location(3),
+                        Ownership::ImmutableReference,
+                    ),
+                    body: vec![],
+                }],
+                None,
+            ),
+            test_location(3),
+        )],
+        test_location(2),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let err = lower_ast(ast, &mut string_table)
+        .expect_err("non-literal match pattern should fail HIR lowering");
+
+    assert_eq!(err.errors[0].error_type, ErrorType::HirTransformation);
+    assert!(
+        err.errors[0]
+            .msg
+            .contains("Match arm patterns must be compile-time literals"),
+        "unexpected error message: {}",
+        err.errors[0].msg
+    );
 }
 
 #[test]

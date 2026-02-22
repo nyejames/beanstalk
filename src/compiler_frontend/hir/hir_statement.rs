@@ -196,6 +196,29 @@ impl<'a> HirBuilder<'a> {
         let mut hir_fields = Vec::with_capacity(fields.len());
 
         for field in fields {
+            // AST guarantees module-wide unique InternedPath symbols. For struct fields this
+            // means each field path must be prefixed by its parent struct path.
+            let Some(parent) = field.id.parent() else {
+                return_hir_transformation_error!(
+                    format!(
+                        "Field '{}' has no parent struct path during HIR lowering",
+                        self.symbol_name_for_diagnostics(&field.id)
+                    ),
+                    self.hir_error_location(location)
+                );
+            };
+
+            if parent != *name {
+                return_hir_transformation_error!(
+                    format!(
+                        "Field '{}' is not prefixed by struct '{}'",
+                        self.symbol_name_for_diagnostics(&field.id),
+                        self.symbol_name_for_diagnostics(name)
+                    ),
+                    self.hir_error_location(location)
+                );
+            }
+
             if self
                 .fields_by_struct_and_name
                 .contains_key(&(struct_id, field.id.clone()))
@@ -560,7 +583,6 @@ impl<'a> HirBuilder<'a> {
         let region = self.current_region_or_error(location)?;
         let then_block = self.create_block(region, location, "if-then")?;
         let else_block = self.create_block(region, location, "if-else")?;
-        let merge_block = self.create_block(region, location, "if-merge")?;
 
         self.emit_terminator(
             current_block,
@@ -575,11 +597,13 @@ impl<'a> HirBuilder<'a> {
         self.log_control_flow_edge(current_block, then_block, "if.true");
         self.log_control_flow_edge(current_block, else_block, "if.false");
 
+        let mut terminated_anchor: Option<BlockId> = None;
+
         self.set_current_block(then_block, location)?;
         self.lower_statement_sequence(then_body)?;
         let then_terminated = self.block_has_explicit_terminator(then_block, location)?;
-        if !then_terminated {
-            self.emit_jump_to(then_block, merge_block, location, "if.then.merge")?;
+        if then_terminated {
+            terminated_anchor = Some(then_block);
         }
 
         self.set_current_block(else_block, location)?;
@@ -588,13 +612,21 @@ impl<'a> HirBuilder<'a> {
         }
 
         let else_terminated = self.block_has_explicit_terminator(else_block, location)?;
-        if !else_terminated {
-            self.emit_jump_to(else_block, merge_block, location, "if.else.merge")?;
+        if else_terminated && terminated_anchor.is_none() {
+            terminated_anchor = Some(else_block);
         }
 
         if then_terminated && else_terminated {
-            // No continuation path exists after this if-expression.
-            return self.set_current_block(then_block, location);
+            // No continuation path exists after this branch.
+            return self.set_current_block(terminated_anchor.unwrap_or(then_block), location);
+        }
+
+        let merge_block = self.create_block(region, location, "if-merge")?;
+        if !then_terminated {
+            self.emit_jump_to(then_block, merge_block, location, "if.then.merge")?;
+        }
+        if !else_terminated {
+            self.emit_jump_to(else_block, merge_block, location, "if.else.merge")?;
         }
 
         self.set_current_block(merge_block, location)
@@ -659,8 +691,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         let region = self.current_region_or_error(location)?;
-        let merge_block = self.create_block(region, location, "match-merge")?;
-
         let mut arm_blocks = Vec::with_capacity(arms.len());
         for _ in arms {
             arm_blocks.push(self.create_block(region, location, "match-arm")?);
@@ -671,19 +701,18 @@ impl<'a> HirBuilder<'a> {
         } else {
             None
         };
+        let mut merge_block = if default.is_none() {
+            Some(self.create_block(region, location, "match-merge")?)
+        } else {
+            None
+        };
 
         let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
-            let lowered_pattern = self.lower_expression(&arm.condition)?;
-            if !lowered_pattern.prelude.is_empty() {
-                return_hir_transformation_error!(
-                    "Match arm pattern lowering produced side-effect statements; only literal patterns are supported",
-                    self.hir_error_location(&arm.condition.location)
-                );
-            }
+            let lowered_pattern = self.lower_match_literal_pattern(&arm.condition)?;
 
             hir_arms.push(HirMatchArm {
-                pattern: HirPattern::Literal(lowered_pattern.value),
+                pattern: HirPattern::Literal(lowered_pattern),
                 guard: None,
                 body: arm_blocks[index],
             });
@@ -699,7 +728,7 @@ impl<'a> HirBuilder<'a> {
             hir_arms.push(HirMatchArm {
                 pattern: HirPattern::Wildcard,
                 guard: None,
-                body: merge_block,
+                body: merge_block.expect("match merge block exists when default arm is absent"),
             });
         }
 
@@ -712,7 +741,6 @@ impl<'a> HirBuilder<'a> {
             location,
         )?;
 
-        let mut has_fallthrough_path = default.is_none();
         let mut terminated_anchor: Option<BlockId> = None;
 
         for (index, arm) in arms.iter().enumerate() {
@@ -726,8 +754,9 @@ impl<'a> HirBuilder<'a> {
                     terminated_anchor = Some(arm_block);
                 }
             } else {
-                self.emit_jump_to(arm_block, merge_block, location, "match.arm.merge")?;
-                has_fallthrough_path = true;
+                let merge_target =
+                    self.ensure_match_merge_block(region, location, &mut merge_block)?;
+                self.emit_jump_to(arm_block, merge_target, location, "match.arm.merge")?;
             }
         }
 
@@ -742,25 +771,77 @@ impl<'a> HirBuilder<'a> {
                     terminated_anchor = Some(default_block_id);
                 }
             } else {
+                let merge_target =
+                    self.ensure_match_merge_block(region, location, &mut merge_block)?;
                 self.emit_jump_to(
                     default_block_id,
-                    merge_block,
+                    merge_target,
                     location,
                     "match.default.merge",
                 )?;
-                has_fallthrough_path = true;
             }
         }
 
-        if has_fallthrough_path {
-            return self.set_current_block(merge_block, location);
+        if let Some(merge_block_id) = merge_block {
+            return self.set_current_block(merge_block_id, location);
         }
 
         if let Some(anchor_block) = terminated_anchor {
             return self.set_current_block(anchor_block, location);
         }
 
-        self.set_current_block(merge_block, location)
+        self.set_current_block(current_block, location)
+    }
+
+    fn lower_match_literal_pattern(
+        &mut self,
+        condition: &Expression,
+    ) -> Result<HirExpression, CompilerError> {
+        let lowered_pattern = self.lower_expression(condition)?;
+        if !lowered_pattern.prelude.is_empty() {
+            return_hir_transformation_error!(
+                "Match arm pattern lowering produced side-effect statements; only literal patterns are supported",
+                self.hir_error_location(&condition.location)
+            );
+        }
+
+        if lowered_pattern.value.value_kind != ValueKind::Const {
+            return_hir_transformation_error!(
+                "Match arm patterns must be compile-time literals",
+                self.hir_error_location(&condition.location)
+            );
+        }
+
+        if !matches!(
+            lowered_pattern.value.kind,
+            HirExpressionKind::Int(_)
+                | HirExpressionKind::Float(_)
+                | HirExpressionKind::Bool(_)
+                | HirExpressionKind::Char(_)
+                | HirExpressionKind::StringLiteral(_)
+        ) {
+            return_hir_transformation_error!(
+                "Match arm patterns currently support only literal int/float/bool/char/string values",
+                self.hir_error_location(&condition.location)
+            );
+        }
+
+        Ok(lowered_pattern.value)
+    }
+
+    fn ensure_match_merge_block(
+        &mut self,
+        region: crate::compiler_frontend::hir::hir_nodes::RegionId,
+        location: &TextLocation,
+        merge_block: &mut Option<BlockId>,
+    ) -> Result<BlockId, CompilerError> {
+        if let Some(existing) = *merge_block {
+            return Ok(existing);
+        }
+
+        let created = self.create_block(region, location, "match-merge")?;
+        *merge_block = Some(created);
+        Ok(created)
     }
 
     fn create_block(
