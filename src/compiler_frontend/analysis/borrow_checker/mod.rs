@@ -18,7 +18,8 @@ use crate::compiler_frontend::analysis::borrow_checker::transfer::{
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     FunctionBorrowSummary, FunctionReturnAliasSummary,
 };
-use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FunctionId, HirExpression, HirExpressionKind, HirFunction, HirModule, HirPlace,
     HirTerminator, LocalId, RegionId,
@@ -82,6 +83,7 @@ impl<'a> BorrowChecker<'a> {
     }
 
     fn run(mut self) -> Result<BorrowCheckReport, CompilerError> {
+        // Build all metadata once so transfer only needs O(1) lookups.
         self.build_function_lookup()?;
         self.build_function_param_mutability()?;
         self.build_function_return_alias_summaries()?;
@@ -220,6 +222,7 @@ impl<'a> BorrowChecker<'a> {
         report: &mut BorrowCheckReport,
     ) -> Result<FunctionBorrowSummary, CompilerError> {
         let reachable_blocks = self.collect_reachable_blocks(function)?;
+        let reachable_block_set = reachable_blocks.iter().copied().collect::<FxHashSet<_>>();
         let layout = self.build_function_layout(function, &reachable_blocks)?;
         let visible_locals_by_block =
             self.build_visibility_masks(function.id, &layout, &reachable_blocks)?;
@@ -305,6 +308,7 @@ impl<'a> BorrowChecker<'a> {
             let block = self.block_by_id_or_error(block_id, function.id)?;
             let mut output_state = input_state.clone();
 
+            // Transfer the block once and collect facts while the state is hot.
             let block_stats = transfer_block(&transfer_context, &layout, block, &mut output_state)?;
             self.merge_block_stats(&mut report.stats, &block_stats);
             summary.mutable_call_sites += block_stats.mutable_call_sites;
@@ -338,7 +342,7 @@ impl<'a> BorrowChecker<'a> {
             out_states.insert(block_id, output_state.clone());
 
             for successor in successors(&block.terminator) {
-                if !reachable_blocks.contains(&successor) {
+                if !reachable_block_set.contains(&successor) {
                     continue;
                 }
 
@@ -450,7 +454,12 @@ impl<'a> BorrowChecker<'a> {
             let mut mask = RootSet::empty(layout.local_count());
 
             for (local_index, local_region) in layout.local_regions.iter().enumerate() {
-                if self.is_region_ancestor_of(*local_region, block.region)? {
+                if self.is_region_ancestor_of(
+                    *local_region,
+                    block.region,
+                    function_id,
+                    *block_id,
+                )? {
                     mask.insert(local_index);
                 }
             }
@@ -465,6 +474,8 @@ impl<'a> BorrowChecker<'a> {
         &self,
         ancestor: RegionId,
         mut region: RegionId,
+        function_id: FunctionId,
+        block_id: BlockId,
     ) -> Result<bool, CompilerError> {
         loop {
             if region == ancestor {
@@ -472,9 +483,24 @@ impl<'a> BorrowChecker<'a> {
             }
 
             let Some(parent) = self.region_parent_by_id.get(&region).copied() else {
+                let location = self
+                    .module
+                    .side_table
+                    .hir_source_location_for_hir(HirLocation::Block(block_id))
+                    .or_else(|| {
+                        self.module
+                            .side_table
+                            .ast_location_for_hir(HirLocation::Block(block_id))
+                    })
+                    .map(|text| text.to_error_location(self.string_table))
+                    .unwrap_or_else(|| self.diagnostics.function_error_location(function_id));
+
                 return_borrow_checker_error!(
-                    format!("Borrow checker could not resolve region '{}'", region.0),
-                    ErrorLocation::default(),
+                    format!(
+                        "Borrow checker could not resolve region '{}' while analyzing block '{}'",
+                        region.0, block_id
+                    ),
+                    location,
                     {
                         CompilationStage => "Borrow Checking",
                     }

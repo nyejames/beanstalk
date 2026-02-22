@@ -44,7 +44,10 @@ impl FunctionLayout {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct BorrowState {
+    // One lattice state per function-local index.
     locals: Vec<LocalState>,
+    // Cached count of locals whose effective roots include each root index.
+    // This keeps mutable conflict checks O(1) per root.
     root_ref_counts: Vec<u32>,
 }
 
@@ -67,10 +70,6 @@ impl BorrowState {
 
     pub(super) fn local_state(&self, local_index: usize) -> &LocalState {
         &self.locals[local_index]
-    }
-
-    pub(super) fn local_state_mut(&mut self, local_index: usize) -> &mut LocalState {
-        &mut self.locals[local_index]
     }
 
     pub(super) fn alias_count_for_root(&self, root_index: usize) -> u32 {
@@ -255,12 +254,6 @@ impl RootSet {
             words: vec![0; word_len],
             bit_len,
         }
-    }
-
-    pub(super) fn singleton(bit_len: usize, bit_index: usize) -> Self {
-        let mut set = Self::empty(bit_len);
-        set.insert(bit_index);
-        set
     }
 
     pub(super) fn insert(&mut self, bit_index: usize) {

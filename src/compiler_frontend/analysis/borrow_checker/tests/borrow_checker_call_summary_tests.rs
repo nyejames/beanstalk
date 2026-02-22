@@ -239,6 +239,61 @@ fn unknown_user_return_is_conservatively_aliased() {
 }
 
 #[test]
+fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let mut_sink = symbol("mut_sink", &mut string_table);
+    let p = symbol("p", &mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let callee = function_node(
+        mut_sink.clone(),
+        FunctionSignature {
+            parameters: vec![param(p, DataType::Int, true, location(1))],
+            returns: vec![],
+        },
+        vec![],
+        location(1),
+    );
+
+    let caller = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(10), Ownership::MutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::FunctionCall {
+                    name: mut_sink,
+                    args: vec![reference_expr(x, DataType::Int, location(11))],
+                    returns: vec![],
+                    location: location(11),
+                },
+                location(11),
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![callee, caller], entry_path),
+        &mut string_table,
+    );
+    run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect("single mutable argument call should be accepted");
+}
+
+#[test]
 fn host_mutable_parameter_requires_mutable_access() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
@@ -289,6 +344,54 @@ fn host_mutable_parameter_requires_mutable_access() {
 }
 
 #[test]
+fn host_mutable_parameter_accepts_mutable_local_argument() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let mut host_registry = default_host_registry(&mut string_table);
+    register_host_function(
+        &mut host_registry,
+        "host_mut_ok",
+        vec![HostAccessKind::Mutable],
+        HostReturnAlias::Fresh,
+        HostAbiType::Void,
+    );
+
+    let host_fn = symbol("host_mut_ok", &mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let start = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(1), Ownership::MutableOwned),
+                )),
+                location(1),
+            ),
+            node(
+                NodeKind::HostFunctionCall {
+                    name: host_fn,
+                    args: vec![reference_expr(x, DataType::Int, location(2))],
+                    returns: vec![],
+                    location: location(2),
+                },
+                location(2),
+            ),
+        ],
+        location(1),
+    );
+
+    let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
+    run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect("mutable host parameter should accept mutable local argument");
+}
+
+#[test]
 fn host_shared_parameter_is_shared_only() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
@@ -334,6 +437,134 @@ fn host_shared_parameter_is_shared_only() {
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
     run_borrow_checker(&hir, &host_registry, &string_table)
         .expect("shared host parameter should not force mutable access");
+}
+
+#[test]
+fn two_mutable_args_to_same_root_are_rejected() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let mut2 = symbol("mut2", &mut string_table);
+    let a = symbol("a", &mut string_table);
+    let b = symbol("b", &mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let callee = function_node(
+        mut2.clone(),
+        FunctionSignature {
+            parameters: vec![
+                param(a, DataType::Int, true, location(1)),
+                param(b, DataType::Int, true, location(1)),
+            ],
+            returns: vec![],
+        },
+        vec![],
+        location(1),
+    );
+
+    let caller = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(10), Ownership::MutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::FunctionCall {
+                    name: mut2,
+                    args: vec![
+                        reference_expr(x.clone(), DataType::Int, location(11)),
+                        reference_expr(x, DataType::Int, location(11)),
+                    ],
+                    returns: vec![],
+                    location: location(11),
+                },
+                location(11),
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![callee, caller], entry_path),
+        &mut string_table,
+    );
+    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect_err("two mutable args to the same root should fail");
+    assert_eq!(error.error_type, ErrorType::BorrowChecker);
+    assert!(error.msg.contains("overlapping"));
+}
+
+#[test]
+fn shared_then_mutable_args_to_same_root_are_rejected() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_and_start(&mut string_table);
+    let host_registry = default_host_registry(&mut string_table);
+
+    let read_then_mut = symbol("read_then_mut", &mut string_table);
+    let read = symbol("read", &mut string_table);
+    let mutate = symbol("mutate", &mut string_table);
+    let x = symbol("x", &mut string_table);
+
+    let callee = function_node(
+        read_then_mut.clone(),
+        FunctionSignature {
+            parameters: vec![
+                param(read, DataType::Int, false, location(1)),
+                param(mutate, DataType::Int, true, location(1)),
+            ],
+            returns: vec![],
+        },
+        vec![],
+        location(1),
+    );
+
+    let caller = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    x.clone(),
+                    Expression::int(1, location(10), Ownership::MutableOwned),
+                )),
+                location(10),
+            ),
+            node(
+                NodeKind::FunctionCall {
+                    name: read_then_mut,
+                    args: vec![
+                        reference_expr(x.clone(), DataType::Int, location(11)),
+                        reference_expr(x, DataType::Int, location(11)),
+                    ],
+                    returns: vec![],
+                    location: location(11),
+                },
+                location(11),
+            ),
+        ],
+        location(10),
+    );
+
+    let hir = lower_hir(
+        build_ast(vec![callee, caller], entry_path),
+        &mut string_table,
+    );
+    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+        .expect_err("shared then mutable access to same root in a call must fail");
+    assert_eq!(error.error_type, ErrorType::BorrowChecker);
+    assert!(error.msg.contains("overlapping"));
 }
 
 #[test]
