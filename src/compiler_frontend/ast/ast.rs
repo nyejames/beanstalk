@@ -76,9 +76,9 @@ impl Ast {
                         }
                     };
 
-                    // Make name from header path
-                    // This ensures unique namespaced function names
-                    // ALL symbols become full paths in the AST converted to interned strings
+                    // Make name from header path.
+                    // AST symbol IDs are stored as full InternedPath values and are unique
+                    // module-wide, not only within a local scope.
                     ast.push(AstNode {
                         kind: NodeKind::Function(
                             header.full_name,

@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use crate::backends::function_registry::{CallTarget, HostFunctionId};
+use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
@@ -12,7 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirTerminator, HirUnaryOp, LocalId, RegionId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
@@ -36,7 +36,7 @@ fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
 
 fn register_local(
     builder: &mut HirBuilder<'_>,
-    name: StringId,
+    name: InternedPath,
     local_id: LocalId,
     data_type: DataType,
     location: TextLocation,
@@ -54,6 +54,10 @@ fn register_local(
         },
         name,
     );
+}
+
+fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
+    InternedPath::from_single_str(name, string_table)
 }
 
 fn rvalue_node(expr: Expression) -> AstNode {
@@ -148,13 +152,13 @@ fn lowers_primitive_literals() {
 #[test]
 fn lowers_reference_to_registered_local() {
     let mut string_table = StringTable::new();
-    let x = string_table.intern("x");
+    let x = symbol("x", &mut string_table);
     let location = TextLocation::new_just_line(2);
     let mut builder = setup_builder(&mut string_table);
 
     register_local(
         &mut builder,
-        x,
+        x.clone(),
         LocalId(10),
         DataType::Int,
         location.clone(),
@@ -183,21 +187,21 @@ fn lowers_reference_to_registered_local() {
 #[test]
 fn lowers_runtime_rpn_arithmetic_stack_correctly() {
     let mut string_table = StringTable::new();
-    let x = string_table.intern("x");
-    let y = string_table.intern("y");
+    let x = symbol("x", &mut string_table);
+    let y = symbol("y", &mut string_table);
     let location = TextLocation::new_just_line(3);
     let mut builder = setup_builder(&mut string_table);
 
     register_local(
         &mut builder,
-        x,
+        x.clone(),
         LocalId(10),
         DataType::Int,
         location.clone(),
     );
     register_local(
         &mut builder,
-        y,
+        y.clone(),
         LocalId(11),
         DataType::Int,
         location.clone(),
@@ -318,13 +322,13 @@ fn lowers_range_operator_in_runtime_rpn() {
 #[test]
 fn lowers_function_call_to_call_statement_and_temp_load() {
     let mut string_table = StringTable::new();
-    let function_name = string_table.intern("sum");
+    let function_name = symbol("sum", &mut string_table);
     let location = TextLocation::new_just_line(6);
     let mut builder = setup_builder(&mut string_table);
-    builder.test_register_function_name(function_name, FunctionId(2));
+    builder.test_register_function_name(function_name.clone(), FunctionId(2));
 
     let call_expr = Expression::function_call(
-        function_name,
+        function_name.clone(),
         vec![Expression::int(
             7,
             location.clone(),
@@ -346,7 +350,7 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
             args,
             result,
         } => {
-            assert_eq!(target, &CallTarget::UserFunction(function_name));
+            assert_eq!(target, &CallTarget::UserFunction(function_name.clone()));
             assert_eq!(args.len(), 1);
             result.expect("call with return should bind a temp local")
         }
@@ -365,11 +369,12 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
 fn lowers_host_call_expression_with_host_target() {
     let mut string_table = StringTable::new();
     let literal_x = string_table.intern("x");
+    let io = symbol("io", &mut string_table);
     let location = TextLocation::new_just_line(7);
     let mut builder = setup_builder(&mut string_table);
 
     let host_call = Expression::host_function_call(
-        HostFunctionId::Io,
+        io.clone(),
         vec![Expression::string_slice(
             literal_x,
             location.clone(),
@@ -383,32 +388,40 @@ fn lowers_host_call_expression_with_host_target() {
         .lower_expression(&host_call)
         .expect("host call lowering should succeed");
     assert_eq!(lowered.prelude.len(), 1);
-    assert!(matches!(
-        lowered.prelude[0].kind,
-        HirStatementKind::Call {
-            target: CallTarget::HostFunction(HostFunctionId::Io),
-            ..
-        }
-    ));
+    let target = match &lowered.prelude[0].kind {
+        HirStatementKind::Call { target, .. } => target,
+        _ => panic!("expected call statement for host call"),
+    };
+    assert_eq!(target, &CallTarget::HostFunction(io));
 }
 
 #[test]
 fn preserves_left_to_right_call_prelude_order_in_nested_call_args() {
     let mut string_table = StringTable::new();
-    let first = string_table.intern("first");
-    let second = string_table.intern("second");
-    let outer = string_table.intern("outer");
+    let first = symbol("first", &mut string_table);
+    let second = symbol("second", &mut string_table);
+    let outer = symbol("outer", &mut string_table);
     let location = TextLocation::new_just_line(8);
     let mut builder = setup_builder(&mut string_table);
 
-    builder.test_register_function_name(first, FunctionId(1));
-    builder.test_register_function_name(second, FunctionId(2));
-    builder.test_register_function_name(outer, FunctionId(3));
+    builder.test_register_function_name(first.clone(), FunctionId(1));
+    builder.test_register_function_name(second.clone(), FunctionId(2));
+    builder.test_register_function_name(outer.clone(), FunctionId(3));
 
-    let arg_one = Expression::function_call(first, vec![], vec![DataType::Int], location.clone());
-    let arg_two = Expression::function_call(second, vec![], vec![DataType::Int], location.clone());
-    let outer_call =
-        Expression::function_call(outer, vec![arg_one, arg_two], vec![DataType::Int], location);
+    let arg_one =
+        Expression::function_call(first.clone(), vec![], vec![DataType::Int], location.clone());
+    let arg_two = Expression::function_call(
+        second.clone(),
+        vec![],
+        vec![DataType::Int],
+        location.clone(),
+    );
+    let outer_call = Expression::function_call(
+        outer.clone(),
+        vec![arg_one, arg_two],
+        vec![DataType::Int],
+        location,
+    );
 
     let lowered = builder
         .lower_expression(&outer_call)
@@ -475,4 +488,37 @@ fn runtime_template_expression_reports_explicit_hir_transformation_error() {
         "unexpected error message: {}",
         err.msg
     );
+}
+
+#[test]
+fn local_resolution_uses_full_path_identity_not_leaf_name() {
+    let mut string_table = StringTable::new();
+    let x_leaf = string_table.intern("x");
+    let scope_a = InternedPath::from_single_str("scope_a", &mut string_table);
+    let scope_b = InternedPath::from_single_str("scope_b", &mut string_table);
+    let local_a = scope_a.append(x_leaf);
+    let local_b = scope_b.append(x_leaf);
+    let location = TextLocation::new_just_line(10);
+    let mut builder = setup_builder(&mut string_table);
+
+    register_local(
+        &mut builder,
+        local_a,
+        LocalId(22),
+        DataType::Int,
+        location.clone(),
+    );
+
+    let expr = Expression::reference(
+        local_b,
+        DataType::Int,
+        location.clone(),
+        Ownership::ImmutableReference,
+    );
+    let err = builder
+        .lower_expression(&expr)
+        .expect_err("unregistered full-path symbol should not resolve by leaf name");
+
+    assert_eq!(err.error_type, ErrorType::HirTransformation);
+    assert!(err.msg.contains("Unresolved local"));
 }

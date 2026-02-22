@@ -20,7 +20,8 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, TextLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_display::HirSideTable;
 use crate::compiler_frontend::hir::{hir_datatypes::*, hir_nodes::*};
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::return_hir_transformation_error;
 use rustc_hash::FxHashMap;
 
@@ -69,10 +70,12 @@ pub struct HirBuilder<'a> {
     pub(super) side_table: HirSideTable,
 
     // === Name resolution tables (filled during declaration pass) ===
-    pub(super) locals_by_name: FxHashMap<StringId, LocalId>,
-    pub(super) functions_by_name: FxHashMap<StringId, FunctionId>,
-    pub(super) structs_by_name: FxHashMap<StringId, StructId>,
-    pub(super) fields_by_struct_and_name: FxHashMap<(StructId, StringId), FieldId>,
+    // AST guarantees module-wide unique InternedPath symbol IDs. HIR keys symbol resolution
+    // by full paths, never by scope-local leaf strings.
+    pub(super) locals_by_name: FxHashMap<InternedPath, LocalId>,
+    pub(super) functions_by_name: FxHashMap<InternedPath, FunctionId>,
+    pub(super) structs_by_name: FxHashMap<InternedPath, StructId>,
+    pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedPath), FieldId>,
 
     // === Fast ID -> arena index maps ===
     pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
@@ -357,6 +360,13 @@ impl<'a> HirBuilder<'a> {
         matches!(terminator, HirTerminator::Panic { message: None })
     }
 
+    pub(super) fn symbol_name_for_diagnostics(&self, symbol: &InternedPath) -> String {
+        symbol
+            .name_str(self.string_table)
+            .map(str::to_owned)
+            .unwrap_or_else(|| symbol.to_string(self.string_table))
+    }
+
     #[cfg(test)]
     pub(crate) fn test_push_block(&mut self, block: HirBlock) {
         self.push_block(block);
@@ -373,13 +383,13 @@ impl<'a> HirBuilder<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: StringId) {
+    pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: InternedPath) {
         let current_block = self.current_block.unwrap_or(BlockId(0));
         let _ = self
             .block_mut_by_id_or_error(current_block, &TextLocation::default())
             .map(|block| block.locals.push(local.clone()));
 
-        self.locals_by_name.insert(name, local.id);
+        self.locals_by_name.insert(name.clone(), local.id);
         self.side_table.bind_local_name(local.id, name);
         self.side_table.map_local_source(&local);
 
@@ -389,8 +399,8 @@ impl<'a> HirBuilder<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn test_register_function_name(&mut self, name: StringId, id: FunctionId) {
-        self.functions_by_name.insert(name, id);
+    pub(crate) fn test_register_function_name(&mut self, name: InternedPath, id: FunctionId) {
+        self.functions_by_name.insert(name.clone(), id);
         self.side_table.bind_function_name(id, name);
 
         if id.0 >= self.next_function_id {

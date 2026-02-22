@@ -129,10 +129,11 @@ pub(crate) struct HirSideTable {
     hir_to_ast: FxHashMap<HirLocation, SourceLocationId>,
     hir_to_source: FxHashMap<HirLocation, SourceLocationId>,
 
-    local_names: FxHashMap<LocalId, StringId>,
-    function_names: FxHashMap<FunctionId, StringId>,
-    struct_names: FxHashMap<StructId, StringId>,
-    field_names: FxHashMap<FieldId, StringId>,
+    // Store canonical path identity. Rendering and diagnostics derive leaf names from these.
+    local_names: FxHashMap<LocalId, InternedPath>,
+    function_names: FxHashMap<FunctionId, InternedPath>,
+    struct_names: FxHashMap<StructId, InternedPath>,
+    field_names: FxHashMap<FieldId, InternedPath>,
 }
 
 impl HirSideTable {
@@ -317,43 +318,65 @@ impl HirSideTable {
     }
 
     #[inline]
-    pub(crate) fn bind_local_name(&mut self, local_id: LocalId, name: StringId) {
+    pub(crate) fn bind_local_name(&mut self, local_id: LocalId, name: InternedPath) {
         self.local_names.insert(local_id, name);
     }
 
     #[inline]
-    pub(crate) fn bind_function_name(&mut self, function_id: FunctionId, name: StringId) {
+    pub(crate) fn bind_function_name(&mut self, function_id: FunctionId, name: InternedPath) {
         self.function_names.insert(function_id, name);
     }
 
     #[inline]
-    pub(crate) fn bind_struct_name(&mut self, struct_id: StructId, name: StringId) {
+    pub(crate) fn bind_struct_name(&mut self, struct_id: StructId, name: InternedPath) {
         self.struct_names.insert(struct_id, name);
     }
 
     #[inline]
-    pub(crate) fn bind_field_name(&mut self, field_id: FieldId, name: StringId) {
+    pub(crate) fn bind_field_name(&mut self, field_id: FieldId, name: InternedPath) {
         self.field_names.insert(field_id, name);
     }
 
     #[inline]
+    pub(crate) fn local_name_path(&self, local_id: LocalId) -> Option<&InternedPath> {
+        self.local_names.get(&local_id)
+    }
+
+    #[inline]
+    pub(crate) fn function_name_path(&self, function_id: FunctionId) -> Option<&InternedPath> {
+        self.function_names.get(&function_id)
+    }
+
+    #[inline]
+    pub(crate) fn struct_name_path(&self, struct_id: StructId) -> Option<&InternedPath> {
+        self.struct_names.get(&struct_id)
+    }
+
+    #[inline]
+    pub(crate) fn field_name_path(&self, field_id: FieldId) -> Option<&InternedPath> {
+        self.field_names.get(&field_id)
+    }
+
+    #[inline]
     pub(crate) fn local_name_id(&self, local_id: LocalId) -> Option<StringId> {
-        self.local_names.get(&local_id).copied()
+        self.local_name_path(local_id).and_then(InternedPath::name)
     }
 
     #[inline]
     pub(crate) fn function_name_id(&self, function_id: FunctionId) -> Option<StringId> {
-        self.function_names.get(&function_id).copied()
+        self.function_name_path(function_id)
+            .and_then(InternedPath::name)
     }
 
     #[inline]
     pub(crate) fn struct_name_id(&self, struct_id: StructId) -> Option<StringId> {
-        self.struct_names.get(&struct_id).copied()
+        self.struct_name_path(struct_id)
+            .and_then(InternedPath::name)
     }
 
     #[inline]
     pub(crate) fn field_name_id(&self, field_id: FieldId) -> Option<StringId> {
-        self.field_names.get(&field_id).copied()
+        self.field_name_path(field_id).and_then(InternedPath::name)
     }
 
     #[inline]
@@ -362,8 +385,8 @@ impl HirSideTable {
         local_id: LocalId,
         string_table: &'a StringTable,
     ) -> Option<&'a str> {
-        self.local_name_id(local_id)
-            .map(|id| string_table.resolve(id))
+        self.local_name_path(local_id)
+            .and_then(|path| path.name_str(string_table))
     }
 
     #[inline]
@@ -372,8 +395,8 @@ impl HirSideTable {
         function_id: FunctionId,
         string_table: &'a StringTable,
     ) -> Option<&'a str> {
-        self.function_name_id(function_id)
-            .map(|id| string_table.resolve(id))
+        self.function_name_path(function_id)
+            .and_then(|path| path.name_str(string_table))
     }
 
     #[inline]
@@ -382,8 +405,8 @@ impl HirSideTable {
         struct_id: StructId,
         string_table: &'a StringTable,
     ) -> Option<&'a str> {
-        self.struct_name_id(struct_id)
-            .map(|id| string_table.resolve(id))
+        self.struct_name_path(struct_id)
+            .and_then(|path| path.name_str(string_table))
     }
 
     #[inline]
@@ -392,8 +415,8 @@ impl HirSideTable {
         field_id: FieldId,
         string_table: &'a StringTable,
     ) -> Option<&'a str> {
-        self.field_name_id(field_id)
-            .map(|id| string_table.resolve(id))
+        self.field_name_path(field_id)
+            .and_then(|path| path.name_str(string_table))
     }
 }
 

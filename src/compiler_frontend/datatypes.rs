@@ -1,9 +1,6 @@
 use crate::compiler_frontend::ast::ast_nodes::Var;
-use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use std::fmt::Display;
 
 #[derive(Debug, Clone, PartialEq)]

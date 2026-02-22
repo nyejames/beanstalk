@@ -9,7 +9,6 @@ use crate::compiler_frontend::tokenizer::tokens::{
 };
 use crate::projects::settings;
 use crate::{return_syntax_error, token_log};
-use std::path::PathBuf;
 
 pub const END_SCOPE_CHAR: char = ';';
 

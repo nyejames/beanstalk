@@ -3,7 +3,7 @@
 //! Lowers typed AST expressions into HIR expressions and statement preludes.
 //! This file contains expression-specific lowering logic on `HirBuilder`.
 
-use crate::backends::function_registry::{CallTarget, HostFunctionId};
+use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
@@ -19,6 +19,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirNodeId, HirPlace, HirStatement, HirStatementKind, HirUnaryOp, LocalId, RegionId, StructId,
     ValueKind,
 };
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::hir_log;
@@ -117,7 +118,7 @@ impl<'a> HirBuilder<'a> {
 
             ExpressionKind::Reference(name) => {
                 let region = self.current_region_or_error(&expr.location)?;
-                let local_id = self.resolve_local_id_or_error(*name, &expr.location)?;
+                let local_id = self.resolve_local_id_or_error(name, &expr.location)?;
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
 
                 Ok(LoweredExpression {
@@ -136,14 +137,14 @@ impl<'a> HirBuilder<'a> {
             }
 
             ExpressionKind::FunctionCall(name, args) => self.lower_call_expression(
-                CallTarget::UserFunction(*name),
+                CallTarget::UserFunction(name.clone()),
                 args,
                 &self.extract_return_types_from_datatype(&expr.data_type),
                 &expr.location,
             ),
 
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
-                CallTarget::HostFunction(*host_id),
+                CallTarget::HostFunction(host_id.clone()),
                 args,
                 &self.extract_return_types_from_datatype(&expr.data_type),
                 &expr.location,
@@ -204,7 +205,7 @@ impl<'a> HirBuilder<'a> {
 
                 for arg in args {
                     let field_id =
-                        self.resolve_field_id_or_error(struct_id, arg.id, &expr.location)?;
+                        self.resolve_field_id_or_error(struct_id, &arg.id, &expr.location)?;
                     let lowered_value = self.lower_expression(&arg.value)?;
                     prelude.extend(lowered_value.prelude);
                     fields.push((field_id, lowered_value.value));
@@ -296,7 +297,7 @@ impl<'a> HirBuilder<'a> {
                     location,
                 } => {
                     let lowered = self.lower_call_expression(
-                        CallTarget::UserFunction(*name),
+                        CallTarget::UserFunction(name.clone()),
                         args,
                         returns,
                         location,
@@ -313,7 +314,7 @@ impl<'a> HirBuilder<'a> {
                     location,
                 } => {
                     let lowered = self.lower_call_expression(
-                        CallTarget::HostFunction(*host_function_id),
+                        CallTarget::HostFunction(host_function_id.clone()),
                         args,
                         returns,
                         location,
@@ -463,9 +464,12 @@ impl<'a> HirBuilder<'a> {
                 args,
                 returns,
                 location,
-            } => {
-                self.lower_call_expression(CallTarget::UserFunction(*name), args, returns, location)
-            }
+            } => self.lower_call_expression(
+                CallTarget::UserFunction(name.clone()),
+                args,
+                returns,
+                location,
+            ),
 
             NodeKind::HostFunctionCall {
                 name: host_function_id,
@@ -473,7 +477,7 @@ impl<'a> HirBuilder<'a> {
                 returns,
                 location,
             } => self.lower_call_expression(
-                CallTarget::HostFunction(*host_function_id),
+                CallTarget::HostFunction(host_function_id.clone()),
                 args,
                 returns,
                 location,
@@ -516,7 +520,7 @@ impl<'a> HirBuilder<'a> {
         match &node.kind {
             NodeKind::Rvalue(expr) => match &expr.kind {
                 ExpressionKind::Reference(name) => {
-                    let local = self.resolve_local_id_or_error(*name, &node.location)?;
+                    let local = self.resolve_local_id_or_error(name, &node.location)?;
                     Ok((vec![], HirPlace::Local(local)))
                 }
 
@@ -534,7 +538,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let lowered = self.lower_call_expression(
-                    CallTarget::UserFunction(*name),
+                    CallTarget::UserFunction(name.clone()),
                     args,
                     returns,
                     location,
@@ -550,7 +554,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let lowered = self.lower_call_expression(
-                    CallTarget::HostFunction(*host_function_id),
+                    CallTarget::HostFunction(host_function_id.clone()),
                     args,
                     returns,
                     location,
@@ -588,7 +592,7 @@ impl<'a> HirBuilder<'a> {
         returns: &[DataType],
         location: &TextLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        if let CallTarget::UserFunction(name) = target {
+        if let CallTarget::UserFunction(name) = &target {
             let _ = self.resolve_function_id_or_error(name, location)?;
         }
 
@@ -808,9 +812,9 @@ impl<'a> HirBuilder<'a> {
 
         let temp_name = format!("__hir_tmp_{}", self.temp_local_counter);
         self.temp_local_counter += 1;
-        let temp_name_id = self.string_table.intern(&temp_name);
+        let temp_name_id = InternedPath::from_single_str(&temp_name, self.string_table);
 
-        self.locals_by_name.insert(temp_name_id, local_id);
+        self.locals_by_name.insert(temp_name_id.clone(), local_id);
         self.side_table.bind_local_name(local_id, temp_name_id);
         self.side_table.map_local_source(&local);
 
@@ -839,16 +843,18 @@ impl<'a> HirBuilder<'a> {
         Ok(region)
     }
 
+    // AST enforces module-wide unique InternedPath symbols and disallows shadowing.
+    // HIR therefore resolves locals/functions by full path identity, not leaf names.
     pub(crate) fn resolve_local_id_or_error(
         &self,
-        name: StringId,
+        name: &InternedPath,
         location: &TextLocation,
     ) -> Result<LocalId, CompilerError> {
-        let Some(local_id) = self.locals_by_name.get(&name).copied() else {
+        let Some(local_id) = self.locals_by_name.get(name).copied() else {
             return_hir_transformation_error!(
                 format!(
                     "Unresolved local '{}' during HIR expression lowering",
-                    self.string_table.resolve(name)
+                    self.symbol_name_for_diagnostics(name)
                 ),
                 self.hir_error_location(location)
             );
@@ -859,14 +865,14 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn resolve_function_id_or_error(
         &self,
-        name: StringId,
+        name: &InternedPath,
         location: &TextLocation,
     ) -> Result<FunctionId, CompilerError> {
-        let Some(function_id) = self.functions_by_name.get(&name).copied() else {
+        let Some(function_id) = self.functions_by_name.get(name).copied() else {
             return_hir_transformation_error!(
                 format!(
                     "Unresolved function '{}' during HIR expression lowering",
-                    self.string_table.resolve(name)
+                    self.symbol_name_for_diagnostics(name)
                 ),
                 self.hir_error_location(location)
             );
@@ -878,18 +884,18 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn resolve_field_id_or_error(
         &self,
         struct_id: StructId,
-        field_name: StringId,
+        field_name: &InternedPath,
         location: &TextLocation,
     ) -> Result<FieldId, CompilerError> {
         let Some(field_id) = self
             .fields_by_struct_and_name
-            .get(&(struct_id, field_name))
+            .get(&(struct_id, field_name.clone()))
             .copied()
         else {
             return_hir_transformation_error!(
                 format!(
                     "Field '{}' is not registered for struct {:?}",
-                    self.string_table.resolve(field_name),
+                    self.symbol_name_for_diagnostics(field_name),
                     struct_id
                 ),
                 self.hir_error_location(location)
@@ -908,7 +914,7 @@ impl<'a> HirBuilder<'a> {
             .fields_by_struct_and_name
             .iter()
             .filter_map(|((_, name), field_id)| {
-                if *name == field_name {
+                if name.name() == Some(field_name) {
                     Some(*field_id)
                 } else {
                     None
@@ -962,7 +968,13 @@ impl<'a> HirBuilder<'a> {
             let struct_field_names = self
                 .fields_by_struct_and_name
                 .keys()
-                .filter_map(|(sid, name)| if *sid == struct_id { Some(*name) } else { None })
+                .filter_map(|(sid, name)| {
+                    if *sid == struct_id {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                })
                 .collect::<Vec<_>>();
 
             if struct_field_names.len() != fields.len() {

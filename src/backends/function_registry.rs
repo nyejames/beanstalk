@@ -18,6 +18,24 @@ pub enum BackendKind {
     Wasm,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CallTarget {
+    UserFunction(InternedPath),
+    HostFunction(InternedPath),
+}
+
+impl CallTarget {
+    pub fn as_string(&self, string_table: &StringTable) -> String {
+        let path = match self {
+            CallTarget::UserFunction(path) | CallTarget::HostFunction(path) => path,
+        };
+
+        path.name_str(string_table)
+            .map(str::to_owned)
+            .unwrap_or_else(|| path.to_string(string_table))
+    }
+}
+
 // ======================================================
 //                    HOST ABI
 // ======================================================
@@ -68,7 +86,7 @@ impl HostFunctionDef {
             .iter()
             .enumerate()
             .map(|(i, p)| {
-                let name = PathBuf::from(self.name.clone()).join(format!("_arg{}", i));
+                let name = PathBuf::from(self.name).join(format!("_arg{}", i));
 
                 Var {
                     id: InternedPath::from_path_buf(&name, string_table),
@@ -156,9 +174,7 @@ impl HostRegistry {
             description: "Output text to the host environment.".into(),
         };
 
-        registry
-            .functions
-            .insert(io_function.name.clone(), io_function);
+        registry.functions.insert(io_function.name, io_function);
 
         registry
     }
@@ -168,7 +184,7 @@ impl HostRegistry {
             return_compiler_error!("Host function '{:?}' is already registered.", function.name);
         }
 
-        self.functions.insert(function.name.clone(), function);
+        self.functions.insert(function.name, function);
         Ok(())
     }
 

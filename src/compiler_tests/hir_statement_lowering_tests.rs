@@ -1,8 +1,5 @@
 #![cfg(test)]
 
-use std::path::Path;
-
-use crate::backends::function_registry::HostFunctionId;
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation, Var};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -15,7 +12,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirPattern, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 fn test_location(line: i32) -> TextLocation {
@@ -30,11 +27,11 @@ fn node(kind: NodeKind, location: TextLocation) -> AstNode {
     }
 }
 
-fn var(name: StringId, value: Expression) -> Var {
+fn var(name: InternedPath, value: Expression) -> Var {
     Var { id: name, value }
 }
 
-fn param(name: StringId, data_type: DataType, mutable: bool, location: TextLocation) -> Var {
+fn param(name: InternedPath, data_type: DataType, mutable: bool, location: TextLocation) -> Var {
     let ownership = if mutable {
         Ownership::MutableOwned
     } else {
@@ -48,12 +45,16 @@ fn param(name: StringId, data_type: DataType, mutable: bool, location: TextLocat
 }
 
 fn function_node(
-    name: StringId,
+    name: InternedPath,
     signature: FunctionSignature,
     body: Vec<AstNode>,
     location: TextLocation,
 ) -> AstNode {
     node(NodeKind::Function(name, signature, body), location)
+}
+
+fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
+    InternedPath::from_single_str(name, string_table)
 }
 
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
@@ -65,11 +66,9 @@ fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     }
 }
 
-fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, StringId) {
+fn entry_path_and_start_name(string_table: &mut StringTable) -> (InternedPath, InternedPath) {
     let entry_path = InternedPath::from_single_str("main.bst", string_table);
-    let start_name = entry_path
-        .join_str(IMPLICIT_START_FUNC_NAME, string_table)
-        .extract_header_name(string_table);
+    let start_name = entry_path.join_str(IMPLICIT_START_FUNC_NAME, string_table);
 
     (entry_path, start_name)
 }
@@ -86,8 +85,8 @@ fn registers_declarations_and_resolves_start_function() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
 
-    let field_name = string_table.intern("field");
-    let struct_name = string_table.intern("MyStruct");
+    let field_name = symbol("field", &mut string_table);
+    let struct_name = symbol("MyStruct", &mut string_table);
 
     let struct_node = node(
         NodeKind::StructDefinition(
@@ -106,7 +105,7 @@ fn registers_declarations_and_resolves_start_function() {
     );
 
     let start_function = function_node(
-        start_name,
+        start_name.clone(),
         FunctionSignature {
             parameters: vec![],
             returns: vec![],
@@ -121,7 +120,10 @@ fn registers_declarations_and_resolves_start_function() {
     assert_eq!(module.structs.len(), 1);
     assert_eq!(module.functions.len(), 1);
     assert_eq!(
-        module.side_table.function_name_id(module.start_function),
+        module
+            .side_table
+            .function_name_path(module.start_function)
+            .cloned(),
         Some(start_name)
     );
 }
@@ -130,11 +132,11 @@ fn registers_declarations_and_resolves_start_function() {
 fn allocates_parameter_locals_and_binds_names() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = string_table.intern("x");
+    let x = symbol("x", &mut string_table);
 
     let body = vec![node(
         NodeKind::Return(vec![Expression::reference(
-            x,
+            x.clone(),
             DataType::Int,
             test_location(3),
             Ownership::ImmutableReference,
@@ -172,7 +174,7 @@ fn allocates_parameter_locals_and_binds_names() {
 fn variable_declaration_emits_local_and_assign_statement() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = string_table.intern("x");
+    let x = symbol("x", &mut string_table);
 
     let start_function = function_node(
         start_name,
@@ -209,11 +211,11 @@ fn variable_declaration_emits_local_and_assign_statement() {
 fn assignment_lowers_value_prelude_before_assign() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = string_table.intern("x");
-    let helper = string_table.intern("helper");
+    let x = symbol("x", &mut string_table);
+    let helper = symbol("helper", &mut string_table);
 
     let helper_fn = function_node(
-        helper,
+        helper.clone(),
         FunctionSignature {
             parameters: vec![],
             returns: vec![DataType::Int],
@@ -231,7 +233,7 @@ fn assignment_lowers_value_prelude_before_assign() {
 
     let target_node = node(
         NodeKind::Rvalue(Expression::reference(
-            x,
+            x.clone(),
             DataType::Int,
             test_location(5),
             Ownership::MutableReference,
@@ -280,10 +282,11 @@ fn assignment_lowers_value_prelude_before_assign() {
 fn call_statements_emit_without_result_binding() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let callee = string_table.intern("callee");
+    let callee = symbol("callee", &mut string_table);
+    let alloc = symbol("alloc", &mut string_table);
 
     let callee_fn = function_node(
-        callee,
+        callee.clone(),
         FunctionSignature {
             parameters: vec![],
             returns: vec![DataType::Int],
@@ -317,7 +320,7 @@ fn call_statements_emit_without_result_binding() {
             ),
             node(
                 NodeKind::HostFunctionCall {
-                    name: HostFunctionId::Alloc,
+                    name: alloc,
                     args: vec![Expression::int(
                         1,
                         test_location(3),
@@ -354,8 +357,8 @@ fn call_statements_emit_without_result_binding() {
 fn return_lowering_handles_zero_one_and_many_values() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let one_name = string_table.intern("one");
-    let many_name = string_table.intern("many");
+    let one_name = symbol("one", &mut string_table);
+    let many_name = symbol("many", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -436,8 +439,8 @@ fn return_lowering_handles_zero_one_and_many_values() {
 fn lowers_if_to_then_else_merge_blocks() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = string_table.intern("x");
-    let y = string_table.intern("y");
+    let x = symbol("x", &mut string_table);
+    let y = symbol("y", &mut string_table);
 
     let if_node = node(
         NodeKind::If(
@@ -499,7 +502,7 @@ fn lowers_if_to_then_else_merge_blocks() {
 fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let chooser = string_table.intern("chooser");
+    let chooser = symbol("chooser", &mut string_table);
 
     let chooser_fn = function_node(
         chooser,
@@ -610,13 +613,13 @@ fn lowers_while_to_header_body_exit_shape() {
 fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let chooser = string_table.intern("choose_match");
-    let x = string_table.intern("x");
+    let chooser = symbol("choose_match", &mut string_table);
+    let x = symbol("x", &mut string_table);
 
     let chooser_fn = function_node(
         chooser,
         FunctionSignature {
-            parameters: vec![param(x, DataType::Int, false, test_location(10))],
+            parameters: vec![param(x.clone(), DataType::Int, false, test_location(10))],
             returns: vec![DataType::Int],
         },
         vec![node(
@@ -677,12 +680,12 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
 fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = string_table.intern("x");
+    let x = symbol("x", &mut string_table);
 
     let match_node = node(
         NodeKind::Match(
             Expression::reference(
-                x,
+                x.clone(),
                 DataType::Int,
                 test_location(3),
                 Ownership::ImmutableReference,
@@ -747,7 +750,7 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
 fn for_loop_reports_hir_transformation_error() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let i = string_table.intern("i");
+    let i = symbol("i", &mut string_table);
 
     let for_loop = node(
         NodeKind::ForLoop(
@@ -815,7 +818,7 @@ fn top_level_return_reports_hir_transformation_error() {
 fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let non_unit_name = string_table.intern("non_unit");
+    let non_unit_name = symbol("non_unit", &mut string_table);
 
     let start_fn = function_node(
         start_name,
@@ -853,7 +856,7 @@ fn enforces_non_unit_fallthrough_and_unit_implicit_return() {
 fn side_table_maps_statement_and_terminator_locations() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
-    let x = string_table.intern("x");
+    let x = symbol("x", &mut string_table);
 
     let decl_loc = test_location(4);
     let ret_loc = test_location(5);

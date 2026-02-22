@@ -10,7 +10,6 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::traits::ContainsReferences;
 use crate::{ast_log, return_syntax_error};
-use std::thread::scope;
 
 // Returns a ForLoop node or WhileLoop Node (or error if there's invalid syntax)
 // TODO: Loop invariance analysis.

@@ -57,7 +57,7 @@ pub fn parse_field_access(
         };
 
         // Get the base members
-        let mut members = match &current_type {
+        let members = match &current_type {
             DataType::Struct(inner_args, ..) => inner_args.to_owned(),
 
             // TODO: Function returns

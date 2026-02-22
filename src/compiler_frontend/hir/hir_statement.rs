@@ -18,7 +18,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
     HirFunction, HirLocal, HirMatchArm, HirPattern, HirRegion, HirStatement, HirStatementKind,
     HirStruct, HirTerminator, LocalId, StructId, ValueKind,
 };
-use crate::compiler_frontend::string_interning::StringId;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
 
@@ -28,13 +28,13 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn prepare_hir_declarations(&mut self, ast: &Ast) -> Result<(), CompilerError> {
         for node in &ast.nodes {
             if let NodeKind::StructDefinition(name, fields) = &node.kind {
-                self.register_struct_declaration(*name, fields, &node.location)?;
+                self.register_struct_declaration(name, fields, &node.location)?;
             }
         }
 
         for node in &ast.nodes {
             if let NodeKind::Function(name, signature, _) = &node.kind {
-                self.register_function_declaration(*name, signature, &node.location)?;
+                self.register_function_declaration(name, signature, &node.location)?;
             }
         }
 
@@ -44,7 +44,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn lower_top_level_node(&mut self, node: &AstNode) -> Result<(), CompilerError> {
         match &node.kind {
             NodeKind::Function(name, signature, body) => {
-                self.lower_function_body(*name, signature, body, &node.location)
+                self.lower_function_body(name, signature, body, &node.location)
             }
 
             NodeKind::StructDefinition(_, _) => Ok(()),
@@ -70,7 +70,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn lower_function_body(
         &mut self,
-        function_name: StringId,
+        function_name: &InternedPath,
         signature: &FunctionSignature,
         body: &[AstNode],
         location: &TextLocation,
@@ -118,7 +118,7 @@ impl<'a> HirBuilder<'a> {
                 args,
                 returns: _,
                 location,
-            } => self.lower_call_statement(CallTarget::UserFunction(*name), args, location),
+            } => self.lower_call_statement(CallTarget::UserFunction(name.clone()), args, location),
 
             NodeKind::HostFunctionCall {
                 name: host_function_id,
@@ -126,7 +126,7 @@ impl<'a> HirBuilder<'a> {
                 returns: _,
                 location,
             } => self.lower_call_statement(
-                CallTarget::HostFunction(*host_function_id),
+                CallTarget::HostFunction(host_function_id.clone()),
                 args,
                 location,
             ),
@@ -178,15 +178,15 @@ impl<'a> HirBuilder<'a> {
 
     fn register_struct_declaration(
         &mut self,
-        name: StringId,
+        name: &InternedPath,
         fields: &[Var],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
-        if self.structs_by_name.contains_key(&name) {
+        if self.structs_by_name.contains_key(name) {
             return_hir_transformation_error!(
                 format!(
                     "Duplicate struct declaration '{}' during HIR lowering",
-                    self.string_table.resolve(name)
+                    self.symbol_name_for_diagnostics(name)
                 ),
                 self.hir_error_location(location)
             );
@@ -198,13 +198,13 @@ impl<'a> HirBuilder<'a> {
         for field in fields {
             if self
                 .fields_by_struct_and_name
-                .contains_key(&(struct_id, field.id))
+                .contains_key(&(struct_id, field.id.clone()))
             {
                 return_hir_transformation_error!(
                     format!(
                         "Duplicate field '{}' in struct '{}'",
-                        self.string_table.resolve(field.id),
-                        self.string_table.resolve(name)
+                        self.symbol_name_for_diagnostics(&field.id),
+                        self.symbol_name_for_diagnostics(name)
                     ),
                     self.hir_error_location(location)
                 );
@@ -220,8 +220,8 @@ impl<'a> HirBuilder<'a> {
             let field_id = self.allocate_field_id();
 
             self.fields_by_struct_and_name
-                .insert((struct_id, field.id), field_id);
-            self.side_table.bind_field_name(field_id, field.id);
+                .insert((struct_id, field.id.clone()), field_id);
+            self.side_table.bind_field_name(field_id, field.id.clone());
             self.side_table
                 .map_ast_to_hir(&field_location, HirLocation::Field(field_id));
             self.side_table
@@ -238,8 +238,8 @@ impl<'a> HirBuilder<'a> {
             fields: hir_fields,
         };
 
-        self.structs_by_name.insert(name, struct_id);
-        self.side_table.bind_struct_name(struct_id, name);
+        self.structs_by_name.insert(name.clone(), struct_id);
+        self.side_table.bind_struct_name(struct_id, name.clone());
         self.side_table
             .map_ast_to_hir(location, HirLocation::Struct(struct_id));
         self.side_table
@@ -252,15 +252,15 @@ impl<'a> HirBuilder<'a> {
 
     fn register_function_declaration(
         &mut self,
-        name: StringId,
+        name: &InternedPath,
         signature: &FunctionSignature,
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
-        if self.functions_by_name.contains_key(&name) {
+        if self.functions_by_name.contains_key(name) {
             return_hir_transformation_error!(
                 format!(
                     "Duplicate function declaration '{}' during HIR lowering",
-                    self.string_table.resolve(name)
+                    self.symbol_name_for_diagnostics(name)
                 ),
                 self.hir_error_location(location)
             );
@@ -294,8 +294,9 @@ impl<'a> HirBuilder<'a> {
             return_type,
         };
 
-        self.functions_by_name.insert(name, function_id);
-        self.side_table.bind_function_name(function_id, name);
+        self.functions_by_name.insert(name.clone(), function_id);
+        self.side_table
+            .bind_function_name(function_id, name.clone());
         self.side_table.map_function(location, &function);
         self.push_function(function);
 
@@ -305,8 +306,7 @@ impl<'a> HirBuilder<'a> {
     fn resolve_start_function(&mut self, ast: &Ast) -> Result<(), CompilerError> {
         let start_name = ast
             .entry_path
-            .join_str(IMPLICIT_START_FUNC_NAME, self.string_table)
-            .extract_header_name(self.string_table);
+            .join_str(IMPLICIT_START_FUNC_NAME, self.string_table);
 
         let Some(start_function) = self.functions_by_name.get(&start_name).copied() else {
             let error_location = ast
@@ -318,7 +318,7 @@ impl<'a> HirBuilder<'a> {
             return_hir_transformation_error!(
                 format!(
                     "Failed to resolve module start function '{}' during HIR lowering",
-                    self.string_table.resolve(start_name)
+                    self.symbol_name_for_diagnostics(&start_name)
                 ),
                 self.hir_error_location(&error_location)
             );
@@ -383,7 +383,7 @@ impl<'a> HirBuilder<'a> {
 
             let param_type = self.lower_data_type(&param.value.data_type, &param_location)?;
             let local_id = self.allocate_named_local(
-                param.id,
+                param.id.clone(),
                 param_type,
                 param.value.ownership.is_mutable(),
                 Some(param_location.clone()),
@@ -409,7 +409,7 @@ impl<'a> HirBuilder<'a> {
 
         let local_type = self.lower_data_type(&variable.value.data_type, &source_location)?;
         let local_id = self.allocate_named_local(
-            variable.id,
+            variable.id.clone(),
             local_type,
             variable.value.ownership.is_mutable(),
             Some(source_location),
@@ -463,7 +463,7 @@ impl<'a> HirBuilder<'a> {
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
         if let CallTarget::UserFunction(name) = &target {
-            let _ = self.resolve_function_id_or_error(*name, location)?;
+            let _ = self.resolve_function_id_or_error(name, location)?;
         }
 
         let mut lowered_args = Vec::with_capacity(args.len());
@@ -787,18 +787,20 @@ impl<'a> HirBuilder<'a> {
 
     fn allocate_named_local(
         &mut self,
-        name: StringId,
+        name: InternedPath,
         ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,
         mutable: bool,
         source_info: Option<TextLocation>,
     ) -> Result<LocalId, CompilerError> {
         let local_location = source_info.clone().unwrap_or_default();
 
+        // AST forbids shadowing and provides module-wide unique symbol paths, so a duplicate
+        // path here indicates invalid redeclaration in the current function lowering context.
         if self.locals_by_name.contains_key(&name) {
             return_hir_transformation_error!(
                 format!(
                     "Local '{}' is already declared in this function scope",
-                    self.string_table.resolve(name)
+                    self.symbol_name_for_diagnostics(&name)
                 ),
                 self.hir_error_location(&local_location)
             );
@@ -821,7 +823,7 @@ impl<'a> HirBuilder<'a> {
             block.locals.push(local.clone());
         }
 
-        self.locals_by_name.insert(name, local_id);
+        self.locals_by_name.insert(name.clone(), local_id);
         self.side_table.bind_local_name(local_id, name);
         self.side_table.map_local_source(&local);
         self.side_table
