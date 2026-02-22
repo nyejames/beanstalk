@@ -58,6 +58,22 @@ pub struct HostParameter {
 
     /// What crosses the ABI boundary
     pub abi_type: HostAbiType,
+
+    /// Borrow access mode required for this argument.
+    pub access_kind: HostAccessKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HostAccessKind {
+    Shared,
+    Mutable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HostReturnAlias {
+    Fresh,
+    AliasAnyArg,
+    AliasMutableArgs,
 }
 
 // ======================================================
@@ -68,6 +84,7 @@ pub struct HostFunctionDef {
     pub name: &'static str, // A unique name for each supported host function
     pub parameters: Vec<HostParameter>,
     pub return_type: HostAbiType,
+    pub return_alias: HostReturnAlias,
     pub ownership: Ownership,
     pub error_handling: ErrorHandling,
     pub description: String,
@@ -167,8 +184,10 @@ impl HostRegistry {
             parameters: vec![HostParameter {
                 language_type: DataType::String,
                 abi_type: HostAbiType::Utf8Str,
+                access_kind: HostAccessKind::Shared,
             }],
             return_type: HostAbiType::Void,
+            return_alias: HostReturnAlias::Fresh,
             ownership: Ownership::ImmutableReference,
             error_handling: ErrorHandling::None,
             description: "Output text to the host environment.".into(),

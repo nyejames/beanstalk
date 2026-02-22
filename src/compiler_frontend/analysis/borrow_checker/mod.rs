@@ -6,16 +6,22 @@ mod types;
 #[allow(unused_imports)]
 pub(crate) use types::{BorrowAnalysis, BorrowCheckReport, BorrowCheckStats};
 
+use crate::backends::function_registry::HostRegistry;
 use crate::borrow_log;
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
-use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
+use crate::compiler_frontend::analysis::borrow_checker::state::{
+    BorrowState, FunctionLayout, RootSet,
+};
 use crate::compiler_frontend::analysis::borrow_checker::transfer::{
     BlockTransferStats, BorrowTransferContext, transfer_block,
 };
-use crate::compiler_frontend::analysis::borrow_checker::types::FunctionBorrowSummary;
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::analysis::borrow_checker::types::{
+    FunctionBorrowSummary, FunctionReturnAliasSummary,
+};
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirFunction, HirModule, HirTerminator,
+    BlockId, FunctionId, HirExpression, HirExpressionKind, HirFunction, HirModule, HirPlace,
+    HirTerminator, LocalId, RegionId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -25,22 +31,30 @@ use std::collections::VecDeque;
 
 pub(crate) fn check_borrows(
     module: &HirModule,
+    host_registry: &HostRegistry,
     string_table: &StringTable,
 ) -> Result<BorrowCheckReport, CompilerError> {
-    BorrowChecker::new(module, string_table).run()
+    BorrowChecker::new(module, host_registry, string_table).run()
 }
 
 struct BorrowChecker<'a> {
     module: &'a HirModule,
+    host_registry: &'a HostRegistry,
     string_table: &'a StringTable,
     diagnostics: BorrowDiagnostics<'a>,
     block_index_by_id: FxHashMap<BlockId, usize>,
+    region_parent_by_id: FxHashMap<RegionId, Option<RegionId>>,
     function_by_path: FxHashMap<InternedPath, FunctionId>,
     function_param_mutability: FxHashMap<FunctionId, Vec<bool>>,
+    function_return_alias: FxHashMap<FunctionId, FunctionReturnAliasSummary>,
 }
 
 impl<'a> BorrowChecker<'a> {
-    fn new(module: &'a HirModule, string_table: &'a StringTable) -> Self {
+    fn new(
+        module: &'a HirModule,
+        host_registry: &'a HostRegistry,
+        string_table: &'a StringTable,
+    ) -> Self {
         let block_index_by_id = module
             .blocks
             .iter()
@@ -48,19 +62,29 @@ impl<'a> BorrowChecker<'a> {
             .map(|(index, block)| (block.id, index))
             .collect::<FxHashMap<_, _>>();
 
+        let region_parent_by_id = module
+            .regions
+            .iter()
+            .map(|region| (region.id(), region.parent()))
+            .collect::<FxHashMap<_, _>>();
+
         Self {
             module,
+            host_registry,
             string_table,
             diagnostics: BorrowDiagnostics::new(module, string_table),
             block_index_by_id,
+            region_parent_by_id,
             function_by_path: FxHashMap::default(),
             function_param_mutability: FxHashMap::default(),
+            function_return_alias: FxHashMap::default(),
         }
     }
 
     fn run(mut self) -> Result<BorrowCheckReport, CompilerError> {
         self.build_function_lookup()?;
         self.build_function_param_mutability()?;
+        self.build_function_return_alias_summaries()?;
 
         let mut report = BorrowCheckReport::default();
 
@@ -72,10 +96,13 @@ impl<'a> BorrowChecker<'a> {
         }
 
         borrow_log!(format!(
-            "[Borrow] Completed borrow checking: functions={} blocks={} states={}",
+            "[Borrow] Completed borrow checking: functions={} blocks={} states={} facts={{stmt:{} term:{} value:{}}}",
             report.stats.functions_analyzed,
             report.stats.blocks_analyzed,
-            report.analysis.total_state_snapshots()
+            report.analysis.total_state_snapshots(),
+            report.analysis.statement_facts.len(),
+            report.analysis.terminator_facts.len(),
+            report.analysis.value_facts.len()
         ));
 
         Ok(report)
@@ -143,6 +170,50 @@ impl<'a> BorrowChecker<'a> {
         Ok(())
     }
 
+    fn build_function_return_alias_summaries(&mut self) -> Result<(), CompilerError> {
+        for function in &self.module.functions {
+            let summary = self.classify_function_return_alias(function)?;
+            self.function_return_alias.insert(function.id, summary);
+        }
+
+        Ok(())
+    }
+
+    fn classify_function_return_alias(
+        &self,
+        function: &HirFunction,
+    ) -> Result<FunctionReturnAliasSummary, CompilerError> {
+        let reachable_blocks = self.collect_reachable_blocks(function)?;
+        let mut param_index_by_local = FxHashMap::default();
+        for (param_index, param_local) in function.params.iter().enumerate() {
+            param_index_by_local.insert(*param_local, param_index);
+        }
+
+        let mut summary = FunctionReturnAliasSummary::Fresh;
+        let mut saw_return = false;
+
+        for block_id in reachable_blocks {
+            let block = self.block_by_id_or_error(block_id, function.id)?;
+            let HirTerminator::Return(value) = &block.terminator else {
+                continue;
+            };
+
+            saw_return = true;
+            let return_summary = classify_return_expression(value, &param_index_by_local);
+            summary = merge_return_alias(summary, return_summary);
+
+            if matches!(summary, FunctionReturnAliasSummary::Unknown) {
+                break;
+            }
+        }
+
+        if !saw_return {
+            return Ok(FunctionReturnAliasSummary::Unknown);
+        }
+
+        Ok(summary)
+    }
+
     fn analyze_function(
         &self,
         function: &HirFunction,
@@ -150,12 +221,16 @@ impl<'a> BorrowChecker<'a> {
     ) -> Result<FunctionBorrowSummary, CompilerError> {
         let reachable_blocks = self.collect_reachable_blocks(function)?;
         let layout = self.build_function_layout(function, &reachable_blocks)?;
+        let visible_locals_by_block =
+            self.build_visibility_masks(function.id, &layout, &reachable_blocks)?;
 
         let transfer_context = BorrowTransferContext {
             module: self.module,
             string_table: self.string_table,
+            host_registry: self.host_registry,
             function_by_path: &self.function_by_path,
             function_param_mutability: &self.function_param_mutability,
+            function_return_alias: &self.function_return_alias,
             diagnostics: BorrowDiagnostics::new(self.module, self.string_table),
         };
 
@@ -180,6 +255,9 @@ impl<'a> BorrowChecker<'a> {
             initial_state.initialize_parameter(param_index);
         }
 
+        if let Some(mask) = visible_locals_by_block.get(&function.entry) {
+            initial_state.kill_invisible(mask);
+        }
         in_states.insert(function.entry, initial_state);
 
         let mut worklist = VecDeque::new();
@@ -191,6 +269,16 @@ impl<'a> BorrowChecker<'a> {
             mutable_call_sites: 0,
             alias_heavy_blocks: Vec::new(),
             worklist_iterations: 0,
+            param_mutability: self
+                .function_param_mutability
+                .get(&function.id)
+                .cloned()
+                .unwrap_or_default(),
+            return_alias: self
+                .function_return_alias
+                .get(&function.id)
+                .cloned()
+                .unwrap_or(FunctionReturnAliasSummary::Unknown),
         };
 
         let mut alias_heavy = FxHashSet::default();
@@ -205,9 +293,14 @@ impl<'a> BorrowChecker<'a> {
         while let Some(block_id) = worklist.pop_front() {
             summary.worklist_iterations += 1;
 
-            let Some(input_state) = in_states.get(&block_id).cloned() else {
+            let Some(mut input_state) = in_states.get(&block_id).cloned() else {
                 continue;
             };
+
+            if let Some(mask) = visible_locals_by_block.get(&block_id) {
+                input_state.kill_invisible(mask);
+            }
+            in_states.insert(block_id, input_state.clone());
 
             let block = self.block_by_id_or_error(block_id, function.id)?;
             let mut output_state = input_state.clone();
@@ -215,6 +308,19 @@ impl<'a> BorrowChecker<'a> {
             let block_stats = transfer_block(&transfer_context, &layout, block, &mut output_state)?;
             self.merge_block_stats(&mut report.stats, &block_stats);
             summary.mutable_call_sites += block_stats.mutable_call_sites;
+
+            for (statement_id, fact) in block_stats.statement_facts {
+                report.analysis.statement_facts.insert(statement_id, fact);
+            }
+            if let Some((terminator_block, fact)) = block_stats.terminator_fact {
+                report
+                    .analysis
+                    .terminator_facts
+                    .insert(terminator_block, fact);
+            }
+            for (value_id, fact) in block_stats.value_facts {
+                report.analysis.value_facts.insert(value_id, fact);
+            }
 
             if output_state.has_any_alias_conflict() {
                 alias_heavy.insert(block_id);
@@ -236,9 +342,14 @@ impl<'a> BorrowChecker<'a> {
                     continue;
                 }
 
+                let mut successor_input = output_state.clone();
+                if let Some(mask) = visible_locals_by_block.get(&successor) {
+                    successor_input.kill_invisible(mask);
+                }
+
                 let next_state = match in_states.get(&successor) {
-                    Some(existing) => existing.join(&output_state),
-                    None => output_state.clone(),
+                    Some(existing) => existing.join(&successor_input),
+                    None => successor_input,
                 };
 
                 let changed_in = match in_states.get(&successor) {
@@ -286,17 +397,17 @@ impl<'a> BorrowChecker<'a> {
         function: &HirFunction,
         reachable_blocks: &[BlockId],
     ) -> Result<FunctionLayout, CompilerError> {
-        let mut local_mutability_by_id = FxHashMap::default();
+        let mut local_info_by_id = FxHashMap::default();
 
         for block_id in reachable_blocks {
             let block = self.block_by_id_or_error(*block_id, function.id)?;
             for local in &block.locals {
-                local_mutability_by_id.insert(local.id, local.mutable);
+                local_info_by_id.insert(local.id, (local.mutable, local.region));
             }
         }
 
         for param in &function.params {
-            if !local_mutability_by_id.contains_key(param) {
+            if !local_info_by_id.contains_key(param) {
                 return_borrow_checker_error!(
                     format!(
                         "Function '{}' parameter '{}' is missing from reachable local layout",
@@ -311,15 +422,70 @@ impl<'a> BorrowChecker<'a> {
             }
         }
 
-        let mut local_ids = local_mutability_by_id.keys().copied().collect::<Vec<_>>();
+        let mut local_ids = local_info_by_id.keys().copied().collect::<Vec<_>>();
         local_ids.sort_by_key(|local_id| local_id.0);
 
         let local_mutable = local_ids
             .iter()
-            .map(|local_id| local_mutability_by_id[local_id])
+            .map(|local_id| local_info_by_id[local_id].0)
+            .collect::<Vec<_>>();
+        let local_regions = local_ids
+            .iter()
+            .map(|local_id| local_info_by_id[local_id].1)
             .collect::<Vec<_>>();
 
-        Ok(FunctionLayout::new(local_ids, local_mutable))
+        Ok(FunctionLayout::new(local_ids, local_mutable, local_regions))
+    }
+
+    fn build_visibility_masks(
+        &self,
+        function_id: FunctionId,
+        layout: &FunctionLayout,
+        reachable_blocks: &[BlockId],
+    ) -> Result<FxHashMap<BlockId, RootSet>, CompilerError> {
+        let mut masks = FxHashMap::default();
+
+        for block_id in reachable_blocks {
+            let block = self.block_by_id_or_error(*block_id, function_id)?;
+            let mut mask = RootSet::empty(layout.local_count());
+
+            for (local_index, local_region) in layout.local_regions.iter().enumerate() {
+                if self.is_region_ancestor_of(*local_region, block.region)? {
+                    mask.insert(local_index);
+                }
+            }
+
+            masks.insert(*block_id, mask);
+        }
+
+        Ok(masks)
+    }
+
+    fn is_region_ancestor_of(
+        &self,
+        ancestor: RegionId,
+        mut region: RegionId,
+    ) -> Result<bool, CompilerError> {
+        loop {
+            if region == ancestor {
+                return Ok(true);
+            }
+
+            let Some(parent) = self.region_parent_by_id.get(&region).copied() else {
+                return_borrow_checker_error!(
+                    format!("Borrow checker could not resolve region '{}'", region.0),
+                    ErrorLocation::default(),
+                    {
+                        CompilationStage => "Borrow Checking",
+                    }
+                );
+            };
+
+            let Some(parent) = parent else {
+                return Ok(false);
+            };
+            region = parent;
+        }
     }
 
     fn collect_reachable_blocks(
@@ -374,6 +540,90 @@ impl<'a> BorrowChecker<'a> {
         total.statements_analyzed += block.statements_analyzed;
         total.terminators_analyzed += block.terminators_analyzed;
         total.conflicts_checked += block.conflicts_checked;
+    }
+}
+
+fn merge_return_alias(
+    left: FunctionReturnAliasSummary,
+    right: FunctionReturnAliasSummary,
+) -> FunctionReturnAliasSummary {
+    match (left, right) {
+        (FunctionReturnAliasSummary::Unknown, _) | (_, FunctionReturnAliasSummary::Unknown) => {
+            FunctionReturnAliasSummary::Unknown
+        }
+
+        (FunctionReturnAliasSummary::Fresh, other) | (other, FunctionReturnAliasSummary::Fresh) => {
+            other
+        }
+
+        (
+            FunctionReturnAliasSummary::AliasParams(mut left),
+            FunctionReturnAliasSummary::AliasParams(right),
+        ) => {
+            left.extend(right);
+            left.sort_unstable();
+            left.dedup();
+            FunctionReturnAliasSummary::AliasParams(left)
+        }
+    }
+}
+
+fn classify_return_expression(
+    expression: &HirExpression,
+    param_index_by_local: &FxHashMap<LocalId, usize>,
+) -> FunctionReturnAliasSummary {
+    if let HirExpressionKind::Load(place) = &expression.kind {
+        if let Some(root_local) = root_local_for_place(place) {
+            return match param_index_by_local.get(&root_local).copied() {
+                Some(param_index) => FunctionReturnAliasSummary::AliasParams(vec![param_index]),
+                None => FunctionReturnAliasSummary::Unknown,
+            };
+        }
+
+        return FunctionReturnAliasSummary::Unknown;
+    }
+
+    if expression_has_any_load(expression) {
+        FunctionReturnAliasSummary::Unknown
+    } else {
+        FunctionReturnAliasSummary::Fresh
+    }
+}
+
+fn expression_has_any_load(expression: &HirExpression) -> bool {
+    match &expression.kind {
+        HirExpressionKind::Load(_) => true,
+        HirExpressionKind::BinOp { left, right, .. } => {
+            expression_has_any_load(left) || expression_has_any_load(right)
+        }
+        HirExpressionKind::UnaryOp { operand, .. } => expression_has_any_load(operand),
+        HirExpressionKind::StructConstruct { fields, .. } => fields
+            .iter()
+            .any(|(_, value)| expression_has_any_load(value)),
+        HirExpressionKind::Collection(elements)
+        | HirExpressionKind::TupleConstruct { elements } => {
+            elements.iter().any(expression_has_any_load)
+        }
+        HirExpressionKind::Range { start, end } => {
+            expression_has_any_load(start) || expression_has_any_load(end)
+        }
+        HirExpressionKind::OptionConstruct { value, .. } => value
+            .as_ref()
+            .map(|value| expression_has_any_load(value))
+            .unwrap_or(false),
+        HirExpressionKind::ResultConstruct { value, .. } => expression_has_any_load(value),
+        HirExpressionKind::Int(_)
+        | HirExpressionKind::Float(_)
+        | HirExpressionKind::Bool(_)
+        | HirExpressionKind::Char(_)
+        | HirExpressionKind::StringLiteral(_) => false,
+    }
+}
+
+fn root_local_for_place(place: &HirPlace) -> Option<LocalId> {
+    match place {
+        HirPlace::Local(local) => Some(*local),
+        HirPlace::Field { base, .. } | HirPlace::Index { base, .. } => root_local_for_place(base),
     }
 }
 

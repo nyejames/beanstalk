@@ -2,7 +2,7 @@ use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, Fun
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
 use crate::compiler_frontend::hir::hir_display::HirLocation;
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirModule, HirStatement, HirTerminator, LocalId,
+    BlockId, FunctionId, HirModule, HirStatement, HirTerminator, HirValueId, LocalId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -84,6 +84,19 @@ impl<'a> BorrowDiagnostics<'a> {
             })
             .map(|location| location.to_error_location(self.string_table))
             .unwrap_or_else(ErrorLocation::default)
+    }
+
+    pub(super) fn value_error_location(
+        &self,
+        value_id: HirValueId,
+        fallback: ErrorLocation,
+    ) -> ErrorLocation {
+        self.module
+            .side_table
+            .value_source_location(value_id)
+            .or_else(|| self.module.side_table.value_ast_location(value_id))
+            .map(|location| location.to_error_location(self.string_table))
+            .unwrap_or(fallback)
     }
 
     pub(super) fn conflicting_local_for_root(

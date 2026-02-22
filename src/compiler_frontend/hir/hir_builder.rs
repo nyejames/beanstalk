@@ -63,6 +63,7 @@ pub struct HirBuilder<'a> {
     pub(super) next_block_id: u32,
     pub(super) next_local_id: u32,
     pub(super) next_node_id: u32,
+    pub(super) next_value_id: u32,
     pub(super) next_region_id: u32,
     pub(super) next_function_id: u32,
     pub(super) next_struct_id: u32,
@@ -112,6 +113,7 @@ impl<'a> HirBuilder<'a> {
             next_block_id: 0,
             next_local_id: 0,
             next_node_id: 0,
+            next_value_id: 0,
             next_region_id: 0,
             next_function_id: 0,
             next_struct_id: 0,
@@ -196,6 +198,12 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn allocate_region_id(&mut self) -> RegionId {
         let id = RegionId(self.next_region_id);
         self.next_region_id += 1;
+        id
+    }
+
+    pub(crate) fn allocate_value_id(&mut self) -> HirValueId {
+        let id = HirValueId(self.next_value_id);
+        self.next_value_id += 1;
         id
     }
 

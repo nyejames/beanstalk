@@ -372,7 +372,7 @@ impl<'a> HirBuilder<'a> {
 
         if self.is_unit_type(return_type) {
             let region = self.current_region_or_error(location)?;
-            let unit = self.unit_expression(region);
+            let unit = self.unit_expression(location, region);
             self.emit_terminator(current_block, HirTerminator::Return(unit), location)?;
             return Ok(());
         }
@@ -580,9 +580,11 @@ impl<'a> HirBuilder<'a> {
             self.emit_statement_to_current_block(prelude, location)?;
         }
 
-        let region = self.current_region_or_error(location)?;
-        let then_block = self.create_block(region, location, "if-then")?;
-        let else_block = self.create_block(region, location, "if-else")?;
+        let parent_region = self.current_region_or_error(location)?;
+        let then_region = self.create_child_region(parent_region);
+        let else_region = self.create_child_region(parent_region);
+        let then_block = self.create_block(then_region, location, "if-then")?;
+        let else_block = self.create_block(else_region, location, "if-else")?;
 
         self.emit_terminator(
             current_block,
@@ -621,7 +623,7 @@ impl<'a> HirBuilder<'a> {
             return self.set_current_block(terminated_anchor.unwrap_or(then_block), location);
         }
 
-        let merge_block = self.create_block(region, location, "if-merge")?;
+        let merge_block = self.create_block(parent_region, location, "if-merge")?;
         if !then_terminated {
             self.emit_jump_to(then_block, merge_block, location, "if.then.merge")?;
         }
@@ -639,11 +641,12 @@ impl<'a> HirBuilder<'a> {
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
         let pre_header_block = self.current_block_id_or_error(location)?;
-        let region = self.current_region_or_error(location)?;
+        let parent_region = self.current_region_or_error(location)?;
 
-        let header_block = self.create_block(region, location, "while-header")?;
-        let body_block = self.create_block(region, location, "while-body")?;
-        let exit_block = self.create_block(region, location, "while-exit")?;
+        let header_block = self.create_block(parent_region, location, "while-header")?;
+        let body_region = self.create_child_region(parent_region);
+        let body_block = self.create_block(body_region, location, "while-body")?;
+        let exit_block = self.create_block(parent_region, location, "while-exit")?;
 
         self.emit_jump_to(pre_header_block, header_block, location, "while.enter")?;
 
@@ -690,19 +693,21 @@ impl<'a> HirBuilder<'a> {
             self.emit_statement_to_current_block(prelude, location)?;
         }
 
-        let region = self.current_region_or_error(location)?;
+        let parent_region = self.current_region_or_error(location)?;
         let mut arm_blocks = Vec::with_capacity(arms.len());
         for _ in arms {
-            arm_blocks.push(self.create_block(region, location, "match-arm")?);
+            let arm_region = self.create_child_region(parent_region);
+            arm_blocks.push(self.create_block(arm_region, location, "match-arm")?);
         }
 
         let default_block = if default.is_some() {
-            Some(self.create_block(region, location, "match-default")?)
+            let default_region = self.create_child_region(parent_region);
+            Some(self.create_block(default_region, location, "match-default")?)
         } else {
             None
         };
         let mut merge_block = if default.is_none() {
-            Some(self.create_block(region, location, "match-merge")?)
+            Some(self.create_block(parent_region, location, "match-merge")?)
         } else {
             None
         };
@@ -755,7 +760,7 @@ impl<'a> HirBuilder<'a> {
                 }
             } else {
                 let merge_target =
-                    self.ensure_match_merge_block(region, location, &mut merge_block)?;
+                    self.ensure_match_merge_block(parent_region, location, &mut merge_block)?;
                 self.emit_jump_to(arm_block, merge_target, location, "match.arm.merge")?;
             }
         }
@@ -772,7 +777,7 @@ impl<'a> HirBuilder<'a> {
                 }
             } else {
                 let merge_target =
-                    self.ensure_match_merge_block(region, location, &mut merge_block)?;
+                    self.ensure_match_merge_block(parent_region, location, &mut merge_block)?;
                 self.emit_jump_to(
                     default_block_id,
                     merge_target,
@@ -842,6 +847,15 @@ impl<'a> HirBuilder<'a> {
         let created = self.create_block(region, location, "match-merge")?;
         *merge_block = Some(created);
         Ok(created)
+    }
+
+    fn create_child_region(
+        &mut self,
+        parent: crate::compiler_frontend::hir::hir_nodes::RegionId,
+    ) -> crate::compiler_frontend::hir::hir_nodes::RegionId {
+        let region_id = self.allocate_region_id();
+        self.push_region(HirRegion::lexical(region_id, Some(parent)));
+        region_id
     }
 
     fn create_block(
@@ -921,7 +935,7 @@ impl<'a> HirBuilder<'a> {
         let region = self.current_region_or_error(location)?;
 
         match values {
-            [] => Ok(self.unit_expression(region)),
+            [] => Ok(self.unit_expression(location, region)),
             [single] => Ok(single.clone()),
             many => {
                 let field_types = many.iter().map(|value| value.ty).collect::<Vec<_>>();
@@ -929,14 +943,15 @@ impl<'a> HirBuilder<'a> {
                     fields: field_types,
                 });
 
-                Ok(HirExpression {
-                    kind: HirExpressionKind::TupleConstruct {
+                Ok(self.make_expression(
+                    location,
+                    HirExpressionKind::TupleConstruct {
                         elements: many.to_vec(),
                     },
-                    ty: tuple_type,
-                    value_kind: ValueKind::RValue,
+                    tuple_type,
+                    ValueKind::RValue,
                     region,
-                })
+                ))
             }
         }
     }

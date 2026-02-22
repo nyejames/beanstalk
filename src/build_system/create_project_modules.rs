@@ -342,11 +342,14 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     // Debug output for the borrow checker (macro-gated by `show_borrow_checker`)
     borrow_log!("=== BORROW CHECKER OUTPUT ===");
     borrow_log!(format!(
-        "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={})",
+        "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={} stmt_facts={} term_facts={} value_facts={})",
         borrow_analysis.analysis.total_state_snapshots(),
         borrow_analysis.stats.functions_analyzed,
         borrow_analysis.stats.blocks_analyzed,
-        borrow_analysis.stats.conflicts_checked
+        borrow_analysis.stats.conflicts_checked,
+        borrow_analysis.analysis.statement_facts.len(),
+        borrow_analysis.analysis.terminator_facts.len(),
+        borrow_analysis.analysis.value_facts.len()
     ));
     borrow_log!("=== END BORROW CHECKER OUTPUT ===");
 

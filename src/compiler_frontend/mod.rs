@@ -189,7 +189,7 @@ impl<'a> CompilerFrontend<'a> {
         &self,
         hir_module: &HirModule,
     ) -> Result<BorrowCheckReport, CompilerMessages> {
-        match run_borrow_checker(hir_module, &self.string_table) {
+        match run_borrow_checker(hir_module, &self.host_function_registry, &self.string_table) {
             Ok(report) => Ok(report),
             Err(error) => Err(CompilerMessages {
                 errors: vec![error],

@@ -11,8 +11,8 @@ use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, Typ
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
     HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId, HirPattern, HirPlace, HirStatement,
-    HirStatementKind, HirStruct, HirTerminator, LocalId, OptionVariant, RegionId, ResultVariant,
-    StructId, ValueKind,
+    HirStatementKind, HirStruct, HirTerminator, HirValueId, LocalId, OptionVariant, RegionId,
+    ResultVariant, StructId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
@@ -40,6 +40,7 @@ pub(crate) enum HirLocation {
     Field(FieldId),
     Local(LocalId),
     Statement(HirNodeId),
+    Value(HirValueId),
     Terminator(BlockId),
 }
 
@@ -52,6 +53,7 @@ impl Display for HirLocation {
             HirLocation::Field(id) => write!(f, "field({})", id),
             HirLocation::Local(id) => write!(f, "local({})", id),
             HirLocation::Statement(id) => write!(f, "statement({})", id),
+            HirLocation::Value(id) => write!(f, "value({})", id),
             HirLocation::Terminator(block) => write!(f, "terminator({})", block),
         }
     }
@@ -90,6 +92,12 @@ impl From<LocalId> for HirLocation {
 impl From<HirNodeId> for HirLocation {
     fn from(value: HirNodeId) -> Self {
         HirLocation::Statement(value)
+    }
+}
+
+impl From<HirValueId> for HirLocation {
+    fn from(value: HirValueId) -> Self {
+        HirLocation::Value(value)
     }
 }
 
@@ -243,6 +251,17 @@ impl HirSideTable {
         self.map_hir_source_location(hir_location, &statement.location);
     }
 
+    pub(crate) fn map_value(
+        &mut self,
+        ast_location: &TextLocation,
+        value_id: HirValueId,
+        source_location: &TextLocation,
+    ) {
+        let hir_location = HirLocation::Value(value_id);
+        self.map_ast_to_hir(ast_location, hir_location);
+        self.map_hir_source_location(hir_location, source_location);
+    }
+
     pub(crate) fn map_function(&mut self, ast_location: &TextLocation, function: &HirFunction) {
         let hir_location = HirLocation::Function(function.id);
         self.map_ast_to_hir(ast_location, hir_location);
@@ -265,6 +284,16 @@ impl HirSideTable {
         if let Some(location) = &local.source_info {
             self.map_hir_source_location(HirLocation::Local(local.id), location);
         }
+    }
+
+    #[inline]
+    pub(crate) fn value_source_location(&self, value_id: HirValueId) -> Option<&TextLocation> {
+        self.hir_source_location_for_hir(HirLocation::Value(value_id))
+    }
+
+    #[inline]
+    pub(crate) fn value_ast_location(&self, value_id: HirValueId) -> Option<&TextLocation> {
+        self.ast_location_for_hir(HirLocation::Value(value_id))
     }
 
     #[inline]
@@ -772,7 +801,13 @@ impl<'a> HirDisplayContext<'a> {
     }
 
     pub(crate) fn render_expression(&self, expr: &HirExpression) -> String {
-        let mut out = self.render_expression_kind(&expr.kind);
+        let mut out = String::new();
+
+        if self.options.include_ids {
+            let _ = write!(out, "[{}] ", self.value_label(expr.id));
+        }
+
+        out.push_str(&self.render_expression_kind(&expr.kind));
 
         if self.options.include_types {
             let _ = write!(out, " : {}", self.type_label(expr.ty));
@@ -1142,6 +1177,10 @@ impl<'a> HirDisplayContext<'a> {
         format!("n{}", node_id.0)
     }
 
+    fn value_label(&self, value_id: HirValueId) -> String {
+        format!("v{}", value_id.0)
+    }
+
     fn region_label(&self, region_id: RegionId) -> String {
         format!("r{}", region_id.0)
     }
@@ -1288,6 +1327,12 @@ impl Display for RegionId {
 impl Display for HirNodeId {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         write!(f, "n{}", self.0)
+    }
+}
+
+impl Display for HirValueId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        write!(f, "v{}", self.0)
     }
 }
 

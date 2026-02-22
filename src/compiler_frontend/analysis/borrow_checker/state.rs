@@ -1,7 +1,7 @@
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
-use crate::compiler_frontend::hir::hir_nodes::LocalId;
+use crate::compiler_frontend::hir::hir_nodes::{LocalId, RegionId};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
@@ -9,10 +9,15 @@ pub(super) struct FunctionLayout {
     pub local_ids: Vec<LocalId>,
     pub local_index_by_id: FxHashMap<LocalId, usize>,
     pub local_mutable: Vec<bool>,
+    pub local_regions: Vec<RegionId>,
 }
 
 impl FunctionLayout {
-    pub(super) fn new(local_ids: Vec<LocalId>, local_mutable: Vec<bool>) -> Self {
+    pub(super) fn new(
+        local_ids: Vec<LocalId>,
+        local_mutable: Vec<bool>,
+        local_regions: Vec<RegionId>,
+    ) -> Self {
         let mut local_index_by_id =
             FxHashMap::with_capacity_and_hasher(local_ids.len(), Default::default());
 
@@ -24,6 +29,7 @@ impl FunctionLayout {
             local_ids,
             local_index_by_id,
             local_mutable,
+            local_regions,
         }
     }
 
@@ -118,6 +124,46 @@ impl BorrowState {
         };
         joined.recompute_root_ref_counts();
         joined
+    }
+
+    pub(super) fn kill_invisible(&mut self, visible_mask: &RootSet) {
+        let local_count = self.locals.len();
+        let mut changed = false;
+
+        for local_index in 0..local_count {
+            if !visible_mask.contains(local_index) {
+                let replacement = LocalState::uninit(local_count);
+                if self.locals[local_index] != replacement {
+                    self.locals[local_index] = replacement;
+                    changed = true;
+                }
+                continue;
+            }
+
+            let mut next = self.locals[local_index].clone();
+            if next.mode.contains(LocalMode::ALIAS) {
+                next.alias_roots.intersect_with(visible_mask);
+                if next.alias_roots.is_empty() {
+                    next = if next.mode.contains(LocalMode::SLOT) {
+                        LocalState {
+                            mode: LocalMode::SLOT,
+                            alias_roots: RootSet::empty(local_count),
+                        }
+                    } else {
+                        LocalState::uninit(local_count)
+                    };
+                }
+            }
+
+            if next != self.locals[local_index] {
+                self.locals[local_index] = next;
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.recompute_root_ref_counts();
+        }
     }
 
     pub(super) fn to_snapshot(&self, local_ids: &[LocalId]) -> BorrowStateSnapshot {
@@ -240,6 +286,12 @@ impl RootSet {
     pub(super) fn union_with(&mut self, other: &Self) {
         for (left, right) in self.words.iter_mut().zip(other.words.iter()) {
             *left |= *right;
+        }
+    }
+
+    pub(super) fn intersect_with(&mut self, other: &Self) {
+        for (left, right) in self.words.iter_mut().zip(other.words.iter()) {
+            *left &= *right;
         }
     }
 

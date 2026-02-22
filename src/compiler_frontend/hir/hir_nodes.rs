@@ -57,6 +57,9 @@ use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 pub struct HirNodeId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HirValueId(pub u32);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct BlockId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -306,6 +309,7 @@ pub enum HirTerminator {
 // ============================================================
 #[derive(Debug, Clone)]
 pub struct HirExpression {
+    pub id: HirValueId,
     pub kind: HirExpressionKind,
     pub ty: TypeId,
     pub value_kind: ValueKind,

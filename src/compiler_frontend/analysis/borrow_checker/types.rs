@@ -1,4 +1,6 @@
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, LocalId};
+use crate::compiler_frontend::hir::hir_nodes::{
+    BlockId, FunctionId, HirNodeId, HirValueId, LocalId,
+};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]
@@ -12,11 +14,26 @@ pub(crate) struct BorrowAnalysis {
     pub function_summaries: FxHashMap<FunctionId, FunctionBorrowSummary>,
     pub block_entry_states: FxHashMap<BlockId, BorrowStateSnapshot>,
     pub block_exit_states: FxHashMap<BlockId, BorrowStateSnapshot>,
+    pub statement_facts: FxHashMap<HirNodeId, StatementBorrowFact>,
+    pub terminator_facts: FxHashMap<BlockId, TerminatorBorrowFact>,
+    pub value_facts: FxHashMap<HirValueId, ValueBorrowFact>,
 }
 
 impl BorrowAnalysis {
     pub(crate) fn total_state_snapshots(&self) -> usize {
         self.block_entry_states.len() + self.block_exit_states.len()
+    }
+
+    pub(crate) fn statement_fact(&self, id: HirNodeId) -> Option<&StatementBorrowFact> {
+        self.statement_facts.get(&id)
+    }
+
+    pub(crate) fn terminator_fact(&self, block: BlockId) -> Option<&TerminatorBorrowFact> {
+        self.terminator_facts.get(&block)
+    }
+
+    pub(crate) fn value_fact(&self, id: HirValueId) -> Option<&ValueBorrowFact> {
+        self.value_facts.get(&id)
     }
 }
 
@@ -30,13 +47,77 @@ pub(crate) struct BorrowCheckStats {
     pub conflicts_checked: usize,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub(crate) struct FunctionBorrowSummary {
     pub entry_block: Option<BlockId>,
     pub reachable_blocks: usize,
     pub mutable_call_sites: usize,
     pub alias_heavy_blocks: Vec<BlockId>,
     pub worklist_iterations: usize,
+    pub param_mutability: Vec<bool>,
+    pub return_alias: FunctionReturnAliasSummary,
+}
+
+impl Default for FunctionBorrowSummary {
+    fn default() -> Self {
+        Self {
+            entry_block: None,
+            reachable_blocks: 0,
+            mutable_call_sites: 0,
+            alias_heavy_blocks: Vec::new(),
+            worklist_iterations: 0,
+            param_mutability: Vec::new(),
+            return_alias: FunctionReturnAliasSummary::Unknown,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum FunctionReturnAliasSummary {
+    Fresh,
+    AliasParams(Vec<usize>),
+    Unknown,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct StatementBorrowFact {
+    pub shared_roots: Vec<LocalId>,
+    pub mutable_roots: Vec<LocalId>,
+    pub conflicts_checked: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct TerminatorBorrowFact {
+    pub shared_roots: Vec<LocalId>,
+    pub mutable_roots: Vec<LocalId>,
+    pub conflicts_checked: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ValueBorrowFact {
+    pub classification: ValueAccessClassification,
+    pub roots: Vec<LocalId>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum ValueAccessClassification {
+    #[default]
+    None,
+    SharedRead,
+    MutableArgument,
+    Mixed,
+}
+
+impl ValueAccessClassification {
+    pub(crate) fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::None, rhs) => rhs,
+            (lhs, Self::None) => lhs,
+            (Self::SharedRead, Self::SharedRead) => Self::SharedRead,
+            (Self::MutableArgument, Self::MutableArgument) => Self::MutableArgument,
+            _ => Self::Mixed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

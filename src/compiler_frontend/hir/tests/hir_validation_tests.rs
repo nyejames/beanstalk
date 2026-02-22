@@ -8,7 +8,8 @@ use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, validate_module_for_tests};
 use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirTerminator, ValueKind,
+    HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirTerminator, HirValueId,
+    ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
@@ -178,9 +179,20 @@ fn validator_rejects_non_literal_match_pattern() {
     let local_id = start.params[0];
     let local_ty = entry_block.locals[0].ty;
     let region = entry_block.region;
+    let scrutinee_id = HirValueId(9000);
+    let pattern_id = HirValueId(9001);
+
+    let value_location = test_location(20);
+    module
+        .side_table
+        .map_value(&value_location, scrutinee_id, &value_location);
+    module
+        .side_table
+        .map_value(&value_location, pattern_id, &value_location);
 
     entry_block.terminator = HirTerminator::Match {
         scrutinee: HirExpression {
+            id: scrutinee_id,
             kind: HirExpressionKind::Int(1),
             ty: local_ty,
             value_kind: ValueKind::Const,
@@ -188,6 +200,7 @@ fn validator_rejects_non_literal_match_pattern() {
         },
         arms: vec![HirMatchArm {
             pattern: HirPattern::Literal(HirExpression {
+                id: pattern_id,
                 kind: HirExpressionKind::Load(HirPlace::Local(local_id)),
                 ty: local_ty,
                 value_kind: ValueKind::Place,

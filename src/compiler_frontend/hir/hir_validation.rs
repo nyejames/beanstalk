@@ -441,6 +441,37 @@ impl<'a> HirValidator<'a> {
         expression: &HirExpression,
         anchor: Option<HirLocation>,
     ) -> Result<(), CompilerError> {
+        let value_location = HirLocation::Value(expression.id);
+        if self
+            .module
+            .side_table
+            .ast_source_id_for_hir(value_location)
+            .is_none()
+        {
+            return Err(self.error_with_hir(
+                format!(
+                    "Value {} is missing AST->HIR side-table mapping",
+                    expression.id
+                ),
+                anchor,
+            ));
+        }
+
+        if self
+            .module
+            .side_table
+            .hir_source_id_for_hir(value_location)
+            .is_none()
+        {
+            return Err(self.error_with_hir(
+                format!(
+                    "Value {} is missing HIR source side-table mapping",
+                    expression.id
+                ),
+                anchor,
+            ));
+        }
+
         self.require_type_id(expression.ty, anchor)?;
         self.require_region_id(expression.region, anchor)?;
 

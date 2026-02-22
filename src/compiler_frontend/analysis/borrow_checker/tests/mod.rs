@@ -1,1 +1,5 @@
-mod borrow_checker_tests;
+mod borrow_checker_call_summary_tests;
+mod borrow_checker_fact_tests;
+mod borrow_checker_pipeline_tests;
+mod borrow_checker_scope_tests;
+mod test_support;

@@ -211,7 +211,7 @@ HIR intentionally avoids full place-based tracking in the initial implementation
 - Make evaluation order explicit
 - Normalize control flow (if, loop, break, return) into explicit blocks
 - Preserve enough structure to reason about variable usage and exclusivity
-- Prepare the program for optional borrow validation and final lowering
+- Prepare the program for mandatory borrow validation and final lowering
 - Serve as a shared source for all backends
 
 ### Key Features
@@ -244,17 +244,17 @@ Use the `show_hir` flag to see the output.
 
 ---
 
-## Stage 6: Borrow Validation (`src/compiler_frontend/borrow_checker/`)
-Borrow validation is not required for correctness, it's for optimization:
-- If a value passes borrow validation, it becomes eligible for non-GC lowering.
-- If it fails or is unanalyzed, it remains GC-managed.
+## Stage 6: Borrow Validation (`src/compiler_frontend/analysis/borrow_checker/`)
+Borrow validation is a mandatory frontend phase for backend semantic parity:
+- Programs that violate borrow/exclusivity rules are rejected before backend lowering.
+- Programs that pass borrow validation can additionally be optimized for non-GC lowering in capable backends.
 
 The borrow checker does not mutate the HIR, it produces side-table facts keyed by node / value IDs. HIR remains a stable semantic representation.
 
 HIR represents semantic meaning under GC. Ownership is an optimization layer, not semantics. Later stages consult these facts during lowering.
 
-While the single mutable access rule is always enforced,
-project builders and debug builds can skip any further analysis to avoid compile time overhead.
+Project builders and debug builds can skip optional post-borrow analyses to avoid compile time overhead,
+but mandatory borrow validation itself is not optional.
 
 **Possible Drop Insertion**
 - Conditional possible_drop(x) locations can be revealed by this analysis:

@@ -45,12 +45,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: HirExpression {
-                        kind: HirExpressionKind::Int(*value),
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Int(*value),
                         ty,
-                        value_kind: ValueKind::Const,
+                        ValueKind::Const,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -60,12 +61,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: HirExpression {
-                        kind: HirExpressionKind::Float(*value),
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Float(*value),
                         ty,
-                        value_kind: ValueKind::Const,
+                        ValueKind::Const,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -75,12 +77,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: HirExpression {
-                        kind: HirExpressionKind::Bool(*value),
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Bool(*value),
                         ty,
-                        value_kind: ValueKind::Const,
+                        ValueKind::Const,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -90,12 +93,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: HirExpression {
-                        kind: HirExpressionKind::Char(*value),
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Char(*value),
                         ty,
-                        value_kind: ValueKind::Const,
+                        ValueKind::Const,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -105,14 +109,15 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: HirExpression {
-                        kind: HirExpressionKind::StringLiteral(
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::StringLiteral(
                             self.string_table.resolve(*value).to_owned(),
                         ),
                         ty,
-                        value_kind: ValueKind::Const,
+                        ValueKind::Const,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -123,12 +128,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: HirExpression {
-                        kind: HirExpressionKind::Load(HirPlace::Local(local_id)),
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Load(HirPlace::Local(local_id)),
                         ty,
-                        value_kind: ValueKind::Place,
+                        ValueKind::Place,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -165,12 +171,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude,
-                    value: HirExpression {
-                        kind: HirExpressionKind::Collection(lowered_items),
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Collection(lowered_items),
                         ty,
-                        value_kind: ValueKind::RValue,
+                        ValueKind::RValue,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -186,15 +193,16 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude,
-                    value: HirExpression {
-                        kind: HirExpressionKind::Range {
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::Range {
                             start: Box::new(lowered_start.value),
                             end: Box::new(lowered_end.value),
                         },
                         ty,
-                        value_kind: ValueKind::RValue,
+                        ValueKind::RValue,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -216,12 +224,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude,
-                    value: HirExpression {
-                        kind: HirExpressionKind::StructConstruct { struct_id, fields },
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::StructConstruct { struct_id, fields },
                         ty,
-                        value_kind: ValueKind::RValue,
+                        ValueKind::RValue,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -250,7 +259,7 @@ impl<'a> HirBuilder<'a> {
                 let region = self.current_region_or_error(&expr.location)?;
                 Ok(LoweredExpression {
                     prelude: vec![],
-                    value: self.unit_expression(region),
+                    value: self.unit_expression(&expr.location, region),
                 })
             }
         }?;
@@ -348,15 +357,16 @@ impl<'a> HirBuilder<'a> {
                                 HirUnaryOp::Neg => operand.ty,
                             };
 
-                            stack.push(HirExpression {
-                                kind: HirExpressionKind::UnaryOp {
+                            stack.push(self.make_expression(
+                                &node.location,
+                                HirExpressionKind::UnaryOp {
                                     op: hir_op,
                                     operand: Box::new(operand),
                                 },
-                                ty: result_ty,
-                                value_kind: ValueKind::RValue,
+                                result_ty,
+                                ValueKind::RValue,
                                 region,
-                            });
+                            ));
                             self.log_rpn_step("unary", node, &stack);
                         }
 
@@ -381,15 +391,17 @@ impl<'a> HirBuilder<'a> {
                             };
 
                             if matches!(op, Operator::Range) {
-                                stack.push(HirExpression {
-                                    kind: HirExpressionKind::Range {
+                                let range_ty = self.intern_type_kind(HirTypeKind::Range);
+                                stack.push(self.make_expression(
+                                    &node.location,
+                                    HirExpressionKind::Range {
                                         start: Box::new(left),
                                         end: Box::new(right),
                                     },
-                                    ty: self.intern_type_kind(HirTypeKind::Range),
-                                    value_kind: ValueKind::RValue,
+                                    range_ty,
+                                    ValueKind::RValue,
                                     region,
-                                });
+                                ));
                                 self.log_rpn_step("range", node, &stack);
                                 continue;
                             }
@@ -397,16 +409,17 @@ impl<'a> HirBuilder<'a> {
                             let hir_op = self.lower_bin_op(op, &node.location)?;
                             let result_ty = self.infer_binop_result_type(left.ty, right.ty, hir_op);
 
-                            stack.push(HirExpression {
-                                kind: HirExpressionKind::BinOp {
+                            stack.push(self.make_expression(
+                                &node.location,
+                                HirExpressionKind::BinOp {
                                     left: Box::new(left),
                                     op: hir_op,
                                     right: Box::new(right),
                                 },
-                                ty: result_ty,
-                                value_kind: ValueKind::RValue,
+                                result_ty,
+                                ValueKind::RValue,
                                 region,
-                            });
+                            ));
                             self.log_rpn_step("binary", node, &stack);
                         }
 
@@ -441,13 +454,9 @@ impl<'a> HirBuilder<'a> {
             );
         }
 
-        let value = stack.pop().expect("checked above");
+        let mut value = stack.pop().expect("checked above");
         let expected_ty = self.lower_data_type(expr_type, location)?;
-
-        let value = HirExpression {
-            ty: expected_ty,
-            ..value
-        };
+        value.ty = expected_ty;
 
         Ok(LoweredExpression { prelude, value })
     }
@@ -495,12 +504,13 @@ impl<'a> HirBuilder<'a> {
 
                 Ok(LoweredExpression {
                     prelude,
-                    value: HirExpression {
-                        kind: HirExpressionKind::Load(place),
+                    value: self.make_expression(
+                        &node.location,
+                        HirExpressionKind::Load(place),
                         ty,
-                        value_kind: ValueKind::Place,
+                        ValueKind::Place,
                         region,
-                    },
+                    ),
                 })
             }
 
@@ -628,7 +638,7 @@ impl<'a> HirBuilder<'a> {
             self.side_table.map_statement(location, &statement);
             prelude.push(statement);
 
-            let value = self.unit_expression(region);
+            let value = self.unit_expression(location, region);
             self.log_call_result_binding(location, None, &value);
             return Ok(LoweredExpression { prelude, value });
         }
@@ -660,12 +670,13 @@ impl<'a> HirBuilder<'a> {
         self.side_table.map_statement(location, &statement);
         prelude.push(statement);
 
-        let value = HirExpression {
-            kind: HirExpressionKind::Load(HirPlace::Local(temp_local)),
-            ty: call_result_type,
-            value_kind: ValueKind::Place,
+        let value = self.make_expression(
+            location,
+            HirExpressionKind::Load(HirPlace::Local(temp_local)),
+            call_result_type,
+            ValueKind::Place,
             region,
-        };
+        );
 
         self.log_call_result_binding(location, Some(temp_local), &value);
 
@@ -1218,13 +1229,39 @@ impl<'a> HirBuilder<'a> {
         }
     }
 
-    pub(crate) fn unit_expression(&mut self, region: RegionId) -> HirExpression {
+    pub(crate) fn make_expression(
+        &mut self,
+        location: &TextLocation,
+        kind: HirExpressionKind,
+        ty: TypeId,
+        value_kind: ValueKind,
+        region: RegionId,
+    ) -> HirExpression {
+        let id = self.allocate_value_id();
+        self.side_table.map_value(location, id, location);
+
         HirExpression {
-            kind: HirExpressionKind::TupleConstruct { elements: vec![] },
-            ty: self.intern_type_kind(HirTypeKind::Unit),
-            value_kind: ValueKind::Const,
+            id,
+            kind,
+            ty,
+            value_kind,
             region,
         }
+    }
+
+    pub(crate) fn unit_expression(
+        &mut self,
+        location: &TextLocation,
+        region: RegionId,
+    ) -> HirExpression {
+        let unit_ty = self.intern_type_kind(HirTypeKind::Unit);
+        self.make_expression(
+            location,
+            HirExpressionKind::TupleConstruct { elements: vec![] },
+            unit_ty,
+            ValueKind::Const,
+            region,
+        )
     }
 
     pub(crate) fn hir_error_location(&self, location: &TextLocation) -> ErrorLocation {

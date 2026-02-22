@@ -1,13 +1,18 @@
-use crate::backends::function_registry::CallTarget;
+use crate::backends::function_registry::{
+    CallTarget, HostAccessKind, HostFunctionDef, HostRegistry, HostReturnAlias,
+};
 use crate::compiler_frontend::analysis::borrow_checker::diagnostics::BorrowDiagnostics;
 use crate::compiler_frontend::analysis::borrow_checker::state::{
     BorrowState, FunctionLayout, LocalState, RootSet,
 };
-use crate::compiler_frontend::analysis::borrow_checker::types::{AccessKind, LocalMode};
+use crate::compiler_frontend::analysis::borrow_checker::types::{
+    AccessKind, FunctionReturnAliasSummary, LocalMode, StatementBorrowFact, TerminatorBorrowFact,
+    ValueAccessClassification, ValueBorrowFact,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace,
-    HirStatement, HirStatementKind, HirTerminator, OptionVariant,
+    BlockId, FunctionId, HirExpression, HirExpressionKind, HirMatchArm, HirNodeId, HirPattern,
+    HirPlace, HirStatement, HirStatementKind, HirTerminator, HirValueId, OptionVariant,
 };
 use crate::compiler_frontend::hir::hir_nodes::{HirBlock, HirModule};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -18,8 +23,10 @@ use rustc_hash::FxHashMap;
 pub(super) struct BorrowTransferContext<'a> {
     pub module: &'a HirModule,
     pub string_table: &'a StringTable,
+    pub host_registry: &'a HostRegistry,
     pub function_by_path: &'a FxHashMap<InternedPath, FunctionId>,
     pub function_param_mutability: &'a FxHashMap<FunctionId, Vec<bool>>,
+    pub function_return_alias: &'a FxHashMap<FunctionId, FunctionReturnAliasSummary>,
     pub diagnostics: BorrowDiagnostics<'a>,
 }
 
@@ -29,6 +36,9 @@ pub(super) struct BlockTransferStats {
     pub terminators_analyzed: usize,
     pub conflicts_checked: usize,
     pub mutable_call_sites: usize,
+    pub statement_facts: Vec<(HirNodeId, StatementBorrowFact)>,
+    pub terminator_fact: Option<(BlockId, TerminatorBorrowFact)>,
+    pub value_facts: Vec<(HirValueId, ValueBorrowFact)>,
 }
 
 pub(super) fn transfer_block(
@@ -38,9 +48,17 @@ pub(super) fn transfer_block(
     state: &mut BorrowState,
 ) -> Result<BlockTransferStats, CompilerError> {
     let mut stats = BlockTransferStats::default();
+    let mut value_fact_buffer = ValueFactBuffer::new(layout.local_count());
 
     for statement in &block.statements {
-        transfer_statement(context, layout, state, statement, &mut stats)?;
+        transfer_statement(
+            context,
+            layout,
+            state,
+            statement,
+            &mut stats,
+            &mut value_fact_buffer,
+        )?;
         stats.statements_analyzed += 1;
     }
 
@@ -51,9 +69,11 @@ pub(super) fn transfer_block(
         block.id,
         &block.terminator,
         &mut stats,
+        &mut value_fact_buffer,
     )?;
     stats.terminators_analyzed += 1;
 
+    stats.value_facts = value_fact_buffer.into_serialized(layout);
     Ok(stats)
 }
 
@@ -63,8 +83,10 @@ fn transfer_statement(
     state: &mut BorrowState,
     statement: &HirStatement,
     stats: &mut BlockTransferStats,
+    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     let mut tracker = StatementAccessTracker::new(layout.local_count());
+    let conflicts_before = stats.conflicts_checked;
 
     match &statement.kind {
         HirStatementKind::Assign { target, value } => {
@@ -78,6 +100,7 @@ fn transfer_statement(
                 &mut tracker,
                 location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
             record_shared_reads_in_expression(
                 context,
@@ -87,6 +110,7 @@ fn transfer_statement(
                 &mut tracker,
                 location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
 
             transfer_assign_target(
@@ -107,26 +131,50 @@ fn transfer_statement(
             result,
         } => {
             let location = context.diagnostics.statement_error_location(statement);
-            let mutability =
-                resolve_call_arg_mutability(context, target, args.len(), location.clone())?;
-            if mutability.iter().any(|is_mutable| *is_mutable) {
+            let semantics = resolve_call_semantics(context, target, args.len(), location.clone())?;
+            if semantics
+                .arg_mutability
+                .iter()
+                .any(|is_mutable| *is_mutable)
+            {
                 stats.mutable_call_sites += 1;
             }
 
+            let mut arg_roots = vec![RootSet::empty(layout.local_count()); args.len()];
+
             for (arg_index, argument) in args.iter().enumerate() {
-                if mutability[arg_index] {
-                    record_shared_reads_for_mutable_argument(
-                        context,
+                record_shared_reads_in_expression(
+                    context,
+                    layout,
+                    state,
+                    argument,
+                    &mut tracker,
+                    location.clone(),
+                    stats,
+                    value_fact_buffer,
+                )?;
+
+                let mut roots = RootSet::empty(layout.local_count());
+                collect_expression_roots(
+                    layout,
+                    state,
+                    argument,
+                    &mut roots,
+                    context
+                        .diagnostics
+                        .value_error_location(argument.id, location.clone()),
+                )?;
+                arg_roots[arg_index] = roots.clone();
+
+                if semantics.arg_mutability[arg_index] {
+                    let mutable_roots = mutable_argument_roots(
                         layout,
                         state,
                         argument,
-                        &mut tracker,
-                        location.clone(),
-                        stats,
+                        context
+                            .diagnostics
+                            .value_error_location(argument.id, location.clone()),
                     )?;
-
-                    let mutable_roots =
-                        mutable_argument_roots(layout, state, argument, location.clone())?;
                     if !mutable_roots.is_empty() {
                         check_mutable_access(
                             context,
@@ -135,20 +183,18 @@ fn transfer_statement(
                             &mutable_roots,
                             None,
                             &mut tracker,
-                            location.clone(),
+                            context
+                                .diagnostics
+                                .value_error_location(argument.id, location.clone()),
                             stats,
                         )?;
                     }
-                } else {
-                    record_shared_reads_in_expression(
-                        context,
-                        layout,
-                        state,
-                        argument,
-                        &mut tracker,
-                        location.clone(),
-                        stats,
-                    )?;
+
+                    value_fact_buffer.record(
+                        argument.id,
+                        ValueAccessClassification::MutableArgument,
+                        &mutable_roots,
+                    );
                 }
             }
 
@@ -166,10 +212,31 @@ fn transfer_statement(
                     );
                 };
 
-                let local_state = state.local_state(local_index).clone();
-                if local_state.mode.is_definitely_uninit() {
-                    state.update_local_state(local_index, LocalState::slot(layout.local_count()));
-                }
+                let alias_roots = match semantics.return_alias {
+                    CallResultAlias::Fresh => None,
+                    CallResultAlias::AliasArgs(ref arg_indices) => {
+                        let mut roots = RootSet::empty(layout.local_count());
+                        for arg_index in arg_indices {
+                            if let Some(arg_root_set) = arg_roots.get(*arg_index) {
+                                roots.union_with(arg_root_set);
+                            }
+                        }
+                        Some(roots)
+                    }
+                    CallResultAlias::Unknown => {
+                        let mut roots = RootSet::empty(layout.local_count());
+                        for arg_root_set in &arg_roots {
+                            roots.union_with(arg_root_set);
+                        }
+                        Some(roots)
+                    }
+                };
+
+                let new_local_state = match alias_roots {
+                    Some(roots) if !roots.is_empty() => LocalState::alias(roots),
+                    _ => LocalState::slot(layout.local_count()),
+                };
+                state.update_local_state(local_index, new_local_state);
             }
         }
 
@@ -183,34 +250,23 @@ fn transfer_statement(
                 &mut tracker,
                 location,
                 stats,
+                value_fact_buffer,
             )?;
         }
 
         HirStatementKind::Drop(_local) => {
-            // Drop sites are ownership/runtime-lowering concerns. Borrow enforcement
-            // in this phase only validates aliasing and mutable exclusivity.
+            // Ownership and drop-elision are handled by later phases.
         }
     }
 
+    let statement_fact = StatementBorrowFact {
+        shared_roots: roots_to_local_ids(layout, &tracker.shared_roots),
+        mutable_roots: roots_to_local_ids(layout, &tracker.mutable_roots),
+        conflicts_checked: stats.conflicts_checked - conflicts_before,
+    };
+    stats.statement_facts.push((statement.id, statement_fact));
+
     Ok(())
-}
-
-fn record_shared_reads_for_mutable_argument(
-    context: &BorrowTransferContext<'_>,
-    layout: &FunctionLayout,
-    state: &BorrowState,
-    expression: &HirExpression,
-    tracker: &mut StatementAccessTracker,
-    location: ErrorLocation,
-    stats: &mut BlockTransferStats,
-) -> Result<(), CompilerError> {
-    if let HirExpressionKind::Load(place) = &expression.kind {
-        return record_shared_reads_in_place_indices(
-            context, layout, state, place, tracker, location, stats,
-        );
-    }
-
-    record_shared_reads_in_expression(context, layout, state, expression, tracker, location, stats)
 }
 
 fn transfer_terminator(
@@ -220,11 +276,13 @@ fn transfer_terminator(
     block_id: BlockId,
     terminator: &HirTerminator,
     stats: &mut BlockTransferStats,
+    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     let mut tracker = StatementAccessTracker::new(layout.local_count());
     let location = context
         .diagnostics
         .terminator_error_location(block_id, terminator);
+    let conflicts_before = stats.conflicts_checked;
 
     match terminator {
         HirTerminator::Jump { args, .. } => {
@@ -263,6 +321,7 @@ fn transfer_terminator(
                 &mut tracker,
                 location,
                 stats,
+                value_fact_buffer,
             )?;
         }
 
@@ -275,6 +334,7 @@ fn transfer_terminator(
                 &mut tracker,
                 location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
 
             for arm in arms {
@@ -286,6 +346,7 @@ fn transfer_terminator(
                     &mut tracker,
                     location.clone(),
                     stats,
+                    value_fact_buffer,
                 )?;
             }
         }
@@ -299,6 +360,7 @@ fn transfer_terminator(
                 &mut tracker,
                 location,
                 stats,
+                value_fact_buffer,
             )?;
         }
 
@@ -312,6 +374,7 @@ fn transfer_terminator(
                     &mut tracker,
                     location,
                     stats,
+                    value_fact_buffer,
                 )?;
             }
         }
@@ -320,6 +383,15 @@ fn transfer_terminator(
         | HirTerminator::Break { .. }
         | HirTerminator::Continue { .. } => {}
     }
+
+    stats.terminator_fact = Some((
+        block_id,
+        TerminatorBorrowFact {
+            shared_roots: roots_to_local_ids(layout, &tracker.shared_roots),
+            mutable_roots: roots_to_local_ids(layout, &tracker.mutable_roots),
+            conflicts_checked: stats.conflicts_checked - conflicts_before,
+        },
+    ));
 
     Ok(())
 }
@@ -332,6 +404,7 @@ fn record_shared_reads_in_pattern(
     tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
     stats: &mut BlockTransferStats,
+    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     if let HirPattern::Literal(expression) = &arm.pattern {
         record_shared_reads_in_expression(
@@ -342,25 +415,46 @@ fn record_shared_reads_in_pattern(
             tracker,
             location.clone(),
             stats,
+            value_fact_buffer,
         )?;
     }
 
     if let Some(guard) = &arm.guard {
-        record_shared_reads_in_expression(context, layout, state, guard, tracker, location, stats)?;
+        record_shared_reads_in_expression(
+            context,
+            layout,
+            state,
+            guard,
+            tracker,
+            location,
+            stats,
+            value_fact_buffer,
+        )?;
     }
 
     Ok(())
 }
 
-fn resolve_call_arg_mutability(
+#[derive(Debug, Clone)]
+struct CallSemantics {
+    arg_mutability: Vec<bool>,
+    return_alias: CallResultAlias,
+}
+
+#[derive(Debug, Clone)]
+enum CallResultAlias {
+    Fresh,
+    AliasArgs(Vec<usize>),
+    Unknown,
+}
+
+fn resolve_call_semantics(
     context: &BorrowTransferContext<'_>,
     target: &CallTarget,
     arg_len: usize,
     location: ErrorLocation,
-) -> Result<Vec<bool>, CompilerError> {
+) -> Result<CallSemantics, CompilerError> {
     match target {
-        CallTarget::HostFunction(_) => Ok(vec![false; arg_len]),
-
         CallTarget::UserFunction(path) => {
             let Some(function_id) = context.function_by_path.get(path).copied() else {
                 return_borrow_checker_error!(
@@ -405,9 +499,93 @@ fn resolve_call_arg_mutability(
                 );
             }
 
-            Ok(param_mutability.clone())
+            let return_alias = match context.function_return_alias.get(&function_id) {
+                Some(FunctionReturnAliasSummary::Fresh) => CallResultAlias::Fresh,
+                Some(FunctionReturnAliasSummary::AliasParams(indices)) => {
+                    CallResultAlias::AliasArgs(indices.clone())
+                }
+                Some(FunctionReturnAliasSummary::Unknown) | None => CallResultAlias::Unknown,
+            };
+
+            Ok(CallSemantics {
+                arg_mutability: param_mutability.clone(),
+                return_alias,
+            })
+        }
+
+        CallTarget::HostFunction(path) => {
+            let host_def = resolve_host_definition(context, path, location.clone())?;
+            if host_def.parameters.len() != arg_len {
+                return_borrow_checker_error!(
+                    format!(
+                        "Borrow checker found argument count mismatch for host function '{}': expected {}, got {}",
+                        host_def.name,
+                        host_def.parameters.len(),
+                        arg_len
+                    ),
+                    location,
+                    {
+                        CompilationStage => "Borrow Checking",
+                        PrimarySuggestion => "Ensure call argument count matches host function signature",
+                    }
+                );
+            }
+
+            let arg_mutability = host_def
+                .parameters
+                .iter()
+                .map(|param| matches!(param.access_kind, HostAccessKind::Mutable))
+                .collect::<Vec<_>>();
+
+            let return_alias = match host_def.return_alias {
+                HostReturnAlias::Fresh => CallResultAlias::Fresh,
+                HostReturnAlias::AliasAnyArg => CallResultAlias::AliasArgs((0..arg_len).collect()),
+                HostReturnAlias::AliasMutableArgs => CallResultAlias::AliasArgs(
+                    arg_mutability
+                        .iter()
+                        .enumerate()
+                        .filter_map(
+                            |(index, is_mutable)| if *is_mutable { Some(index) } else { None },
+                        )
+                        .collect(),
+                ),
+            };
+
+            Ok(CallSemantics {
+                arg_mutability,
+                return_alias,
+            })
         }
     }
+}
+
+fn resolve_host_definition<'a>(
+    context: &'a BorrowTransferContext<'_>,
+    path: &InternedPath,
+    location: ErrorLocation,
+) -> Result<&'a HostFunctionDef, CompilerError> {
+    if let Some(name) = path.name_str(context.string_table) {
+        if let Some(definition) = context.host_registry.get_function(name) {
+            return Ok(definition);
+        }
+    }
+
+    let full = path.to_string(context.string_table);
+    if let Some(definition) = context.host_registry.get_function(&full) {
+        return Ok(definition);
+    }
+
+    return_borrow_checker_error!(
+        format!(
+            "Borrow checker could not resolve host call target '{}'",
+            context.diagnostics.path_name(path)
+        ),
+        location,
+        {
+            CompilationStage => "Borrow Checking",
+            PrimarySuggestion => "Ensure host registry metadata includes this host function",
+        }
+    )
 }
 
 fn transfer_assign_target(
@@ -588,10 +766,7 @@ fn check_mutable_access(
         if !layout.local_mutable[root_index] {
             let root_name = context.diagnostics.local_name(layout.local_ids[root_index]);
             return_borrow_checker_error!(
-                format!(
-                    "Cannot mutably access immutable local '{}'",
-                    root_name
-                ),
+                format!("Cannot mutably access immutable local '{}'", root_name),
                 location.clone(),
                 {
                     CompilationStage => "Borrow Checking",
@@ -682,6 +857,21 @@ fn roots_for_place(
                 );
             };
 
+            let local_state = state.local_state(local_index);
+            if local_state.mode.is_definitely_uninit() {
+                return_borrow_checker_error!(
+                    format!(
+                        "Borrow checker encountered use of local '{}' before initialization or after scope end",
+                        local_id
+                    ),
+                    location,
+                    {
+                        CompilationStage => "Borrow Checking",
+                        PrimarySuggestion => "Initialize the local before use and avoid using branch-local locals outside their region",
+                    }
+                );
+            }
+
             Ok(state.effective_roots(local_index))
         }
 
@@ -699,12 +889,20 @@ fn record_shared_reads_in_place_indices(
     tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
     stats: &mut BlockTransferStats,
+    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     match place {
         HirPlace::Local(_) => Ok(()),
 
         HirPlace::Field { base, .. } => record_shared_reads_in_place_indices(
-            context, layout, state, base, tracker, location, stats,
+            context,
+            layout,
+            state,
+            base,
+            tracker,
+            location,
+            stats,
+            value_fact_buffer,
         ),
 
         HirPlace::Index { base, index } => {
@@ -716,10 +914,18 @@ fn record_shared_reads_in_place_indices(
                 tracker,
                 location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
 
             record_shared_reads_in_expression(
-                context, layout, state, index, tracker, location, stats,
+                context,
+                layout,
+                state,
+                index,
+                tracker,
+                location,
+                stats,
+                value_fact_buffer,
             )
         }
     }
@@ -733,6 +939,7 @@ fn record_shared_reads_in_expression(
     tracker: &mut StatementAccessTracker,
     location: ErrorLocation,
     stats: &mut BlockTransferStats,
+    value_fact_buffer: &mut ValueFactBuffer,
 ) -> Result<(), CompilerError> {
     match &expression.kind {
         HirExpressionKind::Int(_)
@@ -742,18 +949,22 @@ fn record_shared_reads_in_expression(
         | HirExpressionKind::StringLiteral(_) => {}
 
         HirExpressionKind::Load(place) => {
+            let value_location = context
+                .diagnostics
+                .value_error_location(expression.id, location.clone());
             record_shared_reads_in_place_indices(
                 context,
                 layout,
                 state,
                 place,
                 tracker,
-                location.clone(),
+                value_location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
 
-            let roots = roots_for_place(layout, state, place, location.clone())?;
-            check_shared_access(context, layout, &roots, tracker, location, stats)?;
+            let roots = roots_for_place(layout, state, place, value_location.clone())?;
+            check_shared_access(context, layout, &roots, tracker, value_location, stats)?;
         }
 
         HirExpressionKind::BinOp { left, right, .. } => {
@@ -765,15 +976,30 @@ fn record_shared_reads_in_expression(
                 tracker,
                 location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
             record_shared_reads_in_expression(
-                context, layout, state, right, tracker, location, stats,
+                context,
+                layout,
+                state,
+                right,
+                tracker,
+                location.clone(),
+                stats,
+                value_fact_buffer,
             )?;
         }
 
         HirExpressionKind::UnaryOp { operand, .. } => {
             record_shared_reads_in_expression(
-                context, layout, state, operand, tracker, location, stats,
+                context,
+                layout,
+                state,
+                operand,
+                tracker,
+                location.clone(),
+                stats,
+                value_fact_buffer,
             )?;
         }
 
@@ -787,6 +1013,7 @@ fn record_shared_reads_in_expression(
                     tracker,
                     location.clone(),
                     stats,
+                    value_fact_buffer,
                 )?;
             }
         }
@@ -802,6 +1029,7 @@ fn record_shared_reads_in_expression(
                     tracker,
                     location.clone(),
                     stats,
+                    value_fact_buffer,
                 )?;
             }
         }
@@ -815,9 +1043,17 @@ fn record_shared_reads_in_expression(
                 tracker,
                 location.clone(),
                 stats,
+                value_fact_buffer,
             )?;
             record_shared_reads_in_expression(
-                context, layout, state, end, tracker, location, stats,
+                context,
+                layout,
+                state,
+                end,
+                tracker,
+                location.clone(),
+                stats,
+                value_fact_buffer,
             )?;
         }
 
@@ -825,7 +1061,14 @@ fn record_shared_reads_in_expression(
             if matches!(variant, OptionVariant::Some) {
                 if let Some(inner) = value {
                     record_shared_reads_in_expression(
-                        context, layout, state, inner, tracker, location, stats,
+                        context,
+                        layout,
+                        state,
+                        inner,
+                        tracker,
+                        location.clone(),
+                        stats,
+                        value_fact_buffer,
                     )?;
                 }
             }
@@ -833,10 +1076,34 @@ fn record_shared_reads_in_expression(
 
         HirExpressionKind::ResultConstruct { value, .. } => {
             record_shared_reads_in_expression(
-                context, layout, state, value, tracker, location, stats,
+                context,
+                layout,
+                state,
+                value,
+                tracker,
+                location.clone(),
+                stats,
+                value_fact_buffer,
             )?;
         }
     }
+
+    let mut expression_roots = RootSet::empty(layout.local_count());
+    collect_expression_roots(
+        layout,
+        state,
+        expression,
+        &mut expression_roots,
+        context
+            .diagnostics
+            .value_error_location(expression.id, location.clone()),
+    )?;
+    let classification = if expression_roots.is_empty() {
+        ValueAccessClassification::None
+    } else {
+        ValueAccessClassification::SharedRead
+    };
+    value_fact_buffer.record(expression.id, classification, &expression_roots);
 
     Ok(())
 }
@@ -905,15 +1172,29 @@ fn collect_expression_roots(
     Ok(())
 }
 
+fn roots_to_local_ids(
+    layout: &FunctionLayout,
+    roots: &RootSet,
+) -> Vec<crate::compiler_frontend::hir::hir_nodes::LocalId> {
+    roots
+        .iter_ones()
+        .map(|index| layout.local_ids[index])
+        .collect::<Vec<_>>()
+}
+
 #[derive(Debug, Clone)]
 struct StatementAccessTracker {
     root_access: Vec<Option<AccessKind>>,
+    shared_roots: RootSet,
+    mutable_roots: RootSet,
 }
 
 impl StatementAccessTracker {
     fn new(root_count: usize) -> Self {
         Self {
             root_access: vec![None; root_count],
+            shared_roots: RootSet::empty(root_count),
+            mutable_roots: RootSet::empty(root_count),
         }
     }
 
@@ -929,6 +1210,11 @@ impl StatementAccessTracker {
     }
 
     fn record(&mut self, root_index: usize, access: AccessKind) {
+        match access {
+            AccessKind::Shared => self.shared_roots.insert(root_index),
+            AccessKind::Mutable => self.mutable_roots.insert(root_index),
+        }
+
         let entry = &mut self.root_access[root_index];
         match (*entry, access) {
             (Some(AccessKind::Mutable), _) => {}
@@ -936,5 +1222,52 @@ impl StatementAccessTracker {
             (None, AccessKind::Shared) => *entry = Some(AccessKind::Shared),
             (Some(AccessKind::Shared), AccessKind::Shared) => {}
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ValueFactBuffer {
+    local_count: usize,
+    facts: FxHashMap<HirValueId, (ValueAccessClassification, RootSet)>,
+}
+
+impl ValueFactBuffer {
+    fn new(local_count: usize) -> Self {
+        Self {
+            local_count,
+            facts: FxHashMap::default(),
+        }
+    }
+
+    fn record(
+        &mut self,
+        value_id: HirValueId,
+        classification: ValueAccessClassification,
+        roots: &RootSet,
+    ) {
+        let entry = self.facts.entry(value_id).or_insert_with(|| {
+            (
+                ValueAccessClassification::None,
+                RootSet::empty(self.local_count),
+            )
+        });
+
+        entry.0 = entry.0.merge(classification);
+        entry.1.union_with(roots);
+    }
+
+    fn into_serialized(self, layout: &FunctionLayout) -> Vec<(HirValueId, ValueBorrowFact)> {
+        self.facts
+            .into_iter()
+            .map(|(value_id, (classification, roots))| {
+                (
+                    value_id,
+                    ValueBorrowFact {
+                        classification,
+                        roots: roots_to_local_ids(layout, &roots),
+                    },
+                )
+            })
+            .collect::<Vec<_>>()
     }
 }
