@@ -1231,7 +1231,6 @@ impl<'a> HirBuilder<'a> {
         location.to_error_location(self.string_table)
     }
 
-    #[cfg(feature = "show_hir")]
     fn log_expression_input(&self, expr: &Expression) {
         hir_log!(format!(
             "[HIR] Lowering expression {:?} @ {:?}",
@@ -1239,70 +1238,51 @@ impl<'a> HirBuilder<'a> {
         ));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_expression_input(&self, _expr: &Expression) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_expression_output(&self, input: &Expression, output: &HirExpression) {
-        let display = HirDisplayContext::new(self.string_table)
-            .with_side_table(&self.side_table)
-            .with_type_context(&self.type_context);
-
-        let rendered = output.display_with_context(&display);
         hir_log!(format!(
             "[HIR] Lowered expression {:?} -> {}",
-            input.kind, rendered
+            input.kind,
+            output.display_with_context(
+                &HirDisplayContext::new(self.string_table)
+                    .with_side_table(&self.side_table)
+                    .with_type_context(&self.type_context),
+            )
         ));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_expression_output(&self, _input: &Expression, _output: &HirExpression) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_rpn_step(&self, stage: &str, node: &AstNode, stack: &[HirExpression]) {
-        let display = HirDisplayContext::new(self.string_table)
-            .with_side_table(&self.side_table)
-            .with_type_context(&self.type_context);
-
-        let rendered_stack = stack
-            .iter()
-            .map(|expr| expr.display_with_context(&display))
-            .collect::<Vec<_>>()
-            .join(" | ");
-
         hir_log!(format!(
             "[HIR][RPN] {} node={:?} stack=[{}]",
-            stage, node.kind, rendered_stack
+            stage,
+            node.kind,
+            {
+                let display = HirDisplayContext::new(self.string_table)
+                    .with_side_table(&self.side_table)
+                    .with_type_context(&self.type_context);
+                stack
+                    .iter()
+                    .map(|expr| expr.display_with_context(&display))
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+            }
         ));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_rpn_step(&self, _stage: &str, _node: &AstNode, _stack: &[HirExpression]) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_call_result_binding(
         &self,
         location: &TextLocation,
         local: Option<LocalId>,
         value: &HirExpression,
     ) {
-        let display = HirDisplayContext::new(self.string_table)
-            .with_side_table(&self.side_table)
-            .with_type_context(&self.type_context);
-
-        let value_string = value.display_with_context(&display);
         hir_log!(format!(
             "[HIR] Emitted call binding @ {:?}: result={:?}, value={}",
-            location, local, value_string
+            location,
+            local,
+            value.display_with_context(
+                &HirDisplayContext::new(self.string_table)
+                    .with_side_table(&self.side_table)
+                    .with_type_context(&self.type_context),
+            )
         ));
-    }
-
-    #[cfg(not(feature = "show_hir"))]
-    fn log_call_result_binding(
-        &self,
-        _location: &TextLocation,
-        _local: Option<LocalId>,
-        _value: &HirExpression,
-    ) {
     }
 }

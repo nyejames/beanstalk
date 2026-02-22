@@ -323,14 +323,6 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
 
     timer_log!(time, "HIR generated in: ");
 
-    // Debug output for HIR if enabled
-    // #[cfg(feature = "show_hir")]
-    // {
-    //     println!("=== HIR OUTPUT ===");
-    //     println!("{}", hir_module.debug_string(&compiler.string_table));
-    //     println!("=== END HIR OUTPUT ===");
-    // }
-
     // ----------------------------------
     //          BORROW CHECKING
     // ----------------------------------
@@ -347,19 +339,16 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
 
     timer_log!(time, "Borrow checking completed in: ");
 
-    // Debug output for the borrow checker if enabled
-    #[cfg(feature = "show_borrow_checker")]
-    {
-        borrow_log!("=== BORROW CHECKER OUTPUT ===");
-        borrow_log!(format!(
-            "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={})",
-            borrow_analysis.analysis.total_state_snapshots(),
-            borrow_analysis.stats.functions_analyzed,
-            borrow_analysis.stats.blocks_analyzed,
-            borrow_analysis.stats.conflicts_checked
-        ));
-        borrow_log!("=== END BORROW CHECKER OUTPUT ===");
-    }
+    // Debug output for the borrow checker (macro-gated by `show_borrow_checker`)
+    borrow_log!("=== BORROW CHECKER OUTPUT ===");
+    borrow_log!(format!(
+        "Borrow checking completed successfully (states={} functions={} blocks={} conflicts_checked={})",
+        borrow_analysis.analysis.total_state_snapshots(),
+        borrow_analysis.stats.functions_analyzed,
+        borrow_analysis.stats.blocks_analyzed,
+        borrow_analysis.stats.conflicts_checked
+    ));
+    borrow_log!("=== END BORROW CHECKER OUTPUT ===");
 
     Ok(Module {
         folder_name: config

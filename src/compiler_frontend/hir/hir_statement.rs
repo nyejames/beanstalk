@@ -990,23 +990,14 @@ impl<'a> HirBuilder<'a> {
         matches!(self.type_context.get(ty).kind, HirTypeKind::Unit)
     }
 
-    #[cfg(feature = "show_hir")]
     fn log_statement_input(&self, node: &AstNode) {
         hir_log!(format!("[HIR][Stmt] Lowering {:?}", node.kind));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_statement_input(&self, _node: &AstNode) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_statement_output(&self, node: &AstNode) {
         hir_log!(format!("[HIR][Stmt] Lowered {:?}", node.kind));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_statement_output(&self, _node: &AstNode) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_block_created(&self, block_id: BlockId, label: &str, location: &TextLocation) {
         hir_log!(format!(
             "[HIR][CFG] Created block {} ({}) @ {:?}",
@@ -1014,41 +1005,25 @@ impl<'a> HirBuilder<'a> {
         ));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_block_created(&self, _block_id: BlockId, _label: &str, _location: &TextLocation) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_control_flow_edge(&self, from: BlockId, to: BlockId, label: &str) {
         hir_log!(format!("[HIR][CFG] Edge {} -> {} ({})", from, to, label));
     }
 
-    #[cfg(not(feature = "show_hir"))]
-    fn log_control_flow_edge(&self, _from: BlockId, _to: BlockId, _label: &str) {}
-
-    #[cfg(feature = "show_hir")]
     fn log_terminator_emitted(
         &self,
         block_id: BlockId,
         terminator: &HirTerminator,
         location: &TextLocation,
     ) {
-        let display = HirDisplayContext::new(self.string_table)
-            .with_side_table(&self.side_table)
-            .with_type_context(&self.type_context);
-
-        let rendered = terminator.display_with_context(&display);
         hir_log!(format!(
             "[HIR][CFG] Terminator for {} @ {:?}: {}",
-            block_id, location, rendered
+            block_id,
+            location,
+            terminator.display_with_context(
+                &HirDisplayContext::new(self.string_table)
+                    .with_side_table(&self.side_table)
+                    .with_type_context(&self.type_context),
+            )
         ));
-    }
-
-    #[cfg(not(feature = "show_hir"))]
-    fn log_terminator_emitted(
-        &self,
-        _block_id: BlockId,
-        _terminator: &HirTerminator,
-        _location: &TextLocation,
-    ) {
     }
 }

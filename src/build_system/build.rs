@@ -1,6 +1,6 @@
 use crate::build_system::create_project_modules::{ExternalImport, compile_project_frontend};
 use crate::compiler_frontend::Flag;
-use crate::compiler_frontend::analysis::BorrowCheckReport;
+use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;

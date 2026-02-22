@@ -30,7 +30,9 @@ pub(crate) mod hir;
 pub(crate) mod analysis;
 
 use crate::backends::function_registry::HostRegistry;
-use crate::compiler_frontend::analysis::{BorrowCheckReport, check_borrows as run_borrow_checker};
+use crate::compiler_frontend::analysis::borrow_checker::{
+    BorrowCheckReport, check_borrows as run_borrow_checker,
+};
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -175,13 +177,6 @@ impl<'a> CompilerFrontend<'a> {
     /// a place-based representation suitable for borrow checking analysis.
     pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
         let hir_module = lower_module(ast, &mut self.string_table)?;
-
-        // Display HIR if the show_hir feature is enabled
-        // #[cfg(feature = "show_hir")]
-        // {
-        //     println!("{}", hir_module.debug_string(&self.string_table));
-        // }
-
         Ok(hir_module)
     }
 
