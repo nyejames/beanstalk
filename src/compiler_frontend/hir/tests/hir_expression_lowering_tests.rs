@@ -18,9 +18,11 @@ use crate::compiler_frontend::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 
 fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
+    let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
     let mut builder = HirBuilder::new(string_table);
 
     let region = RegionId(0);
+    let function_id = FunctionId(0);
     let block = HirBlock {
         id: BlockId(0),
         region,
@@ -32,6 +34,8 @@ fn setup_builder<'a>(string_table: &'a mut StringTable) -> HirBuilder<'a> {
     builder.test_push_block(block);
     builder.test_set_current_region(region);
     builder.test_set_current_block(BlockId(0));
+    builder.test_register_function_name(test_function_name, function_id);
+    builder.test_set_current_function(function_id);
 
     builder
 }
@@ -96,24 +100,6 @@ fn runtime_template_expression(location: TextLocation, content: Vec<Expression>)
     }
 
     Expression::template(template, Ownership::ImmutableOwned)
-}
-
-fn collect_non_empty_string_literals(
-    expr: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
-    out: &mut Vec<String>,
-) {
-    match &expr.kind {
-        HirExpressionKind::StringLiteral(value) => {
-            if !value.is_empty() {
-                out.push(value.clone());
-            }
-        }
-        HirExpressionKind::BinOp { left, right, .. } => {
-            collect_non_empty_string_literals(left, out);
-            collect_non_empty_string_literals(right, out);
-        }
-        _ => {}
-    }
 }
 
 #[test]
@@ -512,7 +498,7 @@ fn malformed_runtime_rpn_reports_hir_transformation_error() {
 }
 
 #[test]
-fn runtime_template_expression_lowers_to_string_concat_expression() {
+fn runtime_template_expression_lowers_to_synthetic_function_call() {
     let mut string_table = StringTable::new();
     let hello = string_table.intern("hello");
     let location = TextLocation::new_just_line(10);
@@ -530,29 +516,30 @@ fn runtime_template_expression_lowers_to_string_concat_expression() {
     let lowered = builder
         .lower_expression(&expr)
         .expect("runtime template lowering should succeed");
-    assert!(lowered.prelude.is_empty());
+    assert_eq!(lowered.prelude.len(), 1);
 
-    let (left, right) = match lowered.value.kind {
-        HirExpressionKind::BinOp {
-            op: HirBinOp::Add,
-            left,
-            right,
-        } => (left, right),
-        other => panic!("expected string concat binop for template lowering, got {other:?}"),
+    let template_target = match &lowered.prelude[0].kind {
+        HirStatementKind::Call {
+            target: CallTarget::UserFunction(path),
+            result: Some(_),
+            ..
+        } => path.clone(),
+        other => panic!("expected synthetic template call, got {other:?}"),
     };
 
+    assert!(
+        template_target
+            .name_str(&string_table)
+            .is_some_and(|name| name.starts_with("__template_fn_"))
+    );
     assert!(matches!(
-        left.kind,
-        HirExpressionKind::StringLiteral(ref value) if value.is_empty()
-    ));
-    assert!(matches!(
-        right.kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "hello"
+        lowered.value.kind,
+        HirExpressionKind::Load(HirPlace::Local(_))
     ));
 }
 
 #[test]
-fn runtime_template_coerces_non_string_segments() {
+fn runtime_template_generated_function_coerces_non_string_segments() {
     let mut string_table = StringTable::new();
     let location = TextLocation::new_just_line(11);
     let mut builder = setup_builder(&mut string_table);
@@ -565,18 +552,50 @@ fn runtime_template_coerces_non_string_segments() {
     let lowered = builder
         .lower_expression(&expr)
         .expect("runtime template lowering should succeed");
-    assert!(lowered.prelude.is_empty());
+    assert_eq!(lowered.prelude.len(), 1);
 
-    let coerced_chunk = match lowered.value.kind {
+    let template_target = match &lowered.prelude[0].kind {
+        HirStatementKind::Call {
+            target: CallTarget::UserFunction(path),
+            ..
+        } => path.clone(),
+        other => panic!("expected synthetic template call, got {other:?}"),
+    };
+
+    let template_function_id = *builder
+        .functions_by_name
+        .get(&template_target)
+        .expect("synthetic template function should be registered");
+    let template_function = builder
+        .module
+        .functions
+        .iter()
+        .find(|function| function.id == template_function_id)
+        .expect("synthetic template function should be present");
+    let template_entry = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == template_function.entry)
+        .expect("synthetic template entry block should exist");
+
+    let returned = match &template_entry.terminator {
+        HirTerminator::Return(value) => value,
+        other => panic!("expected template function return terminator, got {other:?}"),
+    };
+
+    let coerced_chunk = match &returned.kind {
         HirExpressionKind::BinOp {
             op: HirBinOp::Add,
             right,
             ..
         } => right,
-        other => panic!("expected top-level string concat for template lowering, got {other:?}"),
+        other => {
+            panic!("expected template return to concatenate accumulated string, got {other:?}")
+        }
     };
 
-    let (left, right) = match coerced_chunk.kind {
+    let (left, right) = match &coerced_chunk.kind {
         HirExpressionKind::BinOp {
             op: HirBinOp::Add,
             left,
@@ -589,7 +608,10 @@ fn runtime_template_coerces_non_string_segments() {
         left.kind,
         HirExpressionKind::StringLiteral(ref value) if value.is_empty()
     ));
-    assert!(matches!(right.kind, HirExpressionKind::Int(5)));
+    assert!(matches!(
+        right.kind,
+        HirExpressionKind::Load(HirPlace::Local(_))
+    ));
 }
 
 #[test]
@@ -622,14 +644,44 @@ fn runtime_template_lowers_nested_templates_in_order() {
     let lowered = builder
         .lower_expression(&expr)
         .expect("nested runtime template lowering should succeed");
-    assert!(lowered.prelude.is_empty());
+    assert_eq!(lowered.prelude.len(), 2);
 
-    let mut strings = Vec::new();
-    collect_non_empty_string_literals(&lowered.value, &mut strings);
-    assert_eq!(
-        strings,
-        vec!["A".to_owned(), "B".to_owned(), "C".to_owned()]
-    );
+    assert!(matches!(
+        lowered.prelude[0].kind,
+        HirStatementKind::Call {
+            target: CallTarget::UserFunction(_),
+            result: Some(_),
+            ..
+        }
+    ));
+    assert!(matches!(
+        lowered.prelude[1].kind,
+        HirStatementKind::Call {
+            target: CallTarget::UserFunction(_),
+            result: Some(_),
+            ..
+        }
+    ));
+
+    let outer_call_args = match &lowered.prelude[1].kind {
+        HirStatementKind::Call { args, .. } => args,
+        other => panic!("expected outer template call statement, got {other:?}"),
+    };
+    assert_eq!(outer_call_args.len(), 3);
+    assert!(matches!(
+        outer_call_args[0].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "A"
+    ));
+    assert!(matches!(
+        outer_call_args[1].kind,
+        HirExpressionKind::Load(HirPlace::Local(_))
+    ));
+    assert!(matches!(
+        outer_call_args[2].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "C"
+    ));
+
+    assert_eq!(builder.module.functions.len(), 2);
 }
 
 #[test]

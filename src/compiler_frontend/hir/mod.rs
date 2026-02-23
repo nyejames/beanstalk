@@ -1,6 +1,3 @@
-// This is early prototype code, so ignore placeholder unused stuff for now
-#![allow(unused)]
-
 // CURRENT REFACTOR
 pub(crate) mod hir_builder;
 pub(crate) mod hir_datatypes;

@@ -33,8 +33,14 @@ pub fn lower_module(
     ast: Ast,
     string_table: &mut StringTable,
 ) -> Result<HirModule, CompilerMessages> {
-    let mut ctx = HirBuilder::new(string_table);
+    let ctx = HirBuilder::new(string_table);
     ctx.build_hir_module(ast)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct LoopTargets {
+    pub break_target: BlockId,
+    pub continue_target: BlockId,
 }
 
 #[cfg(test)]
@@ -69,6 +75,7 @@ pub struct HirBuilder<'a> {
     pub(super) next_struct_id: u32,
     pub(super) next_field_id: u32,
     pub(super) temp_local_counter: u32,
+    pub(super) template_function_counter: u32,
 
     // === Type interning ===
     pub(super) type_context: TypeContext,
@@ -94,10 +101,7 @@ pub struct HirBuilder<'a> {
     pub(super) current_function: Option<FunctionId>,
     pub(super) current_block: Option<BlockId>,
     pub(super) current_region: Option<RegionId>,
-
-    // Parallel Metadata Arrays (Index-aligned with the arenas above)
-    // This is for resolving statements back to their original source code locations
-    pub statement_locations: Vec<TextLocation>,
+    pub(super) loop_targets: Vec<LoopTargets>,
 }
 
 impl<'a> HirBuilder<'a> {
@@ -119,6 +123,7 @@ impl<'a> HirBuilder<'a> {
             next_struct_id: 0,
             next_field_id: 0,
             temp_local_counter: 0,
+            template_function_counter: 0,
 
             type_context: TypeContext::default(),
             type_interner: FxHashMap::default(),
@@ -136,8 +141,7 @@ impl<'a> HirBuilder<'a> {
             current_function: None,
             current_block: None,
             current_region: None,
-
-            statement_locations: vec![],
+            loop_targets: vec![],
         }
     }
 
@@ -312,6 +316,7 @@ impl<'a> HirBuilder<'a> {
 
         self.current_function = Some(function_id);
         self.locals_by_name.clear();
+        self.loop_targets.clear();
         self.set_current_block(entry_block, location)
     }
 
@@ -320,6 +325,7 @@ impl<'a> HirBuilder<'a> {
         self.current_block = None;
         self.current_region = None;
         self.locals_by_name.clear();
+        self.loop_targets.clear();
     }
 
     pub(crate) fn set_current_block(

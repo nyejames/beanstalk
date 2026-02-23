@@ -17,6 +17,14 @@ pub(crate) fn validate_module_for_tests(
 
 impl<'a> HirBuilder<'a> {
     pub(crate) fn test_push_block(&mut self, block: HirBlock) {
+        if block.id.0 >= self.next_block_id {
+            self.next_block_id = block.id.0 + 1;
+        }
+
+        if block.region.0 >= self.next_region_id {
+            self.next_region_id = block.region.0 + 1;
+        }
+
         self.push_block(block);
     }
 
@@ -26,6 +34,10 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn test_set_current_block(&mut self, block_id: BlockId) {
         self.current_block = Some(block_id);
+    }
+
+    pub(crate) fn test_set_current_function(&mut self, function_id: FunctionId) {
+        self.current_function = Some(function_id);
     }
 
     pub(crate) fn test_register_local_in_block(&mut self, local: HirLocal, name: InternedPath) {

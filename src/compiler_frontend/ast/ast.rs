@@ -182,6 +182,7 @@ pub struct ScopeContext {
     pub declarations: Vec<Var>,
     pub returns: Vec<DataType>,
     pub host_registry: HostRegistry,
+    pub loop_depth: usize,
 }
 #[derive(PartialEq, Clone)]
 pub enum ContextKind {
@@ -209,12 +210,16 @@ impl ScopeContext {
             declarations: declarations.to_owned(),
             returns,
             host_registry,
+            loop_depth: 0,
         }
     }
 
     pub fn new_child_control_flow(&self, kind: ContextKind) -> ScopeContext {
         let mut new_context = self.to_owned();
         new_context.kind = kind;
+        if matches!(new_context.kind, ContextKind::Loop) {
+            new_context.loop_depth += 1;
+        }
 
         // For now, add the lifetime ID to the scope.
         new_context
@@ -232,6 +237,7 @@ impl ScopeContext {
 
         // Create a new scope path by joining the current scope with the function name
         new_context.scope = self.scope.append(id);
+        new_context.loop_depth = 0;
 
         new_context.declarations = signature.parameters;
 
@@ -252,11 +258,16 @@ impl ScopeContext {
             declarations: Vec::new(),
             returns: Vec::new(),
             host_registry: HostRegistry::default(),
+            loop_depth: 0,
         }
     }
 
     pub fn add_var(&mut self, arg: Var) {
         self.declarations.push(arg);
+    }
+
+    pub fn is_inside_loop(&self) -> bool {
+        self.loop_depth > 0
     }
 }
 
@@ -273,6 +284,7 @@ macro_rules! new_template_context {
             declarations: $context.declarations.to_owned(),
             returns: vec![],
             host_registry: $context.host_registry.clone(),
+            loop_depth: $context.loop_depth,
         }
     };
 }
@@ -291,6 +303,7 @@ macro_rules! new_config_context {
             declarations: $args,
             returns: vec![],
             host_registry: $registry,
+            loop_depth: 0,
         }
     }};
 }
@@ -309,6 +322,7 @@ macro_rules! new_condition_context {
             declarations: $args,
             returns: vec![], //Empty because conditions are always booleans
             host_registry: $registry,
+            loop_depth: 0,
         }
     }};
 }

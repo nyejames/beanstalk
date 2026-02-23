@@ -148,9 +148,8 @@ pub fn function_body_to_ast(
                 // ----------------------------
                 //     HOST FUNCTION CALLS
                 // ----------------------------
-                } else if let Some(host_func_call) = context
-                    .host_registry
-                    .get_function(&string_table.resolve(id))
+                } else if let Some(host_func_call) =
+                    context.host_registry.get_function(string_table.resolve(id))
                 {
                     // Move past the name
                     token_stream.advance();
@@ -249,7 +248,7 @@ pub fn function_body_to_ast(
                 } else {
                     return_rule_error!(
                         "Unexpected use of 'else' keyword. It can only be used inside an if statement or match statement",
-                        token_stream.current_location().to_error_location(&string_table), {
+                        token_stream.current_location().to_error_location(string_table), {
                             CompilationStage => "AST Construction",
                             PrimarySuggestion => "Remove the 'else' or place it inside an if/match statement",
                         }
@@ -287,6 +286,50 @@ pub fn function_body_to_ast(
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
+            }
+
+            TokenKind::Break => {
+                if !context.is_inside_loop() {
+                    return_rule_error!(
+                        "Break statements can only be used inside loops",
+                        token_stream
+                            .current_location()
+                            .to_error_location(string_table),
+                        {
+                            CompilationStage => "AST Construction",
+                            PrimarySuggestion => "Move this break statement inside a loop body",
+                        }
+                    );
+                }
+
+                ast.push(AstNode {
+                    kind: NodeKind::Break,
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                });
+                token_stream.advance();
+            }
+
+            TokenKind::Continue => {
+                if !context.is_inside_loop() {
+                    return_rule_error!(
+                        "Continue statements can only be used inside loops",
+                        token_stream
+                            .current_location()
+                            .to_error_location(string_table),
+                        {
+                            CompilationStage => "AST Construction",
+                            PrimarySuggestion => "Move this continue statement inside a loop body",
+                        }
+                    );
+                }
+
+                ast.push(AstNode {
+                    kind: NodeKind::Continue,
+                    location: token_stream.current_location(),
+                    scope: context.scope.clone(),
+                });
+                token_stream.advance();
             }
 
             TokenKind::End => {

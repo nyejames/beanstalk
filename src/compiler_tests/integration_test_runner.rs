@@ -10,6 +10,7 @@ use std::fs;
 use std::path::Path;
 
 const INTEGRATION_TESTS_PATH: &str = "tests/cases";
+const SEPARATOR_LINE_LENGTH: usize = 37;
 
 /// This module provides a focused test suite that validates the essential
 /// compiler_frontend operations without getting bogged down in implementation details.
@@ -39,7 +40,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
     // Test files that should succeed
     if success_dir.exists() {
         say!(Cyan "Testing files that should succeed:");
-        println!("------------------------------------------");
+        println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
         if let Ok(entries) = fs::read_dir(&success_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -75,7 +76,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
                     }
                 }
 
-                println!("------------------------------------------");
+                println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
             }
         }
     }
@@ -85,7 +86,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
     // Test files that should fail
     if failure_dir.exists() {
         say!(Cyan "Testing files that should fail:");
-        println!("------------------------------------------");
+        println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
         if let Ok(entries) = fs::read_dir(&failure_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
@@ -128,7 +129,7 @@ pub fn run_all_test_cases(show_warnings: bool) {
                         }
                     }
                 }
-                println!("------------------------------------------");
+                println!("{}", "-".repeat(SEPARATOR_LINE_LENGTH));
             }
         }
     }
@@ -136,14 +137,14 @@ pub fn run_all_test_cases(show_warnings: bool) {
     println!();
 
     // Print summary
-    println!("\n{}", "=".repeat(50));
+    println!("\n{}", "=".repeat(SEPARATOR_LINE_LENGTH));
     print!("Test Results Summary. Took: ");
-    say!(#timer.elapsed());
-    println!("  Total tests: {}", total_tests);
-    println!("  Successful compilations: {}", passed_tests);
-    println!("  Failed compilations: {}", failed_tests);
-    println!("  Expected failures: {}", expected_failures);
-    println!("  Unexpected successes: {}", unexpected_successes);
+    say!(Green #timer.elapsed());
+    say!("  Total tests: ", Yellow total_tests);
+    say!("  Successful compilations: ", Blue passed_tests);
+    say!("  Failed compilations: ", Blue failed_tests);
+    say!("  Expected failures: ", Blue expected_failures);
+    say!("  Unexpected successes: ", Blue unexpected_successes);
 
     let correct_results = passed_tests + expected_failures;
     let incorrect_results = failed_tests + unexpected_successes;
@@ -158,8 +159,8 @@ pub fn run_all_test_cases(show_warnings: bool) {
         say!("\n🎉 All tests behaved as expected!");
     } else {
         let percentage = (correct_results as f64 / total_tests as f64) * 100.0;
-        say!("\n⚠", percentage, "% of tests behaved as expected");
+        say!(Yellow "\n⚠ ", Bright Yellow format!("{:.1}", percentage), " %", Reset " of tests behaved as expected");
     }
 
-    println!("{}", "=".repeat(50));
+    println!("{}", "=".repeat(SEPARATOR_LINE_LENGTH));
 }

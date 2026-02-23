@@ -382,6 +382,88 @@ fn falls_back_to_dispatcher_for_cfg_cycle() {
 }
 
 #[test]
+fn lowers_break_and_continue_terminators_with_dispatcher() {
+    let mut string_table = StringTable::new();
+    let (type_context, types) = build_type_context();
+
+    let blocks = vec![
+        HirBlock {
+            id: BlockId(0),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Jump {
+                target: BlockId(1),
+                args: vec![],
+            },
+        },
+        HirBlock {
+            id: BlockId(1),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::If {
+                condition: bool_expression(1, true, types.boolean, RegionId(0)),
+                then_block: BlockId(2),
+                else_block: BlockId(4),
+            },
+        },
+        HirBlock {
+            id: BlockId(2),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Continue { target: BlockId(3) },
+        },
+        HirBlock {
+            id: BlockId(3),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Break { target: BlockId(4) },
+        },
+        HirBlock {
+            id: BlockId(4),
+            region: RegionId(0),
+            locals: vec![],
+            statements: vec![],
+            terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+        },
+    ];
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        blocks,
+        function,
+        &[],
+        type_context,
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &string_table,
+        JsLoweringConfig {
+            pretty: true,
+            emit_locations: false,
+            auto_invoke_start: false,
+        },
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(output.source.contains("switch (__bb"));
+    assert!(output.source.contains("= 3;"));
+    assert!(output.source.contains("= 4;"));
+}
+
+#[test]
 fn lowers_host_io_call_to_console_log() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();

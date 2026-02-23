@@ -69,24 +69,6 @@ fn runtime_template_expression(location: TextLocation, content: Vec<Expression>)
     Expression::template(template, Ownership::ImmutableOwned)
 }
 
-fn collect_non_empty_string_literals(
-    expr: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
-    out: &mut Vec<String>,
-) {
-    match &expr.kind {
-        HirExpressionKind::StringLiteral(value) => {
-            if !value.is_empty() {
-                out.push(value.clone());
-            }
-        }
-        HirExpressionKind::BinOp { left, right, .. } => {
-            collect_non_empty_string_literals(left, out);
-            collect_non_empty_string_literals(right, out);
-        }
-        _ => {}
-    }
-}
-
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
     Ast {
         nodes,
@@ -365,23 +347,25 @@ fn start_function_accumulates_multiple_top_level_templates_in_source_order() {
         })
         .count();
     assert_eq!(template_locals, 1);
-    assert_eq!(entry_block.statements.len(), 5);
+    assert_eq!(entry_block.statements.len(), 7);
 
-    let first_append = match &entry_block.statements[1].kind {
-        HirStatementKind::Assign { value, .. } => value,
-        other => panic!("expected assignment for first template append, got {other:?}"),
-    };
-    let mut first_strings = Vec::new();
-    collect_non_empty_string_literals(first_append, &mut first_strings);
-    assert_eq!(first_strings, vec!["First".to_owned()]);
-
-    let second_append = match &entry_block.statements[3].kind {
-        HirStatementKind::Assign { value, .. } => value,
-        other => panic!("expected assignment for second template append, got {other:?}"),
-    };
-    let mut second_strings = Vec::new();
-    collect_non_empty_string_literals(second_append, &mut second_strings);
-    assert_eq!(second_strings, vec!["Second".to_owned()]);
+    let template_calls = entry_block
+        .statements
+        .iter()
+        .filter_map(|statement| match &statement.kind {
+            HirStatementKind::Call { args, .. } => Some(args),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(template_calls.len(), 2);
+    assert!(matches!(
+        template_calls[0][0].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "First"
+    ));
+    assert!(matches!(
+        template_calls[1][0].kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "Second"
+    ));
 }
 
 #[test]
@@ -519,7 +503,7 @@ fn assignment_lowers_value_prelude_before_assign() {
     let block = &module.blocks[start.entry.0 as usize];
 
     assert!(matches!(
-        block.statements.get(0).map(|statement| &statement.kind),
+        block.statements.first().map(|statement| &statement.kind),
         Some(HirStatementKind::Call {
             result: Some(_),
             ..
@@ -864,6 +848,122 @@ fn lowers_while_to_header_body_exit_shape() {
 }
 
 #[test]
+fn break_in_while_targets_loop_exit_block() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let while_node = node(
+        NodeKind::WhileLoop(
+            Expression::bool(true, test_location(20), Ownership::ImmutableOwned),
+            vec![node(NodeKind::Break, test_location(21))],
+        ),
+        test_location(20),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![while_node],
+        test_location(19),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let header_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected jump to while header"),
+    };
+
+    let (body_block, exit_block) = match module.blocks[header_block.0 as usize].terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        _ => panic!("expected while header conditional terminator"),
+    };
+
+    assert!(matches!(
+        module.blocks[body_block.0 as usize].terminator,
+        HirTerminator::Break { target } if target == exit_block
+    ));
+}
+
+#[test]
+fn continue_in_for_targets_step_block() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let i = symbol("i", &mut string_table);
+
+    let for_node = node(
+        NodeKind::ForLoop(
+            Box::new(var(
+                i,
+                Expression::new(
+                    ExpressionKind::None,
+                    test_location(30),
+                    DataType::Int,
+                    Ownership::ImmutableOwned,
+                ),
+            )),
+            Expression::range(
+                Expression::int(0, test_location(30), Ownership::ImmutableOwned),
+                Expression::int(2, test_location(30), Ownership::ImmutableOwned),
+                test_location(30),
+                Ownership::ImmutableOwned,
+            ),
+            vec![node(NodeKind::Continue, test_location(31))],
+        ),
+        test_location(30),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![for_node],
+        test_location(29),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("for-loop lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let header_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected entry jump to for header"),
+    };
+
+    let (body_block, _exit_block) = match module.blocks[header_block.0 as usize].terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        _ => panic!("expected for header conditional terminator"),
+    };
+
+    let step_block = match module.blocks[body_block.0 as usize].terminator {
+        HirTerminator::Continue { target } => target,
+        _ => panic!("expected continue terminator in for body"),
+    };
+
+    assert!(matches!(
+        module.blocks[step_block.0 as usize].terminator,
+        HirTerminator::Jump { target, .. } if target == header_block
+    ));
+}
+
+#[test]
 fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
@@ -1052,7 +1152,7 @@ fn match_rejects_non_literal_pattern_expressions() {
 }
 
 #[test]
-fn for_loop_reports_hir_transformation_error() {
+fn for_loop_lowers_to_header_body_step_exit_shape() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
     let i = symbol("i", &mut string_table);
@@ -1090,9 +1190,80 @@ fn for_loop_reports_hir_transformation_error() {
     );
 
     let ast = build_ast(vec![start_fn], entry_path);
-    let err = lower_ast(ast, &mut string_table).expect_err("for-loop should fail in this phase");
+    let module = lower_ast(ast, &mut string_table).expect("for-loop lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+    let header_block = match entry_block.terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected entry jump to for header"),
+    };
+
+    let (body_block, exit_block) = match module.blocks[header_block.0 as usize].terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (then_block, else_block),
+        _ => panic!("expected for header to lower to conditional terminator"),
+    };
+
+    let step_block = match module.blocks[body_block.0 as usize].terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected for body to jump to step block"),
+    };
+
+    assert!(matches!(
+        module.blocks[step_block.0 as usize].terminator,
+        HirTerminator::Jump { target, .. } if target == header_block
+    ));
+    assert!(matches!(
+        module.blocks[exit_block.0 as usize].terminator,
+        HirTerminator::Return(_)
+    ));
+    assert_no_placeholder_terminators(&module);
+}
+
+#[test]
+fn break_outside_loop_reports_hir_transformation_error() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Break, test_location(2))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let err = lower_ast(ast, &mut string_table).expect_err("break outside loop should fail");
     assert_eq!(err.errors[0].error_type, ErrorType::HirTransformation);
-    assert!(err.errors[0].msg.contains("For-loop lowering"));
+    assert!(err.errors[0].msg.contains("active loop context"));
+}
+
+#[test]
+fn continue_outside_loop_reports_hir_transformation_error() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Continue, test_location(2))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let err = lower_ast(ast, &mut string_table).expect_err("continue outside loop should fail");
+    assert_eq!(err.errors[0].error_type, ErrorType::HirTransformation);
+    assert!(err.errors[0].msg.contains("active loop context"));
 }
 
 #[test]

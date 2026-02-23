@@ -1,6 +1,8 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, Operator,
+};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -54,7 +56,7 @@ pub fn create_loop(
                         if token_stream.current_token_kind() != &TokenKind::Colon {
                             return_syntax_error!(
                                 "A loop must have a colon after the condition",
-                                token_stream.current_location().to_error_location(&string_table),
+                                token_stream.current_location().to_error_location(string_table),
                                 {
                                     CompilationStage => "Loop Parsing",
                                     PrimarySuggestion => "Add ':' after the loop condition to open the loop body",
@@ -90,7 +92,7 @@ pub fn create_loop(
                                 "A loop condition using an existing variable must be a boolean expression (true or false). Found a {} expression",
                                 data_type.to_string()
                             ),
-                            token_stream.current_location().to_error_location(&string_table),
+                            token_stream.current_location().to_error_location(string_table),
                             {
                                 FoundType => type_str,
                                 ExpectedType => "Bool",
@@ -114,7 +116,7 @@ pub fn create_loop(
             if token_stream.current_token_kind() != &TokenKind::In {
                 return_syntax_error!(
                     format!("A loop must have an 'in' keyword after the variable: {}", string_table.resolve(name)),
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Loop Parsing",
                         PrimarySuggestion => "Add 'in' keyword after the loop variable",
@@ -137,17 +139,42 @@ pub fn create_loop(
                 string_table,
             )?;
 
-            // Make sure this type can be iterated over
-            if !iterable_type.is_iterable() {
-                let type_str: &'static str =
-                    Box::leak(format!("{:?}", iterable_type).into_boxed_str());
+            if !is_range_iteration_expression(&iterated_item) {
+                let type_str: &'static str = Box::leak(
+                    iterated_item
+                        .data_type
+                        .display_with_table(string_table)
+                        .into_boxed_str(),
+                );
+
                 return_syntax_error!(
-                    format!("The type {:?} is not iterable", iterable_type),
-                    token_stream.current_location().to_error_location(&string_table),
+                    format!(
+                        "For-loop lowering currently supports only range iteration. Found '{}'",
+                        iterated_item.data_type.display_with_table(string_table)
+                    ),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         FoundType => type_str,
+                        ExpectedType => "Range",
                         CompilationStage => "Loop Parsing",
-                        PrimarySuggestion => "Use an iterable type like Collection or Range in the for loop",
+                        PrimarySuggestion => "Use a range expression like 'start to end' for now",
+                        AlternativeSuggestion => "Collection/string for-loop lowering has not been implemented in this HIR phase yet",
+                    }
+                );
+            }
+
+            // For this phase we only accept ranges with numeric bounds so the loop binding has a
+            // stable numeric type before HIR lowering.
+            if !matches!(
+                infer_range_binding_type(&iterated_item),
+                Some(DataType::Int) | Some(DataType::Float)
+            ) {
+                return_syntax_error!(
+                    "For-loop range bounds must currently be numeric (Int or Float)",
+                    token_stream.current_location().to_error_location(string_table),
+                    {
+                        CompilationStage => "Loop Parsing",
+                        PrimarySuggestion => "Use numeric range bounds such as '0 to 10'",
                     }
                 );
             }
@@ -156,7 +183,7 @@ pub fn create_loop(
             if token_stream.current_token_kind() != &TokenKind::Colon {
                 return_syntax_error!(
                     "A loop must have a colon after the condition",
-                    token_stream.current_location().to_error_location(&string_table),
+                    token_stream.current_location().to_error_location(string_table),
                     {
                         CompilationStage => "Loop Parsing",
                         PrimarySuggestion => "Add ':' after the loop condition to open the loop body",
@@ -167,13 +194,15 @@ pub fn create_loop(
 
             token_stream.advance();
 
+            let binding_type = infer_range_binding_type(&iterated_item).unwrap_or(DataType::Int);
+
             // The thing being iterated over
             let loop_arg = Var {
                 id: context.scope.append(name),
                 value: Expression::new(
                     iterated_item.kind.to_owned(),
                     token_stream.current_location(),
-                    iterated_item.data_type.to_owned(),
+                    binding_type,
                     iterated_item.ownership.to_owned(),
                 ),
             };
@@ -194,12 +223,62 @@ pub fn create_loop(
         _ => {
             return_syntax_error!(
                 "Loops must have a variable declaration or an expression",
-                token_stream.current_location().to_error_location(&string_table),
+                token_stream.current_location().to_error_location(string_table),
                 {
                     CompilationStage => "Loop Parsing",
                     PrimarySuggestion => "Start the loop with a variable name for 'for' loops or a boolean expression for 'while' loops",
                 }
             );
         }
+    }
+}
+
+fn is_range_iteration_expression(expression: &Expression) -> bool {
+    match &expression.kind {
+        ExpressionKind::Range(_, _) => true,
+        ExpressionKind::Runtime(nodes) => nodes
+            .iter()
+            .any(|node| matches!(node.kind, NodeKind::Operator(Operator::Range))),
+        _ => matches!(expression.data_type, DataType::Range),
+    }
+}
+
+fn infer_range_binding_type(expression: &Expression) -> Option<DataType> {
+    match &expression.kind {
+        ExpressionKind::Range(start, end) => {
+            if matches!(start.data_type, DataType::Float)
+                || matches!(end.data_type, DataType::Float)
+            {
+                Some(DataType::Float)
+            } else if matches!(start.data_type, DataType::Int | DataType::Bool)
+                && matches!(end.data_type, DataType::Int | DataType::Bool)
+            {
+                Some(DataType::Int)
+            } else {
+                None
+            }
+        }
+
+        ExpressionKind::Runtime(nodes) => {
+            let range_uses_float = nodes.iter().any(|node| {
+                matches!(
+                    node.kind,
+                    NodeKind::Rvalue(Expression {
+                        kind: ExpressionKind::Float(_),
+                        ..
+                    })
+                )
+            });
+
+            if range_uses_float {
+                Some(DataType::Float)
+            } else if is_range_iteration_expression(expression) {
+                Some(DataType::Int)
+            } else {
+                None
+            }
+        }
+
+        _ => None,
     }
 }

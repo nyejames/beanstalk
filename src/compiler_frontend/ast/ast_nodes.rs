@@ -44,6 +44,8 @@ pub enum NodeKind {
 
     ForLoop(Box<Var>, Expression, Vec<AstNode>), // Item, Collection, Body,
     WhileLoop(Expression, Vec<AstNode>),         // Condition, Body,
+    Break,
+    Continue,
 
     // Basics
     VariableDeclaration(Var), // Variable name, Value, Visibility,
@@ -174,7 +176,7 @@ impl AstNode {
                     if !value.ownership.is_mutable() {
                         return_type_error!(
                             "Tried to use the 'not' operator on a non-mutable value",
-                            self.location.to_owned().to_error_location(&string_table), {
+                            self.location.to_owned().to_error_location(string_table), {
                                 ExpectedType => "Boolean",
                                 BorrowKind => "Shared",
                                 LifetimeHint => "This value is borrowed",
@@ -186,7 +188,7 @@ impl AstNode {
                                 "Tried to use the 'not' operator on value of type {:?}",
                                 value.data_type
                             ),
-                            self.location.to_owned().to_error_location(&string_table), {
+                            self.location.to_owned().to_error_location(string_table), {
                                 ExpectedType => "Boolean",
                                 BorrowKind => "Shared",
                                 LifetimeHint => "This value is borrowed",
@@ -200,7 +202,7 @@ impl AstNode {
 
         return_type_error!(
             format!("Tried to use the 'not' operator on a non-boolean: {:?}", self.kind),
-            self.location.to_owned().to_error_location(&string_table), {
+            self.location.to_owned().to_error_location(string_table), {
                 ExpectedType => "Boolean",
             }
         );
