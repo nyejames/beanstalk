@@ -87,6 +87,35 @@ fn operator_node(op: Operator, location: TextLocation) -> AstNode {
     }
 }
 
+fn runtime_template_expression(location: TextLocation, content: Vec<Expression>) -> Expression {
+    let mut template = Template::create_default(None);
+    template.location = location.clone();
+
+    for expr in content {
+        template.content.add(expr, false);
+    }
+
+    Expression::template(template, Ownership::ImmutableOwned)
+}
+
+fn collect_non_empty_string_literals(
+    expr: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+    out: &mut Vec<String>,
+) {
+    match &expr.kind {
+        HirExpressionKind::StringLiteral(value) => {
+            if !value.is_empty() {
+                out.push(value.clone());
+            }
+        }
+        HirExpressionKind::BinOp { left, right, .. } => {
+            collect_non_empty_string_literals(left, out);
+            collect_non_empty_string_literals(right, out);
+        }
+        _ => {}
+    }
+}
+
 #[test]
 fn lowers_primitive_literals() {
     let mut string_table = StringTable::new();
@@ -483,20 +512,123 @@ fn malformed_runtime_rpn_reports_hir_transformation_error() {
 }
 
 #[test]
-fn runtime_template_expression_reports_explicit_hir_transformation_error() {
+fn runtime_template_expression_lowers_to_string_concat_expression() {
     let mut string_table = StringTable::new();
+    let hello = string_table.intern("hello");
+    let location = TextLocation::new_just_line(10);
     let mut builder = setup_builder(&mut string_table);
 
-    let expr = Expression::template(Template::create_default(None), Ownership::ImmutableOwned);
-    let err = builder
+    let expr = runtime_template_expression(
+        location.clone(),
+        vec![Expression::string_slice(
+            hello,
+            location,
+            Ownership::ImmutableOwned,
+        )],
+    );
+
+    let lowered = builder
         .lower_expression(&expr)
-        .expect_err("template lowering should fail in this phase");
-    assert_eq!(err.error_type, ErrorType::HirTransformation);
-    assert!(
-        err.msg
-            .contains("Runtime template expressions are not lowered in this phase"),
-        "unexpected error message: {}",
-        err.msg
+        .expect("runtime template lowering should succeed");
+    assert!(lowered.prelude.is_empty());
+
+    let (left, right) = match lowered.value.kind {
+        HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            left,
+            right,
+        } => (left, right),
+        other => panic!("expected string concat binop for template lowering, got {other:?}"),
+    };
+
+    assert!(matches!(
+        left.kind,
+        HirExpressionKind::StringLiteral(ref value) if value.is_empty()
+    ));
+    assert!(matches!(
+        right.kind,
+        HirExpressionKind::StringLiteral(ref value) if value == "hello"
+    ));
+}
+
+#[test]
+fn runtime_template_coerces_non_string_segments() {
+    let mut string_table = StringTable::new();
+    let location = TextLocation::new_just_line(11);
+    let mut builder = setup_builder(&mut string_table);
+
+    let expr = runtime_template_expression(
+        location.clone(),
+        vec![Expression::int(5, location, Ownership::ImmutableOwned)],
+    );
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime template lowering should succeed");
+    assert!(lowered.prelude.is_empty());
+
+    let coerced_chunk = match lowered.value.kind {
+        HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            right,
+            ..
+        } => right,
+        other => panic!("expected top-level string concat for template lowering, got {other:?}"),
+    };
+
+    let (left, right) = match coerced_chunk.kind {
+        HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            left,
+            right,
+        } => (left, right),
+        other => panic!("expected coercion concat for non-string template segment, got {other:?}"),
+    };
+
+    assert!(matches!(
+        left.kind,
+        HirExpressionKind::StringLiteral(ref value) if value.is_empty()
+    ));
+    assert!(matches!(right.kind, HirExpressionKind::Int(5)));
+}
+
+#[test]
+fn runtime_template_lowers_nested_templates_in_order() {
+    let mut string_table = StringTable::new();
+    let a = string_table.intern("A");
+    let b = string_table.intern("B");
+    let c = string_table.intern("C");
+    let location = TextLocation::new_just_line(12);
+    let mut builder = setup_builder(&mut string_table);
+
+    let nested = runtime_template_expression(
+        location.clone(),
+        vec![Expression::string_slice(
+            b,
+            location.clone(),
+            Ownership::ImmutableOwned,
+        )],
+    );
+
+    let expr = runtime_template_expression(
+        location.clone(),
+        vec![
+            Expression::string_slice(a, location.clone(), Ownership::ImmutableOwned),
+            nested,
+            Expression::string_slice(c, location, Ownership::ImmutableOwned),
+        ],
+    );
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("nested runtime template lowering should succeed");
+    assert!(lowered.prelude.is_empty());
+
+    let mut strings = Vec::new();
+    collect_non_empty_string_literals(&lowered.value, &mut strings);
+    assert_eq!(
+        strings,
+        vec!["A".to_owned(), "B".to_owned(), "C".to_owned()]
     );
 }
 

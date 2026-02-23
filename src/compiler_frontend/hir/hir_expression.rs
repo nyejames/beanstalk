@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -234,11 +235,8 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
-            ExpressionKind::Template(_) => {
-                return_hir_transformation_error!(
-                    "Runtime template expressions are not lowered in this phase",
-                    self.hir_error_location(&expr.location)
-                )
+            ExpressionKind::Template(template) => {
+                self.lower_runtime_template_expression(template.as_ref(), &expr.location)
             }
 
             ExpressionKind::Function(_, _) => {
@@ -279,6 +277,94 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(lowered.value)
+    }
+
+    fn lower_runtime_template_expression(
+        &mut self,
+        template: &Template,
+        location: &TextLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let region = self.current_region_or_error(location)?;
+        let string_ty = self.intern_type_kind(HirTypeKind::String);
+        let mut prelude = Vec::new();
+
+        let mut accumulated = self.make_expression(
+            location,
+            HirExpressionKind::StringLiteral(String::new()),
+            string_ty,
+            ValueKind::Const,
+            region,
+        );
+
+        for chunk in template.content.flatten() {
+            let lowered_chunk = self.lower_expression(chunk)?;
+            prelude.extend(lowered_chunk.prelude);
+
+            let chunk_as_string =
+                self.coerce_expression_to_string(lowered_chunk.value, location, string_ty, region);
+
+            accumulated = self.make_expression(
+                location,
+                HirExpressionKind::BinOp {
+                    left: Box::new(accumulated),
+                    op: HirBinOp::Add,
+                    right: Box::new(chunk_as_string),
+                },
+                string_ty,
+                ValueKind::RValue,
+                region,
+            );
+        }
+
+        Ok(LoweredExpression {
+            prelude,
+            value: accumulated,
+        })
+    }
+
+    pub(crate) fn coerce_expression_to_string(
+        &mut self,
+        expression: HirExpression,
+        location: &TextLocation,
+        string_ty: TypeId,
+        region: RegionId,
+    ) -> HirExpression {
+        if matches!(
+            self.type_context.get(expression.ty).kind,
+            HirTypeKind::String
+        ) {
+            return expression;
+        }
+
+        if matches!(self.type_context.get(expression.ty).kind, HirTypeKind::Unit) {
+            return self.make_expression(
+                location,
+                HirExpressionKind::StringLiteral(String::new()),
+                string_ty,
+                ValueKind::Const,
+                region,
+            );
+        }
+
+        let empty = self.make_expression(
+            location,
+            HirExpressionKind::StringLiteral(String::new()),
+            string_ty,
+            ValueKind::Const,
+            region,
+        );
+
+        self.make_expression(
+            location,
+            HirExpressionKind::BinOp {
+                left: Box::new(empty),
+                op: HirBinOp::Add,
+                right: Box::new(expression),
+            },
+            string_ty,
+            ValueKind::RValue,
+            region,
+        )
     }
 
     pub(crate) fn lower_runtime_rpn_expression(

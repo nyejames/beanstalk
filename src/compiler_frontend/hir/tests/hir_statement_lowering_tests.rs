@@ -5,6 +5,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation, 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -13,7 +14,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 
 fn test_location(line: i32) -> TextLocation {
     TextLocation::new_just_line(line)
@@ -55,6 +56,35 @@ fn function_node(
 
 fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)
+}
+
+fn runtime_template_expression(location: TextLocation, content: Vec<Expression>) -> Expression {
+    let mut template = Template::create_default(None);
+    template.location = location.clone();
+
+    for expression in content {
+        template.content.add(expression, false);
+    }
+
+    Expression::template(template, Ownership::ImmutableOwned)
+}
+
+fn collect_non_empty_string_literals(
+    expr: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+    out: &mut Vec<String>,
+) {
+    match &expr.kind {
+        HirExpressionKind::StringLiteral(value) => {
+            if !value.is_empty() {
+                out.push(value.clone());
+            }
+        }
+        HirExpressionKind::BinOp { left, right, .. } => {
+            collect_non_empty_string_literals(left, out);
+            collect_non_empty_string_literals(right, out);
+        }
+        _ => {}
+    }
 }
 
 fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
@@ -215,6 +245,219 @@ fn variable_declaration_emits_local_and_assign_statement() {
             .iter()
             .any(|statement| matches!(statement.kind, HirStatementKind::Assign { .. }))
     );
+}
+
+#[test]
+fn start_function_with_no_template_declaration_returns_empty_string() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![DataType::String],
+        },
+        vec![node(
+            NodeKind::Return(vec![Expression::reference(
+                template_name,
+                DataType::Template,
+                test_location(2),
+                Ownership::ImmutableReference,
+            )]),
+            test_location(2),
+        )],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_function], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+
+    let start_fn = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start_fn.entry.0 as usize];
+    assert_eq!(entry_block.locals.len(), 1);
+    assert_eq!(
+        module
+            .side_table
+            .resolve_local_name(entry_block.locals[0].id, &string_table),
+        Some(TOP_LEVEL_TEMPLATE_NAME)
+    );
+
+    assert!(matches!(
+        entry_block.statements.first().map(|statement| &statement.kind),
+        Some(HirStatementKind::Assign { value, .. })
+            if matches!(&value.kind, HirExpressionKind::StringLiteral(value) if value.is_empty())
+    ));
+    assert!(matches!(
+        &entry_block.terminator,
+        HirTerminator::Return(value) if matches!(&value.kind, HirExpressionKind::Load(_))
+    ));
+}
+
+#[test]
+fn start_function_accumulates_multiple_top_level_templates_in_source_order() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
+    let first = string_table.intern("First");
+    let second = string_table.intern("Second");
+
+    let first_template = runtime_template_expression(
+        test_location(2),
+        vec![Expression::string_slice(
+            first,
+            test_location(2),
+            Ownership::ImmutableOwned,
+        )],
+    );
+
+    let second_template = runtime_template_expression(
+        test_location(3),
+        vec![Expression::string_slice(
+            second,
+            test_location(3),
+            Ownership::ImmutableOwned,
+        )],
+    );
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![DataType::String],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(template_name.clone(), first_template)),
+                test_location(2),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(template_name.clone(), second_template)),
+                test_location(3),
+            ),
+            node(
+                NodeKind::Return(vec![Expression::reference(
+                    template_name,
+                    DataType::Template,
+                    test_location(4),
+                    Ownership::ImmutableReference,
+                )]),
+                test_location(4),
+            ),
+        ],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_function], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+
+    let start_fn = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start_fn.entry.0 as usize];
+    let template_locals = entry_block
+        .locals
+        .iter()
+        .filter(|local| {
+            module
+                .side_table
+                .resolve_local_name(local.id, &string_table)
+                .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
+        })
+        .count();
+    assert_eq!(template_locals, 1);
+    assert_eq!(entry_block.statements.len(), 5);
+
+    let first_append = match &entry_block.statements[1].kind {
+        HirStatementKind::Assign { value, .. } => value,
+        other => panic!("expected assignment for first template append, got {other:?}"),
+    };
+    let mut first_strings = Vec::new();
+    collect_non_empty_string_literals(first_append, &mut first_strings);
+    assert_eq!(first_strings, vec!["First".to_owned()]);
+
+    let second_append = match &entry_block.statements[3].kind {
+        HirStatementKind::Assign { value, .. } => value,
+        other => panic!("expected assignment for second template append, got {other:?}"),
+    };
+    let mut second_strings = Vec::new();
+    collect_non_empty_string_literals(second_append, &mut second_strings);
+    assert_eq!(second_strings, vec!["Second".to_owned()]);
+}
+
+#[test]
+fn top_level_template_declarations_do_not_redeclare_accumulator_local() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = entry_path_and_start_name(&mut string_table);
+    let template_name = symbol(TOP_LEVEL_TEMPLATE_NAME, &mut string_table);
+    let one = string_table.intern("One");
+    let two = string_table.intern("Two");
+
+    let start_function = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![DataType::String],
+        },
+        vec![
+            node(
+                NodeKind::VariableDeclaration(var(
+                    template_name.clone(),
+                    runtime_template_expression(
+                        test_location(2),
+                        vec![Expression::string_slice(
+                            one,
+                            test_location(2),
+                            Ownership::ImmutableOwned,
+                        )],
+                    ),
+                )),
+                test_location(2),
+            ),
+            node(
+                NodeKind::VariableDeclaration(var(
+                    template_name.clone(),
+                    runtime_template_expression(
+                        test_location(3),
+                        vec![Expression::string_slice(
+                            two,
+                            test_location(3),
+                            Ownership::ImmutableOwned,
+                        )],
+                    ),
+                )),
+                test_location(3),
+            ),
+            node(
+                NodeKind::Return(vec![Expression::reference(
+                    template_name,
+                    DataType::Template,
+                    test_location(4),
+                    Ownership::ImmutableReference,
+                )]),
+                test_location(4),
+            ),
+        ],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_function], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+
+    let start_fn = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start_fn.entry.0 as usize];
+
+    let template_locals = entry_block
+        .locals
+        .iter()
+        .filter(|local| {
+            module
+                .side_table
+                .resolve_local_name(local.id, &string_table)
+                .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
+        })
+        .count();
+
+    assert_eq!(template_locals, 1);
 }
 
 #[test]

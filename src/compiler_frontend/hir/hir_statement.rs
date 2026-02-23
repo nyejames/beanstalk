@@ -10,16 +10,17 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_display::{HirDisplayContext, HirLocation};
 use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirField,
+    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpression, HirExpressionKind, HirField,
     HirFunction, HirLocal, HirMatchArm, HirPattern, HirRegion, HirStatement, HirStatementKind,
     HirStruct, HirTerminator, LocalId, StructId, ValueKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use crate::projects::settings::{IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 use crate::return_hir_transformation_error;
 
 use crate::hir_log;
@@ -358,17 +359,18 @@ impl<'a> HirBuilder<'a> {
         body: &[AstNode],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
+        let return_type = self
+            .function_by_id_or_error(function_id, location)?
+            .return_type;
+
         self.lower_parameter_locals(function_id, signature, location)?;
+        self.initialize_start_template_accumulator_if_needed(function_id, return_type, location)?;
         self.lower_statement_sequence(body)?;
 
         let current_block = self.current_block_id_or_error(location)?;
         if self.block_has_explicit_terminator(current_block, location)? {
             return Ok(());
         }
-
-        let return_type = self
-            .function_by_id_or_error(function_id, location)?
-            .return_type;
 
         if self.is_unit_type(return_type) {
             let region = self.current_region_or_error(location)?;
@@ -429,6 +431,10 @@ impl<'a> HirBuilder<'a> {
         } else {
             variable.value.location.clone()
         };
+
+        if self.is_start_template_accumulator_declaration(variable, &source_location)? {
+            return self.append_to_start_template_accumulator(variable, &source_location);
+        }
 
         let local_type = self.lower_data_type(&variable.value.data_type, &source_location)?;
         let local_id = self.allocate_named_local(
@@ -927,6 +933,151 @@ impl<'a> HirBuilder<'a> {
         Ok(local_id)
     }
 
+    fn initialize_start_template_accumulator_if_needed(
+        &mut self,
+        function_id: FunctionId,
+        return_type: crate::compiler_frontend::hir::hir_datatypes::TypeId,
+        location: &TextLocation,
+    ) -> Result<(), CompilerError> {
+        if !self.is_start_function(function_id) || !self.is_string_type(return_type) {
+            return Ok(());
+        }
+
+        let template_name =
+            InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, self.string_table);
+        if self.locals_by_name.contains_key(&template_name) {
+            return Ok(());
+        }
+
+        let template_local =
+            self.allocate_named_local(template_name, return_type, true, Some(location.clone()))?;
+        let region = self.current_region_or_error(location)?;
+        let empty_string = self.make_expression(
+            location,
+            HirExpressionKind::StringLiteral(String::new()),
+            return_type,
+            ValueKind::Const,
+            region,
+        );
+
+        self.emit_statement_kind(
+            HirStatementKind::Assign {
+                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(template_local),
+                value: empty_string,
+            },
+            location,
+        )
+    }
+
+    fn is_start_template_accumulator_declaration(
+        &self,
+        variable: &Var,
+        location: &TextLocation,
+    ) -> Result<bool, CompilerError> {
+        if !variable
+            .id
+            .name_str(self.string_table)
+            .is_some_and(|name| name == TOP_LEVEL_TEMPLATE_NAME)
+        {
+            return Ok(false);
+        }
+
+        let function_id = self.current_function_id_or_error(location)?;
+        if !self.is_start_function(function_id) {
+            return Ok(false);
+        }
+
+        let return_type = self
+            .function_by_id_or_error(function_id, location)?
+            .return_type;
+
+        Ok(self.is_string_type(return_type))
+    }
+
+    fn append_to_start_template_accumulator(
+        &mut self,
+        variable: &Var,
+        location: &TextLocation,
+    ) -> Result<(), CompilerError> {
+        let accumulator_local = self.resolve_local_id_or_error(&variable.id, location)?;
+        let accumulator_type = self.lower_data_type(&DataType::String, location)?;
+        let region = self.current_region_or_error(location)?;
+        let lowered = self.lower_expression(&variable.value)?;
+
+        for prelude in lowered.prelude {
+            self.emit_statement_to_current_block(prelude, location)?;
+        }
+
+        let accumulator_load = self.make_expression(
+            location,
+            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                accumulator_local,
+            )),
+            accumulator_type,
+            ValueKind::Place,
+            region,
+        );
+
+        let chunk_as_string =
+            self.coerce_expression_to_string(lowered.value, location, accumulator_type, region);
+
+        let concatenated = self.make_expression(
+            location,
+            HirExpressionKind::BinOp {
+                left: Box::new(accumulator_load),
+                op: HirBinOp::Add,
+                right: Box::new(chunk_as_string),
+            },
+            accumulator_type,
+            ValueKind::RValue,
+            region,
+        );
+
+        let temp_local = self.allocate_temp_local(accumulator_type, Some(location.clone()))?;
+
+        self.emit_statement_kind(
+            HirStatementKind::Assign {
+                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(temp_local),
+                value: concatenated,
+            },
+            location,
+        )?;
+
+        let temp_load = self.make_expression(
+            location,
+            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                temp_local,
+            )),
+            accumulator_type,
+            ValueKind::Place,
+            region,
+        );
+
+        self.emit_statement_kind(
+            HirStatementKind::Assign {
+                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                    accumulator_local,
+                ),
+                value: temp_load,
+            },
+            location,
+        )
+    }
+
+    fn current_function_id_or_error(
+        &self,
+        location: &TextLocation,
+    ) -> Result<FunctionId, CompilerError> {
+        let Some(function_id) = self.current_function else {
+            return_hir_transformation_error!(
+                "No current HIR function is active",
+                self.hir_error_location(location)
+            );
+        };
+
+        Ok(function_id)
+    }
+
     fn expression_from_return_values(
         &mut self,
         values: &[HirExpression],
@@ -1003,6 +1154,14 @@ impl<'a> HirBuilder<'a> {
 
     fn is_unit_type(&self, ty: crate::compiler_frontend::hir::hir_datatypes::TypeId) -> bool {
         matches!(self.type_context.get(ty).kind, HirTypeKind::Unit)
+    }
+
+    fn is_string_type(&self, ty: crate::compiler_frontend::hir::hir_datatypes::TypeId) -> bool {
+        matches!(self.type_context.get(ty).kind, HirTypeKind::String)
+    }
+
+    fn is_start_function(&self, function_id: FunctionId) -> bool {
+        function_id == self.module.start_function
     }
 
     fn log_statement_input(&self, node: &AstNode) {
