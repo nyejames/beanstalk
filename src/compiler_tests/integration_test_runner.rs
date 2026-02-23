@@ -24,7 +24,11 @@ pub fn run_all_test_cases(show_warnings: bool) {
     let failure_dir = test_cases_dir.join("failure");
 
     // Flags set for all the integration tests
-    let flags = vec![Flag::DisableTimers, Flag::DisableWarnings];
+    let flags = vec![
+        Flag::DisableTimers,
+        Flag::DisableWarnings,
+        Flag::NoOutputFiles,
+    ];
 
     let mut total_tests = 0;
     let mut passed_tests = 0;

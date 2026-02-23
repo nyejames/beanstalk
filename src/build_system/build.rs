@@ -157,7 +157,12 @@ pub fn build_project(
         Err(compiler_messages) => return compiler_messages,
     };
 
-    // TODO: Now write the output files returned from the builder
+    // If the NoOutputFiles flag is set, don't write any files
+    if flags.contains(&Flag::NoOutputFiles) {
+        return messages;
+    }
+
+    // Now write the output files returned from the builder
     for output_file in output_files {
         // A safety check to make sure the file name has been set
         // This is to avoid accidentally overwriting things by mistake
@@ -167,6 +172,11 @@ pub fn build_project(
         }
 
         let full_file_path = current_dir.clone().join(output_file.full_file_path);
+
+        // TODO: need to think more about guards and check for where these files are being written
+        // And prevent build systems from writing things to weird places or doing unexpected things.
+        // TODO: For this the full file path needs to be sanitised
+        // The places a project builder can build to should be sandboxed and not allowed to write to any parent of the current as a minimum
 
         // Otherwise create the file and fill it with the code
         if let Err(e) = match output_file.file_kind {

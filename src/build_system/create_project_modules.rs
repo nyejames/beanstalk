@@ -46,7 +46,7 @@ pub struct FunctionSignature {
 pub enum ImportType {
     /// Built-in compiler_frontend library function (IO, memory management, etc.)
     BuiltIn(BuiltInFunction),
-    /// User-defined external function from host environment
+    /// User-defined external function from the host environment
     External,
 }
 
@@ -109,10 +109,7 @@ pub fn compile_project_frontend(
                     source_path: config.entry_dir.clone(),
                 };
 
-                let module = match compile_module(vec![input_file], &config) {
-                    Ok(module) => module,
-                    Err(e) => return Err(e),
-                };
+                let module = compile_module(vec![input_file], config)?;
 
                 vec![module]
             }
@@ -178,7 +175,7 @@ pub fn compile_project_frontend(
         // Modules are folders that contain a '#' file
         // This is any file that starts with a '#' and becomes an entry point for the module
         // The #config file is a special '#' file that should only live in the entry path
-        let modules = match discover_all_modules_in_project(&config) {
+        let modules = match discover_all_modules_in_project(config) {
             Ok(modules) => modules,
             Err(e) => {
                 let err = CompilerError::file_error(&config.entry_dir, e);

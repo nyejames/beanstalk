@@ -30,7 +30,7 @@ impl ProjectBuilder for HtmlProjectBuilder {
     ) -> Result<Project, CompilerMessages> {
         let mut compiler_messages = CompilerMessages::new();
         // Validate the config has everything needed for an HTML project
-        if let Err(e) = self.validate_project_config(&config) {
+        if let Err(e) = self.validate_project_config(config) {
             return Err(CompilerMessages {
                 errors: vec![e],
                 warnings: Vec::new(),
