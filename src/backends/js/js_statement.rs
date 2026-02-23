@@ -1,217 +1,285 @@
-use crate::backends::js::{JsEmitter, JsIdent};
+use crate::backends::function_registry::CallTarget;
+use crate::backends::js::JsEmitter;
+use crate::backends::js::js_host_functions::resolve_host_function_path;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{HirPlace, HirStmt};
-
-/// Internal representation of simple JS statements
-#[derive(Debug)]
-pub enum JsStmt {
-    /// `let x = expr;`
-    Let { name: JsIdent, value: String },
-
-    /// `x = expr;`
-    Assign { name: JsIdent, value: String },
-
-    /// Standalone expression statement
-    Expr(String),
-}
-
-// ============================================================================
-// Statement Lowering Methods
-// ============================================================================
+use crate::compiler_frontend::hir::hir_nodes::{
+    BlockId, HirFunction, HirMatchArm, HirPattern, HirStatement, HirStatementKind, HirTerminator,
+};
 
 impl<'hir> JsEmitter<'hir> {
-    /// Emits a statement to the output buffer with proper indentation
-    ///
-    /// This method handles all statement types and ensures proper formatting:
-    /// - Let declarations: `let x = value;`
-    /// - Assignments: `x = value;`
-    /// - Expression statements: `expr;`
-    ///
-    /// Statements are emitted with proper indentation based on the current
-    /// indentation depth, and a semicolon is added at the end.
-    pub fn emit_stmt(&mut self, stmt: &JsStmt) {
-        self.emit_indent();
-
-        match stmt {
-            JsStmt::Let { name, value } => {
-                if self.config.pretty {
-                    self.emit(&format!("let {} = {};", name.0, value));
-                } else {
-                    self.emit(&format!("let {}={};", name.0, value));
-                }
-            }
-
-            JsStmt::Assign { name, value } => {
-                if self.config.pretty {
-                    self.emit(&format!("{} = {};", name.0, value));
-                } else {
-                    self.emit(&format!("{}={};", name.0, value));
-                }
-            }
-
-            JsStmt::Expr(expr) => {
-                self.emit(&format!("{};", expr));
-            }
+    pub(crate) fn emit_block_statements(
+        &mut self,
+        block: &crate::compiler_frontend::hir::hir_nodes::HirBlock,
+    ) -> Result<(), CompilerError> {
+        for statement in &block.statements {
+            self.emit_statement(statement)?;
         }
+
+        Ok(())
     }
 
-    /// Emits multiple statements in sequence
-    ///
-    /// This is a convenience method for emitting a list of statements,
-    /// such as the prelude from a JsExpr.
-    pub fn emit_stmts(&mut self, stmts: &[JsStmt]) {
-        for stmt in stmts {
-            self.emit_stmt(stmt);
-        }
-    }
+    pub(crate) fn emit_statement(&mut self, statement: &HirStatement) -> Result<(), CompilerError> {
+        self.emit_location_comment(&statement.location);
 
-    /// Lowers a HIR statement to JavaScript
-    ///
-    /// This method handles all HIR statement types and converts them to
-    /// JavaScript statements. It manages variable declaration tracking to
-    /// distinguish between `let` declarations and reassignments.
-    ///
-    /// **Assignment Handling**:
-    /// - First assignment to a variable: `let x = value;`
-    /// - Subsequent assignments: `x = value;`
-    /// - The `is_mutable` flag is ignored in GC semantics (JavaScript handles mutability)
-    ///
-    /// **Memory Management**:
-    /// - `PossibleDrop` statements are no-ops in GC semantics
-    /// - All memory management is delegated to JavaScript's garbage collector
-    ///
-    /// Returns an error if an unsupported statement is encountered or if lowering fails.
-    pub fn lower_stmt(&mut self, stmt: &HirStmt) -> Result<(), CompilerError> {
-        match stmt {
-            // === Variable Assignment ===
-            HirStmt::Assign {
+        match &statement.kind {
+            HirStatementKind::Assign { target, value } => {
+                let target = self.lower_place(target)?;
+                let value = self.lower_expr(value)?;
+                self.emit_line(&format!("{} = {};", target, value));
+            }
+
+            HirStatementKind::Call {
                 target,
-                value,
-                is_mutable: _,
+                args,
+                result,
             } => {
-                // Lower the value expression
-                let value_expr = self.lower_expr(value)?;
+                let target = self.lower_call_target(target)?;
+                let args = args
+                    .iter()
+                    .map(|arg| self.lower_expr(arg))
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                // Emit any prelude statements from the value expression
-                self.emit_stmts(&value_expr.prelude);
+                let call = format!("{}({})", target, args.join(", "));
 
-                // Get the target variable name
-                // For now, we only support simple variable assignments (not field or index assignments)
-                let target_name = match target {
-                    HirPlace::Var(name) => {
-                        let js_ident = self.make_js_ident(*name);
-                        js_ident.0
-                    }
-                    HirPlace::Field { base, field } => {
-                        // Field assignment: base.field = value
-                        let base_js = self.lower_place(base)?;
-                        let field_name = self.string_table.resolve(*field);
-                        format!("{}.{}", base_js, field_name)
-                    }
-                    HirPlace::Index { base, index } => {
-                        // Index assignment: base[index] = value
-                        let base_js = self.lower_place(base)?;
-                        let index_expr = self.lower_expr(index)?;
-
-                        // Emit index expression prelude
-                        self.emit_stmts(&index_expr.prelude);
-
-                        format!("{}[{}]", base_js, index_expr.value)
-                    }
-                };
-
-                // Determine if this is a declaration or reassignment
-                // Only simple variables can be declared with `let`
-                // Field and index assignments are always reassignments
-                let is_declaration = matches!(target, HirPlace::Var(_))
-                    && !self.declared_vars.contains(&target_name);
-
-                if is_declaration {
-                    // First assignment - emit `let` declaration
-                    self.declared_vars.insert(target_name.clone());
-                    let stmt = JsStmt::Let {
-                        name: JsIdent(target_name),
-                        value: value_expr.value,
-                    };
-                    self.emit_stmt(&stmt);
+                if let Some(result_local) = result {
+                    let result_name = self.local_name(*result_local)?;
+                    self.emit_line(&format!("{} = {};", result_name, call));
                 } else {
-                    // Reassignment - emit plain assignment
-                    let stmt = JsStmt::Assign {
-                        name: JsIdent(target_name),
-                        value: value_expr.value,
-                    };
-                    self.emit_stmt(&stmt);
+                    self.emit_line(&format!("{};", call));
                 }
             }
 
-            // === Function Calls ===
-            HirStmt::Call { target, args } => {
-                let call_expr = self.lower_call(target, args)?;
-
-                // Emit prelude statements
-                self.emit_stmts(&call_expr.prelude);
-
-                // Emit the call as a statement
-                let stmt = JsStmt::Expr(call_expr.value);
-                self.emit_stmt(&stmt);
+            HirStatementKind::Expr(expression) => {
+                let expression = self.lower_expr(expression)?;
+                self.emit_line(&format!("{};", expression));
             }
 
-            // === Memory Management (No-op in GC semantics) ===
-            HirStmt::PossibleDrop(_) => {
-                // No-op: GC handles all memory management
-                // This statement is ignored in JavaScript backend
-            }
-
-            // === Expression Statement ===
-            HirStmt::ExprStmt(expr) => {
-                let js_expr = self.lower_expr(expr)?;
-
-                // Emit prelude statements
-                self.emit_stmts(&js_expr.prelude);
-
-                // Emit the expression as a statement
-                let stmt = JsStmt::Expr(js_expr.value);
-                self.emit_stmt(&stmt);
-            }
-
-            // === Function and Template Definitions ===
-            HirStmt::FunctionDef {
-                name,
-                signature,
-                body,
-            } => {
-                self.lower_function_def(*name, signature, *body)?;
-            }
-
-            HirStmt::TemplateFn { name, params, body } => {
-                self.lower_template_fn(*name, params, *body)?;
-            }
-
-            // === Runtime Template Calls ===
-            HirStmt::RuntimeTemplateCall {
-                template_fn,
-                captures,
-                id: _,
-            } => {
-                // Runtime template calls are function calls that return strings
-                let call_expr = self.lower_function_call(*template_fn, captures)?;
-
-                // Emit prelude statements
-                self.emit_stmts(&call_expr.prelude);
-
-                // Emit the call as a statement
-                let stmt = JsStmt::Expr(call_expr.value);
-                self.emit_stmt(&stmt);
-            }
-
-            // === Struct Definitions ===
-            HirStmt::StructDef { name: _, fields: _ } => {
-                // Struct definitions don't need to emit any JavaScript code
-                // In JavaScript, structs are just object literals created at construction time
-                // No class or prototype definition is needed
+            HirStatementKind::Drop(_) => {
+                // No-op for GC backend.
             }
         }
 
         Ok(())
+    }
+
+    fn lower_call_target(&self, target: &CallTarget) -> Result<String, CompilerError> {
+        match target {
+            CallTarget::UserFunction(path) => Ok(self.user_call_name(path)?.to_owned()),
+            CallTarget::HostFunction(path) => {
+                let Some(host_target) = resolve_host_function_path(path, self.string_table) else {
+                    return Err(CompilerError::compiler_error(format!(
+                        "JavaScript backend: unknown host function '{}'",
+                        path.to_string(self.string_table)
+                    )));
+                };
+
+                Ok(host_target.to_owned())
+            }
+        }
+    }
+
+    pub(crate) fn emit_return_terminator(
+        &mut self,
+        expression: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+    ) -> Result<(), CompilerError> {
+        if self.is_unit_expression(expression) {
+            self.emit_line("return;");
+            return Ok(());
+        }
+
+        let value = self.lower_expr(expression)?;
+        self.emit_line(&format!("return {};", value));
+        Ok(())
+    }
+
+    pub(crate) fn emit_panic_terminator(
+        &mut self,
+        message: &Option<crate::compiler_frontend::hir::hir_nodes::HirExpression>,
+    ) -> Result<(), CompilerError> {
+        if let Some(message) = message {
+            let message = self.lower_expr(message)?;
+            self.emit_line(&format!("throw new Error({});", message));
+        } else {
+            self.emit_line("throw new Error(\"panic\");");
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn emit_dispatcher_for_function(
+        &mut self,
+        function: &HirFunction,
+        reachable_blocks: &[BlockId],
+    ) -> Result<(), CompilerError> {
+        let state_identifier = self.next_temp_identifier("__bb");
+
+        self.emit_line(&format!("let {} = {};", state_identifier, function.entry.0));
+        self.emit_line("while (true) {");
+        self.indent += 1;
+        self.emit_line(&format!("switch ({}) {{", state_identifier));
+        self.indent += 1;
+
+        for block_id in reachable_blocks {
+            let block = match self.block_by_id(*block_id) {
+                Ok(block) => block.clone(),
+                Err(error) => {
+                    self.indent -= 2;
+                    return Err(error);
+                }
+            };
+
+            self.emit_line(&format!("case {}: {{", block.id.0));
+            self.indent += 1;
+
+            if let Err(error) = self.emit_block_statements(&block) {
+                self.indent -= 3;
+                return Err(error);
+            }
+
+            if let Err(error) =
+                self.emit_dispatcher_terminator(&state_identifier, &block.terminator)
+            {
+                self.indent -= 3;
+                return Err(error);
+            }
+
+            self.indent -= 1;
+            self.emit_line("}");
+        }
+
+        self.emit_line("default: {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(&format!(
+                "throw new Error(\"Invalid control-flow block: \" + {});",
+                state_identifier
+            ));
+        });
+        self.emit_line("}");
+
+        self.indent -= 1;
+        self.emit_line("}");
+        self.indent -= 1;
+        self.emit_line("}");
+
+        Ok(())
+    }
+
+    fn emit_dispatcher_terminator(
+        &mut self,
+        state_identifier: &str,
+        terminator: &HirTerminator,
+    ) -> Result<(), CompilerError> {
+        match terminator {
+            HirTerminator::Jump { target, args } => {
+                if !args.is_empty() {
+                    return Err(CompilerError::compiler_error(
+                        "JavaScript backend: Jump terminator args are not supported yet",
+                    ));
+                }
+
+                self.emit_line(&format!("{} = {};", state_identifier, target.0));
+                self.emit_line("continue;");
+            }
+
+            HirTerminator::If {
+                condition,
+                then_block,
+                else_block,
+            } => {
+                let condition = self.lower_expr(condition)?;
+                self.emit_line(&format!("if ({}) {{", condition));
+                self.with_indent(|emitter| {
+                    emitter.emit_line(&format!("{} = {};", state_identifier, then_block.0));
+                });
+                self.emit_line("} else {");
+                self.with_indent(|emitter| {
+                    emitter.emit_line(&format!("{} = {};", state_identifier, else_block.0));
+                });
+                self.emit_line("}");
+                self.emit_line("continue;");
+            }
+
+            HirTerminator::Match { scrutinee, arms } => {
+                if arms.is_empty() {
+                    return Err(CompilerError::compiler_error(
+                        "JavaScript backend: Match terminator has no arms",
+                    ));
+                }
+
+                let scrutinee = self.lower_expr(scrutinee)?;
+                let scrutinee_temp = self.next_temp_identifier("__match");
+                self.emit_line(&format!("const {} = {};", scrutinee_temp, scrutinee));
+
+                for (index, arm) in arms.iter().enumerate() {
+                    let condition = self.lower_match_arm_condition(&scrutinee_temp, arm)?;
+                    if index == 0 {
+                        self.emit_line(&format!("if ({}) {{", condition));
+                    } else {
+                        self.emit_line(&format!("else if ({}) {{", condition));
+                    }
+
+                    self.with_indent(|emitter| {
+                        emitter.emit_line(&format!("{} = {};", state_identifier, arm.body.0));
+                    });
+                    self.emit_line("}");
+                }
+
+                self.emit_line("else {");
+                self.with_indent(|emitter| {
+                    emitter.emit_line("throw new Error(\"No match arm selected\");");
+                });
+                self.emit_line("}");
+                self.emit_line("continue;");
+            }
+
+            HirTerminator::Loop { body, .. } => {
+                self.emit_line(&format!("{} = {};", state_identifier, body.0));
+                self.emit_line("continue;");
+            }
+
+            HirTerminator::Break { target } | HirTerminator::Continue { target } => {
+                self.emit_line(&format!("{} = {};", state_identifier, target.0));
+                self.emit_line("continue;");
+            }
+
+            HirTerminator::Return(value) => {
+                self.emit_return_terminator(value)?;
+            }
+
+            HirTerminator::Panic { message } => {
+                self.emit_panic_terminator(message)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn lower_match_arm_condition(
+        &mut self,
+        scrutinee_expression: &str,
+        arm: &HirMatchArm,
+    ) -> Result<String, CompilerError> {
+        let pattern_condition = match &arm.pattern {
+            HirPattern::Literal(value) => {
+                let literal = self.lower_expr(value)?;
+                format!("{} === {}", scrutinee_expression, literal)
+            }
+
+            HirPattern::Wildcard => "true".to_owned(),
+
+            unsupported => {
+                return Err(CompilerError::compiler_error(format!(
+                    "JavaScript backend: unsupported match pattern {:?}",
+                    unsupported
+                )));
+            }
+        };
+
+        if let Some(guard) = &arm.guard {
+            let guard = self.lower_expr(guard)?;
+            Ok(format!("({}) && ({})", pattern_condition, guard))
+        } else {
+            Ok(pattern_condition)
+        }
     }
 }

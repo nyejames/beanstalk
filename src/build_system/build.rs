@@ -66,6 +66,10 @@ impl OutputFile {
             file_kind,
         }
     }
+
+    pub(crate) fn file_kind(&self) -> &FileKind {
+        &self.file_kind
+    }
 }
 pub struct Project {
     pub output_files: Vec<OutputFile>,

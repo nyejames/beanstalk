@@ -2,12 +2,15 @@
 //
 // Builds Beanstalk projects for web deployment, generating separate WASM files
 // for different HTML pages and including JavaScript bindings for DOM interaction.
-use crate::build_system::build::{Module, OutputFile, Project, ProjectBuilder};
+use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
+use crate::build_system::build::{FileKind, Module, OutputFile, Project, ProjectBuilder};
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::string_interning::StringTable;
+use crate::projects::settings::BEANSTALK_FILE_EXTENSION;
 use crate::projects::settings::Config;
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct HtmlProjectBuilder {}
@@ -39,11 +42,15 @@ impl ProjectBuilder for HtmlProjectBuilder {
             // -----------------------------
             //      BACKEND COMPILATION
             // -----------------------------
+            let auto_invoke_start = should_auto_invoke_start(config, &module.entry_point);
+
             match compile_js_module(
                 &module.hir,
                 &module.string_table,
+                &module.entry_point,
                 &mut output_files,
                 flags.contains(&Flag::Release),
+                auto_invoke_start,
             ) {
                 Ok(()) => {}
                 Err(e) => {
@@ -73,26 +80,42 @@ impl ProjectBuilder for HtmlProjectBuilder {
 fn compile_js_module(
     hir_module: &HirModule,
     string_table: &StringTable,
+    entry_point: &Path,
     output_files: &mut Vec<OutputFile>,
     release_build: bool,
+    auto_invoke_start: bool,
 ) -> Result<(), CompilerError> {
-    todo!();
+    let js_lowering_config = JsLoweringConfig {
+        pretty: !release_build,
+        emit_locations: false,
+        auto_invoke_start,
+    };
 
-    // // The project builder determines where the output files need to go
-    // // by provided the full path from source for each file and its content
-    // let js_lowering_config = JsLoweringConfig {
-    //     pretty: !release_build,
-    //     emit_locations: !release_build,
-    // };
-    //
-    // let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
-    //
-    // output_files.push(OutputFile::new(
-    //     PathBuf::from("test".to_string()),
-    //     FileKind::Js(js_module.source),
-    // ));
-    //
-    // Ok(())
+    let js_module = lower_hir_to_js(hir_module, string_table, js_lowering_config)?;
+
+    output_files.push(OutputFile::new(
+        entry_point.to_path_buf(),
+        FileKind::Js(js_module.source),
+    ));
+
+    Ok(())
+}
+
+fn should_auto_invoke_start(config: &Config, module_entry_point: &Path) -> bool {
+    let is_page_entry = module_entry_point
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .is_some_and(|stem| stem == "#page");
+
+    let is_single_file_project = config
+        .entry_dir
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension == BEANSTALK_FILE_EXTENSION);
+
+    let is_project_entry_module = module_entry_point == config.entry_dir;
+
+    is_page_entry || (is_single_file_project && is_project_entry_module)
 }
 
 #[allow(dead_code)]
@@ -144,3 +167,7 @@ impl Default for HTMLMeta {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "html_project_builder_tests.rs"]
+mod tests;
