@@ -60,12 +60,13 @@ Since compile speed is a goal of the compiler, complex optimisations are left to
 - Imported files' implicit start functions are callable but don't execute automatically
 - Only one entry point is allowed per module, 
 this is the `HeaderKind::Main` and is implicit start function of the entry file
+- The entry file can optionally have a top level const template that is given to the build system
 
 ## Pipeline Stages
 The Beanstalk compiler frontend and build system processes modules through these stages:
 0. **Project Structure** – Parses the config file and determines the boundaries of each module in the project
 1. **Tokenization** – Convert source text to tokens
-2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes `#import "path"` statements so dependencies can be sorted after.
+2. **Header Parsing** – Extract headers and identify the entry point. Separates function definitions, structs and constants from top-level code. Processes import statements so dependencies can be sorted after.
 5. **Dependency Sorting** – Order headers by import dependencies
 6. **AST Construction** – Name resolution, type checking and constant folding
 7. **HIR Generation** – Semantic lowering with explicit control flow and possible drop points inserted
@@ -186,6 +187,7 @@ Variables store their full path including their parents in their name, the last 
 #### Templates
 - Templates fully resolved at the AST stage become string literals before HIR.
 - Templates requiring runtime evaluation are lowered into **explicit template functions**.
+- Top-level const templates are fully folded (or throw an error).
 
 **Runtime Expressions**: When expressions cannot be folded at compile time:
 - Variables, function calls or complex operations become `ExpressionKind::Runtime(Vec<AstNode>)`

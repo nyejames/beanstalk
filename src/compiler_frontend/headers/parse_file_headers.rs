@@ -224,6 +224,10 @@ pub fn parse_headers_in_file(
                 file_imports.extend(paths);
             }
 
+            TokenKind::Hash => {
+                // TODO: Constants
+            }
+
             TokenKind::Eof => {
                 main_function_body.push(current_token);
                 break;
@@ -319,6 +323,7 @@ fn create_header(
                         function_body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                 }
+
                 token_stream.advance();
             }
 
@@ -328,14 +333,7 @@ fn create_header(
             };
         }
 
-        // Could be a struct or immutable variable
-        // Current issues with this way of doing it:
-        // - Compiler directives can interrupt simple parsing here
-        // - What about explicit type declarations?
-        // This naively assumes a very rigid declaration.
-        // What probably needs to happen is a "shallow parse" of the whole assignment,
-        // Since statements don't have a single explicit terminator like scopes do.
-        // This will need to be a lightweight version of new_arg
+        // Could be a struct
         TokenKind::Assign => {
             // Type parameter bracket is a new struct
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
@@ -343,11 +341,6 @@ fn create_header(
                 // This needs to skip until the end of the type parameter bracket
 
                 // Struct fields must prefix their name with their parent's name to make sure they are unique
-            } else if exported {
-                // This is a global constant (exported immutable variable)
-                // TODO: Constant headers
-                // This is exported and immutable, which means it must be enforced to be a compile time constant
-                // Normal immutable variables can be assigned runtime values, but these kinds of constants can't
             }
 
             // Anything else just goes into the start function

@@ -3,7 +3,6 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::headers::imports::parse_file_path;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::compiler_directives::compiler_directive;
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, TextLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
@@ -451,11 +450,8 @@ pub fn get_token_kind(
         return_token!(TokenKind::Mutable, stream);
     }
 
-    // Compiler Directives
-    // These are special compiler_frontend commands that start with a hash
-    // They are always followed by a stringslice literal
     if current_char == '#' {
-        return compiler_directive(&mut token_value, stream, &string_table);
+        return_token!(TokenKind::Hash, stream);
     }
 
     // Used for imports at the top level

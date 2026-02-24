@@ -3,7 +3,6 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 
 use crate::compiler_frontend::compiler_errors::ErrorLocation;
-use crate::compiler_frontend::tokenizer::compiler_directives::CompilerDirective;
 use crate::token_log;
 use std::cmp::Ordering;
 use std::iter::Peekable;
@@ -334,9 +333,8 @@ pub enum TokenKind {
     /// For other Beanstalk files - indicates using public items from another file
     Use,
 
-    // Special compiler_frontend directives
-    /// The only way to manually force a panic in the compiler_frontend in release mode
-    Directive(CompilerDirective),
+    // #
+    Hash,
 
     /// Function Signatures
     Arrow,
@@ -497,7 +495,6 @@ impl TokenKind {
                 | TokenKind::TypeParameterBracket
                 | TokenKind::Comma
                 | TokenKind::End
-                | TokenKind::Directive(_)
                 | TokenKind::Assign
                 | TokenKind::AddAssign
                 | TokenKind::SubtractAssign

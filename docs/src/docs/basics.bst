@@ -36,7 +36,6 @@ Even for primitive types such as integers.
 4 spaces are recommended for indentation. 
 
 - Types use UpperCamelCase
-- Constants use UPPER_SNAKE_CASE
 - Everything else uses regular_snake_case
 
 # Comments

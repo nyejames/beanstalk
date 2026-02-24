@@ -69,7 +69,6 @@ This comes before the type if there is an explicit type declaration.
 **Naming conventions (strictly enforced):**
 - Types/Objects/Choices: `PascalCase`
 - Variables/functions: `regular_snake_case`
-- Constants: `UPPER_SNAKE_CASE`
 
 ## Core Syntax Patterns
 ```beanstalk
@@ -121,12 +120,6 @@ function_name |param Int| -> Int:
     value = param + 1
     return value
 ;
-```
-
-### Panics
-Panics use a compiler directive.
-```beanstalk
-    #panic
 ```
 
 **Collections**

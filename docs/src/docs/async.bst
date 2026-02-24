@@ -132,17 +132,17 @@ Importantly, suspension is **always visible** in the code. There are no hidden p
 
 ---
 
-## Structured concurrency: `#async` scope
+## Structured concurrency: `async` scope
 
-All coroutines in Beanstalk run inside a special async scope, introduced with a compiler directive:
+All coroutines in Beanstalk run inside a special async scope, introduced with a keyword:
 
 ```beanstalk
-#async:
+async:
     ...
 ;
 ```
 
-An `#async` scope means:
+An `async` scope means:
 
 * Coroutines may be spawned inside
 * Suspension (`yield`, channel send/receive) is allowed
@@ -152,7 +152,7 @@ An `#async` scope means:
 Example putting everything together:
 
 ```beanstalk
-#async:
+async:
     in, out => Int
 
     spawn producer(out)
@@ -217,9 +217,6 @@ Beanstalk treats async as **structured control flow plus safe message passing**,
 * `>>` send values
 * `<<` receive values
 * `yield` suspends execution
-* `#async` defines a concurrency boundary
-
-Together, they form a small, explicit, and powerful foundation for async programming — one that scales from simple scripts to complex, concurrent systems without sacrificing clarity or safety.
-
+* `async` defines a concurrency boundary
 
 ]
