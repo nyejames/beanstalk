@@ -9,6 +9,8 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Toke
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
+use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
+use crate::return_rule_error;
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
@@ -141,8 +143,21 @@ pub fn parse_headers_in_file(
                     .get_function(&string_table.resolve(name_id))
                     .is_none()
                 {
+
+
                     // Reference to an existing symbol
                     if encountered_symbols.contains(&name_id) {
+
+                        // If there was a hash before this, then error out as this is shadowing a constant
+                        if next_statement_exported {
+                            return_rule_error!(
+                                "There is already a constant, function or struct using this name. You can't shadow these. Choose a unique name",
+                                token_stream.current_location().to_error_location(string_table), {
+                                    PrimarySuggestion => "Rename the constant to something unique"
+                                }
+                            )
+                        }
+
                         // This is a reference, so it goes into the implicit main function
                         main_function_body.push(current_token);
 
@@ -150,18 +165,6 @@ pub fn parse_headers_in_file(
                         // Conflicts of naming between variables in the implicit main and other headers must be caught at this stage for the implicit main
                         // Create a path from the current file plus the symbol name
                         main_function_dependencies.insert(token_stream.src_path.append(name_id));
-
-                        if next_statement_exported {
-                            next_statement_exported = false;
-                            warnings.push(CompilerWarning::new(
-                                "You can't export a reference to a variable, only new declarations.",
-                                token_stream
-                                    .current_location()
-                                    .to_error_location(string_table),
-                                WarningKind::PointlessExport,
-                                token_stream.src_path.to_path_buf(string_table),
-                            ))
-                        }
 
                     // New symbol declaration
                     } else {
@@ -195,8 +198,8 @@ pub fn parse_headers_in_file(
                             }
                         }
 
-                        next_statement_exported = false;
                         encountered_symbols.insert(name_id);
+                        next_statement_exported = false;
                     };
 
                 // Host function reference
@@ -224,13 +227,13 @@ pub fn parse_headers_in_file(
                 file_imports.extend(paths);
             }
 
-            TokenKind::Hash => {
-                // TODO: Constants
-            }
-
             TokenKind::Eof => {
                 main_function_body.push(current_token);
                 break;
+            }
+
+            TokenKind::Hash => {
+                next_statement_exported = true;
             }
 
             _ => {
@@ -259,6 +262,9 @@ pub fn parse_headers_in_file(
     Ok(headers)
 }
 
+
+// This should probably be just creating a HeaderKind instead,
+// Lots of stuff is just being passed straight through, but who cares tbh
 fn create_header(
     full_name: InternedPath,
     exported: bool,
@@ -337,10 +343,19 @@ fn create_header(
         TokenKind::Assign => {
             // Type parameter bracket is a new struct
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
-                // TODO: Struct headers
-                // This needs to skip until the end of the type parameter bracket
-
-                // Struct fields must prefix their name with their parent's name to make sure they are unique
+                // Move past the parameter bracket, parse the struct.
+                // TODO: This currently won't support referencing other constants in its default arguments
+                // If structs should support constant references being used in the default parameters in future (which it should)
+                // Then this needs to follow the same path as the regular constant declarations, and be parsed at the AST stage always.
+                // This just means structs will need to start carrying with them a set of constant dependencies.
+                token_stream.advance();
+                kind = HeaderKind::Struct(create_struct_definition(token_stream, string_table, &full_name)?);
+            } else if exported {
+                // CONSTANT!
+                // Since this is being exported, it's a variable forced to be a constant
+                // We can't parse it now, because it can still depend on other constants from any other file.
+                // Similar to the struct above, we could parse a version that doesn't depend on constants for now if we want
+                // TODO: add this to the dependency list
             }
 
             // Anything else just goes into the start function

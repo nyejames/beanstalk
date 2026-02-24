@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::field_access::parse_field_access;
@@ -60,6 +60,17 @@ pub fn new_var(
     if token_stream.current_token_kind() == &TokenKind::Mutable {
         token_stream.advance();
         ownership = Ownership::MutableOwned;
+        
+        // Make sure this ISN'T a constant
+        if context.kind == ContextKind::Constant {
+            return_rule_error!(
+                "Constants can't be mutable!",
+                token_stream.current_location().to_error_location(string_table), {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Remove the '~' symbol from the variable declaration",
+                }
+            )
+        }
     };
 
     let mut data_type: DataType;

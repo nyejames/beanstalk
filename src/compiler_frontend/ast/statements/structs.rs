@@ -15,13 +15,13 @@ use crate::return_syntax_error;
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
-    scope: &InternedPath,
+    full_name: &InternedPath, // The scope of this struct
 ) -> Result<Vec<Var>, CompilerError> {
-    // Should start at the Colon
+    // Should start at the parameter bracket
     // Need to skip it,
     token_stream.advance();
 
-    let arguments = parse_parameters(token_stream, &mut true, string_table, scope, true)?;
+    let arguments = parse_parameters(token_stream, &mut true, string_table, full_name, true)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -38,6 +38,8 @@ pub fn parse_parameters(
 ) -> Result<Vec<Var>, CompilerError> {
     let mut args: Vec<Var> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
+
+    // This should be starting after the first parameter bracket
 
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {

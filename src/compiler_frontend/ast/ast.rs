@@ -197,7 +197,7 @@ pub struct ScopeContext {
 pub enum ContextKind {
     Module, // The top-level scope of each file in the module
     Expression,
-    Constant, // An expression that is enforced to be evaluated at compile time and can't contain non constant reference s
+    Constant, // An expression that is enforced to be evaluated at compile time and can't contain non-constant references
     Function,
     Condition, // For loops and if statements
     Loop,
@@ -260,6 +260,7 @@ impl ScopeContext {
         new_context
     }
 
+    // Can also be a cheeky struct or enum or something
     pub fn new_constant(scope: InternedPath) -> ScopeContext {
         ScopeContext {
             kind: ContextKind::Constant,
