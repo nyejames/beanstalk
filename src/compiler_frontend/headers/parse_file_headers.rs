@@ -21,12 +21,18 @@ pub enum HeaderKind {
     Choice(Vec<Var>), // Tagged unions. Not yet implemented in the language
     Constant(Var),
 
+    ConstTemplate {
+        content: Vec<Token>,
+        file_order: usize,
+    },
+
     // The top-level scope of regular files.
     // Any other logic in the top level scope implicitly becomes a "start" function.
     // This only runs when explicitly called from an import.
     // Each .bst file can see and use these like normal functions.
     // Start functions have no arguments or return values
     // and are not visible to the host from the final wasm module.
+    // The build system will know which start function is the main function based on which file is the entry point of the module.
     StartFunction(Vec<Token>),
 }
 

@@ -155,11 +155,20 @@ impl Ast {
 
                 HeaderKind::Constant(_arg) => {
                     // TODO: Implement constant handling
+                    todo!()
                 }
 
                 HeaderKind::Choice(_args) => {
                     // TODO: Implement choice handling
+                    todo!()
                 }
+
+                HeaderKind::ConstTemplate { content, file_order } => {
+                    // TODO: const templates must be collected together in order and folded into a single string
+                    // This will then be provided to the build system separately from the main AST
+                    todo!()
+                }
+
             }
 
             // TODO: create a function definition for these exported headers

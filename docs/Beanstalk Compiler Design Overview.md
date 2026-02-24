@@ -123,17 +123,26 @@ This stage of the compiler is stable and currently can represent almost all the 
 - **Entry Point Detection**: Identifies the entry file and converts its start function to `HeaderKind::Main`
 - **Import Resolution**: Processes import declarations
 - **Dependency Analysis**: Builds import graph and detects circular dependencies
+- **Collect Constants**: Collect exported const bindings and dependencies
+- **Preserve Top-Level Const Template Order**: Each top level const template should have an explicit order to be reconstructed in at later stages of compilation.
 
 **Development Notes**:
 Use `show_headers` feature flag to inspect parsed headers.
 
 ```rust
 pub enum HeaderKind {
-    Function(FunctionSignature, Vec<Token>),
-    Template(Vec<Token>), // Top level templates are used for HTML page generation
-    Struct(Vec<Arg>),
-    Choice(Vec<Arg>),
-    Constant(Arg),
+    Function {
+        signature: FunctionSignature,
+        body: Vec<Token>,
+    },
+    Struct(Vec<Var>),
+    Choice(Vec<Var>), // Tagged unions
+    Constant(Var),
+
+    ConstTemplate {
+        content: Vec<Token>,
+        file_order: usize,
+    },
 
     // The top-level scope of regular files.
     // Any other logic in the top level scope implicitly becomes a "start" function.
@@ -141,13 +150,8 @@ pub enum HeaderKind {
     // Each .bst file can see and use these like normal functions.
     // Start functions have no arguments or return values
     // and are not visible to the host from the final wasm module.
+    // The build system will know which start function is the main function based on which file is the entry point of the module.
     StartFunction(Vec<Token>),
-
-    // This is the main function that the host environment can use to run the final Wasm module.
-    // The start function of the entry file.
-    // It has the same rules as other start functions,
-    // but it is exposed to the host from the final Wasm module.
-    Main(Vec<Token>),
 }
 ```
 
