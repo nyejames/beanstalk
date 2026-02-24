@@ -244,8 +244,6 @@ A module is multiple Beanstalk files compiled together into a single output. Eac
 
 A project is one or more of these modules together with libraries and sometimes other file types that is all compiled together into a more complex output.
 
-Everything at the top level of a file is visible to the rest of the module by default, but may not be visible to the rest of the project.
-
 At the root of every project is a #config.bst file.
 
 **Import syntax:**
@@ -274,6 +272,192 @@ helper.another_func() -- Call another top level function from the file
 **Import resolution rules:**
 - Paths are relative to the root of the module, defined by the directory the entry point file is in or a config file
 - Circular imports are detected and cause compilation errors
+
+### Beanstalk module exports, const coercion, and compile-time folding
+
+* Keep the runtime entry point uniform across backends: `start() -> String`.
+* Let project builders depend only on:
+
+    * `start()`
+    * top-level compile-time templates (`#[ ... ]`), not arbitrary module state.
+* Allow libraries to export **compile-time data** reliably (for templates/metadata/config) without macros.
+
+## Core meanings of `#` at top level
+
+### 1) Visibility
+
+* `#` **at the top level** means **exported from the module**.
+* Non-`#` top-level declarations are private (unless other visibility rules exist later).
+
+### 2) Two kinds of exported symbols
+
+#### A) Exported constant binding (const coercion + export)
+
+```beanstalk
+#name = expr
+```
+
+* Always means: **export `name` and coerce it to a compile-time constant**.
+* `expr` **must fully fold** during the AST folding phase.
+* If folding fails: **compile error**.
+* Resulting type is **`#T`** (“const T”).
+
+Example:
+
+```beanstalk
+#pi = 0.1 + 0.2     -- must fold
+```
+
+`pi` becomes `#Float`.
+
+#### B) Exported runtime symbols (visibility only)
+
+```beanstalk
+#fn foo(...) -> T { ... }
+#MyStruct = | ... |
+```
+
+* `#` means exported.
+* No folding requirement implied.
+* By design, only **functions** and **struct/type declarations** are allowed as runtime exports.
+* Regular runtime variables are **not exportable**; top-level runtime temporaries are treated as part of `start()`.
+
+---
+
+## What “fully folded” means (for `#name = expr`)
+
+`expr` must reduce to a **single known constant value**:
+
+* no references to runtime values/locals
+* no captured state
+* only operations the folder can evaluate
+* result is a non-reference constant the compiler can represent
+
+---
+
+## Const values are data-only (“record semantics”)
+
+Any value of type `#T` is **compile-time-only data**:
+
+* **No methods**: method calls on `#T` are disallowed.
+* **No mutation**: immutable by definition.
+* **No runtime presence**: not lowered into runtime HIR.
+* Allowed operations are limited to:
+
+    * field access / projection
+    * compile-time operators supported by folding (e.g. numeric ops, string concat)
+    * embedding into compile-time templates
+
+### Struct instance coerced to const record
+
+```beanstalk
+Basic = | defaults String |
+#values = Basic("Only allowed const values here")
+```
+
+`values` has type `#Basic` and is data-only.
+
+---
+
+## Compile-time templates and the builder interface
+
+Project builders only use:
+
+* `start() -> String`
+* top-level compile-time templates (`#[ ... ]` and labeled variants)
+
+Builders **do not** consume arbitrary exported constants directly. Exported constants exist so that **templates can reference them** and remain guaranteed-foldable.
+
+Example:
+
+```beanstalk
+#head_defaults = [:
+  <meta charset="UTF-8">
+]
+
+#[html.head: #[head_defaults]]
+```
+
+---
+
+## Folding across files (dependency ordering)
+
+Exported constant bindings form a compile-time dependency graph:
+
+* `#name = expr` may depend only on:
+
+    * literals
+    * other folded constants (including imported exported constants)
+    * compile-time template fragments that fold
+
+Compiler behavior:
+
+1. collect exported const bindings and dependencies
+2. topologically sort
+3. fold in dependency order
+4. error on:
+
+    * non-foldable expressions
+    * cycles
+
+---
+
+## Visibility across modules
+
+### Importing exported constants
+
+* Imported exported constants are available as **compile-time values** (`#T`).
+* They may be used in:
+
+    * other exported const bindings
+    * compile-time templates
+* They may **not** be used in runtime expressions/function bodies.
+
+### Importing exported runtime symbols
+
+* Exported functions/types behave normally and can be used at runtime.
+
+---
+
+## Common diagnostics
+
+### Exported constant does not fold
+
+```beanstalk
+#x = runtime_call()
+```
+
+Error: `#x` must be compile-time foldable.
+
+### Using a const value at runtime
+
+```beanstalk
+#x = 1 + 2
+fn f() { print(x) }   -- error
+```
+
+Error: `x` is `#Int` and cannot be used at runtime.
+
+### Cycle in exported constants
+
+```beanstalk
+#a = b + 1
+#b = a + 1
+```
+
+Error: cycle in compile-time constant dependencies.
+
+---
+
+## Quick reference
+
+| Construct                     | Meaning                                | Must fold? |                                         Runtime usable? |    |     |
+| ----------------------------- | -------------------------------------- | ---------: | ------------------------------------------------------: | -- | --- |
+| `#name = expr`                | Exported **constant** (const coercion) |        Yes |                                                      No |    |     |
+| `name = expr` (top-level)     | Private module binding                 |         No | Depends (usually becomes part of `start()` temporaries) |    |     |
+| `#fn ...`                     | Exported function                      |         No |                                                     Yes |    |     |
+| `#Type =                      | ...                                    |          ` |                                    Exported type/struct | No | Yes |
+| `#[ ... ]` / `#[label: ... ]` | Compile-time template (string)         |        Yes |                                                     N/A |    |     |
   
 
 ## Template System
