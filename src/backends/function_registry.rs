@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -105,7 +105,7 @@ impl HostFunctionDef {
             .map(|(i, p)| {
                 let name = PathBuf::from(self.name).join(format!("_arg{}", i));
 
-                Var {
+                Declaration {
                     id: InternedPath::from_path_buf(&name, string_table),
                     value: Expression {
                         kind: ExpressionKind::None,

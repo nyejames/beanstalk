@@ -5,7 +5,7 @@
 
 use crate::backends::function_registry::CallTarget;
 use crate::compiler_frontend::ast::ast::Ast;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::branching::MatchArm;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -183,7 +183,7 @@ impl<'a> HirBuilder<'a> {
     fn register_struct_declaration(
         &mut self,
         name: &InternedPath,
-        fields: &[Var],
+        fields: &[Declaration],
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
         if self.structs_by_name.contains_key(name) {
@@ -426,7 +426,7 @@ impl<'a> HirBuilder<'a> {
 
     fn lower_variable_declaration_statement(
         &mut self,
-        variable: &Var,
+        variable: &Declaration,
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
         let source_location = if variable.value.location == TextLocation::default() {
@@ -677,7 +677,7 @@ impl<'a> HirBuilder<'a> {
 
     fn lower_for_statement(
         &mut self,
-        binding: &Var,
+        binding: &Declaration,
         iterable: &Expression,
         body: &[AstNode],
         location: &TextLocation,
@@ -1196,7 +1196,7 @@ impl<'a> HirBuilder<'a> {
 
     fn is_start_template_accumulator_declaration(
         &self,
-        variable: &Var,
+        variable: &Declaration,
         location: &TextLocation,
     ) -> Result<bool, CompilerError> {
         if variable
@@ -1221,7 +1221,7 @@ impl<'a> HirBuilder<'a> {
 
     fn append_to_start_template_accumulator(
         &mut self,
-        variable: &Var,
+        variable: &Declaration,
         location: &TextLocation,
     ) -> Result<(), CompilerError> {
         let accumulator_local = self.resolve_local_id_or_error(&variable.id, location)?;

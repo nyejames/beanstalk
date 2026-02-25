@@ -1,4 +1,4 @@
-use super::ast_nodes::{NodeKind, Var};
+use super::ast_nodes::{Declaration, NodeKind};
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::mutation::handle_mutation;
@@ -377,7 +377,7 @@ pub fn function_body_to_ast(
                 let template = Template::new(token_stream, &context, None, string_table)?;
                 let expr = Expression::template(template, Ownership::MutableOwned);
 
-                let template_var = Var {
+                let template_var = Declaration {
                     id: InternedPath::from_single_str(TOP_LEVEL_TEMPLATE_NAME, string_table),
                     value: expr,
                 };

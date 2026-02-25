@@ -37,7 +37,7 @@ pub fn resolve_module_dependencies(
     // Build graph or collect errors
     for header in headers {
         header_log!(header);
-        graph.insert(header.full_name.to_owned(), header);
+        graph.insert(header.tokens.src_path.to_owned(), header);
     }
 
     if !errors.is_empty() {

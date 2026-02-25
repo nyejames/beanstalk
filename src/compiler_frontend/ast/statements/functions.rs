@@ -1,6 +1,6 @@
 use crate::backends::function_registry::HostFunctionDef;
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_multiple_expressions;
 use crate::compiler_frontend::ast::statements::structs::parse_parameters;
@@ -15,7 +15,7 @@ use crate::{ast_log, return_syntax_error, return_type_error};
 // Can have default values
 #[derive(Clone, Debug)]
 pub struct FunctionSignature {
-    pub parameters: Vec<Var>,
+    pub parameters: Vec<Declaration>,
     pub returns: Vec<DataType>,
 }
 
@@ -29,7 +29,7 @@ impl FunctionSignature {
         // Need to skip it,
         token_stream.advance();
 
-        let parameters = parse_parameters(token_stream, &mut true, string_table, scope, false)?;
+        let parameters = parse_parameters(token_stream, &mut true, string_table, false)?;
 
         // create_struct_definition already advances past the closing |,
         // So we're now at the Arrow or Colon token
@@ -510,7 +510,7 @@ pub fn parse_function_call(
 
 pub fn create_function_call_arguments(
     token_stream: &mut FileTokens,
-    required_arguments: &[Var],
+    required_arguments: &[Declaration],
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<Expression>, CompilerError> {

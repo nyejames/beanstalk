@@ -5,7 +5,7 @@ use crate::backends::function_registry::{
 };
 use crate::compiler_frontend::analysis::borrow_checker::{BorrowCheckReport, check_borrows};
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -31,8 +31,8 @@ pub(crate) fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath
     InternedPath::from_single_str(name, string_table)
 }
 
-pub(crate) fn var(id: InternedPath, value: Expression) -> Var {
-    Var { id, value }
+pub(crate) fn var(id: InternedPath, value: Expression) -> Declaration {
+    Declaration { id, value }
 }
 
 pub(crate) fn param(
@@ -40,14 +40,14 @@ pub(crate) fn param(
     data_type: DataType,
     mutable: bool,
     location: TextLocation,
-) -> Var {
+) -> Declaration {
     let ownership = if mutable {
         Ownership::MutableOwned
     } else {
         Ownership::ImmutableOwned
     };
 
-    Var {
+    Declaration {
         id,
         value: Expression::new(ExpressionKind::None, location, data_type, ownership),
     }

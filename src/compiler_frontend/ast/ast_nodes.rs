@@ -11,7 +11,7 @@ pub(crate) use crate::compiler_frontend::tokenizer::tokens::TextLocation;
 use crate::{return_compiler_error, return_type_error};
 
 #[derive(Debug, Clone)]
-pub struct Var {
+pub struct Declaration {
     pub id: InternedPath,
     pub value: Expression,
 }
@@ -30,7 +30,7 @@ pub enum NodeKind {
     Warning(String), // Message, Start pos, End pos
 
     // Config settings
-    Config(Vec<Var>), // Settings,
+    Config(Vec<Declaration>), // Settings,
 
     // Control Flow
     Return(Vec<Expression>),                            // Return value,
@@ -42,13 +42,13 @@ pub enum NodeKind {
         Option<Vec<AstNode>>, // for the wildcard/else case
     ),
 
-    ForLoop(Box<Var>, Expression, Vec<AstNode>), // Item, Collection, Body,
-    WhileLoop(Expression, Vec<AstNode>),         // Condition, Body,
+    ForLoop(Box<Declaration>, Expression, Vec<AstNode>), // Item, Collection, Body,
+    WhileLoop(Expression, Vec<AstNode>),                 // Condition, Body,
     Break,
     Continue,
 
     // Basics
-    VariableDeclaration(Var), // Variable name, Value, Visibility,
+    VariableDeclaration(Declaration), // Variable name, Value, Visibility,
 
     // For simple field access: obj.field
     FieldAccess {
@@ -85,8 +85,8 @@ pub enum NodeKind {
     // example: new_struct_instance = MyStructDefinition(arg1, arg2)
     //          new_struct_instance(arg) -- Calls the main function of the struct
     StructDefinition(
-        InternedPath, // Full unique name path
-        Vec<Var>,     // Fields
+        InternedPath,     // Full unique name path
+        Vec<Declaration>, // Fields
     ),
 
     Function(InternedPath, FunctionSignature, Vec<AstNode>),

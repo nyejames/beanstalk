@@ -1,6 +1,6 @@
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -23,14 +23,32 @@ use crate::return_syntax_error;
 pub fn create_struct_definition(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
-    full_name: &InternedPath, // The scope of this struct
-) -> Result<Vec<Var>, CompilerError> {
+) -> Result<Vec<Declaration>, CompilerError> {
     // Should start at the parameter bracket
     // Need to skip it,
     token_stream.advance();
 
     // Also used by functions, so broken out here
-    let arguments = parse_parameters(token_stream, &mut true, string_table, full_name, true)?;
+    let arguments = parse_parameters(token_stream, &mut true, string_table, true)?;
+
+    // Skip the Parameters token
+    token_stream.advance();
+
+    Ok(arguments)
+}
+
+// This is a constant version of a struct
+// It is compile time only
+pub fn create_record_definition(
+    token_stream: &mut FileTokens,
+    string_table: &mut StringTable,
+) -> Result<Vec<Declaration>, CompilerError> {
+    // Should start at the parameter bracket
+    // Need to skip it,
+    token_stream.advance();
+
+    // Also used by functions, so broken out here
+    let arguments = parse_parameters(token_stream, &mut true, string_table, true)?;
 
     // Skip the Parameters token
     token_stream.advance();
@@ -39,15 +57,13 @@ pub fn create_struct_definition(
 }
 
 // Used by both functions and structs.
-// Function parameter syntax is exactly the same as struct field syntax by design.
 pub fn parse_parameters(
     token_stream: &mut FileTokens,
     pure: &mut bool,
     string_table: &mut StringTable,
-    scope: &InternedPath,
-    is_struct: bool, // False for function definitions, true for struct definitions
-) -> Result<Vec<Var>, CompilerError> {
-    let mut args: Vec<Var> = Vec::with_capacity(1);
+    is_const: bool, // False for function definitions, true for struct definitions
+) -> Result<Vec<Declaration>, CompilerError> {
+    let mut args: Vec<Declaration> = Vec::with_capacity(1);
     let mut next_in_list: bool = true;
 
     // This should be starting after the first parameter bracket
@@ -57,11 +73,6 @@ pub fn parse_parameters(
             // Return the args if the closing token is found
             // Don't skip the closing token
             TokenKind::TypeParameterBracket => {
-                if !is_struct {
-                    token_stream.advance();
-                    return Ok(args);
-                }
-
                 if !next_in_list {
                     return_syntax_error!(
                         "Should have a comma to separate arguments",
@@ -76,9 +87,6 @@ pub fn parse_parameters(
             }
 
             TokenKind::End => {
-                if is_struct {
-                    return Ok(args);
-                }
                 return_syntax_error!(
                     "Unexpected end to this scope while parsing function parameters",
                     token_stream.current_location().to_error_location(string_table),
@@ -104,7 +112,11 @@ pub fn parse_parameters(
                 }
 
                 // Create a new variable
-                let argument = new_parameter(token_stream, scope.append(arg_name), string_table)?;
+                let argument = new_parameter(
+                    token_stream,
+                    token_stream.src_path.append(arg_name),
+                    string_table,
+                )?;
 
                 if argument.value.ownership.is_mutable() {
                     *pure = false;
@@ -160,7 +172,7 @@ pub fn new_parameter(
     token_stream: &mut FileTokens,
     full_name: InternedPath,
     string_table: &mut StringTable,
-) -> Result<Var, CompilerError> {
+) -> Result<Declaration, CompilerError> {
     // Move past the name
     token_stream.advance();
 
@@ -246,7 +258,7 @@ pub fn new_parameter(
         | TokenKind::Newline
         | TokenKind::TypeParameterBracket => {
             ast_log!("Created new parameter of type: {}", data_type);
-            return Ok(Var {
+            return Ok(Declaration {
                 id: full_name,
                 value: Expression::none(),
             });
@@ -302,7 +314,7 @@ pub fn new_parameter(
         data_type
     );
 
-    Ok(Var {
+    Ok(Declaration {
         id: full_name,
         value: parsed_expr,
     })

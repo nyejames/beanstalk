@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use crate::compiler_frontend::ast::ast::{Ast, ModuleExport};
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, TextLocation, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind, TextLocation};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, ErrorType};
@@ -27,18 +27,23 @@ fn node(kind: NodeKind, location: TextLocation) -> AstNode {
     }
 }
 
-fn var(name: InternedPath, value: Expression) -> Var {
-    Var { id: name, value }
+fn var(name: InternedPath, value: Expression) -> Declaration {
+    Declaration { id: name, value }
 }
 
-fn param(name: InternedPath, data_type: DataType, mutable: bool, location: TextLocation) -> Var {
+fn param(
+    name: InternedPath,
+    data_type: DataType,
+    mutable: bool,
+    location: TextLocation,
+) -> Declaration {
     let ownership = if mutable {
         Ownership::MutableOwned
     } else {
         Ownership::ImmutableOwned
     };
 
-    Var {
+    Declaration {
         id: name,
         value: Expression::new(ExpressionKind::None, location, data_type, ownership),
     }

@@ -4,7 +4,7 @@
 //! This file contains expression-specific lowering logic on `HirBuilder`.
 
 use crate::backends::function_registry::CallTarget;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -1159,7 +1159,7 @@ impl<'a> HirBuilder<'a> {
 
     fn resolve_struct_id_from_nominal_fields(
         &self,
-        fields: &[Var],
+        fields: &[Declaration],
         location: &TextLocation,
     ) -> Result<StructId, CompilerError> {
         let Some(first_field) = fields.first() else {

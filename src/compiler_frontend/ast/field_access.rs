@@ -3,7 +3,7 @@ use crate::{
     compiler_frontend::{
         ast::{
             ast::ScopeContext,
-            ast_nodes::{AstNode, NodeKind, Var},
+            ast_nodes::{AstNode, Declaration, NodeKind},
             statements::functions::parse_function_call,
         },
         compiler_errors::CompilerError,
@@ -16,7 +16,7 @@ use crate::{
 
 pub fn parse_field_access(
     token_stream: &mut FileTokens,
-    base_arg: &Var,
+    base_arg: &Declaration,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {

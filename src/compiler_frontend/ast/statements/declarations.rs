@@ -6,9 +6,8 @@ use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionSignature, parse_function_call,
 };
-use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::ast::{
-    ast_nodes::Var, expressions::parse_expression::create_expression,
+    ast_nodes::Declaration, expressions::parse_expression::create_expression,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -19,7 +18,7 @@ use crate::{ast_log, return_rule_error, return_syntax_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
-    reference_arg: &Var,
+    reference_arg: &Declaration,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
@@ -49,7 +48,7 @@ pub fn new_declaration(
     context: &ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
-) -> Result<Var, CompilerError> {
+) -> Result<Declaration, CompilerError> {
     // Move past the name
     token_stream.advance();
 
@@ -106,7 +105,7 @@ pub fn new_declaration(
                 string_table,
             )?;
 
-            return Ok(Var {
+            return Ok(Declaration {
                 id: full_name,
                 value: Expression::function(
                     None,
@@ -272,7 +271,7 @@ pub fn new_declaration(
 
     ast_log!("Created new ", #ownership, " ", data_type);
 
-    Ok(Var {
+    Ok(Declaration {
         id: full_name,
         value: parsed_expr,
     })

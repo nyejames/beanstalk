@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use crate::backends::function_registry::CallTarget;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -734,7 +734,7 @@ fn nominal_struct_identity_uses_field_parent_path() {
         vec![(FieldId(3), field_path.clone(), int_type)],
     );
 
-    let expr_fields = vec![Var {
+    let expr_fields = vec![Declaration {
         id: field_path.clone(),
         value: Expression::int(42, location.clone(), Ownership::ImmutableOwned),
     }];
@@ -827,7 +827,7 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
     );
 
     let local_struct_type = DataType::Struct(
-        vec![Var {
+        vec![Declaration {
             id: field_a.clone(),
             value: Expression::new(
                 ExpressionKind::None,

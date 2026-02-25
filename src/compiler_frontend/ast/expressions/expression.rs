@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::create_template_node::Template;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
@@ -179,7 +179,7 @@ impl Expression {
         }
     }
     pub fn function_without_return(
-        args: Vec<Var>,
+        args: Vec<Declaration>,
         body: Vec<AstNode>,
         location: TextLocation,
     ) -> Self {
@@ -253,7 +253,11 @@ impl Expression {
             ownership,
         }
     }
-    pub fn struct_instance(args: Vec<Var>, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn struct_instance(
+        args: Vec<Declaration>,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
         Self {
             data_type: DataType::Inferred,
             kind: ExpressionKind::StructInstance(args),
@@ -261,7 +265,11 @@ impl Expression {
             ownership,
         }
     }
-    pub fn struct_definition(args: Vec<Var>, location: TextLocation, ownership: Ownership) -> Self {
+    pub fn struct_definition(
+        args: Vec<Declaration>,
+        location: TextLocation,
+        ownership: Ownership,
+    ) -> Self {
         Self {
             data_type: DataType::Inferred,
             kind: ExpressionKind::StructDefinition(args),
@@ -347,8 +355,8 @@ pub enum ExpressionKind {
 
     Collection(Vec<Expression>),
 
-    StructDefinition(Vec<Var>),
-    StructInstance(Vec<Var>),
+    StructDefinition(Vec<Declaration>),
+    StructInstance(Vec<Declaration>),
 
     // This is a special case for the range operator
     // This implementation will probably change in the future to be a more general operator

@@ -1,4 +1,4 @@
-use crate::compiler_frontend::ast::ast_nodes::Var;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::string_interning::StringTable;
 use std::fmt::Display;
@@ -100,8 +100,8 @@ pub enum DataType {
     Collection(Box<DataType>, Ownership),
 
     // Structs
-    Parameters(Vec<Var>),        // Struct definitions and parameters
-    Struct(Vec<Var>, Ownership), // Struct instance
+    Parameters(Vec<Declaration>), // Struct definitions and parameters
+    Struct(Vec<Declaration>, Ownership), // Struct instance
 
     // Return Parameters
     Returns(Vec<DataType>),
@@ -118,8 +118,8 @@ pub enum DataType {
 
     // TODO: IS THIS JUST MULTIPLE TYPES FOR FUNCTION RETURNS?
     // Choices should actually just be enums for now
-    Choices(Vec<Var>),     // Union of types
-    Option(Box<DataType>), // Shorthand for a choice of a type or None
+    Choices(Vec<Declaration>), // Union of types
+    Option(Box<DataType>),     // Shorthand for a choice of a type or None
 }
 
 impl DataType {

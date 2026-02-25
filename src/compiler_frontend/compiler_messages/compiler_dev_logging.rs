@@ -36,15 +36,15 @@ macro_rules! timer_log {
 #[macro_export]
 #[cfg(feature = "show_headers")]
 macro_rules! header_log {
-    ($header:expr) => {
-        saying::say!("\n", $header.to_string());
+    ($($arg:tt)*) => {
+        saying::say!($($arg)*);
     };
 }
 
 #[macro_export]
 #[cfg(not(feature = "show_headers"))]
 macro_rules! header_log {
-    ($header:expr) => {
+    ($($arg:tt)*) => {
         // Nothing
     };
 }

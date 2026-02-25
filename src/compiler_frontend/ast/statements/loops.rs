@@ -1,5 +1,5 @@
 use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -197,7 +197,7 @@ pub fn create_loop(
             let binding_type = infer_range_binding_type(&iterated_item).unwrap_or(DataType::Int);
 
             // The thing being iterated over
-            let loop_arg = Var {
+            let loop_arg = Declaration {
                 id: context.scope.append(name),
                 value: Expression::new(
                     iterated_item.kind.to_owned(),

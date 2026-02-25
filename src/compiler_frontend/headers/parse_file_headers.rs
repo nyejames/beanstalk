@@ -1,34 +1,24 @@
 use crate::backends::function_registry::HostRegistry;
-use crate::compiler_frontend::ast::ast::ScopeContext;
-use crate::compiler_frontend::ast::ast_nodes::Var;
-use crate::compiler_frontend::ast::statements::declarations::new_declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, Token, TokenKind};
-use crate::return_rule_error;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::{header_log, return_rule_error};
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
-    Function {
-        signature: FunctionSignature,
-        body: Vec<Token>,
-    },
+    Function { signature: FunctionSignature },
 
-    Struct(Vec<Var>),
-    Choice(Vec<Var>), // Tagged unions. Not yet implemented in the language
-    Constant(Var),
+    Constant,
+    Struct,
+    Choice, // Tagged unions. Not yet implemented in the language
 
-    ConstTemplate {
-        content: Vec<Token>,
-        file_order: usize,
-    },
+    ConstTemplate { file_order: usize },
 
     // The top-level scope of regular files.
     // Any other logic in the top level scope implicitly becomes a "start" function.
@@ -37,21 +27,24 @@ pub enum HeaderKind {
     // Start functions have no arguments or return values
     // and are not visible to the host from the final wasm module.
     // The build system will know which start function is the main function based on which file is the entry point of the module.
-    StartFunction(Vec<Token>),
+    StartFunction,
 }
 
 #[derive(Clone, Debug)]
 pub struct Header {
-    // The last part of the path is the name of the header
-    // It will also (MAYBE) have a special extension to indicate it's a header and not a file or directory
-    // Might not bother with this idea tho
-    pub full_name: InternedPath,
     pub kind: HeaderKind,
     pub exported: bool,
     // Which headers should be parsed before this one?
     // And what does this header name this import? (last part of the path)
     pub dependencies: HashSet<InternedPath>,
     pub name_location: TextLocation,
+
+    // The actual content of the header to be parsed at the AST stage.
+    // And the full name / path
+    // The last part of the path is the name of the header
+    // It will also (MAYBE) have a special extension to indicate it's a header and not a file or directory
+    // Might not bother with this idea tho
+    pub tokens: FileTokens,
 }
 
 impl Display for Header {
@@ -184,7 +177,7 @@ pub fn parse_headers_in_file(
                         )?;
 
                         match header.kind {
-                            HeaderKind::StartFunction(..) => {
+                            HeaderKind::StartFunction => {
                                 main_function_body.push(current_token);
                                 if let Some(path) =
                                     file_imports.iter().find(|f| f.name() == Some(name_id))
@@ -245,17 +238,17 @@ pub fn parse_headers_in_file(
     // The implicit main function also depends on other headers in this file.
     // So it can use and call any functions or structs defined in this file.
     for header in headers.iter() {
-        println!("{:?}", header.full_name);
+        header_log!(#header.tokens.src_path);
 
-        main_function_dependencies.insert(header.full_name.to_owned());
+        main_function_dependencies.insert(header.tokens.src_path.to_owned());
     }
 
     headers.push(Header {
-        full_name: token_stream.src_path.to_owned(),
-        kind: HeaderKind::StartFunction(main_function_body),
+        kind: HeaderKind::StartFunction,
         exported: next_statement_exported,
         dependencies: main_function_dependencies,
         name_location: TextLocation::default(),
+        tokens: FileTokens::new(token_stream.src_path.to_owned(), main_function_body),
     });
 
     Ok(headers)
@@ -275,7 +268,10 @@ fn create_header(
     // We only need to know what imports this header is actually using.
     // So only track symbols matching this file's imports to add to the dependencies.
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
-    let mut kind: HeaderKind = HeaderKind::StartFunction(Vec::new());
+    let mut kind: HeaderKind = HeaderKind::StartFunction;
+
+    // This 10 comes straight out of my ass
+    let mut body = Vec::with_capacity(10);
 
     // Starts at the first token after the declaration symbol
     let current_token = token_stream.current_token_kind().to_owned();
@@ -287,7 +283,6 @@ fn create_header(
 
             let mut scopes_opened = 1;
             let mut scopes_closed = 0;
-            let mut function_body = Vec::new();
 
             // FunctionSignature::new leaves us at the first token of the function body
             // Don't advance before the first iteration
@@ -296,7 +291,7 @@ fn create_header(
                     TokenKind::End => {
                         scopes_closed += 1;
                         if scopes_opened > scopes_closed {
-                            function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                            body.push(token_stream.tokens[token_stream.index].to_owned());
                         }
                     }
 
@@ -307,13 +302,13 @@ fn create_header(
                     // but it's better from a language design POV for colons to only mean one thing as much as possible anyway.
                     TokenKind::Colon => {
                         scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
 
                     // Double colons need to be closed with semicolons also
                     TokenKind::DoubleColon => {
                         scopes_opened += 1;
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
 
                     TokenKind::Symbol(name_id) => {
@@ -321,20 +316,17 @@ fn create_header(
                         {
                             dependencies.insert(path.to_owned());
                         }
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                     _ => {
-                        function_body.push(token_stream.tokens[token_stream.index].to_owned());
+                        body.push(token_stream.tokens[token_stream.index].to_owned());
                     }
                 }
 
                 token_stream.advance();
             }
 
-            kind = HeaderKind::Function {
-                signature,
-                body: function_body,
-            };
+            kind = HeaderKind::Function { signature };
         }
 
         // Could be a struct
@@ -347,27 +339,16 @@ fn create_header(
                 // Then this needs to follow the same path as the regular constant declarations, and be parsed at the AST stage always.
                 // This just means structs will need to start carrying with them a set of constant dependencies.
                 token_stream.advance();
-                kind = HeaderKind::Struct(create_struct_definition(
-                    token_stream,
-                    string_table,
-                    &full_name,
-                )?);
+
+                kind = HeaderKind::Struct;
             } else if exported {
                 // CONSTANT!
                 // Since this is being exported, it's a variable forced to be a constant
                 // We can't parse it now, because it can still depend on other constants from any other file.
                 // Similar to the struct above, we could parse a version that doesn't depend on constants for now if we want
                 // TODO: add this to the dependency list
-                kind = HeaderKind::Constant(new_declaration(
-                    token_stream,
-                    match full_name.name() {
-                        Some(n) => n,
-                        None => unreachable!(),
-                    },
-                    &ScopeContext::new_constant(full_name.to_owned()),
-                    &mut vec![], // Todo: dAmnit, gonna have to change the headers signature to be messages instead of just errors
-                    string_table,
-                )?);
+
+                kind = HeaderKind::Constant;
             }
 
             // Anything else just goes into the start function
@@ -385,10 +366,10 @@ fn create_header(
     }
 
     Ok(Header {
-        full_name,
         kind,
         exported,
         dependencies,
         name_location,
+        tokens: FileTokens::new(full_name, body),
     })
 }

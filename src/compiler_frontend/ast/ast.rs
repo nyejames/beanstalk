@@ -1,15 +1,15 @@
 use crate::backends::function_registry::HostRegistry;
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, Var};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::function_body_to_ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::statements::structs::create_struct_definition;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::projects::settings::{self, IMPLICIT_START_FUNC_NAME, TOP_LEVEL_TEMPLATE_NAME};
 
 pub struct ModuleExport {
@@ -43,23 +43,20 @@ impl Ast {
         let mut warnings: Vec<CompilerWarning> = Vec::new();
 
         // Collect all function signatures and struct definitions to register them in scope
-        let declarations: Vec<Var> = Vec::new();
-        for header in sorted_headers {
+        let declarations: Vec<Declaration> = Vec::new();
+        for mut header in sorted_headers {
             match header.kind {
-                HeaderKind::Function {
-                    signature,
-                    body: tokens,
-                } => {
+                HeaderKind::Function { signature } => {
                     // Function parameters should be available in the function body scope
                     let context = ScopeContext::new(
                         ContextKind::Function,
-                        header.full_name.to_owned(),
+                        header.tokens.src_path.to_owned(),
                         &signature.parameters,
                         host_registry.clone(),
                         signature.returns.clone(),
                     );
 
-                    let mut token_stream = FileTokens::new(header.full_name.to_owned(), tokens);
+                    let mut token_stream = header.tokens;
 
                     let body = match function_body_to_ast(
                         &mut token_stream,
@@ -76,12 +73,12 @@ impl Ast {
                         }
                     };
 
-                    // Make name from header path.
+                    // Make the name from the header path.
                     // AST symbol IDs are stored as full InternedPath values and are unique
                     // module-wide, not only within a local scope.
                     ast.push(AstNode {
                         kind: NodeKind::Function(
-                            header.full_name,
+                            token_stream.src_path,
                             signature.to_owned(),
                             body.to_owned(),
                         ),
@@ -90,16 +87,16 @@ impl Ast {
                     });
                 }
 
-                HeaderKind::StartFunction(body) => {
+                HeaderKind::StartFunction => {
                     let context = ScopeContext::new(
                         ContextKind::Module,
-                        header.full_name.to_owned(),
+                        header.tokens.src_path.to_owned(),
                         &declarations,
                         host_registry.clone(),
                         vec![],
                     );
 
-                    let mut token_stream = FileTokens::new(header.full_name.to_owned(), body);
+                    let mut token_stream = header.tokens;
 
                     let mut body = match function_body_to_ast(
                         &mut token_stream,
@@ -129,8 +126,8 @@ impl Ast {
                     });
 
                     // Create an implicit "start" function that can be called by other modules
-                    let full_name = header
-                        .full_name
+                    let full_name = token_stream
+                        .src_path
                         .join_str(IMPLICIT_START_FUNC_NAME, string_table);
 
                     let main_signature = FunctionSignature {
@@ -145,30 +142,39 @@ impl Ast {
                     });
                 }
 
-                HeaderKind::Struct(fields) => {
+                HeaderKind::Struct => {
+                    let fields = match create_struct_definition(&mut header.tokens, string_table) {
+                        Ok(f) => f,
+                        Err(e) => {
+                            return Err(CompilerMessages {
+                                errors: vec![e],
+                                warnings,
+                            });
+                        }
+                    };
+
                     ast.push(AstNode {
-                        kind: NodeKind::StructDefinition(header.full_name.to_owned(), fields), // Use the simple name for identifier
+                        kind: NodeKind::StructDefinition(header.tokens.src_path.to_owned(), fields), // Use the simple name for identifier
                         location: header.name_location,
-                        scope: header.full_name, // Preserve the full path in the scope field
+                        scope: header.tokens.src_path, // Preserve the full path in the scope field
                     });
                 }
 
-                HeaderKind::Constant(_arg) => {
+                HeaderKind::Constant => {
                     // TODO: Implement constant handling
                     todo!()
                 }
 
-                HeaderKind::Choice(_args) => {
+                HeaderKind::Choice => {
                     // TODO: Implement choice handling
                     todo!()
                 }
 
-                HeaderKind::ConstTemplate { content, file_order } => {
+                HeaderKind::ConstTemplate { file_order } => {
                     // TODO: const templates must be collected together in order and folded into a single string
                     // This will then be provided to the build system separately from the main AST
                     todo!()
                 }
-
             }
 
             // TODO: create a function definition for these exported headers
@@ -188,7 +194,7 @@ impl Ast {
 pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope: InternedPath,
-    pub declarations: Vec<Var>,
+    pub declarations: Vec<Declaration>,
     pub returns: Vec<DataType>,
     pub host_registry: HostRegistry,
     pub loop_depth: usize,
@@ -209,7 +215,7 @@ impl ScopeContext {
     pub fn new(
         kind: ContextKind,
         scope: InternedPath,
-        declarations: &[Var],
+        declarations: &[Declaration],
         host_registry: HostRegistry,
         returns: Vec<DataType>,
     ) -> ScopeContext {
@@ -272,7 +278,7 @@ impl ScopeContext {
         }
     }
 
-    pub fn add_var(&mut self, arg: Var) {
+    pub fn add_var(&mut self, arg: Declaration) {
         self.declarations.push(arg);
     }
 
