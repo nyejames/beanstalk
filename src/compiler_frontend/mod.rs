@@ -36,7 +36,7 @@ use crate::compiler_frontend::analysis::borrow_checker::{
 use crate::compiler_frontend::ast::ast::Ast;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::headers::parse_file_headers::{Header, parse_headers};
+use crate::compiler_frontend::headers::parse_file_headers::{Header, Headers, parse_headers};
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::hir_nodes::HirModule;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -127,7 +127,7 @@ impl<'a> CompilerFrontend<'a> {
         &mut self,
         files: Vec<FileTokens>,
         warnings: &mut Vec<CompilerWarning>,
-    ) -> Result<Vec<Header>, Vec<CompilerError>> {
+    ) -> Result<Headers, Vec<CompilerError>> {
         parse_headers(
             files,
             &self.host_function_registry,
@@ -159,12 +159,17 @@ impl<'a> CompilerFrontend<'a> {
     /// This assumes that the vec of FileTokens contains all dependencies for each file.
     /// The headers of each file will be parsed first, then each file will be combined into one module.
     /// The AST also provides a list of exports from the module.
-    pub fn headers_to_ast(&mut self, module_tokens: Vec<Header>) -> Result<Ast, CompilerMessages> {
+    pub fn headers_to_ast(
+        &mut self,
+        headers: Vec<Header>,
+        const_template_count: usize,
+    ) -> Result<Ast, CompilerMessages> {
         let interned_entry_dir =
             InternedPath::from_path_buf(&self.project_config.entry_dir, &mut self.string_table);
 
         Ast::new(
-            module_tokens,
+            headers,
+            const_template_count,
             &self.host_function_registry,
             &mut self.string_table,
             interned_entry_dir,

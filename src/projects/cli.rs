@@ -3,7 +3,8 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::display_messages::print_compiler_messages;
 use crate::compiler_tests::integration_test_runner::run_all_test_cases;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::projects::html_project::{dev_server, new_html_project};
+use crate::projects::html_project::new_html_project;
+use crate::projects::old_dev_server;
 use saying::say;
 use std::{
     env,
@@ -86,7 +87,7 @@ pub fn start_cli() {
         // }
         Command::Dev(path) => {
             say!("\nStarting dev server...");
-            dev_server::start_dev_server(&path, &flags);
+            old_dev_server::start_dev_server(&path, &flags);
         }
 
         Command::CompilerTests => {

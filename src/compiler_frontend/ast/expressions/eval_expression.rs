@@ -311,7 +311,7 @@ fn pop_higher_precedence(
 
 // TODO - needs to check what can be concatenated at compile time
 // Everything else should be left for runtime
-fn concat_template(
+pub fn concat_template(
     simplified_expression: &mut Vec<AstNode>,
     ownership: Ownership,
 ) -> Result<Expression, CompilerError> {

@@ -261,7 +261,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     //       Dependency resolution
     // ----------------------------------
     let time = Instant::now();
-    let sorted_modules = match compiler.sort_headers(module_headers) {
+    let sorted_modules = match compiler.sort_headers(module_headers.headers) {
         Ok(modules) => modules,
         Err(error) => {
             compiler_messages.errors.extend(error);
@@ -287,7 +287,7 @@ pub fn compile_module(module: Vec<InputFile>, config: &Config) -> Result<Module,
     };
 
     // Combine all the headers into one AST
-    match compiler.headers_to_ast(sorted_modules) {
+    match compiler.headers_to_ast(sorted_modules, module_headers.const_template_count) {
         Ok(parser_output) => {
             module_ast.nodes.extend(parser_output.nodes);
             module_ast

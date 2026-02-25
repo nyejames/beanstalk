@@ -10,6 +10,7 @@ pub const BS_VAR_PREFIX: &str = "bst_";
 
 /// Special reserved names for functions and variables created by the compiler
 pub const TOP_LEVEL_TEMPLATE_NAME: &str = "#template";
+pub const TOP_LEVEL_CONST_TEMPLATE_NAME: &str = "#const_template";
 pub const IMPLICIT_START_FUNC_NAME: &str = "start";
 
 // This is a guess about how much should be initially allocated for vecs in the compiler.
@@ -21,6 +22,7 @@ pub const SRC_TO_TOKEN_RATIO: usize = 5; // (Maybe) About 1/6 source code to tok
 pub const IMPORTS_CAPACITY: usize = 6; // (No Idea atm)
 pub const EXPORTS_CAPACITY: usize = 6; // (No Idea atm)
 pub const TOKEN_TO_HEADER_RATIO: usize = 35; // (Maybe) About 1/35 tokens to AstNode ratio
+pub const TOKEN_TO_DECLARATION_RATIO: usize = 20; // (Maybe) About 1/20 tokens for each new declaration symbol
 pub const TOKEN_TO_NODE_RATIO: usize = 10; // (Maybe) About 1/10 tokens to AstNode ratio
 pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols the smallest common Ast blocks will likely have
 

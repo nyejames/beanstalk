@@ -5,10 +5,19 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TextLocation, TokenKind};
+use crate::projects::settings::{
+    MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
+    TOP_LEVEL_CONST_TEMPLATE_NAME,
+};
 use crate::{header_log, return_rule_error};
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::path::Path;
+
+pub struct Headers {
+    pub headers: Vec<Header>,
+    pub const_template_count: usize,
+}
 
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
@@ -66,9 +75,10 @@ pub fn parse_headers(
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
     string_table: &mut StringTable,
-) -> Result<Vec<Header>, Vec<CompilerError>> {
+) -> Result<Headers, Vec<CompilerError>> {
     let mut headers: Vec<Header> = Vec::new();
     let mut errors: Vec<CompilerError> = Vec::new();
+    let mut const_template_count = 0;
 
     for mut file in tokenized_files {
         let is_entry_file = file.src_path.to_path_buf(string_table) == entry_file_path;
@@ -82,6 +92,7 @@ pub fn parse_headers(
             warnings,
             is_entry_file,
             string_table,
+            &mut const_template_count,
         );
 
         match headers_from_file {
@@ -98,7 +109,10 @@ pub fn parse_headers(
         return Err(errors);
     }
 
-    Ok(headers)
+    Ok(Headers {
+        headers,
+        const_template_count,
+    })
 }
 
 // Everything at the top level of a file is visible to the whole module.
@@ -110,9 +124,12 @@ pub fn parse_headers_in_file(
     warnings: &mut Vec<CompilerWarning>,
     is_entry_file: bool,
     string_table: &mut StringTable,
+    const_template_number: &mut usize,
 ) -> Result<Vec<Header>, CompilerError> {
-    let mut headers = Vec::new();
-    let mut encountered_symbols: HashSet<StringId> = HashSet::new();
+    let mut headers = Vec::with_capacity(token_stream.length / TOKEN_TO_HEADER_RATIO);
+    let mut encountered_symbols: HashSet<StringId> = HashSet::with_capacity(
+        MINIMUM_LIKELY_DECLARATIONS + (token_stream.tokens.len() / TOKEN_TO_DECLARATION_RATIO),
+    );
 
     // We only need to know IF a header is exported,
     // So later on it can be added to the modules export section
@@ -135,7 +152,7 @@ pub fn parse_headers_in_file(
             // New Function, Struct, Choice, or Constant declaration
             TokenKind::Symbol(name_id) => {
                 if host_function_registry
-                    .get_function(&string_table.resolve(name_id))
+                    .get_function(string_table.resolve(name_id))
                     .is_none()
                 {
                     // Reference to an existing symbol
@@ -228,6 +245,26 @@ pub fn parse_headers_in_file(
                 next_statement_exported = true;
             }
 
+            TokenKind::TemplateHead => {
+                if next_statement_exported {
+                    // Top-level const template
+                    // An 'exported' top-level template that must be evaluated at compile time
+                    let header = create_top_level_const_template(
+                        token_stream.src_path.to_owned(),
+                        *const_template_number,
+                        &file_imports,
+                        token_stream,
+                        string_table,
+                    )?;
+
+                    *const_template_number += 1;
+                    headers.push(header);
+                } else {
+                    // Regular top-level templates just go into the start function
+                    main_function_body.push(current_token);
+                }
+            }
+
             _ => {
                 // Everything else is shoved into the main function body
                 main_function_body.push(current_token);
@@ -240,7 +277,9 @@ pub fn parse_headers_in_file(
     for header in headers.iter() {
         header_log!(#header.tokens.src_path);
 
-        main_function_dependencies.insert(header.tokens.src_path.to_owned());
+        if !matches!(header.kind, HeaderKind::ConstTemplate { .. }) {
+            main_function_dependencies.insert(header.tokens.src_path.to_owned());
+        }
     }
 
     headers.push(Header {
@@ -384,6 +423,81 @@ fn create_header(
     Ok(Header {
         kind,
         exported,
+        dependencies,
+        name_location,
+        tokens: FileTokens::new(full_name, body),
+    })
+}
+
+fn create_top_level_const_template(
+    scope: InternedPath,
+    const_template_number: usize,
+    file_imports: &HashSet<InternedPath>,
+    token_stream: &mut FileTokens,
+    string_table: &mut StringTable,
+) -> Result<Header, CompilerError> {
+    let const_template_name = string_table.intern(&format!(
+        "{TOP_LEVEL_CONST_TEMPLATE_NAME}{const_template_number}"
+    ));
+    let mut dependencies: HashSet<InternedPath> = HashSet::new();
+
+    // This 10 comes straight out of my ass
+    let mut body = Vec::with_capacity(10);
+
+    let start_location = token_stream.current_location();
+
+    // Skip the opening template head token
+    token_stream.advance();
+
+    // Starts at the first token after the declaration symbol
+    let current_token = token_stream.current_token_kind().to_owned();
+
+    let mut scopes_opened = 1;
+    let mut scopes_closed = 0;
+
+    // FunctionSignature::new leaves us at the first token of the function body
+    // Don't advance before the first iteration
+    while scopes_opened > scopes_closed {
+        match token_stream.current_token_kind() {
+            TokenKind::TemplateHead => {
+                scopes_opened += 1;
+                body.push(token_stream.current_token());
+            }
+
+            TokenKind::TemplateClose => {
+                scopes_closed += 1;
+                if scopes_opened > scopes_closed {
+                    body.push(token_stream.current_token());
+                }
+            }
+
+            TokenKind::Symbol(name_id) => {
+                if let Some(path) = file_imports.iter().find(|f| f.name() == Some(*name_id)) {
+                    dependencies.insert(path.to_owned());
+                }
+                body.push(token_stream.current_token());
+            }
+
+            _ => {
+                body.push(token_stream.current_token());
+            }
+        }
+
+        token_stream.advance();
+    }
+
+    let full_name = scope.append(const_template_name);
+    let name_location = TextLocation {
+        scope,
+        start_pos: start_location.start_pos,
+        end_pos: token_stream.current_location().end_pos,
+    };
+
+    Ok(Header {
+        kind: HeaderKind::ConstTemplate {
+            file_order: const_template_number,
+        },
+        exported: true,
         dependencies,
         name_location,
         tokens: FileTokens::new(full_name, body),
