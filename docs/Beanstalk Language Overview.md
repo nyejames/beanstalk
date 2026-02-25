@@ -172,32 +172,103 @@ else
 ;
 ```
 
-Only one keyword for loops "loop". 
+### Loops in Beanstalk
 
-Using the "in" keyword, you can specify an integer, float or collection to iterate through or define a new integer, float or collection. 
+Beanstalk uses a **single** loop keyword: `loop`.
+
+* **`to` / `upto`** select range semantics (exclusive vs inclusive)
+* **Range loops yield the counter**
+* **Collection loops yield elements**
+* **No enumeration syntax yet**
+* **No `reverse` keyword**; direction inferred from bounds
+* **`by`** controls step size and works with both directions
+
+Loops come in two forms:
+
+1. **Conditional loops** (repeat while a condition is true)
 
 ```beanstalk
-    loop thing in things:
-        io(thing)
-    ;
+loop is_connected():
+    io("still connected")
+;
+```
 
-    loop -20 to big_number:
-        io("hello")
-    ;
+2. **Iteration loops** (iterate over a collection or a numeric range)
 
-    -- reverse loop
-    loop n in big_number to smaller_number:
-        io(n)
-    ;
+Iteration loops bind a value each iteration and step through either:
 
-    loop item in collection:
-        io(item.to_string())
-    ;
+* a **collection** (yielding elements), or
+* a **range** (yielding a counter)
 
-    -- Getting the index
-    loop item, index in collection:
-        io(index.to_string())
-    ;
+```beanstalk
+loop item in items:
+    io(item.to_string())
+;
+```
+
+The form is determined entirely by the loop header:
+
+* If the header contains **`to`** or **`upto`**, it is a **range loop**.
+* Otherwise, it is treated as a **conditional loop**.
+
+* `to` for **exclusive** end bounds
+* `upto` for **inclusive** end bounds
+
+```beanstalk
+loop i in 0 to 10:
+    io(i.to_string())
+;
+-- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+
+loop i in 0 upto 10:
+    io(i.to_string())
+;
+-- yields: 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+```
+
+You can specify a step using `by`.
+
+```beanstalk
+loop i in 0 to 10 by 2:
+    io(i.to_string())
+;
+-- yields: 0, 2, 4, 6, 8
+```
+
+### Direction is inferred from bounds
+
+Beanstalk automatically determines the iteration direction from the bounds:
+
+* If `start < end`, the default direction is ascending.
+* If `start > end`, the default direction is descending.
+
+With no `by`, the default step is `+1` for ascending ranges and `-1` for descending ranges.
+
+```beanstalk
+loop i in 10 to 0:
+    io(i.to_string())
+;
+-- yields: 10, 9, 8, 7, 6, 5, 4, 3, 2, 1
+```
+
+You can also supply an explicit step:
+
+```beanstalk
+loop i in 10 upto 0 by 2:
+    io(i.to_string())
+;
+-- yields: 10, 8, 6, 4, 2, 0
+```
+
+- When bounds imply descending iteration, `by` is treated as a magnitude (the compiler will apply the correct sign based on direction).
+- A step of `0` is invalid.
+
+Float ranges are supported, but **`by` should be considered required** to prevent ambiguous or non-terminating loops.
+
+```beanstalk
+loop t in 0.0 to 1.0 by 0.1:
+    io(t.to_string())
+;
 ```
 
 **Structs**
