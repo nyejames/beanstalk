@@ -228,6 +228,11 @@ impl FileTokens {
     }
 
     pub fn advance(&mut self) {
+        if self.index >= self.tokens.len() {
+            token_log!(Red "Compiler tried to advance past token stream bounds");
+            return;
+        }
+
         match &self.current_token_kind() {
             // Can't advance past End of File
             &TokenKind::Eof => {

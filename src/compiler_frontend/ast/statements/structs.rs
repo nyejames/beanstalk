@@ -73,18 +73,6 @@ pub fn parse_parameters(
             // Return the args if the closing token is found
             // Don't skip the closing token
             TokenKind::TypeParameterBracket => {
-                if next_in_list && !args.is_empty() {
-                    return_syntax_error!(
-                        "Should not have a trailing comma in function parameters",
-                        token_stream.current_location().to_error_location(string_table),
-                        {
-                            CompilationStage => "Struct/Parameter Parsing",
-                            PrimarySuggestion => "Remove the trailing comma before the closing '|'",
-                            SuggestedReplacement => "|",
-                        }
-                    )
-                }
-
                 return Ok(args);
             }
 
@@ -132,6 +120,10 @@ pub fn parse_parameters(
             TokenKind::Comma => {
                 token_stream.advance();
                 next_in_list = true;
+            }
+
+            TokenKind::Newline => {
+                token_stream.advance();
             }
 
             // If the EOF is encountered, give an error that a closing token is missing

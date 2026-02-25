@@ -384,24 +384,45 @@ fn create_header(
             // Type parameter bracket is a new struct
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 token_stream.advance();
+                let mut seen_opening_bracket = false;
 
                 loop {
-                    body.push(token_stream.current_token());
-
                     match token_stream.current_token_kind() {
                         TokenKind::TypeParameterBracket => {
-                            token_stream.advance();
-                            break;
+                            body.push(token_stream.current_token());
+
+                            if seen_opening_bracket {
+                                token_stream.advance();
+                                break;
+                            }
+
+                            seen_opening_bracket = true;
+                        }
+
+                        TokenKind::Eof => {
+                            return_rule_error!(
+                                "Unexpected end of file while parsing struct definition. Missing closing '|'.",
+                                token_stream.current_location().to_error_location(string_table),
+                                {
+                                    PrimarySuggestion => "Close the struct fields with a final '|'",
+                                    SuggestedInsertion => "|",
+                                }
+                            )
                         }
 
                         TokenKind::Symbol(name_id) => {
+                            body.push(token_stream.current_token());
+
                             if let Some(path) =
                                 file_imports.iter().find(|f| f.name() == Some(*name_id))
                             {
                                 dependencies.insert(path.to_owned());
                             }
                         }
-                        _ => {}
+
+                        _ => {
+                            body.push(token_stream.current_token());
+                        }
                     }
 
                     token_stream.advance();
