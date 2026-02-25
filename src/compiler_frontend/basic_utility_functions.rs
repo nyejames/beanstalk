@@ -7,7 +7,7 @@ use crate::return_file_error;
 use std::path::{Path, PathBuf};
 
 pub fn is_valid_var_char(char: &char) -> bool {
-    (char.is_alphanumeric() || *char == '_') && !char.is_ascii_punctuation()
+    char.is_alphanumeric() || *char == '_'
 }
 
 // Checks the path and converts it to a PathBuf

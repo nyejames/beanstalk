@@ -1,13 +1,13 @@
 function test_bst_start() {
     let _template;
-    let x;
+    let x_is_cool;
     let y;
     let __hir_tmp_0;
     let __hir_tmp_1;
     
     _template = "";
     console.log("Hello from JavaScript backend!");
-    x = 42;
+    x_is_cool = 42;
     console.log("Test complete");
     y = 840;
     console.log("840");

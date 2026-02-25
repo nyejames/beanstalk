@@ -616,7 +616,7 @@ pub(crate) fn keyword_or_variable(
             // Failing all of that, this is an invalid variable name
             return_syntax_error!(
                 format!("Invalid variable name or keyword: '{}'", token_value),
-                stream.new_location().to_error_location(&string_table),
+                stream.new_location().to_error_location(string_table),
                 {
                     CompilationStage => "Tokenization",
                     PrimarySuggestion => "Variable names must start with a letter or underscore and contain only alphanumeric characters or underscores",
