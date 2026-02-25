@@ -77,10 +77,13 @@ This comes before the type if there is an explicit type declaration.
 
     -- Note: This is not a mutable heap allocated string, just a slice
     -- Regular strings are created using string templates
+    -- Mutability here means that string_slice_value can be reassigned with another string slice
     string_slice_value ~= "text"
-    char ~= '😊'
     raw_string_slice ~= `hi`
-
+    
+    char ~= '😊'
+    
+    -- Owned mutable string
     string_template ~= [:
         This is the Beanstalk programming language
     ]

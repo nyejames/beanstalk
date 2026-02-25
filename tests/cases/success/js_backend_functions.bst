@@ -24,10 +24,10 @@ factorial |n Int| -> Int:
 main ||:
     -- Test simple function calls
     sum = add(5, 3)
-    io("5 + 3 = ", sum)
+    io([: 5 + 3 = sum])
     
     product = multiply(4, 6)
-    io("4 * 6 = ", product)
+    io([: 4 * 6 = product])
     
     -- Test string function
     message = greet("World")
@@ -35,7 +35,7 @@ main ||:
     
     -- Test recursive function
     fact5 = factorial(5)
-    io("5! = ", fact5)
+    io([: 5! = fact5])
     
     io("Function tests passed")
 ;

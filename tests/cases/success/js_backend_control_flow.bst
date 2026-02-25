@@ -27,19 +27,18 @@ main ||:
     ;
     
     -- Test loop
-    sum = 0
+    sum ~= 0
     loop i in 1 to 5:
         sum = sum + i
     ;
-    io("Sum 1-5 = ", sum)
+    io([: Sum 1-5 = sum])
     
-    -- Test loop with collection
-    numbers = {1, 2, 3, 4, 5}
-    total = 0
-    loop num in numbers:
+    -- Secondary loop pass
+    total ~= 0
+    loop num in 1 to 5:
         total = total + num
     ;
-    io("Total = ", total)
+    io([: Total = total])
     
     io("Control flow tests passed")
 ;

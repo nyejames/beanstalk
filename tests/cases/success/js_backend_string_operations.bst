@@ -5,7 +5,7 @@ main ||:
     -- Test basic strings
     str1 = "Hello"
     str2 = "World"
-    io(str1, " ", str2)
+    io(str1 + " " + str2)
     
     -- Test string concatenation
     greeting = "Hello, " + "World!"
@@ -23,13 +23,13 @@ main ||:
     
     -- Test empty string
     empty = ""
-    io("Empty string: '", empty, "'")
+    io("Empty string: '" + empty + "'")
     
     -- Test character literals
     ch1 = 'a'
     ch2 = 'Z'
     ch3 = '😊'
-    io("Characters: ", ch1, ", ", ch2, ", ", ch3)
+    io([: Characters: ch1, ch2, ch3])
     
     io("String operation tests passed")
 ;

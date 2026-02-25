@@ -3,7 +3,7 @@
 
 -- Initialize variables
 condition = true
-data = "test"
+data ~= "test"
 
 -- Complex control flow with borrowing
 if condition:

@@ -4,26 +4,26 @@
 
 main ||:
     -- First assignment should use 'let'
-    x = 10
-    io("x = ", x)
+    x ~= 10
+    io([: x = x])
     
     -- Second assignment should be reassignment
     x = 20
-    io("x = ", x)
+    io([: x = x])
     
     -- Multiple variables
     a = 1
     b = 2
     c = 3
-    io("a = ", a, ", b = ", b, ", c = ", c)
+    io([: a = a, b = b, c = c])
     
     -- String variables
     name = "Alice"
     greeting = "Hello"
-    io(greeting, ", ", name)
+    io(greeting + ", " + name)
     
     -- Boolean variables
     flag1 = true
     flag2 = false
-    io("flag1 = ", flag1, ", flag2 = ", flag2)
+    io([: flag1 = flag1, flag2 = flag2])
 ;
