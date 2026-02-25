@@ -25,21 +25,21 @@
 <br>
 
 ```haskell
-@(html/Basic)
+@(html/basic)
 
 -- Create a new blog post
 create_post |title String, date Int, content String| -> String:
     
     io("Creating a blog post!")
 
-    formatted_blog = [Basic.section:
-        [Basic.small, date]
-        [Basic.center: 
+    formatted_blog = [basic.section:
+        [basic.small, date]
+        [basic.center: 
             # [title]
             ## The worst blog on the internet
         ]
 
-        [Basic.divider]
+        [basic.divider]
 
         [content]
     ]
@@ -51,15 +51,15 @@ create_post |title String, date Int, content String| -> String:
 The HTML build system will generate an HTML page from this code:
 ```haskell
 @(PostGenerator)
-@(html/Basic)
+@(html/basic)
 
 date = 2025
 post = PostGenerator.create_post(date, [:
     I have absolutely nothing interesting to say, and never will.
 ])
 
-[Basic.page:
-    [Basic.pad(3), post]
+[basic.page:
+    [basic.pad(3), post]
 ]
 ```
 
